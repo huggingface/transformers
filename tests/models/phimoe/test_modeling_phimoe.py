@@ -14,6 +14,7 @@
 
 """Testing suite for the PyTorch PhiMoE model."""
 
+import contextlib
 import tempfile
 import unittest
 
@@ -135,19 +136,31 @@ class PhimoeIntegrationTest(unittest.TestCase):
             # preserved, but passed as `max_memory` instead of by capping what psutil reports:
             # `patch_psutil_cpu_memory` takes `min(mem.total, limit)`, so a 240 GiB "cap" was inert
             # on this runner, and a CPU-side budget cannot create accelerator headroom anyway.
-            # Read each device directly rather than via
-            # `get_accelerator_total_memory_gib()`: that helper returns 0.0 whenever
-            # `torch_device` is not exactly "cuda"/"xpu", and a budget guarded on
-            # `> 0` then falls through to `max_memory=None` — which is no budget at
-            # all. Measured on this runner: that revision verified `not_fixed` with
-            # 20.24 GiB allocated on GPU 0, i.e. above the cap it thought it had set,
-            # failing on the same `Concatenate` for `layers.15.mlp.experts.gate_up_proj`.
-            # A fallback that silently disables the fix is how the original bug
-            # survived `cap_psutil_cpu_memory` in the first place.
+            # Reserve device headroom for the conversion's temporary buffer, and
+            # ask the allocator not to fragment the reservation away.
+            #
+            # Measured on this runner across three revisions: an 85% budget was
+            # honoured (18.67 GiB allocated against an 18 GiB cap) and the test
+            # still OOMed with only 168.69 MiB free of 22.30 GiB — the rest
+            # "reserved by PyTorch but unallocated". The failing request is
+            # 1.56 GiB, so at 85% the headroom and the fragmentation are the same
+            # size and the result flips run to run (one `fixed`, two `not_fixed`
+            # on near-identical patches). 70% gives ~6.7 GiB against that
+            # 1.56 GiB, which is margin rather than a coin toss.
+            #
+            # `expandable_segments` attacks the fragmentation directly (the OOM
+            # message itself recommends it) but only takes effect if the
+            # allocator has not already been configured, so it is best-effort:
+            # the budget is what this fix rests on.
+            with contextlib.suppress(Exception):
+                # Older torch has no such setter, and a configured allocator
+                # rejects it; either way the budget below is the real fix.
+                torch.cuda.memory._set_allocator_settings("expandable_segments:True")
             if not torch.cuda.is_available() or torch.cuda.device_count() == 0:
                 raise unittest.SkipTest("phimoe integration test needs an accelerator")
-            n = torch.cuda.device_count()
-            per_device = int(min(torch.cuda.get_device_properties(i).total_memory for i in range(n)) * 0.85 / 1024**3)
+            accel = getattr(torch, torch_device)
+            n = accel.device_count()
+            per_device = int(min(accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3)
             max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
             max_memory["cpu"] = "60GiB"
             cls.model = PhimoeForCausalLM.from_pretrained(
