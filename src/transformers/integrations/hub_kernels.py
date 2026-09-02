@@ -300,11 +300,9 @@ if is_kernels_available():
             "WeatherNext2Attention": {
                 device: {
                     Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-staging/weathernext2-banded-attention",
+                        repo_id="kernels-community/weathernext2-banded-attention",
                         layer_name="WeatherNext2Attention",
-                        revision="pr-1091",
-                        # TODO: point at kernels-community once the PR lands and drop this.
-                        trust_remote_code=True,
+                        version=1,
                     ),
                 }
                 for device in ("cuda", "rocm", "xpu")
