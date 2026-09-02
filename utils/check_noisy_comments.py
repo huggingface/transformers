@@ -130,17 +130,6 @@ def _looks_like_commented_out_code(comment: Comment) -> bool:
     return COMMENTED_OUT_CODE_RE.search(body) is not None or body.startswith(('"', "'"))
 
 
-def _is_header_comment_block(block: list[Comment]) -> bool:
-    """Skip the standard top-of-file copyright/license paragraph."""
-    if not block:
-        return False
-    if block[0].line > 2:
-        return False
-
-    text = "\n".join(comment.text for comment in block[:20])
-    return "Copyright" in text and "Licensed under the Apache License" in text
-
-
 def _is_structured_metadata_block(block: list[Comment]) -> bool:
     bodies = [_comment_body(comment.text) for comment in block]
     return any(body == "/// script" for body in bodies) and any(body == "///" for body in bodies)
@@ -207,22 +196,33 @@ def _iter_python_files(targets: list[str], excludes: set[str]) -> list[Path]:
     return sorted(files)
 
 
-def _tokenize_comments(path: Path) -> list[Comment]:
+def _tokenize_comments(path: Path) -> tuple[list[Comment], set[int]]:
     try:
         source = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         source = path.read_text(encoding="latin-1")
 
     comments = []
+    leading_comment_lines = set()
+    before_code = True
     try:
         tokens = tokenize.generate_tokens(io.StringIO(source).readline)
         for token in tokens:
             if token.type == tokenize.COMMENT:
                 line, column = token.start
-                comments.append(Comment(line=line, column=column, text=token.string, physical_line=token.line))
+                comment = Comment(line=line, column=column, text=token.string, physical_line=token.line)
+                comments.append(comment)
+                if before_code and _is_full_line_comment(comment):
+                    leading_comment_lines.add(line)
+            elif token.type in {tokenize.NL, tokenize.NEWLINE, tokenize.INDENT, tokenize.DEDENT}:
+                continue
+            elif token.type == tokenize.ENDMARKER:
+                break
+            else:
+                before_code = False
     except tokenize.TokenError as error:
         raise ValueError(f"Could not tokenize {_display_path(path)}: {error}") from error
-    return comments
+    return comments, leading_comment_lines
 
 
 def _comment_blocks(comments: list[Comment]) -> list[list[Comment]]:
@@ -251,11 +251,11 @@ def check_file(
     max_comment_chars: int,
 ) -> list[Finding]:
     findings = []
-    comments = _tokenize_comments(path)
+    comments, leading_comment_lines = _tokenize_comments(path)
 
     for block in _comment_blocks(comments):
         if (
-            _is_header_comment_block(block)
+            all(comment.line in leading_comment_lines for comment in block)
             or _is_structured_metadata_block(block)
             or all(_is_directive(comment) for comment in block)
         ):
@@ -286,7 +286,7 @@ def check_file(
             )
 
     for comment in comments:
-        if _is_directive(comment):
+        if comment.line in leading_comment_lines or _is_directive(comment):
             continue
         body = _comment_body(comment.text)
         if len(body) > max_comment_chars:
@@ -350,6 +350,13 @@ def main() -> int:
     parser.add_argument("--exclude", action="append", default=[], help="Path component to exclude; can be repeated.")
     parser.add_argument("--max-findings", type=int, default=50, help="Maximum findings to print before truncating.")
     parser.add_argument(
+        "--rule",
+        action="append",
+        default=[],
+        choices=["NC001", "NC002", "NC003", "NC004"],
+        help="Only report this rule code; can be repeated.",
+    )
+    parser.add_argument(
         "--fail-on-findings",
         action="store_true",
         help="Exit non-zero when noisy comments are found. Default is reporting mode.",
@@ -365,6 +372,9 @@ def main() -> int:
         max_block_chars=args.max_block_chars,
         max_comment_chars=args.max_comment_chars,
     )
+    if args.rule:
+        rules = set(args.rule)
+        findings = [finding for finding in findings if finding.code in rules]
 
     if not findings:
         print("No noisy comments found.")

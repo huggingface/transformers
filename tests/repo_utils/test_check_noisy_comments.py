@@ -64,6 +64,44 @@ class NoisyCommentsTest(unittest.TestCase):
 
             self.assertEqual(findings, [])
 
+    def test_ignores_leading_comments_before_first_code(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            path = self._write_file(
+                repo_root,
+                "\n".join(
+                    [
+                        "#!/usr/bin/env python3",
+                        "",
+                        "# coding=utf-8",
+                        "# Copyright 2020 The HuggingFace Inc. team.",
+                        "#",
+                        '# Licensed under the Apache License, Version 2.0 (the "License");',
+                        "# you may not use this file except in compliance with the License.",
+                        "# You may obtain a copy of the License at",
+                        "#",
+                        "#     http://www.apache.org/licenses/LICENSE-2.0",
+                        "#",
+                        "# Unless required by applicable law or agreed to in writing, software",
+                        '# distributed under the License is distributed on an "AS IS" BASIS,',
+                        "# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.",
+                        "# See the License for the specific language governing permissions and",
+                        "# limitations under the License.",
+                        "",
+                        "# this script dumps information about the environment",
+                        "",
+                        "import sys",
+                    ]
+                ),
+            )
+
+            with patch.object(check_noisy_comments, "ROOT", repo_root):
+                findings = check_noisy_comments.check_file(
+                    path, max_block_lines=5, max_block_chars=500, max_comment_chars=500
+                )
+
+            self.assertEqual(findings, [])
+
     def test_flags_long_comment_block(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
@@ -162,7 +200,7 @@ class NoisyCommentsTest(unittest.TestCase):
     def test_flags_double_quoted_prose(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
-            path = self._write_file(repo_root, '# Use the "simple path" when possible.\nvalue = 1\n')
+            path = self._write_file(repo_root, 'value = 1\n# Use the "simple path" when possible.\n')
 
             with patch.object(check_noisy_comments, "ROOT", repo_root):
                 findings = check_noisy_comments.check_file(
@@ -174,7 +212,7 @@ class NoisyCommentsTest(unittest.TestCase):
     def test_cli_reports_without_failing_by_default(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
-            path = self._write_file(repo_root, '# Use the "simple path" when possible.\nvalue = 1\n')
+            path = self._write_file(repo_root, 'value = 1\n# Use the "simple path" when possible.\n')
             stdout = io.StringIO()
 
             with (
@@ -195,9 +233,9 @@ class NoisyCommentsTest(unittest.TestCase):
             checked_dir.mkdir()
             ignored_dir.mkdir()
             checked_file = checked_dir / "sample.py"
-            checked_file.write_text('# Use the "simple path" when possible.\n', encoding="utf-8")
+            checked_file.write_text('value = 1\n# Use the "simple path" when possible.\n', encoding="utf-8")
             ignored_file = ignored_dir / "sample.py"
-            ignored_file.write_text("# This comment is deliberately not short.\n", encoding="utf-8")
+            ignored_file.write_text("value = 1\n# This comment is deliberately not short.\n", encoding="utf-8")
             stdout = io.StringIO()
 
             with (
@@ -215,9 +253,9 @@ class NoisyCommentsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
             large_file = repo_root / "large.py"
-            large_file.write_text("# " + "a" * 600 + "\n", encoding="utf-8")
+            large_file.write_text("value = 1\n# " + "a" * 600 + "\n", encoding="utf-8")
             small_file = repo_root / "small.py"
-            small_file.write_text('# Use the "simple path" when possible.\n', encoding="utf-8")
+            small_file.write_text('value = 1\n# Use the "simple path" when possible.\n', encoding="utf-8")
             stdout = io.StringIO()
 
             with (
@@ -230,10 +268,41 @@ class NoisyCommentsTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertLess(stdout.getvalue().index("large.py"), stdout.getvalue().index("small.py"))
 
+    def test_cli_filters_by_rule(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            path = self._write_file(
+                repo_root,
+                "\n".join(
+                    [
+                        "value = 1",
+                        "# This is a multi-line note.",
+                        "# It keeps going.",
+                        "# And going.",
+                        "# And going.",
+                        "# And going.",
+                        "# And going.",
+                        '# Use the "simple path" when possible.',
+                    ]
+                ),
+            )
+            stdout = io.StringIO()
+
+            with (
+                patch.object(check_noisy_comments, "ROOT", repo_root),
+                patch.object(sys, "argv", ["check_noisy_comments.py", "--path", str(path), "--rule", "NC004"]),
+                redirect_stdout(stdout),
+            ):
+                exit_code = check_noisy_comments.main()
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("NC004", stdout.getvalue())
+            self.assertNotIn("NC001", stdout.getvalue())
+
     def test_cli_can_fail_on_findings(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
-            path = self._write_file(repo_root, '# Use the "simple path" when possible.\nvalue = 1\n')
+            path = self._write_file(repo_root, 'value = 1\n# Use the "simple path" when possible.\n')
 
             with (
                 patch.object(check_noisy_comments, "ROOT", repo_root),
