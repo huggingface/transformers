@@ -41,26 +41,27 @@ class ReasoningMode(str, enum.Enum):
 class Serve:
     def __init__(
         self,
-        force_model: Annotated[str | None, typer.Argument(help="Model to preload and use for all requests.")] = None,
+        force_model: Annotated[
+            str | None, typer.Argument(help="Load this model first and use it for every request")
+        ] = None,
         # Model options
         continuous_batching: Annotated[
             bool,
-            typer.Option(help="Enable continuous batching with paged attention. Configure with --cb-* flags."),
+            typer.Option(help="Enable continuous batching with paged attention; configure it with --cb-* options"),
         ] = False,
         attn_implementation: Annotated[
-            str | None, typer.Option(help="Attention implementation (e.g. flash_attention_2).")
+            str | None, typer.Option(help="Set the attention implementation, for example, `flash_attention_2`")
         ] = None,
-        compile: Annotated[bool, typer.Option(help="Enable torch.compile for faster inference.")] = False,
+        compile: Annotated[bool, typer.Option(help="Compile with `torch.compile` for faster inference")] = False,
         quantization: Annotated[
-            str | None, typer.Option(help="Quantization method: 'bnb-4bit' or 'bnb-8bit'.")
+            str | None, typer.Option(help="Set the quantization method: `bnb-4bit` or `bnb-8bit`")
         ] = None,
         reasoning: Annotated[
             ReasoningMode,
             typer.Option(
                 help=(
-                    "Reasoning mode. 'auto' uses the chat template default. Only applies to models that "
-                    "support reasoning via their chat template (e.g. Qwen3, Gemma 4) — for other models "
-                    "this flag has no effect."
+                    "Set the reasoning mode: `auto` uses the chat template default. This only applies to models "
+                    "whose chat template supports reasoning."
                 )
             ),
         ] = ReasoningMode.AUTO.value,  # type: ignore[invalid-parameter-default]
@@ -68,45 +69,50 @@ class Serve:
             str | None,
             typer.Option(
                 help=(
-                    "Default JSON kwargs forwarded to apply_chat_template "
-                    "(e.g. '{\"enable_thinking\": true}'); per-request chat_template_kwargs override these."
+                    "Default JSON arguments for `apply_chat_template`; per-request `chat_template_kwargs` override these"
                 )
             ),
         ] = None,
-        device: Annotated[str, typer.Option(help="Device for inference (e.g. 'auto', 'cuda:0', 'cpu').")] = "auto",
-        dtype: Annotated[str | None, typer.Option(help="Override model dtype. 'auto' derives from weights.")] = "auto",
-        trust_remote_code: Annotated[bool, typer.Option(help="Trust remote code when loading.")] = False,
+        device: Annotated[
+            str, typer.Option(help="Device for inference, for example, `auto`, `cuda:0`, or `cpu`")
+        ] = "auto",
+        dtype: Annotated[
+            str | None, typer.Option(help="Override model dtype; `auto` derives it from the weights")
+        ] = "auto",
+        trust_remote_code: Annotated[bool, typer.Option(help="Allow custom model code to run locally")] = False,
         model_timeout: Annotated[
-            int, typer.Option(help="Seconds before idle model is unloaded. Ignored when force_model is set.")
+            int, typer.Option(help="Unload idle models after this many seconds; ignored with a fixed model")
         ] = 300,
         # Continuous batching tuning
         cb_block_size: Annotated[
-            int | None, typer.Option(help="KV cache block size in tokens for continuous batching.")
+            int | None, typer.Option(help="KV-cache block size in tokens for continuous batching")
         ] = None,
         cb_num_blocks: Annotated[
-            int | None, typer.Option(help="Number of KV cache blocks for continuous batching.")
+            int | None, typer.Option(help="Number of KV-cache blocks for continuous batching")
         ] = None,
         cb_max_batch_tokens: Annotated[
-            int | None, typer.Option(help="Maximum tokens per batch for continuous batching.")
+            int | None, typer.Option(help="Maximum tokens per batch for continuous batching")
         ] = None,
         cb_max_memory_percent: Annotated[
-            float | None, typer.Option(help="Max GPU memory fraction for KV cache (0.0-1.0).")
+            float | None, typer.Option(help="Maximum GPU-memory fraction for KV cache, from `0.0` to `1.0`")
         ] = None,
         cb_use_cuda_graph: Annotated[
-            bool | None, typer.Option(help="Enable CUDA graphs for continuous batching.")
+            bool | None, typer.Option(help="Enable CUDA graphs for continuous batching")
         ] = None,
         # Server options
-        host: Annotated[str, typer.Option(help="Server listen address.")] = "localhost",
-        port: Annotated[int, typer.Option(help="Server listen port.")] = 8000,
-        enable_cors: Annotated[bool, typer.Option(help="Enable permissive CORS.")] = False,
-        log_level: Annotated[str, typer.Option(help="Logging level (e.g. 'info', 'warning').")] = "warning",
-        default_seed: Annotated[int | None, typer.Option(help="Default torch seed.")] = None,
+        host: Annotated[str, typer.Option(help="Host address to listen on")] = "localhost",
+        port: Annotated[int, typer.Option(help="Port to listen on")] = 8000,
+        enable_cors: Annotated[bool, typer.Option(help="Allow cross-origin requests from any origin")] = False,
+        log_level: Annotated[str, typer.Option(help="Logging level, for example, `info` or `warning`")] = "warning",
+        default_seed: Annotated[int | None, typer.Option(help="Default PyTorch seed")] = None,
         non_blocking: Annotated[
             bool, typer.Option(hidden=True, help="Run server in a background thread. Used by tests.")
         ] = False,
     ) -> None:
         if not is_serve_available():
-            raise ImportError("Missing dependencies for serving. Install with `pip install transformers[serving]`")
+            raise ImportError(
+                "Serving dependencies are missing. Install them with `pip install transformers[serving]`."
+            )
 
         import uvicorn
 
@@ -158,7 +164,7 @@ class Serve:
         if chat_template_kwargs:
             chat_template_kwargs = json.loads(chat_template_kwargs)
             if not isinstance(chat_template_kwargs, dict):
-                raise typer.BadParameter("--chat-template-kwargs must be a JSON object")
+                raise typer.BadParameter("Expected a JSON object for `--chat-template-kwargs`")
         else:
             chat_template_kwargs = {}
 
@@ -227,15 +233,14 @@ class Serve:
 
 
 Serve.__doc__ = """
-Run a FastAPI server to serve models on-demand with an OpenAI compatible API.
-Models will be loaded and unloaded automatically based on usage and a timeout.
+Run a FastAPI server with an OpenAI-compatible API; models load on demand and unload after a timeout
 
 \b
 Endpoints:
-    POST /v1/chat/completions — Chat completions (streaming + non-streaming).
-    POST /v1/completions      — Legacy text completions from a prompt.
-    GET  /v1/models           — Lists available models.
-    GET  /health              — Health check.
+    POST /v1/chat/completions — Chat completions, streaming or non-streaming
+    POST /v1/completions      — Legacy text completions from a prompt
+    GET  /v1/models           — List available models
+    GET  /health              — Check server health
 
-Requires FastAPI and Uvicorn: pip install transformers[serving]
+Install FastAPI and Uvicorn with `pip install transformers[serving]`
 """

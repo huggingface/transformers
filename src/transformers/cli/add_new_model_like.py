@@ -97,11 +97,11 @@ _AUTO_MAPPING_NAMES = {
 
 def add_new_model_like(
     repo_path: Annotated[
-        str | None, typer.Argument(help="When not using an editable install, the path to the Transformers repo.")
+        str | None, typer.Argument(help="Path to the Transformers repo when not using an editable install")
     ] = None,
 ):
     """
-    Add a new model to the library, based on an existing one.
+    Add a new model to the library based on an existing one
     """
     (
         old_model_infos,
@@ -552,7 +552,7 @@ def _add_new_model_like_internal(
     """
     # As the import was protected, raise if not present (as it's actually a hard dependency for this command)
     if not is_libcst_available():
-        raise ValueError("You need to install `libcst` to run this command -> `pip install libcst`")
+        raise ValueError("This command requires `libcst`. Install it with `pip install libcst`.")
 
     old_lowercase_name = old_model_infos.lowercase_name
 
@@ -693,27 +693,25 @@ def get_user_input():
     # Get old model type
     valid_model_type = False
     while not valid_model_type:
-        old_model_type = input(
-            "What model would you like to duplicate? Please provide it as lowercase, e.g. `llama`): "
-        )
+        old_model_type = input("Which model should you duplicate? Enter its lowercase name, for example, `llama`: ")
         if old_model_type in model_types:
             valid_model_type = True
         else:
-            print(f"{old_model_type} is not a valid model type.")
+            print(f"Couldn't find a model type named `{old_model_type}`.")
             near_choices = difflib.get_close_matches(old_model_type, model_types)
             if len(near_choices) >= 1:
                 if len(near_choices) > 1:
                     near_choices = " or ".join(near_choices)
-                print(f"Did you mean {near_choices}?")
+                print(f"Did you mean `{near_choices}`?")
 
     old_model_infos = ModelInfos(old_model_type)
 
     # Ask for the new model name
     new_lowercase_name = get_user_field(
-        "What is the new model name? Please provide it as snake lowercase, e.g. `new_model`?"
+        "What should the new model be called? Enter a lowercase snake_case name, for example, `new_model`:"
     )
     new_model_paper_name = get_user_field(
-        "What is the fully cased name you would like to appear in the doc (e.g. `NeW ModEl`)? ",
+        "What display name should appear in the docs? For example, `New Model`: ",
         default_value="".join(x.title() for x in new_lowercase_name.split("_")),
     )
 
@@ -726,39 +724,39 @@ def get_user_input():
     add_processor = False
     if old_model_infos.tokenizer_class is not None:
         add_tokenizer = get_user_field(
-            f"Do you want to create a new tokenizer? If `no`, it will use the same as {old_model_type} (y/n)?",
+            f"Create a new tokenizer? Enter `y` to create one or `n` to reuse `{old_model_type}`: ",
             convert_to=convert_to_bool,
-            fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
+            fallback_message="Enter yes/no, y/n, true/false, or 1/0.",
         )
     if old_model_infos.fast_tokenizer_class is not None:
         add_fast_tokenizer = get_user_field(
-            f"Do you want to create a new fast tokenizer? If `no`, it will use the same as {old_model_type} (y/n)?",
+            f"Create a new fast tokenizer? Enter `y` to create one or `n` to reuse `{old_model_type}`: ",
             convert_to=convert_to_bool,
-            fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
+            fallback_message="Enter yes/no, y/n, true/false, or 1/0.",
         )
     if old_model_infos.image_processor_classes is not None:
         add_image_processor = get_user_field(
-            f"Do you want to create a new image processor? If `no`, it will use the same as {old_model_type} (y/n)?",
+            f"Create a new image processor? Enter `y` to create one or `n` to reuse `{old_model_type}`: ",
             convert_to=convert_to_bool,
-            fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
+            fallback_message="Enter yes/no, y/n, true/false, or 1/0.",
         )
     if old_model_infos.video_processor_class is not None:
         add_video_processor = get_user_field(
-            f"Do you want to create a new video processor? If `no`, it will use the same as {old_model_type} (y/n)?",
+            f"Create a new video processor? Enter `y` to create one or `n` to reuse `{old_model_type}`: ",
             convert_to=convert_to_bool,
-            fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
+            fallback_message="Enter yes/no, y/n, true/false, or 1/0.",
         )
     if old_model_infos.feature_extractor_class is not None:
         add_feature_extractor = get_user_field(
-            f"Do you want to create a new feature extractor? If `no`, it will use the same as {old_model_type} (y/n)?",
+            f"Create a new feature extractor? Enter `y` to create one or `n` to reuse `{old_model_type}`: ",
             convert_to=convert_to_bool,
-            fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
+            fallback_message="Enter yes/no, y/n, true/false, or 1/0.",
         )
     if old_model_infos.processor_class is not None:
         add_processor = get_user_field(
-            f"Do you want to create a new processor? If `no`, it will use the same as {old_model_type} (y/n)?",
+            f"Create a new processor? Enter `y` to create one or `n` to reuse `{old_model_type}`: ",
             convert_to=convert_to_bool,
-            fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
+            fallback_message="Enter yes/no, y/n, true/false, or 1/0.",
         )
 
     old_lowercase_name = old_model_infos.lowercase_name

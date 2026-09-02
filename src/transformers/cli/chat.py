@@ -75,11 +75,11 @@ HELP_STRING_MINIMAL = """
 
 **TRANSFORMERS CHAT INTERFACE**
 
-Chat interface to try out a model. Besides chatting with the model, here are some basic commands:
-- **!help**: shows all available commands (set generation settings, save chat, etc.)
-- **!status**: shows the current status of the model and generation settings
-- **!clear**: clears the current conversation and starts a new one
-- **!exit**: closes the interface
+Chat with a model and use these commands:
+- **!help**: Show all available commands
+- **!status**: Show the model and generation settings
+- **!clear**: Clear the conversation and start a new one
+- **!exit**: Exit the chat interface
 """
 
 
@@ -89,17 +89,15 @@ HELP_STRING = f"""
 **TRANSFORMERS CHAT INTERFACE HELP**
 
 Full command list:
-- **!help**: shows this help message
-- **!clear**: clears the current conversation and starts a new one
-- **!status**: shows the current status of the model and generation settings
-- **!example {{NAME}}**: loads example named `{{NAME}}` from the config and uses it as the user input.
+- **!help**: Show this help message
+- **!clear**: Clear the conversation and start a new one
+- **!status**: Show the model and generation settings
+- **!example {{NAME}}**: Load the `{{NAME}}` example and send it as your message.
 Available example names: `{"`, `".join(DEFAULT_EXAMPLES.keys())}`
-- **!set {{ARG_1}}={{VALUE_1}} {{ARG_2}}={{VALUE_2}}** ...: changes the system prompt or generation settings (multiple
-settings are separated by a space). Accepts the same flags and format as the `generate_flags` CLI argument.
-If you're a new user, check this basic flag guide: https://huggingface.co/docs/transformers/llm_tutorial#common-options
-- **!save {{SAVE_NAME}} (optional)**: saves the current chat and settings to file by default to
-`./chat_history/{{MODEL_ID}}/chat_{{DATETIME}}.yaml` or `{{SAVE_NAME}}` if provided
-- **!exit**: closes the interface
+- **!set {{ARG_1}}={{VALUE_1}} {{ARG_2}}={{VALUE_2}}**: Update the system prompt or generation settings. Separate multiple settings with spaces. Use the same format as the `generate_flags` argument.
+For a flag guide, see https://huggingface.co/docs/transformers/llm_tutorial#common-options
+- **!save {{SAVE_NAME}} (optional)**: Save the chat and settings to `./chat_history/{{MODEL_ID}}/chat_{{DATETIME}}.yaml`, or to `{{SAVE_NAME}}` when provided.
+- **!exit**: Exit the chat interface
 """
 
 
@@ -307,24 +305,24 @@ class RichInterface:
 
 
 class Chat:
-    """Chat with a model from the command line."""
+    """Chat with a model from the command line"""
 
     # Defining a class to help with internal state but in practice it's just a method to call
     # TODO: refactor into a proper module with helpers + 1 main method
     def __init__(
         self,
-        model_id: Annotated[str, typer.Argument(help="ID of the model to use (e.g. 'HuggingFaceTB/SmolLM3-3B').")],
+        model_id: Annotated[str, typer.Argument(help="Model ID to use, for example, `HuggingFaceTB/SmolLM3-3B`")],
         base_url: Annotated[
-            str | None, typer.Argument(help="Base url to connect to (e.g. http://localhost:8000/v1).")
+            str | None, typer.Argument(help="Server URL to connect to, for example, `http://localhost:8000/v1`")
         ] = f"http://{DEFAULT_HTTP_ENDPOINT['hostname']}:{DEFAULT_HTTP_ENDPOINT['port']}",
         generate_flags: Annotated[
             list[str] | None,
             typer.Argument(
                 help=(
-                    "Flags to pass to `generate`, using a space as a separator between flags. Accepts booleans, numbers, "
-                    "and lists of integers, more advanced parameterization should be set through --generation-config. "
+                    "Generation settings as space-separated `key=value` pairs. Accepts booleans, numbers, and lists of "
+                    "integers. Use `--generation-config` for more advanced settings. "
                     "Example: `transformers chat <base_url> <model_id> max_new_tokens=100 do_sample=False eos_token_id=[1,2]`. "
-                    "If you're a new user, check this basic flag guide: "
+                    "For a flag guide, see "
                     "https://huggingface.co/docs/transformers/llm_tutorial#common-options"
                 )
             ),
@@ -332,20 +330,20 @@ class Chat:
         # General settings
         user: Annotated[
             str | None,
-            typer.Option(help="Username to display in chat interface. Defaults to the current user's name."),
+            typer.Option(help="Name to show in the chat interface; defaults to your OS username"),
         ] = None,
-        system_prompt: Annotated[str | None, typer.Option(help="System prompt.")] = None,
-        save_folder: Annotated[str, typer.Option(help="Folder to save chat history.")] = "./chat_history/",
-        examples_path: Annotated[str | None, typer.Option(help="Path to a yaml file with examples.")] = None,
+        system_prompt: Annotated[str | None, typer.Option(help="System prompt for the conversation")] = None,
+        save_folder: Annotated[str, typer.Option(help="Directory for chat history")] = "./chat_history/",
+        examples_path: Annotated[str | None, typer.Option(help="Path to a YAML file with examples")] = None,
         # Generation settings
         generation_config: Annotated[
             str | None,
             typer.Option(
-                help="Path to a local generation config file or to a HuggingFace repo containing a `generation_config.json` file. Other generation settings passed as CLI arguments will be applied on top of this generation config."
+                help="Local path or Hub repo containing `generation_config.json`; CLI generation settings override it"
             ),
         ] = None,
     ) -> None:
-        """Chat with a model from the command line."""
+        """Chat with a model from the command line"""
         self.base_url = base_url
 
         parsed = urlparse(self.base_url)
@@ -376,7 +374,7 @@ class Chat:
 
         # Check requirements
         if not is_rich_available():
-            raise ImportError("You need to install rich to use the chat interface. (`pip install rich`)")
+            raise ImportError("The chat interface requires `rich`. Install it with `pip install rich`.")
 
         # Run chat session
         asyncio.run(self._inner_run())
@@ -388,12 +386,12 @@ class Chat:
             output = httpx.get(health_url)
             if output.status_code != 200:
                 raise ValueError(
-                    f"The server running on {url} returned status code {output.status_code} on health check (/health)."
+                    f"The server at {url} returned status code {output.status_code} while checking `/health`."
                 )
         except httpx.ConnectError:
             raise ValueError(
-                f"No server currently running on {url}. To run a local server, please run `transformers serve` in a"
-                f"separate shell. Find more information here: https://huggingface.co/docs/transformers/serving"
+                f"No server is running at {url}. Start one in another shell with `transformers serve`. "
+                f"See https://huggingface.co/docs/transformers/serving for details."
             )
 
         return True
@@ -427,7 +425,7 @@ class Chat:
                 else os.path.join(self.save_folder, self.model_id, f"chat_{time.strftime('%Y-%m-%d_%H-%M-%S')}.json")
             )
             save_chat(filename=filename, chat=chat, settings=self.settings)
-            interface.print_color(text=f"Chat saved to {filename}!", color="green")
+            interface.print_color(text=f"Saved chat to {filename}", color="green")
 
         elif user_input.startswith("!set"):
             # splits the new args into a list of strings, each string being a `flag=value` pair (same format as
@@ -438,10 +436,7 @@ class Chat:
             for flag in new_generate_flags:
                 if "=" not in flag:
                     interface.print_color(
-                        text=(
-                            f"Invalid flag format, missing `=` after `{flag}`. Please use the format "
-                            "`arg_1=value_1 arg_2=value_2 ...`."
-                        ),
+                        text=(f"Invalid flag format: `{flag}` has no `=`. Use `arg_1=value_1 arg_2=value_2 …`."),
                         color="red",
                     )
                     break
@@ -457,9 +452,7 @@ class Chat:
                 interface.print_user_message(examples[example_name]["text"])
                 chat.append({"role": "user", "content": examples[example_name]["text"]})
             else:
-                example_error = (
-                    f"Example {example_name} not found in list of available examples: {list(examples.keys())}."
-                )
+                example_error = f"Unknown example `{example_name}`. Available examples: {list(examples.keys())}."
                 interface.print_color(text=example_error, color="red")
 
         elif user_input == "!status":
@@ -467,7 +460,7 @@ class Chat:
 
         else:
             valid_command = False
-            interface.print_color(text=f"'{user_input}' is not a valid command. Showing help message.", color="red")
+            interface.print_color(text="Unknown command. Showing help.", color="red")
             interface.print_help()
 
         return chat, valid_command, config
@@ -517,7 +510,7 @@ class Chat:
                             )
                         )
                         save_chat(filename=filename, chat=chat, settings=self.settings)
-                        interface.print_color(text=f"Chat saved to {filename}!", color="green")
+                        interface.print_color(text=f"Saved chat to {filename}", color="green")
                         continue
 
                     elif user_input.startswith("!set"):
@@ -530,8 +523,7 @@ class Chat:
                             if "=" not in flag:
                                 interface.print_color(
                                     text=(
-                                        f"Invalid flag format, missing `=` after `{flag}`. Please use the format "
-                                        "`arg_1=value_1 arg_2=value_2 ...`."
+                                        f"Invalid flag format: `{flag}` has no `=`. Use `arg_1=value_1 arg_2=value_2 …`."
                                     ),
                                     color="red",
                                 )
@@ -549,7 +541,9 @@ class Chat:
                             interface.print_user_message(self.examples[example_name]["text"])
                             chat.append({"role": "user", "content": self.examples[example_name]["text"]})
                         else:
-                            example_error = f"Example {example_name} not found in list of available examples: {list(self.examples.keys())}."
+                            example_error = (
+                                f"Unknown example `{example_name}`. Available examples: {list(self.examples.keys())}."
+                            )
                             interface.print_color(text=example_error, color="red")
 
                     elif user_input == "!status":
@@ -557,9 +551,7 @@ class Chat:
                         continue
 
                     elif user_input.startswith("!"):
-                        interface.print_color(
-                            text=f"'{user_input}' is not a valid command. Showing help message.", color="red"
-                        )
+                        interface.print_color(text="Unknown command. Showing help.", color="red")
                         interface.print_help()
                         continue
 
@@ -650,9 +642,8 @@ def parse_generate_flags(generate_flags: list[str] | None) -> dict:
         processed_generate_flags = json.loads(generate_flags_string)
     except json.JSONDecodeError:
         raise ValueError(
-            "Failed to convert `generate_flags` into a valid JSON object."
-            "\n`generate_flags` = {generate_flags}"
-            "\nConverted JSON string = {generate_flags_string}"
+            "Couldn't parse the generation settings. Use space-separated `key=value` pairs, "
+            "for example, `temperature=0.7 max_new_tokens=100`."
         )
     return processed_generate_flags
 
