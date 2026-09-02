@@ -1514,7 +1514,8 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "minimax_m3_sparse": create_causal_mask,
     # DSA always needs to materialize the mask to account for causality (no SDPA `is_cauasal` shortcut)
     "deepseek_sparse_attention": partial(create_causal_mask, allow_is_causal_skip=False),
-    "qwen_sparse_attention": create_causal_mask,
+    # Force mask creation as needed in Qwen's DSA implementation
+    "qwen_sparse_attention": partial(create_causal_mask, allow_is_causal_skip=False),
     "linear_attention": create_recurrent_attention_mask,
     "conv": create_recurrent_attention_mask,
     "hybrid": {"full_attention": create_causal_mask, "linear_attention": create_recurrent_attention_mask},
