@@ -125,41 +125,6 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
             expected_shapes = [(batch_size, seq_len, hidden_size) for hidden_size in hidden_sizes]
             self.assertListEqual([state.shape for state in iteration_hidden_states], expected_shapes)
 
-    def _assert_cached_matches_full(self, model, input_ids, test_static=False):
-        split_idx = (input_ids.shape[1] + 1) // 2
-        with torch.no_grad():
-            expected = model(input_ids, use_cache=False).last_hidden_state
-            chunk_cache = DynamicCache(config=model.config)
-            actual_outputs = [
-                torch.cat(
-                    [
-                        model(input_ids[:, :split_idx], past_key_values=chunk_cache, use_cache=True).last_hidden_state,
-                        model(input_ids[:, split_idx:], past_key_values=chunk_cache, use_cache=True).last_hidden_state,
-                    ],
-                    dim=1,
-                )
-            ]
-            decode_caches = [DynamicCache(config=model.config)]
-            if test_static:
-                decode_caches.append(StaticCache(config=model.config, max_cache_len=input_ids.shape[1]))
-            for cache in decode_caches:
-                actual_outputs.append(
-                    torch.cat(
-                        [
-                            model(
-                                input_ids[:, token_idx : token_idx + 1],
-                                past_key_values=cache,
-                                use_cache=True,
-                            ).last_hidden_state
-                            for token_idx in range(input_ids.shape[1])
-                        ],
-                        dim=1,
-                    )
-                )
-
-        for actual in actual_outputs:
-            torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-5)
-
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config._attn_implementation = "eager"
@@ -376,57 +341,54 @@ class Qwen4ExpVisionText2TextModelTester(VLMModelTester):
     conditional_generation_class = Qwen4ExpForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
-        kwargs.setdefault("num_key_value_heads", 1)
-        kwargs.setdefault("head_dim", 24)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("layer_types", ["linear_attention", "qwen_sparse_attention"])
-        kwargs.setdefault("linear_conv_kernel_dim", 2)
-        kwargs.setdefault("linear_key_head_dim", 16)
-        kwargs.setdefault("linear_value_head_dim", 16)
-        kwargs.setdefault("linear_num_key_heads", 4)
-        kwargs.setdefault("linear_num_value_heads", 8)
-        kwargs.setdefault("hc_count", 2)
-        kwargs.setdefault("hc_lowrank", 8)
-        kwargs.setdefault("ple_layer_ids", [1])
-        kwargs.setdefault("ple_embed_dim", 16)
-        kwargs.setdefault("ple_conv_kernel_size", 2)
-        kwargs.setdefault("ngram_size", 3)
-        kwargs.setdefault("heads_per_ngram", 2)
-        kwargs.setdefault("ngram_vocab_size_base", 31)
-        kwargs.setdefault("make_ngram_vocab_size_divisible_by", 8)
-        kwargs.setdefault("split_ngram_parts", 4)
-        kwargs.setdefault("indexer_n_heads", 2)
-        kwargs.setdefault("indexer_kv_heads", 1)
-        kwargs.setdefault("indexer_head_dim", 8)
-        kwargs.setdefault("indexer_budget", 4)
-        kwargs.setdefault("indexer_compress_ratio", 2)
-        kwargs.setdefault("moe_intermediate_size", 8)
-        kwargs.setdefault("shared_expert_intermediate_size", 8)
-        kwargs.setdefault("num_experts", 4)
-        kwargs.setdefault("bos_token_id", 0)
-        kwargs.setdefault("eos_token_id", 1)
-        kwargs.setdefault("pad_token_id", 2)
-        kwargs.setdefault("video_token_id", 4)
-        kwargs.setdefault("vision_start_token_id", 5)
-        kwargs.setdefault("vision_end_token_id", 6)
-        kwargs.setdefault("image_size", 16)
-        kwargs.setdefault("patch_size", 16)
-        kwargs.setdefault("depth", 1)
-        kwargs.setdefault("vision_hidden_act", "gelu_pytorch_tanh")
-        kwargs.setdefault("num_heads", 4)
-        kwargs.setdefault("spatial_merge_size", 1)
-        kwargs.setdefault("temporal_patch_size", 2)
-        kwargs.setdefault("num_position_embeddings", 16)
-        kwargs.setdefault(
-            "rope_parameters",
-            {
-                "rope_type": "default",
-                "partial_rotary_factor": 0.25,
-                "mrope_section": [1, 1, 1],
-                "mrope_interleaved": True,
-            },
-        )
         super().__init__(parent, **kwargs)
+        self.num_key_value_heads = 1
+        self.head_dim = 24
+        self.hidden_act = "silu"
+        self.layer_types = ["linear_attention", "qwen_sparse_attention"]
+        self.linear_conv_kernel_dim = 2
+        self.linear_key_head_dim = 16
+        self.linear_value_head_dim = 16
+        self.linear_num_key_heads = 4
+        self.linear_num_value_heads = 8
+        self.hc_count = 2
+        self.hc_lowrank = 8
+        self.ple_layer_ids = [1]
+        self.ple_embed_dim = 16
+        self.ple_conv_kernel_size = 2
+        self.ngram_size = 3
+        self.heads_per_ngram = 2
+        self.ngram_vocab_size_base = 31
+        self.make_ngram_vocab_size_divisible_by = 8
+        self.split_ngram_parts = 4
+        self.indexer_n_heads = 2
+        self.indexer_kv_heads = 1
+        self.indexer_head_dim = 8
+        self.indexer_budget = 4
+        self.indexer_compress_ratio = 2
+        self.moe_intermediate_size = 8
+        self.shared_expert_intermediate_size = 8
+        self.num_experts = 4
+        self.bos_token_id = 0
+        self.eos_token_id = 1
+        self.pad_token_id = 2
+        self.video_token_id = 4
+        self.vision_start_token_id = 5
+        self.vision_end_token_id = 6
+        self.image_size = 16
+        self.patch_size = 16
+        self.depth = 1
+        self.vision_hidden_act = "gelu_pytorch_tanh"
+        self.num_heads = 4
+        self.spatial_merge_size = 1
+        self.temporal_patch_size = 2
+        self.num_position_embeddings = 16
+        self.rope_parameters = {
+            "rope_type": "default",
+            "partial_rotary_factor": 0.25,
+            "mrope_section": [1, 1, 1],
+            "mrope_interleaved": True,
+        }
         self.in_channels = self.num_channels
         self.out_hidden_size = self.hidden_size
         self.vision_hidden_size = self.hidden_size
@@ -459,22 +421,6 @@ class Qwen4ExpVisionText2TextModelTester(VLMModelTester):
             "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
             "mm_token_type_ids": mm_token_type_ids,
         }
-
-    # def get_config(self, ple_layer_ids=None):
-    #     text_config = self.get_text_config().to_dict()
-    #     text_config.pop("number_of_conv_states", None)
-    #     if ple_layer_ids is not None:
-    #         text_config["ple_layer_ids"] = ple_layer_ids
-    #     return Qwen4ExpConfig(
-    #         text_config=text_config,
-    #         vision_config=self.get_vision_config().to_dict(),
-    #         image_token_id=self.image_token_id,
-    #         video_token_id=self.video_token_id,
-    #         vision_start_token_id=self.vision_start_token_id,
-    #         vision_end_token_id=self.vision_end_token_id,
-    #         tie_word_embeddings=self.tie_word_embeddings,
-    #         pad_token_id=self.pad_token_id,
-    #     )
 
 
 @require_torch
