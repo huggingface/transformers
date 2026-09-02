@@ -211,6 +211,25 @@ class NoisyCommentsTest(unittest.TestCase):
             self.assertIn("checked/sample.py", stdout.getvalue())
             self.assertNotIn("ignored/sample.py", stdout.getvalue())
 
+    def test_cli_orders_biggest_offenders_first(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            large_file = repo_root / "large.py"
+            large_file.write_text("# " + "a" * 600 + "\n", encoding="utf-8")
+            small_file = repo_root / "small.py"
+            small_file.write_text('# Use the "simple path" when possible.\n', encoding="utf-8")
+            stdout = io.StringIO()
+
+            with (
+                patch.object(check_noisy_comments, "ROOT", repo_root),
+                patch.object(sys, "argv", ["check_noisy_comments.py", "--path", str(repo_root)]),
+                redirect_stdout(stdout),
+            ):
+                exit_code = check_noisy_comments.main()
+
+            self.assertEqual(exit_code, 0)
+            self.assertLess(stdout.getvalue().index("large.py"), stdout.getvalue().index("small.py"))
+
     def test_cli_can_fail_on_findings(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)

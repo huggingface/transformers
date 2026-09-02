@@ -101,6 +101,7 @@ class Finding:
     code: str
     message: str
     text: str
+    score: int
 
 
 def _display_path(path: Path) -> str:
@@ -269,6 +270,7 @@ def check_file(
                     code="NC001",
                     message=f"comment block has {len(block)} lines (limit: {max_block_lines})",
                     text=block[0].text.strip(),
+                    score=len(block),
                 )
             )
         if body_chars > max_block_chars:
@@ -279,6 +281,7 @@ def check_file(
                     code="NC002",
                     message=f"comment block has {body_chars} characters (limit: {max_block_chars})",
                     text=block[0].text.strip(),
+                    score=body_chars,
                 )
             )
 
@@ -294,6 +297,7 @@ def check_file(
                     code="NC003",
                     message=f"comment has {len(body)} characters (limit: {max_comment_chars})",
                     text=comment.text.strip(),
+                    score=len(body),
                 )
             )
         if _has_double_quoted_phrase(comment):
@@ -304,6 +308,7 @@ def check_file(
                     code="NC004",
                     message="comment uses double-quoted prose; prefer backticks, single quotes, or plain text",
                     text=comment.text.strip(),
+                    score=1,
                 )
             )
 
@@ -365,6 +370,9 @@ def main() -> int:
         print("No noisy comments found.")
         return 0
 
+    findings = sorted(
+        findings, key=lambda finding: (-finding.score, finding.code, _display_path(finding.path), finding.line)
+    )
     mode = "Blocking." if args.fail_on_findings else "Reporting only; not blocking."
     print(f"Found {len(findings)} noisy comment finding(s). {mode}")
     for finding in findings[: args.max_findings]:
