@@ -226,6 +226,7 @@ class Qwen3TTSTokenizerSingleCodebookEncoderConfig(PreTrainedConfig):
     encoder_attention_heads: int = 16
     encoder_ffn_dim: int = 4096
     encoder_layerdrop: float | int = 0.0
+    d_model: int = 1280
     dropout: float | int = 0.0
     attention_dropout: float | int = 0.0
     activation_function: str = "gelu"
