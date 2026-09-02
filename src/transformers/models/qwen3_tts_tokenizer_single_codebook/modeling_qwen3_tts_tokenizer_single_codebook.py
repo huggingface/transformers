@@ -988,6 +988,25 @@ class Qwen3TTSTokenizerSingleCodebookDiTAttention(nn.Module):
         return attention_output
 
 
+# AdaLayerNormZero for final layer
+# return only with modulated x for attn input, cuz no more mlp modulation
+class Qwen3TTSTokenizerSingleCodebookAdaLayerNormZeroFinal(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+
+        self.silu = nn.SiLU()
+        self.linear = nn.Linear(dim, dim * 2)
+
+        self.norm = nn.LayerNorm(dim, elementwise_affine=False, eps=1e-6)
+
+    def forward(self, hidden_states, emb):
+        emb = self.linear(self.silu(emb))
+        scale, shift = torch.chunk(emb, 2, dim=1)
+
+        hidden_states = self.norm(hidden_states) * (1 + scale)[:, None, :] + shift[:, None, :]
+        return hidden_states
+
+
 # AdaLayerNormZero
 # return with modulated x for attn input, and params for later mlp modulation
 class Qwen3TTSTokenizerSingleCodebookAdaLayerNormZero(nn.Module):
@@ -1413,98 +1432,6 @@ class DiTCodecEmbedding(nn.Module):
         return code_embed
 
 
-# AdaLayerNormZero for final layer
-# return only with modulated x for attn input, cuz no more mlp modulation
-class Qwen3TTSTokenizerSingleCodebookAdaLayerNormZero_Final(nn.Module):
-    def __init__(self, dim):
-        super().__init__()
-
-        self.silu = nn.SiLU()
-        self.linear = nn.Linear(dim, dim * 2)
-
-        self.norm = nn.LayerNorm(dim, elementwise_affine=False, eps=1e-6)
-
-    def forward(self, hidden_states, emb):
-        emb = self.linear(self.silu(emb))
-        scale, shift = torch.chunk(emb, 2, dim=1)
-
-        hidden_states = self.norm(hidden_states) * (1 + scale)[:, None, :] + shift[:, None, :]
-        return hidden_states
-
-
-def deinterleave_head_dim(x: torch.Tensor) -> torch.Tensor:
-    """Reorder the head dim from interleaved RoPE layout `(x0, x1, x2, x3, ...)` to the standard half-split layout
-    `(x0, x2, ..., x1, x3, ...)` so the kernelized `apply_rotary_pos_emb` can be used.
-    """
-    return torch.cat((x[..., 0::2], x[..., 1::2]), dim=-1)
-
-
-class DiTAttention(nn.Module):
-    def __init__(self, config: Qwen3TTSTokenizerSingleCodebookDiTConfig):
-        super().__init__()
-
-        self.config = config
-        self.dim = config.hidden_size
-        self.heads = config.num_attention_heads
-        self.inner_dim = config.head_dim * config.num_attention_heads
-        self.dropout = config.dropout
-        self.is_causal = False
-
-        self.to_q = nn.Linear(config.hidden_size, self.inner_dim)
-        self.to_k = nn.Linear(config.hidden_size, self.inner_dim)
-        self.to_v = nn.Linear(config.hidden_size, self.inner_dim)
-
-        self.to_out = nn.ModuleList([nn.Linear(self.inner_dim, config.hidden_size), nn.Dropout(config.dropout)])
-
-    def forward(
-        self,
-        hidden_states,  # noised input x
-        position_embeddings=None,  # rotary position embedding for x
-        attention_mask=None,
-    ) -> torch.Tensor:
-        batch_size = hidden_states.shape[0]
-
-        # `sample` projections.
-        query = self.to_q(hidden_states)
-        key = self.to_k(hidden_states)
-        value = self.to_v(hidden_states)
-
-        # attention
-        inner_dim = key.shape[-1]
-        head_dim = inner_dim // self.heads
-        query = query.view(batch_size, -1, self.heads, head_dim).transpose(1, 2)
-        key = key.view(batch_size, -1, self.heads, head_dim).transpose(1, 2)
-        value = value.view(batch_size, -1, self.heads, head_dim).transpose(1, 2)
-
-        # apply rotary position embedding
-        # Due to training process, only first head is applied with RoPE, will be fixed at next release
-        # The checkpoint uses interleaved RoPE, so deinterleave q/k before the half-split rotation.
-        cos, sin = position_embeddings
-        query[:, :1], key[:, :1] = apply_rotary_pos_emb(
-            deinterleave_head_dim(query[:, :1]), deinterleave_head_dim(key[:, :1]), cos, sin
-        )
-
-        attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-        attention_weights, _ = attention_interface(
-            self,
-            query,
-            key,
-            value,
-            attention_mask=attention_mask,
-            is_causal=False,
-        )
-
-        # mask. e.g. inference got a batch with different target durations, mask out the padding
-        attention_weights = attention_weights.reshape(batch_size, -1, self.heads * head_dim)
-        attention_weights = attention_weights.to(query.dtype)
-
-        # linear proj
-        attention_output = self.to_out[0](attention_weights)
-        attention_output = self.to_out[1](attention_output)
-
-        return attention_output
-
-
 # time step conditioning embedding
 class SinusPositionEmbedding(nn.Module):
     def __init__(self, dim):
@@ -1535,41 +1462,6 @@ class DiTTimestepEmbedding(nn.Module):
         return time_hidden
 
 
-class DiTDecoderLayer(nn.Module):
-    def __init__(self, config: Qwen3TTSTokenizerSingleCodebookDiTConfig, look_ahead_block=0, look_backward_block=0):
-        super().__init__()
-        self.attn_norm = Qwen3TTSTokenizerSingleCodebookAdaLayerNormZero(config.hidden_size)
-
-        self.attn = DiTAttention(config)
-        self.look_ahead_block = look_ahead_block
-        self.look_backward_block = look_backward_block
-        self.ff_norm = nn.LayerNorm(config.hidden_size, elementwise_affine=False, eps=1e-6)
-        self.ff = DiTMLP(dim=config.hidden_size, mult=config.ff_mult, dropout=config.dropout)
-
-    def forward(
-        self, hidden_states, timestep, position_embeddings=None, block_diff=None
-    ):  # x: noised input, t: time embedding
-        # pre-norm & modulation for attention input
-        norm, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.attn_norm(hidden_states, emb=timestep)
-
-        # attention
-        attn_output = self.attn(
-            hidden_states=norm,
-            position_embeddings=position_embeddings,
-            attention_mask=(block_diff >= -float(self.look_backward_block))
-            & (block_diff <= float(self.look_ahead_block)),
-        )
-
-        # process attention output for input x
-        hidden_states = hidden_states + gate_msa.unsqueeze(1) * attn_output
-
-        norm = self.ff_norm(hidden_states) * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
-        ff_output = self.ff(norm)
-        hidden_states = hidden_states + gate_mlp.unsqueeze(1) * ff_output
-
-        return hidden_states
-
-
 @auto_docstring(
     custom_intro="""
     The full Qwen2.5Omni Token2WavDiT model. Which take speech tokens as input and predict mel spectrogram.
@@ -1586,41 +1478,25 @@ class Qwen3TTSTokenizerSingleCodebookDecoderDiTModel(Qwen3TTSTokenizerSingleCode
         self.mel_dim = config.mel_dim
         self.repeats = config.repeats
         self.time_embed = DiTTimestepEmbedding(config.hidden_size)
-
         self.text_embed = DiTCodecEmbedding(config.num_embeds, config.emb_dim, config.repeats)
         self.input_embed = DiTInputEmbedding(config)
         self.rotary_embed = Qwen3TTSTokenizerSingleCodebookDiTRotaryEmbedding(config)
-
         self.hidden_size = config.hidden_size
         self.layers = config.num_hidden_layers
         self.block_size = config.block_size
         self.num_attention_heads = config.num_attention_heads
-        self.transformer_blocks = nn.ModuleList(
-            [
+        self.transformer_blocks = nn.ModuleList()
+        for i in range(config.num_hidden_layers):
+            # CODEPATH: Omni Token2Wav DiT look-ahead and look-backward layer sets
+            self.transformer_blocks.append(
                 Qwen3TTSTokenizerSingleCodebookDiTDecoderLayer(
                     config,
-                    look_ahead_block=1
-                    if i in config.look_ahead_layers
-                    else 0,  # CODEPATH: Omni Token2Wav DiT look-ahead layers
-                    look_backward_block=1
-                    if i in config.look_backward_layers
-                    else 0,  # CODEPATH: Omni Token2Wav DiT look-backward layers
-                )
-                for i in range(config.num_hidden_layers)
-            ]
-        )
-        for i in range(config.num_hidden_layers):
-            self.transformer_blocks.append(
-                DiTDecoderLayer(
-                    config,
-                    look_ahead_block=1 if i in config.look_ahead_layers else 0,
-                    look_backward_block=1 if i in config.look_backward_layers else 0,
+                    look_ahead_block=int(i in config.look_ahead_layers),
+                    look_backward_block=int(i in config.look_backward_layers),
                 )
             )
-
-        self.norm_out = Qwen3TTSTokenizerSingleCodebookAdaLayerNormZero_Final(config.hidden_size)  # final modulation
+        self.norm_out = Qwen3TTSTokenizerSingleCodebookAdaLayerNormZeroFinal(config.hidden_size)
         self.proj_out = nn.Linear(config.hidden_size, config.mel_dim)
-
         self.post_init()
 
     def _create_block_diff(self, hidden_states):

@@ -215,7 +215,7 @@ class Qwen3TTSTokenizerSingleCodebookEncoderConfig(PreTrainedConfig):
     model_type = "qwen3_tts_tokenizer_single_codebook_encoder"
     attribute_map = {
         "num_hidden_layers": "encoder_layers",
-        "d_model": "hidden_size",
+        "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
         "intermediate_size": "encoder_ffn_dim",
     }
@@ -226,7 +226,7 @@ class Qwen3TTSTokenizerSingleCodebookEncoderConfig(PreTrainedConfig):
     encoder_attention_heads: int = 16
     encoder_ffn_dim: int = 4096
     encoder_layerdrop: float | int = 0.0
-    d_model: int = 1280
+    d_model: int = 1024
     dropout: float | int = 0.0
     attention_dropout: float | int = 0.0
     activation_function: str = "gelu"
@@ -235,7 +235,6 @@ class Qwen3TTSTokenizerSingleCodebookEncoderConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     max_source_positions: int = 1500
     base_config_key = "encoder_config"
-    hidden_size: int = 1024
     num_layers_before_quantizer: int = 1
 
 
