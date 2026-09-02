@@ -1602,6 +1602,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(inputs_tensor)
 
+        model_kwargs = self._prepare_multimodal_encoder_kwargs_for_generation(model_kwargs)
         if (image_outputs := model_kwargs.pop("mm_encoder_outputs", {}).get("image")) is not None:
             if model_kwargs.get("pixel_values") is not None:
                 raise ValueError("You cannot pass both: raw pixels and pre-computed embeddings for input images")
@@ -1613,8 +1614,11 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         model_kwargs["inputs_embeds"] = inputs_embeds
-        model_kwargs = super()._maybe_prepare_encoder_kwargs_for_generation(
-            None, model_kwargs, model_input_name, generation_config
+        model_kwargs = self._prepare_text_encoder_decoder_kwargs_for_generation(
+            inputs_tensor=inputs_tensor,
+            model_kwargs=model_kwargs,
+            model_input_name=model_input_name,
+            generation_config=generation_config,
         )
         model_kwargs.pop("inputs_embeds", None)
         return model_kwargs

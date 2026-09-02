@@ -146,11 +146,14 @@ class LlavaModel(LlavaPreTrainedModel):
         pixel_values: torch.FloatTensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
+        image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
         kwargs["output_hidden_states"] = True  # Ignore arg on purpose
+        if image_sizes is not None:  # pass only when not-None, not all vision backbones accept it
+            kwargs["image_sizes"] = image_sizes
         image_outputs = self.vision_tower(
             pixel_values,
             return_dict=True,
@@ -174,9 +177,9 @@ class LlavaModel(LlavaPreTrainedModel):
 
         # If image_sizes is provided, we need to split the image features accordingly,
         # but only if the image_sizes is not None (the default in this and related architectures)
-        if kwargs.get("image_sizes") is not None:
+        if image_sizes is not None:
             split_sizes = (
-                (torch.as_tensor(kwargs["image_sizes"], device=image_features.device) // self.vision_tower.patch_size)
+                (torch.as_tensor(image_sizes, device=image_features.device) // self.vision_tower.patch_size)
                 .prod(dim=-1)
                 .tolist()
             )
