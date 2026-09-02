@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
 import concurrent.futures
 import json
 import os
@@ -23,7 +24,7 @@ from tokenizers import Tokenizer, decoders, pre_tokenizers, trainers
 from tokenizers.models import BPE, WordLevel
 
 from transformers import AutoTokenizer, PreTrainedTokenizerFast
-from transformers.testing_utils import require_tokenizers
+from transformers.testing_utils import require_tiktoken, require_tokenizers
 
 
 @require_tokenizers
@@ -275,6 +276,68 @@ class PreTrainedTokenizationFastTest(unittest.TestCase):
 
         # Non-BPE: cleanup IS applied — space before "." is stripped
         self.assertNotIn(" .", decoded)
+
+
+@require_tokenizers
+@require_tiktoken
+class TikTokenAddedTokensTest(unittest.TestCase):
+    """Loading a tiktoken vocab must place `added_tokens_decoder` tokens on their declared ids.
+
+    Repos such as `moonshotai/Kimi-K2.7-Code` ship a tiktoken vocab and declare their special tokens at sparse ids in a
+    reserved range above it. If the ids are appended in a contiguous block, the tokenizer will silently produce a false
+    mapping. The tests below mirror that shape at a small scale so the test needs no network.
+    """
+
+    BASE_TOKENS = list("abcdefghijklmnop")
+    # Sparse and non-contiguous, like the reserved range of a real tiktoken checkpoint: a hole at 19
+    # and a far tail pair, so declaration order and id order disagree.
+    ADDED_TOKENS = {16: "[BOS]", 17: "[EOS]", 18: "<|im_end|>", 20: "<|start_header_id|>", 30: "[UNK]", 31: "[PAD]"}
+
+    def _write_tiktoken_repo(self, directory, base_tokens, added_tokens):
+        with open(os.path.join(directory, "tiktoken.model"), "w") as vocab_file:
+            vocab_file.writelines(
+                f"{base64.b64encode(token.encode()).decode()} {rank}\n" for rank, token in enumerate(base_tokens)
+            )
+        config = {
+            "tokenizer_class": "PreTrainedTokenizerFast",
+            "added_tokens_decoder": {
+                str(token_id): {
+                    "content": content,
+                    "lstrip": False,
+                    "normalized": False,
+                    "rstrip": False,
+                    "single_word": False,
+                    "special": True,
+                }
+                for token_id, content in added_tokens.items()
+            },
+        }
+        with open(os.path.join(directory, "tokenizer_config.json"), "w") as config_file:
+            json.dump(config, config_file)
+
+    def test_added_tokens_keep_their_declared_ids(self):
+        """Every declared added token resolves to the id its config declares."""
+        with tempfile.TemporaryDirectory() as directory:
+            self._write_tiktoken_repo(directory, self.BASE_TOKENS, self.ADDED_TOKENS)
+            tokenizer = AutoTokenizer.from_pretrained(directory)
+
+            misplaced = {
+                content: (token_id, tokenizer.convert_tokens_to_ids(content))
+                for token_id, content in self.ADDED_TOKENS.items()
+                if tokenizer.convert_tokens_to_ids(content) != token_id
+            }
+            self.assertEqual(misplaced, {}, f"tokens landed on the wrong ids (declared, actual): {misplaced}")
+
+    def test_gaps_between_added_tokens_are_padded(self):
+        """Ids with no declared token are filled with reserved placeholders, not left to collapse."""
+        with tempfile.TemporaryDirectory() as directory:
+            self._write_tiktoken_repo(directory, self.BASE_TOKENS, self.ADDED_TOKENS)
+            tokenizer = AutoTokenizer.from_pretrained(directory)
+
+            # 19 is the hole between "<|im_end|>" (18) and "<|start_header_id|>" (20).
+            self.assertEqual(tokenizer.convert_ids_to_tokens(19), "<|reserved_token_19|>")
+            # The vocabulary runs to the highest declared id and no further.
+            self.assertEqual(len(tokenizer), max(self.ADDED_TOKENS) + 1)
 
 
 @require_tokenizers

@@ -829,7 +829,7 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     device = get_device(model.device.type)
 
     if model.kernel_config is not None:
-        inherit_mapping = not model.kernel_config.use_local_kernel
+        inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
         with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
             _kernels_kernelize(model, device=device, mode=mode)
     else:
