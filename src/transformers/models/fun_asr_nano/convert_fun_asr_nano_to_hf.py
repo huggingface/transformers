@@ -94,15 +94,13 @@ ROOT_STATE_DICT_MAPPING = (
 )
 
 COMPONENT_STATE_DICT_MAPPING = (
-    (r"\.feed_forward\.w_1\.", ".fc1."),
-    (r"\.feed_forward\.w_2\.", ".fc2."),
     (r"\.norm1\.", ".self_attn_layer_norm."),
     (r"\.norm2\.", ".final_layer_norm."),
     (r"\.self_attn\.linear_q\.", ".self_attn.q_proj."),
     (r"\.self_attn\.linear_k\.", ".self_attn.k_proj."),
     (r"\.self_attn\.linear_v\.", ".self_attn.v_proj."),
     (r"\.self_attn\.linear_out\.", ".self_attn.out_proj."),
-    (r"\.self_attn\.fsmn_block\.", ".feedforward_sequential_memory.conv."),
+    (r"\.self_attn\.fsmn_block\.", ".self_attn.fsmn.conv."),
 )
 
 
@@ -176,6 +174,13 @@ def convert_key(key: str) -> str | None:
             break
     if mapped_key is None or ".linear_q_k_v." in mapped_key:
         return None
+
+    if mapped_key.startswith("model.audio_tower."):
+        mapped_key = re.sub(r"\.feed_forward\.w_1\.", ".mlp.fc1.", mapped_key)
+        mapped_key = re.sub(r"\.feed_forward\.w_2\.", ".mlp.fc2.", mapped_key)
+    else:
+        mapped_key = re.sub(r"\.feed_forward\.w_1\.", ".fc1.", mapped_key)
+        mapped_key = re.sub(r"\.feed_forward\.w_2\.", ".fc2.", mapped_key)
 
     for pattern, replacement in COMPONENT_STATE_DICT_MAPPING:
         mapped_key = re.sub(pattern, replacement, mapped_key)

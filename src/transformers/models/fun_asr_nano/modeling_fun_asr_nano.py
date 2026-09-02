@@ -20,7 +20,6 @@
 
 from dataclasses import dataclass
 
-import numpy as np
 import torch.nn as nn
 
 from ... import initialization as init
@@ -72,9 +71,9 @@ class FunAsrNanoPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, SinusoidsPositionEmbedding):
+        if isinstance(module, FunAsrNanoPositionEmbedding):
             position_embeddings = module.compute_default_singular_positional_embedding()
-            init.copy_(module.positional_embedding, position_embeddings)
+            init.copy_(module.embedding, position_embeddings)
 
 
 def eager_attention_forward(
@@ -104,9 +103,14 @@ def eager_attention_forward(
 
 
 class FunAsrNanoAttention(nn.Module):
-    """Qwen3-ASR attention adapted for padded batch masks and checkpoint-compatible input projections."""
+    """Qwen3-ASR attention with the SAN-M FSMN value gate."""
 
-    def __init__(self, config: FunAsrNanoEncoderConfig, input_dim: int | None = None):
+    def __init__(
+        self,
+        config: FunAsrNanoEncoderConfig,
+        input_dim: int | None = None,
+        use_fsmn: bool = False,
+    ):
         super().__init__()
         input_dim = input_dim or config.d_model
         self.embed_dim = config.d_model
@@ -129,11 +133,13 @@ class FunAsrNanoAttention(nn.Module):
         self.v_proj = nn.Linear(input_dim, config.d_model, bias=True)
         self.q_proj = nn.Linear(input_dim, config.d_model, bias=True)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
+        self.fsmn = FunAsrNanoFSMN(config) if use_fsmn else None
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
@@ -142,7 +148,9 @@ class FunAsrNanoAttention(nn.Module):
 
         query_states = self.q_proj(hidden_states).view(target_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(target_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(target_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states)
+        fsmn_output = self.fsmn(value_states, input_features_mask) if self.fsmn is not None else None
+        value_states = value_states.view(target_shape).transpose(1, 2)
         attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
@@ -158,6 +166,8 @@ class FunAsrNanoAttention(nn.Module):
         )
         attn_output = attn_output.reshape(batch_size, sequence_length, self.embed_dim)
         attn_output = self.out_proj(attn_output)
+        if fsmn_output is not None:
+            attn_output = attn_output + fsmn_output
         return attn_output, attn_weights
 
 
@@ -196,105 +206,67 @@ class FunAsrNanoFSMN(nn.Module):
         return hidden_states
 
 
-class FunAsrNanoEncoderLayer(GradientCheckpointingLayer):
-    """SAN-M encoder layer combining standard self-attention with a separate feedforward sequential memory FSMN branch.
-
-    The two branches need different masks: `attention_mask` is the backend-specific mask built by
-    `create_bidirectional_mask`, while the FSMN convolution needs the plain 2D `input_features_mask`.
-    """
+class FunAsrNanoMLP(nn.Module):
+    """The SAN-M feed-forward block kept separate from encoder-layer orchestration."""
 
     def __init__(self, config: FunAsrNanoEncoderConfig):
         super().__init__()
-        self.embed_dim = config.d_model
-        self.self_attn = FunAsrNanoAttention(config)
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
+        self.fc1 = nn.Linear(config.d_model, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.d_model)
+        self.activation_fn = ACT2FN[config.hidden_act]
         self.activation_dropout = config.activation_dropout
-        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.feedforward_sequential_memory = FunAsrNanoFSMN(config)
+        self.dropout = config.hidden_dropout
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        input_features_mask: torch.Tensor | None = None,
-        **kwargs,
-    ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-        """
-        residual = hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
-        attention_output, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-
-        # The FSMN branch runs on the value projection
-        value_states = self.self_attn.v_proj(hidden_states)
-        fsmn_output = self.feedforward_sequential_memory(value_states, input_features_mask)
-        hidden_states = residual + nn.functional.dropout(
-            attention_output + fsmn_output, p=self.dropout, training=self.training
-        )
-
-        residual = hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
-        if hidden_states.dtype == torch.float16:
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-        return hidden_states
+        return nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
 
-class SinusoidsPositionEmbedding(nn.Module):
-    def __init__(self, length, channels, max_timescale=10000):
+class FunAsrNanoPositionEmbedding(nn.Module):
+    """Scale LFR features and add the fixed sinusoidal positions before the first SAN-M layer."""
+
+    def __init__(self, config: FunAsrNanoEncoderConfig):
         super().__init__()
-        self.length = length
-        self.channels = channels
-        self.max_timescale = max_timescale
-        if channels % 2 != 0:
-            raise ValueError("SinusoidsPositionEmbedding needs even channels input")
-        position_embedding = self.compute_default_singular_positional_embedding()
-        self.positional_embedding = nn.Buffer(position_embedding, persistent=False)
+        self.scale = config.d_model**0.5
+        self.length = config.max_position_embeddings
+        self.channels = config.input_size
+        self.max_timescale = 10000
+        if self.channels % 2 != 0:
+            raise ValueError("FunAsrNanoPositionEmbedding needs even input channels")
+        self.embedding = nn.Buffer(self.compute_default_singular_positional_embedding(), persistent=False)
 
-    def compute_default_singular_positional_embedding(self):
-        log_timescale_increment = np.log(self.max_timescale) / (self.channels // 2 - 1)
+    def compute_default_singular_positional_embedding(self) -> torch.Tensor:
+        log_timescale_increment = torch.log(torch.tensor(float(self.max_timescale))) / (self.channels // 2 - 1)
         inv_timescales = torch.exp(-log_timescale_increment * torch.arange(self.channels // 2).float())
-        scaled_time = torch.arange(self.length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
+        scaled_time = torch.arange(self.length)[:, None] * inv_timescales[None, :]
         return torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1)
 
-    def forward(self, seqlen: int):
-        return self.positional_embedding[:seqlen, :]
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = hidden_states * self.scale
+        sequence_length = hidden_states.shape[1]
+        positions = self.embedding[1 : sequence_length + 1].to(device=hidden_states.device, dtype=hidden_states.dtype)
+        return hidden_states + positions.unsqueeze(0)
 
 
-class FunAsrNanoEncoderStem(GradientCheckpointingLayer):
-    """Position encoding and the first heterogeneous SAN-M layer."""
+class FunAsrNanoEncoderLayer(GradientCheckpointingLayer):
+    """SAN-M encoder layer with attention-owned sequential memory and a standalone MLP."""
 
-    def __init__(self, config: FunAsrNanoEncoderConfig):
+    def __init__(self, config: FunAsrNanoEncoderConfig, input_dim: int | None = None):
         super().__init__()
+        input_dim = input_dim or config.d_model
         self.embed_dim = config.d_model
-        self.self_attn = FunAsrNanoAttention(config, input_dim=config.input_size)
-        self.self_attn_layer_norm = nn.LayerNorm(config.input_size)
+        self.self_attn = FunAsrNanoAttention(config, input_dim=input_dim, use_fsmn=True)
+        self.self_attn_layer_norm = nn.LayerNorm(input_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
-        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
+        self.fc1 = nn.Identity()
+        self.fc2 = nn.Identity()
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.position_embeddings = SinusoidsPositionEmbedding(config.max_position_embeddings, config.input_size)
-        self.feedforward_sequential_memory = FunAsrNanoFSMN(config)
+        self.mlp = FunAsrNanoMLP(config)
 
     def forward(
         self,
@@ -309,33 +281,21 @@ class FunAsrNanoEncoderStem(GradientCheckpointingLayer):
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
         """
-        hidden_states = hidden_states * (self.self_attn.embed_dim**0.5)
-        sequence_length = hidden_states.shape[1]
-        positions = self.position_embeddings(sequence_length + 1)[1:].to(
-            device=hidden_states.device, dtype=hidden_states.dtype
-        )
-        hidden_states = hidden_states + positions.unsqueeze(0)
-
+        residual = hidden_states if hidden_states.shape[-1] == self.embed_dim else None
         hidden_states = self.self_attn_layer_norm(hidden_states)
         attention_output, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
+            input_features_mask=input_features_mask,
             **kwargs,
         )
-
-        # The FSMN branch runs on the value projection
-        value_states = self.self_attn.v_proj(hidden_states)
-        fsmn_output = self.feedforward_sequential_memory(value_states, input_features_mask)
-        hidden_states = nn.functional.dropout(attention_output + fsmn_output, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(attention_output, p=self.dropout, training=self.training)
+        if residual is not None:
+            hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
+        hidden_states = residual + self.mlp(hidden_states)
         if hidden_states.dtype == torch.float16:
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
@@ -351,16 +311,17 @@ class FunAsrNanoEncoder(FunAsrNanoPreTrainedModel):
     config: FunAsrNanoEncoderConfig
     main_input_name = "input_features"
     input_modalities = "audio"
-    _no_split_modules = ["FunAsrNanoEncoderStem", "FunAsrNanoEncoderLayer"]
+    _no_split_modules = ["FunAsrNanoEncoderLayer"]
     _supports_sdpa = True
     _can_record_outputs = {
-        "hidden_states": [FunAsrNanoEncoderStem, FunAsrNanoEncoderLayer],
+        "hidden_states": FunAsrNanoEncoderLayer,
         "attentions": FunAsrNanoAttention,
     }
 
     def __init__(self, config: FunAsrNanoEncoderConfig):
         super().__init__(config)
-        self.stem = FunAsrNanoEncoderStem(config)
+        self.position_embeddings = FunAsrNanoPositionEmbedding(config)
+        self.stem = FunAsrNanoEncoderLayer(config, input_dim=config.input_size)
         self.layers = nn.ModuleList([FunAsrNanoEncoderLayer(config) for _ in range(config.num_hidden_layers - 1)])
         self.layer_norm = nn.LayerNorm(config.d_model)
         self.timestamp_prediction_layers = nn.ModuleList(
@@ -398,6 +359,7 @@ class FunAsrNanoEncoder(FunAsrNanoPreTrainedModel):
             attention_mask=input_features_mask,
         )
 
+        hidden_states = self.position_embeddings(hidden_states)
         hidden_states = self.stem(hidden_states, attention_mask, input_features_mask, **kwargs)
 
         for layer in self.layers:

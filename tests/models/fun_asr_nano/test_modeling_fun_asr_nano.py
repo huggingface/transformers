@@ -112,6 +112,16 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
         self.assertIn("audio_config", config.to_dict())
         self.assertNotIn("encoder_config", config.to_dict())
 
+    def test_san_m_components_follow_attention_and_mlp_boundaries(self):
+        model = self.model_tester.prepare_config_and_inputs_for_common()[0]
+        model = FunAsrNanoModel(model).eval()
+        state_dict_keys = set(model.state_dict())
+
+        self.assertTrue(any("self_attn.fsmn.conv" in key for key in state_dict_keys))
+        self.assertTrue(any(".mlp.fc1" in key for key in state_dict_keys))
+        self.assertFalse(any("feedforward_sequential_memory" in key for key in state_dict_keys))
+        self.assertFalse(any("audio_adaptor.blocks" in key and ".mlp." in key for key in state_dict_keys))
+
     @unittest.skip(
         reason="This test does not apply to Fun-ASR-Nano since inputs_embeds corresponding to audio tokens "
         "are replaced when input features are provided."
