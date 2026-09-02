@@ -87,6 +87,10 @@ class RecurrentGemmaConfig(PreTrainedConfig):
             self.num_key_value_heads if self.num_key_value_heads is not None else self.num_attention_heads
         )
         self.final_w_init_variance_scale = 2.0 / self.num_hidden_layers
+        self.layer_types = [
+            "linear_attention" if block_type == "recurrent" else "sliding_attention"
+            for block_type in self.layers_block_type
+        ]
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
         super().__post_init__(**kwargs)
 

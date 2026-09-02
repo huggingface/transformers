@@ -583,7 +583,7 @@ class InformerProbSparseAttention(nn.Module):
 
         if top_u_sparsity_measurement is not None:
             # update context: copy the attention output to the context at top_u_sparsity_measurement index
-            dim_for_slice = torch.arange(context.size(0)).unsqueeze(-1)
+            dim_for_slice = torch.arange(context.size(0), device=context.device).unsqueeze(-1)
             context[dim_for_slice, top_u_sparsity_measurement, :] = attn_output
             attn_output = context
 

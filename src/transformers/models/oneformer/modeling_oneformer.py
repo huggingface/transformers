@@ -979,6 +979,7 @@ class OneFormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module):
         position_embeddings: torch.Tensor | None = None,
         reference_points=None,
         spatial_shapes=None,
+        spatial_shapes_list=None,
         level_start_index=None,
         output_attentions: bool = False,
     ):
@@ -1022,7 +1023,7 @@ class OneFormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module):
         else:
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
         # PyTorch implementation
-        output = multi_scale_deformable_attention(value, spatial_shapes, sampling_locations, attention_weights)
+        output = multi_scale_deformable_attention(value, spatial_shapes_list, sampling_locations, attention_weights)
         output = self.output_proj(output)
 
         return output, attention_weights
@@ -1056,6 +1057,7 @@ class OneFormerPixelDecoderEncoderLayer(nn.Module):
         position_embeddings: torch.Tensor | None = None,
         reference_points=None,
         spatial_shapes=None,
+        spatial_shapes_list=None,
         level_start_index=None,
         output_attentions: bool = False,
     ):
@@ -1088,6 +1090,7 @@ class OneFormerPixelDecoderEncoderLayer(nn.Module):
             position_embeddings=position_embeddings,
             reference_points=reference_points,
             spatial_shapes=spatial_shapes,
+            spatial_shapes_list=spatial_shapes_list,
             level_start_index=level_start_index,
             output_attentions=output_attentions,
         )
@@ -1139,12 +1142,12 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
         self.layers = nn.ModuleList([OneFormerPixelDecoderEncoderLayer(config) for _ in range(config.encoder_layers)])
 
     @staticmethod
-    def get_reference_points(spatial_shapes, valid_ratios, device):
+    def get_reference_points(spatial_shapes_list, valid_ratios, device):
         """
         Get reference points for each feature map. Used in decoder.
 
         Args:
-            spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
+            spatial_shapes_list (`list[tuple[int, int]]`):
                 Spatial shapes of each feature map.
             valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
                 Valid ratios of each feature map.
@@ -1154,7 +1157,7 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
             `torch.FloatTensor` of shape `(batch_size, num_queries, num_feature_levels, 2)`
         """
         reference_points_list = []
-        for lvl, (height, width) in enumerate(spatial_shapes):
+        for lvl, (height, width) in enumerate(spatial_shapes_list):
             ref_y, ref_x = torch.meshgrid(
                 torch.linspace(0.5, height - 0.5, height, dtype=valid_ratios.dtype, device=device),
                 torch.linspace(0.5, width - 0.5, width, dtype=valid_ratios.dtype, device=device),
@@ -1174,6 +1177,7 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
         attention_mask=None,
         position_embeddings=None,
         spatial_shapes=None,
+        spatial_shapes_list=None,
         level_start_index=None,
         valid_ratios=None,
         output_attentions=None,
@@ -1213,7 +1217,7 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         hidden_states = inputs_embeds
-        reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=inputs_embeds.device)
+        reference_points = self.get_reference_points(spatial_shapes_list, valid_ratios, device=inputs_embeds.device)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1226,6 +1230,7 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
                 position_embeddings=position_embeddings,
                 reference_points=reference_points,
                 spatial_shapes=spatial_shapes,
+                spatial_shapes_list=spatial_shapes_list,
                 level_start_index=level_start_index,
                 output_attentions=output_attentions,
             )
@@ -1369,11 +1374,11 @@ class OneFormerPixelDecoder(nn.Module):
         source_flatten = []
         mask_flatten = []
         lvl_pos_embed_flatten = []
-        spatial_shapes = []
+        spatial_shapes_list = []
         for level, (source, mask, pos_embed) in enumerate(zip(sources, masks, position_embeddings_list)):
             batch_size, num_channels, height, width = source.shape
             spatial_shape = (height, width)
-            spatial_shapes.append(spatial_shape)
+            spatial_shapes_list.append(spatial_shape)
             source = source.flatten(2).transpose(1, 2)
             mask = mask.flatten(1)
             pos_embed = pos_embed.flatten(2).transpose(1, 2)
@@ -1384,7 +1389,7 @@ class OneFormerPixelDecoder(nn.Module):
         source_flatten = torch.cat(source_flatten, 1)
         mask_flatten = torch.cat(mask_flatten, 1)
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
-        spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=source_flatten.device)
+        spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
 
@@ -1396,6 +1401,7 @@ class OneFormerPixelDecoder(nn.Module):
                 attention_mask=mask_flatten,
                 position_embeddings=lvl_pos_embed_flatten,
                 spatial_shapes=spatial_shapes,
+                spatial_shapes_list=spatial_shapes_list,
                 level_start_index=level_start_index,
                 valid_ratios=valid_ratios,
                 output_attentions=output_attentions,
@@ -1406,19 +1412,14 @@ class OneFormerPixelDecoder(nn.Module):
         y = encoder_outputs.last_hidden_state
         bs = y.shape[0]
 
-        split_size_or_sections = [None] * self.num_feature_levels
-        for i in range(self.num_feature_levels):
-            if i < self.num_feature_levels - 1:
-                split_size_or_sections[i] = level_start_index[i + 1] - level_start_index[i]
-            else:
-                split_size_or_sections[i] = y.shape[1] - level_start_index[i]
+        split_size_or_sections = [height * width for height, width in spatial_shapes_list]
         y = torch.split(y, split_size_or_sections, dim=1)
 
         out = []
         multi_scale_features = []
         num_cur_levels = 0
         for i, z in enumerate(y):
-            out.append(z.transpose(1, 2).view(bs, -1, spatial_shapes[i][0], spatial_shapes[i][1]))
+            out.append(z.transpose(1, 2).view(bs, -1, spatial_shapes_list[i][0], spatial_shapes_list[i][1]))
 
         # append `out` with extra FPN levels
         # Reverse feature maps into top-down order (from low to high resolution)
