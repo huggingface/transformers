@@ -20,7 +20,6 @@
 # limitations under the License.
 
 import math
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -1178,21 +1177,6 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
         self.gradient_checkpointing = False
 
         self.post_init()
-
-    def fast_pos_embed_interpolate(self, grid_thw):
-        warnings.warn(
-            f"`{self.__class__.__name__}.fast_pos_embed_interpolate` is deprecated and will be removed in v5.11. Use `get_vision_interpolation_indices_and_weights` from `transformers.vision_utils` and apply `self.pos_embed`.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
-            grid_thw,
-            num_grid_per_side=self.num_grid_per_side,
-            mode=self.interpolation_mode,
-            align_corners=self.interpolation_align_corners,
-            spatial_merge_size=self.config.spatial_merge_size,
-        )
-        return (self.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -2826,7 +2810,7 @@ class Qwen3OmniMoeTalkerTextSparseMoeBlock(nn.Module):
         )
         self.shared_expert_gate = torch.nn.Linear(config.hidden_size, 1, bias=False)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
         shared_expert_output = self.shared_expert(hidden_states_reshaped)

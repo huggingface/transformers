@@ -337,15 +337,16 @@ class Glm5NextTextForgetGate(nn.Module):
         return -decay_rate * g_softplus
 
 
+# NOTE: the FLA package does not re-cast to `input_dtype` in its implementation, maybe we should do the same
 @use_kernel_forward_from_hub("RMSNormGated")
 class Glm5NextTextRMSNormGated(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6, **kwargs):
+    def __init__(self, hidden_size, eps=1e-6, **kwargs) -> None:
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
         self.activation = "sigmoid"
 
-    def forward(self, hidden_states, gate=None):
+    def forward(self, hidden_states, gate=None) -> torch.Tensor:
         input_dtype = hidden_states.dtype
 
         # Strict FP32 norm (do not downcast on the weights)

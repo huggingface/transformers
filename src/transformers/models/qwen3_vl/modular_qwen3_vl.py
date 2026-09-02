@@ -13,7 +13,6 @@
 # limitations under the License.
 """PyTorch Qwen3-VL model."""
 
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -436,21 +435,6 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         self.gradient_checkpointing = False
 
         self.post_init()
-
-    def fast_pos_embed_interpolate(self, grid_thw):
-        warnings.warn(
-            f"`{self.__class__.__name__}.fast_pos_embed_interpolate` is deprecated and will be removed in v5.11. Use `get_vision_interpolation_indices_and_weights` from `transformers.vision_utils` and apply `self.pos_embed`.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
-            grid_thw,
-            num_grid_per_side=self.num_grid_per_side,
-            mode=self.interpolation_mode,
-            align_corners=self.interpolation_align_corners,
-            spatial_merge_size=self.config.spatial_merge_size,
-        )
-        return (self.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)
 
     @merge_with_config_defaults
     @capture_outputs

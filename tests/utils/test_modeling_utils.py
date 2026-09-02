@@ -67,6 +67,9 @@ from transformers.testing_utils import (
     LoggingLevel,
     TemporaryHubRepo,
     TestCasePlus,
+    backend_empty_cache,
+    backend_memory_allocated,
+    backend_synchronize,
     force_serialization_as_bin_files,
     hub_retry,
     is_staging_test,
@@ -3903,3 +3906,64 @@ class RemoteAndCustomCodeModelTests(unittest.TestCase):
 
         self.assertTrue(model.is_custom_code())
         self.assertFalse(model.is_remote_code())
+
+
+@require_torch_accelerator
+class GradientCheckpointingOffloadTest(unittest.TestCase):
+    """`gradient_checkpointing_enable(offload=True)` holds the saved activations in host memory."""
+
+    def _model(self, num_hidden_layers=8, hidden_size=256):
+        from transformers import LlamaModel, set_seed
+
+        config = LlamaConfig(
+            num_hidden_layers=num_hidden_layers,
+            hidden_size=hidden_size,
+            intermediate_size=hidden_size * 2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            vocab_size=128,
+        )
+        set_seed(0)
+        return LlamaModel(config).to(torch_device).train()
+
+    def _backward(self, model, input_ids):
+        model(input_ids=input_ids).last_hidden_state.float().pow(2).mean().backward()
+
+    def test_gradients_match_the_non_offloaded_run(self):
+        model = self._model()
+        input_ids = torch.randint(0, 128, (1, 64), device=torch_device)
+
+        model.gradient_checkpointing_enable()
+        self._backward(model, input_ids)
+        expected = [p.grad.clone() for p in model.parameters()]
+
+        model.zero_grad(set_to_none=True)
+        model.gradient_checkpointing_enable(offload=True)
+        self._backward(model, input_ids)
+
+        for expected_grad, param in zip(expected, model.parameters()):
+            torch.testing.assert_close(param.grad, expected_grad)
+
+    def test_frees_exactly_the_saved_activations(self):
+        num_hidden_layers, hidden_size, seq_len = 8, 256, 2048
+        # Each checkpointed layer saves one `seq_len x hidden_size` input for its recompute.
+        saved_bytes = num_hidden_layers * seq_len * hidden_size * 4  # fp32
+
+        resident = []
+        for offload in (False, True):
+            model = self._model(num_hidden_layers, hidden_size)
+            model.gradient_checkpointing_enable(offload=offload)
+            input_ids = torch.randint(0, 128, (1, seq_len), device=torch_device)
+            self._backward(model, input_ids)  # warm the allocator
+            model.zero_grad(set_to_none=True)
+            backend_synchronize(torch_device)
+            backend_empty_cache(torch_device)
+
+            # Sampled after the forward, where every layer's saved input is still live.
+            base = backend_memory_allocated(torch_device)
+            output = model(input_ids=input_ids)
+            backend_synchronize(torch_device)
+            resident.append(backend_memory_allocated(torch_device) - base)
+            del output, model
+
+        self.assertEqual(resident[0] - resident[1], saved_bytes)
