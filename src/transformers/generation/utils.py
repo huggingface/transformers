@@ -2083,8 +2083,6 @@ class GenerationMixin(ContinuousMixin):
 
         # Quick escape route 1: if the user specifies a cache, we only need to check for conflicting `generate` arguments
         user_defined_cache = model_kwargs.get(cache_name)
-        # Remembered because it outlives `generate`: the caller holds it, so it has to come back intact.
-        generation_config._user_supplied_cache = user_defined_cache is not None
         if user_defined_cache is not None:
             if generation_config.cache_implementation is not None:
                 raise ValueError(
