@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-10-30 and contributed to Hugging Face Transformers on 2026-08-31.*
+*This model was published in HF papers on 2025-10-30 and contributed to Hugging Face Transformers on 2026-09-02.*
 
 ## Overview
 
@@ -40,7 +40,7 @@ Two things are worth knowing when reading the modeling code:
 - **The layer pattern comes from the checkpoint.** `linear_attn_config` lists `kda_layers` / `full_attn_layers` with
   1-based indices; the config converts them into the standard `layer_types` list.
 
-This model was contributed by [Moonshot AI](https://huggingface.co/moonshotai).
+This model was contributed by [Remi Ouazan](https://huggingface.co/ror).
 The original code can be found [here](https://github.com/MoonshotAI/Kimi-Linear).
 
 ## Usage examples
@@ -64,8 +64,8 @@ print(tokenizer.decode(output_ids, skip_special_tokens=True))
 ```
 
 The KDA layers run on a pure PyTorch implementation by default. Installing
-[`kernels`](https://github.com/huggingface/kernels) (`pip install -U kernels`) makes them dispatch to custom kernels
-instead, which is considerably faster for long sequences.
+[`kernels`](https://github.com/huggingface/kernels) (`pip install -U kernels`) and passing `use_kernels=True`
+in `from_pretrained` makes them dispatch to custom kernels instead, which is considerably faster for long sequences.
 
 ## KimiLinearConfig
 

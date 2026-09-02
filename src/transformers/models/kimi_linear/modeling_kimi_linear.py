@@ -19,6 +19,7 @@
 # limitations under the License.
 
 
+import math
 from collections.abc import Callable
 
 import torch
@@ -400,6 +401,17 @@ def causal_conv1d_fn(
     return out.to(hidden_states.dtype)
 
 
+def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
+    """
+    This function is intended to align with the l2norm implementation in the FLA library.
+
+    # NOTE: FLA compares against `F.normalize` but does + eps instead of max(..., eps) leading to a slight differences
+    """
+    # main difference to qwen's gdn variation: intentionally use sqrt and / to match original triton
+    inv_norm = torch.sqrt((x * x).sum(dim=dim, keepdim=True) + eps)
+    return x / inv_norm
+
+
 @use_kernel_func_from_hub_with_fallback("fused_recurrent_kda", "fla")
 def recurrent_kimi_delta_attention(
     query,
@@ -552,12 +564,6 @@ def chunk_kimi_delta_attention(
     core_attn_out = core_attn_out.transpose(1, 2).contiguous().to(initial_dtype)
 
     return core_attn_out, last_recurrent_state
-
-
-def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
-    """This function is intended to align with the l2norm implementation in the FLA library."""
-    inv_norm = torch.rsqrt((x * x).sum(dim=dim, keepdim=True) + eps)
-    return x * inv_norm
 
 
 @use_kernelized_func(
@@ -844,16 +850,24 @@ class KimiLinearPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, KimiLinearDeltaAttention):
-            init.ones_(module.dt_bias)
-            # Lower bound kept away from 0 so log(A) never becomes -inf
-            init.copy_(module.A_log, torch.empty_like(module.A_log).uniform_(0.01, 16).log_())
+        if isinstance(module, KimiLinearForgetGate):  # following FLA initialization
+            # A_log
+            if module.safe_gate_lower_bound is not None:
+                init.zeros_(module.A_log)
+            else:
+                init.copy_(module.A_log, init.uniform_(module.A_log, a=1.0, b=16.0).log())
+            # dt_bias
+            init.uniform_(module.dt_bias, a=math.log(1e-3), b=math.log(1e-1))
+            dt = module.dt_bias.exp().clamp_min(1e-4)
+            init.copy_(module.dt_bias, dt + torch.log(-torch.expm1(-dt)))  # (stable) inverse softplus
         elif isinstance(module, KimiLinearExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, KimiLinearTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
+        elif isinstance(module, KimiLinearRMSNormGated):
+            init.ones_(module.weight)
 
 
 @auto_docstring

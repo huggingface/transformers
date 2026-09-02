@@ -119,7 +119,7 @@ class KimiLinearConfig(PreTrainedConfig):
         self.head_dim = self.qk_rope_head_dim
         super().__post_init__(**kwargs)
         # Checkpoint stores linear attention attributes in a config sub-dict: if it's there, extract them
-        linear_attn_config = kwargs.pop("linear_attn_config", {})
+        linear_attn_config = kwargs.get("linear_attn_config", {})
         self.linear_head_dim = linear_attn_config.get("head_dim", self.linear_head_dim)
         self.linear_num_heads = linear_attn_config.get("num_heads", self.linear_num_heads)
         self.linear_conv_kernel_dim = linear_attn_config.get("short_conv_kernel_size", self.linear_conv_kernel_dim)
@@ -140,7 +140,7 @@ class KimiLinearConfig(PreTrainedConfig):
 
         # Same for MLP layer types, which indicate MLP or MoE
         if self.mlp_layer_types is None:
-            first_k_dense_replace = kwargs.pop("first_k_dense_replace", 1)
+            first_k_dense_replace = kwargs.get("first_k_dense_replace", 1)
             self.mlp_layer_types = [
                 "dense" if i < first_k_dense_replace else "sparse" for i in range(self.num_hidden_layers)
             ]

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+import math
 from collections.abc import Callable
 
 import torch
@@ -21,9 +22,6 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import (
-    use_kernelized_func,
-)
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeModelOutputWithPast
@@ -42,15 +40,11 @@ from ...models.glm5_next.modeling_glm5_next import (
     Glm5NextTextForgetGate,
     Glm5NextTextLinearAttention,
     Glm5NextTextRMSNormGated,
-    chunk_kimi_delta_attention,
-    recurrent_kimi_delta_attention,
 )
 from ...models.llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
 from ...models.qwen3_next.modeling_qwen3_next import (
     Qwen3NextModel,
     Qwen3NextPreTrainedModel,
-    causal_conv1d_fn,
-    causal_conv1d_update,
 )
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
@@ -114,7 +108,7 @@ class KimiLinearConfig(DeepseekV3Config):
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)
         # Checkpoint stores linear attention attributes in a config sub-dict: if it's there, extract them
-        linear_attn_config = kwargs.pop("linear_attn_config", {})
+        linear_attn_config = kwargs.get("linear_attn_config", {})
         self.linear_head_dim = linear_attn_config.get("head_dim", self.linear_head_dim)
         self.linear_num_heads = linear_attn_config.get("num_heads", self.linear_num_heads)
         self.linear_conv_kernel_dim = linear_attn_config.get("short_conv_kernel_size", self.linear_conv_kernel_dim)
@@ -135,7 +129,7 @@ class KimiLinearConfig(DeepseekV3Config):
 
         # Same for MLP layer types, which indicate MLP or MoE
         if self.mlp_layer_types is None:
-            first_k_dense_replace = kwargs.pop("first_k_dense_replace", 1)
+            first_k_dense_replace = kwargs.get("first_k_dense_replace", 1)
             self.mlp_layer_types = [
                 "dense" if i < first_k_dense_replace else "sparse" for i in range(self.num_hidden_layers)
             ]
@@ -214,21 +208,11 @@ class KimiLinearAttention(DeepseekV3Attention):
         return attn_output, attn_weights
 
 
-def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
-    """This function is intended to align with the l2norm implementation in the FLA library."""
-    inv_norm = torch.rsqrt((x * x).sum(dim=dim, keepdim=True) + eps)
-    return x * inv_norm
-
-
 class KimiLinearForgetGate(Glm5NextTextForgetGate):
-
     def __init__(self, config: KimiLinearConfig):
         super().__init__(config)
 
 
-@use_kernelized_func(
-    [chunk_kimi_delta_attention, recurrent_kimi_delta_attention, causal_conv1d_fn, causal_conv1d_update]
-)
 class KimiLinearDeltaAttention(Glm5NextTextLinearAttention):
     """Kimi Linear Attention: this is essentialy the same a gated delta net (GDN) but decay is per-channel instead of
     per-token."""
@@ -269,16 +253,24 @@ class KimiLinearPreTrainedModel(Qwen3NextPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, KimiLinearDeltaAttention):
-            init.ones_(module.dt_bias)
-            # Lower bound kept away from 0 so log(A) never becomes -inf
-            init.copy_(module.A_log, torch.empty_like(module.A_log).uniform_(0.01, 16).log_())
+        if isinstance(module, KimiLinearForgetGate):  # following FLA initialization
+            # A_log
+            if module.safe_gate_lower_bound is not None:
+                init.zeros_(module.A_log)
+            else:
+                init.copy_(module.A_log, init.uniform_(module.A_log, a=1.0, b=16.0).log())
+            # dt_bias
+            init.uniform_(module.dt_bias, a=math.log(1e-3), b=math.log(1e-1))
+            dt = module.dt_bias.exp().clamp_min(1e-4)
+            init.copy_(module.dt_bias, dt + torch.log(-torch.expm1(-dt)))  # (stable) inverse softplus
         elif isinstance(module, KimiLinearExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, KimiLinearTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
+        elif isinstance(module, KimiLinearRMSNormGated):
+            init.ones_(module.weight)
 
 
 @auto_docstring

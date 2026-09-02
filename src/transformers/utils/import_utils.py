@@ -116,19 +116,9 @@ def resolve_internal_import(module: ModuleType | None, chained_path: str) -> Cal
 
     final_module = module
     for path in chained_path.split("."):
-        attribute = getattr(final_module, path, None)
-        # If the submodule is not eagerly loaded and is has never been imported, then it's not yet an attribute of the
-        # parent module, so `getattr` alone might miss it. We need to actually import it to be sure.
-        if attribute is None and isinstance(final_module, ModuleType):
-            try:
-                attribute = importlib.import_module(f"{final_module.__name__}.{path}")
-            except ImportError:
-                return None
-        # If the module is still not found, then we cannot resolve.
-        if attribute is None:
+        final_module = getattr(final_module, path, None)
+        if not final_module:
             return None
-        final_module = attribute
-
     return final_module
 
 
