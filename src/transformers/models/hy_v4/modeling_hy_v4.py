@@ -69,10 +69,8 @@ class HYV4UnweightedRMSNorm(nn.Module):
         super().__init__()
         self.eps = eps
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x * torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.eps).to(x.dtype)
-
-    def inverse_rms(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # Keeps the output in float (compared to DSv4 casting back to the input dtype)
         return torch.rsqrt(hidden_states.float().square().mean(-1, keepdim=True) + self.eps)
 
 
@@ -484,7 +482,7 @@ class HYV4MLP(nn.Module):
         return down_proj
 
 
-class HYV4TopKRouter(nn.Module):
+class HYV4TopkRouter(nn.Module):
     def __init__(self, config: HYV4Config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -527,48 +525,40 @@ class HYV4TopKRouter(nn.Module):
 
 @use_experts_implementation
 class HYV4Experts(nn.Module):
-    """GLM4-MoE-Lite experts with HYV4's bounded SwiGLU and EP sentinel handling."""
+    """Collection of expert weights stored as 3D tensors."""
 
-    def __init__(self, config: HYV4Config):
+    def __init__(self, config):
         super().__init__()
-        if config._experts_implementation == "sonicmoe":
-            raise ValueError("HYV4 does not support SonicMoE because its fused SwiGLU omits `swiglu_limit`.")
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
-        self.act_fn = ACT2FN[config.hidden_act]
         self.swiglu_limit = config.swiglu_limit
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        top_k_indices: torch.Tensor,
-        top_k_weights: torch.Tensor,
+        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
+        final = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            expert_mask = F.one_hot(top_k_indices, num_classes=self.num_experts + 1).permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in expert_hit:
+            mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in hit:
             expert_idx = expert_idx[0]
             if expert_idx == self.num_experts:
                 continue
-            top_k_position, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx].to(self.gate_up_proj.dtype)
-            current_state = self._apply_gate(F.linear(current_state, self.gate_up_proj[expert_idx]))
-            current_state = F.linear(current_state, self.down_proj[expert_idx])
-            current_state = current_state * top_k_weights[token_idx, top_k_position, None]
-            final_hidden_states.index_add_(0, token_idx, current_state.to(final_hidden_states.dtype))
-        return final_hidden_states
+            top_k_pos, token_idx = torch.where(mask[expert_idx])
+            current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
+            current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
+            final.index_add_(0, token_idx, current.to(final.dtype))
+        return final
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
-        if self.swiglu_limit > 0:
-            gate = gate.float().clamp(max=self.swiglu_limit).to(gate.dtype)
-            up = up.float().clamp(min=-self.swiglu_limit, max=self.swiglu_limit).to(up.dtype)
-        return self.act_fn(gate) * up
+        gate = gate.clamp(min=None, max=self.swiglu_limit)
+        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        # Simple swiglu instead of alpha
+        return F.silu(gate) * up
 
 
 class HYV4MoE(nn.Module):
@@ -579,9 +569,11 @@ class HYV4MoE(nn.Module):
     def __init__(self, config: HYV4Config):
         super().__init__()
         self.config = config
-        self.gate = HYV4TopKRouter(config)
         self.experts = HYV4Experts(config)
-        self.shared_experts = HYV4MLP(config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts)
+        self.gate = HYV4TopkRouter(config)
+        self.shared_experts = HYV4MLP(
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
@@ -615,7 +607,7 @@ class HYV4HyperConnection(nn.Module):
         device_type = hidden_states.device.type if hidden_states.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
             flat = hidden_states.flatten(2).float()
-            inverse_rms = self.input_norm.inverse_rms(flat)
+            inverse_rms = self.input_norm(flat)
             mixes = F.linear(flat.to(self.hc_fn.dtype), self.hc_fn) * inverse_rms
             pre_logits, post_logits = mixes.split(self.hc_mult, dim=-1)
             pre_gates = torch.sigmoid(pre_logits * self.hc_scale[0] + self.hc_base[: self.hc_mult]) + self.hc_eps
@@ -646,7 +638,7 @@ class HYV4HyperHead(nn.Module):
         device_type = hidden_states.device.type if hidden_states.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
             flat = hidden_states.flatten(2).float()
-            inverse_rms = self.input_norm.inverse_rms(flat)
+            inverse_rms = self.input_norm(flat)
             mixes = F.linear(flat.to(self.hc_head_fn.dtype), self.hc_head_fn) * inverse_rms
             pre_gates = torch.sigmoid(mixes * self.hc_head_scale + self.hc_head_base) + self.hc_eps
             output = torch.sum(pre_gates.unsqueeze(-1) * hidden_states.reshape(original_shape), dim=2)
@@ -731,7 +723,7 @@ class HYV4PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, HYV4TopKRouter):
+        if isinstance(module, HYV4TopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, HYV4Experts):

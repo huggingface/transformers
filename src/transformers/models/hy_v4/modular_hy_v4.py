@@ -21,7 +21,6 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import RopeParameters
@@ -32,7 +31,6 @@ from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4UnweightedRMSNorm
 from ..glm4_moe_lite.modeling_glm4_moe_lite import (
     Glm4MoeLiteAttention,
     Glm4MoeLiteDecoderLayer,
-    Glm4MoeLiteExperts,
     Glm4MoeLiteForCausalLM,
     Glm4MoeLiteMLP,
     Glm4MoeLiteModel,
@@ -42,6 +40,7 @@ from ..glm4_moe_lite.modeling_glm4_moe_lite import (
     Glm4MoeLiteTopkRouter,
     apply_rotary_pos_emb,
 )
+from ..glm5_next.modeling_glm5_next import Glm5NextTextExperts
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaIndexer, GlmMoeDsaRotaryEmbedding
 from ..gpt_oss.modeling_gpt_oss import eager_attention_forward
 
@@ -199,7 +198,8 @@ class HYV4RMSNorm(Glm4MoeLiteRMSNorm):
 
 
 class HYV4UnweightedRMSNorm(DeepseekV4UnweightedRMSNorm):
-    def inverse_rms(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # Keeps the output in float (compared to DSv4 casting back to the input dtype)
         return torch.rsqrt(hidden_states.float().square().mean(-1, keepdim=True) + self.eps)
 
 
@@ -350,57 +350,16 @@ class HYV4MLP(Glm4MoeLiteMLP):
     pass
 
 
-class HYV4TopKRouter(Glm4MoeLiteTopkRouter):
+class HYV4TopkRouter(Glm4MoeLiteTopkRouter):
     pass
 
 
-@use_experts_implementation
-class HYV4Experts(Glm4MoeLiteExperts):
-    """GLM4-MoE-Lite experts with HYV4's bounded SwiGLU and EP sentinel handling."""
-
-    def __init__(self, config: HYV4Config):
-        if config._experts_implementation == "sonicmoe":
-            raise ValueError("HYV4 does not support SonicMoE because its fused SwiGLU omits `swiglu_limit`.")
-        super().__init__(config)
-        self.swiglu_limit = config.swiglu_limit
-
-    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        gate, up = gate_up.chunk(2, dim=-1)
-        if self.swiglu_limit > 0:
-            gate = gate.float().clamp(max=self.swiglu_limit).to(gate.dtype)
-            up = up.float().clamp(min=-self.swiglu_limit, max=self.swiglu_limit).to(up.dtype)
-        return self.act_fn(gate) * up
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        top_k_indices: torch.Tensor,
-        top_k_weights: torch.Tensor,
-    ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
-        with torch.no_grad():
-            expert_mask = F.one_hot(top_k_indices, num_classes=self.num_experts + 1).permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
-            top_k_position, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx].to(self.gate_up_proj.dtype)
-            current_state = self._apply_gate(F.linear(current_state, self.gate_up_proj[expert_idx]))
-            current_state = F.linear(current_state, self.down_proj[expert_idx])
-            current_state = current_state * top_k_weights[token_idx, top_k_position, None]
-            final_hidden_states.index_add_(0, token_idx, current_state.to(final_hidden_states.dtype))
-        return final_hidden_states
+class HYV4Experts(Glm5NextTextExperts):
+    pass
 
 
 class HYV4MoE(Glm4MoeLiteMoE):
-    def __init__(self, config: HYV4Config):
-        nn.Module.__init__(self)
-        self.config = config
-        self.gate = HYV4TopKRouter(config)
-        self.experts = HYV4Experts(config)
-        self.shared_experts = HYV4MLP(config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts)
+    pass
 
 
 class HYV4HyperConnection(nn.Module):
@@ -425,7 +384,7 @@ class HYV4HyperConnection(nn.Module):
         device_type = hidden_states.device.type if hidden_states.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
             flat = hidden_states.flatten(2).float()
-            inverse_rms = self.input_norm.inverse_rms(flat)
+            inverse_rms = self.input_norm(flat)
             mixes = F.linear(flat.to(self.hc_fn.dtype), self.hc_fn) * inverse_rms
             pre_logits, post_logits = mixes.split(self.hc_mult, dim=-1)
             pre_gates = torch.sigmoid(pre_logits * self.hc_scale[0] + self.hc_base[: self.hc_mult]) + self.hc_eps
@@ -456,7 +415,7 @@ class HYV4HyperHead(nn.Module):
         device_type = hidden_states.device.type if hidden_states.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
             flat = hidden_states.flatten(2).float()
-            inverse_rms = self.input_norm.inverse_rms(flat)
+            inverse_rms = self.input_norm(flat)
             mixes = F.linear(flat.to(self.hc_head_fn.dtype), self.hc_head_fn) * inverse_rms
             pre_gates = torch.sigmoid(mixes * self.hc_head_scale + self.hc_head_base) + self.hc_eps
             output = torch.sum(pre_gates.unsqueeze(-1) * hidden_states.reshape(original_shape), dim=2)
@@ -532,7 +491,7 @@ class HYV4PreTrainedModel(Glm4MoeLitePreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, HYV4TopKRouter):
+        if isinstance(module, HYV4TopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, HYV4Experts):
