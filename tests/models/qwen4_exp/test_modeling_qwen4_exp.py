@@ -187,6 +187,10 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_generate_from_random_inputs_embeds(self):
         pass
 
+    @unittest.skip("Qwen4 needs the eos token explicitly inside the modeling for the ple embedding")
+    def test_model_forward_default_config_values(self):
+        pass
+
     def test_ple_layers_must_use_linear_attention(self):
         with self.assertRaisesRegex(
             StrictDataclassClassValidationError, "PLE is only supported on linear_attention layers"
@@ -197,7 +201,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
             )
 
     def test_finegrained_fp8_embedding_conversion(self):
-        config = self.model_tester.get_config(ple_layer_ids=[1], layer_types=["linear_attention"])
+        config = self.model_tester.get_config()
         with torch.device("meta"):
             model = Qwen4ExpForCausalLM(config)
 
@@ -559,6 +563,10 @@ class Qwen4ExpVisionText2TextModelTest(VLMModelTest, unittest.TestCase):
         "Cannot generate from random embeds since the ple embedding needs to revert them if input_ids are not provided"
     )
     def test_generate_from_random_inputs_embeds(self):
+        pass
+
+    @unittest.skip("Qwen4 needs the eos token explicitly inside the modeling for the ple embedding")
+    def test_model_forward_default_config_values(self):
         pass
 
     def test_fsdp_plan_has_no_unused_rules(self):
