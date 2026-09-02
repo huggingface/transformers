@@ -1074,23 +1074,11 @@ def _build_checkpoint_conversion_mapping():
                 ],
                 target_patterns=".experts.gate_up_proj",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
-                # Both ops build a temporary buffer the size of the merged result, which
-                # spikes device memory past the card while converting Phi-MoE's experts.
-                # Same reason as `qwen4_exp_text`'s ngram_embedding converter below.
-                # Applied in core_model_loading.convert_and_load_state_dict_in_model,
-                # where the `mapping.force_cpu` check and the comment above it explain
-                # it: convert on CPU, then let `device_map` place the finished
-                # parameter. Deliberately a no-op under `tp_plan` (`sharding_op is
-                # None` guard), which shards before converting so there is no spike.
-                force_cpu=True,
             ),
             WeightConverter(
                 source_patterns=".experts.*.w2.weight",
                 target_patterns=".experts.down_proj",
-                # MergeModulelist alone spikes the same way — it concatenates every
-                # expert's w2 into one tensor.
                 operations=[MergeModulelist(dim=0)],
-                force_cpu=True,
             ),
         ],
         "lfm2_moe": [

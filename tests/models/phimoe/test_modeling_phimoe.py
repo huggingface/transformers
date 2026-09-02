@@ -22,7 +22,6 @@ from parameterized import parameterized
 from transformers import StaticCache, is_torch_available
 from transformers.testing_utils import (
     backend_device_count,
-    cap_psutil_cpu_memory,
     cleanup,
     require_torch,
     slow,
@@ -122,18 +121,39 @@ class PhimoeIntegrationTest(unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.offload_dir = tempfile.TemporaryDirectory()
-            # Cap psutil CPU memory to 60 GiB × num_accelerators so device_map="auto" offloads some
-            # layers to disk, preventing GPU OOM at inference time. See #48290 for full rationale.
-            num_accelerators = max(1, backend_device_count(torch_device)) if torch_device is not None else 1
-            with cap_psutil_cpu_memory(int(60 * num_accelerators * 1024**3)):
-                cls.model = PhimoeForCausalLM.from_pretrained(
-                    "microsoft/Phi-3.5-MoE-instruct",
-                    experts_implementation="eager",
-                    dtype="auto",
-                    device_map="auto",
-                    offload_folder=cls.offload_dir.name,
-                )
+            cls.model = PhimoeForCausalLM.from_pretrained(
+                "microsoft/Phi-3.5-MoE-instruct",
+                experts_implementation="eager",
+                dtype="auto",
+                device_map="auto",
+                max_memory=cls._max_memory(),
+                offload_folder=cls.offload_dir.name,
+            )
         return cls.model
+
+    @classmethod
+    def _max_memory(cls):
+        """Per-device budget for `device_map="auto"`, leaving conversion headroom.
+
+        `auto` otherwise plans against each device's *full* capacity, so the
+        placement itself consumes the room the loader still needs: merging the
+        per-expert `w1`/`w3` weights into the fused `gate_up_proj` allocates a
+        temporary buffer on the device the parameter is being placed on, and it
+        OOMs inside `from_pretrained`. Reserving a slice of each accelerator is
+        what `max_memory` is for; the previous `cap_psutil_cpu_memory` cap only
+        steers how much goes to CPU/disk and cannot reserve device room (and it
+        scaled *up* with accelerator count, so it was loosest on the multi-GPU
+        configuration where this failed).
+        """
+        if torch_device is None or not torch.cuda.is_available():
+            return None
+        reserve = 0.85  # leave ~15% of each card for the conversion buffer
+        budget = {
+            i: f"{int(torch.cuda.get_device_properties(i).total_memory * reserve / 1024**3)}GiB"
+            for i in range(max(1, backend_device_count(torch_device)))
+        }
+        budget["cpu"] = "60GiB"
+        return budget
 
     @classmethod
     def tearDownClass(cls):
