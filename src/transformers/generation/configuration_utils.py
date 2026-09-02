@@ -19,7 +19,7 @@ import os
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 from .. import __version__
@@ -1239,26 +1239,29 @@ class GenerationConfig(PushToHubMixin):
             for metadata_field in METADATA_FIELDS:
                 config_dict.pop(metadata_field, None)
 
+        def convert_dataclass_to_dict(obj):
+            if isinstance(obj, dict):
+                return {key: convert_dataclass_to_dict(value) for key, value in obj.items()}
+            elif isinstance(obj, (list, tuple)):
+                return [convert_dataclass_to_dict(item) for item in obj]
+            elif is_dataclass(obj) and not isinstance(obj, type):
+                # Some of our dataclasses have a custom `to_dict()` method, and we prefer it
+                if hasattr(obj, "to_dict") and callable(obj.to_dict):
+                    return convert_dataclass_to_dict(obj.to_dict())
+                return convert_dataclass_to_dict(asdict(obj))
+            else:
+                return obj
+
         def convert_keys_to_string(obj):
             if isinstance(obj, dict):
                 return {str(key): convert_keys_to_string(value) for key, value in obj.items()}
-            elif isinstance(obj, list):
+            elif isinstance(obj, (list, tuple)):
                 return [convert_keys_to_string(item) for item in obj]
             else:
                 return obj
 
-        def convert_dataclass_to_dict(obj):
-            if isinstance(obj, dict):
-                return {key: convert_dataclass_to_dict(value) for key, value in obj.items()}
-            elif is_dataclass(obj):
-                # Some of our dataclasses have a custom `to_dict()` method, and we prefer it
-                if hasattr(obj, "to_dict"):
-                    return obj.to_dict()
-            else:
-                return obj
-
-        config_dict = convert_keys_to_string(config_dict)
         config_dict = convert_dataclass_to_dict(config_dict)
+        config_dict = convert_keys_to_string(config_dict)
 
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
