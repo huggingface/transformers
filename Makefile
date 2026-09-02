@@ -12,7 +12,7 @@ export PYTHONPATH = src
 
 STYLE_CHECKERS := ruff_check, ruff_format, init_isort, sort_auto_mappings
 TYPING_CHECKERS := types, modeling_structure
-CODE_QUALITY_CHECKERS := $(TYPING_CHECKERS), $(STYLE_CHECKERS)
+CODE_QUALITY_CHECKERS := $(TYPING_CHECKERS), $(STYLE_CHECKERS), noisy_comments
 
 REPO_CONSISTENCY_CHECKERS := \
 	auto_mappings, \

@@ -1,0 +1,360 @@
+# Copyright 2026 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Report comments that are likely to be verbose, low-signal AI output."""
+
+import argparse
+import io
+import re
+import tokenize
+from dataclasses import dataclass
+from pathlib import Path
+
+
+CHECKER_CONFIG = {
+    "name": "noisy_comments",
+    "label": "Noisy comments",
+    # Matches the library/code-quality surface instead of only model implementation files.
+    # Approximate: excludes are applied by the checker at runtime.
+    "cache_globs": [
+        "examples/**/*.py",
+        "tests/**/*.py",
+        "src/**/*.py",
+        "utils/**/*.py",
+        "scripts/**/*.py",
+        ".circleci/create_circleci_config.py",
+        "benchmark/**/*.py",
+        "benchmark_v2/**/*.py",
+        "setup.py",
+        "conftest.py",
+    ],
+    "check_args": [],
+    "fix_args": None,
+}
+
+ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_TARGETS = [
+    "examples",
+    "tests",
+    "src",
+    "utils",
+    "scripts",
+    ".circleci/create_circleci_config.py",
+    "benchmark",
+    "benchmark_v2",
+    "setup.py",
+    "conftest.py",
+]
+DEFAULT_EXCLUDES = {
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "__pycache__",
+    "build",
+    "dist",
+    "node_modules",
+}
+DIRECTIVE_PREFIXES = (
+    "#!",
+    "# -*-",
+    "# coding",
+    "# fmt:",
+    "# isort:",
+    "# noqa",
+    "# pyright:",
+    "# ruff:",
+    "# type:",
+)
+DOUBLE_QUOTE_ALLOWLIST = {
+    '"AS IS"',
+    '"License"',
+}
+CODE_SPAN_RE = re.compile(r"`[^`]*`")
+COMMENTED_OUT_CODE_RE = re.compile(
+    r"^\s*(@|((async\s+)?def|class|from|import|if|elif|else|for|while|with|try|except|finally|return|yield|"
+    r"raise|assert|print)\b|[A-Za-z_][A-Za-z0-9_\.]*\s*[=(])"
+)
+
+
+@dataclass(frozen=True)
+class Comment:
+    line: int
+    column: int
+    text: str
+    physical_line: str
+
+
+@dataclass(frozen=True)
+class Finding:
+    path: Path
+    line: int
+    code: str
+    message: str
+    text: str
+
+
+def _display_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
+def _comment_body(text: str) -> str:
+    return text[1:].strip()
+
+
+def _is_full_line_comment(comment: Comment) -> bool:
+    return comment.physical_line[: comment.column].strip() == ""
+
+
+def _is_directive(comment: Comment) -> bool:
+    text = comment.text.strip()
+    lower_text = text.lower()
+    return lower_text.startswith(DIRECTIVE_PREFIXES)
+
+
+def _looks_like_commented_out_code(comment: Comment) -> bool:
+    body = _comment_body(comment.text)
+    return COMMENTED_OUT_CODE_RE.search(body) is not None or body.startswith(('"', "'"))
+
+
+def _is_header_comment_block(block: list[Comment]) -> bool:
+    """Skip the standard top-of-file copyright/license paragraph."""
+    if not block:
+        return False
+    if block[0].line > 2:
+        return False
+
+    text = "\n".join(comment.text for comment in block[:20])
+    return "Copyright" in text and "Licensed under the Apache License" in text
+
+
+def _is_structured_metadata_block(block: list[Comment]) -> bool:
+    bodies = [_comment_body(comment.text) for comment in block]
+    return any(body == "/// script" for body in bodies) and any(body == "///" for body in bodies)
+
+
+def _has_double_quoted_phrase(comment: Comment) -> bool:
+    text = CODE_SPAN_RE.sub("", comment.text)
+    if any(allowed in text for allowed in DOUBLE_QUOTE_ALLOWLIST):
+        return False
+    if _is_directive(comment) or _looks_like_commented_out_code(comment):
+        return False
+
+    in_quote = False
+    quoted = []
+    current = []
+    escaped = False
+    for char in text:
+        if escaped:
+            current.append(char)
+            escaped = False
+            continue
+        if char == "\\":
+            if in_quote:
+                escaped = True
+            continue
+        if char == '"':
+            if in_quote:
+                quoted.append("".join(current))
+                current = []
+            in_quote = not in_quote
+        elif in_quote:
+            current.append(char)
+
+    return any(any(char.isalpha() for char in phrase) for phrase in quoted)
+
+
+def _iter_python_files(targets: list[str], excludes: set[str]) -> list[Path]:
+    files = set()
+    for target in targets:
+        path = ROOT / target
+        if path.is_file() and path.suffix == ".py":
+            files.add(path)
+            continue
+        if not path.is_dir():
+            continue
+        for candidate in path.rglob("*.py"):
+            if excludes.intersection(candidate.relative_to(ROOT).parts):
+                continue
+            files.add(candidate)
+    return sorted(files)
+
+
+def _tokenize_comments(path: Path) -> list[Comment]:
+    try:
+        source = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        source = path.read_text(encoding="latin-1")
+
+    comments = []
+    try:
+        tokens = tokenize.generate_tokens(io.StringIO(source).readline)
+        for token in tokens:
+            if token.type == tokenize.COMMENT:
+                line, column = token.start
+                comments.append(Comment(line=line, column=column, text=token.string, physical_line=token.line))
+    except tokenize.TokenError as error:
+        raise ValueError(f"Could not tokenize {_display_path(path)}: {error}") from error
+    return comments
+
+
+def _comment_blocks(comments: list[Comment]) -> list[list[Comment]]:
+    blocks = []
+    current = []
+    previous_line = None
+    for comment in comments:
+        if not _is_full_line_comment(comment):
+            continue
+        if previous_line is None or comment.line == previous_line + 1:
+            current.append(comment)
+        else:
+            if current:
+                blocks.append(current)
+            current = [comment]
+        previous_line = comment.line
+    if current:
+        blocks.append(current)
+    return blocks
+
+
+def check_file(
+    path: Path,
+    max_block_lines: int,
+    max_block_chars: int,
+    max_comment_chars: int,
+) -> list[Finding]:
+    findings = []
+    comments = _tokenize_comments(path)
+
+    for block in _comment_blocks(comments):
+        if (
+            _is_header_comment_block(block)
+            or _is_structured_metadata_block(block)
+            or all(_is_directive(comment) for comment in block)
+        ):
+            continue
+
+        body_chars = sum(len(_comment_body(comment.text)) for comment in block)
+        if len(block) > max_block_lines:
+            findings.append(
+                Finding(
+                    path=path,
+                    line=block[0].line,
+                    code="NC001",
+                    message=f"comment block has {len(block)} lines (limit: {max_block_lines})",
+                    text=block[0].text.strip(),
+                )
+            )
+        if body_chars > max_block_chars:
+            findings.append(
+                Finding(
+                    path=path,
+                    line=block[0].line,
+                    code="NC002",
+                    message=f"comment block has {body_chars} characters (limit: {max_block_chars})",
+                    text=block[0].text.strip(),
+                )
+            )
+
+    for comment in comments:
+        if _is_directive(comment):
+            continue
+        body = _comment_body(comment.text)
+        if len(body) > max_comment_chars:
+            findings.append(
+                Finding(
+                    path=path,
+                    line=comment.line,
+                    code="NC003",
+                    message=f"comment has {len(body)} characters (limit: {max_comment_chars})",
+                    text=comment.text.strip(),
+                )
+            )
+        if _has_double_quoted_phrase(comment):
+            findings.append(
+                Finding(
+                    path=path,
+                    line=comment.line,
+                    code="NC004",
+                    message="comment uses double-quoted prose; prefer backticks, single quotes, or plain text",
+                    text=comment.text.strip(),
+                )
+            )
+
+    return findings
+
+
+def check_comments(
+    targets: list[str] | None = None,
+    excludes: set[str] | None = None,
+    max_block_lines: int = 5,
+    max_block_chars: int = 500,
+    max_comment_chars: int = 500,
+) -> list[Finding]:
+    targets = DEFAULT_TARGETS if targets is None else targets
+    excludes = DEFAULT_EXCLUDES if excludes is None else excludes
+
+    findings = []
+    for path in _iter_python_files(targets, excludes):
+        findings.extend(check_file(path, max_block_lines, max_block_chars, max_comment_chars))
+    return findings
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("targets", nargs="*", default=DEFAULT_TARGETS, help="Files or directories to check.")
+    parser.add_argument("--max-block-lines", type=int, default=5, help="Maximum contiguous full-line comment lines.")
+    parser.add_argument("--max-block-chars", type=int, default=500, help="Maximum characters in a comment block.")
+    parser.add_argument("--max-comment-chars", type=int, default=500, help="Maximum characters in any one comment.")
+    parser.add_argument("--exclude", action="append", default=[], help="Path component to exclude; can be repeated.")
+    parser.add_argument("--max-findings", type=int, default=50, help="Maximum findings to print before truncating.")
+    parser.add_argument(
+        "--fail-on-findings",
+        action="store_true",
+        help="Exit non-zero when noisy comments are found. Default is reporting mode.",
+    )
+    args = parser.parse_args()
+
+    excludes = DEFAULT_EXCLUDES.union(args.exclude)
+    findings = check_comments(
+        targets=args.targets,
+        excludes=excludes,
+        max_block_lines=args.max_block_lines,
+        max_block_chars=args.max_block_chars,
+        max_comment_chars=args.max_comment_chars,
+    )
+
+    if not findings:
+        print("No noisy comments found.")
+        return 0
+
+    mode = "Blocking." if args.fail_on_findings else "Reporting only; not blocking."
+    print(f"Found {len(findings)} noisy comment finding(s). {mode}")
+    for finding in findings[: args.max_findings]:
+        print(f"{_display_path(finding.path)}:{finding.line}: {finding.code} {finding.message}")
+        print(f"    {finding.text[:160]}")
+
+    remaining = len(findings) - args.max_findings
+    if remaining > 0:
+        print(f"... and {remaining} more finding(s).")
+    print("Tune thresholds with --max-block-lines, --max-block-chars, and --max-comment-chars.")
+    print(f"Found {len(findings)} noisy comment finding(s).")
+
+    return 1 if args.fail_on_findings else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

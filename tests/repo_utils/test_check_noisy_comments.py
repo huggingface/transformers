@@ -1,0 +1,177 @@
+# Copyright 2026 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import io
+import os
+import sys
+import tempfile
+import unittest
+from contextlib import redirect_stdout
+from pathlib import Path
+from unittest.mock import patch
+
+
+git_repo_path = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+utils_path = os.path.join(git_repo_path, "utils")
+if utils_path not in sys.path:
+    sys.path.append(utils_path)
+
+import check_noisy_comments  # noqa: E402
+
+
+LICENSE_HEADER = """# Copyright 2026 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+
+
+class NoisyCommentsTest(unittest.TestCase):
+    def _write_file(self, repo_root: Path, content: str) -> Path:
+        path = repo_root / "sample.py"
+        path.write_text(content, encoding="utf-8")
+        return path
+
+    def test_ignores_standard_license_header(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            path = self._write_file(repo_root, LICENSE_HEADER + "\nvalue = 1\n")
+
+            with patch.object(check_noisy_comments, "ROOT", repo_root):
+                findings = check_noisy_comments.check_file(
+                    path, max_block_lines=5, max_block_chars=500, max_comment_chars=500
+                )
+
+            self.assertEqual(findings, [])
+
+    def test_flags_long_comment_block(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            path = self._write_file(
+                repo_root,
+                "\n".join(
+                    [
+                        "value = 1",
+                        "# This is a multi-line note.",
+                        "# It keeps going.",
+                        "# And going.",
+                        "# And going.",
+                        "# And going.",
+                        "# And going.",
+                    ]
+                ),
+            )
+
+            with patch.object(check_noisy_comments, "ROOT", repo_root):
+                findings = check_noisy_comments.check_file(
+                    path, max_block_lines=5, max_block_chars=500, max_comment_chars=500
+                )
+
+            self.assertEqual([finding.code for finding in findings], ["NC001"])
+
+    def test_ignores_inline_script_metadata_block(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            path = self._write_file(
+                repo_root,
+                "\n".join(
+                    [
+                        "# /// script",
+                        "# dependencies = [",
+                        '#     "torch",',
+                        '#     "torchaudio",',
+                        "# ]",
+                        "# ///",
+                        "value = 1",
+                    ]
+                ),
+            )
+
+            with patch.object(check_noisy_comments, "ROOT", repo_root):
+                findings = check_noisy_comments.check_file(
+                    path, max_block_lines=5, max_block_chars=500, max_comment_chars=500
+                )
+
+            self.assertEqual(findings, [])
+
+    def test_thresholds_are_configurable(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            path = self._write_file(repo_root, "value = 1\n# This comment is deliberately not short.\n")
+
+            with patch.object(check_noisy_comments, "ROOT", repo_root):
+                strict = check_noisy_comments.check_file(
+                    path, max_block_lines=5, max_block_chars=500, max_comment_chars=10
+                )
+                relaxed = check_noisy_comments.check_file(
+                    path, max_block_lines=5, max_block_chars=500, max_comment_chars=100
+                )
+
+            self.assertEqual([finding.code for finding in strict], ["NC003"])
+            self.assertEqual(relaxed, [])
+
+    def test_flags_double_quoted_prose(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            path = self._write_file(repo_root, '# Use the "simple path" when possible.\nvalue = 1\n')
+
+            with patch.object(check_noisy_comments, "ROOT", repo_root):
+                findings = check_noisy_comments.check_file(
+                    path, max_block_lines=5, max_block_chars=500, max_comment_chars=500
+                )
+
+            self.assertEqual([finding.code for finding in findings], ["NC004"])
+
+    def test_cli_reports_without_failing_by_default(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            path = self._write_file(repo_root, '# Use the "simple path" when possible.\nvalue = 1\n')
+            stdout = io.StringIO()
+
+            with (
+                patch.object(check_noisy_comments, "ROOT", repo_root),
+                patch.object(sys, "argv", ["check_noisy_comments.py", str(path)]),
+                redirect_stdout(stdout),
+            ):
+                exit_code = check_noisy_comments.main()
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Reporting only; not blocking.", stdout.getvalue())
+
+    def test_cli_can_fail_on_findings(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            path = self._write_file(repo_root, '# Use the "simple path" when possible.\nvalue = 1\n')
+
+            with (
+                patch.object(check_noisy_comments, "ROOT", repo_root),
+                patch.object(sys, "argv", ["check_noisy_comments.py", str(path), "--fail-on-findings"]),
+                redirect_stdout(io.StringIO()),
+            ):
+                exit_code = check_noisy_comments.main()
+
+            self.assertEqual(exit_code, 1)
+
+
+if __name__ == "__main__":
+    unittest.main()
