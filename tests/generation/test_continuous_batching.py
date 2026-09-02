@@ -16,7 +16,6 @@ import functools
 import gc
 import itertools
 import os
-import queue
 import threading
 import time
 import unittest
@@ -778,81 +777,26 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                 os.environ["WORLD_SIZE"] = original_ws
 
 
-# Class for the handshake that lets threads sharing the model pause the generation loop. These tests drive the
-# handshake directly, with a stand-in generation loop, so they need no model and no accelerator.
+# Class for the states of the pause handshake that a real single-rank generation loop cannot produce: a loop parked
+# on a peer's request, a wait interrupted mid-flight, a loop that is already gone. They drive the handshake directly
+# with a stand-in loop, so they need no model and no accelerator. The everyday behaviour -- pausing repeatedly while
+# generation is in flight, several threads holding at once -- is tested against a real model in
+# `ContinuousBatchingWithAcceleratorTest`.
 class ContinuousBatchingPauseTest(unittest.TestCase):
     @staticmethod
     def _pause_handshake_manager(status: BackgroundThreadStatus, thread: threading.Thread | None):
-        """Build a manager shell that only supports `pause_generation`, which needs the status object, a thread to tell
-        whether the generation loop is running, and a distributed helper with no CPU comm group (single rank)."""
+        """Build a manager shell that supports `pause` and `stop`: the status object, a thread to tell whether the
+        generation loop is running, and a single-rank distributed helper with no CPU comm group. `batch_processor` and
+        `_original_attn_impl` are the two attributes `stop` tears down, both already empty here."""
         manager = ContinuousBatchingManager.__new__(ContinuousBatchingManager)
         manager.background_thread_status = status
         manager._generation_thread = thread
-        manager.distributed_helper = SimpleNamespace(cpu_comm_group=None)
+        manager.distributed_helper = SimpleNamespace(cpu_comm_group=None, global_rank=0)
+        manager.batch_processor = None
+        manager._original_attn_impl = None
         return manager
 
-    def test_pause_generation_never_overlaps_generation(self) -> None:
-        """A thread pausing the model at every step, back to back, while the generation loop is running and requests
-        keep coming in. The loop must never launch work while a pause is held, and no queued request may be lost
-        across the pauses."""
-        num_pauses = 200
-        status = BackgroundThreadStatus()
-        request_queue: queue.Queue[int] = queue.Queue()
-        processed: list[int] = []
-        steps = 0
-        pause_held = False
-        overlaps: list[int] = []
-        stop_loop = threading.Event()
-
-        def generation_loop() -> None:
-            nonlocal steps
-            try:
-                while not stop_loop.is_set():
-                    # Mirrors what `ContinuousBatchProcessor._update_tp_group_state` does at every iteration
-                    if status.is_pause_requested():
-                        status.pause_and_wait()
-                    # Everything below stands for the work the loop launches once the all-reduce is done
-                    if pause_held:
-                        overlaps.append(steps)
-                    while True:
-                        try:
-                            processed.append(request_queue.get_nowait())
-                        except queue.Empty:
-                            break
-                    steps += 1
-            finally:
-                status.mark_as_stopped()
-
-        loop_thread = threading.Thread(target=generation_loop)
-        loop_thread.start()
-        manager = self._pause_handshake_manager(status, loop_thread)
-
-        try:
-            for i in range(num_pauses):
-                request_queue.put(2 * i)  # a request submitted while the loop is running
-                with manager.pause():
-                    pause_held = True
-                    request_queue.put(2 * i + 1)  # and one submitted while the pause is held
-                    # The loop is parked, so its step counter cannot move while we are in here
-                    steps_at_pause = steps
-                    time.sleep(0)  # release the GIL, giving the loop every chance to misbehave
-                    self.assertEqual(steps, steps_at_pause, f"the loop ran during pause {i}")
-                    pause_held = False
-            # Let the loop drain what is left before shutting it down, so nothing is pending on exit
-            deadline = time.monotonic() + 10
-            while not request_queue.empty() and time.monotonic() < deadline:
-                time.sleep(0.01)
-        finally:
-            stop_loop.set()
-            loop_thread.join(timeout=10)
-
-        self.assertFalse(loop_thread.is_alive())
-        self.assertEqual(overlaps, [], f"the loop launched work {len(overlaps)} times while a pause was held")
-        # Every request went through exactly once, and the loop kept running between pauses
-        self.assertEqual(processed, list(range(2 * num_pauses)))
-        self.assertGreaterEqual(steps, num_pauses)
-
-    def test_pause_generation_on_a_peer_initiated_pause(self) -> None:
+    def test_pause_on_a_peer_initiated_pause(self) -> None:
         """Under TP the pause is MAX-reduced, so a rank parks as soon as ANY rank asks: its loop can be parked before
         its own threads have asked for anything. A thread arriving on an already parked loop must be let straight in,
         not rejected or left waiting."""
@@ -882,74 +826,106 @@ class ContinuousBatchingPauseTest(unittest.TestCase):
         self.assertEqual(entered, [True], "the thread was not let into an already parked loop")
         self.assertTrue(resumed.is_set(), "the loop never resumed after the pause was released")
 
-    def test_pause_generation_with_several_holders(self) -> None:
-        """Any number of threads may hold the pause at once. The loop must stay parked until the last one leaves, and
-        one holder raising must not release the pause for the others."""
-        num_holders = 4
+    def test_pause_request_is_dropped_when_the_wait_is_interrupted(self) -> None:
+        """An exception raised while waiting for the pause -- a Ctrl-C on the waiting thread, say -- must not leave the
+        request behind. A leaked request keeps `is_pause_requested` true forever, so the loop parks at its next
+        iteration and stays parked with nobody left to close the window. The interrupt is injected through the wait
+        predicate, which raises it from inside `wait_for` with the lock held, exactly where a real one would land."""
         status = BackgroundThreadStatus()
-        resumed_at = []
-        holders_inside = []
-        lock = threading.Lock()
-        release = threading.Event()
+        loop_resumed = threading.Event()
 
         def generation_loop() -> None:
             try:
-                while not status.is_pause_requested():
-                    time.sleep(0.001)
                 status.pause_and_wait()
-                with lock:
-                    resumed_at.append(len(holders_inside))  # how many were still inside when the loop resumed
+                loop_resumed.set()
             finally:
                 status.mark_as_stopped()
 
         loop_thread = threading.Thread(target=generation_loop)
         loop_thread.start()
         manager = self._pause_handshake_manager(status, loop_thread)
+        # Let the loop park, so the interrupted request is the only thing holding the window open
+        deadline = time.monotonic() + 10
+        while not status.is_pause_requested() and time.monotonic() < deadline:
+            time.sleep(0.01)
 
-        def holder(index: int) -> None:
-            try:
-                with manager.pause():
-                    with lock:
-                        holders_inside.append(index)
-                    release.wait(timeout=10)
-                    with lock:
-                        holders_inside.remove(index)
-                    if index == 0:
-                        raise ValueError("this holder fails, the others must be unaffected")
-            except ValueError:
+        def interrupted_predicate() -> bool:
+            raise KeyboardInterrupt("interrupted while waiting for the pause")
+
+        status._pause_predicate = interrupted_predicate
+        with self.assertRaises(KeyboardInterrupt):
+            with manager.pause():
                 pass
 
-        threads = [threading.Thread(target=holder, args=(i,)) for i in range(num_holders)]
-        for thread in threads:
-            thread.start()
-        # Wait for every holder to be inside the pause at the same time
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline:
-            with lock:
-                if len(holders_inside) == num_holders:
-                    break
-            time.sleep(0.01)
-        with lock:
-            self.assertEqual(len(holders_inside), num_holders, "not all holders got in")
-        self.assertFalse(resumed_at, "the loop resumed while holders were still inside")
-
-        release.set()
-        for thread in threads:
-            thread.join(timeout=10)
+        self.assertFalse(status.is_pause_requested(), "the interrupted request was left behind")
+        self.assertFalse(status.is_pause_requested(local=True), "the caller's own counter was left behind")
         loop_thread.join(timeout=10)
+        self.assertTrue(loop_resumed.is_set(), "the interrupted request left the generation loop parked")
 
+    def test_stop_from_inside_a_pause_raises(self) -> None:
+        """Stopping from a thread that is itself holding a pause can never work: `stop` waits for the generation loop,
+        which cannot exit before the pause is released, which cannot happen before this thread leaves the context. It
+        must raise rather than wait for itself, whatever the blocking flags say."""
+        status = BackgroundThreadStatus()
+        loop_thread = threading.Thread(target=status.pause_and_wait)
+        loop_thread.start()
+        manager = self._pause_handshake_manager(status, loop_thread)
+
+        try:
+            with manager.pause():
+                for kwargs in [{}, {"block": False}, {"block": True, "timeout": 5.0}]:
+                    with self.assertRaises(RuntimeError) as context:
+                        manager.stop(**kwargs)
+                    self.assertIn("from inside a pause", str(context.exception), f"wrong error for {kwargs}")
+        finally:
+            loop_thread.join(timeout=10)
         self.assertFalse(loop_thread.is_alive())
-        self.assertEqual(resumed_at, [0], "the loop must resume exactly once, after the last holder left")
+
+    def test_stop_from_another_thread_while_paused(self) -> None:
+        """A thread that is not itself pausing may stop the manager: it is not waiting for itself, so the stop simply
+        waits for the holder to leave and the loop to exit. Only a fully blocking stop is exercised here, since a stop
+        that returns before the loop has exited tears the manager down under a live loop -- a pre-existing problem of
+        `stop`, unrelated to pausing, and not something `pause` guards against."""
+        status = BackgroundThreadStatus()
+        loop_thread = threading.Thread(target=status.pause_and_wait)
+        loop_thread.start()
+        manager = self._pause_handshake_manager(status, loop_thread)
+
+        holding = threading.Event()
+        release = threading.Event()
+
+        def holder() -> None:
+            with manager.pause():
+                holding.set()
+                release.wait(timeout=10)
+
+        holder_thread = threading.Thread(target=holder)
+        holder_thread.start()
+        try:
+            self.assertTrue(holding.wait(timeout=10), "the holder never got its pause")
+            # A fully blocking stop waits for the holder to leave and the loop to exit
+            stopped = threading.Event()
+            stopper = threading.Thread(target=lambda: (manager.stop(), stopped.set()))
+            stopper.start()
+            self.assertFalse(stopped.wait(timeout=0.5), "the stop returned while the pause was still held")
+            release.set()
+            stopper.join(timeout=10)
+            self.assertTrue(stopped.is_set(), "the stop never completed after the pause was released")
+        finally:
+            release.set()
+            holder_thread.join(timeout=10)
+            loop_thread.join(timeout=10)
+        self.assertFalse(loop_thread.is_alive())
 
     @staticmethod
     def _pause_in_thread(manager, timeout: float = 10) -> tuple[bool, Exception | None]:
-        """Enter and leave `pause_generation` in a separate thread, so a wait that never returns shows up as a timeout
+        """Enter and leave `pause` in a separate thread, so a wait that never returns shows up as a timeout
         instead of hanging the test suite. Returns whether the thread finished and the exception it raised, if any."""
         raised: list[Exception] = []
 
         def enter_and_leave() -> None:
             try:
-                with manager.pause_generation():
+                with manager.pause():
                     pass
             except Exception as e:
                 raised.append(e)
@@ -960,7 +936,7 @@ class ContinuousBatchingPauseTest(unittest.TestCase):
         finished = not thread.is_alive()
         return finished, (raised[0] if raised else None)
 
-    def test_pause_generation_raises_when_the_loop_cannot_pause(self) -> None:
+    def test_pause_raises_when_the_loop_cannot_pause(self) -> None:
         """A pause request the loop will never honour must raise instead of blocking: whether the loop died on a fatal
         error, hard-stopped in the window right after reading the request, was never started, or already stopped."""
         # 1. The loop dies with a fatal error while a pause is pending: the error is chained as `__cause__`
@@ -972,6 +948,8 @@ class ContinuousBatchingPauseTest(unittest.TestCase):
             try:
                 while not status.is_pause_requested():
                     time.sleep(0.001)
+                # Same order as `_handle_critical_error`: the hard stop is requested before the error is recorded
+                status.request_stop(BackgroundThreadStatus.HARD_STOP, 0)
                 status.record_fatal_error(fatal_error)
                 keep_unwinding.wait(timeout=10)  # the loop is still on its way out when the waiter gives up
             finally:
@@ -981,7 +959,7 @@ class ContinuousBatchingPauseTest(unittest.TestCase):
         loop_thread.start()
         manager = self._pause_handshake_manager(status, loop_thread)
         finished, error = self._pause_in_thread(manager)
-        self.assertTrue(finished, "`pause_generation` blocked after the generation loop died")
+        self.assertTrue(finished, "`pause` blocked after the generation loop died")
         self.assertIsInstance(error, RuntimeError)
         self.assertIs(error.__cause__, fatal_error)
         # The half-dead manager is brought down rather than left looking usable
@@ -1007,14 +985,14 @@ class ContinuousBatchingPauseTest(unittest.TestCase):
         manager = self._pause_handshake_manager(status, loop_thread)
         finished, error = self._pause_in_thread(manager)
         loop_thread.join(timeout=10)
-        self.assertTrue(finished, "`pause_generation` blocked after the generation loop hard-stopped")
+        self.assertTrue(finished, "`pause` blocked after the generation loop hard-stopped")
         self.assertIsInstance(error, RuntimeError)
         self.assertGreaterEqual(status.local_status, BackgroundThreadStatus.HARD_STOP)
 
         # 3. A manager that was never started fails immediately
         manager = self._pause_handshake_manager(BackgroundThreadStatus(), None)
         finished, error = self._pause_in_thread(manager)
-        self.assertTrue(finished, "`pause_generation` blocked on a manager that was never started")
+        self.assertTrue(finished, "`pause` blocked on a manager that was never started")
         self.assertIsInstance(error, RuntimeError)
 
         # 4. And so does a manager whose generation thread already joined
@@ -1024,7 +1002,7 @@ class ContinuousBatchingPauseTest(unittest.TestCase):
         loop_thread.join(timeout=10)
         manager = self._pause_handshake_manager(status, loop_thread)
         finished, error = self._pause_in_thread(manager)
-        self.assertTrue(finished, "`pause_generation` blocked on an already stopped manager")
+        self.assertTrue(finished, "`pause` blocked on an already stopped manager")
         self.assertIsInstance(error, RuntimeError)
 
 
@@ -1613,6 +1591,135 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         # Verify parity with regular generate
         self.assertEqual(chunk_no_reuse.generated_tokens, expected_output_tokens[0])
+
+    # ------------------------------------------------- Pause tests ------------------------------------------------- #
+
+    def _started_manager_with_requests(self, max_new_tokens: int = 200):
+        """A running manager with a few requests in flight, and the tokenized inputs that were submitted."""
+        tokenizer, model = get_tokenizer_and_model("TinyLlama/TinyLlama-1.1B-Chat-v1.0", "paged|sdpa", torch_device)
+        input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
+        cb_config = ContinuousBatchingConfig(use_cuda_graph=False, use_async_batching=False)
+        manager = model.init_continuous_batching(continuous_batching_config=cb_config)
+        manager.logit_processor.clear()
+        manager.warmup()  # so an eventual graph capture does not happen on the loop thread mid-test
+        manager.start()
+        for ids in input_ids:
+            manager.add_request(ids, max_new_tokens=max_new_tokens)
+        return model, manager, len(input_ids)
+
+    def _wait_until_generating(self, manager, timeout: float = 60) -> None:
+        """Block until the loop has run a step. Requests are only admitted to the scheduler *after* the pause window
+        in `_update_tp_group_state`, so a pause taken on the very first iteration parks an empty scheduler and proves
+        nothing about the loop being held back."""
+        # `current_batch` is only set once the loop thread starts, hence the default
+        deadline = time.monotonic() + timeout
+        while getattr(manager, "current_batch", 0) == 0 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertGreater(getattr(manager, "current_batch", 0), 0, "the generation loop never started generating")
+
+    @staticmethod
+    def _collect_finished(manager, expected: int, timeout: float = 120):
+        """Drain the manager's outputs until `expected` requests have finished, or the timeout expires."""
+        outputs = {}
+        deadline = time.monotonic() + timeout
+        while len(outputs) < expected and time.monotonic() < deadline:
+            result = manager.get_result(timeout=1.0)
+            if result is not None and result.is_finished():
+                outputs[result.request_id] = result
+        return outputs
+
+    @with_flush_memory
+    def test_pause_during_generation(self) -> None:
+        """A thread pausing the model between generation steps, back to back, while requests are in flight: the shape a
+        trainer sharing the model has. The generation loop must not run a step while the pause is held, and every
+        request must still complete."""
+        num_pauses = 5
+        model, manager, num_requests = self._started_manager_with_requests()
+        try:
+            self._wait_until_generating(manager)
+            for i in range(num_pauses):
+                with manager.pause():
+                    # The loop is parked, so its own step counter cannot move while we are in here
+                    batches_at_pause = manager.current_batch
+                    # A frozen step counter only proves something if the loop had work to do
+                    self.assertTrue(
+                        manager.batch_processor.has_pending_requests(),
+                        f"generation finished before pause {i}: a frozen step counter would prove nothing",
+                    )
+                    with torch.no_grad():  # stands in for a trainer updating the model in place
+                        for parameter in model.parameters():
+                            parameter.add_(0.0)
+                    # A generation step is only a few ms, so hold the pause long enough that a loop which ignored it
+                    # would get through many of them. Without this the assertion below is too fast to catch anything.
+                    time.sleep(0.3)
+                    self.assertEqual(manager.current_batch, batches_at_pause, f"the loop ran during pause {i}")
+            outputs = self._collect_finished(manager, num_requests)
+        finally:
+            manager.stop(block=True)
+
+        self.assertEqual(len(outputs), num_requests, "some requests were lost across the pauses")
+        for request_id, output in outputs.items():
+            self.assertGreater(len(output.generated_tokens), 0, f"{request_id} generated nothing")
+
+    @with_flush_memory
+    def test_pause_with_several_holders(self) -> None:
+        """Several threads may hold the pause at the same time. The loop must stay parked until the *last* one leaves,
+        so the holders are let out one at a time and the loop's step counter is checked after each."""
+        num_holders = 3
+        model, manager, num_requests = self._started_manager_with_requests()
+        # One extra party for the main thread, which asserts while every holder sits inside its pause
+        all_inside = threading.Barrier(num_holders + 1, timeout=60)
+        may_leave = [threading.Event() for _ in range(num_holders)]
+        has_left = [threading.Event() for _ in range(num_holders)]
+        holder_errors = []
+
+        def holder(index: int) -> None:
+            try:
+                with manager.pause():
+                    all_inside.wait()  # every holder is inside its pause at this point
+                    may_leave[index].wait(timeout=60)
+                has_left[index].set()
+            except Exception as error:  # a holder that never got in would break the barrier
+                holder_errors.append(error)
+
+        threads = [threading.Thread(target=holder, args=(index,)) for index in range(num_holders)]
+        try:
+            self._wait_until_generating(manager)
+            for thread in threads:
+                thread.start()
+            all_inside.wait()
+            batches_at_pause = manager.current_batch
+            # Same positive control: the loop must have work queued, or a frozen counter means nothing
+            self.assertTrue(
+                manager.batch_processor.has_pending_requests(),
+                "generation finished before the holders got in: a frozen step counter would prove nothing",
+            )
+
+            for index in range(num_holders):
+                may_leave[index].set()
+                self.assertTrue(has_left[index].wait(timeout=30), f"holder {index} never left its pause")
+                # A generation step is only a few ms, so give a loop that resumed too early time to show it
+                time.sleep(0.3)
+                if index < num_holders - 1:
+                    self.assertEqual(
+                        manager.current_batch,
+                        batches_at_pause,
+                        f"the loop resumed with {num_holders - index - 1} holders still inside",
+                    )
+
+            for thread in threads:
+                thread.join(timeout=30)
+            outputs = self._collect_finished(manager, num_requests)
+        finally:
+            for event in may_leave:
+                event.set()
+            manager.stop(block=True)
+
+        self.assertEqual(holder_errors, [], f"holders failed to take the pause: {holder_errors}")
+        self.assertGreater(
+            manager.current_batch, batches_at_pause, "the loop never resumed after the last holder left"
+        )
+        self.assertEqual(len(outputs), num_requests, "some requests were lost across the pauses")
 
     def test_prefix_sharing(self) -> None:
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
@@ -2269,6 +2376,136 @@ def _tp_cancellation_worker(
         manager.stop(block=True)
 
 
+def _tp_pause_generation_worker(
+    rank: int,
+    model_id: str,
+    attn_implementation: str,
+    max_new_tokens: int,
+    num_pauses: int,
+    skew_seconds: float,
+    use_async_batching: bool = False,
+    use_cuda_graph: bool = False,
+) -> None:
+    """Loads `model_id` with `DistributedConfig(tp_size=...)` and runs, on every rank, a generation loop plus a second
+    thread that repeatedly pauses it through `pause`. Each rank enters its first pause at a different time,
+    so the ranks reach the pause window at different loop iterations: the pause request is MAX-reduced, so a rank parks
+    before its own thread has asked for anything, which is the case a single-rank test cannot reach.
+
+    Inside the pause, every rank issues a collective on the TP group. That collective is what makes a desync visible:
+    if a rank resumed generation instead of staying parked, its generation forward would issue TP collectives that pair
+    up with its peers' probe and the probe would come back wrong (or hang). Rank 0 owns the assertions."""
+    import threading
+    import time
+
+    import torch
+    import torch.distributed as dist
+
+    from transformers.distributed import DistributedConfig
+
+    tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+    if not hasattr(tokenizer, "pad_token") and hasattr(tokenizer, "eos_token"):
+        tokenizer.pad_token = tokenizer.eos_token
+
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id,
+        attn_implementation=attn_implementation,
+        distributed_config=DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"])),
+        dtype=torch.float32,
+    ).eval()
+
+    chats = [[{"role": "user", "content": message}] for message in _DEFAULT_USER_MESSAGES]
+    tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
+    input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
+
+    # A group of its own for the test's own synchronization: the manager's groups are used by the generation loop
+    # thread, and issuing collectives on them from the main thread at the same time would interleave.
+    sync_group = dist.new_group(backend="gloo")
+
+    cb_config = ContinuousBatchingConfig(
+        use_cuda_graph=use_cuda_graph, use_async_batching=use_async_batching, cpu_group_timeout=120
+    )
+    manager = model.init_continuous_batching(continuous_batching_config=cb_config)
+    manager.logit_processor.clear()
+    # Warm up synchronously, so an eventual CUDA-graph capture does not happen on the loop thread mid-test
+    manager.warmup()
+    manager.start()
+
+    tp_group = manager.distributed_helper.tp_group
+    tp_size = manager.distributed_helper.tp_size
+    expected_probe = float(sum(range(1, tp_size + 1)))
+    pauses_taken = []
+    pause_errors = []
+
+    def pauser() -> None:
+        """Stands in for a trainer thread updating the model in place between generation steps."""
+        try:
+            time.sleep(skew_seconds * rank)  # the ranks do not ask at the same iteration
+            for _ in range(num_pauses):
+                with manager.pause():
+                    # A collective on the TP group, like a training step would issue. Every rank must be in the same
+                    # pause window for this to come back with the right value.
+                    probe = torch.full((16,), float(rank + 1), device=model.device)
+                    dist.all_reduce(probe, group=tp_group)
+                    if probe[0].item() != expected_probe:
+                        raise AssertionError(
+                            f"TP collective inside the pause returned {probe[0].item()}, expected {expected_probe}: "
+                            f"the ranks are not in the same pause window"
+                        )
+                    pauses_taken.append(1)
+                time.sleep(0.02)  # let the generation loop make progress between pauses
+        except Exception as error:  # surfaced on the main thread below
+            pause_errors.append(error)
+
+    pause_thread = threading.Thread(target=pauser)
+    pause_thread.start()
+
+    try:
+        # `add_request` only enqueues on the TP driver and returns None elsewhere; the states are then broadcast, so
+        # every rank produces outputs for the driver's request ids. Collect by count and key on what comes back.
+        for ids in input_ids:
+            manager.add_request(ids, max_new_tokens=max_new_tokens, streaming=False)
+        outputs = {}
+        deadline = time.time() + 300
+        while len(outputs) < len(input_ids) and time.time() < deadline:
+            result = manager.get_result(timeout=1.0)
+            if result is not None and result.is_finished():
+                outputs[result.request_id] = result
+        pause_thread.join(timeout=120)
+    finally:
+        # The pause thread must be done before stopping: `stop` joins the generation thread, which cannot exit while a
+        # pause is held. And no rank may stop while another rank's thread is still pausing, since the stop travels
+        # through the same all-reduce as the pause and would leave the late rank asking a loop that is already gone.
+        if not pause_thread.is_alive():
+            dist.barrier(group=sync_group)
+            manager.stop(block=True)
+
+    assert not pause_thread.is_alive(), f"rank {rank}: the pausing thread never finished"
+    if pause_errors:
+        # `is_running()` reports a dead loop the same way it reports a stopped one, so chain whatever killed it
+        loop_error = manager.background_thread_status.fatal_error
+        raise pause_errors[0] from loop_error
+    assert len(pauses_taken) == num_pauses, f"rank {rank}: took {len(pauses_taken)} pauses, expected {num_pauses}"
+    assert len(outputs) == len(input_ids), f"rank {rank}: got {len(outputs)}/{len(input_ids)} requests back"
+
+    # Cross-rank parity: pausing must not change what generation produces, nor make the ranks diverge. Sorting by
+    # request id gives every rank the same order.
+    local_tokens = [outputs[request_id].generated_tokens for request_id in sorted(outputs)]
+    gathered_tokens = [None] * tp_size
+    dist.all_gather_object(gathered_tokens, local_tokens, group=tp_group)
+
+    if rank != 0:
+        return
+
+    for index, tokens in enumerate(local_tokens):
+        assert len(tokens) > 0, f"Request {index} got no generated tokens"
+    for src_rank, src_tokens in enumerate(gathered_tokens):
+        if src_tokens != gathered_tokens[0]:
+            raise AssertionError(
+                f"Generation diverges across ranks when pausing: rank {src_rank} got {src_tokens}, rank 0 got "
+                f"{gathered_tokens[0]}"
+            )
+
+
 @require_torch_multi_accelerator
 class ContinuousBatchingTensorParallelTest(unittest.TestCase):
     """Integration tests for continuous batching with tensor parallelism. Each test spawns a TP-sized process group
@@ -2296,6 +2533,17 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
         """Test that continuous batching with `DistributedConfig(tp_size=...)` produces non-empty, reproducible greedy outputs and
         that all TP ranks agree on the generated tokens."""
         self._run_cb_worker(max_new_tokens=4)
+
+    def test_continuous_batching_tp_pause(self) -> None:
+        """Test that `pause` keeps the TP ranks in the same pause window even when they ask for it at
+        different iterations, and that pausing repeatedly mid-generation loses no request and makes no rank diverge."""
+        _init_distributed(tp=self.tp_size, backend="nccl")(_tp_pause_generation_worker)(
+            model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+            attn_implementation="paged|sdpa",
+            max_new_tokens=20,
+            num_pauses=5,
+            skew_seconds=0.25,
+        )
 
     @slow
     def test_continuous_batching_tp_greedy(self) -> None:
