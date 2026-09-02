@@ -152,7 +152,3 @@ class FunAsrNanoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitte
         )
         self.assertTrue(torch.all(batch["input_features_mask"][0, :valid_length] == 1))
         self.assertTrue(torch.all(batch["input_features_mask"][0, valid_length:] == 0))
-
-
-if __name__ == "__main__":
-    unittest.main()

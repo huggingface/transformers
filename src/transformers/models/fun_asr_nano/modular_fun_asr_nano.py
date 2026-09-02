@@ -43,7 +43,7 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
 from ..qwen3_asr.modeling_qwen3_asr import Qwen3ASRAudioAttention, Qwen3ASRAudioEncoderLayer, Qwen3ASREncoder
 from ..whisper.modeling_whisper import WhisperEncoderLayer, eager_attention_forward
-from .configuration_fun_asr_nano import FunAsrNanoAdaptorConfig, FunAsrNanoConfig, FunAsrNanoEncoderConfig
+from .configuration_fun_asr_nano import FunAsrNanoAdaptorConfig, FunAsrNanoAudioConfig, FunAsrNanoConfig
 
 
 if is_torch_available():
@@ -69,7 +69,7 @@ def _prepare_keyword_inputs(keywords, batch_size: int) -> list[list[str] | None]
     """Broadcast / validate the hotword argument to match batch_size."""
     if isinstance(keywords, str):
         keywords = [keywords]
-    if isinstance(keywords, (list, tuple)) and all(isinstance(item, str) for item in keywords):
+    if isinstance(keywords, list | tuple) and all(isinstance(item, str) for item in keywords):
         keywords = [list(keywords)] * batch_size
     return prepare_prompt_input(keywords, batch_size, input_name="keywords")
 
@@ -221,7 +221,7 @@ class FunAsrNanoAttention(Qwen3ASRAudioAttention):
 
     def __init__(
         self,
-        config: FunAsrNanoEncoderConfig,
+        config: FunAsrNanoAudioConfig,
         input_dim: int | None = None,
         use_fsmn: bool = False,
     ):
@@ -270,7 +270,7 @@ class FunAsrNanoAttention(Qwen3ASRAudioAttention):
 class FunAsrNanoFSMN(nn.Module):
     """Depthwise feedforward sequential memory network (FSMN) used alongside self-attention."""
 
-    def __init__(self, config: FunAsrNanoEncoderConfig):
+    def __init__(self, config: FunAsrNanoAudioConfig):
         super().__init__()
         self.conv = nn.Conv1d(
             config.d_model,
@@ -305,7 +305,7 @@ class FunAsrNanoFSMN(nn.Module):
 class FunAsrNanoMLP(nn.Module):
     """The SAN-M feed-forward block kept separate from encoder-layer orchestration."""
 
-    def __init__(self, config: FunAsrNanoEncoderConfig):
+    def __init__(self, config: FunAsrNanoAudioConfig):
         super().__init__()
         self.fc1 = nn.Linear(config.d_model, config.intermediate_size)
         self.fc2 = nn.Linear(config.intermediate_size, config.d_model)
@@ -324,7 +324,7 @@ class FunAsrNanoMLP(nn.Module):
 class FunAsrNanoPositionEmbedding(nn.Module):
     """Scale LFR features and add the fixed sinusoidal positions before the first SAN-M layer."""
 
-    def __init__(self, config: FunAsrNanoEncoderConfig):
+    def __init__(self, config: FunAsrNanoAudioConfig):
         super().__init__()
         self.scale = config.d_model**0.5
         self.length = config.max_position_embeddings
@@ -350,7 +350,7 @@ class FunAsrNanoPositionEmbedding(nn.Module):
 class FunAsrNanoEncoderLayer(Qwen3ASRAudioEncoderLayer):
     """SAN-M encoder layer with attention-owned sequential memory and a standalone MLP."""
 
-    def __init__(self, config: FunAsrNanoEncoderConfig, input_dim: int | None = None):
+    def __init__(self, config: FunAsrNanoAudioConfig, input_dim: int | None = None):
         input_dim = input_dim or config.d_model
         super().__init__(config)
         self.self_attn_layer_norm = nn.LayerNorm(input_dim)
@@ -399,7 +399,7 @@ class FunAsrNanoEncoder(Qwen3ASREncoder):
         "attentions": FunAsrNanoAttention,
     }
 
-    def __init__(self, config: FunAsrNanoEncoderConfig):
+    def __init__(self, config: FunAsrNanoAudioConfig):
         PreTrainedModel.__init__(self, config)
         self.position_embeddings = FunAsrNanoPositionEmbedding(config)
         self.stem = FunAsrNanoEncoderLayer(config, input_dim=config.input_size)
@@ -466,25 +466,22 @@ class FunAsrNanoAdaptorLayer(WhisperEncoderLayer):
 
 
 class FunAsrNanoMultiModalProjector(AudioFlamingo3MultiModalProjector):
+    """Projects audio features into the text space and applies the checkpoint's adaptor blocks."""
+
     def __init__(self, config: FunAsrNanoConfig):
         super().__init__()
         self.linear_1 = nn.Linear(config.audio_config.d_model, config.projector_hidden_size)
         self.linear_2 = nn.Linear(config.projector_hidden_size, config.adaptor_config.d_model)
-
-
-class FunAsrNanoAdaptor(nn.Module):
-    """Bidirectional self-attention adaptor applied to the projected audio features."""
-
-    def __init__(self, config: FunAsrNanoConfig):
-        super().__init__()
         adaptor_config = config.adaptor_config
-        adaptor_config._attn_implementation = config.audio_config._attn_implementation
         self.config = adaptor_config
         self.blocks = nn.ModuleList(
             [FunAsrNanoAdaptorLayer(adaptor_config) for _ in range(adaptor_config.num_hidden_layers)]
         )
 
-    def forward(self, hidden_states: torch.Tensor, input_features_mask: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, input_features_mask: torch.Tensor | None = None) -> torch.Tensor:
+        hidden_states = self.linear_1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
         attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=hidden_states,
@@ -504,7 +501,7 @@ class FunAsrNanoAdaptor(nn.Module):
 class FunAsrNanoModel(AudioFlamingo3Model):
     def __init__(self, config):
         super().__init__(config)
-        self.audio_adaptor = FunAsrNanoAdaptor(config)
+        self.multi_modal_projector = FunAsrNanoMultiModalProjector(config)
 
     @can_return_tuple
     @auto_docstring(
@@ -539,8 +536,7 @@ class FunAsrNanoModel(AudioFlamingo3Model):
         )
         encoder_out = encoder_outputs.last_hidden_state
 
-        audio_embeds = self.multi_modal_projector(encoder_out)
-        audio_embeds = self.audio_adaptor(audio_embeds, input_features_mask)
+        audio_embeds = self.multi_modal_projector(encoder_out, input_features_mask)
         pooler_output = audio_embeds[input_features_mask.to(device=audio_embeds.device, dtype=torch.bool)]
 
         return BaseModelOutputWithPooling(

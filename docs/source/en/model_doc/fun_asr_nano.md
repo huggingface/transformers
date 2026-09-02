@@ -156,7 +156,6 @@ with torch.inference_mode():
     generated_ids = model.generate(
         **inputs,
         max_new_tokens=200,
-        cache_implementation="static",
         compile_config=CompileConfig(),
     )
 generated_ids = generated_ids[:, inputs.input_ids.shape[1]:]
@@ -167,9 +166,9 @@ print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 
 [[autodoc]] FunAsrNanoConfig
 
-## FunAsrNanoEncoderConfig
+## FunAsrNanoAudioConfig
 
-[[autodoc]] FunAsrNanoEncoderConfig
+[[autodoc]] FunAsrNanoAudioConfig
 
 ## FunAsrNanoAdaptorConfig
 

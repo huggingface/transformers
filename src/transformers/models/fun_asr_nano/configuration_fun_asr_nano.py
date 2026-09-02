@@ -20,7 +20,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")
 @strict
-class FunAsrNanoEncoderConfig(PreTrainedConfig):
+class FunAsrNanoAudioConfig(PreTrainedConfig):
     r"""
     num_stacked_frames (`int`, *optional*, defaults to 7):
         Number of consecutive mel frames stacked by low-frame-rate feature extraction.
@@ -149,4 +149,9 @@ class FunAsrNanoConfig(PreTrainedConfig):
             )
 
 
-__all__ = ["FunAsrNanoAdaptorConfig", "FunAsrNanoConfig", "FunAsrNanoEncoderConfig"]
+# `FunAsrNanoEncoderConfig` was exposed in the initial PR. Keep it as an alias so serialized
+# configs and early downstream imports keep working while `FunAsrNanoAudioConfig` is the canonical name.
+FunAsrNanoEncoderConfig = FunAsrNanoAudioConfig
+
+
+__all__ = ["FunAsrNanoAdaptorConfig", "FunAsrNanoAudioConfig", "FunAsrNanoConfig", "FunAsrNanoEncoderConfig"]

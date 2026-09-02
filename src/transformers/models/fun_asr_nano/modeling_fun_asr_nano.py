@@ -35,7 +35,12 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_to
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from .configuration_fun_asr_nano import FunAsrNanoAdaptorConfig, FunAsrNanoConfig, FunAsrNanoEncoderConfig
+from .configuration_fun_asr_nano import (
+    FunAsrNanoAdaptorConfig,
+    FunAsrNanoAudioConfig,
+    FunAsrNanoConfig,
+    FunAsrNanoEncoderConfig,
+)
 
 
 if is_torch_available():
@@ -107,7 +112,7 @@ class FunAsrNanoAttention(nn.Module):
 
     def __init__(
         self,
-        config: FunAsrNanoEncoderConfig,
+        config: FunAsrNanoAudioConfig,
         input_dim: int | None = None,
         use_fsmn: bool = False,
     ):
@@ -174,7 +179,7 @@ class FunAsrNanoAttention(nn.Module):
 class FunAsrNanoFSMN(nn.Module):
     """Depthwise feedforward sequential memory network (FSMN) used alongside self-attention."""
 
-    def __init__(self, config: FunAsrNanoEncoderConfig):
+    def __init__(self, config: FunAsrNanoAudioConfig):
         super().__init__()
         self.conv = nn.Conv1d(
             config.d_model,
@@ -209,7 +214,7 @@ class FunAsrNanoFSMN(nn.Module):
 class FunAsrNanoMLP(nn.Module):
     """The SAN-M feed-forward block kept separate from encoder-layer orchestration."""
 
-    def __init__(self, config: FunAsrNanoEncoderConfig):
+    def __init__(self, config: FunAsrNanoAudioConfig):
         super().__init__()
         self.fc1 = nn.Linear(config.d_model, config.intermediate_size)
         self.fc2 = nn.Linear(config.intermediate_size, config.d_model)
@@ -228,7 +233,7 @@ class FunAsrNanoMLP(nn.Module):
 class FunAsrNanoPositionEmbedding(nn.Module):
     """Scale LFR features and add the fixed sinusoidal positions before the first SAN-M layer."""
 
-    def __init__(self, config: FunAsrNanoEncoderConfig):
+    def __init__(self, config: FunAsrNanoAudioConfig):
         super().__init__()
         self.scale = config.d_model**0.5
         self.length = config.max_position_embeddings
@@ -254,7 +259,7 @@ class FunAsrNanoPositionEmbedding(nn.Module):
 class FunAsrNanoEncoderLayer(GradientCheckpointingLayer):
     """SAN-M encoder layer with attention-owned sequential memory and a standalone MLP."""
 
-    def __init__(self, config: FunAsrNanoEncoderConfig, input_dim: int | None = None):
+    def __init__(self, config: FunAsrNanoAudioConfig, input_dim: int | None = None):
         super().__init__()
         input_dim = input_dim or config.d_model
         self.embed_dim = config.d_model
@@ -318,7 +323,7 @@ class FunAsrNanoEncoder(FunAsrNanoPreTrainedModel):
         "attentions": FunAsrNanoAttention,
     }
 
-    def __init__(self, config: FunAsrNanoEncoderConfig):
+    def __init__(self, config: FunAsrNanoAudioConfig):
         super().__init__(config)
         self.position_embeddings = FunAsrNanoPositionEmbedding(config)
         self.stem = FunAsrNanoEncoderLayer(config, input_dim=config.input_size)
@@ -427,37 +432,23 @@ class FunAsrNanoAdaptorLayer(GradientCheckpointingLayer):
 
 
 class FunAsrNanoMultiModalProjector(nn.Module):
-    """
-    Audio adaptor (small MLP) that projects FunAsrNanoEncoder features
-    to the LLM embedding space so they can replace `<sound>` tokens.
-    """
+    """Projects audio features into the text space and applies the checkpoint's adaptor blocks."""
 
     def __init__(self, config: FunAsrNanoConfig):
         super().__init__()
         self.linear_1 = nn.Linear(config.audio_config.d_model, config.projector_hidden_size)
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Linear(config.projector_hidden_size, config.adaptor_config.d_model)
-
-    def forward(self, audio_features):
-        hidden_states = self.linear_1(audio_features)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
-        return hidden_states
-
-
-class FunAsrNanoAdaptor(nn.Module):
-    """Bidirectional self-attention adaptor applied to the projected audio features."""
-
-    def __init__(self, config: FunAsrNanoConfig):
-        super().__init__()
         adaptor_config = config.adaptor_config
-        adaptor_config._attn_implementation = config.audio_config._attn_implementation
         self.config = adaptor_config
         self.blocks = nn.ModuleList(
             [FunAsrNanoAdaptorLayer(adaptor_config) for _ in range(adaptor_config.num_hidden_layers)]
         )
 
-    def forward(self, hidden_states: torch.Tensor, input_features_mask: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, input_features_mask: torch.Tensor | None = None) -> torch.Tensor:
+        hidden_states = self.linear_1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
         attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=hidden_states,
@@ -484,7 +475,6 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel):
         self.audio_tower = AutoModel.from_config(config.audio_config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.multi_modal_projector = FunAsrNanoMultiModalProjector(config)
-        self.audio_adaptor = FunAsrNanoAdaptor(config)
         self.post_init()
 
     @can_return_tuple
@@ -520,8 +510,7 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel):
         )
         encoder_out = encoder_outputs.last_hidden_state
 
-        audio_embeds = self.multi_modal_projector(encoder_out)
-        audio_embeds = self.audio_adaptor(audio_embeds, input_features_mask)
+        audio_embeds = self.multi_modal_projector(encoder_out, input_features_mask)
         pooler_output = audio_embeds[input_features_mask.to(device=audio_embeds.device, dtype=torch.bool)]
 
         return BaseModelOutputWithPooling(

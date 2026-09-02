@@ -213,7 +213,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("focalnet", "FocalNetConfig"),
         ("fsmt", "FSMTConfig"),
         ("fun_asr_nano", "FunAsrNanoConfig"),
-        ("fun_asr_nano_encoder", "FunAsrNanoEncoderConfig"),
+        ("fun_asr_nano_encoder", "FunAsrNanoAudioConfig"),
         ("funnel", "FunnelConfig"),
         ("fuyu", "FuyuConfig"),
         ("gemma", "GemmaConfig"),

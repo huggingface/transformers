@@ -68,8 +68,8 @@ from huggingface_hub import snapshot_download
 
 from transformers import (
     AutoTokenizer,
+    FunAsrNanoAudioConfig,
     FunAsrNanoConfig,
-    FunAsrNanoEncoderConfig,
     FunAsrNanoFeatureExtractor,
     FunAsrNanoForConditionalGeneration,
     FunAsrNanoProcessor,
@@ -83,7 +83,7 @@ ROOT_STATE_DICT_MAPPING = (
     (r"^audio_encoder\.tp_encoders\.", "model.audio_tower.timestamp_prediction_layers."),
     (r"^audio_encoder\.after_norm\.", "model.audio_tower.layer_norm."),
     (r"^audio_encoder\.tp_norm\.", "model.audio_tower.timestamp_prediction_layer_norm."),
-    (r"^audio_adaptor\.blocks\.", "model.audio_adaptor.blocks."),
+    (r"^audio_adaptor\.blocks\.", "model.multi_modal_projector.blocks."),
     (r"^audio_adaptor\.linear1\.", "model.multi_modal_projector.linear_1."),
     (r"^audio_adaptor\.linear2\.", "model.multi_modal_projector.linear_2."),
     # Keep lm_head.weight explicitly. Although tie_word_embeddings=True, this model load path
@@ -223,7 +223,7 @@ def build_config_from_yaml(config_yaml_path: str, qwen3_config_path: str) -> Fun
 
     # Audio encoder config (standalone encoder model -> standalone config, Parakeet-style).
     enc_conf = cfg.get("audio_encoder_conf", {})
-    audio_config = FunAsrNanoEncoderConfig(
+    audio_config = FunAsrNanoAudioConfig(
         num_mel_bins=80,
         num_stacked_frames=7,
         hidden_size=enc_conf.get("output_size", 512),

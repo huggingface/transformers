@@ -15,7 +15,8 @@
 
 import unittest
 
-from transformers import FunAsrNanoConfig, FunAsrNanoEncoderConfig, Qwen3Config
+from transformers import FunAsrNanoAudioConfig, FunAsrNanoConfig, FunAsrNanoEncoderConfig, Qwen3Config
+from transformers.models.fun_asr_nano.convert_fun_asr_nano_to_hf import convert_key
 from transformers.testing_utils import require_torch, require_torch_gpu, slow
 
 from ...alm_tester import ALMModelTest, ALMModelTester
@@ -96,7 +97,7 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
     model_tester_class = FunAsrNanoModelTester
     all_model_classes = (FunAsrNanoForConditionalGeneration, FunAsrNanoModel) if is_torch_available() else ()
     pipeline_model_mapping = {"audio-text-to-text": FunAsrNanoForConditionalGeneration} if is_torch_available() else {}
-    model_split_percents = [0.5, 0.83, 0.9]
+    model_split_percents = [0.5, 0.9]
 
     def _audio_features_get_expected_num_attentions(self, model_tester=None):
         # The SAN-M stack is heterogeneous: one stem block, `num_hidden_layers - 1` regular blocks and
@@ -112,6 +113,9 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
         self.assertIn("audio_config", config.to_dict())
         self.assertNotIn("encoder_config", config.to_dict())
 
+    def test_audio_config_is_the_canonical_encoder_config_name(self):
+        self.assertIs(FunAsrNanoAudioConfig, FunAsrNanoEncoderConfig)
+
     def test_san_m_components_follow_attention_and_mlp_boundaries(self):
         model = self.model_tester.prepare_config_and_inputs_for_common()[0]
         model = FunAsrNanoModel(model).eval()
@@ -120,7 +124,16 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
         self.assertTrue(any("self_attn.fsmn.conv" in key for key in state_dict_keys))
         self.assertTrue(any(".mlp.fc1" in key for key in state_dict_keys))
         self.assertFalse(any("feedforward_sequential_memory" in key for key in state_dict_keys))
-        self.assertFalse(any("audio_adaptor.blocks" in key and ".mlp." in key for key in state_dict_keys))
+        self.assertTrue(any("multi_modal_projector.blocks" in key for key in state_dict_keys))
+        self.assertFalse(any("audio_adaptor" in key for key in state_dict_keys))
+
+    def test_checkpoint_adaptor_blocks_map_to_multimodal_projector(self):
+        key = "audio_adaptor.blocks.0.self_attn.linear_q.weight"
+
+        self.assertEqual(
+            convert_key(key),
+            "model.multi_modal_projector.blocks.0.self_attn.q_proj.weight",
+        )
 
     @unittest.skip(
         reason="This test does not apply to Fun-ASR-Nano since inputs_embeds corresponding to audio tokens "

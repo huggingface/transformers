@@ -52,7 +52,7 @@ def _prepare_keyword_inputs(keywords, batch_size: int) -> list[list[str] | None]
     """Broadcast / validate the hotword argument to match batch_size."""
     if isinstance(keywords, str):
         keywords = [keywords]
-    if isinstance(keywords, (list, tuple)) and all(isinstance(item, str) for item in keywords):
+    if isinstance(keywords, list | tuple) and all(isinstance(item, str) for item in keywords):
         keywords = [list(keywords)] * batch_size
     return prepare_prompt_input(keywords, batch_size, input_name="keywords")
 

@@ -156,7 +156,3 @@ class FunAsrNanoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 == torch.where(labels[~audio_positions] == -100, -100, input_ids[~audio_positions])
             ).all()
         )
-
-
-if __name__ == "__main__":
-    unittest.main()
