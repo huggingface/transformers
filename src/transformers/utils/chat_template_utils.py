@@ -629,3 +629,70 @@ class Chat:
             if not is_valid_message(message):
                 raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
         self.messages = messages
+
+
+# Content holding a NUL is never inlined, so an unmarked span can never carry one
+_SAFE_SPAN = re.compile("\x00([0-9]+)\x00")
+
+
+def sanitize_content(conversations: list[ChatType], tokenizer) -> tuple[list[ChatType], list[list[int]]]:
+    """Swap each message content for a marker, and encode the content as ordinary text.
+
+    `split_special_tokens=True` makes the tokenizer read a user's `<|im_end|>` as literal text, so nothing is
+    stripped or escaped. Jinja then formats markers, and [`~PreTrainedTokenizerBase.apply_chat_template`]
+    splices the ids back in.
+
+    Only content is swapped: `role`, `tools` and `documents` come from the application, not from the user.
+    Markers are opaque, so a template that slices content or takes its `| length` sees the marker instead.
+    """
+    safe_ids: list[list[int]] = []
+
+    def sanitize_text(text: str, may_inline: bool) -> str:
+        """A string, either left for the template's own encoding call or replaced by a marker."""
+        ids = tokenizer.encode(text, add_special_tokens=False, split_special_tokens=True)
+        # Inlining keeps ordinary chats byte-identical, instead of paying the boundary effects of a separate
+        # call (SentencePiece prepends a dummy space to every one)
+        if may_inline and "\x00" not in text and ids == tokenizer.encode(text, add_special_tokens=False):
+            return text
+        safe_ids.append(ids)
+        return f"\x00{len(safe_ids) - 1}\x00"
+
+    def sanitize_part(part: Any, may_inline: bool) -> Any:
+        """A content block, of which only the text is untrusted; the rest is structure."""
+        if isinstance(part, str):
+            return sanitize_text(part, may_inline)
+        elif isinstance(part, dict) and isinstance(part.get("text"), str):
+            return {**part, "text": sanitize_text(part["text"], may_inline)}
+        return part
+
+    def sanitize_field(content: Any) -> Any:
+        """The `content` of one message: either a string, or a list of blocks."""
+        # Blocks in a list render back to back, so two inlined halves of a control token would fuse into the
+        # real thing. Only a lone string is safe to inline, since template text is what surrounds it.
+        if isinstance(content, list):
+            return [sanitize_part(part, may_inline=False) for part in content]
+        return sanitize_part(content, may_inline=True)
+
+    safe_conversations = [
+        [
+            {key: sanitize_field(value) if key == "content" else value for key, value in message.items()}
+            for message in messages
+        ]
+        for messages in (chat.messages if hasattr(chat, "messages") else chat for chat in conversations)
+    ]
+    return safe_conversations, safe_ids
+
+
+def encode_sanitized_chat(tokenizer, rendered_chat: str, safe_ids: list[list[int]]) -> list[int]:
+    """Encode a chat rendered by `sanitize_content`.
+
+    Template text is encoded normally, so its own control tokens stay special, while each marker becomes the
+    ids already produced for the content it stands for.
+    """
+    input_ids = []
+    for index, span in enumerate(_SAFE_SPAN.split(rendered_chat)):
+        if index % 2:  # a marker: content, already encoded as ordinary text
+            input_ids.extend(safe_ids[int(span)])
+        elif span:
+            input_ids.extend(tokenizer.encode(span, add_special_tokens=False))
+    return input_ids
