@@ -650,7 +650,12 @@ def deepgemm_bf16_experts_forward(
         grouped_layout,
         total_padded_rows,
     ) = _dispatch_routed_input(
-        hidden_states, top_k_index, top_k_weights, self.num_experts, deepgemm.m_alignment, is_sm100(),
+        hidden_states,
+        top_k_index,
+        top_k_weights,
+        self.num_experts,
+        deepgemm.m_alignment,
+        is_sm100(),
         is_expert_parallel=self.is_expert_parallel,
     )
 
@@ -737,7 +742,12 @@ def deepgemm_fp8_fp4_experts_forward(
         grouped_layout,
         total_padded_rows,
     ) = _dispatch_routed_input(
-        hidden_states, top_k_index, top_k_weights, self.num_experts, deepgemm.m_alignment, is_sm100(),
+        hidden_states,
+        top_k_index,
+        top_k_weights,
+        self.num_experts,
+        deepgemm.m_alignment,
+        is_sm100(),
         is_expert_parallel=self.is_expert_parallel,
     )
     sf_recipe = (1, 1, cast_kwargs["gran_k"]) if cast_kwargs.get("use_packed_ue8m0") else None
