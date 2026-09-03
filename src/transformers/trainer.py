@@ -4018,23 +4018,20 @@ class Trainer:
             self.accelerator.unwrap_model(self.model, keep_torch_compile=False), "_device_mesh", None
         ) is not None and not _is_peft_model(self.model):
             # The model was sharded at load time (`DistributedConfig`). Gathering its DTensor state
-            # dict is collective, so every rank must participate; only the main process writes.
+            # dict is collective, so every rank must take part; only the main process writes.
             # (PEFT models fall through to the adapter-only save below.)
-            from .distributed.tensor_parallel import gather_state_dict_for_save
-
             unwrapped = self.accelerator.unwrap_model(self.model, keep_torch_compile=False)
-            gather_start = time.time()
-            state_dict = gather_state_dict_for_save(unwrapped.state_dict(), None, None, 0)
-            gather_s = time.time() - gather_start
+            distributed_config = unwrapped.config.distributed_config
+            state_dict = unwrapped.gather_sharded_state_dict_for_save(
+                unwrapped, unwrapped.state_dict(), distributed_config, save_on_this_rank=self.args.should_save
+            )
             if self.args.should_save:
-                write_start = time.time()
                 # `save_pretrained` ends with `barrier_after_gathered_checkpoint_save`.
                 self._save(output_dir, state_dict=state_dict)
-                logger.info(f"Sharded-model save: gather {gather_s:.1f}s, write {time.time() - write_start:.1f}s")
             else:
                 # Match the writer's end-of-save barrier so no rank runs ahead into the next
                 # step's collectives while the main process is still writing.
-                unwrapped.barrier_after_gathered_checkpoint_save(unwrapped.config.distributed_config)
+                unwrapped.barrier_after_gathered_checkpoint_save(distributed_config)
 
         elif self.args.should_save:
             self._save(output_dir)
