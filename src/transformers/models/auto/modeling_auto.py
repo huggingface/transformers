@@ -269,6 +269,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("imagegpt", "ImageGPTModel"),
         ("informer", "InformerModel"),
         ("inkling_mm_model", "InklingModel"),
+        ("inkling_text", "InklingTextModel"),
         ("instructblip", "InstructBlipModel"),
         ("instructblipvideo", "InstructBlipVideoModel"),
         ("internvl", "InternVLModel"),

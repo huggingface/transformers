@@ -33,6 +33,7 @@ from ..utils.import_utils import (
     is_kernels_available,
     is_rocm_platform,
     is_torch_available,
+    is_torchdynamo_compiling,
     is_torchdynamo_exporting,
     resolve_internal_import,
 )
@@ -74,6 +75,9 @@ _KERNELS_INTERNAL_PATH_MAPPINGS = {
     "mamba_inner_fn": "ops.selective_scan_interface",
     "selective_scan_fn": "ops.selective_scan_interface",
 }
+
+# Maps from import name to the distribution that ships it, where the two differ
+_PACKAGE_TO_DISTRIBUTION = {"fla": "flash-linear-attention"}
 
 
 if is_kernels_available():
@@ -892,6 +896,18 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
             # Some original packages are incompatible with torch.export, so we always use the torch path when exporting
             if is_new_implementation and is_torchdynamo_exporting():
                 return torch_function(*args, **kwargs)
+
+            if not is_new_implementation and not is_torchdynamo_compiling():
+                # These torch paths are readable references, not fast kernels, so their runtimes are
+                # significantly slower: for `chunk_gated_delta_rule` the gap is more than an order of
+                # magnitude on an H100. Warn the user when they end up on one. The logger is untraceable,
+                # hence the guard.
+                distribution = _PACKAGE_TO_DISTRIBUTION.get(package, package)
+                logger.warning_once(
+                    f"`{func_name}` is falling back to its reference PyTorch implementation because "
+                    f"`{distribution}` is not installed. This is correct but much slower; install "
+                    f"`{distribution}` for the optimized kernel."
+                )
 
             kwargs = {k: v for k, v in kwargs.items() if k in applicable_params}
             return implementation(*args, **kwargs)
