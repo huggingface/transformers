@@ -187,6 +187,16 @@ def convert_state_dict(paddle_state_dict: dict, model: PPDocLayoutV4ForObjectDet
                 state_dict[f"{prefix}.{name}.{suffix}"] = chunk.contiguous()
             continue
 
+        # Paddle fuses the query and key projections of the global pointer heads into a single `dense` parameter.
+        if "global_pointer.dense." in new_key:
+            prefix, suffix = new_key.rsplit(".", 1)
+            prefix = prefix.rsplit(".", 1)[0]
+            if suffix == "weight":
+                tensor = tensor.T
+            for name, chunk in zip(("q_proj", "k_proj"), tensor.chunk(2, dim=0)):
+                state_dict[f"{prefix}.{name}.{suffix}"] = chunk.contiguous()
+            continue
+
         if new_key not in expected_shapes:
             raise ValueError(f"{key} was renamed to {new_key}, which is not a parameter of the Transformers model.")
         if new_key.endswith(".weight") and new_key.rsplit(".", 1)[0] in linear_modules:

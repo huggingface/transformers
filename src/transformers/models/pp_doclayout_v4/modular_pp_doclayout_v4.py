@@ -640,6 +640,11 @@ class PPDocLayoutV4MLPPredictionHead(PPDocLayoutV3MLPPredictionHead):
     pass
 
 
+# Soft `-inf` masking the diagonal of the successor logits so that a query is never its own successor. Kept below the
+# fp16 maximum of 65504 to stay finite in half precision, where `-inf` would leak `NaN` into `exp`-based sigmoids.
+SELF_LOOP_MASK_VALUE = 1e4
+
+
 class PPDocLayoutV4GlobalPointer(nn.Module):
     """
     Pairwise scorer shared by both reading order heads.
@@ -651,22 +656,23 @@ class PPDocLayoutV4GlobalPointer(nn.Module):
 
     def __init__(self, config: PPDocLayoutV4Config, antisymmetric: bool):
         super().__init__()
-        self.head_size = config.global_pointer_head_size
+        self.head_dim = config.global_pointer_head_size
+        self.scaling = self.head_dim**-0.5
         self.antisymmetric = antisymmetric
-        self.dense = nn.Linear(config.d_model, self.head_size * 2)
+        self.q_proj = nn.Linear(config.d_model, self.head_dim)
+        self.k_proj = nn.Linear(config.d_model, self.head_dim)
         self.dropout = nn.Dropout(config.gp_dropout_value)
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, _ = inputs.shape
-        query_key_projection = self.dense(inputs).reshape(batch_size, sequence_length, 2, self.head_size)
-        query_key_projection = self.dropout(query_key_projection)
-        queries, keys = torch.unbind(query_key_projection, dim=2)
+        input_shape = inputs.shape[:-1]
+        queries = self.dropout(self.q_proj(inputs))
+        keys = self.dropout(self.k_proj(inputs))
 
-        logits = (queries @ keys.transpose(-2, -1)) / (self.head_size**0.5)
+        logits = (queries @ keys.transpose(-2, -1)) * self.scaling
         if self.antisymmetric:
             return logits - logits.transpose(-2, -1)
-        eye = torch.eye(sequence_length, device=logits.device, dtype=logits.dtype)
-        return logits - eye * 1e4
+        eye = torch.eye(input_shape[-1], device=logits.device, dtype=logits.dtype)
+        return logits - eye * SELF_LOOP_MASK_VALUE
 
 
 class PPDocLayoutV4S2RFusion(nn.Module):
@@ -816,7 +822,6 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
     def __init__(self, config: PPDocLayoutV4Config):
         super().__init__(config)
 
-        self.num_queries = config.num_queries
         self.query_pos_head = PPDocLayoutV4MLPPredictionHead(
             config.num_coords, 2 * config.d_model, config.d_model, num_layers=2
         )
