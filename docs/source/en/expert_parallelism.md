@@ -69,9 +69,9 @@ On 8 GPUs, full fine-tuning of Qwen3-30B-A3B in bf16 at sequence length 2048:
 
 | configuration | tokens/s/GPU | peak memory/GPU |
 |---|---|---|
-| `tp_size=8` | 3023 | 40.9 GB |
-| `tp_size=4, fsdp_size=2` | 2326 | 34.2 GB |
-| `tp_size=2, fsdp_size=4` | 2244 | 32.3 GB |
+| `tp_size=8` | 3485 | 38.6 GB |
+| `tp_size=4, fsdp_size=2` | 2900 | 34.2 GB |
+| `tp_size=2, fsdp_size=4` | 2830 | 32.3 GB |
 
 > [!WARNING]
 > Resuming from a checkpoint is not supported yet for models sharded at load time, so the [`Trainer`] only accepts `save_only_model=True` or `save_strategy="no"` for them.
