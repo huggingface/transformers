@@ -17,10 +17,9 @@ import unittest
 
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
-    Expectations,
     cleanup,
     require_torch,
-    require_torch_accelerator,
+    require_torch_large_accelerator,
     slow,
     torch_device,
 )
@@ -51,8 +50,9 @@ class KimiLinearModelTester(CausalLMModelTester):
         self.hidden_act = "silu"
         # Two layers covering all four branches: a KDA layer with a dense MLP, and an MLA layer with a MoE
         # block. Anything less would leave one of the decoder-layer paths untested.
-        self.layer_types = ["linear_attention", "full_attention"]
-        self.mlp_layer_types = ["dense", "sparse"]
+        self.num_hidden_layers = 2
+        self.layer_types=["linear_attention", "full_attention"]
+        self.mlp_layer_types=["dense", "sparse"]
         # KDA (linear attention) layers
         self.linear_conv_kernel_dim = 2
         self.linear_key_head_dim = 16
@@ -201,61 +201,117 @@ class KimiLinearModelTest(CausalLMModelTest, unittest.TestCase):
         torch.testing.assert_close(torch.stack(stepwise, dim=1), full[:, -3:, :], rtol=1e-3, atol=1e-3)
 
 
-@require_torch_accelerator
+
 @slow
+@require_torch_large_accelerator(memory=55)
+@require_torch
 class KimiLinearIntegrationTest(unittest.TestCase):
+    model = None
     model_id = "moonshotai/Kimi-Linear-48B-A3B-Instruct"
-    # "The capital of France is"
-    input_ids = [1008, 10484, 318, 15383, 387]
+
+    def setUp(self):
+        self.message = [{"role": "user", "content": "Tell me about the french revolution."}]
+        cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    def test_model_48b_a3b_logits(self):
-        model = KimiLinearForCausalLM.from_pretrained(
-            self.model_id, device_map="auto", dtype=torch.bfloat16, attn_implementation="eager"
-        )
-        with torch.no_grad():
-            out = model(torch.tensor([self.input_ids]).to(torch_device))
-
-        # fmt: off
-        expected_means = Expectations(
-            {
-                ("cuda", None): torch.tensor([[-4.0342, -4.4775, -4.5614, -4.7169, -4.9126]]),
-            }
-        )
-        expected_slices = Expectations(
-            {
-                ("cuda", None): torch.tensor([2.1406, 6.5312, 2.6094, 3.5625, 4.3750, 1.7344, 4.0625, 6.6250, 3.2031, 3.4062, 1.1250, 6.4688, 3.6406, 6.2188, 4.2500]),
-            }
-        )
-        # fmt: on
-
-        logits = out.logits.float()
-        torch.testing.assert_close(
-            logits.mean(-1), expected_means.get_expectation().to(torch_device), rtol=1e-2, atol=1e-2
-        )
-        torch.testing.assert_close(
-            logits[0, -1, :15], expected_slices.get_expectation().to(torch_device), rtol=1e-2, atol=1e-2
+    def load_model(self, dtype: str, attn_implementation: str = "eager"):
+        return KimiLinearForCausalLM.from_pretrained(
+            self.model_id, device_map="auto", dtype=dtype, attn_implementation=attn_implementation,
         )
 
-    def test_model_48b_a3b_generation(self):
-        # the checkpoint ships a custom tiktoken-based tokenizer, so remote code is required for it
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
-        model = KimiLinearForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
+    def test_large_model_integration_test(self):
+        model = self.load_model("auto")
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
 
-        expected_texts = Expectations(
-            {
-                ("cuda", None): "The French Revolution (1789-1799) was a period of radical political and social upheaval in France that profoundly changed the course of modern history. It began with widespread frustration over the mon",
-            }
-        )  # fmt: skip
+        # Test input ids
+        inputs = tokenizer.apply_chat_template(
+            self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ).to(torch_device)
+        expected_input_ids = [163587, 2482, 163601, 69211, 1019, 1215, 276, 64782, 25317, 13, 163586, 163588, 69702, 163601]  # fmt: skip
+        self.assertEqual(expected_input_ids, inputs.input_ids[0].tolist())
 
-        text = tokenizer.apply_chat_template(
-            [{"role": "user", "content": "Tell me about the french revolution."}],
-            add_generation_prompt=True,
-            tokenize=False,
+        # Test generation
+        output = model.generate(**inputs, max_new_tokens=40)
+        decoded_output = tokenizer.decode(output[0][len(inputs.input_ids[0]) :], skip_special_tokens=True)
+
+        EXPECTED_DECODED_TEXT = "The French Revolution (1789–1799) was a period of radical political and social upheaval in France that profoundly changed the course of modern history. It began with widespread frustration over the mon"  # fmt: skip
+        self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
+
+    def test_large_model_integration_test_batch(self):
+        model = self.load_model("auto")
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+
+        inputs = tokenizer.apply_chat_template(
+            [self.message] * 2, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ).to(torch_device)
+
+        outputs = model.generate(**inputs, max_new_tokens=30)
+        decoded_outputs = [
+            tokenizer.decode(output[len(inputs.input_ids[0]) :], skip_special_tokens=True) for output in outputs
+        ]
+
+        EXPECTED_DECODED_TEXT = [
+            'The French Revolution (1789–1799) was a period of radical political and social upheaval in France that profoundly changed the course of modern',
+            'The French Revolution (1789–1799) was a period of radical political and social upheaval in France that profoundly changed the course of modern'
+        ]  # fmt: skip
+        self.assertEqual(decoded_outputs, EXPECTED_DECODED_TEXT)
+
+
+# Garbage output expected as it is a dummy model to be run on the CI
+@slow
+@require_torch
+class KimiLinearSmallIntegrationTest(unittest.TestCase):
+    model = None
+    model_id = "hf-internal-testing/tiny-kimi-linear"
+
+    def setUp(self):
+        self.message = [{"role": "user", "content": "Tell me about the french revolution."}]
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def load_model(self, dtype: str, attn_implementation: str = "eager"):
+        return KimiLinearForCausalLM.from_pretrained(
+            self.model_id, device_map="auto", dtype=dtype, attn_implementation=attn_implementation,
         )
-        inputs = tokenizer(text, return_tensors="pt", add_special_tokens=False).to(model.device)
-        generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
-        completion = tokenizer.decode(generated_ids[0][inputs.input_ids.shape[1] :], skip_special_tokens=True)
-        self.assertEqual(completion, expected_texts.get_expectation())
+
+    def test_small_model_integration_test(self):
+        model = self.load_model("auto")
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+
+        # Test input ids
+        inputs = tokenizer.apply_chat_template(
+            self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ).to(torch_device)
+        expected_input_ids = [163587, 2482, 163601, 69211, 1019, 1215, 276, 64782, 25317, 13, 163586, 163588, 69702, 163601]  # fmt: skip
+        self.assertEqual(expected_input_ids, inputs.input_ids[0].tolist())
+
+        # Test generation
+        output = model.generate(**inputs, max_new_tokens=30)
+        decoded_output = tokenizer.decode(output[0][len(inputs.input_ids[0]) :], skip_special_tokens=True)
+
+        EXPECTED_DECODED_TEXT = 'Tiny门将 ਦbuddy五是 Adv熙熙DTV族自治统计学 destruct>");\n比较稳定穆里尼奥ielSearching RET废弃_y老老实儿女普遍的 Though千丝万缕_DOC.top仔细看esser WinningESCRIPTOR'  # fmt: skip
+        self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
+
+    def test_small_model_integration_test_batch(self):
+        model = self.load_model("auto")
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+
+        inputs = tokenizer.apply_chat_template(
+            [self.message] * 2, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ).to(torch_device)
+
+        outputs = model.generate(**inputs, max_new_tokens=30)
+        decoded_outputs = [
+            tokenizer.decode(output[len(inputs.input_ids[0]) :], skip_special_tokens=True) for output in outputs
+        ]
+
+        EXPECTED_DECODED_TEXT = [
+            'Tiny门将 ਦbuddy五是 Adv熙熙DTV族自治统计学 destruct>");\n比较稳定穆里尼奥ielSearching RET废弃_y老老实儿女普遍的 Though千丝万缕_DOC.top仔细看esser WinningESCRIPTOR',
+            'Tiny门将 ਦbuddy五是 Adv熙熙DTV族自治统计学 destruct>");\n比较稳定穆里尼奥ielSearching RET废弃_y老老实儿女普遍的 Though千丝万缕_DOC.top仔细看esser WinningESCRIPTOR',
+        ]  # fmt: skip
+        print(decoded_outputs)
+        self.assertEqual(decoded_outputs, EXPECTED_DECODED_TEXT)
