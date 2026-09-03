@@ -268,6 +268,7 @@ class Gemma4UnifiedImageProcessor(TorchvisionBackend):
             antialias=True,
         )
 
+    @auto_docstring
     def preprocess(
         self,
         images: ImageInput,

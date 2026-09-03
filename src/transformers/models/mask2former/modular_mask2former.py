@@ -18,6 +18,7 @@ from torch import nn
 from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...utils import (
     TensorType,
+    auto_docstring,
     logging,
     requires_backends,
 )
@@ -330,6 +331,7 @@ class Mask2FormerImageProcessor(MaskFormerImageProcessor):
 
 
 @requires(backends=("torch",))
+@auto_docstring
 class Mask2FormerImageProcessorPil(MaskFormerImageProcessorPil):
     def post_process_semantic_segmentation(
         self,

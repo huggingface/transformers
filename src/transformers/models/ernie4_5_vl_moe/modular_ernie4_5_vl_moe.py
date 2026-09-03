@@ -685,6 +685,7 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretr
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
@@ -1058,6 +1059,7 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         )
 
 
+@auto_docstring
 class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
@@ -1212,6 +1214,7 @@ class Ernie4_5_VLMoeImageProcessor(Qwen2VLImageProcessor):
 
 
 # Keep aliases for BC
+@auto_docstring
 class Ernie4_5_VL_MoeForConditionalGeneration(Ernie4_5_VLMoeForConditionalGeneration):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
@@ -1221,6 +1224,7 @@ class Ernie4_5_VL_MoeForConditionalGeneration(Ernie4_5_VLMoeForConditionalGenera
         super().__init__(*args, **kwargs)
 
 
+@auto_docstring
 class Ernie4_5_VL_MoeConfig(Ernie4_5_VLMoeConfig):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
@@ -1229,6 +1233,7 @@ class Ernie4_5_VL_MoeConfig(Ernie4_5_VLMoeConfig):
         super().__init__(*args, **kwargs)
 
 
+@auto_docstring
 class Ernie4_5_VL_MoeTextConfig(Ernie4_5_VLMoeTextConfig):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
@@ -1237,6 +1242,7 @@ class Ernie4_5_VL_MoeTextConfig(Ernie4_5_VLMoeTextConfig):
         super().__init__(*args, **kwargs)
 
 
+@auto_docstring
 class Ernie4_5_VL_MoeVisionConfig(Ernie4_5_VLMoeVisionConfig):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
@@ -1245,6 +1251,7 @@ class Ernie4_5_VL_MoeVisionConfig(Ernie4_5_VLMoeVisionConfig):
         super().__init__(*args, **kwargs)
 
 
+@auto_docstring
 class Ernie4_5_VL_MoePreTrainedModel(Ernie4_5_VLMoePreTrainedModel):
     def post_init(self):
         logger.warning_once(
@@ -1253,6 +1260,7 @@ class Ernie4_5_VL_MoePreTrainedModel(Ernie4_5_VLMoePreTrainedModel):
         super().post_init()
 
 
+@auto_docstring
 class Ernie4_5_VL_MoeModel(Ernie4_5_VLMoeModel):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
@@ -1261,6 +1269,7 @@ class Ernie4_5_VL_MoeModel(Ernie4_5_VLMoeModel):
         super().__init__(*args, **kwargs)
 
 
+@auto_docstring
 class Ernie4_5_VL_MoeTextModel(Ernie4_5_VLMoeTextModel):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
@@ -1269,6 +1278,7 @@ class Ernie4_5_VL_MoeTextModel(Ernie4_5_VLMoeTextModel):
         super().__init__(*args, **kwargs)
 
 
+@auto_docstring
 class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Ernie4_5_VLMoeVisionTransformerPretrainedModel):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
@@ -1287,6 +1297,7 @@ class Ernie4_5_VL_MoeVariableResolutionResamplerModel(Ernie4_5_VLMoeVariableReso
         super().__init__(*args, **kwargs)
 
 
+@auto_docstring
 class Ernie4_5_VL_MoeImageProcessor(Ernie4_5_VLMoeImageProcessor):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
@@ -1295,6 +1306,7 @@ class Ernie4_5_VL_MoeImageProcessor(Ernie4_5_VLMoeImageProcessor):
         super().__init__(*args, **kwargs)
 
 
+@auto_docstring
 class Ernie4_5_VL_MoeImageProcessorPil(Ernie4_5_VLMoeImageProcessorPil):
     def __init__(self, *args, **kwargs):
         logger.warning_once(

@@ -67,6 +67,7 @@ class SamHQVisionEncoderOutput(ModelOutput):
     intermediate_embeddings: list[torch.FloatTensor] | None = None
 
 
+@auto_docstring
 @dataclass
 class SamHQMMaskDecoderOutputs(ModelOutput):
     r"""
@@ -554,6 +555,7 @@ class SamHQVisionEncoder(SamHQPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | SamHQVisionEncoderOutput:

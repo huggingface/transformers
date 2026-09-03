@@ -548,6 +548,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_values: torch.FloatTensor,
@@ -555,19 +556,18 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
-        Args:
-            input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
-                Float values of the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
-                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
-                the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_values`, the [`AutoFeatureExtractor`] should be used for padding
-                and conversion into a tensor of type `torch.FloatTensor`.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding indices in `input_values`. Mask values selected in `[0, 1]`:
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-                [What are attention masks?](../glossary#attention-mask)
+        input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
+            Float values of the raw speech waveform. Raw speech waveform can be
+            obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
+            `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
+            the soundfile library (`pip install soundfile`). To prepare the array into
+            `input_values`, the [`AutoFeatureExtractor`] should be used for padding
+            and conversion into a tensor of type `torch.FloatTensor`.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding indices in `input_values`. Mask values selected in `[0, 1]`:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+            [What are attention masks?](../glossary#attention-mask)
         """
         input_values = input_values.unsqueeze(1)
         hidden_states = nn.functional.tanh(self.conv1(input_values))
@@ -636,6 +636,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

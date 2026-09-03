@@ -24,6 +24,7 @@
 # limitations under the License.
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...utils import auto_docstring
 
 
 class PaddleOCRVLProcessorKwargs(ProcessingKwargs, total=False):
@@ -35,6 +36,7 @@ class PaddleOCRVLProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class PaddleOCRVLProcessor(ProcessorMixin):
     r"""
     [`PaddleOCRVLProcessor`] offers all the functionalities of [`PaddleOCRVLImageProcessor`] and [`LLamaTokenizerFast`]. See the

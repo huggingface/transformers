@@ -2192,20 +2192,20 @@ class SeamlessM4TCodeHifiGan(SeamlessM4TPreTrainedModel):
 
         return input_lengths
 
+    @auto_docstring
     def forward(
         self, input_ids: torch.LongTensor, spkr_id: torch.Tensor, lang_id: torch.Tensor, **kwargs
     ) -> tuple[torch.Tensor]:
-        """
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary.
+        r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
 
-                Indices can be obtained using [`SeamlessM4TTextToUnitForConditionalGeneration`]. [What are input
-                IDs?](../glossary#input-ids)
-            spkr_id (`int`, *optional*):
-                The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
-            tgt_lang (`str`, *optional*):
-                The language id to use as target language for translation.
+            Indices can be obtained using [`SeamlessM4TTextToUnitForConditionalGeneration`]. [What are input
+            IDs?](../glossary#input-ids)
+        spkr_id (`int`, *optional*):
+            The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
+        lang_id (`torch.Tensor` of shape `(batch_size, 1)`):
+            The id of the target language, used to look up the language embedding added to the unit hidden states.
         """
         hidden_states = self.unit_embedding(input_ids).transpose(1, 2)
         spkr = self.speaker_embedding(spkr_id).transpose(1, 2)

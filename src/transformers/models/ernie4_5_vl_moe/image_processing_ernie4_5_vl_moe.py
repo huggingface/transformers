@@ -255,6 +255,7 @@ class Ernie4_5_VLMoeImageProcessor(TorchvisionBackend):
         return grid_h * grid_w
 
 
+@auto_docstring
 class Ernie4_5_VL_MoeImageProcessor(Ernie4_5_VLMoeImageProcessor):
     def __init__(self, *args, **kwargs):
         logger.warning_once(

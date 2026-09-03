@@ -1900,6 +1900,7 @@ class SeamlessM4Tv2TextToUnitDecoder(SeamlessM4Tv2PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         char_input_ids: torch.LongTensor | None = None,
@@ -1908,15 +1909,14 @@ class SeamlessM4Tv2TextToUnitDecoder(SeamlessM4Tv2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> SeamlessM4Tv2TextToUnitDecoderOutput:
         r"""
-        Args:
-            char_input_ids (`torch.LongTensor` of shape `(batch_size, char_sequence_length)`):
-                Character indices. The correspondence between characters and indices can be found in `char_to_id`, a
-                dictionary in the generation configuration.
-            char_count_per_id (`torch.Tensor` of shape `(batch_size, encoder_sequence_length)`):
-                Number of characters per text input id.
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
+        char_input_ids (`torch.LongTensor` of shape `(batch_size, char_sequence_length)`):
+            Character indices. The correspondence between characters and indices can be found in `char_to_id`, a
+            dictionary in the generation configuration.
+        char_count_per_id (`torch.Tensor` of shape `(batch_size, encoder_sequence_length)`):
+            Number of characters per text input id.
+        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+            of the decoder.
         """
         # create padding mask for character lengths
         char_padding_mask = _compute_new_attention_mask(char_input_ids, char_count_per_id.sum(1))
@@ -1995,6 +1995,7 @@ class SeamlessM4Tv2TextToUnitModel(SeamlessM4Tv2PreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -2005,6 +2006,14 @@ class SeamlessM4Tv2TextToUnitModel(SeamlessM4Tv2PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | Seq2SeqModelOutput:
+        r"""
+        char_input_ids (`torch.LongTensor` of shape `(batch_size, char_sequence_length)`, *optional*):
+            Character indices of the transcription. The character-level sequence drives the non-autoregressive
+            unit decoder.
+        char_count_per_id (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Number of characters each subword of `input_ids` expands into, used to align the encoder states with
+            `char_input_ids`.
+        """
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -2412,21 +2421,21 @@ class SeamlessM4Tv2CodeHifiGan(SeamlessM4Tv2PreTrainedModel):
 
         return input_lengths
 
+    @auto_docstring
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TCodeHifiGan.forward with SeamlessM4T->SeamlessM4Tv2, spkr_id->speaker_id
     def forward(
         self, input_ids: torch.LongTensor, speaker_id: torch.Tensor, lang_id: torch.Tensor, **kwargs
     ) -> tuple[torch.Tensor]:
-        """
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary.
+        r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
 
-                Indices can be obtained using [`SeamlessM4Tv2TextToUnitForConditionalGeneration`]. [What are input
-                IDs?](../glossary#input-ids)
-            speaker_id (`int`, *optional*):
-                The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
-            tgt_lang (`str`, *optional*):
-                The language id to use as target language for translation.
+            Indices can be obtained using [`SeamlessM4Tv2TextToUnitForConditionalGeneration`]. [What are input
+            IDs?](../glossary#input-ids)
+        speaker_id (`int`, *optional*):
+            The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
+        lang_id (`torch.Tensor` of shape `(batch_size, 1)`):
+            The id of the target language, used to look up the language embedding added to the unit hidden states.
         """
         hidden_states = self.unit_embedding(input_ids).transpose(1, 2)
         spkr = self.speaker_embedding(speaker_id).transpose(1, 2)

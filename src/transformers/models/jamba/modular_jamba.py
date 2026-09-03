@@ -392,6 +392,7 @@ class JambaMambaDecoderLayer(GradientCheckpointingLayer):
 ALL_DECODER_LAYER_TYPES = {"attention": JambaAttentionDecoderLayer, "mamba": JambaMambaDecoderLayer}
 
 
+@auto_docstring
 class JambaPreTrainedModel(PreTrainedModel):
     config: JambaConfig
     base_model_prefix = "model"

@@ -42,21 +42,19 @@ if TYPE_CHECKING:
 ListOfDict = list[dict[str, int | str]]
 
 
+@auto_docstring
 @dataclass
 class Wav2Vec2DecoderWithLMOutput(ModelOutput):
-    """
-    Output type of [`Wav2Vec2DecoderWithLM`], with transcription.
-
-    Args:
-        text (list of `str` or `str`):
-            Decoded logits in text from. Usually the speech transcription.
-        logit_score (list of `float` or `float`):
-            Total logit score of the beams associated with produced text.
-        lm_score (list of `float`):
-            Fused lm_score of the beams associated with produced text.
-        word_offsets (list of `list[dict[str, Union[int, str]]]` or `list[dict[str, Union[int, str]]]`):
-            Offsets of the decoded words. In combination with sampling rate and model downsampling rate word offsets
-            can be used to compute time stamps for each word.
+    r"""
+    text (list of `str` or `str`):
+        Decoded logits in text from. Usually the speech transcription.
+    logit_score (list of `float` or `float`):
+        Total logit score of the beams associated with produced text.
+    lm_score (list of `float`):
+        Fused lm_score of the beams associated with produced text.
+    word_offsets (list of `list[dict[str, Union[int, str]]]` or `list[dict[str, Union[int, str]]]`):
+        Offsets of the decoded words. In combination with sampling rate and model downsampling rate word offsets
+        can be used to compute time stamps for each word.
     """
 
     text: list[list[str]] | list[str] | str

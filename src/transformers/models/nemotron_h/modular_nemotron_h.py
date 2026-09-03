@@ -279,6 +279,7 @@ class NemotronHBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class NemotronHPreTrainedModel(PreTrainedModel):
     config: NemotronHConfig
     base_model_prefix = "model"
@@ -362,6 +363,7 @@ class NemotronHPreTrainedModel(PreTrainedModel):
                         init.copy_(p, p_new)
 
 
+@auto_docstring
 class NemotronHModel(NemotronHPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -381,6 +383,7 @@ class NemotronHModel(NemotronHPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -442,6 +445,7 @@ class NemotronHModel(NemotronHPreTrainedModel):
         )
 
 
+@auto_docstring
 class NemotronHForCausalLM(ZambaForCausalLM):
     _tied_weights_keys = {}
 

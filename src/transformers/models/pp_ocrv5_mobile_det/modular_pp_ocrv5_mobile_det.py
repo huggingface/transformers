@@ -240,6 +240,7 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.FloatTensor,

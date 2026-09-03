@@ -363,6 +363,7 @@ class Ovis2VisualEmbeddingTable(nn.Embedding):
         return torch.matmul(visual_tokens, self.weight)
 
 
+@auto_docstring
 class Ovis2PreTrainedModel(PreTrainedModel):
     config: Ovis2Config
     base_model_prefix = "model"
@@ -394,6 +395,7 @@ def hard_softmax(logits: torch.Tensor, dim: int):
     return ret
 
 
+@auto_docstring
 class Ovis2VisionModel(Ovis2PreTrainedModel):
     config: Ovis2VisionConfig
     _can_record_outputs = {
@@ -418,6 +420,7 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithVisualIndicatorFeatures:

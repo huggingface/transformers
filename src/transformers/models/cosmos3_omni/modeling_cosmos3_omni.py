@@ -501,6 +501,7 @@ class Cosmos3OmniCausalLMOutputWithPast(CausalLMOutputWithPast):
     rope_deltas: torch.LongTensor | None = None
 
 
+@auto_docstring
 class Cosmos3OmniForConditionalGeneration(Cosmos3OmniPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208

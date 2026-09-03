@@ -934,6 +934,7 @@ class Qwen3NextDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class Qwen3NextPreTrainedModel(PreTrainedModel):
     config: Qwen3NextConfig
     base_model_prefix = "model"
@@ -971,6 +972,7 @@ class Qwen3NextPreTrainedModel(PreTrainedModel):
             init.normal_(module.gate.weight, mean=0.0, std=self.config.initializer_range)
 
 
+@auto_docstring
 class Qwen3NextModel(Qwen3NextPreTrainedModel):
     def __init__(self, config: Qwen3NextConfig):
         super().__init__(config)

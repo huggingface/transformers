@@ -1144,11 +1144,6 @@ diff = '''
 [rules.TRF057]
 description = "Public model, config, output and processor classes and their public methods must carry @auto_docstring."
 default_enabled = true
-# no contribution date
-# no contribution date
-# no contribution date
-allowlist_models = ["kosmos2", "timm_backbone", "timm_wrapper", "vitpose_backbone", "wav2vec2_with_lm", "x_clip"]
-cutoff_date = "2026-06-20"
 
 [rules.TRF057.explanation]
 what_it_does = "Checks `@auto_docstring` on public `PreTrainedModel` subclasses (`<Model>PreTrainedModel`, `<Model>Model`, `<Model>For<Task>`, backbones), `PreTrainedConfig` subclasses, `ModelOutput` subclasses, image processors and `ProcessorMixin` subclasses, and on their public methods `forward`, `get_image_features`, `get_video_features`, `get_audio_features`, `get_text_features`, `preprocess` and `__call__`. A `modular_*.py` is checked against the files generated from it."

@@ -360,12 +360,20 @@ class VitPoseBackboneEncoder(VitPoseBackbonePreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
         dataset_index: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
+        r"""
+        dataset_index (`torch.Tensor` of shape `(batch_size,)`, *optional*):
+            Index to use in the Mixture-of-Experts (MoE) blocks of the backbone.
+
+            This corresponds to the dataset index used during training, e.g. index 0 refers to dataset A (e.g.
+            MPII) and index 1 refers to dataset B (e.g. CrowdPose).
+        """
         for layer_module in self.layer:
             hidden_states = layer_module(hidden_states, dataset_index, **kwargs)
 

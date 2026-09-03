@@ -272,6 +272,7 @@ class PPOCRV6SmallDetNeck(nn.Module):
         return fused_feature_map
 
 
+@auto_docstring
 class PPOCRV6SmallDetPreTrainedModel(PreTrainedModel):
     """
     Base class for all PPOCRV5 Server Det pre-trained models. Handles model initialization,
@@ -321,6 +322,7 @@ class PPOCRV6SmallDetForObjectDetection(PPOCRV6SmallDetPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,

@@ -102,6 +102,7 @@ class Cosmos3OmniPreTrainedModel(Qwen3VLPreTrainedModel):
         PreTrainedModel._init_weights(module)
 
 
+@auto_docstring
 class Cosmos3OmniForConditionalGeneration(Qwen3VLForConditionalGeneration):
     pass
 

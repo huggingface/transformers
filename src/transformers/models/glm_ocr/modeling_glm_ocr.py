@@ -531,6 +531,7 @@ class GlmOcrVisionPatchEmbed(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class GlmOcrVisionModel(GlmOcrPreTrainedModel):
     config: GlmOcrVisionConfig
     input_modalities = ("image", "video")
@@ -1157,6 +1158,7 @@ class GlmOcrCausalLMOutputWithPast(CausalLMOutputWithPast):
     rope_deltas: torch.LongTensor | None = None
 
 
+@auto_docstring
 class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208

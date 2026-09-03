@@ -118,6 +118,7 @@ class DPREncoder(DPRPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         input_ids: Tensor,
@@ -172,6 +173,7 @@ class DPRSpanPredictor(DPRPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         input_ids: Tensor,

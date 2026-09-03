@@ -921,6 +921,7 @@ class ZambaModel(ZambaPreTrainedModel):
 
 
 # Adapted from transformers.models.jamba.modeling_jamba.JambaForCausalLM with Jamba->Zamba, JAMBA->ZAMBA
+@auto_docstring
 class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 

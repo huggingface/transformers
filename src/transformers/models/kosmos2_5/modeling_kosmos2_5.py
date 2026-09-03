@@ -41,6 +41,7 @@ from ...utils import (
     TransformersKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    auto_docstring,
     can_return_tuple,
     logging,
     replace_return_docstrings,
@@ -59,6 +60,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = Kosmos2_5Config
 
 
+@auto_docstring
 class Kosmos2_5PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -245,45 +247,24 @@ KOSMOS2_5_INPUTS_DOCSTRING = r"""
 """
 
 
+@auto_docstring
 @dataclass
 class Kosmos2_5ModelOutput(ModelOutput):
-    """
-    Base class for text model's outputs that also contains a pooling of the last hidden states.
+    r"""
+    width (`torch.FloatTensor` of shape `(batch_size,)`):
+        The original width (before resizing) of each image in the batch.
+    height (`torch.FloatTensor` of shape `(batch_size,)`):
+        The original height (before resizing) of each image in the batch.
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+        Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
+    projection_attentions (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        width (`torch.FloatTensor` of shape `(batch_size,)`):
-            The original width (before resizing) of each image in the batch.
-        height (`torch.FloatTensor` of shape `(batch_size,)`):
-            The original height (before resizing) of each image in the batch.
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
-        projection_attentions (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
-            the weighted average in the self-attention heads.
-        vision_model_output(`BaseModelOutputWithPooling`, *optional*):
-            The output of the [`Kosmos2VisionModel`].
-        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-            input) to speed up sequential decoding.
+        Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
+        the weighted average in the self-attention heads.
+    vision_model_output (`BaseModelOutputWithPooling`, *optional*):
+        The output of the [`Kosmos2VisionModel`].
     """
 
     last_hidden_state: torch.FloatTensor | None = None
@@ -300,47 +281,28 @@ class Kosmos2_5ModelOutput(ModelOutput):
         return tuple((self[k] if k != "vision_model_output" else getattr(self, k).to_tuple()) for k in self.keys())
 
 
+@auto_docstring
 @dataclass
 class Kosmos2_5ForConditionalGenerationModelOutput(ModelOutput):
-    """
-    Model output class for `Kosmos2_5ForConditionalGeneration`.
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    width (`torch.FloatTensor` of shape `(batch_size,)`):
+        The original width (before resizing) of each image in the batch.
+    height (`torch.FloatTensor` of shape `(batch_size,)`):
+        The original height (before resizing) of each image in the batch.
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+        Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
+    projection_attentions (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        width (`torch.FloatTensor` of shape `(batch_size,)`):
-            The original width (before resizing) of each image in the batch.
-        height (`torch.FloatTensor` of shape `(batch_size,)`):
-            The original height (before resizing) of each image in the batch.
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
-        projection_attentions (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
-            the weighted average in the self-attention heads.
-        vision_model_output(`BaseModelOutputWithPooling`, *optional*):
-            The output of the [`Kosmos2VisionModel`].
-        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-            input) to speed up sequential decoding.
+        Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
+        the weighted average in the self-attention heads.
+    vision_model_output (`BaseModelOutputWithPooling`, *optional*):
+        The output of the [`Kosmos2VisionModel`].
     """
 
     loss: torch.FloatTensor | None = None
@@ -596,6 +558,7 @@ class Kosmos2_5VisionEncoder(Kosmos2_5PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -913,6 +876,7 @@ class Kosmos2_5TextTransformer(Kosmos2_5PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -925,6 +889,17 @@ class Kosmos2_5TextTransformer(Kosmos2_5PreTrainedModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
+        r"""
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+            Image features already projected into the text embedding space. When given, the vision model is
+            skipped and these features are inserted at the positions marked by `image_embeds_position_mask`.
+        image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to indicate the location in a sequence to insert the image features. Mask values selected in `[0,
+            1]`:
+
+            - 1 for places where to put the image features,
+            - 0 for places that are not for image features (i.e. for text tokens).
+        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
@@ -1037,6 +1012,7 @@ class Kosmos2_5ImageToTextProjection(nn.Module):
         return hidden_states, attn_weights
 
 
+@auto_docstring
 class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
     config_class = Kosmos2_5VisionConfig
     input_modalities = ("image",)
@@ -1060,12 +1036,18 @@ class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
 
     # Similar to transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionModel.forward without docstring
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         flattened_patches: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
+        r"""
+        flattened_patches (`torch.FloatTensor` of shape `(batch_size, max_patches, 2 + patch_height * patch_width * image_channels)`):
+            Flattened patches of the images. `flattened_patches` can be obtained using [`AutoImageProcessor`]. See
+            [`Kosmos2_5ImageProcessor.__call__`] for details.
+        """
         if flattened_patches is None:
             raise ValueError("You have to specify flattened_patches")
 
@@ -1087,6 +1069,7 @@ class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
 
 
 # Adapted from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextModel with KOSMOS2->KOSMOS2_5
+@auto_docstring
 class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
     config_class = Kosmos2_5TextConfig
     input_modalities = ("text",)
@@ -1106,6 +1089,7 @@ class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
     @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_5_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPastAndCrossAttentions, config_class=Kosmos2_5TextConfig)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -1119,6 +1103,16 @@ class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
         r"""
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+            Image features already projected into the text embedding space. When given, the vision model is
+            skipped and these features are inserted at the positions marked by `image_embeds_position_mask`.
+        image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to indicate the location in a sequence to insert the image features. Mask values selected in `[0,
+            1]`:
+
+            - 1 for places where to put the image features,
+            - 0 for places that are not for image features (i.e. for text tokens).
+
         Returns:
 
         """
@@ -1141,6 +1135,7 @@ class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
     """,
     KOSMOS2_5_START_DOCSTRING,
 )
+@auto_docstring
 class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
     config_class = Kosmos2_5Config
 
@@ -1162,6 +1157,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
     @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Kosmos2_5ModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -1178,6 +1174,25 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Kosmos2_5ModelOutput:
         r"""
+        flattened_patches (`torch.FloatTensor` of shape `(batch_size, max_patches, 2 + patch_height * patch_width * image_channels)`):
+            Flattened patches of the images. `flattened_patches` can be obtained using [`AutoImageProcessor`]. See
+            [`Kosmos2_5ImageProcessor.__call__`] for details.
+        width (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+            The original width (before resizing) of each image in the batch. This can be obtained using
+            [`AutoImageProcessor`]. See [`Kosmos2_5ImageProcessor.__call__`] for details.
+        height (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+            The original height (before resizing) of each image in the batch. This can be obtained using
+            [`AutoImageProcessor`]. See [`Kosmos2_5ImageProcessor.__call__`] for details.
+        image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to indicate the location in a sequence to insert the image features. Mask values selected in `[0,
+            1]`:
+
+            - 1 for places where to put the image features,
+            - 0 for places that are not for image features (i.e. for text tokens).
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+            Image features already projected into the text embedding space. When given, the vision model is
+            skipped and these features are inserted at the positions marked by `image_embeds_position_mask`.
+
         Returns:
 
         Examples:
@@ -1256,6 +1271,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
     """,
     KOSMOS2_5_START_DOCSTRING,
 )
+@auto_docstring
 class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
     config_class = Kosmos2_5TextConfig
     input_modalities = ("text",)
@@ -1285,6 +1301,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
     @can_return_tuple
     @add_start_docstrings_to_model_forward(KOSMOS2_5_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=Kosmos2_5TextConfig)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -1300,6 +1317,15 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithCrossAttentions:
         r"""
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+            Image features already projected into the text embedding space. When given, the vision model is
+            skipped and these features are inserted at the positions marked by `image_embeds_position_mask`.
+        image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to indicate the location in a sequence to insert the image features. Mask values selected in `[0,
+            1]`:
+
+            - 1 for places where to put the image features,
+            - 0 for places that are not for image features (i.e. for text tokens).
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
@@ -1402,6 +1428,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
     """,
     KOSMOS2_5_START_DOCSTRING,
 )
+@auto_docstring
 class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixin):
     config_class = Kosmos2_5Config
 
@@ -1431,6 +1458,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         output_type=Kosmos2_5ForConditionalGenerationModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -1449,6 +1477,24 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         **kwargs: Unpack[TransformersKwargs],
     ) -> Kosmos2_5ForConditionalGenerationModelOutput:
         r"""
+        flattened_patches (`torch.FloatTensor` of shape `(batch_size, max_patches, 2 + patch_height * patch_width * image_channels)`):
+            Flattened patches of the images. `flattened_patches` can be obtained using [`AutoImageProcessor`]. See
+            [`Kosmos2_5ImageProcessor.__call__`] for details.
+        width (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+            The original width (before resizing) of each image in the batch. This can be obtained using
+            [`AutoImageProcessor`]. See [`Kosmos2_5ImageProcessor.__call__`] for details.
+        height (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+            The original height (before resizing) of each image in the batch. This can be obtained using
+            [`AutoImageProcessor`]. See [`Kosmos2_5ImageProcessor.__call__`] for details.
+        image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to indicate the location in a sequence to insert the image features. Mask values selected in `[0,
+            1]`:
+
+            - 1 for places where to put the image features,
+            - 0 for places that are not for image features (i.e. for text tokens).
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+            Image features already projected into the text embedding space. When given, the vision model is
+            skipped and these features are inserted at the positions marked by `image_embeds_position_mask`.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are

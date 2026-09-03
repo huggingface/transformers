@@ -326,6 +326,7 @@ class CwmPreTrainedModel(PreTrainedModel):
     }
 
 
+@auto_docstring
 class CwmModelOutputWithPast(BaseModelOutputWithPast):
     pass
 

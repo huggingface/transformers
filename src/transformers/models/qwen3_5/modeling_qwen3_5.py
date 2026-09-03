@@ -869,6 +869,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class Qwen3_5PreTrainedModel(PreTrainedModel):
     config: Qwen3_5Config
     base_model_prefix = "model"
@@ -1079,6 +1080,7 @@ class Qwen3_5VisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class Qwen3_5VisionModel(Qwen3_5PreTrainedModel):
     config: Qwen3_5VisionConfig
     input_modalities = ("image", "video")
@@ -1119,13 +1121,13 @@ class Qwen3_5VisionModel(Qwen3_5PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
-        """
-        Args:
-            hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
-                The final hidden states of the model.
-            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
-                The temporal, height and width of feature shape of each image in LLM.
+        r"""
+        hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
+            The final hidden states of the model.
+        grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
+            The temporal, height and width of feature shape of each image in LLM.
 
         Returns:
             `torch.Tensor`: hidden_states.
@@ -1181,6 +1183,7 @@ class Qwen3_5ModelOutputWithPast(BaseModelOutputWithPast):
     rope_deltas: torch.LongTensor | None = None
 
 
+@auto_docstring
 class Qwen3_5TextModel(Qwen3_5PreTrainedModel):
     config: Qwen3_5TextConfig
 
@@ -1720,6 +1723,7 @@ class Qwen3_5CausalLMOutputWithPast(CausalLMOutputWithPast):
     rope_deltas: torch.LongTensor | None = None
 
 
+@auto_docstring
 class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
@@ -2039,6 +2043,7 @@ class Qwen3_5TextForSequenceClassification(GenericForSequenceClassification, Qwe
 
 
 class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,

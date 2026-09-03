@@ -957,6 +957,7 @@ class Qwen3_5MoeDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class Qwen3_5MoePreTrainedModel(PreTrainedModel):
     config: Qwen3_5MoeConfig
     base_model_prefix = "model"
@@ -1173,6 +1174,7 @@ class Qwen3_5MoeVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class Qwen3_5MoeVisionModel(Qwen3_5MoePreTrainedModel):
     config: Qwen3_5MoeVisionConfig
     input_modalities = ("image", "video")
@@ -1213,13 +1215,13 @@ class Qwen3_5MoeVisionModel(Qwen3_5MoePreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
-        """
-        Args:
-            hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
-                The final hidden states of the model.
-            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
-                The temporal, height and width of feature shape of each image in LLM.
+        r"""
+        hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
+            The final hidden states of the model.
+        grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
+            The temporal, height and width of feature shape of each image in LLM.
 
         Returns:
             `torch.Tensor`: hidden_states.
@@ -1290,6 +1292,7 @@ class Qwen3_5MoeCausalLMOutputWithPast(CausalLMOutputWithPast):
     aux_loss: torch.FloatTensor | None = None
 
 
+@auto_docstring
 class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
     config: Qwen3_5MoeTextConfig
 
@@ -1906,6 +1909,7 @@ class Qwen3_5MoeForCausalLM(Qwen3_5MoePreTrainedModel, GenerationMixin):
         )
 
 
+@auto_docstring
 class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208

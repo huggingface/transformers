@@ -322,6 +322,7 @@ class VideoLlama3PreTrainedModel(Qwen2VLPreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
+@auto_docstring
 class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
     config: VideoLlama3VisionConfig
     main_input_name = "pixel_values"
@@ -626,6 +627,7 @@ class VideoLlama3CausalLMOutputWithPast(ModelOutput):
     video_hidden_states: torch.FloatTensor | None = None
 
 
+@auto_docstring
 class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
     _can_compile_fullgraph = False
 

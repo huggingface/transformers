@@ -250,6 +250,7 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
         )
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

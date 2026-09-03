@@ -447,6 +447,7 @@ class BlipEncoder(nn.Module):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
+@auto_docstring
 class BlipVisionModel(BlipPreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)

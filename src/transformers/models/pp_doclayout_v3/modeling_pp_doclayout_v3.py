@@ -288,6 +288,7 @@ class PPDocLayoutV3PreTrainedModel(PreTrainedModel):
                 init.zeros_(module.num_batches_tracked)
 
 
+@auto_docstring
 @dataclass
 class PPDocLayoutV3DecoderOutput(ModelOutput):
     r"""
@@ -1000,6 +1001,7 @@ class PPDocLayoutV3HybridEncoder(PPDocLayoutV3PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         inputs_embeds=None,
@@ -1007,9 +1009,11 @@ class PPDocLayoutV3HybridEncoder(PPDocLayoutV3PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
+        x4_feat (`tuple[torch.FloatTensor, torch.FloatTensor]`):
+            Highest resolution backbone feature map and its pixel mask. It is fused into the mask features
+            produced by the encoder mask head.
         """
         feature_maps = inputs_embeds
 
@@ -1193,6 +1197,7 @@ class PPDocLayoutV3Decoder(PPDocLayoutV3PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         inputs_embeds=None,
@@ -1210,23 +1215,37 @@ class PPDocLayoutV3Decoder(PPDocLayoutV3PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-                The query embeddings that are passed into the decoder.
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
-                in `[0, 1]`:
-                - 1 for pixels that are real (i.e. **not masked**),
-                - 0 for pixels that are padding (i.e. **masked**).
-            reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
-                Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
-            spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of the feature maps.
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
-                Indexes for the start of each feature level. In range `[0, sequence_length]`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+            The query embeddings that are passed into the decoder.
+        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+            of the decoder.
+        encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
+            in `[0, 1]`:
+            - 1 for pixels that are real (i.e. **not masked**),
+            - 0 for pixels that are padding (i.e. **masked**).
+        reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
+            Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
+        spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
+            Spatial shapes of the feature maps.
+        spatial_shapes_list (`list[tuple[int, int]]`):
+            Spatial shapes of each feature map (but as list for export compatibility).
+        level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
+            Indexes for the start of each feature level. In range `[0, sequence_length]`.
+        order_head (`nn.ModuleList`, *optional*):
+            One reading-order head per decoder layer, applied to the query states before `global_pointer`.
+            Reading-order logits are only returned when both `order_head` and `global_pointer` are given.
+        global_pointer (`nn.Module`, *optional*):
+            Global pointer module turning the output of `order_head` into reading-order logits.
+        mask_query_head (`nn.Module`):
+            Head projecting the normalized query states to the mask embedding space of `mask_feat`.
+        norm (`nn.Module`):
+            Normalization layer applied to the hidden states of every decoder layer before the
+            classification, mask and reading-order heads.
+        mask_feat (`torch.FloatTensor` of shape `(batch_size, num_prototypes, height, width)`):
+            Mask prototypes produced by the encoder, combined with the mask query embeddings to predict
+            one segmentation mask per query.
         """
         if inputs_embeds is not None:
             hidden_states = inputs_embeds

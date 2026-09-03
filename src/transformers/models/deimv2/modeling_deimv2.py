@@ -1152,6 +1152,7 @@ class Deimv2ConvEncoder(Deimv2PreTrainedModel):
 
         self.post_init()
 
+    @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> list[torch.Tensor]:
         features = self.model(pixel_values, **kwargs).feature_maps
         return [proj(feat) for proj, feat in zip(self.encoder_input_proj, features)]
@@ -1177,6 +1178,7 @@ class Deimv2DINOv3ConvEncoder(Deimv2PreTrainedModel):
 
         self.post_init()
 
+    @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> list[torch.Tensor]:
         backbone_output = self.backbone(pixel_values, **kwargs)
         feature_maps = backbone_output.feature_maps
@@ -1236,6 +1238,7 @@ class Deimv2LiteEncoder(Deimv2PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(self, inputs_embeds: list[torch.Tensor], **kwargs: Unpack[TransformersKwargs]) -> Deimv2EncoderOutput:
         projected_features = [self.input_proj[i](feature) for i, feature in enumerate(inputs_embeds)]
         projected_features.append(self.down_conv1(self.down_pool1(projected_features[-1])))
@@ -1309,15 +1312,15 @@ class Deimv2HybridEncoder(Deimv2PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         inputs_embeds: list[torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Deimv2EncoderOutput:
         r"""
-        Args:
-            inputs_embeds (`list[torch.FloatTensor]`):
-                Multi-scale feature maps from the backbone (one tensor per feature level) passed to the encoder.
+        inputs_embeds (`list[torch.FloatTensor]`):
+            Multi-scale feature maps from the backbone (one tensor per feature level) passed to the encoder.
         """
         feature_maps = inputs_embeds
 
@@ -1452,6 +1455,7 @@ class Deimv2Decoder(Deimv2PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         encoder_hidden_states: torch.Tensor,
@@ -1465,23 +1469,27 @@ class Deimv2Decoder(Deimv2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Deimv2DecoderOutput:
         r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-                The query embeddings that are passed into the decoder.
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
-                in `[0, 1]`:
-                - 1 for pixels that are real (i.e. **not masked**),
-                - 0 for pixels that are padding (i.e. **masked**).
-            reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
-                Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
-            spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of the feature maps.
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
-                Indexes for the start of each feature level. In range `[0, sequence_length]`.
+        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+            of the decoder.
+        reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
+            Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+            The query embeddings that are passed into the decoder.
+        spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
+            Spatial shapes of the feature maps.
+        level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
+            Indexes for the start of each feature level. In range `[0, sequence_length]`.
+        spatial_shapes_list (`list[tuple[int, int]]`):
+            Spatial shapes of each feature map (but as list for export compatibility).
+        encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
+            in `[0, 1]`:
+            - 1 for pixels that are real (i.e. **not masked**),
+            - 0 for pixels that are padding (i.e. **masked**).
+        memory_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask over the flattened encoder feature map. Accepted for compatibility with the original
+            D-FINE implementation, which does not use it either.
         """
         if inputs_embeds is not None:
             hidden_states = inputs_embeds

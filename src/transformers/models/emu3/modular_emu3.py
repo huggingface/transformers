@@ -912,6 +912,7 @@ class Emu3ForCausalLM(LlamaForCausalLM, Emu3PreTrainedModel, GenerationMixin):
         super().forward()
 
 
+@auto_docstring
 class Emu3Model(Emu3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1067,6 +1068,7 @@ class Emu3Model(Emu3PreTrainedModel):
         return outputs
 
 
+@auto_docstring
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     output_modalities = ("image", "text")
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}

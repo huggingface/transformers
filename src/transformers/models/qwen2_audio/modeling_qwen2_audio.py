@@ -340,6 +340,7 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_features,
@@ -347,10 +348,9 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
-        Args:
-            attention_mask (`torch.Tensor`)`, *optional*):
-                Qwen2Audio does not support masking of the `input_features`, this argument is preserved for compatibility,
-                but it is not used. By default the silence in the input log mel spectrogram are ignored.
+        attention_mask (`torch.Tensor`)`, *optional*):
+            Qwen2Audio does not support masking of the `input_features`, this argument is preserved for compatibility,
+            but it is not used. By default the silence in the input log mel spectrogram are ignored.
         """
 
         expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]

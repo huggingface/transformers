@@ -1099,6 +1099,7 @@ class Gemma3TextForSequenceClassification(GenericForSequenceClassification, Gemm
 
 
 class Gemma3ForSequenceClassification(GenericForSequenceClassification, Gemma3PreTrainedModel):
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

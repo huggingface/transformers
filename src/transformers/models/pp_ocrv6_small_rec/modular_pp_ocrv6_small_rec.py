@@ -31,7 +31,8 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.generic import TensorType
+from ...utils.generic import TensorType, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..pp_ocrv5_server_rec.configuration_pp_ocrv5_server_rec import PPOCRV5ServerRecConfig
 from ..pp_ocrv5_server_rec.image_processing_pp_ocrv5_server_rec import PPOCRV5ServerRecImageProcessor
 from ..pp_ocrv5_server_rec.modeling_pp_ocrv5_server_rec import (
@@ -175,6 +176,9 @@ class PPOCRV6SmallRecEncoderWithSVTR(PPOCRV5ServerRecEncoderWithSVTR):
             ]
         )
 
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
     def forward(self, hidden_states: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
         # PP-OCRv6_small_rec uses the output of the first conv block as the residual.
         residual = self.conv_block[0](hidden_states)

@@ -663,6 +663,7 @@ class OwlViTTextTransformer(OwlViTPreTrainedModel):
         )
 
 
+@auto_docstring
 class OwlViTTextModel(OwlViTPreTrainedModel):
     config: OwlViTTextConfig
     input_modalities = ("text",)
@@ -756,6 +757,7 @@ class OwlViTVisionTransformer(OwlViTPreTrainedModel):
         )
 
 
+@auto_docstring
 class OwlViTVisionModel(OwlViTPreTrainedModel):
     config: OwlViTVisionConfig
     main_input_name = "pixel_values"
@@ -1047,6 +1049,11 @@ class OwlViTClassPredictionHead(nn.Module):
         return (pred_logits, image_class_embeds)
 
 
+@auto_docstring(
+    custom_intro="""
+    OWL-ViT model with class and box prediction heads on top, for open-vocabulary object detection.
+    """
+)
 class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     config: OwlViTConfig
 

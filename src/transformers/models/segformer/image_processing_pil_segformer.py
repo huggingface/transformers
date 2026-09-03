@@ -55,6 +55,7 @@ class SegformerImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @requires(backends=("torch", "torchvision"))
+@auto_docstring
 class SegformerImageProcessorPil(PilBackend):
     """PIL backend for Segformer with reduce_label support."""
 

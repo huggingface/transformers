@@ -1754,6 +1754,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
         return padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds
 
 
+@auto_docstring
 class BigBirdForPreTraining(BigBirdPreTrainedModel):
     _tied_weights_keys = {
         "cls.predictions.decoder.bias": "cls.predictions.bias",

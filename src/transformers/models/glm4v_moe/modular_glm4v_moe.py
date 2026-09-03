@@ -340,6 +340,7 @@ class Glm4vMoeModelOutputWithPast(Qwen3VLMoeModelOutputWithPast):
     pass
 
 
+@auto_docstring
 class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
     def __init__(self, config):
         super().__init__(config)

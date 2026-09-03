@@ -39,6 +39,7 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_slanet import SLANetConfig
 
 
+@auto_docstring
 class SLANetPreTrainedModel(PreTrainedModel):
     config: SLANetConfig
     base_model_prefix = "backbone"
@@ -157,12 +158,18 @@ class SLANetSLAHead(SLANetPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @filter_output_hidden_states
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.FloatTensor,
         targets: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
+        r"""
+        targets (`torch.Tensor` of shape `(batch_size, max_text_length + 1)`, *optional*):
+            Ground-truth structure token ids. Accepted for compatibility with the original implementation,
+            which uses them for teacher forcing; this head always decodes autoregressively.
+        """
         features = torch.zeros(
             (hidden_states.shape[0], self.config.hidden_size), dtype=torch.float32, device=hidden_states.device
         )
@@ -425,6 +432,7 @@ class SLANetCSPPAN(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class SLANetBackbone(SLANetPreTrainedModel):
     def __init__(self, config: SLANetConfig):
         super().__init__(config)

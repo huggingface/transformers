@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...processing_utils import ProcessorMixin
+from ...utils import auto_docstring
 
 
+@auto_docstring
 class PeAudioVideoProcessor(ProcessorMixin):
     def __init__(self, feature_extractor=None, video_processor=None, tokenizer=None, **kwargs):
         super().__init__(feature_extractor, video_processor, tokenizer, **kwargs)

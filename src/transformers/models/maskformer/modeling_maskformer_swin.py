@@ -691,8 +691,13 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
             init.copy_(module.relative_position_index, module.create_relative_position_index())
 
 
+@auto_docstring
 class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (`bool`, *optional*, defaults to `True`):
+            Whether to add an average pooling layer producing `pooler_output` from the last hidden state.
+        """
         super().__init__(config)
         self.config = config
         self.num_layers = len(config.depths)
@@ -709,6 +714,7 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
+    @auto_docstring
     def forward(
         self,
         pixel_values=None,
@@ -761,6 +767,7 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
         )
 
 
+@auto_docstring
 class MaskFormerSwinBackbone(BackboneMixin, MaskFormerSwinPreTrainedModel):
     """
     MaskFormerSwin backbone, designed especially for the MaskFormer framework.
@@ -789,6 +796,7 @@ class MaskFormerSwinBackbone(BackboneMixin, MaskFormerSwinPreTrainedModel):
 
     @can_return_tuple
     @filter_output_hidden_states
+    @auto_docstring
     def forward(
         self,
         pixel_values: Tensor,

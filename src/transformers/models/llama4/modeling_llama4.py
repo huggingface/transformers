@@ -573,6 +573,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         )
 
 
+@auto_docstring
 class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer"]
     base_model_prefix = "language_model"
@@ -1017,6 +1018,7 @@ class Llama4VisionRotaryEmbedding(nn.Module):
         return self.freqs_ci.to(hidden_states.device)
 
 
+@auto_docstring
 class Llama4VisionModel(Llama4PreTrainedModel):
     base_model_prefix = "vision_model"
     input_modalities = ("image",)
@@ -1054,6 +1056,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         """
         return self.patch_embedding
 
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -1064,7 +1067,6 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         **kwargs,
     ) -> BaseModelOutputWithPooling | tuple[torch.Tensor, ...]:
         r"""
-
         Example:
 
         ```python
@@ -1155,6 +1157,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         )
 
 
+@auto_docstring
 class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer", "Llama4VisionEncoderLayer"]
     _tp_plan = {}

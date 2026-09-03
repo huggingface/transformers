@@ -945,9 +945,17 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
         return left_context, num_lookahead_tokens
 
 
+@auto_docstring
 @dataclass
 class NemotronAsrStreamingRNNTOutput(ParakeetRNNTOutput):
     r"""
+    loss (`torch.FloatTensor`, *optional*):
+        RNN-T loss, returned when `labels` are provided.
+    logits (`torch.FloatTensor`):
+        Joint token logits. Shape is `(batch, T, U+1, vocab)` for training
+        or `(batch, 1, 1, vocab)` for single-step inference.
+    decoder_cache (`NemotronAsrStreamingRNNTDecoderCache`, *optional*):
+        Decoder LSTM cache containing hidden state, cell state, and last output.
     encoder_past_key_values (`Cache`, *optional*):
         Updated encoder attention K/V sliding-window cache, returned when encoding audio with `use_cache=True`
         (cache-aware streaming). Pass it to the next chunk's forward.

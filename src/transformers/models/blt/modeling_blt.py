@@ -594,6 +594,7 @@ class BltLocalEncoder(BltPreTrainedModel):
 
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -607,6 +608,18 @@ class BltLocalEncoder(BltPreTrainedModel):
         patch_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
+        r"""
+        patch_embeds (`torch.Tensor` of shape `(batch_size, num_patches * cross_attn_k, hidden_size)`, *optional*):
+            Patch embeddings used as the queries of the cross-attention layers. They are recomputed from the
+            byte-level hidden states at every cross-attention layer, so passing them is only useful to seed
+            the first layer.
+        num_patches (`int`, *optional*):
+            Number of patches the byte sequence is split into. Used as the size of the patch dimension when
+            pooling the byte hidden states into patch embeddings.
+        patch_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Index of the patch every byte belongs to. Bytes sharing an index are pooled into the same patch
+            embedding.
+        """
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
@@ -705,6 +718,7 @@ class BltLocalDecoder(BltPreTrainedModel):
 
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -716,6 +730,11 @@ class BltLocalDecoder(BltPreTrainedModel):
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
+        r"""
+        patch_embeds (`torch.Tensor` of shape `(batch_size, num_patches, hidden_size_global)`, *optional*):
+            Patch level hidden states produced by the global transformer. They are projected and used as the
+            cross-attention states that condition the byte level decoder.
+        """
         batch_size = inputs_embeds.shape[0]
         hidden_states = inputs_embeds
         patch_embeds = self.patch_embedding_projection(patch_embeds)
@@ -778,6 +797,7 @@ class BltGlobalTransformer(BltPreTrainedModel):
 
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         inputs_embeds: torch.Tensor,
@@ -871,6 +891,7 @@ class BltPatcher(BltPreTrainedModel):
 
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -884,6 +905,15 @@ class BltPatcher(BltPreTrainedModel):
         max_patch_length: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
+        r"""
+        patch_size (`int`, *optional*):
+            Size of the patches used in the patching mechanism. When `None`, every byte becomes its own patch.
+        threshold (`float`, *optional*):
+            Entropy threshold above which a new patch is started. When set, patch boundaries come from
+            thresholding the predicted entropies instead of from `patch_size`.
+        max_patch_length (`int`, *optional*):
+            Maximum length of the generated patches. Longer patches are split into several smaller ones.
+        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1148,6 +1178,7 @@ def _prepare_patch_cross_attention_mask(
     return cross_attention_mask
 
 
+@auto_docstring
 class BltModel(BltPreTrainedModel):
     def __init__(self, config: BltConfig):
         super().__init__(config)
@@ -1171,6 +1202,7 @@ class BltModel(BltPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1182,6 +1214,11 @@ class BltModel(BltPreTrainedModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
+        r"""
+        patch_lengths (`torch.Tensor` of shape `(batch_size, num_patches)`, *optional*):
+            Number of bytes in each patch. When not provided, patch boundaries are computed by the entropy
+            patcher, or every byte becomes its own patch if the model has no patcher.
+        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 

@@ -38,7 +38,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import filter_out_non_signature_kwargs, logging
+from ...utils import auto_docstring, filter_out_non_signature_kwargs, logging
 
 
 if is_vision_available():
@@ -60,6 +60,13 @@ def make_batched(videos) -> list[list[ImageInput]]:
     raise ValueError(f"Could not make batched video from {videos}")
 
 
+@auto_docstring(
+    custom_args=r"""
+    offset (`bool`, *optional*, defaults to `True`):
+        Whether to scale the image in both negative and positive directions. Can be overridden by the `offset`
+        parameter in the `preprocess` method.
+    """
+)
 class VivitImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Vivit image processor.
@@ -283,6 +290,7 @@ class VivitImageProcessor(BaseImageProcessor):
         return image
 
     @filter_out_non_signature_kwargs()
+    @auto_docstring
     def preprocess(
         self,
         videos: ImageInput,

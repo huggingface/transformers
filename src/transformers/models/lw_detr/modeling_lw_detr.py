@@ -327,6 +327,7 @@ class LwDetrViTEncoder(LwDetrViTPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1104,6 +1105,7 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         inputs_embeds: torch.Tensor | None = None,
@@ -1116,6 +1118,18 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
+        r"""
+        reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`, *optional*):
+            Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
+        spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`, *optional*):
+            Spatial shapes of the feature maps.
+        spatial_shapes_list (`list[tuple[int, int]]`):
+            Spatial shapes of each feature map (but as list for export compatibility).
+        level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
+            Indexes for the start of each feature level. In range `[0, sequence_length]`.
+        valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`, *optional*):
+            Ratio of valid area in each feature level.
+        """
         intermediate = ()
         intermediate_reference_points = (reference_points,)
 

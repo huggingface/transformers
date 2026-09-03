@@ -259,6 +259,7 @@ class AudioFlamingo3PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
 
+@auto_docstring
 @dataclass
 class AudioFlamingo3ModelOutputWithPast(BaseModelOutputWithPast):
     r"""
@@ -354,6 +355,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_features: torch.Tensor,
@@ -361,15 +363,14 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
         **kwargs,
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Args:
-            input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
-                Log-Mel features extracted from raw audio. Use the processor/feature extractor to compute and pad
-                these features from waveform input.
-            input_features_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
+        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
+            Log-Mel features extracted from raw audio. Use the processor/feature extractor to compute and pad
+            these features from waveform input.
+        input_features_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
 
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
         """
 
         seq_len = (input_features.shape[-1] - 1) // 2 + 1  # After conv2 downsampling
@@ -577,7 +578,12 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
+    @auto_docstring
     def get_audio_features(self, input_features, input_features_mask, **kwargs):
+        r"""
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+            Mask to avoid performing attention on padding feature indices.
+        """
         return self.model.get_audio_features(input_features, input_features_mask, **kwargs)
 
     @can_return_tuple

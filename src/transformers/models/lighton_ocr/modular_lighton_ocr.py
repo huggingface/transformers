@@ -125,6 +125,7 @@ class LightOnOcrProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class LightOnOcrProcessor(ProcessorMixin):
     valid_processor_kwargs = LightOnOcrProcessorKwargs
 
@@ -137,6 +138,13 @@ class LightOnOcrProcessor(ProcessorMixin):
         chat_template=None,
         **kwargs,
     ):
+        r"""
+        patch_size (`int`, *optional*, defaults to 14):
+            Patch size of the vision encoder.
+        spatial_merge_size (`int`, *optional*, defaults to 2):
+            Number of patches merged along each spatial dimension before entering the language model. Together
+            with `patch_size` it gives the effective patch size used to count image tokens.
+        """
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
         self.patch_size = patch_size

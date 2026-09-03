@@ -112,6 +112,7 @@ class CwmPreTrainedModel(LlamaPreTrainedModel):
     pass
 
 
+@auto_docstring
 class CwmModelOutputWithPast(BaseModelOutputWithPast):
     pass
 

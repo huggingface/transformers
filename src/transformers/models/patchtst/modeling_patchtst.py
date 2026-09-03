@@ -696,6 +696,7 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         patch_input: torch.Tensor,
@@ -703,15 +704,9 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
         output_attentions: bool | None = None,
         **kwargs,
     ) -> BaseModelOutput:
-        """
-        Parameters:
-            patch_input (`torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`, *required*):
-                Past values of the time series
-            output_hidden_states (bool, optional): Indicates if hidden states should be outputted.
-            output_attentions (bool, optional): Indicates if attentions should be outputted.
-
-        return:
-            `BaseModelOutput`
+        r"""
+        patch_input (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, patch_length)`):
+            Patchified time series values, as produced by `PatchTSTPatchify`.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1082,6 +1077,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1093,23 +1089,21 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         **kwargs,
     ) -> tuple | PatchTSTModelOutput:
         r"""
-        Parameters:
-            past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
-                Input sequence to the model
-            past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
-                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
-                in `[0, 1]`:
+        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+            Context values of the time series. For a pretraining task, this denotes the input time series to predict
+            the masked portion. For a forecasting task, this denotes the history/past time series values.
 
-                - 1 for values that are **observed**,
-                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            future_values (`torch.BoolTensor` of shape `(batch_size, prediction_length, num_input_channels)`, *optional*):
-                Future target values associated with the `past_values`
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the output attention of all layers
-            return_dict (`bool`, *optional*):
-                Whether or not to return a `ModelOutput` instead of a plain tuple.
+            For univariate time series, `num_input_channels` dimension should be 1. For multivariate time series, it
+            is greater than 1.
+        past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+            in `[0, 1]`:
+
+            - 1 for values that are **observed**,
+            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+        future_values (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_input_channels)`, *optional*):
+            Future target values. Accepted so that the base model shares the signature of the task heads; it is
+            not used here.
 
         Returns:
             `PatchTSTModelOutput` or tuple of `torch.Tensor` (if `return_dict`=False or `config.return_dict`=False)
@@ -1220,6 +1214,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1230,20 +1225,18 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         **kwargs,
     ) -> tuple | PatchTSTForPretrainingOutput:
         r"""
-        Parameters:
-            past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
-                Input sequence to the model
-            past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
-                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
-                in `[0, 1]`:
+        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+            Context values of the time series. For a pretraining task, this denotes the input time series to predict
+            the masked portion. For a forecasting task, this denotes the history/past time series values.
 
-                - 1 for values that are **observed**,
-                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the output attention of all layers
-            return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
+            For univariate time series, `num_input_channels` dimension should be 1. For multivariate time series, it
+            is greater than 1.
+        past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+            in `[0, 1]`:
+
+            - 1 for values that are **observed**,
+            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
         Returns:
             `PatchTSTForPretrainingOutput` or tuple of `torch.Tensor` (if `return_dict`=False or
@@ -1587,6 +1580,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1598,23 +1592,20 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         **kwargs,
     ) -> tuple | PatchTSTForPredictionOutput:
         r"""
-        Parameters:
-            past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
-                Input sequence to the model
-            past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
-                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
-                in `[0, 1]`:
+        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+            Context values of the time series. For a pretraining task, this denotes the input time series to predict
+            the masked portion. For a forecasting task, this denotes the history/past time series values.
 
-                - 1 for values that are **observed**,
-                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            future_values (`torch.Tensor` of shape `(bs, forecast_len, num_input_channels)`, *optional*):
-                Future target values associated with the `past_values`
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the output attention of all layers
-            return_dict (`bool`, *optional*):
-                Whether or not to return a `ModelOutput` instead of a plain tuple.
+            For univariate time series, `num_input_channels` dimension should be 1. For multivariate time series, it
+            is greater than 1.
+        past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+            in `[0, 1]`:
+
+            - 1 for values that are **observed**,
+            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+        future_values (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_input_channels)`, *optional*):
+            Future target values the model is trained to predict. Required to return a loss.
 
         Returns:
             `PatchTSTForPredictionOutput` or tuple of `torch.Tensor` (if `return_dict`=False or

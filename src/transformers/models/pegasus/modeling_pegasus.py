@@ -1009,10 +1009,12 @@ class PegasusDecoderWrapper(PegasusPreTrainedModel):
         self.decoder = PegasusDecoder(config)
         self.post_init()
 
+    @auto_docstring
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
 
 
+@auto_docstring
 class PegasusForCausalLM(PegasusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {
         "lm_head.weight": "model.decoder.embed_tokens.weight",

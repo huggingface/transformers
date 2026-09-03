@@ -472,6 +472,7 @@ class BrosEncoder(BrosPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -481,6 +482,11 @@ class BrosEncoder(BrosPreTrainedModel):
         encoder_attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithCrossAttentions:
+        r"""
+        bbox_pos_emb (`torch.FloatTensor` of shape `(batch_size, sequence_length, sequence_length, bbox_hidden_size)`):
+            Bounding box positional embeddings, added to the attention scores of every layer to encode the 2D
+            layout of the document.
+        """
         for layer_module in self.layer:
             hidden_states = layer_module(
                 hidden_states,

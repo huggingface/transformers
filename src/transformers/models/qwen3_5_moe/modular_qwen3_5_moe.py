@@ -212,6 +212,7 @@ class Qwen3_5MoeDecoderLayer(Qwen3NextDecoderLayer):
         self.post_attention_layernorm = Qwen3_5MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
+@auto_docstring
 class Qwen3_5MoePreTrainedModel(Qwen3NextPreTrainedModel):
     _no_split_modules = ["Qwen3_5MoeDecoderLayer", "Qwen3_5MoeVisionBlock"]
 
@@ -237,6 +238,7 @@ class Qwen3_5MoePreTrainedModel(Qwen3NextPreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
+@auto_docstring
 class Qwen3_5MoeVisionModel(Qwen3_5VisionModel):
     pass
 
@@ -249,6 +251,7 @@ class Qwen3_5MoeCausalLMOutputWithPast(Qwen3VLMoeCausalLMOutputWithPast):
     pass
 
 
+@auto_docstring
 class Qwen3_5MoeTextModel(Qwen3_5TextModel):
     pass
 
@@ -266,6 +269,7 @@ class Qwen3_5MoeForCausalLM(Qwen3NextForCausalLM):
         self.model = Qwen3_5MoeTextModel(config)
 
 
+@auto_docstring
 class Qwen3_5MoeForConditionalGeneration(Qwen3VLMoeForConditionalGeneration):
     _tp_plan = {"lm_head": "colwise_gather_output"}
 

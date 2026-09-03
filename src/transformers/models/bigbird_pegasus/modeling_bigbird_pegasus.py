@@ -2289,10 +2289,12 @@ class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
         self.decoder = BigBirdPegasusDecoder(config)
         self.post_init()
 
+    @auto_docstring
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
 
 
+@auto_docstring
 class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel, GenerationMixin):
     def __init__(self, config):
         config.is_decoder = True

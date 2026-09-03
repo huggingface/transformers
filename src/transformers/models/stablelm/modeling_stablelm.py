@@ -483,6 +483,7 @@ class StableLmModel(StableLmPreTrainedModel):
         )
 
 
+@auto_docstring
 # Copied from transformers.models.persimmon.modeling_persimmon.PersimmonForCausalLM with PERSIMMON->STABLELM,Persimmon->StableLm
 class StableLmForCausalLM(StableLmPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}

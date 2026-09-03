@@ -272,6 +272,7 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -303,6 +304,7 @@ class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,

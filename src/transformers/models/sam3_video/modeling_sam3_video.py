@@ -487,6 +487,7 @@ class Sam3VideoSegmentationOutput(ModelOutput):
     frame_idx: int | None = None
 
 
+@auto_docstring
 class Sam3VideoPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained

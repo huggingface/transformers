@@ -513,6 +513,7 @@ class JetMoeModel(MixtralModel):
         )
 
 
+@auto_docstring
 class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 

@@ -78,6 +78,12 @@ def _merge_candidate_labels_text(text: list[str]) -> str:
     return merged_labels_str
 
 
+@auto_docstring(
+    custom_intro="""
+    `dict` returned by [`GroundingDinoProcessor.post_process_grounded_object_detection`], which warns when the
+    deprecated `labels` key is read.
+    """
+)
 class DictWithDeprecationWarning(dict):
     message = (
         "The key `labels` is will return integer ids in `GroundingDinoProcessor.post_process_grounded_object_detection` "

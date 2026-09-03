@@ -25,40 +25,38 @@ from ...utils.type_validators import interval, is_divisible_by
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 @strict
 class StructureModuleConfig(PreTrainedConfig):
-    """
-    Args:
-        sequence_dim:
-            Single representation channel dimension
-        pairwise_dim:
-            Pair representation channel dimension
-        ipa_dim:
-            IPA hidden channel dimension
-        resnet_dim:
-            Angle resnet (Alg. 23 lines 11-14) hidden channel dimension
-        num_heads_ipa:
-            Number of IPA heads
-        num_qk_points:
-            Number of query/key points to generate during IPA
-        num_v_points:
-            Number of value points to generate during IPA
-        dropout_rate:
-            Dropout rate used throughout the layer
-        num_blocks:
-            Number of structure module blocks
-        num_transition_layers:
-            Number of layers in the single representation transition (Alg. 23 lines 8-9)
-        num_resnet_blocks:
-            Number of blocks in the angle resnet
-        num_angles:
-            Number of angles to generate in the angle resnet
-        trans_scale_factor:
-            Scale of single representation transition hidden dimension
-        epsilon:
-            Small number used in angle resnet normalization
-        inf:
-            Large number used for attention masking
+    r"""
+    sequence_dim (`int`, *optional*, defaults to 384):
+        Dimensionality of the single (per-residue) representation inside the structure module.
+    pairwise_dim (`int`, *optional*, defaults to 128):
+        Dimensionality of the pairwise (residue-pair) representation inside the structure module.
+    ipa_dim (`int`, *optional*, defaults to 16):
+        Hidden dimension of each invariant point attention head.
+    resnet_dim (`int`, *optional*, defaults to 128):
+        Hidden dimension of the ResNet that predicts the torsion angles.
+    num_heads_ipa (`int`, *optional*, defaults to 12):
+        Number of attention heads used by invariant point attention.
+    num_qk_points (`int`, *optional*, defaults to 4):
+        Number of query/key points per invariant point attention head.
+    num_v_points (`int`, *optional*, defaults to 8):
+        Number of value points per invariant point attention head.
+    num_blocks (`int`, *optional*, defaults to 8):
+        Number of weight-sharing structure module blocks.
+    num_transition_layers (`int`, *optional*, defaults to 1):
+        Number of layers in the transition MLP applied to the single representation of each block.
+    num_resnet_blocks (`int`, *optional*, defaults to 2):
+        Number of blocks in the torsion angle ResNet.
+    num_angles (`int`, *optional*, defaults to 7):
+        Number of torsion angles predicted per residue.
+    trans_scale_factor (`int`, *optional*, defaults to 10):
+        Factor the predicted backbone translations are scaled by before being turned into coordinates.
+    epsilon (`float`, *optional*, defaults to 1e-08):
+        Small constant added to denominators for numerical stability.
+    inf (`float`, *optional*, defaults to 100000.0):
+        Large finite value used in place of infinity when masking attention logits.
     """
 
     sequence_dim: int | None = 384
@@ -78,8 +76,35 @@ class StructureModuleConfig(PreTrainedConfig):
     inf: float | None = 1e5
 
 
+@auto_docstring
 @strict
 class TrunkConfig(PreTrainedConfig):
+    r"""
+    num_blocks (`int`, *optional*, defaults to 48):
+        Number of blocks in the folding trunk.
+    sequence_state_dim (`int`, *optional*, defaults to 1024):
+        Dimensionality of the sequence state carried through the trunk.
+    pairwise_state_dim (`int`, *optional*, defaults to 128):
+        Dimensionality of the pairwise state carried through the trunk. Must be even.
+    sequence_head_width (`int`, *optional*, defaults to 32):
+        Width of each attention head over the sequence state. `sequence_state_dim` must be a multiple of it.
+    pairwise_head_width (`int`, *optional*, defaults to 32):
+        Width of each attention head over the pairwise state. `pairwise_state_dim` must be a multiple of it.
+    position_bins (`int`, *optional*, defaults to 32):
+        Number of relative position bins used by the trunk's pairwise positional embedding.
+    layer_drop (`float`, *optional*, defaults to 0.0):
+        Probability of skipping a whole trunk block during training.
+    cpu_grad_checkpoint (`bool`, *optional*, defaults to `False`):
+        Whether to offload the gradient checkpoints of the trunk to CPU memory.
+    max_recycles (`int`, *optional*, defaults to 4):
+        Number of times the trunk output is recycled back into its input.
+    chunk_size (`int`, *optional*, defaults to 128):
+        Chunk size used to compute the trunk's axial attention, which makes memory usage roughly linear
+        instead of quadratic in the sequence length. `None` disables chunking.
+    structure_module (`Union[dict, StructureModuleConfig]`, *optional*):
+        Configuration of the structure module that turns the trunk states into 3D coordinates.
+    """
+
     sub_configs = {"structure_module": StructureModuleConfig}
 
     num_blocks: int | None = 48
@@ -129,8 +154,34 @@ class TrunkConfig(PreTrainedConfig):
             )
 
 
+@auto_docstring
 @strict
 class EsmFoldConfig(PreTrainedConfig):
+    r"""
+    esm_type (`str`, *optional*):
+        Name of the ESM-2 checkpoint used as the language model backbone.
+    fp16_esm (`bool`, *optional*, defaults to `True`):
+        Whether to run the ESM-2 backbone in half precision.
+    use_esm_attn_map (`bool`, *optional*, defaults to `False`):
+        Whether to feed the attention maps of the ESM-2 backbone into the pairwise state. Not supported by
+        this port, since no public checkpoint uses it.
+    esm_ablate_pairwise (`bool`, *optional*, defaults to `False`):
+        Ablation flag: drop the pairwise representation coming from the language model.
+    esm_ablate_sequence (`bool`, *optional*, defaults to `False`):
+        Ablation flag: zero out the sequence representation coming from the language model.
+    esm_input_dropout (`float`, *optional*, defaults to 0.0):
+        Dropout applied to the language model representations before they enter the trunk.
+    embed_aa (`bool`, *optional*, defaults to `True`):
+        Whether to add a learned amino-acid embedding to the initial sequence state.
+    bypass_lm (`bool`, *optional*, defaults to `False`):
+        Whether to skip the language model entirely and feed zeroed representations to the trunk. Only
+        useful for debugging and profiling.
+    lddt_head_hid_dim (`int`, *optional*, defaults to 128):
+        Hidden dimension of the head predicting the per-atom pLDDT confidence.
+    trunk (`Union[dict, TrunkConfig]`, *optional*):
+        Configuration of the folding trunk.
+    """
+
     sub_configs = {"trunk": TrunkConfig}
 
     esm_type: str | None = None

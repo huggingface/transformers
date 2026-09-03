@@ -218,6 +218,7 @@ class PI0Model(PI0PreTrainedModel):
         return dit_output
 
 
+@auto_docstring
 class PI0ForConditionalGeneration(PI0PreTrainedModel):
     """PI0 model with action projection heads and flow matching."""
 

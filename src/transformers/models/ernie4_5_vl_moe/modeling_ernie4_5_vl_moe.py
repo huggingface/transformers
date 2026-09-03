@@ -888,6 +888,7 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Ernie4_5_VLMoePreTrainedMod
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
@@ -1483,6 +1484,7 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
+@auto_docstring
 class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
@@ -1808,6 +1810,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
 
 
 # Keep aliases for BC
+@auto_docstring
 class Ernie4_5_VL_MoeForConditionalGeneration(Ernie4_5_VLMoeForConditionalGeneration):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
@@ -1817,6 +1820,7 @@ class Ernie4_5_VL_MoeForConditionalGeneration(Ernie4_5_VLMoeForConditionalGenera
         super().__init__(*args, **kwargs)
 
 
+@auto_docstring
 class Ernie4_5_VL_MoePreTrainedModel(Ernie4_5_VLMoePreTrainedModel):
     def post_init(self):
         logger.warning_once(
@@ -1825,6 +1829,7 @@ class Ernie4_5_VL_MoePreTrainedModel(Ernie4_5_VLMoePreTrainedModel):
         super().post_init()
 
 
+@auto_docstring
 class Ernie4_5_VL_MoeModel(Ernie4_5_VLMoeModel):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
@@ -1833,6 +1838,7 @@ class Ernie4_5_VL_MoeModel(Ernie4_5_VLMoeModel):
         super().__init__(*args, **kwargs)
 
 
+@auto_docstring
 class Ernie4_5_VL_MoeTextModel(Ernie4_5_VLMoeTextModel):
     def __init__(self, *args, **kwargs):
         logger.warning_once(
@@ -1841,6 +1847,7 @@ class Ernie4_5_VL_MoeTextModel(Ernie4_5_VLMoeTextModel):
         super().__init__(*args, **kwargs)
 
 
+@auto_docstring
 class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Ernie4_5_VLMoeVisionTransformerPretrainedModel):
     def __init__(self, *args, **kwargs):
         logger.warning_once(

@@ -1374,6 +1374,11 @@ class RfDetrSegmentationMLPBlock(nn.Module):
         return hidden_states
 
 
+@auto_docstring(
+    custom_intro="""
+    RF-DETR object detection model with a segmentation head on top, for instance segmentation.
+    """
+)
 class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # We can't initialize the model on meta device as some weights are modified during the initialization

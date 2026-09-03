@@ -848,6 +848,7 @@ class OlmoHybridLinearAttentionDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class OlmoHybridPreTrainedModel(PreTrainedModel):
     config: OlmoHybridConfig
     base_model_prefix = "model"
@@ -882,6 +883,7 @@ class OlmoHybridPreTrainedModel(PreTrainedModel):
             init.copy_(module.dt_bias, inv_dt)
 
 
+@auto_docstring
 class OlmoHybridModel(OlmoHybridPreTrainedModel):
     def __init__(self, config: OlmoHybridConfig):
         super().__init__(config)
@@ -908,6 +910,7 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

@@ -561,6 +561,7 @@ class Mistral4DecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class Mistral4PreTrainedModel(PreTrainedModel):
     config: Mistral4Config
     base_model_prefix = "model"

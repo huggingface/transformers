@@ -20,7 +20,7 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_soundfile_available, is_torch_available, logging
+from ...utils import auto_docstring, is_soundfile_available, is_torch_available, logging
 from ...utils.import_utils import requires, requires_backends
 
 
@@ -50,6 +50,7 @@ class HiggsAudioV2ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 @requires(backends=("torch",))
+@auto_docstring
 class HiggsAudioV2Processor(ProcessorMixin):
     r"""
     Constructs a Higgs Audio processor which wraps a [`DacFeatureExtractor`], a [`AutoTokenizer`],
@@ -97,6 +98,26 @@ class HiggsAudioV2Processor(ProcessorMixin):
         audio_stream_bos_id=1024,
         audio_stream_eos_id=1025,
     ):
+        r"""
+        audio_tokenizer (`HiggsAudioV2TokenizerModel`):
+            The audio tokenizer turning waveforms into discrete audio codes and back.
+        audio_token (`str`, *optional*, defaults to `"<|AUDIO_OUT|>"`):
+            Placeholder token marking where audio codes are inserted in the text. Overridden by the tokenizer's
+            own `audio_token` when it defines one.
+        audio_bos_token (`str`, *optional*, defaults to `"<|audio_out_bos|>"`):
+            Token opening an audio segment. Overridden by the tokenizer's own `audio_bos_token` when it defines
+            one.
+        audio_eos_token (`str`, *optional*, defaults to `"<|audio_eos|>"`):
+            Token closing an audio segment. Overridden by the tokenizer's own `audio_eos_token` when it defines
+            one.
+        audio_delay_token (`str`, *optional*, defaults to `"<|reserved_special_token_6|>"`):
+            Token used as the delay pattern filler between codebooks. Overridden by the tokenizer's own
+            `audio_delay_token` when it defines one.
+        audio_stream_bos_id (`int`, *optional*, defaults to 1024):
+            Audio code id marking the beginning of a code stream.
+        audio_stream_eos_id (`int`, *optional*, defaults to 1025):
+            Audio code id marking the end of a code stream.
+        """
         self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
         self.audio_bos_token = tokenizer.audio_bos_token if hasattr(tokenizer, "audio_bos_token") else audio_bos_token
         self.audio_eos_token = tokenizer.audio_eos_token if hasattr(tokenizer, "audio_eos_token") else audio_eos_token
@@ -126,6 +147,7 @@ class HiggsAudioV2Processor(ProcessorMixin):
             num_codebooks - 1
         )
 
+    @auto_docstring
     def __call__(
         self,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
@@ -133,6 +155,10 @@ class HiggsAudioV2Processor(ProcessorMixin):
         output_labels: bool | None = False,
         **kwargs: Unpack[HiggsAudioV2ProcessorKwargs],
     ):
+        r"""
+        output_labels (`bool`, *optional*, defaults to `False`):
+            Whether to also return `labels` and `audio_labels`, so the batch can be used for training.
+        """
         output_kwargs = self._merge_kwargs(
             HiggsAudioV2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,

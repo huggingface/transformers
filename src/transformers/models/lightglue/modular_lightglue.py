@@ -171,6 +171,7 @@ class LightGlueImageProcessor(SuperGlueImageProcessor):
 
 
 @requires(backends=("torch",))
+@auto_docstring
 class LightGlueImageProcessorPil(SuperGlueImageProcessorPil):
     @requires(backends=("torch",))
     def post_process_keypoint_matching(

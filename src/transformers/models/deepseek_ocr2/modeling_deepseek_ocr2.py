@@ -54,9 +54,10 @@ from .configuration_deepseek_ocr2 import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 @dataclass
 class DeepseekOcr2ModelOutputWithPooling(BaseModelOutputWithPooling):
-    """
+    r"""
     local_last_hidden_state (`torch.FloatTensor` of shape `(total_local_patches, sequence_length, hidden_size)`, *optional*):
         Last hidden state from the vision encoder for local (cropped) patches.
     local_hidden_states (`torch.FloatTensor`, *optional*):
@@ -952,6 +953,7 @@ class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
         return BaseModelOutputWithPast(last_hidden_state=hidden_states)
 
 
+@auto_docstring
 class DeepseekOcr2VisionModel(DeepseekOcr2PreTrainedModel):
     """Vision pipeline: SAM ViT-B (with neck)"""
 

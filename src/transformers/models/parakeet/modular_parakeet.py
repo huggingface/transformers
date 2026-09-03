@@ -490,25 +490,23 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         )
 
 
+@auto_docstring
 @dataclass
 class ParakeetCTCGenerateOutput(ModelOutput):
-    """
-    Outputs of Parakeet CTC model generation.
-
-    Args:
-        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
-            if all batches finished early due to the `eos_token_id`.
-        logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
-            Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
-            each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
-            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
-            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
+    r"""
+    sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+        The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+        if all batches finished early due to the `eos_token_id`.
+    logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
+        Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
+        at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+        each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
+    attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
+        Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+        `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
+    hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
+        Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+        `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
     """
 
     sequences: torch.LongTensor
@@ -517,6 +515,7 @@ class ParakeetCTCGenerateOutput(ModelOutput):
     hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
 
 
+@auto_docstring
 @dataclass
 class ParakeetGenerateOutput(ParakeetCTCGenerateOutput):
     """
@@ -748,19 +747,17 @@ class ParakeetRNNTJointNetwork(nn.Module):
         return self.head(joint_output)
 
 
+@auto_docstring
 @dataclass
 class ParakeetRNNTOutput(BaseModelOutputWithPooling):
-    """
-    Output of the Parakeet RNN-T forward pass.
-
-    Args:
-        loss (`torch.FloatTensor`, *optional*):
-            RNN-T loss, returned when `labels` are provided.
-        logits (`torch.FloatTensor`):
-            Joint token logits. Shape is `(batch, T, U+1, vocab)` for training
-            or `(batch, 1, 1, vocab)` for single-step inference.
-        decoder_cache (`ParakeetRNNTDecoderCache`, *optional*):
-            Decoder LSTM cache containing hidden state, cell state, and last output.
+    r"""
+    loss (`torch.FloatTensor`, *optional*):
+        RNN-T loss, returned when `labels` are provided.
+    logits (`torch.FloatTensor`):
+        Joint token logits. Shape is `(batch, T, U+1, vocab)` for training
+        or `(batch, 1, 1, vocab)` for single-step inference.
+    decoder_cache (`ParakeetRNNTDecoderCache`, *optional*):
+        Decoder LSTM cache containing hidden state, cell state, and last output.
     """
 
     loss: torch.FloatTensor | None = None
@@ -789,6 +786,7 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
         self.post_init()
 
     @can_return_tuple
+    @auto_docstring
     def get_audio_features(
         self,
         input_features: torch.Tensor,

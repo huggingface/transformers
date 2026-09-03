@@ -498,6 +498,7 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
         )
 
 
+@auto_docstring
 class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

@@ -832,6 +832,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         )
 
 
+@auto_docstring
 class AltCLIPTextModel(AltCLIPPreTrainedModel):
     config: AltCLIPTextConfig
     input_modalities = ("text",)

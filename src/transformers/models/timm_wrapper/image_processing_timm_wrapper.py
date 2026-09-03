@@ -20,7 +20,7 @@ import torch
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import to_pil_image
 from ...image_utils import ImageInput, make_flat_list_of_images
-from ...utils import TensorType, logging, requires_backends
+from ...utils import TensorType, auto_docstring, logging, requires_backends
 from ...utils.import_utils import is_timm_available, is_torch_available, requires
 
 
@@ -35,6 +35,14 @@ logger = logging.get_logger(__name__)
 
 
 @requires(backends=("torch", "timm", "torchvision"))
+@auto_docstring(
+    custom_args=r"""
+    pretrained_cfg (`dict[str, Any]`):
+        The configuration of the pretrained model used to resolve evaluation and training transforms.
+    architecture (`str`, *optional*):
+        Name of the architecture of the model.
+    """
+)
 class TimmWrapperImageProcessor(BaseImageProcessor):
     """
     Wrapper class for timm models to be used within transformers.
@@ -93,6 +101,7 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
             pretrained_model_name_or_path, image_processor_filename=image_processor_filename, **kwargs
         )
 
+    @auto_docstring
     def preprocess(
         self,
         images: ImageInput,

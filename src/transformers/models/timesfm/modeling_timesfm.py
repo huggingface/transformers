@@ -566,6 +566,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         return shifted_seq
 
 
+@auto_docstring
 class TimesFmModelForPrediction(TimesFmPreTrainedModel):
     """TimesFM model for quantile and mean prediction."""
 

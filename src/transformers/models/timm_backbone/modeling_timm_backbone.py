@@ -20,7 +20,7 @@ from ... import initialization as init
 from ...backbone_utils import BackboneMixin
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import is_timm_available, logging, requires_backends
+from ...utils import auto_docstring, is_timm_available, logging, requires_backends
 from ...utils.generic import can_return_tuple
 from .configuration_timm_backbone import TimmBackboneConfig
 
@@ -32,6 +32,7 @@ if is_timm_available():
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 class TimmBackbone(BackboneMixin, PreTrainedModel):
     """
     Wrapper class for timm models to be used as backbones. This enables using the timm models interchangeably with the
@@ -132,6 +133,7 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
                 init.zeros_(module.num_batches_tracked)
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,

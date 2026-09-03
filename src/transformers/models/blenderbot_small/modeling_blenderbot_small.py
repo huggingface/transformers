@@ -880,10 +880,12 @@ class BlenderbotSmallDecoderWrapper(BlenderbotSmallPreTrainedModel):
         self.decoder = BlenderbotSmallDecoder(config)
         self.post_init()
 
+    @auto_docstring
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
 
 
+@auto_docstring
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->BlenderbotSmall, facebook/bart-base->facebook/blenderbot_small-90M
 class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {

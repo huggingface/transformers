@@ -1371,12 +1371,12 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         z_logits = self.blocks(pixel_values)
         return nn.Softmax(dim=1)(z_logits)
 
+    @auto_docstring
     def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> torch.Tensor:
-        f"""
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-                Pixel values. Codebook pixel values can be obtained using [`AutoImageProcessor`] by passing
-                `return_codebook_pixels=True`. See [`FlavaImageProcessor.__call__`] for details.
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Codebook pixel values can be obtained using [`AutoImageProcessor`] by passing
+            `return_codebook_pixels=True`. See [`FlavaImageProcessor.__call__`] for details.
 
         Examples:
 

@@ -657,6 +657,7 @@ class Sam2PreTrainedModel(PreTrainedModel):
                 init.zeros_(module.no_memory_embedding)
 
 
+@auto_docstring
 class Sam2HieraDetModel(Sam2PreTrainedModel):
     config_class = Sam2HieraDetConfig
     main_input_name = "pixel_values"
@@ -702,6 +703,7 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -754,6 +756,7 @@ class Sam2VisionModel(Sam2PreTrainedModel):
         return self.backbone.get_input_embeddings()
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,

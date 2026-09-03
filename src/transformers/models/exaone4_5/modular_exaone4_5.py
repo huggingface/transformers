@@ -213,6 +213,7 @@ class Exaone4_5_PreTrainedModel(Exaone4PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
+@auto_docstring
 class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel, Qwen2_5_VisionTransformerPretrainedModel):
     config_class = Exaone4_5_VisionConfig
 
@@ -312,6 +313,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2VLModel):
         raise AttributeError("Exaone4.5 doesn't use 3D positions")
 
 
+@auto_docstring
 class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLForConditionalGeneration):
     """
     Main EXAONE 4.5 conditional generation class.

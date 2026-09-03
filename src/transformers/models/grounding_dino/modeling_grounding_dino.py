@@ -1440,6 +1440,7 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
         reference_points = reference_points[:, :, None] * valid_ratios[:, None]
         return reference_points
 
+    @auto_docstring
     def forward(
         self,
         vision_features: Tensor,
@@ -1460,47 +1461,46 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
         **kwargs,
     ) -> tuple | GroundingDinoEncoderOutput:
         r"""
-        Args:
-            vision_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
-            vision_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
-                - 0 for pixel features that are real (i.e. **not masked**),
-                - 1 for pixel features that are padding (i.e. **masked**).
-                [What are attention masks?](../glossary#attention-mask)
-            vision_position_embedding (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Position embeddings that are added to the queries and keys in each self-attention layer.
-            spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of each feature map.
-            spatial_shapes_list (`list[tuple[int, int]]`):
-                Spatial shapes of each feature map (but as list for export compatibility).
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`):
-                Starting index of each feature map.
-            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
-                Ratio of valid area in each feature level.
-            text_features (`torch.FloatTensor` of shape `(batch_size, text_seq_len, hidden_size)`):
-                Flattened text features that are passed to the encoder.
-            text_attention_mask (`torch.Tensor` of shape `(batch_size, text_seq_len)`, *optional*):
-                Mask to avoid performing attention on padding text features. Mask values selected in `[0, 1]`:
-                - 0 for text features that are real (i.e. **not masked**),
-                - 1 for text features that are padding (i.e. **masked**).
-                [What are attention masks?](../glossary#attention-mask)
-            text_position_embedding (`torch.FloatTensor` of shape `(batch_size, text_seq_len)`):
-                Position embeddings that are added to the queries and keys in each self-attention layer.
-            text_self_attention_masks (`torch.BoolTensor` of shape `(batch_size, text_seq_len, text_seq_len)`):
-                Masks to avoid performing attention between padding text features. Mask values selected in `[0, 1]`:
-                - 1 for text features that are real (i.e. **not masked**),
-                - 0 for text features that are padding (i.e. **masked**).
-            text_position_ids (`torch.LongTensor` of shape `(batch_size, num_queries)`):
-                Position ids for text features.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+        vision_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
+        vision_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
+            - 0 for pixel features that are real (i.e. **not masked**),
+            - 1 for pixel features that are padding (i.e. **masked**).
+            [What are attention masks?](../glossary#attention-mask)
+        vision_position_embedding (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Position embeddings that are added to the queries and keys in each self-attention layer.
+        spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
+            Spatial shapes of each feature map.
+        spatial_shapes_list (`list[tuple[int, int]]`):
+            Spatial shapes of each feature map (but as list for export compatibility).
+        level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`):
+            Starting index of each feature map.
+        valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
+            Ratio of valid area in each feature level.
+        text_features (`torch.FloatTensor` of shape `(batch_size, text_seq_len, hidden_size)`):
+            Flattened text features that are passed to the encoder.
+        text_attention_mask (`torch.Tensor` of shape `(batch_size, text_seq_len)`, *optional*):
+            Mask to avoid performing attention on padding text features. Mask values selected in `[0, 1]`:
+            - 0 for text features that are real (i.e. **not masked**),
+            - 1 for text features that are padding (i.e. **masked**).
+            [What are attention masks?](../glossary#attention-mask)
+        text_position_embedding (`torch.FloatTensor` of shape `(batch_size, text_seq_len)`):
+            Position embeddings that are added to the queries and keys in each self-attention layer.
+        text_self_attention_masks (`torch.BoolTensor` of shape `(batch_size, text_seq_len, text_seq_len)`):
+            Masks to avoid performing attention between padding text features. Mask values selected in `[0, 1]`:
+            - 1 for text features that are real (i.e. **not masked**),
+            - 0 for text features that are padding (i.e. **masked**).
+        text_position_ids (`torch.LongTensor` of shape `(batch_size, num_queries)`):
+            Position ids for text features.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+            returned tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+            for more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1596,6 +1596,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         inputs_embeds,
@@ -1615,43 +1616,42 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
         **kwargs,
     ) -> tuple | GroundingDinoDecoderOutput:
         r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-                The query embeddings that are passed into the decoder.
-            vision_encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Last hidden state from encoder related to vision feature map.
-            vision_encoder_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
-                - 1 for pixel features that are real (i.e. **not masked**),
-                - 0 for pixel features that are padding (i.e. **masked**).
-            text_encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, text_seq_len, hidden_size)`):
-                Last hidden state from encoder related to text features.
-            text_encoder_attention_mask (`torch.Tensor` of shape `(batch_size, text_seq_len)`, *optional*):
-                Mask to avoid performing attention on padding text features. Mask values selected in `[0, 1]`:
-                - 0 for text features that are real (i.e. **not masked**),
-                - 1 for text features that are padding (i.e. **masked**).
-            reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
-                Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
-            spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of the feature maps.
-            spatial_shapes_list (`list[tuple[int, int]]`):
-                Spatial shapes of the feature maps (but as list for export compatibility).
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
-                Indexes for the start of each feature level. In range `[0, sequence_length]`.
-            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`, *optional*):
-                Ratio of valid area in each feature level.
-            self_attn_mask (`torch.BoolTensor` of shape `(batch_size, text_seq_len)`):
-                Masks to avoid performing self-attention between vision hidden state. Mask values selected in `[0, 1]`:
-                - 1 for queries that are real (i.e. **not masked**),
-                - 0 for queries that are padding (i.e. **masked**).
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+            The query embeddings that are passed into the decoder.
+        vision_encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Last hidden state from encoder related to vision feature map.
+        vision_encoder_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
+            - 1 for pixel features that are real (i.e. **not masked**),
+            - 0 for pixel features that are padding (i.e. **masked**).
+        text_encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, text_seq_len, hidden_size)`):
+            Last hidden state from encoder related to text features.
+        text_encoder_attention_mask (`torch.Tensor` of shape `(batch_size, text_seq_len)`, *optional*):
+            Mask to avoid performing attention on padding text features. Mask values selected in `[0, 1]`:
+            - 0 for text features that are real (i.e. **not masked**),
+            - 1 for text features that are padding (i.e. **masked**).
+        reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
+            Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
+        spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
+            Spatial shapes of the feature maps.
+        spatial_shapes_list (`list[tuple[int, int]]`):
+            Spatial shapes of the feature maps (but as list for export compatibility).
+        level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
+            Indexes for the start of each feature level. In range `[0, sequence_length]`.
+        valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`, *optional*):
+            Ratio of valid area in each feature level.
+        self_attn_mask (`torch.BoolTensor` of shape `(batch_size, text_seq_len)`):
+            Masks to avoid performing self-attention between vision hidden state. Mask values selected in `[0, 1]`:
+            - 1 for queries that are real (i.e. **not masked**),
+            - 0 for queries that are padding (i.e. **masked**).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+            returned tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+            for more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

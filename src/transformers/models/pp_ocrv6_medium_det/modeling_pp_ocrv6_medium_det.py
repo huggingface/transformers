@@ -321,6 +321,7 @@ class PPOCRV6MediumDetNeck(nn.Module):
         return torch.cat(upsampled[::-1], dim=1)
 
 
+@auto_docstring
 class PPOCRV6MediumDetPreTrainedModel(PreTrainedModel):
     """
     Base class for all PPOCRV5 Server Det pre-trained models. Handles model initialization,
@@ -370,6 +371,7 @@ class PPOCRV6MediumDetForObjectDetection(PPOCRV6MediumDetPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,

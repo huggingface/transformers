@@ -391,6 +391,7 @@ class InstructBlipVideoEncoder(nn.Module):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
+@auto_docstring
 class InstructBlipVideoVisionModel(InstructBlipVideoPreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = "video"
@@ -706,6 +707,7 @@ class InstructBlipVideoQFormerEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
     """
     Querying Transformer (Q-Former), used in InstructBlipVideo. Slightly modified from BLIP-2 as it also takes the

@@ -133,6 +133,7 @@ class DeepseekVLModel(JanusModel):
         del self.generation_head
 
 
+@auto_docstring
 class DeepseekVLForConditionalGeneration(JanusForConditionalGeneration):
     output_modalities = ("text",)
 

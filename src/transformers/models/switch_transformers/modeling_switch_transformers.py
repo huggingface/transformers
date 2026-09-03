@@ -697,6 +697,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids=None,
@@ -1093,6 +1094,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         return self._shift_right(labels)
 
 
+@auto_docstring
 class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
     _tied_weights_keys = {
         "encoder.embed_tokens.weight": "shared.weight",

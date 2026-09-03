@@ -340,6 +340,7 @@ class HGNetV2Encoder(nn.Module):
         )
 
 
+@auto_docstring
 class HGNetV2Backbone(BackboneMixin, HGNetV2PreTrainedModel):
     has_attentions = False
 

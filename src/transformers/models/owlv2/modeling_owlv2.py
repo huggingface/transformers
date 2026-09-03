@@ -677,6 +677,7 @@ class Owlv2TextTransformer(Owlv2PreTrainedModel):
         )
 
 
+@auto_docstring
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTTextModel with google/owlvit-base-patch32->google/owlv2-base-patch16, OWLVIT->OWLV2,OwlViT->Owlv2
 class Owlv2TextModel(Owlv2PreTrainedModel):
     config: Owlv2TextConfig
@@ -772,6 +773,7 @@ class Owlv2VisionTransformer(Owlv2PreTrainedModel):
         )
 
 
+@auto_docstring
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTVisionModel with OWLVIT->OWLV2,OwlViT->Owlv2,google/owlvit-base-patch32->google/owlv2-base-patch16
 class Owlv2VisionModel(Owlv2PreTrainedModel):
     config: Owlv2VisionConfig
@@ -1067,6 +1069,11 @@ class Owlv2ClassPredictionHead(nn.Module):
         return (pred_logits, image_class_embeds)
 
 
+@auto_docstring(
+    custom_intro="""
+    OWLv2 model with class, box and objectness prediction heads on top, for open-vocabulary object detection.
+    """
+)
 class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
     config: Owlv2Config
 

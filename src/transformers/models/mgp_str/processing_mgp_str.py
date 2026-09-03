@@ -26,6 +26,11 @@ if is_torch_available():
     import torch
 
 
+@auto_docstring(
+    custom_intro="""
+    The head a [`MgpstrProcessor`] decoding call refers to: the character, BPE or WordPiece output.
+    """
+)
 class DecodeType(ExplicitEnum):
     CHARACTER = "char"
     BPE = "bpe"
