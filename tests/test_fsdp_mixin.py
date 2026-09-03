@@ -23,6 +23,7 @@ import tempfile
 import time
 import traceback
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from contextlib import contextmanager
 
 from parameterized import parameterized
@@ -499,21 +500,21 @@ def _grad_norm_across_meshes(model):
     from torch.distributed.tensor import DTensor
     from torch.nn.utils import get_total_norm
 
-    grads_by_mesh = {}
+    grads_by_mesh = defaultdict(list)
     for param in model.parameters():
         if param.grad is not None:
-            grads_by_mesh.setdefault(param.grad.device_mesh if isinstance(param.grad, DTensor) else None, []).append(
-                param.grad
-            )
+            grads_by_mesh[param.grad.device_mesh if isinstance(param.grad, DTensor) else None].append(param.grad)
     norms = [get_total_norm(grads) for grads in grads_by_mesh.values()]
     norms = [n.full_tensor() if isinstance(n, DTensor) else n for n in norms]
     return torch.linalg.vector_norm(torch.stack(norms))
 
 
 def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, dtype=None):
-    """DDP vs a 2-D (fsdp, tp) mesh with expert parallelism on `tp`. DDP sees the whole batch on every
-    rank; each `fsdp` rank of the 2-D run sees its own slice of it, so FSDP2's reduction over `fsdp`
-    is exercised. Losses, gradient norms and final weights have to match step by step."""
+    """
+    DDP vs a 2-D (fsdp, tp) mesh with expert parallelism on `tp`. DDP sees the whole batch on every rank; each `fsdp`
+    rank of the 2-D run sees its own slice of it, so FSDP2's reduction over `fsdp` is exercised. Losses, gradient norms
+    and final weights have to match step by step.
+    """
     init_test_logger()
 
     if dtype is None:
@@ -732,8 +733,10 @@ class FSDPTesterMixin(ABC):
 
     @is_fsdp_test
     def test_fsdp2_expert_parallel_2d_vs_ddp(self):
-        """Training on a 2-D (fsdp, tp) mesh with expert parallelism, each fsdp rank on its own slice of
-        the batch, traces DDP on the whole batch step by step."""
+        """
+        Training on a 2-D (fsdp, tp) mesh with expert parallelism, each fsdp rank on its own slice of the batch,
+        traces DDP on the whole batch step by step.
+        """
         config = self.model_tester.get_config()
         if getattr(config, "base_model_ep_plan", None) is None:
             self.skipTest("Model does not have an expert parallel plan (base_model_ep_plan)")

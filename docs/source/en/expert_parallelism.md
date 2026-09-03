@@ -63,7 +63,7 @@ distributed_config = DistributedConfig(
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B", distributed_config=distributed_config)
 ```
 
-The model is loaded on a 2-D `(fsdp, tp)` device mesh, and `tp_size * fsdp_size` must equal the number of processes. The expert parallel plan shards the experts across `tp`, then FSDP2 shards every parameter, experts included, across `fsdp` and owns their gradient reduction. Each `fsdp` rank trains on its own part of the batch. Nothing else changes: train with the [`Trainer`] as usual (it computes the gradient norm across the two meshes and steps the optimizer per parameter), and `save_model` gathers the sharded weights and writes a regular checkpoint.
+The model is loaded on a 2-D `(fsdp, tp)` device mesh, and `tp_size * fsdp_size` must equal the number of processes. The expert parallel plan shards the experts across `tp`, then FSDP2 shards every parameter, experts included, across `fsdp` and owns their gradient reduction. Each `fsdp` rank trains on its own part of the batch. Nothing else changes: train with the [`Trainer`] as usual (it computes the gradient norm across the two meshes and gives each mesh its own optimizer param group), and [`~Trainer.save_model`] gathers the sharded weights and writes a regular checkpoint.
 
 On 8 GPUs, full fine-tuning of Qwen3-30B-A3B in bf16 at sequence length 2048:
 
