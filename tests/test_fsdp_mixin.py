@@ -563,8 +563,7 @@ class FSDPTesterMixin(ABC):
         """The model tester instance (e.g., CausalLMModelTester)."""
         ...
 
-    def _skip_if_insufficient_devices(self, world_size=None):
-        world_size = world_size or self.fsdp_nproc_per_node
+    def _skip_if_insufficient_devices(self, world_size):
         available_workers = _get_available_fsdp_workers()
         if available_workers < world_size:
             self.skipTest(f"Need at least {world_size} FSDP workers, have {available_workers}")
