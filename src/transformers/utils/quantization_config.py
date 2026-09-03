@@ -1702,6 +1702,8 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             Whether to dequantize the model during loading.
         modules_to_not_convert (`list`, *optional*):
             A list of module names that should not be converted during quantization.
+        modules_to_convert (`list`, *optional*):
+            A list of additional module names, such as embedding tables, that should be converted during quantization.
         scale_fmt (`str`, *optional*, defaults to `"float"`):
             Storage dtype of the per-block weight scales: `"float"` (fp32, V3-style) or
             `"ue8m0"` (1-byte `torch.float8_e8m0fnu`, V4-style).
@@ -1713,6 +1715,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         weight_block_size: tuple[int, int] = (128, 128),
         dequantize: bool = False,
         modules_to_not_convert: list | None = None,
+        modules_to_convert: list | None = None,
         scale_fmt: str = "float",
         **kwargs,
     ):
@@ -1721,6 +1724,8 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         if modules_to_not_convert is None and "ignored_layers" in kwargs:
             modules_to_not_convert = kwargs.pop("ignored_layers")
         self.modules_to_not_convert = modules_to_not_convert
+        # TODO: check overlap with not to convert
+        self.modules_to_convert = modules_to_convert
         self.activation_scheme = activation_scheme
         self.weight_block_size = weight_block_size
         self.dequantize = dequantize

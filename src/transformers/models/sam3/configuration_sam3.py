@@ -15,8 +15,6 @@
 
 from huggingface_hub.dataclasses import strict
 
-from transformers import CLIPTextConfig
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -230,7 +228,7 @@ class Sam3Config(PreTrainedConfig):
     is_composition = True
     sub_configs = {
         "vision_config": Sam3VisionConfig,
-        "text_config": CLIPTextConfig,
+        "text_config": AutoConfig,
         "geometry_encoder_config": Sam3GeometryEncoderConfig,
         "detr_encoder_config": Sam3DETREncoderConfig,
         "detr_decoder_config": Sam3DETRDecoderConfig,
@@ -252,7 +250,7 @@ class Sam3Config(PreTrainedConfig):
             self.vision_config = Sam3VisionConfig(**self.vision_config)
 
         if self.text_config is None:
-            self.text_config = CLIPTextConfig(
+            self.text_config = CONFIG_MAPPING["clip_text_model"](
                 **{
                     "vocab_size": 49408,
                     "hidden_size": 1024,
@@ -265,7 +263,9 @@ class Sam3Config(PreTrainedConfig):
                 }
             )
         if isinstance(self.text_config, dict):
-            self.text_config = CLIPTextConfig(**self.text_config)
+            self.text_config = CONFIG_MAPPING[self.text_config.get("model_type", "clip_text_model")](
+                **self.text_config
+            )
 
         if self.geometry_encoder_config is None:
             self.geometry_encoder_config = Sam3GeometryEncoderConfig()
