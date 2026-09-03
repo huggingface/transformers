@@ -423,11 +423,7 @@ class DeferredStopCheck(StopCheck):
 
     @staticmethod
     def is_supported(
-        device: torch.device,
-        cache: "Cache | None",
-        use_cache: bool = True,
-        is_assistant: bool = False,
-        cache_is_returned: bool = True,
+        device: torch.device, cache: "Cache | None", is_assistant: bool = False, cache_is_returned: bool = True
     ) -> bool:
         """
         Whether the stop decision can safely be deferred by a step, in this decoding context.
@@ -440,16 +436,12 @@ class DeferredStopCheck(StopCheck):
         # Do not defer if it's an assistant performing the `generate` call
         if is_assistant:
             return False
-        # No cache under any of the cache names. Either there is genuinely none to roll back, or the model
-        # builds its own in `prepare_inputs_for_generation` (models for which `_supports_default_dynamic_cache`
-        # is False) and it is not visible - in which case we cannot tell whether it could be rolled back, so we
-        # do not risk it.
+        # Since this is called after prefill, if we still do not have any cache, it means we'll never have one
         if cache is None:
-            return not use_cache
-        if cache.is_croppable:
             return True
-        # if we don't return the cache, we don't need to bother about activating past recording since it will be dropped
-        return not cache_is_returned
+        # if we don't return the cache, we don't need to bother about activating past recording since it will be dropped anyway
+        else:
+            return cache.is_croppable or not cache_is_returned
 
     def __call__(self, unfinished_sequences: torch.Tensor, tokens: torch.Tensor, length: int) -> bool:
         should_stop, tokens_cpu, copy_done = self.slots[0]
@@ -2082,6 +2074,8 @@ class GenerationMixin(ContinuousMixin):
                 raise ValueError(
                     "Passing a tuple of `past_key_values` is not supported anymore. Please use a `Cache` instance."
                 )
+            # Marks the cache has user-defined for generate later on
+            user_defined_cache._is_user_defined = True
             return
 
         # Quick escape route 2: if the user specifies no cache is to be used. (conflicting arguments are handled in
@@ -3006,15 +3000,11 @@ class GenerationMixin(ContinuousMixin):
         # Note that it is very important to do this only after the prefill, as we may otherwise call `activate_past_recording` on the
         # Cache, which will cause a huge unneeded memory spike if the prefill is huge and the model would otherwise drop most of the
         # states, such as if it uses sliding window or linear attention
-        cache = next((model_kwargs[name] for name in ALL_CACHE_NAMES if name in model_kwargs), None)
+        cache = next((outputs[name] for name in ALL_CACHE_NAMES if name in outputs), None)
         # The cache outlives `generate` if the user asked to return it, or if it is one they passed in.
-        cache_is_returned = generation_config.return_dict_in_generate
+        cache_is_returned = generation_config.return_dict_in_generate or getattr(cache, "_is_user_defined", False)
         if DeferredStopCheck.is_supported(
-            input_ids.device,
-            cache,
-            use_cache=model_kwargs.get("use_cache", False),
-            is_assistant=generation_config.is_assistant,
-            cache_is_returned=cache_is_returned,
+            input_ids.device, cache, is_assistant=generation_config.is_assistant, cache_is_returned=cache_is_returned
         ):
             # The cache goes in only if it has to come back intact; otherwise the extra step may stand in it.
             stop_check = DeferredStopCheck(
