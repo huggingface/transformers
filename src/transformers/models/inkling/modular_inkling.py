@@ -561,10 +561,9 @@ class InklingSharedExperts(nn.Module):
         super().__init__()
         self.n_shared_experts = config.n_shared_experts
         intermediate_dim = config.moe_intermediate_size
-        # TP loader cuts shards on the raw tensor but validates shapes on the target, so a Transpose
-        # conversion op breaks sharded loads. The runtime transpose(1, 2) is not a per-forward
-        # cost: it is a stride-metadata view, so the same
-        # matmul layout every nn.Linear runs
+        # TP loader cuts shards on the raw tensor but validates shapes on the target, so a Transpose conversion op breaks sharded
+        # loads. The runtime transpose(1, 2) is not a per-forward cost: it is a stride-metadata view, so the same matmul layout
+        # every nn.Linear runs
         self.gate_proj = nn.Parameter(torch.empty(config.n_shared_experts, intermediate_dim, config.hidden_size))
         self.up_proj = nn.Parameter(torch.empty(config.n_shared_experts, intermediate_dim, config.hidden_size))
         self.down_proj = nn.Parameter(torch.empty(config.n_shared_experts, config.hidden_size, intermediate_dim))
@@ -804,7 +803,7 @@ class InklingTextModel(InklingPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        # The norm need to be outside the `if` in case `input_embeds` are given explicitly
+        # The norm needs to be outside the `if` in case `input_embeds` are given explicitly
         inputs_embeds = self.embed_norm(inputs_embeds)
 
         if use_cache and past_key_values is None:

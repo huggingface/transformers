@@ -81,6 +81,7 @@ class InklingTextModelTester(CausalLMModelTester):
 class InklingTextModelTests(CausalLMModelTest, unittest.TestCase):
     model_tester_class = InklingTextModelTester
     _torch_compile_train_cls = InklingForCausalLM if is_torch_available() else None
+    model_split_percents = [0.5, 0.8, 0.9]
 
     @unittest.skip("MoE routing on a tiny randomly-initialized model makes the overfit target unstable.")
     def test_training_overfit(self):
