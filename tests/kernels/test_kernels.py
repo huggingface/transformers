@@ -17,6 +17,7 @@
 
 import copy
 import os
+import sys
 import tempfile
 import types
 from unittest.mock import MagicMock, patch
@@ -31,6 +32,7 @@ from transformers.integrations.hub_kernels import (
     is_kernel,
     lazy_load_kernel,
     load_and_register_attn_kernel,
+    use_kernel_func_from_hub_with_fallback,
 )
 from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -251,6 +253,50 @@ class TestHubKernels(TestCasePlus):
         output = model.generate(tokenized_input, max_new_tokens=10, do_sample=False)
         output = self.tokenizer.decode(output[0], skip_special_tokens=True)
         self.assertTrue(output in EXPECTED_OUTPUT)
+
+        del model
+
+    def test_kernels_mapping_functions_registration(self):
+        kernel_config = KernelConfig(
+            kernel_mapping={"rotary_pos_emb": ("kernels-community/rotary:apply_rotary_transformers", {"version": 2})}
+        )
+
+        # Functions would previously raise if not properly handled
+        model = AutoModelForCausalLM.from_pretrained(
+            "unsloth/Llama-3.2-1B-Instruct", use_kernels=True, device_map=torch_device, kernel_config=kernel_config
+        )
+
+        # Sanity checks making sure it is really been found / registered under the model
+        self.assertIn("rotary_pos_emb", model.kernel_config.registered_layer_names.values())
+        self.assertTrue(any(name.endswith(".rotary_pos_emb") for name in model.kernel_config.registered_layer_names))
+
+        del model
+
+    def test_kernels_mapping_no_inherit(self):
+        kernel_config = KernelConfig(
+            kernel_mapping={
+                "RMSNorm": (
+                    "kernels-community/layer-norm:LlamaRMSNorm",
+                    {"version": 1},
+                )
+            },
+            # Force to only inherit the mapping ^
+            inherit_mapping=False,
+        )
+
+        model = AutoModelForCausalLM.from_pretrained(
+            "unsloth/Llama-3.2-1B-Instruct", use_kernels=True, device_map=torch_device, kernel_config=kernel_config
+        )
+        first_rms_norm = model.model.layers[0].input_layernorm
+        first_self_attn = model.model.layers[0].self_attn
+
+        # RoPE should still be registered under attn
+        self.assertIn("rotary_pos_emb", getattr(first_self_attn, "_kernel_funcs", {}))
+        first_rope = first_self_attn._kernel_funcs["rotary_pos_emb"]
+
+        # Check kernelization by fwd matching
+        self.assertIsNot(first_rms_norm.forward.__func__, type(first_rms_norm).forward)  # exchanged
+        self.assertIs(first_rope.forward.__func__, type(first_rope).forward)  # not exchanged
 
         del model
 
@@ -510,6 +556,40 @@ class TestKernelUtilities(TestCasePlus):
             self.assertIs(mod1, sentinel_mod)
             self.assertIs(mod2, sentinel_mod)
             self.assertEqual(call_count["n"], 1)
+
+    def _make_fallback_func(self, torch_function):
+        """Decorate `torch_function` with a fake original package installed, as if e.g. `fla` were available."""
+        package_name = "fake_kernel_package"
+        package = types.ModuleType(package_name)
+        # Same name as the torch reference, but a different (recognisable) result and an extra kernel-only kwarg.
+        package.fake_op = lambda hidden_states, weight, cu_seqlens=None: hidden_states * weight * 10
+
+        with patch.dict(sys.modules, {package_name: package}):
+            return use_kernel_func_from_hub_with_fallback("fake_op", package_name)(torch_function)
+
+    def test_export_falls_back_to_torch_implementation(self):
+        """Tests if a function decorated with use_kernel_func_from_hub_with_fallback is traced by `torch.export` as the
+        original torch function and not the installed package's function, since the latter is generally not exportable.
+        """
+
+        def fake_op(hidden_states, weight, **kwargs):
+            return hidden_states + weight
+
+        decorated = self._make_fallback_func(fake_op)
+
+        class Wrapper(torch.nn.Module):
+            def forward(self, hidden_states, weight):
+                return decorated(hidden_states, weight)
+
+        inputs = (torch.ones(4), torch.full((4,), 3.0))
+        package_result, torch_result = torch.full((4,), 30.0), torch.full((4,), 4.0)
+
+        # Eager and `torch.compile` keep the package implementation ...
+        self.assertTrue(torch.equal(decorated(*inputs), package_result))
+        self.assertTrue(torch.equal(torch.compile(Wrapper(), fullgraph=True)(*inputs), package_result))
+        # ... only `torch.export` swaps in the torch one.
+        exported = torch.export.export(Wrapper(), inputs)
+        self.assertTrue(torch.equal(exported.module()(*inputs), torch_result))
 
 
 @require_kernels

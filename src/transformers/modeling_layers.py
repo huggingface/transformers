@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -89,12 +90,6 @@ class GradientCheckpointingLayer(nn.Module):
 
             if not self._can_checkpoint_with_cache:
                 # different names for the same thing in different layers
-                # TODO cyril: this one without `S` can be removed after deprecation cycle
-                if "past_key_value" in kwargs and kwargs["past_key_value"] is not None:
-                    kwargs["past_key_value"] = None
-                    message += " `past_key_value=None`,"
-                    do_warn = True
-
                 if "past_key_values" in kwargs and kwargs["past_key_values"] is not None:
                     kwargs["past_key_values"] = None
                     message += " `past_key_values=None`,"
@@ -429,12 +424,13 @@ class MtpModel(PreTrainedModel):
         self, layer_idx: int, inputs_embeds: torch.Tensor, mtp_cache: MtpCache, position_ids: torch.Tensor
     ):
         """
-        Create the (potentially several) masks required for layer `layer_idx`. This relies on the `layer_type`
-        attribute of the mtp layer if any, otherwise simply create a causal mask for full attention.
+        Create the (potentially several) masks required for layer `layer_idx`. This relies on the `layer_types` from the MTP config
+        if defined, and otherwise uses full attention.
         """
         # Note that `_assisted_decoding` raises on batch_size > 1, so there is no padding mask to add
+        layer_config = self.config.per_layer_config[layer_idx] if self.config.is_heterogeneous else self.config
         mask_kwargs = {
-            "config": self.config,
+            "config": layer_config,
             "inputs_embeds": inputs_embeds,
             "attention_mask": None,
             "past_key_values": mtp_cache,
@@ -443,7 +439,8 @@ class MtpModel(PreTrainedModel):
             "layer_idx": layer_idx,
         }
 
-        mtp_layer_type = getattr(self.layers[layer_idx], "layer_type", None)
+        mtp_layer_types = getattr(self.config, "layer_types", None)
+        mtp_layer_type = mtp_layer_types[layer_idx] if mtp_layer_types is not None else None
         masks = {}
         if mtp_layer_type is not None and mtp_layer_type in LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING:
             mask_function = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[mtp_layer_type]
@@ -533,12 +530,12 @@ class MtpModel(PreTrainedModel):
                     logits, labels, vocab_size=self.config.vocab_size, shift_labels=shift_labels, **kwargs
                 )
 
-            # Append the drafted logits
-            drafted_logits.append(logits)
             # Decode one token
             next_token_logits = logits[:, -1, :].to(device=input_ids.device)
             if logits_processor is not None and full_input_ids is not None:
                 next_token_logits = logits_processor(full_input_ids, next_token_logits.to(dtype=torch.float32))
+            # Append the drafted logits AFTER logits processors if any
+            drafted_logits.append(next_token_logits[:, None, :])
             if do_sample:
                 probs = nn.functional.softmax(next_token_logits, dim=-1, dtype=torch.float32)
                 next_mtp_token = torch.multinomial(probs, num_samples=1)
@@ -605,8 +602,12 @@ class MtpModel(PreTrainedModel):
         # Open the files, get the slices corresponding only to mtp weights, rename them, and load them
         mtp_state_dict = {}
         all_pointer = set()
+        is_mps = device_map is not None and any(
+            (d.type if isinstance(d, torch.device) else d) == "mps" for d in device_map.values()
+        )
+        backend = "pread" if is_mps or sys.platform == "win32" else "mmap"
         for file in mtp_files:
-            file_pointer = safe_open(file, framework="pt", device="cpu")
+            file_pointer = safe_open(file, framework="pt", device="cpu", backend=backend)
             all_pointer.add(file_pointer)
             for k in file_pointer.keys():
                 # It's one of the mtp weights
@@ -635,7 +636,6 @@ class MtpModel(PreTrainedModel):
             load_config=LoadStateDictConfig(
                 weight_mapping=weight_conversions, device_map=device_map, dtype=main_model.config.dtype
             ),
-            tp_plan=None,
         )
         # finally close all opened file pointers
         for k in all_pointer:

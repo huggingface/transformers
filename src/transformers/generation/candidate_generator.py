@@ -1422,7 +1422,8 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
 
 class MTPCandidateGenerator(AssistedCandidateGenerator):
     requires_model_outputs: bool = True
-    # We always need to pass the hidden states from the main model
+    # We always need to pass the hidden states from the main model - it will be overriden in the __init__ to capture only the
+    # last layer's hidden_states
     model_kwargs_overrides: dict[str, Any] = {"output_hidden_states": True}
 
     def __init__(
@@ -1442,6 +1443,10 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
                 "mtp weights."
             )
 
+        # Override to capture only the last main model's layer to save memory
+        last_layer_idx = main_model.config.get_text_config().num_hidden_layers - 1
+        self.model_kwargs_overrides = {"output_hidden_states": [last_layer_idx]}
+
         # Heuristic: use the device of the last layer of the main model for the MTP layers
         base_model = main_model.get_decoder()
         self.device = next(x.device for x in base_model.layers[-1].parameters())  # type: ignore
@@ -1454,6 +1459,9 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         # Save those to know how to decode mtp tokens
         self.do_sample = generation_config.do_sample
         self.logits_processor = logits_processor
+
+        # Same tensor the stopping criteria are built from, so a draft cropped here stops generation
+        self.eos_token_id = getattr(generation_config, "_eos_token_tensor", None)
 
         self.is_main_model_prefill = True
 
@@ -1538,6 +1546,17 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         # Once we arrive here the first time, it's no longer the case
         self.is_main_model_prefill = False
 
+        # Crop the draft after the first EOS, otherwise the target model may accept eos and the rest as valid,
+        # thus not stopping generation after "eos" -- the block is committed before the stopping criteria run,
+        # and they only look at the last committed token. Cropping leaves EOS last, so they fire unchanged.
+        if self.eos_token_id is not None:
+            drafted_tokens = candidate_ids[0]
+            eos_positions = (torch.isin(drafted_tokens, self.eos_token_id.to(drafted_tokens.device))).nonzero()
+            if eos_positions.numel() > 0:
+                num_drafted = eos_positions[0].item() + 1
+                candidate_ids = candidate_ids[:, :num_drafted]
+                candidate_logits = candidate_logits[:, :num_drafted]
+
         # cat everything back together (we need to return the full ids here)
         candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
         return candidate_ids, candidate_logits
@@ -1566,7 +1585,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
     """
 
     requires_model_outputs: bool = True
-    # We always need to pass the hidden states at `draft_config.target_layer_ids` from the main model
+    # This will be overriden in the __init__ to capture only the required layer's hidden_states
     model_kwargs_overrides: dict[str, Any] = {"output_hidden_states": True}
 
     def __init__(
@@ -1589,6 +1608,8 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         # Get the layers used to obtain the intermediate hidden_states from main model, and prepare the diffusion window ids tensor
         self.target_layer_ids = assistant_model.config.target_layer_ids
+        # Override to capture only those specific layers
+        self.model_kwargs_overrides = {"output_hidden_states": self.target_layer_ids}
         self.block_size = assistant_model.config.block_size
         self.mask_token_id = assistant_model.config.mask_token_id
         self.noise_ids_mask = torch.tensor([self.mask_token_id] * (self.block_size - 1))[None, ...]
@@ -1601,7 +1622,28 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         self.do_sample = generation_config.do_sample
         self.logits_processor = logits_processor
 
+        # Same tensor the stopping criteria are built from, so a draft cropped here stops generation
+        self.eos_token_id = getattr(generation_config, "_eos_token_tensor", None)
+
         self.is_main_model_prefill = True
+
+    def _get_noise_embeds(self, noise_ids: torch.LongTensor) -> torch.Tensor:
+        """
+        Get noise token embeddings from the main model while bypassing its optional embedding normalization, which should not be used
+        for DFlash (the embedding may be a subclass of nn.Embedding with the additional normalization).
+        """
+        embed_norm = getattr(self.main_model_input_embeddings, "embed_norm", None)
+        if embed_norm is None:
+            return self.main_model_input_embeddings(noise_ids)
+
+        # For TP-aware models, the easiest workaround to avoid the norm is to temporarily set it to Identity
+        try:
+            self.main_model_input_embeddings.embed_norm = nn.Identity()
+            embeds = self.main_model_input_embeddings(noise_ids)
+        finally:
+            self.main_model_input_embeddings.embed_norm = embed_norm
+
+        return embeds
 
     def get_candidates(
         self,
@@ -1633,7 +1675,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         # hidden states of only accepted tokens thus crop out the rest
         context_hidden_states: torch.Tensor = torch.cat(
             [
-                model_outputs.hidden_states[i + 1][:, :num_last_main_model_tokens].to(self.device)
+                model_outputs.hidden_states[i][:, :num_last_main_model_tokens].to(self.device)
                 for i in self.target_layer_ids
             ],
             dim=-1,
@@ -1656,8 +1698,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         # Create the new inputs corresponding to only the "noise", or "diffusion window". It's the last bonus token (or "anchor") from
         # the main model, and the noise tokens
         noise_ids = torch.cat([input_ids[:, -1:], self.noise_ids_mask.to(input_ids.device)], dim=-1)
-        # The assistant needs embedding without norm thus take the lookup table and call `F.embedding`
-        noise_embeds = torch.nn.functional.embedding(noise_ids, self.main_model_input_embeddings.weight)
+        noise_embeds = self._get_noise_embeds(noise_ids)
 
         # Append positions and mask for the noise tokens, because they correspond to positions beyond the last `num_last_main_model_tokens`
         # that will first be used to populate the assistant kv cache at those positions through the `context_hidden_states`
@@ -1680,22 +1721,23 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         candidate_logits = self.main_model_output_embeddings(
             outputs.last_hidden_state[:, 1:].to(self.main_model_output_embeddings.weight.device)
-        )
+        ).to(input_ids.device)
 
         # Potentially allow some logits manipulation and sampling - in this case we need to loop over new tokens to correctly apply processors
         if self.logits_processor is not None:
             candidate_ids = input_ids
+            # Upcast for logit manipulations
+            candidate_logits = candidate_logits.to(dtype=torch.float32)
             # We need to sample 1 by 1 for the processors
             for i in range(candidate_logits.shape[1]):
-                next_token_logits = self.logits_processor(
-                    candidate_ids, candidate_logits[:, i, :].to(device=input_ids.device, dtype=torch.float32)
-                )
+                # Re-assign so we later return the correct logits
+                candidate_logits[:, i, :] = self.logits_processor(candidate_ids, candidate_logits[:, i, :])
                 if self.do_sample:
-                    probs = nn.functional.softmax(next_token_logits, dim=-1, dtype=torch.float32)
+                    probs = nn.functional.softmax(candidate_logits[:, i, :], dim=-1, dtype=torch.float32)
                     next_token = torch.multinomial(probs, num_samples=1)
                 else:
-                    next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
-                # Append it to the full sequence
+                    next_token = torch.argmax(candidate_logits[:, i, :], dim=-1, keepdim=True)
+                # Append it to the full sequence to be used by the next round of `self.logits_processor`
                 candidate_ids = torch.cat([candidate_ids, next_token], dim=-1)
         # Here we can vectorize as we don't have any processors
         else:
@@ -1705,7 +1747,18 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
                 candidate_ids = torch.multinomial(probs.squeeze(0), num_samples=1)
             else:
                 candidate_ids = candidate_logits.argmax(dim=-1)
-            candidate_ids = torch.cat([input_ids, candidate_ids.to(input_ids.device)], dim=-1)
+            candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
+
+        # Crop the draft after the first EOS, otherwise the target model may accept eos and the rest as valid,
+        # thus not stopping generation after "eos" -- the block is committed before the stopping criteria run,
+        # and they only look at the last committed token. Cropping leaves EOS last, so they fire unchanged.
+        if self.eos_token_id is not None:
+            drafted_tokens = candidate_ids[0, input_ids.shape[1] :]
+            eos_positions = (torch.isin(drafted_tokens, self.eos_token_id.to(drafted_tokens.device))).nonzero()
+            if eos_positions.numel() > 0:
+                num_drafted = eos_positions[0].item() + 1
+                candidate_ids = candidate_ids[:, : input_ids.shape[1] + num_drafted]
+                candidate_logits = candidate_logits[:, :num_drafted]
 
         return candidate_ids, candidate_logits
 
