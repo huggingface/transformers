@@ -73,6 +73,7 @@ from ...vision_utils import (
     get_vision_position_ids,
 )
 from ..auto.modeling_auto import AutoModel
+from ..qwen3_5.modeling_qwen3_5 import paged_gated_delta_forward
 from .configuration_qwen3_5_moe import Qwen3_5MoeConfig, Qwen3_5MoeTextConfig, Qwen3_5MoeVisionConfig
 
 
@@ -525,6 +526,18 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
 
         b = self.in_proj_b(hidden_states)
         a = self.in_proj_a(hidden_states)
+
+        # Continuous batching packs the scheduled sequences in one row and keeps per-request conv and recurrent
+        # states in the paged cache, so it has its own conv and delta rule path
+        if kwargs.get("cache") is not None:
+            core_attn_out = paged_gated_delta_forward(
+                self, mixed_qkv, b, a, kwargs["cache"], kwargs["cu_seq_lens_q"], kwargs["linear_state_indices"]
+            )
+            core_attn_out = core_attn_out.reshape(-1, self.head_v_dim)
+            z = z.reshape(-1, self.head_v_dim)
+            core_attn_out = self.norm(core_attn_out, z)
+            core_attn_out = core_attn_out.reshape(batch_size, seq_len, -1)
+            return self.out_proj(core_attn_out)
 
         if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
             conv_state = cache_params.layers[self.layer_idx].conv_states[0]
