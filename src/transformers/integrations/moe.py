@@ -125,11 +125,12 @@ def batched_mm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
-    # Clamp EP sentinels so `gate_up_proj[expert_ids]` stays in-bounds. Routing weights are already
-    # zero at sentinel slots (RouterParallel masks them at dispatch), so the weighted mul drops
-    # those contributions — we pay the wasted GEMM compute because batched_mm has no offset to skip.
-    # Out-of-place to avoid mutating the caller's routing tensor (a contiguous `reshape(-1)` aliases it).
-    expert_ids = expert_ids.clamp(0, self.num_experts - 1)
+    if self.is_expert_parallel:
+        # Clamp EP sentinels so `gate_up_proj[expert_ids]` stays in-bounds. Routing weights are already
+        # zero at sentinel slots (RouterParallel masks them at dispatch), so the weighted mul drops
+        # those contributions — we pay the wasted GEMM compute because batched_mm has no offset to skip.
+        # Out-of-place to avoid mutating the caller's routing tensor (a contiguous `reshape(-1)` aliases it).
+        expert_ids = expert_ids.clamp(0, self.num_experts - 1)
 
     # Select gate_up or just up projection weights and biases
     if self.has_gate:
@@ -436,7 +437,7 @@ def grouped_mm_experts_forward(
         selected_biases = self.up_proj_bias[expert_ids_g] if self.has_bias else None
 
     # Pre-mask (bwd path).
-    if sentinel_mask is not None:
+    if self.is_expert_parallel:
         selected_hidden_states_g.masked_fill_(sentinel_mask, 0.0)
 
     # --- Up projection per expert (grouped) ---
@@ -465,7 +466,7 @@ def grouped_mm_experts_forward(
     weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
 
     # Post-mask (fwd path).
-    if sentinel_mask is not None:
+    if self.is_expert_parallel:
         weighted_out.masked_fill_(sentinel_mask, 0.0)
 
     # Restore original order
