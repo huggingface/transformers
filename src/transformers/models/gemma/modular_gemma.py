@@ -21,6 +21,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
@@ -136,6 +137,7 @@ class GemmaRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
+@use_kernel_forward_from_hub("GeGLUMLP", condition=lambda module: module.config.hidden_act == "gelu_pytorch_tanh")
 class GemmaMLP(LlamaMLP):
     def __init__(self, config):
         super().__init__(config)

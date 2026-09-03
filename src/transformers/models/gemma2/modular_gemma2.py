@@ -18,7 +18,6 @@ import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -92,6 +91,7 @@ class Gemma2Config(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    attribute_map = {"hidden_act": "hidden_activation"}
 
     vocab_size: int = 256000
     hidden_size: int = 2304
@@ -141,9 +141,7 @@ class Gemma2RMSNorm(GemmaRMSNorm):
 
 
 class Gemma2MLP(GemmaMLP):
-    def __init__(self, config):
-        super().__init__(config)
-        self.act_fn = ACT2FN[config.hidden_activation]
+    pass
 
 
 class Gemma2RotaryEmbedding(GemmaRotaryEmbedding):

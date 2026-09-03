@@ -577,6 +577,7 @@ class HunYuanVLDenseV1Attention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class HunYuanVLMLP(nn.Module):
     def __init__(self, config: HunYuanVLConfig, layer_idx=None, is_shared_mlp=False):
         super().__init__()

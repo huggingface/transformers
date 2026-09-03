@@ -19,6 +19,7 @@ from huggingface_hub.dataclasses import strict
 from torch.nn import CrossEntropyLoss
 
 from ...configuration_utils import PreTrainedConfig
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
@@ -117,6 +118,7 @@ class NomicBertAttention(JinaEmbeddingsV3Attention):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class NomicBertMLP(GemmaMLP):
     pass
 

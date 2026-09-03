@@ -63,6 +63,7 @@ class HunYuanMoEV1RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class HunYuanMoEV1MLP(nn.Module):
     def __init__(self, config: HunYuanMoEV1Config):
         super().__init__()

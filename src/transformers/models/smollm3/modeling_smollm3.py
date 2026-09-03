@@ -268,6 +268,7 @@ class SmolLM3RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class SmolLM3MLP(nn.Module):
     def __init__(self, config):
         super().__init__()

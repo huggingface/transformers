@@ -124,6 +124,7 @@ class Ovis2RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class Ovis2VisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -254,6 +255,7 @@ class Ovis2VisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class Ovis2MLP(nn.Module):
     def __init__(self, config):
         super().__init__()

@@ -64,6 +64,7 @@ class Gemma2Config(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    attribute_map = {"hidden_act": "hidden_activation"}
 
     vocab_size: int = 256000
     hidden_size: int = 2304

@@ -127,6 +127,7 @@ class Qwen2MoeRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class Qwen2MoeMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()

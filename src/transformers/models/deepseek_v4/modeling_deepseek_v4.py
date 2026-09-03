@@ -962,6 +962,7 @@ class DeepseekV4HyperHead(nn.Module):
         return (pre.unsqueeze(-1) * x).sum(dim=2).to(x.dtype)
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class DeepseekV4MLP(nn.Module):
     def __init__(self, config: DeepseekV4Config):
         super().__init__()

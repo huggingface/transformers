@@ -215,6 +215,7 @@ class AriaProjector(nn.Module):
         return out
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class AriaSharedExpertsMLP(nn.Module):
     """
     Shared Expert MLP for shared experts.

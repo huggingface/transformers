@@ -25,6 +25,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import (
     GenericForQuestionAnswering,
@@ -56,6 +57,7 @@ class Qwen2MoeRotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class Qwen2MoeMLP(GemmaMLP):
     def __init__(self, config, intermediate_size=None):
         super().__init__()

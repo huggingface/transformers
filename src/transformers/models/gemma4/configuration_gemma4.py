@@ -148,6 +148,7 @@ class Gemma4TextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    attribute_map = {"hidden_act": "hidden_activation"}
 
     vocab_size: int = 262_144
     hidden_size: int = 2304
@@ -266,6 +267,7 @@ class Gemma4VisionConfig(PreTrainedConfig):
         "encoder.layers.*.mlp.up_proj": "colwise",
         "encoder.layers.*.mlp.down_proj": "rowwise",
     }
+    attribute_map = {"hidden_act": "hidden_activation"}
 
     default_theta = 100.0
 

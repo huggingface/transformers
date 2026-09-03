@@ -1118,6 +1118,7 @@ class DeepseekOcr2TextAttention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class DeepseekOcr2TextMLP(nn.Module):
     def __init__(self, config: DeepseekOcr2TextConfig, hidden_size=None, intermediate_size=None):
         super().__init__()

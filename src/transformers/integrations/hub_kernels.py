@@ -102,9 +102,9 @@ if is_kernels_available():
     )
     from kernels import use_kernelized_func as _kernels_use_kernelized_func
 
-    def use_kernel_forward_from_hub(layer_name: str):
+    def use_kernel_forward_from_hub(layer_name: str, condition: Callable[["nn.Module"], bool] | None = None):
         if _kernels_enabled:
-            return _kernels_use_kernel_forward_from_hub(layer_name)
+            return _kernels_use_kernel_forward_from_hub(layer_name, condition)
         else:
             logger.warning_once(
                 f"kernels hub usage is disabled through the environment USE_HUB_KERNELS={_TRANSFORMERS_USE_HUB_KERNELS}"

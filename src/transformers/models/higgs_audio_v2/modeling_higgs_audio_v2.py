@@ -45,6 +45,7 @@ from .generation_higgs_audio_v2 import HiggsAudioV2GenerationMixin
 logger = logging.get_logger(__name__)
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class HiggsAudioV2MLP(nn.Module):
     def __init__(self, config):
         super().__init__()

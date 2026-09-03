@@ -396,6 +396,7 @@ class VoxtralRealtimeAttention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class VoxtralRealtimeMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -681,6 +682,7 @@ class VoxtralRealtimeTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class VoxtralRealtimeTextMLP(nn.Module):
     def __init__(self, config):
         super().__init__()

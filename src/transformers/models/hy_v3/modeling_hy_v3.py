@@ -120,6 +120,7 @@ class HYV3RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class HYV3MLP(nn.Module):
     def __init__(self, config: HYV3Config, intermediate_size: int | None = None):
         super().__init__()

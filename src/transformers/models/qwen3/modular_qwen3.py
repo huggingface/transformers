@@ -18,6 +18,7 @@ from collections.abc import Callable
 import torch
 
 from ...cache_utils import Cache
+from ...integrations import use_kernel_forward_from_hub
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -49,6 +50,7 @@ class Qwen3RMSNorm(Qwen2RMSNorm):
     pass
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class Qwen3MLP(GemmaMLP):
     pass
 

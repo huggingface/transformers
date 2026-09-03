@@ -48,7 +48,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
@@ -153,6 +153,7 @@ class T5GemmaRMSNorm(Gemma2RMSNorm):
     pass
 
 
+@no_inherit_decorator
 class T5GemmaMLP(Gemma2MLP):
     def __init__(self, config):
         super().__init__(config)

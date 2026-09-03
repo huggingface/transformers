@@ -782,6 +782,7 @@ class Step3p7RMSNorm(MiniMaxM3VLRMSNorm):
     pass
 
 
+@no_inherit_decorator
 class Step3p7MLP(DeepseekV4MLP):
     def __init__(self, config, layer_idx, is_shared_expert=False):
         super().__init__(config)

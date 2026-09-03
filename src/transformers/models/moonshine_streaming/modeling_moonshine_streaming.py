@@ -28,6 +28,7 @@ from torch import Tensor
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -431,6 +432,7 @@ class MoonshineStreamingEncoder(MoonshineStreamingPreTrainedModel):
         return MoonshineStreamingEncoderModelOutput(last_hidden_state=hidden_states, attention_mask=attention_mask)
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class MoonshinMoonshineStreamingDecoderMLP(nn.Module):
     def __init__(self, config):
         super().__init__()

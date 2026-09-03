@@ -33,7 +33,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import (
     _preprocess_mask_arguments,
     blockwise_overlay,
@@ -688,6 +688,7 @@ class Gemma4VisionPooler(nn.Module):
         return hidden_states, padding_positions
 
 
+@use_kernel_forward_from_hub("GeGLUMLP", condition=lambda module: module.config.hidden_act == "gelu_pytorch_tanh")
 class Gemma4VisionMLP(nn.Module):
     def __init__(self, config: Gemma4VisionConfig):
         super().__init__()
@@ -697,7 +698,7 @@ class Gemma4VisionMLP(nn.Module):
         self.gate_proj = Gemma4ClippableLinear(config, self.hidden_size, self.intermediate_size)
         self.up_proj = Gemma4ClippableLinear(config, self.hidden_size, self.intermediate_size)
         self.down_proj = Gemma4ClippableLinear(config, self.intermediate_size, self.hidden_size)
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
@@ -1062,6 +1063,7 @@ class Gemma4VisionEncoder(nn.Module):
         return BaseModelOutputWithPast(last_hidden_state=hidden_states)
 
 
+@use_kernel_forward_from_hub("GeGLUMLP", condition=lambda module: module.config.hidden_act == "gelu_pytorch_tanh")
 class Gemma4TextMLP(nn.Module):
     def __init__(self, config: Gemma4TextConfig, layer_idx: int):
         super().__init__()
@@ -1074,7 +1076,7 @@ class Gemma4TextMLP(nn.Module):
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))

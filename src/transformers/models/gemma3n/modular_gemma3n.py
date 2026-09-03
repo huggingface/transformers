@@ -40,7 +40,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..gemma2.modeling_gemma2 import (
@@ -1303,6 +1303,7 @@ class Gemma3nTextLaurelBlock(nn.Module):
         return hidden_states + normed_laurel_hidden_states
 
 
+@no_inherit_decorator
 class Gemma3nTextMLP(Gemma2MLP):
     def __init__(self, config: Gemma3nTextConfig, layer_idx: int = 0):
         super().__init__(config)

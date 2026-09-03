@@ -355,6 +355,7 @@ class PeVideoEncoderAttention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class PeVideoEncoderMLP(nn.Module):
     def __init__(self, config):
         super().__init__()

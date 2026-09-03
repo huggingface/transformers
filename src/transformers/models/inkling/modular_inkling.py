@@ -40,7 +40,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..gemma3.modeling_gemma3 import (
     Gemma3CausalLMOutputWithPast,
@@ -500,6 +500,7 @@ class InklingAttention(nn.Module):
         return attn_output, attn_weights
 
 
+@no_inherit_decorator
 class InklingMLP(Gemma3MLP):
     def __init__(self, config: InklingTextConfig):
         super().__init__(config)

@@ -64,6 +64,7 @@ class HunYuanDenseV1RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+@use_kernel_forward_from_hub("SwiGLUMLP", condition=lambda module: module.config.hidden_act == "silu")
 class HunYuanDenseV1MLP(nn.Module):
     def __init__(self, config: HunYuanDenseV1Config, layer_idx=None, is_shared_mlp=False):
         super().__init__()
