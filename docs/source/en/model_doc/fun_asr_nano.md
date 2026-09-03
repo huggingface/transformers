@@ -10,7 +10,7 @@ distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, e
 implied. See the License for the specific language governing permissions and limitations under the
 License.
 -->
-*This model was published in HF papers on 2025-09-15 and contributed to Hugging Face Transformers on 2026-09-02.*
+*This model was published in HF papers on 2025-09-15 and contributed to Hugging Face Transformers on 2026-09-03.*
 
 # Fun-ASR-Nano
 
@@ -166,13 +166,7 @@ print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 
 [[autodoc]] FunAsrNanoConfig
 
-## FunAsrNanoAudioConfig
-
-[[autodoc]] FunAsrNanoAudioConfig
-
 ## FunAsrNanoEncoderConfig
-
-`FunAsrNanoEncoderConfig` is a backward-compatible alias of `FunAsrNanoAudioConfig`.
 
 [[autodoc]] FunAsrNanoEncoderConfig
 

@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -20,7 +22,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")
 @strict
-class FunAsrNanoAudioConfig(PreTrainedConfig):
+class FunAsrNanoEncoderConfig(PreTrainedConfig):
     r"""
     num_stacked_frames (`int`, *optional*, defaults to 7):
         Number of consecutive mel frames stacked by low-frame-rate feature extraction.
@@ -31,15 +33,6 @@ class FunAsrNanoAudioConfig(PreTrainedConfig):
     """
 
     model_type = "fun_asr_nano_encoder"
-    attribute_map = {
-        "d_model": "hidden_size",
-        "encoder_attention_heads": "num_attention_heads",
-        "encoder_ffn_dim": "intermediate_size",
-        "encoder_layers": "num_hidden_layers",
-        "activation_function": "hidden_act",
-        "dropout": "hidden_dropout",
-        "kernel_size": "fsmn_kernel_size",
-    }
 
     num_mel_bins: int = 80
     hidden_size: int = 512
@@ -47,8 +40,6 @@ class FunAsrNanoAudioConfig(PreTrainedConfig):
     intermediate_size: int = 2048
     num_hidden_layers: int = 50
     hidden_dropout: float = 0.1
-    attention_dropout: float = 0.1
-    activation_dropout: float = 0.1
     hidden_act: str = "relu"
     max_position_embeddings: int = 2049
     num_stacked_frames: int = 7
@@ -63,22 +54,11 @@ class FunAsrNanoAudioConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")
 @strict
 class FunAsrNanoAdaptorConfig(PreTrainedConfig):
-    attribute_map = {
-        "d_model": "hidden_size",
-        "encoder_attention_heads": "num_attention_heads",
-        "encoder_ffn_dim": "intermediate_size",
-        "encoder_layers": "num_hidden_layers",
-        "activation_function": "hidden_act",
-        "dropout": "hidden_dropout",
-    }
-
     hidden_size: int = 1024
     num_attention_heads: int = 8
     intermediate_size: int = 256
     num_hidden_layers: int = 2
     hidden_dropout: float = 0.0
-    attention_dropout: float = 0.0
-    activation_dropout: float = 0.0
     hidden_act: str = "relu"
 
 
@@ -86,8 +66,6 @@ class FunAsrNanoAdaptorConfig(PreTrainedConfig):
 @strict
 class FunAsrNanoConfig(PreTrainedConfig):
     r"""
-    audio_config (`dict` or `PreTrainedConfig`, *optional*):
-        Configuration for the audio encoder.
     adaptor_config (`dict` or `FunAsrNanoAdaptorConfig`, *optional*):
         Configuration for the bidirectional audio adaptor.
     """
@@ -109,10 +87,6 @@ class FunAsrNanoConfig(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
-        encoder_config = kwargs.pop("encoder_config", None)
-        if self.audio_config is None and encoder_config is not None:
-            self.audio_config = encoder_config
-
         if isinstance(self.audio_config, dict):
             self.audio_config["model_type"] = self.audio_config.get("model_type", "fun_asr_nano_encoder")
             self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
@@ -123,7 +97,15 @@ class FunAsrNanoConfig(PreTrainedConfig):
             self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
             self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
         elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen3"]()
+            self.text_config = CONFIG_MAPPING["qwen3"](
+                hidden_size=1024,
+                intermediate_size=3072,
+                num_hidden_layers=28,
+                num_attention_heads=16,
+                num_key_value_heads=8,
+                max_position_embeddings=40960,
+                tie_word_embeddings=True,
+            )
 
         if isinstance(self.adaptor_config, dict):
             self.adaptor_config = FunAsrNanoAdaptorConfig(**self.adaptor_config)
@@ -149,9 +131,4 @@ class FunAsrNanoConfig(PreTrainedConfig):
             )
 
 
-# `FunAsrNanoEncoderConfig` was exposed in the initial PR. Keep it as an alias so serialized
-# configs and early downstream imports keep working while `FunAsrNanoAudioConfig` is the canonical name.
-FunAsrNanoEncoderConfig = FunAsrNanoAudioConfig
-
-
-__all__ = ["FunAsrNanoAdaptorConfig", "FunAsrNanoAudioConfig", "FunAsrNanoConfig", "FunAsrNanoEncoderConfig"]
+__all__ = ["FunAsrNanoAdaptorConfig", "FunAsrNanoEncoderConfig", "FunAsrNanoConfig"]

@@ -11,11 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for Fun-ASR-Nano model."""
 
 import unittest
 
-from transformers import FunAsrNanoAudioConfig, FunAsrNanoConfig, FunAsrNanoEncoderConfig, Qwen3Config
+from transformers import FunAsrNanoConfig, FunAsrNanoEncoderConfig, Qwen3Config
 from transformers.models.fun_asr_nano.convert_fun_asr_nano_to_hf import convert_key
 from transformers.testing_utils import require_torch, require_torch_gpu, slow
 
@@ -106,16 +105,6 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
         tester = model_tester or self.model_tester
         return tester.num_hidden_layers + tester.num_timestamp_prediction_blocks
 
-    def test_legacy_encoder_config_alias_loads_as_audio_config(self):
-        config = FunAsrNanoConfig(encoder_config=FunAsrNanoEncoderConfig(hidden_size=32))
-
-        self.assertEqual(config.audio_config.hidden_size, 32)
-        self.assertIn("audio_config", config.to_dict())
-        self.assertNotIn("encoder_config", config.to_dict())
-
-    def test_audio_config_is_the_canonical_encoder_config_name(self):
-        self.assertIs(FunAsrNanoAudioConfig, FunAsrNanoEncoderConfig)
-
     def test_san_m_components_follow_attention_and_mlp_boundaries(self):
         model = self.model_tester.prepare_config_and_inputs_for_common()[0]
         model = FunAsrNanoModel(model).eval()
@@ -155,7 +144,7 @@ class FunAsrNanoIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
+        model_id = "bezzam/Fun-ASR-Nano-2512-hf"
         cls.processor = AutoProcessor.from_pretrained(model_id)
         cls.model = FunAsrNanoForConditionalGeneration.from_pretrained(
             model_id, dtype=torch.bfloat16, device_map="auto"
@@ -224,7 +213,3 @@ class FunAsrNanoIntegrationTest(unittest.TestCase):
             "The tribal chieftain called for the boy, and presented him with fifty pieces of gold.",
         ]
         self.assertListEqual(transcripts, EXPECTED_TRANSCRIPTS)
-
-
-if __name__ == "__main__":
-    unittest.main()

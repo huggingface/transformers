@@ -68,8 +68,8 @@ from huggingface_hub import snapshot_download
 
 from transformers import (
     AutoTokenizer,
-    FunAsrNanoAudioConfig,
     FunAsrNanoConfig,
+    FunAsrNanoEncoderConfig,
     FunAsrNanoFeatureExtractor,
     FunAsrNanoForConditionalGeneration,
     FunAsrNanoProcessor,
@@ -94,6 +94,8 @@ ROOT_STATE_DICT_MAPPING = (
 )
 
 COMPONENT_STATE_DICT_MAPPING = (
+    (r"\.feed_forward\.w_1\.", ".mlp.fc1."),
+    (r"\.feed_forward\.w_2\.", ".mlp.fc2."),
     (r"\.norm1\.", ".self_attn_layer_norm."),
     (r"\.norm2\.", ".final_layer_norm."),
     (r"\.self_attn\.linear_q\.", ".self_attn.q_proj."),
@@ -175,13 +177,6 @@ def convert_key(key: str) -> str | None:
     if mapped_key is None or ".linear_q_k_v." in mapped_key:
         return None
 
-    if mapped_key.startswith("model.audio_tower."):
-        mapped_key = re.sub(r"\.feed_forward\.w_1\.", ".mlp.fc1.", mapped_key)
-        mapped_key = re.sub(r"\.feed_forward\.w_2\.", ".mlp.fc2.", mapped_key)
-    else:
-        mapped_key = re.sub(r"\.feed_forward\.w_1\.", ".fc1.", mapped_key)
-        mapped_key = re.sub(r"\.feed_forward\.w_2\.", ".fc2.", mapped_key)
-
     for pattern, replacement in COMPONENT_STATE_DICT_MAPPING:
         mapped_key = re.sub(pattern, replacement, mapped_key)
     return mapped_key
@@ -223,7 +218,7 @@ def build_config_from_yaml(config_yaml_path: str, qwen3_config_path: str) -> Fun
 
     # Audio encoder config (standalone encoder model -> standalone config, Parakeet-style).
     enc_conf = cfg.get("audio_encoder_conf", {})
-    audio_config = FunAsrNanoAudioConfig(
+    audio_config = FunAsrNanoEncoderConfig(
         num_mel_bins=80,
         num_stacked_frames=7,
         hidden_size=enc_conf.get("output_size", 512),
