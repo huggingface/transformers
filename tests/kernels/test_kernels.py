@@ -593,6 +593,7 @@ class TestKernelUtilities(TestCasePlus):
         self.assertTrue(torch.equal(exported.module()(*inputs), torch_result))
 
     def test_fallback_resolves_function_from_package_root(self):
+        """The package-root implementation takes precedence over the nested-module fallback."""
         package = types.ModuleType("optional_backend")
         optimized_function = MagicMock(return_value="optimized")
         package.optimized_function = optimized_function
@@ -637,12 +638,13 @@ class TestKernelUtilities(TestCasePlus):
     )
     def test_fallback_imports_nested_module(
         self,
-        _case_name,
+        case_name,
         func_name,
         package_name,
         internal_path,
         internal_module_name,
     ):
+        """A nested implementation can be resolved from an explicit or registered module path."""
         package = types.ModuleType(package_name)
         internal_module = types.ModuleType(internal_module_name)
         optimized_function = MagicMock(return_value="optimized")
@@ -672,6 +674,7 @@ class TestKernelUtilities(TestCasePlus):
         )
 
     def test_fallback_uses_torch_when_nested_module_is_missing(self):
+        """The reference implementation remains available when the nested module cannot be imported."""
         package = types.ModuleType("optional_backend")
         torch_function = MagicMock(return_value="torch")
 
