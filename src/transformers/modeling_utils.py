@@ -4586,6 +4586,14 @@ class PreTrainedModel(
         return self._tp_size
 
     @property
+    def fsdp_size(self):
+        """
+        Returns the model's FSDP sharding degree.
+        """
+        # if None, the model didn't undergo FSDP sharding
+        return self._fsdp_size
+
+    @property
     def supports_pp_plan(self):
         # Check if model has a PP plan
         if self._pp_plan:

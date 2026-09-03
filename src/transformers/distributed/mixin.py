@@ -56,6 +56,7 @@ class DistributedMixin:
     _tp_plan: dict[str, str] | None = None
     _ep_plan: dict[str, str] | None = None
     _tp_size = None
+    _fsdp_size = None
     _pp_plan: dict[str, tuple[str, str]] | None = None
     _fsdp_plan: dict[str, str] | None = None
 
@@ -163,7 +164,12 @@ class DistributedMixin:
                     f"is not equal to world_size ({world_size})"
                 )
 
-        if distributed_config.tp_size > 1:
+        if distributed_config.fsdp_size > 1:
+            # Builds a 2-D (fsdp, tp) mesh when tensor/expert parallelism is also requested.
+            device_map, device_mesh = initialize_fully_sharded_data_parallelism(distributed_config)
+            if distributed_config.tp_size > 1 and distributed_config.tp_plan is None:
+                distributed_config.tp_plan = "auto"
+        elif distributed_config.tp_size > 1:
             if distributed_config.tp_plan is None:
                 distributed_config.tp_plan = "auto"
             device_map, device_mesh = initialize_tensor_parallelism(
@@ -172,8 +178,6 @@ class DistributedMixin:
                 device_mesh=device_mesh,
                 device_map=device_map,
             )
-        elif distributed_config.fsdp_size > 1:
-            device_map, device_mesh = initialize_fully_sharded_data_parallelism(distributed_config)
         elif distributed_config.pp_size > 1:
             device_map, device_mesh = initialize_pipeline_parallelism(distributed_config)
 
@@ -190,19 +194,23 @@ class DistributedMixin:
         if device_mesh is not None:
             model.config.distributed_config = distributed_config
             model._device_mesh = device_mesh
+            # The Trainer mirrors these into accelerate's `ParallelismConfig`; without them accelerate
+            # sees unaccounted ranks and falls back to DDP, which rejects the DTensor parameters.
             model._tp_size = distributed_config.tp_size
+            model._fsdp_size = distributed_config.fsdp_size
 
+            # Both may apply: experts/attention are sharded across `tp`, the rest across `fsdp`.
             if distributed_config.tp_size > 1:
                 tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
                 if isinstance(distributed_config.tp_plan, dict):
                     model.tp_plan = distributed_config.tp_plan
                 model = apply_tensor_parallelism(model, tp_mesh)
 
-            elif distributed_config.fsdp_size > 1:
+            if distributed_config.fsdp_size > 1:
                 fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
                 model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
 
-            elif distributed_config.pp_size > 1:
+            if distributed_config.pp_size > 1:
                 pp_mesh = device_mesh["pp"] if device_mesh.ndim > 1 else device_mesh
                 model = apply_pipeline_parallelism(model, pp_mesh)
         return model
