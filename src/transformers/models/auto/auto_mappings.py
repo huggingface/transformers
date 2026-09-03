@@ -367,6 +367,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("longformer", "LongformerConfig"),
         ("longt5", "LongT5Config"),
         ("luke", "LukeConfig"),
+        ("lumma", "LummaConfig"),
         ("lw_detr", "LwDetrConfig"),
         ("lw_detr_vit", "LwDetrViTConfig"),
         ("lxmert", "LxmertConfig"),

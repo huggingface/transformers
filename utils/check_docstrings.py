@@ -2124,7 +2124,7 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False, cache: di
         # If we are checking against the diff, we skip objects that are not part of the diff.
         if module_diff_files is not None:
             object_file = find_source_file(getattr(transformers, name))
-            object_file_relative_path = "src/" + str(object_file).split("/src/")[1]
+            object_file_relative_path = object_file.relative_to(PATH_TO_REPO).as_posix()
             if object_file_relative_path not in module_diff_files:
                 continue
 

@@ -82,27 +82,67 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"matcher.backbone.layer(\d+).(\d+).rbr_1x1.conv": r"efficientloftr.backbone.stages.\1.blocks.\2.conv2.conv",
     r"matcher.backbone.layer(\d+).(\d+).rbr_1x1.bn": r"efficientloftr.backbone.stages.\1.blocks.\2.conv2.norm",
     r"matcher.backbone.layer(\d+).(\d+).rbr_identity": r"efficientloftr.backbone.stages.\1.blocks.\2.identity",
-    r"matcher.loftr_coarse.layers.(\d*[02468]).aggregate": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.aggregation.q_aggregation",
-    r"matcher.loftr_coarse.layers.(\d*[02468]).norm1": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.aggregation.norm",
-    r"matcher.loftr_coarse.layers.(\d*[02468]).q_proj": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.attention.q_proj",
-    r"matcher.loftr_coarse.layers.(\d*[02468]).k_proj": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.attention.k_proj",
-    r"matcher.loftr_coarse.layers.(\d*[02468]).v_proj": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.attention.v_proj",
-    r"matcher.loftr_coarse.layers.(\d*[02468]).merge": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.attention.o_proj",
-    r"matcher.loftr_coarse.layers.(\d*[02468]).mlp.(\d+)": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.mlp.fc{1 if m.group(2) == '0' else 2}",
-    r"matcher.loftr_coarse.layers.(\d*[02468]).norm2": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.mlp.layer_norm",
-    r"matcher.loftr_coarse.layers.(\d*[13579]).aggregate": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.aggregation.q_aggregation",
-    r"matcher.loftr_coarse.layers.(\d*[13579]).norm1": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.aggregation.norm",
-    r"matcher.loftr_coarse.layers.(\d*[13579]).q_proj": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.attention.q_proj",
-    r"matcher.loftr_coarse.layers.(\d*[13579]).k_proj": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.attention.k_proj",
-    r"matcher.loftr_coarse.layers.(\d*[13579]).v_proj": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.attention.v_proj",
-    r"matcher.loftr_coarse.layers.(\d*[13579]).merge": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.attention.o_proj",
-    r"matcher.loftr_coarse.layers.(\d*[13579]).mlp.(\d+)": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.mlp.fc{1 if m.group(2) == '0' else 2}",
-    r"matcher.loftr_coarse.layers.(\d*[13579]).norm2": lambda m: f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.mlp.layer_norm",
+    r"matcher.loftr_coarse.layers.(\d*[02468]).aggregate": lambda m: (
+        f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.aggregation.q_aggregation"
+    ),
+    r"matcher.loftr_coarse.layers.(\d*[02468]).norm1": lambda m: (
+        f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.aggregation.norm"
+    ),
+    r"matcher.loftr_coarse.layers.(\d*[02468]).q_proj": lambda m: (
+        f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.attention.q_proj"
+    ),
+    r"matcher.loftr_coarse.layers.(\d*[02468]).k_proj": lambda m: (
+        f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.attention.k_proj"
+    ),
+    r"matcher.loftr_coarse.layers.(\d*[02468]).v_proj": lambda m: (
+        f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.attention.v_proj"
+    ),
+    r"matcher.loftr_coarse.layers.(\d*[02468]).merge": lambda m: (
+        f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.attention.o_proj"
+    ),
+    r"matcher.loftr_coarse.layers.(\d*[02468]).mlp.(\d+)": lambda m: (
+        f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.mlp.fc{1 if m.group(2) == '0' else 2}"
+    ),
+    r"matcher.loftr_coarse.layers.(\d*[02468]).norm2": lambda m: (
+        f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.self_attention.mlp.layer_norm"
+    ),
+    r"matcher.loftr_coarse.layers.(\d*[13579]).aggregate": lambda m: (
+        f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.aggregation.q_aggregation"
+    ),
+    r"matcher.loftr_coarse.layers.(\d*[13579]).norm1": lambda m: (
+        f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.aggregation.norm"
+    ),
+    r"matcher.loftr_coarse.layers.(\d*[13579]).q_proj": lambda m: (
+        f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.attention.q_proj"
+    ),
+    r"matcher.loftr_coarse.layers.(\d*[13579]).k_proj": lambda m: (
+        f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.attention.k_proj"
+    ),
+    r"matcher.loftr_coarse.layers.(\d*[13579]).v_proj": lambda m: (
+        f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.attention.v_proj"
+    ),
+    r"matcher.loftr_coarse.layers.(\d*[13579]).merge": lambda m: (
+        f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.attention.o_proj"
+    ),
+    r"matcher.loftr_coarse.layers.(\d*[13579]).mlp.(\d+)": lambda m: (
+        f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.mlp.fc{1 if m.group(2) == '0' else 2}"
+    ),
+    r"matcher.loftr_coarse.layers.(\d*[13579]).norm2": lambda m: (
+        f"efficientloftr.local_feature_transformer.layers.{int(m.group(1)) // 2}.cross_attention.mlp.layer_norm"
+    ),
     r"matcher.fine_preprocess.layer3_outconv": "refinement_layer.out_conv",
-    r"matcher.fine_preprocess.layer(\d+)_outconv.weight": lambda m: f"refinement_layer.out_conv_layers.{0 if int(m.group(1)) == 2 else m.group(1)}.out_conv1.weight",
-    r"matcher.fine_preprocess.layer(\d+)_outconv2\.0": lambda m: f"refinement_layer.out_conv_layers.{0 if int(m.group(1)) == 2 else m.group(1)}.out_conv2",
-    r"matcher.fine_preprocess.layer(\d+)_outconv2\.1": lambda m: f"refinement_layer.out_conv_layers.{0 if int(m.group(1)) == 2 else m.group(1)}.batch_norm",
-    r"matcher.fine_preprocess.layer(\d+)_outconv2\.3": lambda m: f"refinement_layer.out_conv_layers.{0 if int(m.group(1)) == 2 else m.group(1)}.out_conv3",
+    r"matcher.fine_preprocess.layer(\d+)_outconv.weight": lambda m: (
+        f"refinement_layer.out_conv_layers.{0 if int(m.group(1)) == 2 else m.group(1)}.out_conv1.weight"
+    ),
+    r"matcher.fine_preprocess.layer(\d+)_outconv2\.0": lambda m: (
+        f"refinement_layer.out_conv_layers.{0 if int(m.group(1)) == 2 else m.group(1)}.out_conv2"
+    ),
+    r"matcher.fine_preprocess.layer(\d+)_outconv2\.1": lambda m: (
+        f"refinement_layer.out_conv_layers.{0 if int(m.group(1)) == 2 else m.group(1)}.batch_norm"
+    ),
+    r"matcher.fine_preprocess.layer(\d+)_outconv2\.3": lambda m: (
+        f"refinement_layer.out_conv_layers.{0 if int(m.group(1)) == 2 else m.group(1)}.out_conv3"
+    ),
 }
 
 
