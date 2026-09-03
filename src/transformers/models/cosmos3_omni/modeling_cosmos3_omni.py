@@ -418,7 +418,7 @@ class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel):
         image_mask = None
         video_mask = None
 
-        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
             mm_encoder_outputs["image"]: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs

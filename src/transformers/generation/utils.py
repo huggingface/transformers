@@ -893,7 +893,10 @@ class GenerationMixin(ContinuousMixin):
                 }
                 keys_to_pop.update(encoder_kwargs.keys())
                 # all models use only two arg names to define the main input (only fuyu uses `image_patches`)
-                if any(key in encoder_kwargs for key in ["pixel_values", "pixel_values_videos", "image_patches"]):
+                if any(
+                    key in encoder_kwargs
+                    for key in ["pixel_values", "pixel_values_images", "pixel_values_videos", "image_patches"]
+                ):
                     if model_kwargs["mm_encoder_outputs"].get(f"{modality}") is not None:
                         raise ValueError(
                             f"You cannot pass both: raw pixels and pre-computed embeddings for input {modality}"

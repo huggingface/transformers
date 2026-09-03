@@ -1248,7 +1248,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         >>> print(generated_text)
         The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV, which is parked in the middle of a busy city street. This is an unconventional approach to ironing clothes, as it requires the man to balance himself and his ironing equipment on top of the vehicle while navigating through traffic. Additionally, the presence of taxis and other vehicles in the scene further emphasizes the unusual nature of this situation.
         ```"""
-        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None:
             mm_encoder_outputs["image"]: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
                 pixel_values,

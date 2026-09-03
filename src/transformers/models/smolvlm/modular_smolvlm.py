@@ -239,7 +239,7 @@ class SmolVLMModel(Idefics3Model):
         if pixel_values is not None and mm_encoder_outputs is not None:
             raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
-        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
             mm_encoder_outputs["image"] = self.get_image_features(pixel_values, pixel_attention_mask, return_dict=True)
 

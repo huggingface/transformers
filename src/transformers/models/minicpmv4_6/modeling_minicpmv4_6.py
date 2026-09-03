@@ -693,7 +693,7 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if (
             mm_encoder_outputs.get("image") is None
             and pixel_values is not None

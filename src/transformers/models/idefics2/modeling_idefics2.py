@@ -919,7 +919,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         if pixel_values is not None and mm_encoder_outputs is not None:
             raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
-        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if (isinstance(mm_encoder_outputs, dict) and mm_encoder_outputs.get("image")) or pixel_values is not None:
             if mm_encoder_outputs.get("image") is None:
                 mm_encoder_outputs["image"] = self.get_image_features(
@@ -1099,43 +1099,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        pixel_attention_mask=None,
-        mm_encoder_outputs=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        use_cache=False,
-        **kwargs,
-    ):
-        # Overwritten -- there are mutually exclusive inputs (if the logic to make `encoder_outputs` take
-        # precedence is moved to the model, we can remove this fn)
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            pixel_values=pixel_values,
-            pixel_attention_mask=pixel_attention_mask,
-            mm_encoder_outputs=mm_encoder_outputs,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            use_cache=use_cache,
-            **kwargs,
-        )
-
-        if mm_encoder_outputs and mm_encoder_outputs.get("image") or (use_cache and not is_first_iteration):
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_attention_mask"] = None
-
-        return model_inputs
 
 
 __all__ = ["Idefics2ForConditionalGeneration", "Idefics2PreTrainedModel", "Idefics2Model"]

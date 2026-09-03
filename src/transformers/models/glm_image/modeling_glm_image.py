@@ -1257,7 +1257,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs else {}
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
             source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
             mm_encoder_outputs["image"] = self.get_image_features(
