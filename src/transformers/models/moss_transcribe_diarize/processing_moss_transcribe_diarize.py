@@ -19,15 +19,20 @@
 # limitations under the License.
 
 
+import re
+
 import numpy as np
 import torch
 
-from ...audio_utils import AudioInput, make_list_of_audio_chat_template
+from ...audio_utils import AudioInput, make_audio_chat_content, make_list_of_audio_chat_template, parse_timestamp
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
 from ...utils.import_utils import requires
+
+
+logger = logging.get_logger(__name__)
 
 
 class MossTranscribeDiarizeProcessorKwargs(ProcessingKwargs, total=False):
@@ -48,10 +53,42 @@ class MossTranscribeDiarizeProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+# Diarized segments look like `[start][S01]text[end]`, e.g. `[0.00][S01]Hello there.[7.56]`.
+_SEGMENT_PATTERN = re.compile(
+    r"\[(?P<start>[^\[\]]+)\]\[S(?P<speaker>\d+)\](?P<content>.*?)\[(?P<end>[^\[\]]+)\]", re.DOTALL
+)
+
+
 @requires(backends=("torch",))
 @auto_docstring
 class MossTranscribeDiarizeProcessor(ProcessorMixin):
+    r"""
+    Constructs a VibeVoice ASR processor which wraps [`VibeVoiceAcousticTokenizerFeatureExtractor`] and
+    [`Qwen2TokenizerFast`] into a single processor that inherits both the audio feature extraction and
+    tokenizer functionalities.
+
+    See the [`~MossTranscribeDiarizeProcessor.__call__`] for more information.
+
+    Args:
+        feature_extractor (`VibeVoiceAcousticTokenizerFeatureExtractor`):
+            The feature extractor for audio processing.
+        tokenizer (`Qwen2TokenizerFast`):
+            The tokenizer for text processing.
+        chat_template (`str`, *optional*):
+            A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
+        audio_token (`str`, *optional*, defaults to `"<|box_start|>"`):
+            The audio token placeholder to use in the chat template.
+        audio_bos_token (`str`, *optional*, defaults to `"<|object_ref_start|>"`):
+            The audio begin-of-sequence token placeholder to use in the chat template.
+        audio_eos_token (`str`, *optional*, defaults to `"<|object_ref_end|>"`):
+            The audio end-of-sequence token placeholder to use in the chat template.
+        audio_duration_token (`str`, *optional*, defaults to `"<|AUDIO_DURATION|>"`):
+            The audio duration token placeholder to use in the chat template.
+    """
+
     valid_processor_kwargs = MossTranscribeDiarizeProcessorKwargs
+    feature_extractor_class = "WhisperFeatureExtractor"
+    tokenizer_class = "Qwen2TokenizerFast"
 
     def __init__(
         self,
@@ -59,6 +96,9 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         tokenizer=None,
         chat_template: str | None = None,
         audio_token: str = "<|audio_pad|>",
+        audio_bos_token: str = "<|audio_start|>",
+        audio_eos_token: str = "<|audio_end|>",
+        audio_duration_token: str | None = None,
         audio_tokens_per_second: float = 12.5,
         audio_merge_size: int = 4,
         audio_encoder_stride: int = 2,
@@ -73,6 +113,13 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         r"""
         audio_token (`str`, *optional*, defaults to `"<|audio_pad|>"`):
             Special token used to represent audio inputs in the chat template.
+        audio_bos_token (`str`, *optional*, defaults to `"<|audio_start|>"`):
+            Special token marking the start of the audio span in the chat template.
+        audio_eos_token (`str`, *optional*, defaults to `"<|audio_end|>"`):
+            Special token marking the end of the audio span in the chat template.
+        audio_duration_token (`str`, *optional*):
+            Unused by MOSS-Transcribe-Diarize, which has no audio-duration placeholder in its prompts; kept only
+            because [`~VibeVoiceAsrProcessor.__call__`] is shared with [`VibeVoiceAsrProcessor`].
         audio_tokens_per_second (`float`, *optional*, defaults to 12.5):
             Expected number of audio placeholder tokens per second of input audio.
         audio_merge_size (`int`, *optional*, defaults to 4):
@@ -87,17 +134,20 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
             Default prompt used by [`~MossTranscribeDiarizeProcessor.apply_transcription_request`] when `prompt` is
             `None`. Requests timestamped transcription with speaker labels such as `[S01]`.
         """
+        self.default_transcription_prompt = default_transcription_prompt
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
-        self.default_transcription_prompt = default_transcription_prompt
+        self.audio_bos_token = audio_bos_token
+        self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(audio_bos_token)
+        self.audio_eos_token = audio_eos_token
+        self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(audio_eos_token)
+        self.audio_duration_token = audio_duration_token
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
         self.audio_tokens_per_second = audio_tokens_per_second
         self.audio_merge_size = int(audio_merge_size)
         self.audio_encoder_stride = int(audio_encoder_stride)
         self.time_marker_every_seconds = time_marker_every_seconds
         self.enable_time_marker = enable_time_marker
-        self.audio_start_token = getattr(tokenizer, "audio_start_token", "<|audio_start|>")
-        self.audio_end_token = getattr(tokenizer, "audio_end_token", "<|audio_end|>")
 
     @auto_docstring
     def __call__(
@@ -113,42 +163,60 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
 
         Returns:
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
-            audio features (`input_features`, `input_features_mask`).
+            audio features (`input_values`, `padding_mask`).
         """
-        # Check only if passed explicitly as another value since by default we'll use `pt`
-        if "return_tensors" in kwargs and kwargs["return_tensors"] != "pt":
+        output_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)
+        return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
+
+        if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
-        if output_labels:
-            kwargs["return_mm_token_type_ids"] = True
-        model_inputs = super().__call__(audio=audio, text=text, **kwargs)
+        if audio is not None:
+            _, text, _, audio = self.prepare_inputs_layout(text=text, audio=audio, **kwargs)
+
+            # Replace audio duration placeholders in text
+            if self.audio_duration_token:
+                audio_durations = iter([len(el) / self.feature_extractor.sampling_rate for el in audio])
+                audio_duration_pattern = re.compile(re.escape(self.audio_duration_token))
+                for i in range(len(text)):
+                    text[i] = audio_duration_pattern.sub(lambda _: f"{next(audio_durations):.2f}", text[i])
+
+        model_inputs = super().__call__(text=text, audio=audio, **kwargs)
 
         if output_labels:
-            mm_token_type_ids = model_inputs.pop("mm_token_type_ids")
             labels = model_inputs["input_ids"].clone()
-            labels[mm_token_type_ids != 0] = -100  # audio positions
+            labels[labels == self.audio_token_id] = -100
+            labels[labels == self.audio_bos_token_id] = -100
+            labels[labels == self.audio_eos_token_id] = -100
             labels[labels == self.tokenizer.pad_token_id] = -100
             model_inputs["labels"] = labels
-        return BatchFeature(data=model_inputs, tensor_type="pt")
+
+        return BatchFeature(data=model_inputs, tensor_type="pt", skip_tensor_conversion=self.skip_tensor_conversion)
+
+    def prepare_inputs_layout(self, text=None, audio=None, **kwargs):
+        _, text, _, audio = super().prepare_inputs_layout(text=text, audio=audio, **kwargs)
+        if isinstance(text, str):
+            text = [text]
+        return None, text, None, audio
 
     def validate_inputs(
         self,
-        audio: AudioInput | None = None,
         text: TextInput | list[TextInput] | None = None,
+        audio: AudioInput | None = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
-        super().validate_inputs(audio=audio, text=text, **kwargs)
+        super().validate_inputs(text=text, audio=audio, **kwargs)
 
-        if text is not None and audio is not None and len(text) != len(audio):
-            raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
+        if not isinstance(text, (list, tuple)):
+            raise ValueError("text input must be a string or list of strings")
 
-    def _get_audio_token_length(self, audio_lengths: "torch.Tensor") -> "torch.Tensor":
-        merge_factor = 4
-        for padding, kernel_size, stride in [(1, 3, 1), (1, 3, 2)]:
-            audio_lengths = (audio_lengths + 2 * padding - (kernel_size - 1) - 1) // stride + 1
+        if audio is not None:
+            for example in audio:
+                if example.ndim != 1:
+                    raise ValueError(f"Audio should be mono, got shape: {example.shape}")
 
-        num_tokens = (audio_lengths - merge_factor) // merge_factor + 1
-        return num_tokens
+            if len(text) != len(audio):
+                raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
 
     def _process_audio(self, audio: AudioInput, **kwargs) -> tuple[dict[str, torch.Tensor], list[str]]:
         # Determine number of Whisper-window chunks per sample, and flatten
@@ -207,11 +275,6 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         return self.audio_token * num_tokens
 
     @property
-    def model_input_names(self) -> list[str]:
-        names = [name for name in super().model_input_names if name != "input_features_mask"]
-        return names + ["audio_feature_lengths", "audio_chunk_mapping"]
-
-    @property
     def unused_input_names(self) -> list[str]:
         "Input names returned always by subprocessors but not used in model's `forward`"
         return ["num_audio_tokens"]
@@ -242,30 +305,15 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         if batch_size == 0:
             raise ValueError("`audio` must contain at least one sample.")
 
-        if prompt is None:
-            prompts = [self.default_transcription_prompt] * batch_size
-        elif isinstance(prompt, str):
-            prompts = [prompt] * batch_size
-        elif isinstance(prompt, (list, tuple)):
-            if len(prompt) != batch_size:
-                raise ValueError(
-                    f"Received {len(prompt)} prompt(s) for {batch_size} audio sample(s); counts must match."
-                )
-            prompts = [self.default_transcription_prompt if item is None else item for item in prompt]
-        else:
-            raise TypeError("`prompt` must be a string, a sequence of strings, or `None`.")
+        prompts = [
+            self.default_transcription_prompt if item is None else item
+            for item in prepare_prompt_input(prompt, batch_size, input_name="prompt")
+        ]
 
-        conversations = []
-        for prompt_text, audio_item in zip(prompts, audio_items):
-            content = []
-            if isinstance(audio_item, str):
-                content.append({"type": "audio", "path": audio_item})
-            else:
-                content.append({"type": "audio", "audio": audio_item})
-
-            content.append({"type": "text", "text": prompt_text})
-
-            conversations.append([{"role": "user", "content": content}])
+        conversations = [
+            [{"role": "user", "content": make_audio_chat_content(audio_item, prompt_text)}]
+            for prompt_text, audio_item in zip(prompts, audio_items)
+        ]
 
         return self.apply_chat_template(
             conversations,
@@ -275,46 +323,109 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
             **kwargs,
         )
 
-    def decode(self, *args, strip_prefix=False, **kwargs):
+    def decode(self, *args, return_format="raw", **kwargs):
         """
-        Forward arguments to [`~PreTrainedTokenizer.decode`] and optionally remove the assistant framing the model
-        was trained to produce.
+        Forward arguments to [`~PreTrainedTokenizer.decode`] and optionally parse the dict-like output.
 
-        AF3 transcription requests respond with sentences such as `"The spoken content of the audio is \"...\"."`.
-        Setting `strip_prefix=True` trims the fixed prefix for just the transcription text.
+        VibeVoice ASR outputs transcriptions in a dictionary-like format, e.g.:
+        ```
+        [
+            'assistant\n[{"Start":0.0,"End":7.56,"Speaker":0,"Content":"text"}]\n',
+            'assistant\n[{"Start":0,"End":5.20,"Speaker":0,"Content":"text"}]\n'
+        ]
+        ```
+
+        Args:
+            return_format (`str`, *optional*, defaults to `"raw"`):
+                Options are:
+                - `"raw"`: Return a list of raw decoded strings from the tokenizer, without any parsing.
+                - `"parsed"`: Return a list of list of parsed dictionary objects for each speaker utterance with timestamps.
+                - `"transcription_only"`: Return a list of extracted transcription strings.
+
+                `skip_special_tokens` is automatically enforced (hard-set) to `True` for `"parsed"` and `"transcription_only"`.
         """
+        return_types = ["raw", "parsed", "transcription_only"]
+        if return_format not in return_types:
+            raise ValueError(f"return_format must be one of {return_types}.")
+        if return_format != "raw":
+            kwargs["skip_special_tokens"] = True  # for other formats this does not make sense, we can silently ignore
+
         decoded = self.tokenizer.decode(*args, **kwargs)
-        if strip_prefix:
-            decoded = [self._strip_assistant_prefix_and_quotes(text) for text in decoded]
+
+        if return_format == "parsed":
+            decoded = self.extract_speaker_dict(decoded)
+        elif return_format == "transcription_only":
+            decoded = self.extract_transcription(decoded)
         return decoded
 
-    def batch_decode(self, *args, **kwargs):
-        """BC as previous examples used batch_decode"""
-        return self.decode(*args, **kwargs)
-
-    def _strip_assistant_prefix_and_quotes(self, text: str) -> str:
+    def extract_speaker_dict(self, text: str | list[str]) -> list[dict] | str | list[list[dict] | str]:
         """
-        Remove the assistant prefix and surrounding quotes from a decoded transcription string.
+        Extract speaker/timestamp segments from raw output, returning original text on failure.
+
+        Args:
+            text (`str` or `list[str]`):
+                Single text or batch of texts to parse from the output of `decode` with `return_format="raw"`.
+
+        Returns:
+            Parsed output(s). For single input, returns `list[dict]` or `str`.
+            For batch input, returns `list[list[dict] | str]`.
         """
+        is_single = isinstance(text, str)
+        if is_single:
+            text = [text]
 
-        stripped = text.strip()
+        speaker_dict = []
+        for t in text:
+            t = t.strip()
+            if t.startswith("assistant"):
+                t = t[len("assistant") :].strip()
 
-        for prefix in (
-            "The spoken content of the audio is",
-            "The transcription of the audio is",
-            "The content of the input audio is",
-        ):
-            if stripped.startswith(prefix):
-                stripped = stripped[len(prefix) :].strip()
-                break
+            segments = [
+                {
+                    "Start": parse_timestamp(match["start"]),
+                    "End": parse_timestamp(match["end"]),
+                    "Speaker": int(match["speaker"]),
+                    "Content": match["content"].strip(),
+                }
+                for match in _SEGMENT_PATTERN.finditer(t)
+            ]
 
-        if stripped.endswith("."):
-            stripped = stripped[:-1].strip()
+            if not segments:
+                logger.warning("Output doesn't contain any `[start][S0N]text[end]` segments.")
+                speaker_dict.append(t)
+            else:
+                speaker_dict.append(segments)
 
-        if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {"'", '"'}:
-            stripped = stripped[1:-1].strip()
+        return speaker_dict[0] if is_single else speaker_dict
 
-        return stripped
+    def extract_transcription(self, text: str | list[str]) -> str | list[str]:
+        """
+        Extract and concatenate 'Content' fields from the raw output, returning original text on failure.
+
+        Args:
+            text (`str` or `list[str]`):
+                Single text or batch of texts to parse from the output of `decode` with `return_format="raw"`.
+
+        Returns:
+            Extracted transcription(s). For single input, returns `str`.
+            For batch input, returns `list[str]`.
+        """
+        is_single = isinstance(text, str)
+        if is_single:
+            text = [text]
+
+        transcriptions = []
+        for t in text:
+            dict_output = self.extract_speaker_dict(t)
+
+            # If parsing failed, dict_output is the original string
+            if isinstance(dict_output, str):
+                transcriptions.append(dict_output)
+            else:
+                contents = [seg.get("Content", "") for seg in dict_output if isinstance(seg, dict)]
+                transcriptions.append(" ".join(contents).strip())
+
+        return transcriptions[0] if is_single else transcriptions
 
     def _build_time_marker_span(self, num_tokens: int) -> str:
         num_tokens = int(num_tokens)
@@ -339,6 +450,10 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         if remainder > 0:
             parts.append(self.audio_token * remainder)
         return "".join(parts)
+
+    @property
+    def model_input_names(self) -> list[str]:
+        return super().model_input_names + ["audio_feature_lengths", "audio_chunk_mapping"]
 
 
 __all__ = ["MossTranscribeDiarizeProcessor", "MossTranscribeDiarizeProcessorKwargs"]
