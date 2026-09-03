@@ -792,6 +792,7 @@ class KimiLinearDecoderLayer(GradientCheckpointingLayer):
 
         self.input_layernorm = KimiLinearRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = KimiLinearRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.layer_type = config.layer_types[layer_idx]
 
     def forward(
         self,
@@ -800,23 +801,27 @@ class KimiLinearDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-        # Self Attention
-        attn_outputs = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        # Linear attention returns a tensor but regular attention returns a tuple, so we unpack here
-        hidden_states = attn_outputs[0] if isinstance(attn_outputs, tuple) else attn_outputs
+        # Token mixer: linear attention takes the cache as `cache_params` and returns a bare tensor
+        if self.layer_type == "linear_attention":
+            hidden_states = self.self_attn(
+                hidden_states=hidden_states,
+                cache_params=past_key_values,
+                attention_mask=attention_mask,
+                **kwargs,
+            )
+        else:
+            hidden_states, _ = self.self_attn(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                **kwargs,
+            )
         hidden_states = residual + hidden_states
 
         # Fully Connected
