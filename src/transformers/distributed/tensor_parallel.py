@@ -126,8 +126,10 @@ def _use_local_dtensor_params(module):
 # Symmetric-memory all-reduce for the inference path. A decode step under tensor parallelism does two all-reduces
 # per layer on a [batch, hidden] bf16 tensor of a few MB, and NCCL's ring is latency-bound there: 44 us per call at
 # tp8 for 1.5 MB inside a cuda graph, against 19 us for torch's two-shot symmetric-memory kernel (25 vs 19 at tp4).
-# One buffer per (group, hidden, dtype) is allocated and rendezvoused the first time a shape is seen, sized to the
-# largest row count seen, and every call reduces in a prefix view of it. A rendezvous cannot happen while a cuda
+# Messages above 8 MB (a training-side forward over thousands of packed tokens, which also runs through this path
+# under no_grad) stay on NCCL, whose ring is bandwidth-optimal there. One buffer per (group, hidden, dtype) is
+# allocated and rendezvoused the first time a shape is seen, sized to the largest row count seen, and every call
+# reduces in a prefix view of it. A rendezvous cannot happen while a cuda
 # graph is being captured, so a larger row count seen during capture falls back to NCCL for that call; continuous
 # batching warms up at its largest batch before it captures anything, so that fallback is not taken there.
 _SYMM_BUFFERS: dict[tuple, "torch.Tensor"] = {}
@@ -138,6 +140,7 @@ def _inference_all_reduce(output: "torch.Tensor", process_group) -> None:
         output.dim() < 2
         or not output.is_cuda
         or not output.is_contiguous()
+        or output.numel() * output.element_size() > 8 * 1024 * 1024  # bandwidth-bound: NCCL's ring wins there
         or dist.get_world_size(process_group) > 8
         or os.environ.get("HF_TP_NCCL_ALL_REDUCE") == "1"
     ):
