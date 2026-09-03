@@ -54,7 +54,7 @@ Start with a smaller dataset by including the `max_train_samples`, `max_eval_sam
 > Not all example scripts support the `max_predict_samples` parameter. Run the command below to check whether a script supports it or not.
 >
 > ```bash
-> examples/pytorch/summarization/run_summarization.py -h
+> python examples/pytorch/summarization/run_summarization.py -h
 > ```
 
 The example below fine-tunes [T5-small](https://huggingface.co/google-t5/t5-small) on the [CNN/DailyMail](https://huggingface.co/datasets/abisee/cnn_dailymail) dataset. T5 requires an additional `source_prefix` parameter to prompt it to summarize.
@@ -67,10 +67,11 @@ Resuming training from a checkpoint is very useful if training is interrupted be
 
 Share your model on the [Hub](https://huggingface.co/) with the `--push_to_hub` parameter. It creates a repository and uploads the model to the folder name specified in `--output_dir`. You could also use the `--push_to_hub_model_id` parameter to specify the repository name.
 
+Drop the `max_train_samples`, `max_eval_samples`, and `max_predict_samples` parameters once everything works, and add `--resume_from_checkpoint path_to_specific_checkpoint` to resume from a checkpoint.
+
 ```bash
 python examples/pytorch/summarization/run_summarization.py \
     --model_name_or_path google-t5/t5-small \
-    # remove the `max_train_samples`, `max_eval_samples` and `max_predict_samples` if everything works
     --max_train_samples 50 \
     --max_eval_samples 50 \
     --max_predict_samples 50 \
@@ -84,8 +85,7 @@ python examples/pytorch/summarization/run_summarization.py \
     --per_device_eval_batch_size=4 \
     --push_to_hub \
     --push_to_hub_model_id finetuned-t5-cnn_dailymail \
-    # --resume_from_checkpoint path_to_specific_checkpoint \
-    --predict_with_generate \
+    --predict_with_generate
 ```
 
 For mixed precision and distributed training, include the following parameters and launch training with [torchrun](https://pytorch.org/docs/stable/elastic/run.html).

@@ -1765,6 +1765,11 @@ def convert_and_load_state_dict_in_model(
                 for target_name, param in realized_value.items():
                     param = param[0] if isinstance(param, list) else param
                     param_device = get_device(device_map, target_name)
+                    # Exception for params that are so huge that they need conversions on cpu no matter what - we put them back on
+                    # the correct device now (if the device_map managed to make them fit on any device, as usually they will stay on
+                    # cpu and this is a no-op)
+                    if getattr(mapping, "force_cpu", False) and param_device != "disk":
+                        param = param.to(param_device)
                     # Offloading support
                     if param_device == "disk" and (target_name not in model_buffers or offload_buffers):
                         disk_offload_index = offload_and_maybe_resave_param(
