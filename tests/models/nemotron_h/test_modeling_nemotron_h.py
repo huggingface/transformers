@@ -320,6 +320,34 @@ class NemotronHModelTester:
 
         self.parent.assertTrue(torch.allclose(outputs_fast_cached, outputs_slow_cached, atol=1e-3, rtol=1e-3))
 
+    def create_and_check_kwargs_reach_mamba2_mixer(self, config, input_ids, *args):
+        """
+        Kernel kwargs given to the model must reach the Mamba2 mixer, which splats them into
+        the fused conv1d+scan, the conv and the chunk scan. This is how `seq_idx` reaches the
+        kernels for packed / variable-length batches.
+        """
+        model = NemotronHModel(config)
+        model.to(torch_device)
+        model.eval()
+
+        mixer = next(block.mixer for block in model.layers if block.block_type == "linear_attention")
+        original_forward = mixer.forward
+        seen = []
+
+        def recording_forward(*fwd_args, **fwd_kwargs):
+            seen.append(set(fwd_kwargs))
+            return original_forward(*fwd_args, **fwd_kwargs)
+
+        mixer.forward = recording_forward
+
+        input_ids = input_ids.to(torch_device)
+        seq_idx = torch.zeros(input_ids.shape, dtype=torch.int32, device=torch_device)
+        with torch.no_grad():
+            model(input_ids, seq_idx=seq_idx)
+
+        self.parent.assertTrue(seen, "the linear-attention mixer was never called")
+        self.parent.assertIn("seq_idx", seen[0])
+
     def create_and_check_nemotron_h_chunked_prefill(self, config, input_ids, *args, device="cpu"):
         """
         Adapted from `test_linear_attention_multi_token_cached_forward_matches_single_token`
@@ -521,33 +549,8 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
 
     def test_kwargs_reach_mamba2_mixer(self):
-        """
-        Kernel kwargs given to the model must reach the Mamba2 mixer, which splats
-        them into the fused conv1d+scan, conv and chunk-scan calls. This is how
-        `seq_idx` gets to the kernels for packed / variable-length batches, and it
-        matches Bamba, GraniteMoEHybrid and Zamba2.
-        """
-        config, input_ids, *_ = self.model_tester.prepare_config_and_inputs()
-        model = NemotronHModel(config).to(torch_device).eval()
-
-        seen = []
-        mixer = next(block.mixer for block in model.layers if block.block_type == "linear_attention")
-        original_forward = mixer.forward
-
-        def recording_forward(*args, **kwargs):
-            seen.append(set(kwargs))
-            # The torch fallback kernels do not implement seq_idx, so only record it.
-            kwargs.pop("seq_idx", None)
-            return original_forward(*args, **kwargs)
-
-        mixer.forward = recording_forward
-
-        seq_idx = torch.zeros(input_ids.shape, dtype=torch.int32, device=torch_device)
-        with torch.no_grad():
-            model(input_ids, seq_idx=seq_idx)
-
-        self.assertTrue(seen, "the linear-attention mixer was never called")
-        self.assertIn("seq_idx", seen[0])
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_kwargs_reach_mamba2_mixer(*config_and_inputs)
 
     def test_attention_outputs(self):
         r"""
