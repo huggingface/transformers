@@ -805,7 +805,6 @@ class KimiLinearDecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-        # Token mixer: linear attention takes the cache as `cache_params` and returns a bare tensor
         if self.layer_type == "linear_attention":
             hidden_states = self.self_attn(
                 hidden_states=hidden_states,
