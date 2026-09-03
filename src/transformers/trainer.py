@@ -2646,8 +2646,10 @@ class Trainer:
         self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
 
     def _mixed_mesh_grad_norm(self, model, max_norm):
-        """Gradient norm (and clip) when the gradients live on different device meshes, which
-        `clip_grad_norm_` cannot span: one norm per mesh, each already reduced over its own mesh."""
+        """
+        Gradient norm (and clip) when the gradients live on different device meshes, which `clip_grad_norm_` cannot
+        span: one norm per mesh, each already reduced over its own mesh.
+        """
         from torch.distributed.tensor import DTensor
         from torch.nn.utils import clip_grads_with_norm_, get_total_norm
 
@@ -4030,8 +4032,10 @@ class Trainer:
         else:
             self.model.save_pretrained(output_dir, state_dict=state_dict)
 
+        # A non-writer rank of a model sharded at load time is only here for the collectives above.
         if not self.args.should_save:
-            return  # a non-writer rank of a model sharded at load time, only here for the collectives above
+            return
+
         if self.processing_class is not None:
             self.processing_class.save_pretrained(output_dir)
         elif (
