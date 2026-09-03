@@ -1187,13 +1187,11 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring(custom_intro="Obtains image last hidden states from the vision tower and apply al projection.")
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_select_strategy: str,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""

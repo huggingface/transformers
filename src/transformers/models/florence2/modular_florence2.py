@@ -1615,7 +1615,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
 
         model_kwargs["inputs_embeds"] = inputs_embeds
         model_kwargs = self._prepare_text_encoder_decoder_kwargs_for_generation(
-            inputs_tensor=inputs_tensor,
+            inputs_tensor=None,
             model_kwargs=model_kwargs,
             model_input_name=model_input_name,
             generation_config=generation_config,
