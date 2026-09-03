@@ -400,13 +400,16 @@ class DeferredStopCheck(StopCheck):
     def __init__(
         self,
         input_ids: torch.LongTensor,
-        max_length: int | None = None,
-        cache: "Cache | None" = None,
+        max_length: int,
+        cache: "Cache | None",
+        cache_is_returned: bool,
         streamer: "BaseStreamer | None" = None,
     ):
         super().__init__(streamer)
         self.max_length = max_length
-        self.cache = cache
+        # We only need to care about rollbacking the cache if we are going to return the Cache, i.e. if the user requested additional
+        # outputs or if the user passed an explicit Cache object
+        self.cache = cache if cache_is_returned else None
         if cache is not None:
             cache.activate_past_recording()
         pinned = input_ids.device.type == "cuda"
@@ -422,19 +425,14 @@ class DeferredStopCheck(StopCheck):
         self.stop_reported = False
 
     @staticmethod
-    def is_supported(
-        device: torch.device, cache: "Cache | None", is_assistant: bool = False, cache_is_returned: bool = True
-    ) -> bool:
+    def is_supported(device: torch.device, cache: "Cache | None", cache_is_returned: bool, is_assistant: bool) -> bool:
         """
         Whether the stop decision can safely be deferred by a step, in this decoding context.
         In general, we do not defer unless the device is `"mps"`, and if the user requests to return the `Cache`, we need this
         `Cache` to be able to rollback its states correctly, so that the last `forward` can be correctly reverted.
         """
-        # Only mps for now, we should enable it for cuda when we have gains
-        if device.type != "mps":
-            return False
-        # Do not defer if it's an assistant performing the `generate` call
-        if is_assistant:
+        # Only mps for now, we should enable it for cuda if we observe perf gains - also skip if it's an assistant
+        if device.type != "mps" or is_assistant:
             return False
         # Since this is called after prefill, if we still do not have any cache, it means we'll never have one
         if cache is None:
@@ -3004,12 +3002,9 @@ class GenerationMixin(ContinuousMixin):
         # The cache outlives `generate` if the user asked to return it, or if it is one they passed in.
         cache_is_returned = generation_config.return_dict_in_generate or getattr(cache, "_is_user_defined", False)
         if DeferredStopCheck.is_supported(
-            input_ids.device, cache, is_assistant=generation_config.is_assistant, cache_is_returned=cache_is_returned
+            input_ids.device, cache, cache_is_returned, is_assistant=generation_config.is_assistant
         ):
-            # The cache goes in only if it has to come back intact; otherwise the extra step may stand in it.
-            stop_check = DeferredStopCheck(
-                input_ids, stopping_criteria.max_length, cache if cache_is_returned else None, streamer
-            )
+            stop_check = DeferredStopCheck(input_ids, stopping_criteria.max_length, cache, cache_is_returned, streamer)
         else:
             stop_check = StopCheck(streamer)
 
@@ -3080,6 +3075,7 @@ class GenerationMixin(ContinuousMixin):
                 del outputs
 
         steps_to_undo = stop_check.finish()
+        # We may need to remove the last output if we deferred the stop checks
         if steps_to_undo:
             input_ids, scores, raw_logits, decoder_attentions, cross_attentions, decoder_hidden_states = (
                 _undo_generation_steps(
