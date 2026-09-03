@@ -205,16 +205,12 @@ def _get_adamw_torch(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     ctx.optimizer_kwargs.update(ctx.adam_kwargs)
     if ctx.args.optim == OptimizerNames.ADAMW_TORCH_FUSED:
         ctx.optimizer_kwargs.update({"fused": True})
-    # Expert parallelism leaves the parameters on different meshes, so the fused and foreach kernels
-    # cannot span the parameter set. Step per parameter instead.
-    if ctx.model is not None and has_mixed_dtensor(p for p in ctx.model.parameters() if p.requires_grad):
-        ctx.optimizer_kwargs.update({"fused": False, "foreach": False})
     return AdamW, ctx.optimizer_kwargs
 
 
 def has_mixed_dtensor(tensors) -> bool:
     """Whether `tensors` do not all share one device mesh, so whole-set ops (fused/foreach kernels,
-    `clip_grad_norm_`) cannot span them. Expert parallelism leaves the experts sharded and everything
+    `clip_grad_norm_`) cannot span them; the Trainer then groups by mesh. Expert parallelism leaves the experts sharded and everything
     else as plain tensors; under a 2-D (fsdp, tp) mesh everything is a `DTensor`, but the experts live
     on the full mesh and the rest on the `fsdp` sub-mesh."""
     from torch.distributed.tensor import DTensor
