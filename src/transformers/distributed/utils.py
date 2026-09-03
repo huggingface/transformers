@@ -87,9 +87,7 @@ def prefetch_checkpoint_shards(checkpoint_files: list[str]) -> None:
         list(pool.map(_warm, checkpoint_files[local_rank::local_world]))
     if _is_torch_distributed_initialized():
         torch.distributed.barrier()
-    logger.warning_once(
-        f"Prefetched {len(checkpoint_files)} checkpoint shards in {time.time() - prefetch_start:.0f}s"
-    )
+    logger.warning_once(f"Prefetched {len(checkpoint_files)} checkpoint shards in {time.time() - prefetch_start:.0f}s")
 
 
 def is_local_dist_rank_0() -> bool:
