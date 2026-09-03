@@ -358,13 +358,9 @@ GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
 
 
 def _undo_generation_steps(num_steps: int, input_ids: torch.LongTensor, *recorded: "tuple | None") -> tuple:
-    """Undo the last `num_steps` decoding steps, so that they leave no trace in what `generate` returns.
-
-    Drops the tokens and whatever was recorded alongside them. The two slices below look alike but are not the
-    same operation: `input_ids` is a tensor grown with `cat(..., dim=-1)`, so it is undone on that same axis,
-    while everything in `recorded` (`scores`, `raw_logits`, attentions, hidden states) is a tuple holding one
-    entry per generated token, so slicing it simply drops the last `num_steps` entries. The cache entries
-    those steps wrote are dropped by `DeferredStopCheck.finish`.
+    """
+    Undo the last `num_steps` decoding steps, so that they leave no trace in what `generate` returns.
+    Note that the cache entries those steps wrote are dropped by `DeferredStopCheck.finish` instead.
     """
     # `[:-0]` is `[:0]`, which would empty everything rather than leave it alone
     if num_steps == 0:
@@ -373,11 +369,8 @@ def _undo_generation_steps(num_steps: int, input_ids: torch.LongTensor, *recorde
 
 
 class StopCheck:
-    """Decides when the decoding loop should stop, and hands each new token to a streamer.
-
-    Both jobs read device data on the host, which blocks until the device has caught up. `DeferredStopCheck`
-    reads a step late instead, by which point there is nothing left to wait for. This is the plain, immediate
-    check, used everywhere that one cannot be.
+    """
+    Decides when the decoding loop should stop, and hands each new token to a streamer.
     """
 
     def __init__(self, streamer: "BaseStreamer | None" = None):
@@ -394,16 +387,14 @@ class StopCheck:
 
 
 class DeferredStopCheck(StopCheck):
-    """Reports whether generation should stop, one step late, so the host never waits on the device.
+    """
+    A deferred `StopCheck` that reports whether generation should stop, one step late, so the host never waits on the device.
 
-    Reading `unfinished_sequences.max() == 0` blocks the host until the device has caught up, every step,
-    leaving it unable to queue the next step meanwhile. Copying that flag asynchronously and reading it on
-    the *following* step removes the stall. It costs one extra forward pass, whose results the caller undoes
-    using the count returned by `finish`.
-
-    Streaming needs the tokens themselves on the host, which is that same stall over again, so they ride in
-    the same slot behind the same event and are streamed one step behind. The extra token is never streamed:
-    it is still in flight when the loop breaks, and `finish` drops it.
+    Reading `unfinished_sequences.max() == 0` blocks the host until the device has caught up, every step, leaving it unable to queue
+    the next step meanwhile. Copying that flag asynchronously and reading it on the *following* step removes the stall. It costs one
+    extra `forward` pass, whose results the caller undoes using the count returned by `finish`.
+    Streaming needs the tokens themselves on the host, which is the same synchronization, so tokens are streamed one step behind.
+    The extra token is never streamed: it is still in flight when the loop breaks, and `finish` drops it.
     """
 
     def __init__(
@@ -438,17 +429,15 @@ class DeferredStopCheck(StopCheck):
         is_assistant: bool = False,
         cache_is_returned: bool = True,
     ) -> bool:
-        """Whether the stop decision can safely be deferred by a step, in this decoding context.
-
-        Deferring costs one extra forward pass, so it is only safe where that pass leaves no trace. What it
-        writes to `input_ids`, `scores` and the rest is undone whatever the cache does; the cache is the one
-        thing a rollback may not be able to reach, and that only matters if the cache is handed back at all.
+        """
+        Whether the stop decision can safely be deferred by a step, in this decoding context.
+        In general, we do not defer unless the device is `"mps"`, and if the user requests to return the `Cache`, we need this
+        `Cache` to be able to rollback its states correctly, so that the last `forward` can be correctly reverted.
         """
         # Only mps for now, we should enable it for cuda when we have gains
         if device.type != "mps":
             return False
-        # Blocked for the assistant, as it only generates ~20 steps: one more step is ~5% more work. It also
-        # checks the probability of the last token on every step with `.item()`, so it syncs there anyway.
+        # Do not defer if it's an assistant performing the `generate` call
         if is_assistant:
             return False
         # No cache under any of the cache names. Either there is genuinely none to roll back, or the model
@@ -3013,13 +3002,12 @@ class GenerationMixin(ContinuousMixin):
             is_first_iteration=not generation_config.is_assistant,
         )
 
-        # Deciding when to stop costs a host/device sync per step, and so does handing a streamer its tokens.
-        # Where it is safe to, defer both by a step instead. Set up only now that the prompt has been through:
-        # recording the past holds on to whatever a cache would otherwise shrink away, and over a long prefill
-        # that would defeat the point of a sliding window. From here on each step adds a single token.
+        # Decides whether we can defer the stopping criteria to avoid a synchronization point in between every `forward`.
+        # Note that it is very important to do this only after the prefill, as we may otherwise call `activate_past_recording` on the
+        # Cache, which will cause a huge unneeded memory spike if the prefill is huge and the model would otherwise drop most of the
+        # states, such as if it uses sliding window or linear attention
         cache = next((model_kwargs[name] for name in ALL_CACHE_NAMES if name in model_kwargs), None)
-        # The cache outlives `generate` if they asked for it back, or if it is one they passed in.
-        # one edge case not fixed here is when the user pass its own cache.
+        # The cache outlives `generate` if the user asked to return it, or if it is one they passed in.
         cache_is_returned = generation_config.return_dict_in_generate
         if DeferredStopCheck.is_supported(
             input_ids.device,
@@ -3119,8 +3107,6 @@ class GenerationMixin(ContinuousMixin):
             streamer.end()
 
         if return_dict_in_generate:
-            # Looked up again here rather than reused from before the loop: some models only put their cache
-            # in `model_kwargs` once they have run, and callers read `use_cache` off this being present
             cache = None
             if any(cache_key in model_kwargs for cache_key in ALL_CACHE_NAMES):
                 cache_key = next(cache_key for cache_key in ALL_CACHE_NAMES if cache_key in model_kwargs)
