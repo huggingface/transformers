@@ -43,7 +43,7 @@ from torch.autograd.graph import save_on_cpu
 from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
-from transformers.distributed.utils import is_dtensor
+from transformers.distributed.utils import is_dtensor, prefetch_checkpoint_shards
 
 from . import initialization as init
 from .configuration_utils import PreTrainedConfig
@@ -4360,28 +4360,7 @@ class PreTrainedModel(
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
         expected_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys
 
-        if checkpoint_files and (prefetch_threads := int(os.environ.get("HF_SHARD_PREFETCH", "0"))):
-            # The per-tensor read pattern below reads a network filesystem at well under 1 GiB/s while
-            # large sequential reads sustain many times that; warming the page cache first makes the
-            # actual load run at memory speed. Local ranks split the shard list between them (every
-            # node needs the full checkpoint cached, since every rank slices tensors from all shards).
-            import time
-            from concurrent.futures import ThreadPoolExecutor
-
-            local_rank = int(os.environ.get("LOCAL_RANK", "0"))
-            local_world = int(os.environ.get("LOCAL_WORLD_SIZE", "1"))
-
-            def _warm(path, bufsize=16 * 2**20):
-                with open(path, "rb", buffering=0) as f:
-                    while f.read(bufsize):
-                        pass
-
-            prefetch_start = time.time()
-            with ThreadPoolExecutor(max_workers=prefetch_threads) as pool:
-                list(pool.map(_warm, checkpoint_files[local_rank::local_world]))
-            if torch.distributed.is_available() and torch.distributed.is_initialized():
-                torch.distributed.barrier()
-            logger.warning_once(f"Prefetched {len(checkpoint_files)} checkpoint shards in {time.time() - prefetch_start:.0f}s")
+        prefetch_checkpoint_shards(checkpoint_files)
 
         if logger.level >= logging.WARNING:
             verify_tp_plan(expected_keys, getattr(model, "_tp_plan", None))
