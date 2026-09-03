@@ -314,7 +314,7 @@ class KimiLinearAttention(nn.Module):
 
 
 class KimiLinearForgetGate(nn.Module):
-    """Same as Glm5NextTextForgetGate but with no gate_lower_bound."""
+    """Same as Glm5NextTextForgetGate but with no gate_lower_bound and no A_log reshape."""
 
     def __init__(self, config: KimiLinearConfig):
         super().__init__()
@@ -325,14 +325,14 @@ class KimiLinearForgetGate(nn.Module):
         self.f_a_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
         self.f_b_proj = nn.Linear(self.head_dim, self.qkv_dim, bias=False)
         self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim))
-        self.A_log = nn.Parameter(torch.empty(self.num_heads))
+        self.A_log = nn.Parameter(torch.empty(1, 1, self.num_heads, 1))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_shape = (*hidden_states.shape[:2], -1, self.head_dim)
 
         forget_gate = self.f_b_proj(self.f_a_proj(hidden_states))
         g = (forget_gate.float() + self.dt_bias.float().view(1, 1, -1)).view(hidden_shape)
-        A_log = self.A_log.float().view(1, 1, self.num_heads, 1)
+        A_log = self.A_log.float()
         decay_rate = torch.exp(A_log)
 
         # Softplus "log(1 + exp(x))" with uper bound restraint to avoid overflows
@@ -806,7 +806,7 @@ class KimiLinearDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
-        hidden_states, _ = self.self_attn(
+        attn_outputs = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -815,6 +815,8 @@ class KimiLinearDecoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             **kwargs,
         )
+        # Linear attention returns a tensor but regular attention returns a tuple, so we unpack here
+        hidden_states = attn_outputs[0] if isinstance(attn_outputs, tuple) else attn_outputs
         hidden_states = residual + hidden_states
 
         # Fully Connected

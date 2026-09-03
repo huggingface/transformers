@@ -1834,6 +1834,11 @@ def _build_checkpoint_conversion_mapping():
     ]
 
     mapping["kimi_linear"] = [
+        # Forget gate weights are attached to the forget gate module instead of the attention
+        WeightRenaming(source_patterns=r"self_attn\.f_a_proj\.", target_patterns=r"self_attn.forget_gate.f_a_proj."),
+        WeightRenaming(source_patterns=r"self_attn\.f_b_proj\.", target_patterns=r"self_attn.forget_gate.f_b_proj."),
+        WeightRenaming(source_patterns=r"self_attn\.dt_bias", target_patterns=r"self_attn.forget_gate.dt_bias"),
+        WeightRenaming(source_patterns=r"self_attn\.A_log", target_patterns=r"self_attn.forget_gate.A_log"),
         # Conv weights are stacked before runtime
         WeightConverter(
             source_patterns=[

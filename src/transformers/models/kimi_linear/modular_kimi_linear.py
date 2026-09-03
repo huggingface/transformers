@@ -18,6 +18,7 @@ from collections.abc import Callable
 
 import torch
 from huggingface_hub.dataclasses import strict
+from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
@@ -209,10 +210,11 @@ class KimiLinearAttention(DeepseekV3Attention):
 
 
 class KimiLinearForgetGate(Glm5NextTextForgetGate):
-    """Same as Glm5NextTextForgetGate but with no gate_lower_bound."""
+    """Same as Glm5NextTextForgetGate but with no gate_lower_bound and no A_log reshape."""
 
     def __init__(self, config: KimiLinearConfig):
         super().__init__(config)
+        self.A_log = nn.Parameter(torch.empty(1, 1, self.num_heads, 1))
         del self.safe_gate_lower_bound
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -220,7 +222,7 @@ class KimiLinearForgetGate(Glm5NextTextForgetGate):
 
         forget_gate = self.f_b_proj(self.f_a_proj(hidden_states))
         g = (forget_gate.float() + self.dt_bias.float().view(1, 1, -1)).view(hidden_shape)
-        A_log = self.A_log.float().view(1, 1, self.num_heads, 1)
+        A_log = self.A_log.float()
         decay_rate = torch.exp(A_log)
 
         # Softplus "log(1 + exp(x))" with uper bound restraint to avoid overflows
