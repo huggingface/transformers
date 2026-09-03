@@ -613,6 +613,8 @@ class Trainer:
         self._train_batch_size = args.train_batch_size
         # Guards one-time LR scheduler creation in create_optimizer_and_scheduler
         self._created_lr_scheduler = False
+        # Resolved lazily at the first gradient clip; see `_has_mixed_mesh_grads`.
+        self._mixed_mesh_grads: bool | None = None
 
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
@@ -2687,17 +2689,21 @@ class Trainer:
         return total_norm
 
     def _has_mixed_mesh_grads(self, model) -> bool:
-        """True when the gradients do not all share one device mesh, so whole-set ops cannot be used."""
+        """True when the gradients do not all share one device mesh, so whole-set ops cannot be used.
+
+        Static for the life of the run (sharding never changes after setup), so scan only once."""
         from torch.distributed.tensor import DTensor
 
-        meshes = set()
-        for p in model.parameters():
-            if p.grad is None:
-                continue
-            meshes.add(p.grad.device_mesh if isinstance(p.grad, DTensor) else None)
-            if len(meshes) > 1:
-                return True
-        return False
+        if self._mixed_mesh_grads is None:
+            meshes = set()
+            for p in model.parameters():
+                if p.grad is None:
+                    continue
+                meshes.add(p.grad.device_mesh if isinstance(p.grad, DTensor) else None)
+                if len(meshes) > 1:
+                    break
+            self._mixed_mesh_grads = len(meshes) > 1
+        return self._mixed_mesh_grads
 
     def _clip_grad_norm(self, model):
         """Clip gradients to max_grad_norm. Returns the pre-clip gradient norm."""

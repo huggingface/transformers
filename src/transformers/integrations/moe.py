@@ -404,14 +404,20 @@ def dispatch_experts_forward(
         def forward(ctx, x, out_sizes, in_sizes, group):
             ctx.group, ctx.out_sizes, ctx.in_sizes = group, out_sizes, in_sizes
             out = x.new_empty(sum(out_sizes), *x.shape[1:])
-            dist.all_to_all_single(out, x.contiguous(), output_split_sizes=out_sizes, input_split_sizes=in_sizes, group=group)
+            dist.all_to_all_single(
+                out, x.contiguous(), output_split_sizes=out_sizes, input_split_sizes=in_sizes, group=group
+            )
             return out
 
         @staticmethod
         def backward(ctx, grad):
             back = grad.new_empty(sum(ctx.in_sizes), *grad.shape[1:])
             dist.all_to_all_single(
-                back, grad.contiguous(), output_split_sizes=ctx.in_sizes, input_split_sizes=ctx.out_sizes, group=ctx.group
+                back,
+                grad.contiguous(),
+                output_split_sizes=ctx.in_sizes,
+                input_split_sizes=ctx.out_sizes,
+                group=ctx.group,
             )
             return back, None, None, None
 
@@ -639,10 +645,6 @@ def grouped_mm_experts_forward(
 
     # Apply routing weights
     weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
-
-    # Post-mask (fwd path).
-    if self.is_expert_parallel:
-        weighted_out.masked_fill_(sentinel_mask, 0.0)
 
     # Restore original order
     inv_perm = torch.empty_like(perm)

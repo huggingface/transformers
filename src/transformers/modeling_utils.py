@@ -4791,7 +4791,9 @@ class PreTrainedModel(
             import time as _time
 
             sweep_start = _time.time()
-            unmarked = [n for n, v in self.state_dict(keep_vars=True).items() if not getattr(v, "_is_hf_initialized", False)]
+            unmarked = [
+                n for n, v in self.state_dict(keep_vars=True).items() if not getattr(v, "_is_hf_initialized", False)
+            ]
             logger.warning(f"init sweep: {len(unmarked)} unmarked params, e.g. {unmarked[:8]}")
             self.initialize_weights()
             logger.warning(f"init sweep took {_time.time() - sweep_start:.1f}s")

@@ -734,8 +734,9 @@ class EpRouterParallel(TensorParallelLayer):
         router_logits, router_scores, router_indices, *extra_outputs = output
         # Each rank's score gradient covers only its local experts' slots; sum the per-rank partials
         # before the mask (each slot has exactly one owning rank, so the sum is exact).
-        process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-        router_scores = _AllReduceBackward.apply(router_scores, process_group)
+        if torch.is_grad_enabled() and router_scores.requires_grad:
+            process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+            router_scores = _AllReduceBackward.apply(router_scores, process_group)
         non_local_mask = (router_indices // num_local_experts) != ep_rank
         router_scores = router_scores.masked_fill(non_local_mask, 0.0)
         router_indices = router_indices.masked_fill(non_local_mask, -1)

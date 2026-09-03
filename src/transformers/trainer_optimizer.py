@@ -205,26 +205,24 @@ def _get_adamw_torch(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     ctx.optimizer_kwargs.update(ctx.adam_kwargs)
     if ctx.args.optim == OptimizerNames.ADAMW_TORCH_FUSED:
         ctx.optimizer_kwargs.update({"fused": True})
-    # Fused/foreach kernels cannot span parameters on different meshes (e.g. under expert parallelism).
-    if _has_mixed_dtensor_params(ctx.model):
+    # HACK(ep-2d): expert parallelism leaves only the expert weights as DTensor, so the fused and
+    # foreach kernels cannot span the parameter set. Step per parameter instead.
+    if ctx.model is not None and has_mixed_dtensor(p for p in ctx.model.parameters() if p.requires_grad):
         ctx.optimizer_kwargs.update({"fused": False, "foreach": False})
     return AdamW, ctx.optimizer_kwargs
 
 
-def _has_mixed_dtensor_params(model) -> bool:
-    """True when parameters do not all share one device mesh, so fused/foreach kernels cannot span them."""
+def has_mixed_dtensor(tensors) -> bool:
+    """Whether `tensors` mixes `DTensor` and plain tensors, as expert parallelism leaves a model:
+    experts sharded, everything else replicated."""
     from torch.distributed.tensor import DTensor
 
-    if model is None:
-        return False
-    meshes = set()
-    for p in model.parameters():
-        if not p.requires_grad:
-            continue
-        meshes.add(p.device_mesh if isinstance(p, DTensor) else None)
-        if len(meshes) > 1:
-            return True
-    return False
+    tensors = list(tensors)
+    return (
+        bool(tensors)
+        and any(isinstance(t, DTensor) for t in tensors)
+        and not all(isinstance(t, DTensor) for t in tensors)
+    )
 
 
 def _get_adamw_torch_xla(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
