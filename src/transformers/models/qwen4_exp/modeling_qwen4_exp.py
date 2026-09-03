@@ -1170,8 +1170,12 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
             blocks.append(ngram_ids + head_offsets.view(1, 1, -1))
 
         ngram_ids = torch.cat(blocks, dim=-1)[:, -input_ids.shape[1] :]
-        # We need explicit device placement here, as the embedding may be skipped from device_map completely
-        return self.ngram_embedding(ngram_ids.to(self.ngram_embedding.weight.device)).to(ngram_ids.device).flatten(-2)
+        # We need explicit device placement here, as the embedding may be skipped from device_map completely (we just need to be
+        # careful in the case of offloading to disk)
+        execution_device = (
+            self.ngram_embedding.weight.device if self.ngram_embedding.weight.device.type != "meta" else None
+        )
+        return self.ngram_embedding(ngram_ids.to(execution_device)).to(ngram_ids.device).flatten(-2)
 
 
 class Qwen4ExpTextPLELayer(nn.Module):
