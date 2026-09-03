@@ -76,6 +76,9 @@ _KERNELS_INTERNAL_PATH_MAPPINGS = {
     "selective_scan_fn": "ops.selective_scan_interface",
 }
 
+# Maps from import name to the distribution that ships it, where the two differ
+_PACKAGE_TO_DISTRIBUTION = {"fla": "flash-linear-attention"}
+
 
 if is_kernels_available():
     from kernels import (
@@ -859,11 +862,11 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
                 return torch_function(*args, **kwargs)
 
             if not is_new_implementation and not is_torchdynamo_compiling():
-                # These torch paths are readable references, not fast kernels: for
-                # `chunk_gated_delta_rule` the gap is more than an order of magnitude on a H100.
-                # Warn the user when they end up on one. The logger is untraceable, hence the guard.
-                # `flash-linear-attention` is the distribution that ships the `fla` import name.
-                distribution = "flash-linear-attention" if package == "fla" else package
+                # These torch paths are readable references, not fast kernels, so their runtimes are
+                # significantly slower: for `chunk_gated_delta_rule` the gap is more than an order of
+                # magnitude on an H100. Warn the user when they end up on one. The logger is untraceable,
+                # hence the guard.
+                distribution = _PACKAGE_TO_DISTRIBUTION.get(package, package)
                 logger.warning_once(
                     f"`{func_name}` is falling back to its reference PyTorch implementation because "
                     f"`{distribution}` is not installed. This is correct but much slower; install "
