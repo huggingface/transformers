@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import re
 import weakref
 
@@ -120,6 +121,49 @@ def _use_local_dtensor_params(module):
                     requires_grad=current.requires_grad,
                 )
 
+
+
+# Symmetric-memory all-reduce for the inference path. A decode step under tensor parallelism does two all-reduces
+# per layer on a [batch, hidden] bf16 tensor of a few MB, and NCCL's ring is latency-bound there: 44 us per call at
+# tp8 for 1.5 MB inside a cuda graph, against 19 us for torch's two-shot symmetric-memory kernel (25 vs 19 at tp4).
+# One buffer per (group, hidden, dtype) is allocated and rendezvoused the first time a shape is seen, sized to the
+# largest row count seen, and every call reduces in a prefix view of it. A rendezvous cannot happen while a cuda
+# graph is being captured, so a larger row count seen during capture falls back to NCCL for that call; continuous
+# batching warms up at its largest batch before it captures anything, so that fallback is not taken there.
+_SYMM_BUFFERS: dict[tuple, "torch.Tensor"] = {}
+
+
+def _inference_all_reduce(output: "torch.Tensor", process_group) -> None:
+    if (
+        output.dim() < 2
+        or not output.is_cuda
+        or not output.is_contiguous()
+        or dist.get_world_size(process_group) > 8
+        or os.environ.get("HF_TP_NCCL_ALL_REDUCE") == "1"
+    ):
+        dist.all_reduce(output, group=process_group)
+        return
+    # the model runs on [batch, tokens, hidden]; the reduction only cares about rows of `hidden`
+    output = output.view(-1, output.shape[-1])
+    try:
+        import torch.distributed._symmetric_memory as symm_mem
+    except ImportError:
+        dist.all_reduce(output, group=process_group)
+        return
+    rows, hidden = output.shape
+    key = (process_group.group_name, hidden, output.dtype)
+    buf = _SYMM_BUFFERS.get(key)
+    if buf is None or buf.shape[0] < rows:
+        if torch.cuda.is_current_stream_capturing():
+            dist.all_reduce(output, group=process_group)
+            return
+        buf = symm_mem.empty(max(rows, 8192), hidden, dtype=output.dtype, device=output.device)
+        symm_mem.rendezvous(buf, process_group.group_name)
+        _SYMM_BUFFERS[key] = buf
+    view = buf[:rows]
+    view.copy_(output)
+    torch.ops.symm_mem.two_shot_all_reduce_(view, "sum", process_group.group_name)
+    output.copy_(view)
 
 class TensorParallelLayer:
     def should_use_local_tensors(self, module):
@@ -331,7 +375,7 @@ class RowwiseParallel(TensorParallelLayer):
         )
         if use_local_inference_path:
             process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-            dist.all_reduce(output, group=process_group)
+            _inference_all_reduce(output, process_group)
             if (bias := module._parameters.get("bias")) is not None:
                 output = output + (bias.to_local() if isinstance(bias, DTensor) else bias)
         else:
