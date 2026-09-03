@@ -494,9 +494,26 @@ def _test_fsdp2_plan_vs_ddp_impl(rank, config_class, config_dict, tie_word_embed
         logger.debug("DDP and FSDP2 comparison checks passed.")
 
 
+def _grad_norm_across_meshes(model):
+    """Total gradient norm of parameters living on different device meshes (what the Trainer does)."""
+    from torch.distributed.tensor import DTensor
+    from torch.nn.utils import get_total_norm
+
+    grads_by_mesh = {}
+    for param in model.parameters():
+        if param.grad is not None:
+            grads_by_mesh.setdefault(param.grad.device_mesh if isinstance(param.grad, DTensor) else None, []).append(
+                param.grad
+            )
+    norms = [get_total_norm(grads) for grads in grads_by_mesh.values()]
+    norms = [n.full_tensor() if isinstance(n, DTensor) else n for n in norms]
+    return torch.linalg.vector_norm(torch.stack(norms))
+
+
 def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, dtype=None):
-    """DDP vs a 2-D (fsdp, tp) mesh with expert parallelism on `tp`: same batch on every rank, so the
-    sharded run has to trace the DDP run step by step and end on the same weights."""
+    """DDP vs a 2-D (fsdp, tp) mesh with expert parallelism on `tp`. DDP sees the whole batch on every
+    rank; each `fsdp` rank of the 2-D run sees its own slice of it, so FSDP2's reduction over `fsdp`
+    is exercised. Losses, gradient norms and final weights have to match step by step."""
     init_test_logger()
 
     if dtype is None:
@@ -504,25 +521,39 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
 
     device = _get_rank_device(rank)
     config = config_class.from_dict(config_dict)
-    batches = _build_repeated_training_batches(config, device, NUM_STEPS)
+    world_size = dist.get_world_size()
+    dp = world_size // 2
+    generator = torch.Generator(device=device)
+    generator.manual_seed(SEED)
+    input_ids = torch.randint(0, config.vocab_size, (dp * BATCH_SIZE, SEQ_LEN), device=device, generator=generator)
+    batches = [(input_ids, input_ids.clone())] * NUM_STEPS
 
     with _deterministic_init_model_dir(rank, config, dtype) as init_model_dir:
-        ddp_losses, _, ddp_state_dict = train_ddp(rank, batches, LR, device, dtype, init_model_dir)
+        ddp_losses, ddp_grad_norms, ddp_state_dict = train_ddp(rank, batches, LR, device, dtype, init_model_dir)
 
         _set_determinism(SEED)
-        world_size = dist.get_world_size()
         model = AutoModelForCausalLM.from_pretrained(
             init_model_dir,
             torch_dtype=dtype,
-            distributed_config=DistributedConfig(tp_size=2, fsdp_size=world_size // 2, enable_expert_parallel=True),
+            distributed_config=DistributedConfig(tp_size=2, fsdp_size=dp, enable_expert_parallel=True),
         )
-        assert model.tp_size == 2 and model.fsdp_size == world_size // 2
+        assert model.tp_size == 2 and model.fsdp_size == dp
         assert model._device_mesh.mesh_dim_names == ("fsdp", "tp")
         model.train()
         optimizer = torch.optim.Adam(model.parameters(), lr=LR, foreach=False)
-        # `clip_grad_norm_` cannot span parameters living on different meshes; the Trainer has its own
-        # norm for that case, so only the losses and the final weights are compared here.
-        losses, _ = _run_training_steps(model, optimizer, batches, track_grad_norms=False)
+        dp_rank = model._device_mesh["fsdp"].get_local_rank()
+        dp_group = model._device_mesh["fsdp"].get_group()
+        losses, grad_norms = [], []
+        for ids, labels in batches:
+            rows = slice(dp_rank * BATCH_SIZE, (dp_rank + 1) * BATCH_SIZE)
+            optimizer.zero_grad()
+            loss = model(input_ids=ids[rows], labels=labels[rows], use_cache=False).loss
+            loss.backward()
+            grad_norms.append(_grad_norm_across_meshes(model).item())
+            optimizer.step()
+            loss = loss.detach()
+            dist.all_reduce(loss, group=dp_group)
+            losses.append(loss.item() / dp)
         state_dict = gather_full_state_dict(model)
 
     for step in range(len(ddp_losses)):
@@ -532,6 +563,13 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
             rtol=DDP_FSDP_RTOL,
             atol=DDP_FSDP_ATOL,
             msg=f"Loss mismatch at step {step}: DDP={ddp_losses[step]}, FSDP2+EP={losses[step]}",
+        )
+        torch.testing.assert_close(
+            torch.tensor(ddp_grad_norms[step]),
+            torch.tensor(grad_norms[step]),
+            rtol=DDP_FSDP_RTOL,
+            atol=DDP_FSDP_ATOL,
+            msg=f"Grad norm mismatch at step {step}: DDP={ddp_grad_norms[step]}, FSDP2+EP={grad_norms[step]}",
         )
 
     for key in ddp_state_dict:
@@ -694,7 +732,8 @@ class FSDPTesterMixin(ABC):
 
     @is_fsdp_test
     def test_fsdp2_expert_parallel_2d_vs_ddp(self):
-        """Training on a 2-D (fsdp, tp) mesh with expert parallelism traces DDP step by step."""
+        """Training on a 2-D (fsdp, tp) mesh with expert parallelism, each fsdp rank on its own slice of
+        the batch, traces DDP on the whole batch step by step."""
         config = self.model_tester.get_config()
         if getattr(config, "base_model_ep_plan", None) is None:
             self.skipTest("Model does not have an expert parallel plan (base_model_ep_plan)")
