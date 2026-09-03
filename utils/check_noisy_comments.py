@@ -49,7 +49,9 @@ CHECKER_CONFIG = {
         ".github/scripts/codeowners_for_review_action",
     ],
     "check_args": [],
-    "fix_args": None,
+    # Nothing here is auto-fixable, but `make style` should still surface findings while you are
+    # writing the comment, so this runs in --fix mode instead of being skipped as check-only.
+    "fix_args": [],
     # For the reviewer resolver, which supplies the file ownership used to skip owners' own comments.
     "needs_requirements": True,
 }

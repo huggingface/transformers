@@ -269,7 +269,8 @@ class NoisyCommentsTest(unittest.TestCase):
 
             with (
                 patch.object(check_noisy_comments, "ROOT", repo_root),
-                patch.object(sys, "argv", ["check_noisy_comments.py", str(path), "--no-cache"]),
+                patch.object(check_noisy_comments, "_running_in_pr", return_value=False),
+                patch.object(sys, "argv", ["check_noisy_comments.py", str(path), "--no-cache", "--progress", "never"]),
                 redirect_stdout(stdout),
             ):
                 exit_code = check_noisy_comments.main()
@@ -294,7 +295,10 @@ class NoisyCommentsTest(unittest.TestCase):
 
             with (
                 patch.object(check_noisy_comments, "ROOT", repo_root),
-                patch.object(sys, "argv", ["check_noisy_comments.py", "--path", "checked", "--no-cache"]),
+                patch.object(check_noisy_comments, "_running_in_pr", return_value=False),
+                patch.object(
+                    sys, "argv", ["check_noisy_comments.py", "--path", "checked", "--no-cache", "--progress", "never"]
+                ),
                 redirect_stdout(stdout),
             ):
                 exit_code = check_noisy_comments.main()
@@ -371,7 +375,12 @@ class NoisyCommentsTest(unittest.TestCase):
 
             with (
                 patch.object(check_noisy_comments, "ROOT", repo_root),
-                patch.object(sys, "argv", ["check_noisy_comments.py", "--path", str(repo_root), "--no-cache"]),
+                patch.object(check_noisy_comments, "_running_in_pr", return_value=False),
+                patch.object(
+                    sys,
+                    "argv",
+                    ["check_noisy_comments.py", "--path", str(repo_root), "--no-cache", "--progress", "never"],
+                ),
                 redirect_stdout(stdout),
             ):
                 exit_code = check_noisy_comments.main()
@@ -389,8 +398,20 @@ class NoisyCommentsTest(unittest.TestCase):
 
             with (
                 patch.object(check_noisy_comments, "ROOT", repo_root),
+                patch.object(check_noisy_comments, "_running_in_pr", return_value=False),
                 patch.object(
-                    sys, "argv", ["check_noisy_comments.py", "--path", str(path), "--rule", "NC002", "--no-cache"]
+                    sys,
+                    "argv",
+                    [
+                        "check_noisy_comments.py",
+                        "--path",
+                        str(path),
+                        "--rule",
+                        "NC002",
+                        "--no-cache",
+                        "--progress",
+                        "never",
+                    ],
                 ),
                 redirect_stdout(stdout),
             ):
@@ -638,7 +659,15 @@ class NoisyCommentsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
             path = self._write_file(repo_root, NOISY_SOURCE)
-            argv = ["check_noisy_comments.py", str(path), "--no-cache", "--no-owner-filter", "--no-date-filter"]
+            argv = [
+                "check_noisy_comments.py",
+                str(path),
+                "--no-cache",
+                "--no-owner-filter",
+                "--no-date-filter",
+                "--progress",
+                "never",
+            ]
 
             with (
                 patch.object(check_noisy_comments, "ROOT", repo_root),
@@ -657,7 +686,15 @@ class NoisyCommentsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
             path = self._write_file(repo_root, NOISY_SOURCE)
-            argv = ["check_noisy_comments.py", str(path), "--no-cache", "--no-owner-filter", "--no-date-filter"]
+            argv = [
+                "check_noisy_comments.py",
+                str(path),
+                "--no-cache",
+                "--no-owner-filter",
+                "--no-date-filter",
+                "--progress",
+                "never",
+            ]
 
             with (
                 patch.object(check_noisy_comments, "ROOT", repo_root),
@@ -681,6 +718,8 @@ class NoisyCommentsTest(unittest.TestCase):
                 "--no-owner-filter",
                 "--no-date-filter",
                 "--no-fail-on-findings",
+                "--progress",
+                "never",
             ]
 
             with (
@@ -699,7 +738,15 @@ class NoisyCommentsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = Path(tmpdir)
             path = self._write_file(repo_root, NOISY_SOURCE)
-            argv = ["check_noisy_comments.py", str(path), "--no-cache", "--no-owner-filter", "--no-date-filter"]
+            argv = [
+                "check_noisy_comments.py",
+                str(path),
+                "--no-cache",
+                "--no-owner-filter",
+                "--no-date-filter",
+                "--progress",
+                "never",
+            ]
 
             # No merge base (a CI checkout without `origin/main`): the scan covers the whole tree, so
             # blocking would fail PRs for comments they never touched.
@@ -722,7 +769,12 @@ class NoisyCommentsTest(unittest.TestCase):
 
             with (
                 patch.object(check_noisy_comments, "ROOT", repo_root),
-                patch.object(sys, "argv", ["check_noisy_comments.py", str(path), "--fail-on-findings", "--no-cache"]),
+                patch.object(check_noisy_comments, "_running_in_pr", return_value=False),
+                patch.object(
+                    sys,
+                    "argv",
+                    ["check_noisy_comments.py", str(path), "--fail-on-findings", "--no-cache", "--progress", "never"],
+                ),
                 redirect_stdout(io.StringIO()),
             ):
                 exit_code = check_noisy_comments.main()

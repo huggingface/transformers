@@ -10,9 +10,9 @@ export PYTHONPATH = src
 # so they can never drift out of sync (e.g. silently dropping `auto_mappings`
 # from CI, as happened in #45018 → fixed in #45774).
 
-STYLE_CHECKERS := ruff_check, ruff_format, init_isort, sort_auto_mappings
+STYLE_CHECKERS := ruff_check, ruff_format, init_isort, sort_auto_mappings, noisy_comments
 TYPING_CHECKERS := types, modeling_structure
-CODE_QUALITY_CHECKERS := $(TYPING_CHECKERS), $(STYLE_CHECKERS), noisy_comments
+CODE_QUALITY_CHECKERS := $(TYPING_CHECKERS), $(STYLE_CHECKERS)
 
 REPO_CONSISTENCY_CHECKERS := \
 	auto_mappings, \
