@@ -97,6 +97,7 @@ from .trainer_optimizer import (
     _OPTIMIZER_HANDLERS,
     OptimizerContext,
     _parse_optim_args,
+    has_mixed_dtensor,
     is_optimizer_factory,
 )
 from .trainer_pt_utils import (
@@ -1271,6 +1272,18 @@ class Trainer:
                     "weight_decay": 0.0,
                 },
             ]
+            if has_mixed_dtensor(p for group in optimizer_grouped_parameters for p in group["params"]):
+                # Parameters on different device meshes (expert parallelism, alone or with FSDP2 on a 2-D
+                # mesh) cannot share one fused/foreach kernel call: give each mesh its own param group.
+                from torch.distributed.tensor import DTensor
+
+                split_groups = []
+                for group in optimizer_grouped_parameters:
+                    by_mesh = defaultdict(list)
+                    for p in group["params"]:
+                        by_mesh[p.device_mesh if isinstance(p, DTensor) else None].append(p)
+                    split_groups.extend({**group, "params": params} for params in by_mesh.values())
+                optimizer_grouped_parameters = split_groups
 
             if self.optimizer_cls_and_kwargs is not None:
                 optimizer_cls, optimizer_kwargs = self.optimizer_cls_and_kwargs
@@ -2658,8 +2671,6 @@ class Trainer:
         # Static for the life of the run (sharding never changes after setup), so scan the
         # parameters only on the first call.
         if self._mixed_mesh_grads is None:
-            from .trainer_optimizer import has_mixed_dtensor
-
             self._mixed_mesh_grads = has_mixed_dtensor(p.grad for p in model.parameters() if p.grad is not None)
         return self._mixed_mesh_grads
 
