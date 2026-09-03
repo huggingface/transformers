@@ -470,6 +470,11 @@ class DeferredStopCheck(StopCheck):
             self.streamer.put(tokens_cpu.clone())
         if self.cache is not None:
             self.cache.crop(-steps_to_undo)
+            # We also need to deactivate past_recording, since we are giving the cache back to the user and it may lead to unneeded
+            # memory spike on the next prefill
+            for layer in self.cache.layers:
+                if hasattr(layer, "record_past"):
+                    layer.record_past = False
         return steps_to_undo
 
 
