@@ -51,6 +51,9 @@ from transformers.generation.continuous_batching.requests import (
     RequestStatus,
     get_device_and_memory_breakdown,
 )
+from transformers.generation.continuous_batching.utils import (
+    SUPPORTED_CUDA_GRAPH_DEVICE_TYPES,
+)
 from transformers.integrations.eager_paged import eager_paged_attention_forward
 from transformers.integrations.sdpa_paged import sdpa_attention_paged_forward
 from transformers.testing_utils import (
@@ -809,9 +812,12 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         is_fa = is_flash_attention_requested(requested_attention_implementation=attn_implementation)
         if is_fa and not is_flash_attn_2_available(kernels_fallback_ok=True):
             self.skipTest("Flash Attention is not available and neither is the kernels library. Skipping test.")
-        # Skip the test if cuda graph is on but the device is not CUDA
-        if continuous_batching_config.use_cuda_graph and torch_device != "cuda":
-            self.skipTest("CUDA graph is only supported on CUDA devices. Skipping test.")
+        # Skip the test if CUDA graph is on but the device does not support graph capture.
+        if (
+            any(continuous_batching_config.cuda_graph_booleans)
+            and torch_device not in SUPPORTED_CUDA_GRAPH_DEVICE_TYPES
+        ):
+            self.skipTest("CUDA graph is only supported on CUDA or XPU devices. Skipping test.")
 
         # If the config turns on compile, change the generation config to use the default mode instead of
         # max-autotune-no-cudagraphs which can change the kernels between generate_batch and generate
@@ -871,7 +877,11 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # can flip an early greedy tie in bf16, whereas eager float32 tracks the true greedy path.
         past_key_values = None
         if not compare_to_fp32_eager:
-            model.generation_config.use_cuda_graph = continuous_batching_config.use_cuda_graph
+            model.generation_config.use_cuda_graph = (
+                any(continuous_batching_config.cuda_graph_booleans)
+                if torch_device in SUPPORTED_CUDA_GRAPH_DEVICE_TYPES
+                else False
+            )
             model.generation_config.compile_config = continuous_batching_config.varlen_compile_config
             # Create a static cache if compile_config is set, because regular generate requires a compileable cache
             if model.generation_config.compile_config is not None:

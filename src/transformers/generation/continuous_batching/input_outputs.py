@@ -11,10 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from contextlib import nullcontext
 from functools import partial
 from itertools import repeat
-from typing import TypedDict
+from typing import Any, TypedDict
 
 import torch
 
@@ -25,7 +24,15 @@ from ...utils import get_available_devices
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .requests import TMP_TOKEN_ID, FutureRequestState, logger
-from .utils import CudaGraphBuffer, aligned_divide, attn_mask_is_needed, build_attention_mask, pad_to_pow2
+from .utils import (
+    CudaGraphBuffer,
+    aligned_divide,
+    attn_mask_is_needed,
+    build_attention_mask,
+    device_stream_ctx,
+    get_torch_device_module,
+    pad_to_pow2,
+)
 
 
 class PagedAttentionArgs(TypedDict):
@@ -95,6 +102,7 @@ class ContinuousBatchingIOs:
         # Memoize attributes
         self.cache = cache
         self.device = device
+        self.device_module = get_torch_device_module(device) if device.type in ("cuda", "xpu") else None
         self.config = config
         self.model_dtype = model_dtype
         self.max_requests_per_batch = continuous_batching_config.max_requests_per_batch
@@ -117,7 +125,7 @@ class ContinuousBatchingIOs:
         # Setup static tensors and compute stream
         self._setup_static_tensors(logit_processor=logit_processor)
         self._reset_static_tensors(full_reset=True)
-        self.compute_stream = torch.cuda.Stream(device=self.device) if device.type == "cuda" else None
+        self.compute_stream = self.device_module.Stream(device=self.device) if self.device_module is not None else None
 
     def _setup_static_tensors(self, logit_processor: ContinuousBatchingLogitsProcessorList) -> None:
         """Allocates static tensors for generation inputs and outputs. This is called only once at init time, to avoid
@@ -209,9 +217,7 @@ class ContinuousBatchingIOs:
         )
         # For read index, the +T is because there are sentinel indices for seqlen_q when model uses a sliding window
 
-    def _transfer_inputs(
-        self, other: "ContinuousBatchingIOs", stream: torch.cuda.Stream, non_blocking: bool = False
-    ) -> None:
+    def _transfer_inputs(self, other: "ContinuousBatchingIOs", stream: Any, non_blocking: bool = False) -> None:
         # Transfer accumulators
         other.num_q_tokens = self.num_q_tokens
         other.max_kv_read = self.max_kv_read
@@ -225,7 +231,7 @@ class ContinuousBatchingIOs:
         other.max_seqlen_q = self.max_seqlen_q
         other.max_seqlen_k = dict(self.max_seqlen_k)
         # Transfer static tensors
-        maybe_stream = torch.cuda.stream(stream) if stream is not None else nullcontext()
+        maybe_stream = device_stream_ctx(other.device_module, stream)
         with maybe_stream:
             other._bulk_input_tensor.copy_(self._bulk_input_tensor, non_blocking=non_blocking)  # fast bulk transfer
             # Only transfer block_table for decode-only batches (when it's actually used)
@@ -305,6 +311,9 @@ class ContinuousBatchingIOs:
     def retrieve_device_outputs(self) -> None:
         if self.compute_stream is not None:
             self.compute_stream.synchronize()
+
+    def stream_ctx(self):
+        return device_stream_ctx(self.device_module, self.compute_stream)
 
     def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int], list[float] | None]:
         new_tokens = self.output_ids[0, : self.num_request_in_batch].tolist()
@@ -546,7 +555,7 @@ class ContinuousBatchingIOs:
         # Keys for varlen path
         return (self.num_q_tokens, self.max_kv_read, *self.max_seqlen_k.values())
 
-    def get_graph(self, prefix: str = "") -> torch.cuda.CUDAGraph | None:
+    def get_graph(self, prefix: str = "") -> Any | None:
         key = self._get_graph_key()
         graph = self.graphs.get_graph(key)
         # If this point is reached, it means the next step will be a new graph capture
@@ -554,7 +563,7 @@ class ContinuousBatchingIOs:
             logger.info(f"{prefix}Creating graph for {key = }")
         return graph
 
-    def set_graph(self, graph: torch.cuda.CUDAGraph) -> None:
+    def set_graph(self, graph: Any) -> None:
         key = self._get_graph_key()
         self.graphs.set_graph(key, graph)
         logger.info(f"Setting graph for {key = }")
@@ -587,10 +596,10 @@ class HostDeviceIOPair:
             model_dtype=model_dtype,
             logit_processor=logit_processor,
         )
-        # Create events only on CUDA devices
-        self.h2d_over = torch.cuda.Event() if torch.cuda.is_available() else None
-        self.compute_over = torch.cuda.Event() if torch.cuda.is_available() else None
-        self.d2h_over = torch.cuda.Event() if torch.cuda.is_available() else None
+        self.device_module = get_torch_device_module(device)
+        self.h2d_over = self.device_module.Event()
+        self.compute_over = self.device_module.Event()
+        self.d2h_over = self.device_module.Event()
 
     def reset(self) -> None:
         self.host_io.reset()
@@ -599,11 +608,11 @@ class HostDeviceIOPair:
             if event is not None:
                 event.synchronize()
 
-    def transfer_inputs_h2d(self, stream: torch.cuda.Stream) -> None:
+    def transfer_inputs_h2d(self, stream: Any) -> None:
         self.host_io._transfer_inputs(self.device_io, stream=stream, non_blocking=True)
 
-    def transfer_outputs_d2h(self, stream: torch.cuda.Stream | None) -> None:
-        maybe_stream = torch.cuda.stream(stream) if stream is not None else nullcontext()
+    def transfer_outputs_d2h(self, stream: Any | None) -> None:
+        maybe_stream = device_stream_ctx(self.device_module, stream)
         with maybe_stream:
             self.host_io.output_ids.copy_(self.device_io.output_ids, non_blocking=True)
 
@@ -663,9 +672,10 @@ class ContinuousBatchingAsyncIOs:
         model_dtype: torch.dtype,
         logit_processor: ContinuousBatchingLogitsProcessorList,
     ) -> None:
-        # Async batching needs streams to function, so check is CUDA is available
-        if not torch.cuda.is_available():
-            raise RuntimeError(f"Async batching requires CUDA, but {torch.cuda.is_available() = }")
+        self.device = device
+        self.device_module = get_torch_device_module(device)
+        if not self.device_module.is_available():
+            raise RuntimeError(f"Async batching requires an available {device.type} device.")
         # IO pairs used to avoid race conditions
         self.current_pair = 0
         self.io_pairs = [
@@ -680,9 +690,9 @@ class ContinuousBatchingAsyncIOs:
             for _ in range(2)
         ]
         # CUDA streams
-        self.h2d_stream = torch.cuda.Stream(device=device)
-        self.d2h_stream = torch.cuda.Stream(device=device)
-        self.compute_stream = torch.cuda.Stream(device=device)
+        self.h2d_stream = self.device_module.Stream(device=device)
+        self.d2h_stream = self.device_module.Stream(device=device)
+        self.compute_stream = self.device_module.Stream(device=device)
         # Set all unused compute streams to None
         self.io_pairs[0].host_io.compute_stream = None
         self.io_pairs[0].device_io.compute_stream = None
@@ -779,11 +789,11 @@ class ContinuousBatchingAsyncIOs:
         # The output ids are used to copy_ the inferred tokens: they need to be on the device
         return self.io_pairs[self.current_pair].device_io.output_ids
 
-    def get_graph(self) -> torch.cuda.CUDAGraph | None:
+    def get_graph(self) -> Any | None:
         prefix = f"(IO {self.current_pair})"
         return self.io_pairs[self.current_pair].device_io.get_graph(prefix=prefix)
 
-    def set_graph(self, graph: torch.cuda.CUDAGraph) -> None:
+    def set_graph(self, graph: Any) -> None:
         self.io_pairs[self.current_pair].device_io.set_graph(graph)
 
     @property
@@ -802,6 +812,9 @@ class ContinuousBatchingAsyncIOs:
         # Swap IO pair
         self.swap_io_pairs()
 
+    def stream_ctx(self):
+        return device_stream_ctx(self.device_module, self.compute_stream)
+
     def swap_io_pairs(self) -> None:
         """Switch to the other IO pair so the next batch reads from / writes into a fresh set of static buffers."""
         self.current_pair = 1 - self.current_pair
@@ -809,7 +822,7 @@ class ContinuousBatchingAsyncIOs:
     # This method is called after the switch and not during the first batch
     def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int], list[float] | None]:
         io_pair = self.io_pairs[self.current_pair]
-        io_pair.d2h_over.synchronize()  # ty:ignore[unresolved-attribute]  <- this is always a CUDA event
+        io_pair.d2h_over.synchronize()
         return io_pair.host_io.prepare_batch_update()
 
     def reset(self) -> None:

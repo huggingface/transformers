@@ -18,7 +18,7 @@ import queue
 import threading
 from abc import abstractmethod
 from collections.abc import Callable, Generator
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from time import perf_counter
 from typing import Any
 
@@ -42,7 +42,7 @@ from .model_runner import ModelRunner
 from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import WorkloadHints, drain_queue
+from .utils import WorkloadHints, drain_queue, get_torch_device_module
 
 
 """
@@ -317,10 +317,13 @@ class ContinuousBatchProcessor:
         )
 
     def __del__(self) -> None:
+        device_module = None
+        if self.model_device.type in ("cuda", "xpu"):
+            device_module = get_torch_device_module(self.model_device)
         self.inputs_and_outputs = None  # clean up CUDA graphs in priority
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        if device_module is not None and device_module.is_available():
+            device_module.empty_cache()
 
     def reset(self) -> None:
         """Reset the batch processor for a new generation loop."""
@@ -514,9 +517,7 @@ class ContinuousBatchProcessor:
         if copy_source:
             # FIXME: this will avoid any race condition, but it can cause issue when using async batching with a sliding
             # window model. Fix will be fixed in a PR in the near future (tempfix, v5.3)
-            compute_stream = self.inputs_and_outputs.compute_stream
-            maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
-            with maybe_stream:
+            with self.inputs_and_outputs.stream_ctx():
                 self.cache.copy_cache(copy_source, copy_destination)
 
     def has_pending_requests(self) -> bool:
@@ -720,6 +721,9 @@ class ContinuousBatchingManager:
         # We expect the batch processor to be initialized at this point. Warn otherwise.
         if self.batch_processor is None:
             logger.warning("\nBatch processor was not initialized.")
+        device_module = None
+        if self.model.device.type in ("cuda", "xpu"):
+            device_module = get_torch_device_module(self.model.device)
 
         # If the manager is not started, warn and return.
         if self._generation_thread is None:
@@ -752,8 +756,8 @@ class ContinuousBatchingManager:
 
         # In all cases, a little cleanup is good
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        if device_module is not None and device_module.is_available():
+            device_module.empty_cache()
 
     def join(self, stop_trigger_time: float, timeout: float | None = None) -> None:
         """Wait for the background thread to finish. Wait can be capped using the timeout argument (in seconds)."""

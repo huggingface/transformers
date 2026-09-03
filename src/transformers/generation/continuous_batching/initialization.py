@@ -25,7 +25,7 @@ from ...modeling_flash_attention_utils import lazy_import_paged_flash_attention
 from ...utils import is_torch_xpu_available
 from ...utils.generic import is_flash_attention_requested
 from .requests import logger
-from .utils import WorkloadHints
+from .utils import WorkloadHints, is_cuda_graph_available
 
 
 FALLBACK_DEFAULTS = {
@@ -207,12 +207,14 @@ def decide_use_cuda_graphs(
 
     This function modifies the `use_cuda_graph` attribute of the config in place, to a tuple of booleans.
     """
-    # If cuda is not available, we cannot use cuda graphs
-    if not torch.cuda.is_available():
+    # If no CUDA graph-capture backend is available, we cannot use graphs.
+    graph_backend_available = is_cuda_graph_available()
+    if not graph_backend_available:
         intended_use_cuda_graph = any(cb_config.cuda_graph_booleans)
         if intended_use_cuda_graph:  # throw a warning only if the user intended to use cuda graphs
             logger.warning(
-                f"{cb_config.use_cuda_graph = } but {torch.cuda.is_available() = }: turning off cuda graphs"
+                f"{cb_config.use_cuda_graph = } but no CUDA graph-capture backend is available: "
+                "turning off CUDA graphs"
             )
         cb_config.use_cuda_graph = (False, False)
 
