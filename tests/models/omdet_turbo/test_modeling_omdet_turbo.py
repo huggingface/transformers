@@ -224,12 +224,6 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_object_detection_head_model(config, inputs_dict)
 
-    @unittest.skip(
-        reason="Unsupported as classes_input_ids are classes input are flattened by the processor: https://github.com/huggingface/transformers/issues/33669"
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(reason="OmDet-Turbo does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass

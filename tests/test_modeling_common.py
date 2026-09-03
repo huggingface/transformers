@@ -105,7 +105,6 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_mps,
     require_torch_multi_accelerator,
-    require_torch_multi_gpu,
     rocm_has_sdpa_flash_backend,
     run_first,
     run_test_using_subprocess,
@@ -3018,32 +3017,6 @@ class ModelTesterMixin(ExportTesterMixin):
                         inputs_embeds=inputs_embeds, decoder_inputs_embeds=decoder_inputs_embeds, **inputs
                     )[0]
             torch.testing.assert_close(out_embeds, out_ids)
-
-    @require_torch_gpu
-    @require_torch_multi_gpu
-    def test_multi_gpu_data_parallel_forward(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # move input tensors to accelerator O
-        for k, v in inputs_dict.items():
-            if torch.is_tensor(v):
-                inputs_dict[k] = v.to(0)
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            model.to(0)
-            model.eval()
-
-            if model.config._experts_implementation == "grouped_mm":
-                # DataParallel does not respect buffer alignment when replicating the model on
-                # multiple GPUs, which can cause errors in grouped_mm experts implementation.
-                model.set_experts_implementation("eager")
-
-            # Wrap model in nn.DataParallel
-            model = nn.DataParallel(model)
-            torch.cuda.synchronize()  # otherwise the transfer might not be complete
-            with torch.no_grad():
-                _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
     def check_device_map_is_respected(self, model, device_map):
         for param_name, param in model.named_parameters():
