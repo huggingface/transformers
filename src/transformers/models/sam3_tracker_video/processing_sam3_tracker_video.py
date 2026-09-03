@@ -29,12 +29,10 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
 from ...video_utils import VideoInput
 from .modeling_sam3_tracker_video import Sam3TrackerVideoInferenceSession
 
 
-@requires(backends=("torch",))
 @auto_docstring
 class Sam3TrackerVideoProcessor(ProcessorMixin):
     def __init__(
