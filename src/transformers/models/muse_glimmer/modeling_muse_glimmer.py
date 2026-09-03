@@ -1054,6 +1054,7 @@ class MuseGlimmerForConditionalGeneration(MuseGlimmerPreTrainedModel, Generation
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config):
         super().__init__(config)

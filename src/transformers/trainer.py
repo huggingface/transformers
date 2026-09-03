@@ -81,7 +81,7 @@ from .models.auto.modeling_auto import (
 from .optimization import GreedyLR, get_scheduler
 from .processing_utils import ProcessorMixin
 from .pytorch_utils import is_torch_greater_or_equal_than_2_6
-from .tokenization_utils_base import PreTrainedTokenizerBase
+from .tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
     DefaultFlowCallback,
@@ -99,6 +99,7 @@ from .trainer_optimizer import (
     is_optimizer_factory,
 )
 from .trainer_pt_utils import (
+    BatchRebalanceSampler,
     EvalLoopContainer,
     IterableDatasetShard,
     LabelSmoother,
@@ -999,16 +1000,32 @@ class Trainer:
         if is_torch_greater_or_equal_than_2_6:
             dataloader_params["in_order"] = self.args.dataloader_in_order
 
+        sampler = None
         if not isinstance(dataset, torch.utils.data.IterableDataset):
-            if sampler_fn is not None:
-                dataloader_params["sampler"] = sampler_fn(dataset)
-            dataloader_params["drop_last"] = self.args.dataloader_drop_last
+            sampler = sampler_fn(dataset) if sampler_fn is not None else None
+            if isinstance(sampler, BatchRebalanceSampler):
+                # Pass as `batch_sampler`; it is mutually exclusive with `batch_size`/`sampler`/`drop_last`.
+                dataloader_params.pop("batch_size", None)
+                dataloader_params["batch_sampler"] = sampler
+            else:
+                if sampler is not None:
+                    dataloader_params["sampler"] = sampler
+                dataloader_params["drop_last"] = self.args.dataloader_drop_last
             if is_training:
                 dataloader_params["worker_init_fn"] = partial(
                     seed_worker, num_workers=self.args.dataloader_num_workers, rank=self.args.process_index
                 )
 
         dataloader = self.accelerator.prepare(DataLoader(dataset, **dataloader_params))
+
+        # `BatchRebalanceSampler` is already rank-aware, so the `BatchSamplerShard` wrapper
+        # added by `accelerator.prepare` would re-shard it and silently drop samples. Neutralise
+        # it by making the wrapper a passthrough (num_processes=1)
+        if isinstance(sampler, BatchRebalanceSampler):
+            prepared_bs = getattr(dataloader, "batch_sampler", None)
+            if prepared_bs is not None and getattr(prepared_bs, "batch_sampler", None) is sampler:
+                prepared_bs.num_processes = 1
+                prepared_bs.process_index = 0
 
         # Store the prepared dataloader for subsequent evaluations if using persistent workers.
         if dataloader_key is not None and self.args.dataloader_persistent_workers:
@@ -1024,9 +1041,12 @@ class Trainer:
         if train_dataset is None:
             train_dataset = self.train_dataset
         if train_dataset is None or not has_length(train_dataset):
-            if train_dataset is not None and self.args.train_sampling_strategy == "group_by_length":
+            if train_dataset is not None and self.args.train_sampling_strategy in (
+                "group_by_length",
+                "batch_rebalance",
+            ):
                 logger.warning(
-                    "`train_sampling_strategy='group_by_length'` is ignored because the training dataset does not "
+                    f"`train_sampling_strategy='{self.args.train_sampling_strategy}'` is ignored because the training dataset does not "
                     "implement `__len__` (e.g. an `IterableDataset`). Examples will be consumed in the dataset's own "
                     "order."
                 )
@@ -1050,6 +1070,42 @@ class Trainer:
                 dataset=train_dataset,
                 lengths=lengths,
                 model_input_name=model_input_name,
+            )
+        elif self.args.train_sampling_strategy == "batch_rebalance":
+            if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
+                lengths = (
+                    train_dataset[self.args.length_column_name]
+                    if self.args.length_column_name in train_dataset.column_names
+                    else None
+                )
+            else:
+                lengths = None
+            model_input_name = (
+                self.processing_class.model_input_names[0] if self.processing_class is not None else None
+            )
+            if lengths is None:
+                model_input_name = model_input_name if model_input_name is not None else "input_ids"
+                if not isinstance(train_dataset[0], (dict, BatchEncoding)) or model_input_name not in train_dataset[0]:
+                    raise ValueError(
+                        "Can only automatically infer lengths for datasets whose items are dictionaries with an "
+                        f"'{model_input_name}' key."
+                    )
+                lengths = [len(feature[model_input_name]) for feature in train_dataset]
+            elif isinstance(lengths, torch.Tensor):
+                lengths = lengths.tolist()
+
+            world_size = max(1, self.args.world_size)
+            rank = self.args.process_index if self.args.world_size > 1 else 0
+            grad_accum = self.args.gradient_accumulation_steps
+            effective_batch_size = self.args.train_batch_size * grad_accum * world_size
+
+            return BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=world_size,
+                grad_accum=grad_accum,
+                rank=rank,
+                drop_last=self.args.dataloader_drop_last,
             )
         elif self.args.train_sampling_strategy == "sequential":
             return SequentialSampler(train_dataset)
@@ -1401,12 +1457,16 @@ class Trainer:
 
         # Activate gradient checkpointing if needed
         if args.gradient_checkpointing:
-            # `every_n_layers` selects which layers are checkpointed; the remaining keys are forwarded to
-            # `torch.utils.checkpoint.checkpoint`, so it has to come out of the dict before that happens.
+            # `every_n_layers` selects which layers are checkpointed and `offload` where their saved
+            # activations live; the remaining keys are forwarded to `torch.utils.checkpoint.checkpoint`, so both
+            # have to come out of the dict before that happens.
             gc_kwargs = dict(args.gradient_checkpointing_kwargs or {})
             every_n_layers = gc_kwargs.pop("every_n_layers", 1)
+            offload = gc_kwargs.pop("offload", False)
             self.model.gradient_checkpointing_enable(
-                gradient_checkpointing_kwargs=gc_kwargs or None, every_n_layers=every_n_layers
+                gradient_checkpointing_kwargs=gc_kwargs or None,
+                every_n_layers=every_n_layers,
+                offload=offload,
             )
 
         # If the model uses a tokenizer, it may have a new tokens for fine-tuning purposes.
@@ -1724,6 +1784,12 @@ class Trainer:
 
         if hasattr(train_dataloader, "set_epoch"):
             train_dataloader.set_epoch(epoch)
+        # `DataLoaderShard.set_epoch` (accelerate) does not forward to a batch sampler wrapped
+        # in `BatchSamplerShard`, so reach it explicitly.
+        shard_wrapper = getattr(train_dataloader, "batch_sampler", None)
+        underlying_sampler = getattr(shard_wrapper, "batch_sampler", None)
+        if hasattr(underlying_sampler, "set_epoch"):
+            underlying_sampler.set_epoch(epoch)
         epoch_iterator = iter(train_dataloader)
 
         # We chunkify the epoch iterator into gradient accumulation steps `n` batches
