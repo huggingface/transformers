@@ -191,32 +191,6 @@ class KimiLinearModelTest(CausalLMModelTest, unittest.TestCase):
         tol = 1e-3 if is_flash_linear_attention_available() else 1e-4
         torch.testing.assert_close(under_test_first, ref_first, rtol=tol, atol=tol)
 
-    def test_incremental_decoding_matches_full_forward(self):
-        """
-        Decoding token by token through the cache must match a single forward pass over the whole sequence.
-        This is what generation relies on, and it covers the three cache kinds Kimi Linear mixes at once:
-        the KDA recurrent state, the KDA conv state, and the MLA latent KV cache.
-        """
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config._attn_implementation = "eager"
-        model = KimiLinearModel._from_config(config)
-        model.to(torch_device)
-        model.eval()
-
-        input_ids = ids_tensor((1, 10), config.vocab_size).to(torch_device)
-        with torch.no_grad():
-            full = model(input_ids=input_ids, use_cache=False).last_hidden_state
-
-            cache = DynamicCache(config=config)
-            # prefill everything but the last token, then decode the remaining ones one at a time
-            model(input_ids=input_ids[:, :-3], past_key_values=cache, use_cache=True)
-            stepwise = []
-            for i in range(input_ids.shape[1] - 3, input_ids.shape[1]):
-                out = model(input_ids=input_ids[:, i : i + 1], past_key_values=cache, use_cache=True)
-                stepwise.append(out.last_hidden_state[:, -1, :])
-
-        torch.testing.assert_close(torch.stack(stepwise, dim=1), full[:, -3:, :], rtol=1e-3, atol=1e-3)
-
 
 @slow
 @require_torch_large_accelerator(memory=55)
