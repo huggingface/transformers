@@ -346,6 +346,30 @@ class FP8Linear(nn.Linear):
         )
 
 
+class FP8Embedding(nn.Embedding):
+    """`nn.Embedding` whose table is stored in FP8 with a single per-tensor `weight_scale`.
+
+    Qwen4-Exp's hashed n-gram table is ~48 GiB in FP8, too big to dequantize at load time, so the
+    rescale runs on the rows a lookup gathers instead. Build it on the `meta` device: like
+    `FP8Linear`, `__init__` lets `nn.Embedding` allocate a full-precision table first.
+    """
+
+    def __init__(
+        self,
+        num_embeddings: int,
+        embedding_dim: int,
+        padding_idx: int | None = None,
+    ):
+        super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
+        self.weight = nn.Parameter(torch.empty(num_embeddings, embedding_dim, dtype=_FP8_DTYPE), requires_grad=False)
+        # `(1,)` rather than a scalar: the shape checkpoints serialize per-tensor scales with.
+        self.weight_scale = nn.Parameter(torch.ones(1), requires_grad=False)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        rows = super().forward(input)
+        return rows.to(self.weight_scale.dtype) * self.weight_scale
+
+
 class FP8GroupedLinear(FP8Linear):
     """FP8 drop-in for block-diagonal grouped linears.
 
@@ -792,6 +816,22 @@ def _disable_deepgemm_on_multi_device(model: nn.Module) -> None:
         "single CUDA context and corrupt across devices). Run tensor/expert parallel (one device per "
         "process) to use the faster DeepGEMM path."
     )
+
+
+def replace_with_fp8_embedding(model, patterns: list[str], modules_to_not_convert: list[str] | None = None):
+    """Swap every `nn.Embedding` whose name ends with one of `patterns` for `FP8Embedding`.
+
+    Also runs under `dequantize=True`: a table worth quantizing is one we cannot afford to expand.
+    """
+    for name, module in list(model.named_modules()):
+        if type(module) is nn.Embedding and any(name.endswith(p) for p in patterns):
+            if not should_convert_module(name, modules_to_not_convert):
+                continue
+            with torch.device("meta"):
+                new_module = FP8Embedding(module.num_embeddings, module.embedding_dim, module.padding_idx)
+            new_module._hf_quantized_needs_local_tp = True
+            model.set_submodule(name, new_module)
+    return model
 
 
 def replace_with_fp8_linear(
