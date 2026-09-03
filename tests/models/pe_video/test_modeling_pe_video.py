@@ -27,7 +27,6 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
     random_attention_mask,
-    require_torch_gpu,
 )
 
 
@@ -372,7 +371,6 @@ class PeVideoModelTest(ModelTesterMixin, unittest.TestCase):
     def test_can_init_all_missing_weights(self):
         pass
 
-    @require_torch_gpu  # pe-video contains triton code which cannot run on CPU, so we only test on GPU
     def test_all_tensors_are_parameter_or_buffer(self):
         super().test_all_tensors_are_parameter_or_buffer()
 
