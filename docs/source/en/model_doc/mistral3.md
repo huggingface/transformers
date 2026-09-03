@@ -30,6 +30,8 @@ You can find the original Mistral 3 checkpoints under the [Mistral AI](https://h
 > [!TIP]
 > This model was contributed by [cyrilvallez](https://huggingface.co/cyrilvallez) and [yonigozlan](https://huggingface.co/yonigozlan).
 > Click on the Mistral3 models in the right sidebar for more examples of how to apply Mistral3 to different tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to generate text for an image with [`Pipeline`] and the [`AutoModel`] class.
 

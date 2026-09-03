@@ -15,16 +15,14 @@
 
 import unittest
 
-from datasets import load_dataset
-
 from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available
 
 from ...test_image_processing_common import (
+    ImageProcessingTester,
     ImageProcessingTestMixin,
     PostProcessSemanticSegmentationTestMixin,
-    prepare_image_inputs,
 )
 from ...test_processing_common import url_to_local_path
 
@@ -35,7 +33,7 @@ if is_torch_available():
     from transformers.modeling_outputs import SemanticSegmenterOutput
 
 
-class MobileNetV2ImageProcessingTester:
+class MobileNetV2ImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -75,20 +73,6 @@ class MobileNetV2ImageProcessingTester:
             "do_reduce_labels": self.do_reduce_labels,
         }
 
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.crop_size["height"], self.crop_size["width"]
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
     def prepare_post_process_semantic_segmentation_inputs(self):
         inputs = {
             "outputs": SemanticSegmenterOutput(
@@ -106,17 +90,6 @@ class MobileNetV2ImageProcessingTester:
             "width": self.crop_size["width"],
         }
         return inputs, expected_shape
-
-
-def prepare_semantic_single_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-    example = ds[0]
-    return example["image"], example["map"]
-
-
-def prepare_semantic_batch_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-    return list(ds["image"][:2]), list(ds["map"][:2])
 
 
 @require_torch
@@ -213,7 +186,7 @@ class MobileNetV2ImageProcessingTest(
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test not batched input (PIL images)
-            image, segmentation_map = prepare_semantic_single_inputs()
+            image, segmentation_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
 
             encoding = image_processing(image, segmentation_map, return_tensors="pt")
             self.assertEqual(
@@ -238,7 +211,9 @@ class MobileNetV2ImageProcessingTest(
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test batched input (PIL images)
-            images, segmentation_maps = prepare_semantic_batch_inputs()
+            images, segmentation_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+                batched=True
+            )
 
             encoding = image_processing(images, segmentation_maps, return_tensors="pt")
             self.assertEqual(
@@ -268,7 +243,7 @@ class MobileNetV2ImageProcessingTest(
             image_processing = image_processing_class(**self.image_processor_dict)
 
             # ADE20k has 150 classes, and the background is included, so labels should be between 0 and 150
-            image, map = prepare_semantic_single_inputs()
+            image, map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
             encoding = image_processing(image, map, return_tensors="pt")
             self.assertTrue(encoding["labels"].min().item() >= 0)
             self.assertTrue(encoding["labels"].max().item() <= 150)
@@ -278,7 +253,7 @@ class MobileNetV2ImageProcessingTest(
             self.assertTrue(encoding["labels"].min().item() >= 0)
             self.assertTrue(encoding["labels"].max().item() <= 255)
             # Ensure reduce label returns the same number of masks
-            image, map = prepare_semantic_batch_inputs()
+            image, map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(batched=True)
             encoding = image_processing(image, map, return_tensors="pt")
             self.assertTrue(len(encoding["labels"]) == len(map))
 
@@ -300,7 +275,7 @@ class MobileNetV2ImageProcessingTest(
             self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].pixel_values)
 
         # Test with single image and segmentation map
-        image, segmentation_map = prepare_semantic_single_inputs()
+        image, segmentation_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)

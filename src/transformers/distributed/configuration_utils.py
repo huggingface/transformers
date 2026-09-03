@@ -15,19 +15,21 @@
 import json
 import os
 from dataclasses import asdict, dataclass
+from typing import Literal
 
 
 @dataclass
 class DistributedConfig:
     """
-    Configuration for native distributed training (FSDP2 + TP).
+    Configuration for native distributed inference and training with tensor, pipeline, or FSDP2 parallelism.
 
     Args:
         tp_size (`int`, *optional*):
-            Number of devices for tensor parallelism. If `None` and `fsdp_size` is set, defaults to 1.
-        tp_plan (`dict`, *optional*):
-            Tensor parallel sharding plan. Leave as `None` to use the model's `base_model_tp_plan`.
-            Set explicitly to override.
+            Number of devices for tensor parallelism. If `None` and `tp_plan` is set, defaults to
+            `WORLD_SIZE // (other_parallel_size)`. If `None` and no `tp_plan` is set, defaults to 1.
+        tp_plan (`dict[str, str]` or `"auto"`, *optional*):
+            Tensor parallel sharding plan. Pass `"auto"`, or leave as `None` when `tp_size` is set, to use the
+            model's predefined `base_model_tp_plan`. Pass a dictionary to override the predefined plan.
         enable_sequence_parallel (`bool`, *optional*, defaults to `False`):
             Reserved for sequence parallelism. Not wired up yet.
         enable_expert_parallel (`bool`, *optional*, defaults to `False`):
@@ -38,30 +40,44 @@ class DistributedConfig:
             Whether to enable CPU offloading for FSDP2.
         fsdp_mixed_precision (`bool`, *optional*, defaults to `False`):
             Whether to enable mixed precision for FSDP2.
+        pp_size (`int`, *optional*):
+            Number of devices for pipeline parallelism. If `None` and another parallel mode is set, defaults to 1.
     """
 
     tp_size: int | None = None
-    tp_plan: dict[str, str] | None = None
+    tp_plan: dict[str, str] | Literal["auto"] | None = None
     enable_sequence_parallel: bool = False
     enable_expert_parallel: bool = False
     fsdp_size: int | None = None
     fsdp_cpu_offload: bool = False
     fsdp_mixed_precision: bool = False
+    pp_size: int | None = None
 
     def __post_init__(self):
-        if self.tp_size is None and self.fsdp_size is None:
+        if self.tp_plan is None and self.tp_size is None and self.fsdp_size is None and self.pp_size is None:
             return
 
-        if self.tp_size is None:
-            self.tp_size = 1
         if self.fsdp_size is None:
             self.fsdp_size = 1
+        if self.pp_size is None:
+            self.pp_size = 1
+        if self.tp_size is None and self.tp_plan is not None:
+            world_size = int(os.environ.get("WORLD_SIZE", 1))
+            other_parallel_size = self.fsdp_size * self.pp_size
+            if world_size % other_parallel_size != 0:
+                raise ValueError(
+                    f"WORLD_SIZE ({world_size}) must be divisible by fsdp_size * pp_size "
+                    f"({other_parallel_size}) to derive tp_size."
+                )
+            self.tp_size = world_size // other_parallel_size
+        elif self.tp_size is None:
+            self.tp_size = 1
 
-        if self.tp_size > 1 and self.fsdp_size > 1:
+        if self.tp_size > 1 and self.fsdp_size > 1 and self.pp_size > 1:
             raise ValueError(
-                "FSDP+TP is not supported yet. "
-                "Use DistributedConfig(fsdp_size=N) or DistributedConfig(tp_size=N), not both. "
-                "2D support will come soon."
+                "FSDP+TP+PP is not supported yet. "
+                "Use DistributedConfig(fsdp_size=N) or DistributedConfig(tp_size=N) or DistributedConfig(pp_size=N), not all three. "
+                "Only 1D support is available for now."
             )
 
     @classmethod

@@ -239,7 +239,10 @@ class SmolVLMModel(Idefics3Model):
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(input_ids.device)
 
         if pixel_values is not None and image_hidden_states is not None:
-            raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
+            raise ValueError(
+                "You cannot specify both pixel_values and image_hidden_states at the same time. To reuse a "
+                "previous call's image_hidden_states, remove pixel_values from the inputs instead of passing both."
+            )
 
         if pixel_values is not None:
             image_hidden_states = self.get_image_features(
@@ -289,7 +292,10 @@ class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
             Mask to avoid performing attention on padding pixel indices.
         image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The hidden states of the image encoder after modality projection.
+            The hidden states of the image encoder after modality projection. Pass this instead of `pixel_values`
+            to reuse a previous call's vision-tower output and skip recomputing it (e.g. across turns in a
+            conversation). Do not pass both at once: clear `pixel_values` from the inputs first, or a `ValueError`
+            is raised.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or `model.image_token_id`. Tokens with indices set to `model.image_token_id` are

@@ -43,6 +43,9 @@ class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
             Target dB FS for normalization.
         eps (`float`, *optional*, defaults to 1e-06):
             A small value to avoid division by zero when normalizing.
+        pad_to_multiple_of (`int`, *optional*, defaults to 3200):
+            Pad the audio to a multiple of this value, which should correspond to the hop length of the acoustic
+            tokenizer, i.e. the downsampling factor of its encoder.
 
     """
 
@@ -56,6 +59,7 @@ class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
         normalize_audio=True,
         target_dB_FS=-25,
         eps=1e-6,
+        pad_to_multiple_of=3200,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -63,6 +67,7 @@ class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
         self.normalize_audio = normalize_audio
         self.target_dB_FS = target_dB_FS
         self.eps = eps
+        self.pad_to_multiple_of = pad_to_multiple_of
 
     def __call__(
         self,
@@ -94,9 +99,12 @@ class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
                 - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
                   lengths).
             pad_to_multiple_of (`int`, *optional*):
-                If set will pad the sequence to a multiple of the provided value.
+                If set will pad the sequence to a multiple of the provided value. Defaults to
+                `self.pad_to_multiple_of` if not provided.
 
         """
+        if pad_to_multiple_of is None:
+            pad_to_multiple_of = self.pad_to_multiple_of
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(

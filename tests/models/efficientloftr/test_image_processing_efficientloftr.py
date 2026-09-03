@@ -26,7 +26,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
@@ -43,7 +43,7 @@ def random_tensor(size):
     return torch.rand(size)
 
 
-class EfficientLoFTRImageProcessingTester:
+class EfficientLoFTRImageProcessingTester(ImageProcessingTester):
     """Tester for EfficientLoFTRImageProcessor"""
 
     def __init__(

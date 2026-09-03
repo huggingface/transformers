@@ -13,8 +13,6 @@
 # limitations under the License.
 import unittest
 
-from parameterized import parameterized
-
 from transformers import AutoModel, AutoTokenizer, NomicBertConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
@@ -216,6 +214,17 @@ class NomicBertModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
+    def create_and_check_forward_beyond_max_position_embeddings(self, config, input_ids, *args):
+        # This model is rope-only, so `max_position_embeddings` does not bound the input length.
+        # See https://github.com/huggingface/transformers/pull/48407
+        model = NomicBertModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        seq_length = config.max_position_embeddings + 8
+        long_input_ids = ids_tensor([1, seq_length], config.vocab_size).to(torch_device)
+        result = model(long_input_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (1, seq_length, self.hidden_size))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -280,10 +289,9 @@ class NomicBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("Model doesn't support scaling rope and raises shape mismatch errors with token types!")
-    def test_model_rope_scaling_from_config(self, scaling_type):
-        pass
+    def test_forward_beyond_max_position_embeddings(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_forward_beyond_max_position_embeddings(*config_and_inputs)
 
 
 @require_torch

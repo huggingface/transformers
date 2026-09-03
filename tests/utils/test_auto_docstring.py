@@ -431,6 +431,8 @@ Args:
         """Test complete class and forward method docstrings for PreTrainedModel with ModelArgs and custom parameters."""
         actual_class_docstring = DummyForTestModel.__doc__
         expected_class_docstring = """
+The bare None Model outputting raw hidden-states without any specific head on top.
+
 This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
 library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
 etc.)
@@ -701,7 +703,6 @@ Parameters:
 
         expected_class_docstring = """
 Constructs a fast DummyForTest image processor.
-
 Args:
     do_convert_rgb (`bool`, *kwargs*, *optional*):
         Whether to convert the image to RGB.

@@ -51,6 +51,8 @@ from transformers.generation.continuous_batching.requests import (
     RequestStatus,
     get_device_and_memory_breakdown,
 )
+from transformers.integrations.eager_paged import eager_paged_attention_forward
+from transformers.integrations.sdpa_paged import sdpa_attention_paged_forward
 from transformers.testing_utils import (
     backend_empty_cache,
     backend_memory_allocated,
@@ -216,6 +218,20 @@ def regular_generate(
 
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
+    @parameterized.expand(
+        [("paged|eager", eager_paged_attention_forward), ("paged|sdpa", sdpa_attention_paged_forward)]
+    )
+    def test_paged_forward_without_cache_raises(self, attn_implementation, attention_forward):
+        # A standard forward on a model switched to a paged implementation reaches these with no cache. They are
+        # written for the packed inputs and the 4D mask continuous batching prepares, so they would silently attend
+        # bidirectionally instead of causally: refuse the call rather than return a wrong result.
+        module = torch.nn.Module()
+        module.layer_idx = 0
+        module.num_key_value_groups = 1
+        q = k = v = torch.zeros(1, 1, 4, 8)
+        with self.assertRaisesRegex(ValueError, attn_implementation.replace("|", r"\|")):
+            attention_forward(module, q, k, v, None, scaling=1.0)
+
     def test_generation_outputs_are_snapshots(self):
         state = RequestState(
             request_id="r", initial_tokens=[10, 11], max_new_tokens=3, streaming=True, record_timestamps=True
@@ -1086,6 +1102,43 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             max_new_tokens=80,
         )
 
+    @require_torch_multi_accelerator
+    @with_flush_memory
+    def test_cuda_graph_capture_on_non_default_device(self) -> None:
+        """The background generation thread does not inherit the main thread's current CUDA device: it's a thread-local
+        variable. A freshly spawned thread starts on device 0. A model living on any other device therefore used to bind
+        its CUDA graph memory pool to device 0 while capturing on the model's device, which tripped an allocator assert
+        (`use_count > 0`) on the first in-thread capture. Regression test for #48312.
+
+        The graphs must be captured by the background thread, so this test must not call `warmup()` before `start()`:
+        warming up captures on the main thread instead, which is a documented workaround for the bug.
+        """
+        if torch_device != "cuda":
+            self.skipTest("CUDA graph is only supported on CUDA devices. Skipping test.")
+
+        # The whole point of the test is that the model does NOT live on device 0, where the background thread starts
+        device = f"{torch_device}:1"
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", device, torch.bfloat16)
+
+        gen_config = GenerationConfig(max_new_tokens=5, do_sample=False, eos_token_id=tokenizer.eos_token_id)
+        cb_config = ContinuousBatchingConfig(use_cuda_graph=True, use_async_batching=False, max_memory_percent=0.2)
+
+        manager = model.init_continuous_batching(generation_config=gen_config, continuous_batching_config=cb_config)
+        manager.start()
+        try:
+            input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
+            request_ids = manager.add_requests(input_ids, max_new_tokens=5)
+            for _ in request_ids:
+                output = manager.get_result(timeout=120)
+                self.assertIsNotNone(output, "The background generation thread died before returning a result")
+                self.assertIsNone(output.error, f"Request failed during in-thread graph capture: {output.error}")
+                self.assertTrue(output.generated_tokens, "Request returned no generated tokens")
+            # The cache and the graph memory pool must have been created on the model's device, not on device 0
+            self.assertEqual(manager.batch_processor.cache.device, torch.device(device))
+        finally:
+            manager.stop(block=True, timeout=60)
+
     @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
     @slow
     def test_continuous_batching_log_probs(self, use_cuda_graph: bool, use_async_batching: bool) -> None:
@@ -1239,6 +1292,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             def on_result(output):
                 token_counts.append(len(output.generated_tokens))
                 if output.is_finished():
+                    self.assertEqual(output.status, RequestStatus.FINISHED)  # fail if the request failed
                     future.set_result(True)
 
             request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens, streaming=True)
@@ -1394,6 +1448,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             while requests_left:
                 result = manager.get_result(timeout=1)
                 if result and result.is_finished():
+                    self.assertEqual(result.status, RequestStatus.FINISHED)  # fail if the request failed
                     results.append(result)
                     requests_left -= 1
                 else:
@@ -1573,6 +1628,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             while len(results) < 2:
                 result = manager.get_result(timeout=1)
                 if result is not None and result.is_finished():
+                    self.assertEqual(result.status, RequestStatus.FINISHED)  # fail if the request failed
                     results[result.request_id] = result
                 elif not manager.is_running():
                     break

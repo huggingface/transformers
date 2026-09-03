@@ -15,7 +15,7 @@
 import base64
 import os
 from collections.abc import Iterable
-from dataclasses import dataclass, fields
+from dataclasses import astuple, dataclass, fields
 from io import BytesIO
 from typing import Any, Union
 
@@ -1021,6 +1021,8 @@ class SizeDict:
     shortest_edge: int | None = None
     max_height: int | None = None
     max_width: int | None = None
+    min_pixels: int | None = None
+    max_pixels: int | None = None
 
     def __getitem__(self, key):
         if hasattr(self, key):
@@ -1040,7 +1042,7 @@ class SizeDict:
                 yield f.name, val
 
     def __hash__(self):
-        return hash((self.height, self.width, self.longest_edge, self.shortest_edge, self.max_height, self.max_width))
+        return hash(astuple(self))
 
     def __contains__(self, key):
         return hasattr(self, key) and getattr(self, key) is not None

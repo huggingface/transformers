@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import itertools
 import tempfile
 import unittest
 
@@ -36,6 +37,10 @@ if is_torch_available():
         DynamicCache,
         Qwen3NextForCausalLM,
         Qwen3NextModel,
+    )
+    from transformers.models.qwen3_next.modeling_qwen3_next import (
+        torch_chunk_gated_delta_rule,
+        torch_recurrent_gated_delta_rule,
     )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -287,6 +292,47 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
 
                 # This should not crash
                 _ = model.generate(**inputs_dict, max_new_tokens=5, min_new_tokens=5)
+
+    # seq_length 3 fits in one padded chunk, 12 spans exactly 3 chunks, 13 spans 4 chunks with padding
+    @parameterized.expand(itertools.product([3, 12, 13], [False, True]))
+    def test_gdn_chunked_matches_recurrent(self, seq_length: int, with_initial_state: bool):
+        """Ensures that the GDN implementation matches the recurrent one. This does not test if the GDN implementation
+        is still correct, for this check PR #47625 or https://gist.github.com/remi-or/40397649f763f2dd38f8f7e453f08cb3
+        """
+        torch.manual_seed(0)
+        batch_size, num_heads, k_head_dim, v_head_dim = 2, 3, 8, 16
+        query = torch.randn(batch_size, seq_length, num_heads, k_head_dim, device=torch_device)
+        key = torch.randn(batch_size, seq_length, num_heads, k_head_dim, device=torch_device)
+        value = torch.randn(batch_size, seq_length, num_heads, v_head_dim, device=torch_device)
+        g = -torch.rand(batch_size, seq_length, num_heads, device=torch_device)  # log-decays, must be <= 0
+        beta = torch.rand(batch_size, seq_length, num_heads, device=torch_device)
+        initial_state = None
+        if with_initial_state:
+            initial_state = torch.randn(batch_size, num_heads, k_head_dim, v_head_dim, device=torch_device)
+
+        chunk_out, chunk_state = torch_chunk_gated_delta_rule(
+            query,
+            key,
+            value,
+            g,
+            beta,
+            chunk_size=4,
+            initial_state=initial_state,
+            output_final_state=True,
+            use_qk_l2norm_in_kernel=True,
+        )
+        recurrent_out, recurrent_state = torch_recurrent_gated_delta_rule(
+            query,
+            key,
+            value,
+            g,
+            beta,
+            initial_state=initial_state,
+            output_final_state=True,
+            use_qk_l2norm_in_kernel=True,
+        )
+        torch.testing.assert_close(chunk_out, recurrent_out, rtol=1e-4, atol=1e-5)
+        torch.testing.assert_close(chunk_state, recurrent_state, rtol=1e-4, atol=1e-5)
 
 
 @slow

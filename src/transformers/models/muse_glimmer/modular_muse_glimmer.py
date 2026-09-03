@@ -530,6 +530,15 @@ class MuseGlimmerVisionConfig(Kimi_K25VisionConfig):
     """
 
     model_type = "muse_glimmer_vision"
+    base_model_tp_plan = {
+        "patch_embedder.patch_embedding": "colwise_gather_output",
+        "layers.*.attn.q_proj": "colwise",
+        "layers.*.attn.k_proj": "colwise",
+        "layers.*.attn.v_proj": "colwise",
+        "layers.*.attn.proj": "rowwise",
+        "layers.*.mlp.fc1": "colwise",
+        "layers.*.mlp.fc2": "rowwise",
+    }
 
     hidden_size: int = 1536
     num_hidden_layers: int = 50
@@ -576,6 +585,7 @@ class MuseGlimmerTextConfig(Gemma2Config, PreTrainedConfig):
 
     model_type = "muse_glimmer_text"
     base_model_tp_plan = {
+        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
@@ -658,6 +668,11 @@ class MuseGlimmerConfig(PreTrainedConfig):
 
     model_type = "muse_glimmer"
     sub_configs = {"text_config": MuseGlimmerTextConfig, "vision_config": MuseGlimmerVisionConfig}
+    base_model_tp_plan = {
+        "vision_adapter.fc1": "colwise",
+        "vision_adapter.fc2": "rowwise",
+        "vision_projection": "colwise_gather_output",
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -1097,6 +1112,8 @@ class MuseGlimmerModel(Kimi_K25Model):
 
 
 class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

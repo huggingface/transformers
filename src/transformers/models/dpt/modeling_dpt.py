@@ -28,7 +28,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import load_backbone
+from ...backbone_utils import filter_output_hidden_states, load_backbone
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -941,6 +941,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @filter_output_hidden_states
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -989,13 +990,6 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
-        # Internally the model always needs to output hidden states, we control the output
-        # per user request on the final output
-        user_requested_hidden_states = kwargs.get("output_hidden_states") or getattr(
-            self.config, "output_hidden_states", False
-        )
-        kwargs["output_hidden_states"] = True
-
         if self.backbone is not None:
             outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
             hidden_states = outputs.feature_maps
@@ -1030,7 +1024,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         return DepthEstimatorOutput(
             loss=loss,
             predicted_depth=predicted_depth,
-            hidden_states=outputs.hidden_states if user_requested_hidden_states else None,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
@@ -1094,6 +1088,7 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @filter_output_hidden_states
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -1126,13 +1121,6 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         ```"""
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
-
-        # Internally the model always needs to output hidden states, we control the output
-        # per user request on the final output
-        user_requested_hidden_states = kwargs.get("output_hidden_states") or getattr(
-            self.config, "output_hidden_states", False
-        )
-        kwargs["output_hidden_states"] = True
 
         outputs: BaseModelOutputWithPoolingAndIntermediateActivations = self.dpt(pixel_values, **kwargs)
         hidden_states = outputs.hidden_states
@@ -1177,7 +1165,7 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         return SemanticSegmenterOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states if user_requested_hidden_states else None,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 

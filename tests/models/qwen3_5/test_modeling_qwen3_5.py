@@ -758,8 +758,8 @@ class Qwen3_5IntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_generation(self):
-        expected_text_completion = "My favourite condiment is 100% real.\nThe 100% real is the only one that is"
-        prompt = "My favourite condiment is "
+        expected_text_completion = "My favourite condiment is a little bit of what?\nA. Salt\nB. Sugar\nC. Vinegar\n"
+        prompt = "My favourite condiment is"
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, use_fast=False)
         model = Qwen3_5ForCausalLM.from_pretrained(self.model_id, device_map="auto")

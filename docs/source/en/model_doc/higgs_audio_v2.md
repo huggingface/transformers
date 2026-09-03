@@ -530,7 +530,6 @@ conversation2 = [
 
 inputs = processor.apply_chat_template(
     [conversation1, conversation2],
-    add_generation_prompt=True,
     tokenize=True,
     return_dict=True,
     sampling_rate=24000,

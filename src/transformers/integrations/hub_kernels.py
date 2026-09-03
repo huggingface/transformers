@@ -33,6 +33,7 @@ from ..utils.import_utils import (
     is_kernels_available,
     is_rocm_platform,
     is_torch_available,
+    is_torchdynamo_compiling,
     is_torchdynamo_exporting,
     resolve_internal_import,
 )
@@ -64,6 +65,8 @@ _kernels_enabled = _TRANSFORMERS_USE_HUB_KERNELS in ENV_VARS_TRUE_VALUES
 
 # Maps from func name to the internal module path
 _KERNELS_INTERNAL_PATH_MAPPINGS = {
+    "chunk_kda": "ops.kda",
+    "fused_recurrent_kda": "ops.kda",
     "chunk_gated_delta_rule": "ops.gated_delta_rule",
     "fused_recurrent_gated_delta_rule": "ops.gated_delta_rule",
     "mamba_split_conv1d_scan_combined": "ops.triton.ssd_combined",
@@ -72,6 +75,9 @@ _KERNELS_INTERNAL_PATH_MAPPINGS = {
     "mamba_inner_fn": "ops.selective_scan_interface",
     "selective_scan_fn": "ops.selective_scan_interface",
 }
+
+# Maps from import name to the distribution that ships it, where the two differ
+_PACKAGE_TO_DISTRIBUTION = {"fla": "flash-linear-attention"}
 
 
 if is_kernels_available():
@@ -295,7 +301,7 @@ if is_kernels_available():
                     Mode.INFERENCE: LayerRepository(
                         repo_id="biohub/esmfold2-trimul",
                         layer_name="ESMFold2TriangleMultiplication",
-                        version=1,
+                        revision="9bcafd5b29a6c81645ae299d5364f5b9e503aca8",
                         trust_remote_code=True,
                     ),
                 },
@@ -491,6 +497,34 @@ if is_kernels_available():
                         repo_id="kernels-community/activation", layer_name="GeluTanh", version=1
                     )
                 }
+            },
+            "chunk_kda": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_kimi_delta_attention",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_kimi_delta_attention",
+                        version=1,
+                    ),
+                },
+            },
+            "fused_recurrent_kda": {
+                "cuda": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_kimi_delta_attention",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_kimi_delta_attention",
+                        version=1,
+                    ),
+                },
             },
             "rotary_pos_emb": {
                 "xpu": {
@@ -763,7 +797,7 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     device = get_device(model.device.type)
 
     if model.kernel_config is not None:
-        inherit_mapping = not model.kernel_config.use_local_kernel
+        inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
         with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
             _kernels_kernelize(model, device=device, mode=mode)
     else:
@@ -826,6 +860,18 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
             # Some original packages are incompatible with torch.export, so we always use the torch path when exporting
             if is_new_implementation and is_torchdynamo_exporting():
                 return torch_function(*args, **kwargs)
+
+            if not is_new_implementation and not is_torchdynamo_compiling():
+                # These torch paths are readable references, not fast kernels, so their runtimes are
+                # significantly slower: for `chunk_gated_delta_rule` the gap is more than an order of
+                # magnitude on an H100. Warn the user when they end up on one. The logger is untraceable,
+                # hence the guard.
+                distribution = _PACKAGE_TO_DISTRIBUTION.get(package, package)
+                logger.warning_once(
+                    f"`{func_name}` is falling back to its reference PyTorch implementation because "
+                    f"`{distribution}` is not installed. This is correct but much slower; install "
+                    f"`{distribution}` for the optimized kernel."
+                )
 
             kwargs = {k: v for k, v in kwargs.items() if k in applicable_params}
             return implementation(*args, **kwargs)
