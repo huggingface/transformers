@@ -2658,9 +2658,7 @@ class Trainer:
         if self._mixed_mesh_grads is None:
             from .trainer_optimizer import has_mixed_dtensor
 
-            self._mixed_mesh_grads = has_mixed_dtensor(
-                p.grad for p in model.parameters() if p.grad is not None
-            )
+            self._mixed_mesh_grads = has_mixed_dtensor(p.grad for p in model.parameters() if p.grad is not None)
         return self._mixed_mesh_grads
 
     def _clip_grad_norm(self, model):
