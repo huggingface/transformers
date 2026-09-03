@@ -449,6 +449,7 @@ class AXK1Attention(nn.Module):
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
 
+        # No branching on q_lora_rank being None: unlike Deepseek V3, it is always an int, so we always use Q-LoRA
         q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
         q_states = q_states.view(query_shape).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
