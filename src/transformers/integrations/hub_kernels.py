@@ -858,7 +858,7 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
             if is_new_implementation and is_torchdynamo_exporting():
                 return torch_function(*args, **kwargs)
 
-            if implementation is torch_function and not is_torchdynamo_compiling():
+            if not is_new_implementation and not is_torchdynamo_compiling():
                 # These torch paths are readable references, not fast kernels: for
                 # `chunk_gated_delta_rule` the gap is more than an order of magnitude on a H100.
                 # Warn the user when they end up on one. The logger is untraceable, hence the guard.
