@@ -193,7 +193,7 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
         device_map = torch.device(device_type)
 
     fsdp_size = distributed_config.fsdp_size
-    tp_size = distributed_config.tp_size or 1
+    tp_size = distributed_config.tp_size
 
     # `fsdp` is the outer dimension so that the `tp` ranks of a group are contiguous, which is what
     # the expert all-to-all and the TP collectives want.
