@@ -352,6 +352,52 @@ class AutoImageProcessorTest(unittest.TestCase):
             image_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="pil")
             self.assertIsInstance(image_processor, ViTImageProcessorPil)
 
+    @require_torchvision
+    def test_fallback_to_config_mapping_when_image_processor_type_unresolvable(self):
+        # If the checkpoint ships an `image_processor_type` that does not resolve to any class in the
+        # current version of the library, we should fall back to the mapping keyed on the model config's
+        # `model_type` instead of raising "Unrecognized image processor".
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            config_tmpfile = Path(tmpdirname) / "config.json"
+            with open(processor_tmpfile, "w") as fp:
+                json.dump({"image_processor_type": "ThisImageProcessorDoesNotExist"}, fp)
+            with open(config_tmpfile, "w") as fp:
+                json.dump({"model_type": "clip"}, fp)
+
+            image_processor = AutoImageProcessor.from_pretrained(tmpdirname)
+            self.assertIsInstance(image_processor, CLIPImageProcessor)
+
+    @require_torchvision
+    def test_qwen3_vl_checkpoint_resolves_to_qwen2_vl_image_processor(self):
+        # Regression test for #48511: Qwen3-VL-family checkpoints reuse the Qwen2-VL image processor and
+        # ship legacy or unresolvable `image_processor_type` values. Both the legacy Fast name they ship
+        # and an unresolvable name must resolve through to the Qwen2-VL image processor.
+        from transformers import Qwen2VLImageProcessor
+
+        preprocessor_dict = {
+            "image_mean": [0.5, 0.5, 0.5],
+            "image_std": [0.5, 0.5, 0.5],
+            "patch_size": 16,
+            "merge_size": 2,
+            "temporal_patch_size": 2,
+            "processor_class": "Qwen3VLProcessor",
+        }
+        config_dict = {
+            "model_type": "qwen3_vl",
+            "text_config": {"model_type": "qwen3_vl_text"},
+            "vision_config": {"model_type": "qwen3_vl"},
+        }
+        for image_processor_type in ["Qwen2VLImageProcessorFast", "Qwen3VLImageProcessor"]:
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                with open(Path(tmpdirname) / "preprocessor_config.json", "w") as fp:
+                    json.dump({**preprocessor_dict, "image_processor_type": image_processor_type}, fp)
+                with open(Path(tmpdirname) / "config.json", "w") as fp:
+                    json.dump(config_dict, fp)
+
+                image_processor = AutoImageProcessor.from_pretrained(tmpdirname)
+                self.assertIsInstance(image_processor, Qwen2VLImageProcessor)
+
     def test_unavailable_backend_error_mentions_missing_dependency(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
             processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"

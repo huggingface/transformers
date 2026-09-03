@@ -649,6 +649,29 @@ class AutoImageProcessor:
         if base_class_name is not None:
             image_processor_class = _load_backend_class(base_class_name, backend, is_legacy_fast)
 
+            if image_processor_class is None and image_processor_auto_map is None:
+                # The checkpoint's `image_processor_type` does not resolve to any class known to this
+                # version of the library (e.g. a stale or legacy name saved by older versions or by
+                # checkpoints of models that reuse another model's image processor, such as
+                # Qwen3-VL-family checkpoints). Instead of failing outright, fall back to the mapping
+                # keyed on the model config's `model_type` (handled below).
+                try:
+                    if not isinstance(config, PreTrainedConfig):
+                        config = AutoConfig.from_pretrained(
+                            pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                        )
+                except (OSError, ValueError):
+                    # No usable model config (missing config.json, unrecognized model_type, ...):
+                    # keep the original error paths below.
+                    pass
+                else:
+                    if type(config) in IMAGE_PROCESSOR_MAPPING:
+                        logger.warning(
+                            f"Could not resolve `image_processor_type` {image_processor_type!r} to an image "
+                            f"processor class. Falling back to the image processor mapped for the "
+                            f"`{type(config).__name__}` model type."
+                        )
+
         # Handle remote code
         has_remote_code = image_processor_auto_map is not None
         has_local_code = image_processor_class is not None or type(config) in IMAGE_PROCESSOR_MAPPING
