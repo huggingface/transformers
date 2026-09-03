@@ -44,17 +44,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import (
-        InklingForCausalLM,
-        InklingForConditionalGeneration,
-        InklingModel,
-        InklingTextModel,
-    )
-
-
-GEMMA4_RANDOM_MOE_FA2_SKIP_REASON = (
-    "Randomly initialized Inkling MoE routers are too sensitive to tiny eager/FA2 input differences"
-)
+    from transformers import InklingForCausalLM, InklingForConditionalGeneration, InklingModel, InklingTextModel
 
 
 class InklingTextModelTester(CausalLMModelTester):
@@ -253,11 +243,11 @@ class InklingAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_disk_offload_safetensors(self):
         pass
 
-    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
+    @unittest.skip("Randomly initialized Inkling MoE routers are too sensitive to tiny eager/FA2 input differences")
     def test_flash_attn_2_inference_equivalence(self):
         pass
 
-    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
+    @unittest.skip("Randomly initialized Inkling MoE routers are too sensitive to tiny eager/FA2 input differences")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
