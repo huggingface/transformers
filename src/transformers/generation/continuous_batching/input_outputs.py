@@ -477,7 +477,10 @@ class ContinuousBatchingIOs:
 
         # If we are not using the block table, we populate the write indices (and maybe the read indices)
         if not self.use_block_table:
-            to_index_tensor = partial(torch.tensor, dtype=torch.int64, device=self.device)
+            # These lists run to hundreds of thousands of ints per batch on sliding-window models (up to a window per
+            # request); numpy converts them several times faster than torch.tensor does
+            def to_index_tensor(indices):
+                return torch.from_numpy(np.asarray(indices, dtype=np.int64)).to(self.device, non_blocking=True)
             for i, group_write_indices in enumerate(write_index):
                 self.write_index_storage[i, : len(group_write_indices)] = to_index_tensor(group_write_indices)
                 self.true_write_sizes[i] = len(group_write_indices)
