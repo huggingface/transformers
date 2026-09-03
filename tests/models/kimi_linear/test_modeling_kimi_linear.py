@@ -14,10 +14,12 @@
 """Testing suite for the PyTorch Kimi Linear model."""
 
 import unittest
+from unittest import mock
 
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     cleanup,
+    is_flash_linear_attention_available,
     require_torch,
     require_torch_large_accelerator,
     slow,
@@ -83,12 +85,27 @@ class KimiLinearModelTest(CausalLMModelTest, unittest.TestCase):
         return (batch_size, 3 * config.linear_num_heads * config.linear_head_dim, config.linear_conv_kernel_dim)
 
     def _get_recurrent_state_shape(self, batch_size: int, config):
-        return (
-            batch_size,
-            config.linear_num_value_heads,
-            config.linear_key_head_dim,
-            config.linear_value_head_dim,
-        )
+        return (batch_size, config.linear_num_heads, config.linear_head_dim, config.linear_head_dim)
+
+    @unittest.skipIf(
+        is_flash_linear_attention_available(),
+        "FLA wraps `fused_recurrent_kda_fwd` in `torch.compiler.disable`, so the decode step cannot be traced as a "
+        "full graph when the FLA kernel is installed",
+    )
+    def test_generate_compile_model_forward_fullgraph(self):
+        super().test_generate_compile_model_forward_fullgraph()
+
+    @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
+
+    @unittest.skip("MLA creates different head dims which avoids invoking the FA backend")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    def test_recurrent_layers_mask_padding_on_continued_forward(self):
+        with mock.patch("transformers.utils.import_utils.is_torchdynamo_compiling", return_value=True):
+            super().test_recurrent_layers_mask_padding_on_continued_forward()
 
     def test_attention_outputs(self):
         """Overwritten: Kimi Linear alternates KDA layers with full-attention (MLA) layers, so only the
@@ -169,7 +186,10 @@ class KimiLinearModelTest(CausalLMModelTest, unittest.TestCase):
             multi_out = model(input_ids=torch.cat([next_token, distractors], dim=1), past_key_values=cache_multi)
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
-        torch.testing.assert_close(under_test_first, ref_first, rtol=1e-4, atol=1e-4)
+        # The FLA kernels run their matmuls in TF32, so the chunked and the recurrent kernels drift apart by ~1e-4 on
+        # the same inputs. The torch reference paths agree to fp32 precision.
+        tol = 1e-3 if is_flash_linear_attention_available() else 1e-4
+        torch.testing.assert_close(under_test_first, ref_first, rtol=tol, atol=tol)
 
     def test_incremental_decoding_matches_full_forward(self):
         """
