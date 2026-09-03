@@ -42,7 +42,7 @@ import enum
 import functools
 import inspect
 import sys
-from collections.abc import MutableMapping
+from collections.abc import Iterable, MutableMapping
 from typing import Any
 
 from ..utils import logging
@@ -68,13 +68,14 @@ if is_torch_available():
 
 
 # ── Patch and fix registries ────────────────────────────────────────────────
-# Single contract across exporters: `_PATCHES[backend]` lists `(obj, attribute, factory)` triples
+# Single contract across exporters: `_PATCHES[backend]` lists `(obj_path, attribute, factory)` triples
 # to install reversibly, and `_FX_NODE_FIXES[backend]` lists `(gm, node) -> bool` fixers to
 # apply in place. Each exporter populates its slot at module load (via `@register_patch` /
-# `@register_fx_node_fix` decorators, or direct list-append for cases that can't be expressed
-# as dotted paths). The export pipeline drives them via the backend-keyed helpers below.
+# `@register_fx_node_fix` decorators). `obj_path` is a dotted string resolved at apply time, not
+# import time — resolving `executorch.backends.qualcomm`, say, would run the QNN SDK installer on
+# `import transformers`. The export pipeline drives them via the backend-keyed helpers below.
 
-_PATCHES: dict[str, list[tuple[Any, str, callable]]] = {}
+_PATCHES: dict[str, list[tuple[str, str, callable]]] = {}
 _FX_NODE_FIXES: dict[str, list[callable]] = {}
 _FX_PROGRAM_FIXES: dict[str, list[callable]] = {}
 
@@ -105,8 +106,29 @@ def patch_attributes(patches: list[tuple[Any, str, callable]]):
 
 @contextlib.contextmanager
 def apply_patches(backend: str):
-    """Install `_PATCHES[backend]` for the duration of the block."""
-    with patch_attributes(_PATCHES.get(backend, [])):
+    """Install `_PATCHES[backend]` for the duration of the block, resolving each entry's dotted object
+    path now (importing submodules as needed). This runs only when `backend` is actually exporting, so
+    its modules are importable.
+
+    A patch whose target no longer resolves — the owner path or the attribute was removed by a newer
+    backend version — is skipped with a warning rather than failing the export. Such a patch worked
+    around something that version of the backend no longer has (e.g. an upstream fix removed the pass
+    it wrapped), so it is simply moot; a hard failure here would break export on every version bump
+    that drops a patched symbol."""
+    patches = []
+    for obj_path, attribute, factory in _PATCHES.get(backend, []):
+        try:
+            obj = _resolve_dotted_path(obj_path)
+        except (ImportError, AttributeError):
+            obj = None
+        if obj is None or not hasattr(obj, attribute):
+            logger.warning_once(
+                f"Skipping export patch for `{obj_path}.{attribute}`: not found in the installed "
+                f"`{backend}` backend (likely removed or fixed upstream)."
+            )
+            continue
+        patches.append((obj, attribute, factory))
+    with patch_attributes(patches):
         yield
 
 
@@ -145,10 +167,10 @@ def register_patch(backend: str, *paths: str):
 
     Each `path` is a dotted Python path like `"torch.where"`, `"torch.Tensor.unsqueeze"`,
     or `"transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeTop2Router._cast_classifier"`.
-    The rightmost segment is the attribute to swap; the rest is the object that owns it.
-    Paths are resolved at decoration time — submodules are imported as needed, falling
-    back to `getattr` for class attributes. A path that fails to resolve (e.g. the backend
-    isn't installed) is silently skipped so the module still imports.
+    The rightmost segment is the attribute to swap; the rest is the object that owns it. The
+    owner path is stored as-is and resolved by `apply_patches` at apply time — never at import,
+    so a path into an uninstalled or install-on-import backend (e.g. `executorch.backends.qualcomm`,
+    whose import runs the QNN SDK auto-installer) costs nothing until that backend actually runs.
 
     Passing multiple paths registers the SAME factory against each — useful for swapping
     the same method or torch op across several call sites (e.g. ``torch.unsqueeze`` +
@@ -158,32 +180,26 @@ def register_patch(backend: str, *paths: str):
     def decorator(fn):
         for path in paths:
             obj_path, _, attribute = path.rpartition(".")
-            obj = _resolve_dotted_path(obj_path)
-            if obj is None:
-                continue
-            _PATCHES.setdefault(backend, []).append((obj, attribute, fn))
+            _PATCHES.setdefault(backend, []).append((obj_path, attribute, fn))
         return fn
 
     return decorator
 
 
 def _resolve_dotted_path(path: str):
-    """Resolve a dotted Python path to the actual object — importing submodules where
-    possible, falling back to `getattr` for class attributes (e.g. `torch.Tensor`).
-    Returns `None` if the path can't be resolved (e.g. the backend isn't installed)."""
+    """Resolve a dotted Python path to the actual object — importing submodules where possible,
+    falling back to `getattr` for class attributes (e.g. `torch.Tensor`). Raises `ImportError` /
+    `AttributeError` if the path can't be resolved — callers resolve only paths they expect to exist."""
     import importlib
 
     parts = path.split(".")
-    try:
-        obj = importlib.import_module(parts[0])
-        for part in parts[1:]:
-            try:
-                obj = importlib.import_module(f"{obj.__name__}.{part}")
-            except (ImportError, AttributeError):
-                obj = getattr(obj, part)
-        return obj
-    except (ImportError, AttributeError):
-        return None
+    obj = importlib.import_module(parts[0])
+    for part in parts[1:]:
+        try:
+            obj = importlib.import_module(f"{obj.__name__}.{part}")
+        except (ImportError, AttributeError):
+            obj = getattr(obj, part)
+    return obj
 
 
 def apply_fx_node_fixes(backend: str, graph_module) -> None:
@@ -927,3 +943,34 @@ def decompose_for_generation(
     components = decompose_multimodal(prefill_model, prefill_inputs)
     components["decode"] = stages["decode"]
     return components
+
+
+def capture_calibration_inputs(
+    model: PreTrainedModel,
+    calibration_dataset: Iterable[dict[str, Any]],
+    generation_config: Any = None,
+    multi_token_decode: bool = False,
+) -> dict[str, list[dict]]:
+    """Capture per-component forward inputs for post-training quantization calibration.
+
+    Reuses `decompose_for_generation`'s capture: each generate-style sample in `calibration_dataset` is
+    run through the decomposition, and every component's forward kwargs are collected. Returns
+    `{component_name: [forward_inputs, ...]}` — one list per component (same keys
+    `decompose_for_generation` produces), which the exporter feeds to that component's quantization
+    calibration. This is the input/output-capture "trick" applied to calibration: the user provides one
+    generate-level dataset, and each single-graph component gets its own inferred calibration set.
+    """
+    calibration: dict[str, list[dict]] = {}
+    for sample in calibration_dataset:
+        components = decompose_for_generation(
+            model, sample, generation_config=generation_config, multi_token_decode=multi_token_decode
+        )
+        for name, (_submodel, forward_inputs) in components.items():
+            calibration.setdefault(name, []).append(forward_inputs)
+        # A multi-token decode graph serves the prefill step too, so its quantization encodings must cover
+        # both distributions — calibrated on decode steps alone, the KV-cache values it writes at prefill
+        # would be quantized under encodings observed only on single-token steps. Feed it the prefill
+        # capture as one more calibration sample (the same forward, so the same kwarg schema).
+        if multi_token_decode and "prefill" in components and "decode" in components:
+            calibration["decode"].append(components["prefill"][1])
+    return calibration

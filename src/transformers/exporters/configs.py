@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
 from os import PathLike
@@ -96,6 +97,20 @@ class DynamoConfig(ExportConfigMixin):
             fine-grained ``Dim(min=, max=)`` bounds. Not needed with ``dynamic=True`` / ``Dim.AUTO``,
             where ``torch.export`` infers shape relations instead of verifying them against the
             user-stated bounds.
+        quantizer (`Quantizer`, *optional*):
+            Post-training quantization recipe — a PT2E `Quantizer` (e.g. `XNNPACKQuantizer(...)`,
+            `X86InductorQuantizer(...)`, a vendor `QnnQuantizer`, …). When set, the exported graph is
+            quantized (`prepare_pt2e` → calibrate → `convert_pt2e`) before it is returned/lowered.
+            Backend-agnostic: the resulting quantized `ExportedProgram` runs on inductor (int8), lowers
+            to ExecuTorch, or translates to ONNX QDQ. `None` (default) exports in full precision.
+        calibration_dataset (`Iterable[dict]`, *optional*):
+            Forward-kwarg dicts run through the prepared graph to gather observer statistics for static
+            quantization — any iterable of dicts works, including a `torch.utils.data.DataLoader` whose
+            batches collate to forward kwargs. Ignored when `quantizer` is `None`. When `None`,
+            calibration falls back to a
+            single pass on the export's own sample inputs (a warning is emitted — one sample can hurt
+            accuracy). For generative models, pass a generate-style dataset to `export_for_generation`'s
+            `calibration_dataset` instead — it fans out a per-component calibration set automatically.
     """
 
     export_format: ExportFormat = ExportFormat.DYNAMO
@@ -104,6 +119,9 @@ class DynamoConfig(ExportConfigMixin):
     strict: bool = False
     dynamic_shapes: dict[str, Any] | None = None
     prefer_deferred_runtime_asserts_over_guards: bool = False
+
+    quantizer: Any = None
+    calibration_dataset: Iterable[Any] | None = None
 
 
 @dataclass
@@ -163,6 +181,10 @@ class ExecutorchConfig(DynamoConfig):
 
             - `"xnnpack"` — CPU inference via the XNNPACK library (default; runs anywhere).
             - `"cuda"` — GPU inference via the ExecuTorch CUDA backend.
+            - `"qnn"` — on-SoC accelerator inference via the Qualcomm QNN backend. QNN serves several
+              accelerators (HTP/NPU, LPAI, the Adreno GPU); this integration currently targets the HTP.
+              Requires the Qualcomm AI Engine Direct SDK; pair with a `QnnQuantizer` via `quantizer`
+              for int8/16 (else fp16).
         alloc_graph_input (`bool`, *optional*, defaults to `True`):
             Whether the memory-planning pass reserves arena memory for graph inputs. When `False`,
             the runtime uses the caller-provided input buffers directly instead of copying into the
