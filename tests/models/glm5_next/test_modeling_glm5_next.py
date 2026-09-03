@@ -22,6 +22,7 @@ from transformers import (
     Glm5NextConfig,
     Glm5NextForConditionalGeneration,
     Glm5NextModel,
+    Glm5NextVisionModel,
     Glm5NextVisionConfig,
     is_torch_available,
     logging,
@@ -33,6 +34,7 @@ from transformers.testing_utils import (
     CaptureLogger,
     require_torch,
     require_torch_accelerator,
+    require_flash_attn,
     require_torch_greater_or_equal,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
@@ -169,11 +171,11 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
     # FIXME: export is very sensitive to any shape changes
     test_torch_exportable = False
 
-    @unittest.skip("Glm5Next does not support flash_attention_2.")
+    @unittest.skip("Glm5Next text DSA attention does not support flash_attention_2 in the common full-model test.")
     def test_flash_attn_2_inference_equivalence(self):
         pass
 
-    @unittest.skip("Glm5Next does not support flash_attention_2.")
+    @unittest.skip("Glm5Next text DSA attention does not support flash_attention_2 in the common full-model test.")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
