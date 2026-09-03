@@ -445,6 +445,37 @@ def make_list_of_audio_chat_template(
     return make_list_of_audio(audio)
 
 
+def make_audio_chat_content(audio_item: "str | np.ndarray", prompt: str | None = None) -> list[dict]:
+    """
+    Build the chat-template `content` list.
+
+    Args:
+        audio_item (`str` or `np.ndarray`):
+            A single audio item as accepted by chat templates: a local path/URL/array.
+        prompt (`str`, *optional*):
+            Text to include alongside the audio.
+
+    Returns:
+        `list[dict]`: A chat-template content list, ready to be wrapped in a `{"role": ..., "content": ...}` message.
+    """
+    content = (
+        [{"type": "audio", "path": audio_item}]
+        if isinstance(audio_item, str)
+        else [{"type": "audio", "audio": audio_item}]
+    )
+    if prompt is not None:
+        content.append({"type": "text", "text": prompt})
+    return content
+
+
+def parse_timestamp(value: str) -> float:
+    """
+    Parse a timestamp string into seconds. Accepts a plain float (`"7.56"`) or a colon-separated
+    `MM:SS` / `HH:MM:SS` string (`"1:23"`, `"01:02:03"`), for diarization/transcription decoders.
+    """
+    return sum(float(part) * 60**i for i, part in enumerate(reversed(value.strip().split(":"))))
+
+
 def hertz_to_mel(freq: float | np.ndarray, mel_scale: str = "htk") -> float | np.ndarray:
     """
     Convert frequency from hertz to mels.

@@ -17,7 +17,7 @@ import re
 
 import numpy as np
 
-from ...audio_utils import AudioInput, make_list_of_audio_chat_template
+from ...audio_utils import AudioInput, make_audio_chat_content, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
@@ -109,7 +109,7 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
             audio features (`input_values`, `padding_mask`).
         """
-        output_kwargs = self._merge_kwargs(VibeVoiceAsrProcessorKwargs, **kwargs)
+        output_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)
         return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
 
         if return_tensors != "pt":
@@ -117,13 +117,13 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
 
         if audio is not None:
             _, text, _, audio = self.prepare_inputs_layout(text=text, audio=audio, **kwargs)
-            self.validate_inputs(text=text, audio=audio, **kwargs)
 
             # Replace audio duration placeholders in text
-            audio_durations = iter([len(el) / self.feature_extractor.sampling_rate for el in audio])
-            audio_duration_pattern = re.compile(re.escape(self.audio_duration_token))
-            for i in range(len(text)):
-                text[i] = audio_duration_pattern.sub(lambda _: f"{next(audio_durations):.2f}", text[i])
+            if self.audio_duration_token:
+                audio_durations = iter([len(el) / self.feature_extractor.sampling_rate for el in audio])
+                audio_duration_pattern = re.compile(re.escape(self.audio_duration_token))
+                for i in range(len(text)):
+                    text[i] = audio_duration_pattern.sub(lambda _: f"{next(audio_durations):.2f}", text[i])
 
         model_inputs = super().__call__(text=text, audio=audio, **kwargs)
 
@@ -208,18 +208,10 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
 
         prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
 
-        conversations = []
-        for prompt_text, audio_item in zip(prompts, audio_items):
-            content = []
-            if isinstance(audio_item, str):
-                content.append({"type": "audio", "path": audio_item})
-            else:
-                content.append({"type": "audio", "audio": audio_item})
-
-            if prompt_text is not None:
-                content.append({"type": "text", "text": prompt_text})
-
-            conversations.append([{"role": "user", "content": content}])
+        conversations = [
+            [{"role": "user", "content": make_audio_chat_content(audio_item, prompt_text)}]
+            for prompt_text, audio_item in zip(prompts, audio_items)
+        ]
 
         return self.apply_chat_template(
             conversations,
