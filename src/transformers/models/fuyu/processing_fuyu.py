@@ -31,7 +31,6 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging, requires_backends
-from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -197,7 +196,6 @@ def construct_full_unpacked_stream(
     all_bi_stream = [torch.cat([subsequence_stream[:num_real_tokens]], dim=0)]
 
     return all_bi_stream
-
 
 
 @auto_docstring

@@ -23,42 +23,20 @@ import numpy as np
 
 from ...audio_utils import AudioInput
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     auto_docstring,
-    is_vision_available,
     logging,
 )
-from ...utils.import_utils import requires
 from ...video_utils import VideoInput
-
-
-if is_vision_available():
-    from .image_processing_gemma4_unified import Gemma4UnifiedImageProcessorKwargs, get_aspect_ratio_preserving_size
+from .image_processing_gemma4_unified import get_aspect_ratio_preserving_size
 
 
 logger = logging.get_logger(__name__)
 
 
-class Gemma4UnifiedVideoProcessorKwargs(VideosKwargs, total=False):
-    """
-    patch_size (`int`, *optional*):
-        Size of each image patch in pixels.
-    max_soft_tokens (`int`, *optional*):
-        Maximum number of soft (vision) tokens per video frame.
-        Must be one of {70, 140, 280, 560, 1120}.
-    pooling_kernel_size (`int`, *optional*):
-        Spatial pooling kernel size applied after patchification.
-    """
-
-    patch_size: int
-    max_soft_tokens: int
-    pooling_kernel_size: int
-
-
 class Gemma4UnifiedProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Gemma4UnifiedImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": True,
@@ -73,7 +51,6 @@ class Gemma4UnifiedProcessorKwargs(ProcessingKwargs, total=False):
 
 
 @auto_docstring
-
 class Gemma4UnifiedProcessor(ProcessorMixin):
     valid_processor_kwargs = Gemma4UnifiedProcessorKwargs
 

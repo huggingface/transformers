@@ -19,20 +19,15 @@ from ...audio_utils import AudioInput
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, is_vision_available, logging
-from ...utils.import_utils import requires
+from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
-
-
-if is_vision_available():
-    from .image_processing_gemma4 import Gemma4ImageProcessorKwargs, get_aspect_ratio_preserving_size
+from .image_processing_gemma4 import get_aspect_ratio_preserving_size
 
 
 logger = logging.get_logger(__name__)
 
 
 class Gemma4ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Gemma4ImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": True,
@@ -47,7 +42,6 @@ class Gemma4ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 @auto_docstring
-
 class Gemma4Processor(ProcessorMixin):
     valid_processor_kwargs = Gemma4ProcessorKwargs
 
