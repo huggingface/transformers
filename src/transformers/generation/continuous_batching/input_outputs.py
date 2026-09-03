@@ -240,9 +240,14 @@ class ContinuousBatchingIOs:
                 other.block_table.copy_(self.block_table, non_blocking=non_blocking)
             # Otherwise, we transfer the write indices (and read indices if the batch uses any cache reads)
             else:
-                other.write_index_storage.copy_(self.write_index_storage, non_blocking=non_blocking)
+                # Only the prefix the batch uses: the read storage is sized by the whole pool (num_pages + T entries
+                # of int64, hundreds of MB on a small model with a large pool) and copying it whole every batch was
+                # 90% of gemma-3-1b's device time.
+                q_size = self.num_q_tokens
+                kv_size = self.max_kv_read + self.num_q_tokens
+                other.write_index_storage[:, :q_size].copy_(self.write_index_storage[:, :q_size], non_blocking=non_blocking)
                 if self.max_kv_read > 0:
-                    other.read_index_storage.copy_(self.read_index_storage, non_blocking=non_blocking)
+                    other.read_index_storage[:, :kv_size].copy_(self.read_index_storage[:, :kv_size], non_blocking=non_blocking)
             # Transfer the attention masks if needed
             if self.attention_mask is not None and other.attention_mask is not None:
                 for layer_type in self.attention_mask.keys():
