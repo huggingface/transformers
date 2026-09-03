@@ -246,6 +246,26 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
         self.assertEqual(text_config.rope_parameters["mrope_section"], [2, 2, 2, 2])
         self.assertNotIn("xdrope_section", text_config.rope_parameters)
 
+    def test_legacy_field_aliases_normalize_onto_canonical_fields(self):
+        # `attention_head_dim` / `org_vocab_size` / `pad_id` are the names the Tencent codebase uses for `head_dim` /
+        # `vocab_size` / `pad_token_id`; every public checkpoint stores both spellings with the same value. They must
+        # fold onto the canonical field rather than linger as duplicate attributes.
+        aliases = {"attention_head_dim": "head_dim", "org_vocab_size": "vocab_size", "pad_id": "pad_token_id"}
+        legacy_kwargs = {"attention_head_dim": 16, "org_vocab_size": 99, "pad_id": 7}
+
+        for config in (HunYuanVLTextConfig(**legacy_kwargs), HunYuanVLConfig(**legacy_kwargs).text_config):
+            for alias, canonical in aliases.items():
+                self.assertEqual(getattr(config, canonical), legacy_kwargs[alias])
+                # reading the alias keeps working, but it is not stored (and so not serialized) separately
+                self.assertEqual(getattr(config, alias), legacy_kwargs[alias])
+                self.assertNotIn(alias, config.__dict__)
+                self.assertNotIn(alias, config.to_dict())
+
+        # the top-level config folds them into `text_config` instead of keeping them at the root
+        config = HunYuanVLConfig(**legacy_kwargs)
+        for alias in aliases:
+            self.assertNotIn(alias, config.to_dict())
+
     def test_mismatching_num_image_tokens(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
@@ -426,6 +446,7 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", None): "The image is a radar chart that compares the performance of four different models or methods across various benchmarks. The chart is labeled with the names of the benchmarks on the axes, and each model is represented by a different colored line. The models are labeled as BLIP-2, InstructBLIP, Qwen-VL",
+                ("xpu", 5): "To determine what is shown in the image, we analyze the visual elements:  \n\n1. **Chart Type**: A radar chart (also called a spider chart) is used to compare multiple datasets.  \n2. **Axes and Data**: The chart has 12 axes, each representing a dataset: *VQ",
             }
         )  # fmt: skip
         decoded_text = self._generate_trimmed_text(model, inputs, max_new_tokens=self.max_new_tokens)[0]
@@ -445,6 +466,10 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
                 ("cuda", None): [
                     "The image is a radar chart that compares the performance of four different models or methods across various benchmarks. The chart is labeled with the names of the benchmarks on the axes, and each model is represented by a different colored line. The models are labeled as BLIP-2, InstructBLIP, Qwen-VL",
                     "To determine the animal on the candy, observe the image: there are two candies—one teal and one orange. The teal candy has a black silhouette of a bird (a type of bird in the family **passerina**). The orange candy also has a black silhouette of a bird, but",
+                ],
+                ("xpu", 5): [
+                    "To determine what is shown in the image, we analyze the context of the radar chart. A radar chart is a graphical representation of multivariate data, where each axis represents a different variable (here, different models or tasks).  \n\nIn the image, the axes are labeled with model names (e.g., VQAv",
+                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of reptile with a shell and a tail).",
                 ]
             }
         )  # fmt: skip
@@ -459,6 +484,7 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", None): "To determine the answer, we analyze the radar chart:  \n\n1. **First image**: The first image shows a hand with multiple colored candy beads. The top - most bead is teal, and the second bead from the top is green. The third bead from the top is orange. The fourth bead from the",
+                ("xpu", 5): "To determine the answers, let’s analyze the radar chart:  \n\n1. **First Image**: The first image shows a radar chart with multiple colored candy beads. The first candy bead is a **green** one. The animal on this green bead is a **turtle** (a small aquatic creature with a",
             }
         )  # fmt: skip
         decoded_text = self._generate_trimmed_text(model, inputs, max_new_tokens=self.max_new_tokens)[0]
@@ -480,6 +506,11 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "OCR (Optical Character Recognition) is a computer technology that uses **Optical Character Recognition (OCR)** to extract text from images or documents. It is a powerful tool for automating tasks like text extraction, image analysis, and document processing.\n\n### Brief Explanation:\n1. **Purpose**: OCR is used to recognize and extract",
                     "To determine the answer, we analyze the radar chart:  \n\n1. **First image**: The first image shows a hand with multiple colored candy beads. The top - most bead is teal, and the second bead from the top is green. The third bead from the top is orange. The fourth bead from the",
                     "The image is a radar chart that compares the performance of four different models or methods across various benchmarks. The chart is labeled with the names of the benchmarks on the axes, and each model is represented by a different colored line. The models are labeled as BLIP-2, InstructBLIP, Qwen-VL",
+                ],
+                ("xpu", 5): [
+                    "It is a software tool that allows you to extract text from a document.",
+                    "To determine what is shown in the first image and what animal is on the candy in the second image, we analyze the radar chart:  \n\n1. **First Image**: The first radar chart has a green - colored region. The animal on this green region is a turtle.  \n2. **Second Image**:",
+                    "To determine what is shown in the image, we analyze the context of the radar chart. A radar chart is a graphical representation of multivariate data, where each axis represents a different variable (here, different models or tasks).  \n\nIn the image, the axes are labeled with model names (e.g., VQAv",
                 ]
             }
         )  # fmt: skip
@@ -501,6 +532,10 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
                 ("cuda", None): [
                     "STEALTH CAM 07:59 AM 09/01/15 69 F FRONT CBN",
                     "To determine the animal on the candy, observe the image: there are two candies—one teal and one orange. The teal candy has a black silhouette of a bird (a type of bird in the family **passerina**). The orange candy also has a black silhouette of a bird, but",
+                ],
+                ("xpu", 5): [
+                    "STEALTH CAM\n07:59 AM 09/01/15 69 F \nFRONT CBN",
+                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of reptile with a shell and a tail).",
                 ]
             }
         )  # fmt: skip
@@ -521,12 +556,17 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
                 ("cuda", None): [
                     "STEALTH CAM 07:59 AM 09/01/15 69 F FRONT CBN",
                     "To determine the animal on the candy, observe the image: there are two candies—one teal and one orange. The teal candy has a black silhouette of a bird (a type of bird in the family **passerina**). The orange candy also has a black silhouette of a bird, but",
+                ],
+                ("xpu", 5): [
+                    "STEALTH CAM\n07:59 AM 09/01/15 69 F \nFRONT CBN",
+                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of reptile with a shell and a tail).",
                 ]
             }
         )  # fmt: skip
         expected_texts_single = Expectations(
             {
                 ("cuda", None): "STEALTH CAM 07:59 AM 09/01/15 69 F FRONT CBN",
+                ("xpu", 5): "STEALTH CAM\n07:59 AM 09/01/15 69 F \nFRONT CBN",
             }
         )  # fmt: skip
 

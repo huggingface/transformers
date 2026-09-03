@@ -38,7 +38,8 @@ from packaging import version
 from safetensors import safe_open
 from safetensors.torch import load as _safe_load_bytes
 from safetensors.torch import save_file as safe_save_file
-from torch import Tensor, nn
+from torch import nn
+from torch.autograd.graph import save_on_cpu
 from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
@@ -402,7 +403,7 @@ def _find_disjoint(tensors: list[set[str]], state_dict: dict[str, torch.Tensor])
                 filtered_tensors.append({name})
             else:
                 filtered_tensors[-1].add(name)
-            last_stop = stop
+            last_stop = max(last_stop, stop)
     disjoint_tensors = []
     shared_tensors = []
     for tensors in filtered_tensors:
@@ -914,114 +915,6 @@ class ModuleUtilsMixin:
         `torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
         """
         return next(param.dtype for param in self.parameters() if param.is_floating_point())
-
-    def invert_attention_mask(self: "PreTrainedModel", encoder_attention_mask: Tensor) -> Tensor:
-        """
-        Invert an attention mask (e.g., switches 0. and 1.).
-
-        Args:
-            encoder_attention_mask (`torch.Tensor`): An attention mask.
-
-        Returns:
-            `torch.Tensor`: The inverted attention mask.
-        """
-        logger.warning_once(
-            "Detected the usage of `invert_attention_mask`: This function is deprecated and will be removed in v5.12.0. "
-            "Please use the new API in `transformers.masking_utils`"
-        )
-
-        if encoder_attention_mask.dim() == 3:
-            encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
-        if encoder_attention_mask.dim() == 2:
-            encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
-        # T5 has a mask that can compare sequence ids, we can simulate this here with this transposition
-        # encoder_extended_attention_mask = (encoder_extended_attention_mask ==
-        # encoder_extended_attention_mask.transpose(-1, -2))
-        encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * torch.finfo(self.dtype).min
-
-        return encoder_extended_attention_mask
-
-    @staticmethod
-    def create_extended_attention_mask_for_decoder(input_shape, attention_mask):
-        logger.warning_once(
-            "Detected the usage of `create_extended_attention_mask_for_decoder`: This function is deprecated and will be removed in v5.12.0. "
-            "Please use the new API in `transformers.masking_utils`"
-        )
-
-        device = attention_mask.device
-        batch_size, seq_length = input_shape
-        seq_ids = torch.arange(seq_length, device=device)
-        causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
-        # in case past_key_values are used we need to add a prefix ones mask to the causal mask
-        causal_mask = causal_mask.to(attention_mask.dtype)
-
-        if causal_mask.shape[1] < attention_mask.shape[1]:
-            prefix_seq_len = attention_mask.shape[1] - causal_mask.shape[1]
-            causal_mask = torch.cat(
-                [
-                    torch.ones((batch_size, seq_length, prefix_seq_len), device=device, dtype=causal_mask.dtype),
-                    causal_mask,
-                ],
-                dim=-1,
-            )
-
-        extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
-        return extended_attention_mask
-
-    def get_extended_attention_mask(
-        self: "PreTrainedModel",
-        attention_mask: Tensor,
-        input_shape: tuple[int, ...],
-        dtype: torch.dtype | None = None,
-    ) -> Tensor:
-        """
-        Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
-
-        Arguments:
-            attention_mask (`torch.Tensor`):
-                Mask with ones indicating tokens to attend to, zeros for tokens to ignore.
-            input_shape (`tuple[int]`):
-                The shape of the input to the model.
-
-        Returns:
-            `torch.Tensor` The extended attention mask, with a the same dtype as `attention_mask.dtype`.
-        """
-        logger.warning_once(
-            "Detected the usage of `get_extended_attention_mask`: This function is deprecated and will be removed in v5.12.0. "
-            "Please use the new API in `transformers.masking_utils`"
-        )
-
-        if dtype is None:
-            dtype = self.dtype
-
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        if attention_mask.dim() == 3:
-            extended_attention_mask = attention_mask[:, None, :, :]
-        elif attention_mask.dim() == 2:
-            # Provided a padding mask of dimensions [batch_size, seq_length]
-            # - if the model is a decoder, apply a causal mask in addition to the padding mask
-            # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
-            if getattr(self.config, "is_decoder", None):
-                extended_attention_mask = ModuleUtilsMixin.create_extended_attention_mask_for_decoder(
-                    input_shape, attention_mask
-                )
-            else:
-                extended_attention_mask = attention_mask[:, None, None, :]
-        else:
-            raise ValueError(
-                f"Wrong shape for input_ids (shape {input_shape}) or attention_mask (shape {attention_mask.shape})"
-            )
-
-        # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-        # masked positions, this operation will create a tensor which is 0.0 for
-        # positions we want to attend and the dtype's smallest value for masked positions.
-        # Since we are adding it to the raw scores before the softmax, this is
-        # effectively the same as removing these entirely.
-        extended_attention_mask = extended_attention_mask.to(dtype=dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(dtype).min
-        return extended_attention_mask
 
     def num_parameters(self: "PreTrainedModel", only_trainable: bool = False, exclude_embeddings: bool = False) -> int:
         """
@@ -3183,7 +3076,9 @@ class PreTrainedModel(
         # Tie weights needs to be called here, but it can use the pre-computed `all_tied_weights_keys`
         self.tie_weights(recompute_mapping=False)
 
-    def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None):
+    def gradient_checkpointing_enable(
+        self, gradient_checkpointing_kwargs=None, every_n_layers: int = 1, offload: bool = False
+    ):
         """
         Activates gradient checkpointing for the current model.
 
@@ -3191,6 +3086,15 @@ class PreTrainedModel(
         the module. https://discuss.pytorch.org/t/any-different-between-model-input-and-model-forward-input/3690/2
 
         Args:
+            every_n_layers (`int`, *optional*, defaults to 1):
+                Checkpoint only every `every_n_layers`-th decoder layer, leaving the rest to keep their activations.
+                `1` checkpoints every layer, which is the usual all-or-nothing behavior. Larger values trade memory
+                back for speed, which is worth it whenever the memory freed by full checkpointing is going unused.
+            offload (`bool`, *optional*, defaults to `False`):
+                Hold the activations saved for the recompute in pinned host memory rather than on the accelerator.
+                This frees `layers x sequence x hidden` bytes of device memory, which is what dominates at long
+                sequence lengths, and costs a device-to-host copy in the forward and a host-to-device copy in the
+                backward. Both copies run on the compute stream, so the step gets slower.
             gradient_checkpointing_kwargs (dict, *optional*):
                 Additional keyword arguments passed along to the `torch.utils.checkpoint.checkpoint` function.
         """
@@ -3200,14 +3104,27 @@ class PreTrainedModel(
         if gradient_checkpointing_kwargs is None:
             gradient_checkpointing_kwargs = {"use_reentrant": False}
 
-        gradient_checkpointing_func = functools.partial(checkpoint, **gradient_checkpointing_kwargs)
+        if offload:
+            device_type = torch.accelerator.current_accelerator().type
+
+            def checkpoint_func(function, *args, **kwargs):
+                with save_on_cpu(pin_memory=True, device_type=device_type):
+                    return checkpoint(function, *args, **kwargs)
+        else:
+            checkpoint_func = checkpoint
+
+        gradient_checkpointing_func = functools.partial(checkpoint_func, **gradient_checkpointing_kwargs)
 
         # For old GC format (transformers < 4.35.0) for models that live on the Hub
         # we will fall back to the overwritten `_set_gradient_checkpointing` method
         _is_using_old_format = "value" in inspect.signature(self._set_gradient_checkpointing).parameters
 
         if not _is_using_old_format:
-            self._set_gradient_checkpointing(enable=True, gradient_checkpointing_func=gradient_checkpointing_func)
+            self._set_gradient_checkpointing(
+                enable=True,
+                gradient_checkpointing_func=gradient_checkpointing_func,
+                every_n_layers=every_n_layers,
+            )
         else:
             self.apply(partial(self._set_gradient_checkpointing, value=True))
             logger.warning(
@@ -3225,8 +3142,17 @@ class PreTrainedModel(
             # the gradients to make sure the gradient flows.
             self.enable_input_require_grads()
 
-    def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = checkpoint):
+    def _set_gradient_checkpointing(
+        self,
+        enable: bool = True,
+        gradient_checkpointing_func: Callable = checkpoint,
+        every_n_layers: int = 1,
+    ):
+        # Imported here rather than at module scope: `modeling_layers` imports from this module.
+        from .modeling_layers import GradientCheckpointingLayer
+
         is_gradient_checkpointing_set = False
+        layer_index = 0
 
         # Apply it on the top-level module in case the top-level modules supports it
         # for example, LongT5Stack inherits from `PreTrainedModel`.
@@ -3238,7 +3164,13 @@ class PreTrainedModel(
         for module in self.modules():
             if hasattr(module, "gradient_checkpointing"):
                 setattr(module, "_gradient_checkpointing_func", gradient_checkpointing_func)
-                setattr(module, "gradient_checkpointing", enable)
+                # Only the repeated per-layer blocks are counted, so `every_n_layers` means what it says even when
+                # other modules also carry a `gradient_checkpointing` flag.
+                if enable and isinstance(module, GradientCheckpointingLayer):
+                    setattr(module, "gradient_checkpointing", layer_index % every_n_layers == 0)
+                    layer_index += 1
+                else:
+                    setattr(module, "gradient_checkpointing", enable)
                 is_gradient_checkpointing_set = True
 
         if not is_gradient_checkpointing_set:
@@ -4021,7 +3953,8 @@ class PreTrainedModel(
                 GPU and the available CPU RAM if unset.
             distributed_config ([`~transformers.distributed.configuration_utils.DistributedConfig`], *optional*):
                 Configuration for native distributed loading with tensor parallelism or FSDP2. Pass
-                `DistributedConfig(tp_size=N)` for tensor parallelism, or
+                `DistributedConfig(tp_size=N)` to use a model's predefined tensor parallel plan,
+                `DistributedConfig(tp_plan=...)` to specify a tensor parallel plan, or
                 `DistributedConfig(fsdp_size=N)` for FSDP2. Requires `torchrun` and an initialized
                 process group when `tp_size > 1` or `fsdp_size > 1`. Mutually exclusive with `device_map`.
             device_mesh (`torch.distributed.DeviceMesh`, *optional*):
@@ -4119,6 +4052,8 @@ class PreTrainedModel(
         gguf_file = kwargs.pop("gguf_file", None)
         distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
+        tp_plan = kwargs.pop("tp_plan", None)
+        tp_size = kwargs.pop("tp_size", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         allow_all_kernels = kwargs.pop("allow_all_kernels", False)
         use_kernels = kwargs.pop("use_kernels", False)
@@ -4160,6 +4095,26 @@ class PreTrainedModel(
                 "If your plan is to load the model on each device, you should set device_map={"
                 ": PartialState().process_index} where PartialState comes from accelerate library"
             )
+
+        has_standalone_tp_args = tp_plan is not None or tp_size is not None
+
+        if distributed_config is not None and has_standalone_tp_args:
+            raise ValueError(
+                "Pass either `distributed_config` or the standalone `tp_plan`/`tp_size` arguments, not both. "
+                "Set tensor-parallel options on `DistributedConfig` when using it."
+            )
+
+        if tp_plan is not None:
+            warnings.warn(
+                "Passing `tp_plan` directly to `from_pretrained` is deprecated and will be removed in v5.18. "
+                "Pass it in `distributed_config=DistributedConfig(tp_plan=...)` instead.",
+                FutureWarning,
+                stacklevel=2,
+            )
+
+        if has_standalone_tp_args:
+            # For backwards compatibility, we still support passing `tp_plan` and `tp_size` directly to `from_pretrained`.
+            distributed_config = DistributedConfig(tp_plan=tp_plan, tp_size=tp_size)
 
         if distributed_config is not None:
             distributed_config, device_map, device_mesh = cls.prepare_distribute_model(
@@ -4472,6 +4427,7 @@ class PreTrainedModel(
                 unexpected_keys=set(),
                 mismatched_keys=set(),
                 conversion_errors={},
+                skipped_pp_keys=set(),
             )
         else:
             all_pointer = set()
@@ -4488,7 +4444,15 @@ class PreTrainedModel(
                         (d.type if isinstance(d, torch.device) else d) == "mps"
                         for d in load_config.device_map.values()
                     )
-                    backend, device = ("pread", "mps") if is_mps else ("mmap", "cpu")
+                    # Use pread on MPS (mmap incompatible) and Windows (mmap reserves
+                    # copy-on-write commit charge for the entire file, exhausting memory
+                    # for large multi-shard checkpoints).
+                    if is_mps:
+                        backend, device = "pread", "mps"
+                    elif sys.platform == "win32":
+                        backend, device = "pread", "cpu"
+                    else:
+                        backend, device = "mmap", "cpu"
                     file_pointer = safe_open(file, framework="pt", device=device, backend=backend)
                     all_pointer.add(file_pointer)
                     for k in file_pointer.keys():
