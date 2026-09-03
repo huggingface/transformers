@@ -19,10 +19,12 @@ from parameterized import parameterized
 from transformers import AutoProcessor, FunAsrNanoProcessor
 from transformers.testing_utils import require_librosa, require_torch
 
-from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin
+from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin, url_to_local_path
 
 
-AUDIO_URL = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
+AUDIO_URL = url_to_local_path(
+    "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
+)
 
 
 @require_torch
