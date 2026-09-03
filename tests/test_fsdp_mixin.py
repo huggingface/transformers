@@ -494,6 +494,60 @@ def _test_fsdp2_plan_vs_ddp_impl(rank, config_class, config_dict, tie_word_embed
         logger.debug("DDP and FSDP2 comparison checks passed.")
 
 
+def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, dtype=None):
+    """DDP vs a 2-D (fsdp, tp) mesh with expert parallelism on `tp`: same batch on every rank, so the
+    sharded run has to trace the DDP run step by step and end on the same weights."""
+    init_test_logger()
+
+    if dtype is None:
+        dtype = torch.float32
+
+    device = _get_rank_device(rank)
+    config = config_class.from_dict(config_dict)
+    batches = _build_repeated_training_batches(config, device, NUM_STEPS)
+
+    with _deterministic_init_model_dir(rank, config, dtype) as init_model_dir:
+        ddp_losses, _, ddp_state_dict = train_ddp(rank, batches, LR, device, dtype, init_model_dir)
+
+        _set_determinism(SEED)
+        world_size = dist.get_world_size()
+        model = AutoModelForCausalLM.from_pretrained(
+            init_model_dir,
+            torch_dtype=dtype,
+            distributed_config=DistributedConfig(tp_size=2, fsdp_size=world_size // 2, enable_expert_parallel=True),
+        )
+        assert model.tp_size == 2 and model.fsdp_size == world_size // 2
+        assert model._device_mesh.mesh_dim_names == ("fsdp", "tp")
+        model.train()
+        optimizer = torch.optim.Adam(model.parameters(), lr=LR, foreach=False)
+        # `clip_grad_norm_` cannot span parameters living on different meshes; the Trainer has its own
+        # norm for that case, so only the losses and the final weights are compared here.
+        losses, _ = _run_training_steps(model, optimizer, batches, track_grad_norms=False)
+        state_dict = gather_full_state_dict(model)
+
+    for step in range(len(ddp_losses)):
+        torch.testing.assert_close(
+            torch.tensor(ddp_losses[step]),
+            torch.tensor(losses[step]),
+            rtol=DDP_FSDP_RTOL,
+            atol=DDP_FSDP_ATOL,
+            msg=f"Loss mismatch at step {step}: DDP={ddp_losses[step]}, FSDP2+EP={losses[step]}",
+        )
+
+    for key in ddp_state_dict:
+        assert key in state_dict, f"Key {key} missing from FSDP2+EP state dict"
+        torch.testing.assert_close(
+            ddp_state_dict[key],
+            state_dict[key],
+            rtol=DDP_FSDP_RTOL,
+            atol=DDP_FSDP_ATOL,
+            msg=f"Weight mismatch for {key}: DDP vs FSDP2+EP",
+        )
+
+    if rank == 0:
+        logger.debug("DDP and FSDP2+EP (2-D mesh) comparison checks passed.")
+
+
 # =============================================================================
 # Mixin class
 # =============================================================================
@@ -509,10 +563,11 @@ class FSDPTesterMixin(ABC):
         """The model tester instance (e.g., CausalLMModelTester)."""
         ...
 
-    def _skip_if_insufficient_devices(self):
+    def _skip_if_insufficient_devices(self, world_size=None):
+        world_size = world_size or self.fsdp_nproc_per_node
         available_workers = _get_available_fsdp_workers()
-        if available_workers < self.fsdp_nproc_per_node:
-            self.skipTest(f"Need at least {self.fsdp_nproc_per_node} FSDP workers, have {available_workers}")
+        if available_workers < world_size:
+            self.skipTest(f"Need at least {world_size} FSDP workers, have {available_workers}")
 
     def _skip_if_mps(self):
         if torch._C._get_accelerator().type == "mps":
@@ -558,9 +613,10 @@ class FSDPTesterMixin(ABC):
             config.vocab_size_per_layer_input = config.vocab_size
         return type(config), config.to_diff_dict()
 
-    def _run_fsdp2_distributed_test(self, test_name, test_impl, *test_args, **test_kwargs):
+    def _run_fsdp2_distributed_test(self, test_name, test_impl, *test_args, world_size=None, **test_kwargs):
+        world_size = world_size or self.fsdp_nproc_per_node
         self._skip_if_mps()
-        self._skip_if_insufficient_devices()
+        self._skip_if_insufficient_devices(world_size)
         self._skip_if_fsdp_distributed_not_enabled()
 
         config_class, config_dict = self._get_tiny_config()
@@ -575,8 +631,8 @@ class FSDPTesterMixin(ABC):
         try:
             mp.spawn(
                 _fsdp_global_wrapper,
-                args=(test_name, test_impl, func_args, test_kwargs, self.fsdp_nproc_per_node, port, results_file),
-                nprocs=self.fsdp_nproc_per_node,
+                args=(test_name, test_impl, func_args, test_kwargs, world_size, port, results_file),
+                nprocs=world_size,
             )
 
             with open(results_file) as f:
@@ -635,4 +691,14 @@ class FSDPTesterMixin(ABC):
             f"test_fsdp2_plan_vs_ddp_{label}",
             _test_fsdp2_plan_vs_ddp_impl,
             label == "tied",
+        )
+
+    @is_fsdp_test
+    def test_fsdp2_expert_parallel_2d_vs_ddp(self):
+        """Training on a 2-D (fsdp, tp) mesh with expert parallelism traces DDP step by step."""
+        config = self.model_tester.get_config()
+        if getattr(config, "base_model_ep_plan", None) is None:
+            self.skipTest("Model does not have an expert parallel plan (base_model_ep_plan)")
+        self._run_fsdp2_distributed_test(
+            "fsdp2_expert_parallel_2d_vs_ddp", _test_fsdp2_expert_parallel_2d_vs_ddp_impl, world_size=4
         )
