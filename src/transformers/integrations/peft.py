@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import inspect
 import json
 import os
@@ -21,6 +22,12 @@ from safetensors import safe_open
 
 from .._typing import PeftConfigLike
 from ..conversion_mapping import get_model_conversion_mapping
+from ..core_model_loading import (
+    WeightConverter,
+    WeightRenaming,
+    dot_natural_key,
+    rename_source_key,
+)
 from ..utils import (
     CONFIG_NAME,
     cached_file,
@@ -33,7 +40,7 @@ from ..utils import (
     logging,
 )
 from ..utils.hub import DownloadKwargs
-from ..utils.loading_report import log_state_dict_report
+from ..utils.loading_report import LoadStateDictInfo, log_state_dict_report
 
 
 if is_torch_available():
@@ -76,6 +83,45 @@ class PeftAdapterMixin:
     _hf_peft_config_loaded = False
     _prepare_peft_hotswap_kwargs: dict | None = None
     peft_config: dict[str, PeftConfigLike]
+
+    def _resolve_adapter_state_dict(
+        self, adapter_state_dict: dict[str, "torch.Tensor"] | None, checkpoint_files
+    ) -> dict[str, torch.Tensor]:
+        # Materialize the adapter state dict from `adapter_state_dict` or `checkpoint_files`. Used by paths
+        # that bypass `self._load_pretrained_model` (which would otherwise read the files itself).
+        from ..modeling_utils import load_state_dict
+
+        all_pointer = set()
+        if adapter_state_dict is not None:
+            merged_state_dict = adapter_state_dict
+        elif (
+            checkpoint_files is not None
+            and checkpoint_files[0].endswith(".safetensors")
+            and adapter_state_dict is None
+        ):
+            merged_state_dict = {}
+            for file in checkpoint_files:
+                file_pointer = safe_open(file, framework="pt", device="cpu")
+                all_pointer.add(file_pointer)
+                for k in file_pointer.keys():
+                    merged_state_dict[k] = file_pointer.get_tensor(k)
+        # Checkpoints are .bin
+        elif checkpoint_files is not None:
+            merged_state_dict = {}
+            for ckpt_file in checkpoint_files:
+                merged_state_dict.update(load_state_dict(ckpt_file))
+        else:
+            raise ValueError("Neither a state dict nor checkpoint files were found.")
+
+        return merged_state_dict
+
+    def _set_peft_inference_mode(self) -> None:
+        from peft.tuners.tuners_utils import BaseTunerLayer
+
+        self.eval()
+        for module in self.modules():
+            if isinstance(module, BaseTunerLayer):
+                module.requires_grad_(False)
 
     def load_adapter(
         self,
@@ -157,7 +203,7 @@ class PeftAdapterMixin:
         from peft import PeftType
         from peft.utils.save_and_load import _maybe_shard_state_dict_for_tp
 
-        from ..modeling_utils import LoadStateDictConfig, _get_resolved_checkpoint_files, load_state_dict
+        from ..modeling_utils import LoadStateDictConfig, _get_resolved_checkpoint_files
 
         if local_files_only:
             kwargs["local_files_only"] = True
@@ -274,8 +320,6 @@ class PeftAdapterMixin:
 
         device_map = getattr(self, "hf_device_map", {"": self.device})
 
-        # If the model is tensor parallel, we handle the sharding of the state dict here since the logic in `self._load_pretrained_model`
-        # is not compatible with the way PEFT adapter should be sharded.
         has_tp_adapters = False
         for module in self.modules():
             tp_info = getattr(module, "_tp_info", None)
@@ -284,34 +328,81 @@ class PeftAdapterMixin:
                 break
 
         if has_tp_adapters:
-            all_pointer = set()
-            if adapter_state_dict is not None:
-                merged_state_dict = adapter_state_dict
-            elif (
-                checkpoint_files is not None
-                and checkpoint_files[0].endswith(".safetensors")
-                and adapter_state_dict is None
-            ):
-                merged_state_dict = {}
-                for file in checkpoint_files:
-                    file_pointer = safe_open(file, framework="pt", device="cpu")
-                    all_pointer.add(file_pointer)
-                    for k in file_pointer.keys():
-                        merged_state_dict[k] = file_pointer.get_tensor(k)
-            # Checkpoints are .bin
-            elif checkpoint_files is not None:
-                merged_state_dict = {}
-                for ckpt_file in checkpoint_files:
-                    merged_state_dict.update(load_state_dict(ckpt_file))
-            else:
-                raise ValueError("Neither a state dict nor checkpoint files were found.")
-
-            adapter_state_dict = merged_state_dict
+            adapter_state_dict = self._resolve_adapter_state_dict(adapter_state_dict, checkpoint_files)
 
             if any(not isinstance(v, torch.Tensor) for v in adapter_state_dict.values()):
                 raise ValueError("Expected all values in the adapter state dict to be tensors.")
 
             _maybe_shard_state_dict_for_tp(self, adapter_state_dict, adapter_name)
+
+        if hotswap:
+            # Bypass the standard loader and use PEFT's hotswap path so that LoRA weights whose rank differs from the
+            # existing adapter's are copied (and zero-padded) in place rather than triggering a "size mismatch" reinit,
+            # and so the LoRA scaling is updated alongside the weights.
+            from peft.utils.hotswap import check_hotswap_configs_compatible, hotswap_adapter_from_state_dict
+            from peft.utils.transformers_weight_conversion import convert_peft_config_for_transformers
+
+            # The PEFT config conversion for v5 architecture changes is normally applied in-place by
+            # inject_adapter_in_model, which is skipped when hotswapping, so it needs to be applied explicitly.
+            convert_peft_config_for_transformers(peft_config, self, weight_conversions)
+
+            adapter_state_dict = self._resolve_adapter_state_dict(adapter_state_dict, checkpoint_files)
+
+            # Need to apply conversions manually as we don't use _load_pretrained_model. Same logic as in:
+            # https://github.com/huggingface/transformers/blob/a8f150d35d5863971db1e5c1dbc2a1c265f27f96/src/transformers/core_model_loading.py#L1222
+            renamings = [r for r in peft_weight_conversions if isinstance(r, WeightRenaming)]
+            converters = [c for c in peft_weight_conversions if isinstance(c, WeightConverter)]
+            pattern_to_converter = {p: c for c in converters for p in c.source_patterns}
+            meta_state_dict = self.state_dict()
+            conversion_mapping: dict[str, WeightConverter] = {}
+            processed_state_dict = {}
+            # Sort by `dot_natural_key` so converters such as MergeModulelist collect experts in numeric order.
+            for key, value in sorted(adapter_state_dict.items(), key=lambda kv: dot_natural_key(kv[0])):
+                renamed_key, source_pattern = rename_source_key(
+                    key, renamings, converters, self.base_model_prefix, meta_state_dict
+                )
+                if renamed_key not in meta_state_dict and key in meta_state_dict:  # see #44396 ff
+                    # Key should probably not have been renamed but we might need the `prefix` to be added.
+                    renamed_key, source_pattern = rename_source_key(
+                        key, [], [], base_model_prefix=self.base_model_prefix, meta_state_dict=meta_state_dict
+                    )
+
+                if source_pattern is not None:
+                    # A WeightConverter matched: bucket the tensor so its operations can run over all siblings.
+                    mapping = conversion_mapping.setdefault(
+                        renamed_key, copy.deepcopy(pattern_to_converter[source_pattern])
+                    )
+                    mapping.add_tensor(renamed_key, key, source_pattern, value)
+                else:
+                    processed_state_dict[renamed_key] = value
+
+            for layer_name, mapping in conversion_mapping.items():
+                realized = mapping.convert(layer_name, model=self, config=self.config)
+                for target_name, param in realized.items():
+                    processed_state_dict[target_name] = param[0] if isinstance(param, list) else param
+
+            check_hotswap_configs_compatible(self.peft_config[adapter_name], peft_config)
+            try:
+                hotswap_adapter_from_state_dict(
+                    model=self,
+                    state_dict=processed_state_dict,
+                    adapter_name=adapter_name,
+                    config=peft_config,
+                )
+            except Exception as e:
+                logger.error(f"Hotswapping {adapter_name} was unsuccessful with the following error:\n{e}")
+                raise
+
+            if peft_config.inference_mode:
+                self._set_peft_inference_mode()
+
+            return LoadStateDictInfo(
+                missing_keys=set(),
+                unexpected_keys=set(),
+                mismatched_keys=set(),
+                error_msgs=[],
+                conversion_errors={},
+            )
 
         load_config = replace(
             load_config,
@@ -332,12 +423,14 @@ class PeftAdapterMixin:
         )
 
         if peft_config.inference_mode:
-            from peft.tuners.tuners_utils import BaseTunerLayer
+            self._set_peft_inference_mode()
 
-            self.eval()
-            for module in self.modules():
-                if isinstance(module, BaseTunerLayer):
-                    module.requires_grad_(False)
+        adapter_key_markers = {adapter_name}
+        if peft_config is not None and getattr(peft_config, "peft_type", None) is not None:
+            adapter_key_markers.add(peft_config.peft_type.value.lower())
+
+        def is_adapter_key(key: str) -> bool:
+            return any(marker in key for marker in adapter_key_markers)
 
         loading_info.missing_keys = {k for k in loading_info.missing_keys if is_adapter_key(k)}
 
@@ -348,6 +441,19 @@ class PeftAdapterMixin:
             loading_info=loading_info,
             logger=logger,
         )
+
+        if self._prepare_peft_hotswap_kwargs is not None:
+            # Apply once, after the first adapter has been loaded but before the model is
+            # compiled, so the LoRA layers get padded up to target_rank and a later adapter
+            # with a different rank can be hot-swapped in without recompiling.
+            from peft.utils.hotswap import prepare_model_for_compiled_hotswap
+
+            prepare_model_for_compiled_hotswap(self, config=peft_config, **self._prepare_peft_hotswap_kwargs)
+            self._prepare_peft_hotswap_kwargs = None
+
+        if peft_config.inference_mode:
+            self._set_peft_inference_mode()
+
         return loading_info
 
     def enable_peft_hotswap(
