@@ -186,7 +186,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-
 <hfoption id="int4-weight-only">
 
 ```py
@@ -257,7 +256,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-
 <hfoption id="int4-weight-only">
 
 ```py
@@ -525,7 +523,7 @@ print("Response:", correct_output_text[0][len(prompt) :])
 # Load model from saved checkpoint
 reloaded_model = AutoModelForCausalLM.from_pretrained(
     save_to,
-    device_map="cuda:0",
+    device_map=torch.accelerator.current_accelerator(),
     torch_dtype=torch.bfloat16,
     # quantization_config=quantization_config,
 )

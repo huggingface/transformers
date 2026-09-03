@@ -120,12 +120,16 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
-        from ..integrations.finegrained_fp8 import replace_with_fp8_linear
+        from ..integrations.finegrained_fp8 import replace_with_fp8_embedding, replace_with_fp8_linear
 
         self._normalize_modules_to_not_convert(model)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
+
+        modules_to_convert = self.quantization_config.modules_to_convert
+        if self.pre_quantized and modules_to_convert:
+            replace_with_fp8_embedding(model, modules_to_convert, self.modules_to_not_convert)
 
         model = replace_with_fp8_linear(
             model,
@@ -182,20 +186,25 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
             config.base_model_tp_plan = text_plan
 
-        # Per-impl rewrite of the experts parallel-layer kind. Applied LAST so it composes
-        # on top of any plan written above (e.g. the Qwen3 dense plan). Models carry the
-        # experts mapping under `base_model_tp_plan` and/or `base_model_ep_plan` — rewrite
-        # both. See `FP8Experts._impl_tp_layer_overrides`.
         from ..integrations.finegrained_fp8 import FP8Experts
 
         impl = getattr(config, "_experts_implementation", None)
-        layer_overrides = FP8Experts._impl_tp_layer_overrides.get(impl)
-        if layer_overrides:
-            for plan_attr in ("base_model_tp_plan", "base_model_ep_plan"):
-                base_plan = getattr(config, plan_attr, None) or {}
-                updated_plan = {k: layer_overrides.get(v, v) for k, v in base_plan.items()}
-                if updated_plan != base_plan:
-                    setattr(config, plan_attr, updated_plan)
+        layer_overrides = FP8Experts._impl_tp_layer_overrides.get(impl, {})
+        for plan_attr in ("base_model_tp_plan", "base_model_ep_plan"):
+            base_plan = getattr(config, plan_attr, None) or {}
+            # Per-impl rewrite of the experts parallel-layer kind. Applied LAST so it composes
+            # on top of any plan written above (e.g. the Qwen3 dense plan). Models carry the
+            # experts mapping under `base_model_tp_plan` and/or `base_model_ep_plan` — rewrite
+            # both. See `FP8Experts._impl_tp_layer_overrides`.
+            updated_plan = {k: layer_overrides.get(v, v) for k, v in base_plan.items()}
+
+            # Expert scales must be sharded along with their corresponding weights.
+            for key, style in list(updated_plan.items()):
+                if style == "grouped_gemm":
+                    updated_plan.setdefault(f"{key}_scale_inv", style)
+
+            if updated_plan != base_plan:
+                setattr(config, plan_attr, updated_plan)
 
         return config
 
@@ -260,6 +269,14 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         # loads scales as parameters, `dequantize=True` feeds them into `Fp8Dequantize`.
         scale_rename = WeightRenaming(source_patterns=r"^(.+)\.scale$", target_patterns=r"\1.weight_scale_inv")
         weight_conversions = [scale_rename] + list(weight_conversions)
+
+        # Some checkpoints shard weights (e.g. Qwen4-Exp's `ngram_embedding`). Since WeightConverter targets become source
+        # patterns when saving, anchor them to avoid matching the corresponding scale parameters.
+        for conv in weight_conversions:
+            if isinstance(conv, WeightConverter):
+                conv._original_target_patterns = [
+                    f"{p}$" if p.endswith(".weight") else p for p in conv._original_target_patterns
+                ]
 
         if not (self.pre_quantized and self.quantization_config.dequantize):
             return weight_conversions + self.get_weight_conversions()

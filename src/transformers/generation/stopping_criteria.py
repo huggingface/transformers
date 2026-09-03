@@ -28,10 +28,12 @@ STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        scores (`torch.FloatTensor` of shape `(batch_size, config.vocab_size)`):
-            Prediction scores of a language modeling head. These can be scores for each vocabulary token before SoftMax
-            or scores for each vocabulary token after SoftMax. If this stopping criteria depends on the `scores` input,
-            make sure you pass `return_dict_in_generate=True, output_scores=True` to `generate`.
+        scores (`tuple(torch.FloatTensor)`):
+            Prediction scores of a language modeling head, as a tuple with one tensor per generation step, each of
+            shape `(batch_size, config.vocab_size)`. These can be scores for each vocabulary token before SoftMax or
+            scores for each vocabulary token after SoftMax. If this stopping criteria depends on the `scores` input,
+            make sure you pass `return_dict_in_generate=True, output_scores=True` to `generate`, otherwise `None` is
+            passed.
         kwargs (`dict[str, Any]`, *optional*):
             Additional stopping criteria specific kwargs.
 
@@ -51,7 +53,9 @@ class StoppingCriteria(ABC):
     """
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: tuple[torch.FloatTensor] | None, **kwargs
+    ) -> torch.BoolTensor:
         raise NotImplementedError("StoppingCriteria needs to be subclassed")
 
 
@@ -72,7 +76,9 @@ class MaxLengthCriteria(StoppingCriteria):
         self.max_position_embeddings = max_position_embeddings
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: tuple[torch.FloatTensor] | None, **kwargs
+    ) -> torch.BoolTensor:
         cur_len = input_ids.shape[1]
         is_done = cur_len >= self.max_length
         if self.max_position_embeddings is not None and not is_done and cur_len > self.max_position_embeddings:
@@ -102,7 +108,9 @@ class MaxTimeCriteria(StoppingCriteria):
         self.initial_timestamp = time.time() if initial_timestamp is None else initial_timestamp
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: tuple[torch.FloatTensor] | None, **kwargs
+    ) -> torch.BoolTensor:
         is_done = time.time() - self.initial_timestamp > self.max_time
         return torch.full((input_ids.shape[0],), is_done, device=input_ids.device, dtype=torch.bool)
 
@@ -462,15 +470,16 @@ class StopStringCriteria(StoppingCriteria):
                     + max_valid_end_lens * i
                     + len(possible_end_lens),
                 ] = possible_end_lens
-            for token, token_idx in zip(token_list, token_indices):
-                gather_vec[token_idx, -1] = len(token)
+
+        for token, token_idx in zip(token_list, token_indices):
+            gather_vec[token_idx, -1] = len(token)
 
         gather_vec = torch.tensor(gather_vec, dtype=torch.int32)
 
         return gather_vec, max_valid_positions, max_valid_end_lens
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.Tensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: tuple[torch.FloatTensor] | None, **kwargs) -> torch.Tensor:
         self.embedding_vec = self.embedding_vec.to(input_ids.device)
         self.target_lens = self.target_lens.to(input_ids.device)
         # The maximum length we need to consider is 1 token per character. Note that input_ids can also be
@@ -549,7 +558,7 @@ class EosTokenCriteria(StoppingCriteria):
         self.eos_token_id = eos_token_id
 
     def __call__(
-        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, new_token_length: int = 1, **kwargs
+        self, input_ids: torch.LongTensor, scores: tuple[torch.FloatTensor] | None, new_token_length: int = 1, **kwargs
     ) -> torch.BoolTensor:
         r"""
         Args:
@@ -560,10 +569,12 @@ class EosTokenCriteria(StoppingCriteria):
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
-            scores (`torch.FloatTensor` of shape `(batch_size, config.vocab_size)`):
-                Prediction scores of a language modeling head. These can be scores for each vocabulary token before SoftMax
-                or scores for each vocabulary token after SoftMax. If this stopping criteria depends on the `scores` input,
-                make sure you pass `return_dict_in_generate=True, output_scores=True` to `generate`.
+            scores (`tuple(torch.FloatTensor)`):
+                Prediction scores of a language modeling head, as a tuple with one tensor per generation step, each of
+                shape `(batch_size, config.vocab_size)`. These can be scores for each vocabulary token before SoftMax
+                or scores for each vocabulary token after SoftMax. If this stopping criteria depends on the `scores`
+                input, make sure you pass `return_dict_in_generate=True, output_scores=True` to `generate`, otherwise
+                `None` is passed.
             new_token_length (`int`, *optional*, defaults to `1`):
                 The number of tokens that will be checked for the criteria. The latest `new_token_length` tokens on
                 each batch item will be checked.
@@ -594,7 +605,9 @@ class ConfidenceCriteria(StoppingCriteria):
     def __init__(self, assistant_confidence_threshold):
         self.assistant_confidence_threshold = assistant_confidence_threshold
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: tuple[torch.FloatTensor] | None, **kwargs
+    ) -> torch.BoolTensor:
         probs = scores[-1].softmax(-1)
         p = probs[0, input_ids[0, -1]].item()
         if p < self.assistant_confidence_threshold:
@@ -604,7 +617,9 @@ class ConfidenceCriteria(StoppingCriteria):
 
 class StoppingCriteriaList(list):
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: tuple[torch.FloatTensor] | None, **kwargs
+    ) -> torch.BoolTensor:
         is_done = torch.full((input_ids.shape[0],), False, device=input_ids.device, dtype=torch.bool)
         for criteria in self:
             is_done = is_done | criteria(input_ids, scores, **kwargs)

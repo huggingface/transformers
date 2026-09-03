@@ -18,7 +18,6 @@
 # limitations under the License.
 
 import math
-import warnings
 
 import numpy as np
 import torch
@@ -45,7 +44,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
@@ -126,6 +125,10 @@ class PaddleOCRVLImageProcessorKwargs(Qwen2VLImageProcessorKwargs):
         The temporal patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
+    min_pixels (`int`, *optional*, defaults to `384 * 384`):
+        The min pixels of the image to resize the image.
+    max_pixels (`int`, *optional*, defaults to `1536 * 1536`):
+        The max pixels of the image to resize the image.
     """
 
 
@@ -487,22 +490,8 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
         self.interpolation_align_corners = True
         self.interpolation_mode = "bilinear"
 
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        warnings.warn(
-            f"`{self.__class__.__name__}.interpolate_pos_encoding` is deprecated and will be removed in v5.11. "
-            "Use `get_vision_interpolation_indices_and_weights` from `transformers.vision_utils` and apply `self.position_embedding`.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        grid_thw = torch.tensor([[1, height, width]], device=embeddings.device)
-        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
-            grid_thw,
-            num_grid_per_side=self.num_grid_per_side,
-            mode=self.interpolation_mode,
-            align_corners=self.interpolation_align_corners,
-            spatial_merge_size=1,
-        )
-        return (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1).unsqueeze(0)
+    def interpolate_pos_encoding(self, **super_kwargs):
+        raise NotImplementedError("Not needed - positions are interpolated in `forward`")
 
     def forward(
         self,
@@ -716,21 +705,12 @@ class PaddleOCRVLModel(Qwen2VLModel):
     def get_video_features(self):
         raise AttributeError("PaddleOCRVLModel does not support video.")
 
-    @accepts_precomputed_kwargs(modality="image")
-    @can_return_tuple
-    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
         pixel_values = pixel_values.type(self.visual.dtype).unsqueeze(0)
         vision_outputs = self.visual(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = vision_outputs.last_hidden_state
@@ -777,10 +757,6 @@ class PaddleOCRVLModel(Qwen2VLModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs,
     ) -> tuple | PaddleOCRVLModelOutputWithPast:
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
         if inputs_embeds is None:
             inputs_embeds = self.language_model.embed_tokens(input_ids)
 
@@ -845,13 +821,6 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | PaddleOCRVLCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-
         Example:
 
         ```python

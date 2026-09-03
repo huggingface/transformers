@@ -56,6 +56,7 @@ from .candidate_generator import (
     AssistedCandidateGenerator,
     AssistedCandidateGeneratorDifferentTokenizers,
     CandidateGenerator,
+    DFlashTokenCandidateGenerator,
     EarlyExitCandidateGenerator,
     MTPCandidateGenerator,
     PromptLookupCandidateGenerator,
@@ -1060,6 +1061,14 @@ class GenerationMixin(ContinuousMixin):
                 inputs_tensor=inputs_tensor,
                 logits_processor=logits_processor,
             )
+        elif generation_config.speculation_type == "dflash":
+            candidate_generator = DFlashTokenCandidateGenerator(
+                assistant_model=assistant_model,
+                main_model_input_embeddings=self.get_input_embeddings(),
+                main_model_output_embeddings=self.get_output_embeddings(),
+                generation_config=generation_config,
+                logits_processor=logits_processor,
+            )
         elif different_tokenizers:
             assistant_model = cast("PreTrainedModel", assistant_model)
             target_tokenizer = cast("PreTrainedTokenizerBase", target_tokenizer)
@@ -1573,7 +1582,9 @@ class GenerationMixin(ContinuousMixin):
                     f"assisted generation is not supported with stateful models, such as {self.__class__.__name__}"
                 )
 
-        if (assistant_model := generation_mode_kwargs.get("assistant_model")) is not None:
+        if (
+            assistant_model := generation_mode_kwargs.get("assistant_model")
+        ) is not None and generation_config.speculation_type != "dflash":
             if self.config.is_encoder_decoder and not assistant_model.config.is_encoder_decoder:
                 attributes_to_check = ["encoder_attention_heads", "encoder_ffn_dim", "encoder_layers"]
                 attributes_to_check = [attr for attr in dir(assistant_model.config) if attr in attributes_to_check]
@@ -2122,8 +2133,11 @@ class GenerationMixin(ContinuousMixin):
             generation_config.compile_config is not None and generation_config.compile_config._compile_all_devices
         )
         # Note: for some models that only use linear attention (e.g. Mamba), even a DynamicCache is compilable since all
+        # Encoder-decoder models hold that cache in a subcache, so we unwrap it to check the cache the decoder actually generates with
+        decoder_cache = cache.self_attention_cache if isinstance(cache, EncoderDecoderCache) else cache
+        # Note: for some models that only use linear attention (e.g. Mamba), even a DynamicCache is compilable since all
         # layers are, but we don't want to ALWAYS compile when calling `generate`, so we check the type
-        using_compilable_cache = cache is not None and cache.is_compileable and type(cache) is not DynamicCache
+        using_compilable_cache = cache is not None and cache.is_compileable and type(decoder_cache) is not DynamicCache
         can_compile = valid_hardware and using_compilable_cache
 
         # Exception 1: Some quantization methods do not support compilation
