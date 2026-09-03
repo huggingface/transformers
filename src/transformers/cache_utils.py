@@ -964,15 +964,14 @@ class LinearAttentionCacheLayerMixin(ABC):
 
     @property
     def is_croppable(self) -> bool:
-        """Whether `crop` can put this layer back as it was.
-
-        It puts the conv states back, but the recurrent ones are updated in place and absorb whatever is rolled
-        back, so a layer that keeps them cannot be returned to a previous state. A layer that only ever uses the
-        conv part can be -- see e.g. lfm2. Which one this is only shows once a forward has filled the states in,
-        so before that the answer is no.
+        """
+        Whether `crop` can put this layer back as it was. This is only supported when there are no recurrent states.
         """
         if any(self.is_recurrent_states_initialized.values()):
             return False
+        # If nothing is initialized, return False as we don't yet know whether we will have any recurrent states or no, so let's be
+        # extra careful. If a conv states is initialized but no recurrent states are, then we return True as we know that we will never
+        # have any recurrent state (they are updated in the same forward)
         return any(self.is_conv_states_initialized.values())
 
     def activate_past_recording(self):
@@ -2064,12 +2063,6 @@ class EncoderDecoderCache(Cache):
         self.self_attention_cache.reorder_cache(beam_idx)
         self.cross_attention_cache.reorder_cache(beam_idx)
 
-    @property
-    def is_croppable(self) -> bool:
-        """`crop` goes through `check_dynamic_cache` here, so both wrapped caches must be dynamic as well."""
-        caches = (self.self_attention_cache, self.cross_attention_cache)
-        return all(isinstance(c, DynamicCache) and c.is_croppable for c in caches)
-
     def check_dynamic_cache(self, method: str):
         if not (
             isinstance(self.self_attention_cache, DynamicCache)
@@ -2110,6 +2103,10 @@ class EncoderDecoderCache(Cache):
     @property
     def is_compileable(self) -> bool:
         return self.self_attention_cache.is_compileable
+
+    @property
+    def is_croppable(self) -> bool:
+        return self.self_attention_cache.is_croppable
 
     def activate_past_recording(self):
         self.self_attention_cache.activate_past_recording()
