@@ -365,7 +365,7 @@ The `@auto_docstring` decorator generates docstrings through the following steps
 3. Each parameter's description follows this priority chain:
 
     - A manual docstring (`r""" """` block or `custom_args`) takes priority.
-    - The predefined source dict ([`ModelArgs`], [`ConfigArgs`], [`ImageProcessorArgs`], [`ProcessorArgs`], [`ModelOutputArgs`]) is the fallback.
+    - The predefined source dict ([`ModelArgs`], [`ModelForArgs`], [`ConfigArgs`], [`ImageProcessorArgs`], [`ProcessorArgs`], [`ModelOutputArgs`]) is the fallback.
     - If neither source has a description, the parameter is flagged with `[ERROR]` in the build output.
 
 4. For model classes with standard names like `ModelForCausalLM`, or classes that map to a pipeline, `@auto_docstring` generates the intro. For multimodal processors, the intro lists which components (tokenizer, image processor, and so on) the class wraps. See [ClassDocstring](https://github.com/huggingface/transformers/blob/main/src/transformers/utils/auto_docstring.py#L2437) for the full list.

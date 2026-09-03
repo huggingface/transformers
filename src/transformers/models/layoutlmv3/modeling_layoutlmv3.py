@@ -871,8 +871,6 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
             config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
             format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
             y1) represents the position of the lower right corner.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
 
         Examples:
 

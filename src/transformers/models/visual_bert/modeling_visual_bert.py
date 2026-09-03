@@ -903,10 +903,6 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
             *visual_token_type_ids* to *1* for all tokens.
         image_text_alignment (`torch.LongTensor` of shape `(batch_size, visual_seq_length, alignment_number)`, *optional*):
             Image-Text alignment uses to decide the position IDs of the visual embeddings.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
 
         Example:
 
