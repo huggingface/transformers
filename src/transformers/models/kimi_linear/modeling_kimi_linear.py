@@ -314,6 +314,8 @@ class KimiLinearAttention(nn.Module):
 
 
 class KimiLinearForgetGate(nn.Module):
+    """Same as Glm5NextTextForgetGate but with no gate_lower_bound."""
+
     def __init__(self, config: KimiLinearConfig):
         super().__init__()
         self.head_dim = config.linear_head_dim
@@ -325,8 +327,6 @@ class KimiLinearForgetGate(nn.Module):
         self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim))
         self.A_log = nn.Parameter(torch.empty(self.num_heads))
 
-        self.safe_gate_lower_bound = config.linear_lower_bound
-
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_shape = (*hidden_states.shape[:2], -1, self.head_dim)
 
@@ -334,10 +334,6 @@ class KimiLinearForgetGate(nn.Module):
         g = (forget_gate.float() + self.dt_bias.float().view(1, 1, -1)).view(hidden_shape)
         A_log = self.A_log.float().view(1, 1, self.num_heads, 1)
         decay_rate = torch.exp(A_log)
-
-        # Safe lower bound decay
-        if self.safe_gate_lower_bound is not None:
-            return self.safe_gate_lower_bound * torch.sigmoid(decay_rate * g)
 
         # Softplus "log(1 + exp(x))" with uper bound restraint to avoid overflows
         # NOTE: Softplus for larger values (e.g. 20+), Softplus(x) == x
@@ -852,10 +848,7 @@ class KimiLinearPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, KimiLinearForgetGate):  # following FLA initialization
             # A_log
-            if module.safe_gate_lower_bound is not None:
-                init.zeros_(module.A_log)
-            else:
-                init.copy_(module.A_log, init.uniform_(module.A_log, a=1.0, b=16.0).log())
+            init.copy_(module.A_log, init.uniform_(module.A_log, a=1.0, b=16.0).log())
             # dt_bias
             init.uniform_(module.dt_bias, a=math.log(1e-3), b=math.log(1e-1))
             dt = module.dt_bias.exp().clamp_min(1e-4)
