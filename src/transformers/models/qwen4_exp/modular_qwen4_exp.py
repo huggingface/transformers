@@ -699,8 +699,12 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
             blocks.append(ngram_ids + head_offsets.view(1, 1, -1))
 
         ngram_ids = torch.cat(blocks, dim=-1)[:, -input_ids.shape[1] :]
-        # We need explicit device placement here, as the embedding may be skipped from device_map completely
-        return self.ngram_embedding(ngram_ids.to(self.ngram_embedding.weight.device)).to(ngram_ids.device).flatten(-2)
+        # We need explicit device placement here, as the embedding may be skipped from device_map completely (we just need to be
+        # careful in the case of offloading to disk)
+        execution_device = (
+            self.ngram_embedding.weight.device if self.ngram_embedding.weight.device.type != "meta" else None
+        )
+        return self.ngram_embedding(ngram_ids.to(execution_device)).to(ngram_ids.device).flatten(-2)
 
 
 class Qwen4ExpTextPLELayer(nn.Module):
@@ -996,7 +1000,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
                 "allow_is_causal_skip": False,
             }
             causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
+                "qwen_sparse_attention": create_causal_mask(**mask_kwargs),
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 
@@ -1015,7 +1019,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
             hidden_states = decoder_layer(
                 hidden_states,
                 position_embeddings=position_embeddings,
-                attention_mask=causal_mask_mapping["full_attention"],
+                attention_mask=causal_mask_mapping["qwen_sparse_attention"],
                 conv_mask=conv_mask,
                 past_key_values=past_key_values,
                 ple_input_ids=ple_input_ids,
@@ -1032,32 +1036,6 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
 class Qwen4ExpForCausalLM(Qwen3_5MoeForCausalLM):
     config: Qwen4ExpTextConfig
-
-    @staticmethod
-    def create_masks_for_generate(
-        config: PreTrainedConfig,
-        inputs_embeds: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None,
-        position_ids: torch.Tensor | None,
-        **kwargs,
-    ) -> dict:
-        # We need to overwrite to add the `allow_is_causal_skip=False` condition
-        mask_kwargs = {
-            "config": config,
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-            # Due to the indexer, we always want to create a mask to then simply overlay the indexer mask in each layer - otherwise
-            # we may have to recreate it in each layer if it gets skipped
-            "allow_is_causal_skip": False,
-        }
-        causal_mask_mapping = {
-            "full_attention": create_causal_mask(**mask_kwargs),
-            "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
-        }
-        return causal_mask_mapping
 
 
 @auto_docstring
@@ -1146,31 +1124,7 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
 
 @auto_docstring
 class Qwen4ExpForConditionalGeneration(Qwen3_5MoeForConditionalGeneration):
-    @staticmethod
-    def create_masks_for_generate(
-        config: PreTrainedConfig,
-        inputs_embeds: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None,
-        position_ids: torch.Tensor | None,
-        **kwargs,
-    ) -> dict:
-        # We need to overwrite to add the `allow_is_causal_skip=False` condition
-        mask_kwargs = {
-            "config": config,
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-            # Due to the indexer, we always want to create a mask to then simply overlay the indexer mask in each layer - otherwise
-            # we may have to recreate it in each layer if it gets skipped
-            "allow_is_causal_skip": False,
-        }
-        causal_mask_mapping = {
-            "full_attention": create_causal_mask(**mask_kwargs),
-            "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
-        }
-        return causal_mask_mapping
+    pass
 
 
 __all__ = [
