@@ -51,12 +51,12 @@ class KimiLinearModelTester(CausalLMModelTester):
         # Two layers covering all four branches: a KDA layer with a dense MLP, and an MLA layer with a MoE
         # block. Anything less would leave one of the decoder-layer paths untested.
         self.num_hidden_layers = 2
-        self.layer_types=["linear_attention", "full_attention"]
-        self.mlp_layer_types=["dense", "sparse"]
+        self.layer_types = ["linear_attention", "full_attention"]
+        self.mlp_layer_types = ["dense", "sparse"]
         # KDA (linear attention) layers
         self.linear_conv_kernel_dim = 2
-        self.linear_key_head_dim = 16
-        self.linear_num_key_heads = 4
+        self.linear_head_dim = 16
+        self.linear_num_heads = 4
         # MLA (full attention) layers. The released checkpoints have no query LoRA, so keep `q_lora_rank`
         # unset to exercise the same `q_proj` branch they take.
         self.q_lora_rank = None
@@ -80,10 +80,7 @@ class KimiLinearModelTest(CausalLMModelTest, unittest.TestCase):
 
     def _get_conv_state_shape(self, batch_size: int, config):
         # KDA packs the q/k/v short convolutions into a single depthwise conv1d
-        conv_dim = 2 * config.linear_num_key_heads * config.linear_key_head_dim + (
-            config.linear_num_value_heads * config.linear_value_head_dim
-        )
-        return (batch_size, conv_dim, config.linear_conv_kernel_dim)
+        return (batch_size, 3 * config.linear_num_heads * config.linear_head_dim, config.linear_conv_kernel_dim)
 
     def _get_recurrent_state_shape(self, batch_size: int, config):
         return (
@@ -201,7 +198,6 @@ class KimiLinearModelTest(CausalLMModelTest, unittest.TestCase):
         torch.testing.assert_close(torch.stack(stepwise, dim=1), full[:, -3:, :], rtol=1e-3, atol=1e-3)
 
 
-
 @slow
 @require_torch_large_accelerator(memory=55)
 @require_torch
@@ -218,7 +214,7 @@ class KimiLinearIntegrationTest(unittest.TestCase):
 
     def load_model(self, dtype: str, attn_implementation: str = "eager"):
         return KimiLinearForCausalLM.from_pretrained(
-            self.model_id, device_map="auto", dtype=dtype, attn_implementation=attn_implementation,
+            self.model_id, device_map="auto", dtype=dtype, attn_implementation=attn_implementation
         )
 
     def test_large_model_integration_test(self):
@@ -275,7 +271,7 @@ class KimiLinearSmallIntegrationTest(unittest.TestCase):
 
     def load_model(self, dtype: str, attn_implementation: str = "eager"):
         return KimiLinearForCausalLM.from_pretrained(
-            self.model_id, device_map="auto", dtype=dtype, attn_implementation=attn_implementation,
+            self.model_id, device_map="auto", dtype=dtype, attn_implementation=attn_implementation
         )
 
     def test_small_model_integration_test(self):

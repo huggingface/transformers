@@ -58,6 +58,7 @@ from transformers.integrations.moe import (
     grouped_mm_experts_forward,
     sonicmoe_experts_forward,
 )
+from transformers.integrations.sonicmoe import is_sonicmoe_loadable
 from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, _get_tied_weight_keys
 from transformers.models.auto import get_values
@@ -603,13 +604,9 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
             "grouped_mm": Mock(wraps=grouped_mm_experts_forward),
         }
 
-        if (
-            dtype != torch.float32
-            and is_kernels_available()
-            and torch.cuda.is_available()
-            and torch.cuda.get_device_capability() >= (9, 0)
-        ):
-            # we also need nvidia-cutlass-dsl and apache-tvm-ffi
+        # `is_sonicmoe_loadable` checks for `kernels`, a Hopper+ GPU and the `nvidia-cutlass-dsl` / `apache-tvm-ffi`
+        # build dependencies, so the kernel is only exercised where it can actually be loaded
+        if dtype != torch.float32 and is_sonicmoe_loadable():
             mocks["sonicmoe"] = Mock(wraps=sonicmoe_experts_forward)
             implementations.append("sonicmoe")
 
