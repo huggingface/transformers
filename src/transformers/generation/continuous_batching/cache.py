@@ -17,6 +17,7 @@ from typing import Any
 
 import torch
 
+from ...utils import logging
 from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig
 from ...utils.generic import is_flash_attention_requested
@@ -91,6 +92,9 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]]
     # And note the layer types
     group_types = [layer_types[lg[0]] for lg in layer_groups]
     return layer_groups, group_types
+
+
+logger = logging.get_logger(__name__)
 
 
 class PagedAttentionCache:
@@ -244,7 +248,23 @@ class PagedAttentionCache:
             )
             bytes_per_slot = prod(self._conv_state_shape) * self.dtype.itemsize
             bytes_per_slot += prod(self._recurrent_state_shape) * torch.float32.itemsize
-            linear_state_bytes = self._linear_state_slots_chunk * bytes_per_slot * len(self.linear_attention_layers)
+            # A request's linear state is 50-150 MB on the current hybrids (the fp32 recurrent state of every linear
+            # layer), so a thousand of them do not fit next to the KV pool. Budget the slots up front, out of the
+            # same memory the pool is sized from, and cap the concurrency to what was budgeted: growing the pools by
+            # doubling on demand ran the card out of memory in the middle of a run.
+            per_request = bytes_per_slot * len(self.linear_attention_layers)
+            free_memory = torch.cuda.mem_get_info()[0] if self.device.type == "cuda" else 0
+            budget = int(free_memory * continuous_batching_config.max_memory_percent * 0.4)
+            wanted = continuous_batching_config.max_requests_per_batch or self._linear_state_slots_chunk
+            slots = max(8, min(wanted, budget // per_request if free_memory else wanted))
+            if slots < wanted:
+                logger.warning(
+                    f"Linear-attention states cost {per_request / 2**20:.0f} MiB per request: capping concurrency at "
+                    f"{slots} requests (budget {budget / 2**30:.1f} GiB) instead of {wanted}."
+                )
+                continuous_batching_config.max_requests_per_batch = slots
+            self._linear_state_slots_chunk = slots
+            linear_state_bytes = slots * per_request
 
         max_batch_tokens, num_blocks = PagedAttentionMemoryHandler(
             config=config,
