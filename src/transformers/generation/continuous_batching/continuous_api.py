@@ -596,15 +596,15 @@ class ContinuousBatchProcessor:
         memory in between, which is exactly the case this exists for. See `exp/repro_kv_offload.py` in the zero-sync
         work for a one-GPU reproduction.
         """
-        # Async batching keeps a batch in flight while the next one is prepared, and offloading every request from
-        # under it corrupts the ones that were mid-generation. Settling the pending pair first is not enough, so this
-        # combination is refused rather than silently producing garbage. Cuda graphs themselves are fine: they are
-        # dropped and recaptured if the cache does not come back at the same addresses, which costs about 110 ms.
+        # Async batching keeps one batch in flight: after a loop iteration the pair that was just computed has been
+        # swapped out and its outputs are read back one iteration later. Consume that batch first, from its own
+        # pair, so every request holds the tokens it was actually sampled, then forget the IO bookkeeping (the
+        # request -> position maps would otherwise carry a stale token into the re-prefill). Cuda graphs themselves
+        # are fine: they are dropped and recaptured if the cache does not come back at the same addresses.
         if isinstance(self.inputs_and_outputs, ContinuousBatchingAsyncIOs):
-            raise RuntimeError(
-                "release_memory() is not supported with async batching. Pass use_async_batching=False; cuda graphs "
-                "can stay on, since they are recaptured when needed."
-            )
+            self.inputs_and_outputs.swap_io_pairs()
+            self.update_batch()
+            self.inputs_and_outputs.reset()
         self.offloading_manager.discard_all_active()
         # The offloading manager holds block-shaped views of the cache, and a view keeps its base alive, so they have
         # to go before the tensors can actually be freed.
