@@ -1191,6 +1191,33 @@ class SyntheticCacheTest(unittest.TestCase):
             "DynamicCache Scenario 2 layer 1 failed",
         )
 
+    def test_dynamic_cache_reset_returns_to_empty_state(self):
+        """reset() must empty a DynamicCache, not zero its tensors in place.
+
+        A dynamic layer's length *is* its tensor shape, so the in-place zeroing
+        inherited from CacheLayerMixin left get_seq_length() reporting the old
+        length, is_initialized True, and the next update() concatenating onto
+        stale zeros.
+        """
+        prefill = torch.tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])[None, None, :, None]
+        update = torch.tensor([7.0, 8.0, 9.0])[None, None, :, None]
+
+        cache = DynamicCache()
+        cache.update(prefill, prefill, 0)
+        self.assertEqual(cache.get_seq_length(), 6)
+        self.assertTrue(cache.is_initialized)
+
+        cache.reset()
+        self.assertEqual(cache.get_seq_length(), 0)
+        self.assertFalse(cache.is_initialized)
+
+        keys, _ = cache.update(update, update, 0)
+        self.assertEqual(keys.shape[-2], 3)  # no stale positions prepended
+        self.assertEqual(keys[0, 0, :, 0].tolist(), [7.0, 8.0, 9.0])
+
+        # reset() on a fresh cache is a no-op, not a crash
+        DynamicCache().reset()
+
     def test_dynamic_cache_batch_select_indices(self):
         """Select a subset of batches in-place using batch_select_indices."""
         cache = DynamicCache()
