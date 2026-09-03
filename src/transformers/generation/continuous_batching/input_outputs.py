@@ -16,6 +16,7 @@ from functools import partial
 from itertools import repeat
 from typing import TypedDict
 
+import numpy as np
 import torch
 
 from transformers.configuration_utils import PretrainedConfig
@@ -722,6 +723,7 @@ class ContinuousBatchingAsyncIOs:
         self.io_pairs[1].device_io.compute_stream = None
         # Used in carry over ids computation
         self.max_batch_tokens = cache.max_batch_tokens
+        self._carry_over_buf = np.full(self.max_batch_tokens, -1, dtype=np.int32)
 
     # These methods are simple wrapper dispatching to the current IO pair
     def get_cumulative_seqlens(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
@@ -750,7 +752,10 @@ class ContinuousBatchingAsyncIOs:
         N+1. This method computes the ids of the tokens to carry over."""
         next_req_id_to_new_token_position = self.io_pairs[self.current_pair].host_io.req_id_to_new_token_position
         prev_req_id_to_new_token_position = self.io_pairs[1 - self.current_pair].host_io.req_id_to_new_token_position
-        carry_over_ids = [-1 for _ in range(self.max_batch_tokens)]
+        # a persistent host buffer: building a max_batch_tokens-long python list and a tensor from it every batch
+        # was a fixed ~1 ms of host time per step
+        carry_over_ids = self._carry_over_buf
+        carry_over_ids.fill(-1)
         # Carry over happens after the raw predictions have been indexed with logits_indices. So output_ids contains the
         # a sequence of contiguous new tokens in the order the request were added to the batch. Eg:
         # output_ids = [new_tok_req3, new_tok_req1, new_tok_req2]
@@ -760,7 +765,7 @@ class ContinuousBatchingAsyncIOs:
             new_token_position = next_req_id_to_new_token_position.get(req_id)
             if new_token_position is not None:
                 carry_over_ids[new_token_position] = i
-        return torch.tensor(carry_over_ids, dtype=torch.int32)
+        return torch.from_numpy(carry_over_ids)
 
     # The get_model_kwargs method is where the H2D transfer happens
     def get_model_kwargs(self, use_padding: bool = False) -> PagedAttentionArgs:

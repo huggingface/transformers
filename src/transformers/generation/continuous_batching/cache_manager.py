@@ -462,11 +462,14 @@ class FullAttentionCacheAllocator(CacheAllocator):
         total_length = past_length + query_length
         # Use ceiling division to include the partial block at the end
         num_blocks_needed = (total_length + self.block_size - 1) // self.block_size
-        block_table[:num_blocks_needed] = torch.tensor(
-            request_blocks[:num_blocks_needed], device=block_table.device, dtype=block_table.dtype
-        )
-        # TODO: this creates a lot of H2D transfers when not using async batching, but we will update to always using
-        # an IO pair in the future or a CPU-side block table. This also entails a small memory allocation.
+        if block_table.device.type == "cpu":
+            # writing the python list straight into the host tensor is a few microseconds; building a tensor from it
+            # first is ten times that, and this runs once per request per batch
+            block_table.numpy()[:num_blocks_needed] = request_blocks[:num_blocks_needed]
+        else:
+            block_table[:num_blocks_needed] = torch.tensor(
+                request_blocks[:num_blocks_needed], device=block_table.device, dtype=block_table.dtype
+            )
 
 
 class SlidingAttentionCacheAllocator(CacheAllocator):
