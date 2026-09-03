@@ -228,8 +228,8 @@ class AXK2Indexer(nn.Module):
         hidden_states: torch.Tensor,
         q_resid: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        position_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        position_ids: torch.Tensor,  # Kept for BC
         past_key_values: Cache | None = None,
     ) -> torch.Tensor:
         """
@@ -279,12 +279,10 @@ class AXK2Indexer(nn.Module):
         index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
         # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask is not None:
-            index_scores = index_scores + attention_mask
+        if attention_mask.dtype == torch.bool:
+            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
         else:
-            key_positions = torch.arange(index_scores.shape[-1], device=index_scores.device)
-            causal = key_positions[None, None, :] > position_ids[:, :, None]  # [B, S, T]
-            index_scores = index_scores.masked_fill(causal, float("-inf"))
+            index_scores = index_scores + attention_mask
 
         topk = min(self.index_topk, index_scores.shape[-1])
         return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
@@ -588,7 +586,7 @@ class AXK2Attention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
+        attention_mask: torch.Tensor,
         past_key_values: Cache | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -625,13 +623,12 @@ class AXK2Attention(nn.Module):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
-        indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
         topk_indices = self.indexer(
             hidden_states,
             q_resid,
             position_embeddings,
-            indexer_mask,
-            position_ids,
+            attention_mask[:, 0, :, :],
+            position_ids,  # Kept for BC
             past_key_values=past_key_values,
         )
 
@@ -642,11 +639,11 @@ class AXK2Attention(nn.Module):
                 .scatter(-1, topk_indices.long(), False)
                 .unsqueeze(1)
             )
-            if attention_mask is None:
-                key_positions = torch.arange(key_states.shape[2], device=hidden_states.device)
-                index_mask = index_mask | (key_positions[None, None, None, :] > position_ids[:, None, :, None])
-                attention_mask = hidden_states.new_zeros((batch_size, 1, seq_length, key_states.shape[2]))
-            attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
+
+            if attention_mask.dtype == torch.bool:
+                attention_mask = attention_mask & ~index_mask
+            else:
+                attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
         else:
             sparse_indices = topk_indices
 
@@ -678,10 +675,7 @@ class AXK2DecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
         self.self_attn = AXK2Attention(config, layer_idx)
 
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = AXK2MoE(config)
-        else:
-            self.mlp = AXK2MLP(config)
+        self.mlp = AXK2MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else AXK2MLP(config)
         self.input_layernorm = AXK2GatedRMSNorm(config)
         self.post_attention_layernorm = (
             AXK2GatedRMSNorm(config)
@@ -806,6 +800,7 @@ class AXK2Model(AXK2PreTrainedModel):
                 "attention_mask": attention_mask,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
+                "allow_is_causal_skip": False,  # Always force creation to account for causality in the indexer
             }
             causal_mask_mapping = {"deepseek_sparse_attention": create_causal_mask(**mask_kwargs)}
 

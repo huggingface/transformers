@@ -134,11 +134,11 @@ class MyModelConfig(PreTrainedConfig):
         Description of another model-specific parameter.
 
     ```python
-    >>> from transformers import MyModelConfig, MyModel
+    from transformers import MyModelConfig, MyModel
 
-    >>> configuration = MyModelConfig()
-    >>> model = MyModel(configuration)
-    >>> configuration = model.config
+    configuration = MyModelConfig()
+    model = MyModel(configuration)
+    configuration = model.config
     ```
     """
 
@@ -280,8 +280,8 @@ Write `Returns` and `Examples` sections manually in the docstring to override th
         Example:
 
         ```python
-        >>> model = MyModel.from_pretrained("org/my-model")
-        >>> output = model(input_ids)
+        model = MyModel.from_pretrained("org/my-model")
+        output = model(input_ids)
         ```
         """
         # ...

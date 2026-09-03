@@ -110,41 +110,66 @@ class MuseGlimmerVision2TextModelTest(VLMModelTest, unittest.TestCase):
                 _ = model(**curr_input_dict)
 
 
+# `meta-models/Muse-Glimmer-30B` is 29.8B parameters -- 55.5 GiB of bfloat16 weights, so it does not fit on the
+# single 24 GiB accelerator of the daily CI runner. `device_map="auto"` is what makes the test runnable there:
+# it fills the accelerator(s) and offloads the remainder to CPU RAM, planned against the `CI_CPU_MEMORY_LIMIT_GB`
+# budget `conftest.py` caps `psutil` to (60 GiB per accelerator). Loading with an explicit single-device map
+# instead asks for all 55.5 GiB on one card and raises `torch.OutOfMemoryError` while materializing weights.
 @slow
 @require_torch_accelerator
 class MuseGlimmerIntegrationTest(unittest.TestCase):
     EXPECTED_TEXT_PREFIX = " to find your gift. The purpose of life is to give it away."
     EXPECTED_IMAGE_PREFIX = " two cats sleeping on a pink"
 
+    model_id = "meta-models/Muse-Glimmer-30B"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.model = None
+
+    @classmethod
+    def get_model(cls):
+        # Materialized on first use and shared by the whole class. Loading per test method paid for 55.5 GiB
+        # of weights twice, and left the first copy alive while the second was being materialized.
+        if cls.model is None:
+            cls.model = MuseGlimmerForConditionalGeneration.from_pretrained(
+                cls.model_id, dtype=torch.bfloat16, device_map="auto"
+            )
+        return cls.model
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "model"):
+            del cls.model
+        cleanup(torch_device, gc_collect=True)
+
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
+        self.processor = AutoProcessor.from_pretrained(self.model_id)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @classmethod
-    def get_model_and_processor(cls):
-        model = MuseGlimmerForConditionalGeneration.from_pretrained(
-            "meta-models/Muse-Glimmer-30B", dtype=torch.bfloat16, device_map=torch_device
-        )
-        processor = AutoProcessor.from_pretrained("meta-models/Muse-Glimmer-30B")
-        return model, processor
-
     def test_text_generation_matches_reference(self):
         # The reference implementation tokenizes raw completions as [bos] + encode(prompt).
-        model, processor = self.get_model_and_processor()
-        tokenizer = processor.tokenizer
+        model = self.get_model()
+        tokenizer = self.processor.tokenizer
 
         prompt = "The meaning of life is"
         prompt_ids = tokenizer(prompt, add_special_tokens=False).input_ids
         input_ids = torch.tensor([[tokenizer.bos_token_id] + prompt_ids], device=torch_device)
 
-        output = model.generate(input_ids=input_ids, max_new_tokens=30, do_sample=False)
+        # The assertion only compares the first 15 tokens' worth of text, so anything generated past that is
+        # never checked. 24 leaves margin for a different token split without paying for tokens nobody reads --
+        # which is not free: on a single-accelerator runner every decoded token restreams the CPU-offloaded
+        # weights across PCIe.
+        output = model.generate(input_ids=input_ids, max_new_tokens=24, do_sample=False)
         completion = tokenizer.decode(output[0, input_ids.shape[1] :], skip_special_tokens=True)
         self.assertEqual(completion[: len(self.EXPECTED_TEXT_PREFIX)], self.EXPECTED_TEXT_PREFIX)
 
     def test_image_generation_matches_reference(self):
-        model, processor = self.get_model_and_processor()
+        model = self.get_model()
+        processor = self.processor
         tokenizer = processor.tokenizer
 
         image = load_coco_image("000000039769.jpg").convert("RGB")
@@ -164,7 +189,9 @@ class MuseGlimmerIntegrationTest(unittest.TestCase):
             input_ids=input_ids,
             pixel_values=image_inputs["pixel_values"].to(torch_device, torch.bfloat16),
             image_grid_thw=image_grid_thw.to(torch_device),
-            max_new_tokens=60,
+            # Same reasoning as the text test: the asserted prefix is 6 tokens, so 12 is margin, and the 48
+            # further tokens this used to generate were never compared against anything.
+            max_new_tokens=12,
             do_sample=False,
         )
         completion = tokenizer.decode(output[0, input_ids.shape[1] :], skip_special_tokens=True)
