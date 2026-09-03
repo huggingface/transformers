@@ -19,7 +19,7 @@ from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available, is_vision_available
 from transformers.image_processing_utils import get_size_dict
-from transformers.image_utils import ChannelDimension, SizeDict
+from transformers.image_utils import SizeDict
 from transformers.processing_utils import VideosKwargs
 from transformers.testing_utils import (
     require_av,
@@ -259,7 +259,7 @@ class BaseVideoProcessorTester(unittest.TestCase):
             ],
             dtype=np.uint8,
         )
-        rgb_video = video_processor.convert_to_rgb(video_np_transparent, input_data_format=ChannelDimension.LAST)
+        rgb_video = video_processor.convert_to_rgb(video_np_transparent)
         self.assertEqual(rgb_video.shape, (2, 3, 1, 1))
         # Red with alpha=128 over white: (1 - 128/255)*255 + (128/255)*255 = 255 for R, ~127.5 for G and B
         np.testing.assert_allclose(rgb_video[0, :, 0, 0], [255.0, 127.0, 127.0], atol=1.0)
@@ -271,7 +271,7 @@ class BaseVideoProcessorTester(unittest.TestCase):
             ],
             dtype=np.uint8,
         )
-        rgb_video = video_processor.convert_to_rgb(video_np_opaque, input_data_format=ChannelDimension.LAST)
+        rgb_video = video_processor.convert_to_rgb(video_np_opaque)
         self.assertEqual(rgb_video.shape, (2, 3, 1, 1))
         np.testing.assert_array_equal(rgb_video[0, :, 0, 0], [255, 0, 0])
 
@@ -282,7 +282,7 @@ class BaseVideoProcessorTester(unittest.TestCase):
             ],
             dtype=np.uint8,
         )
-        rgb_video = video_processor.convert_to_rgb(video_np_zero_alpha, input_data_format=ChannelDimension.LAST)
+        rgb_video = video_processor.convert_to_rgb(video_np_zero_alpha)
         self.assertEqual(rgb_video.shape, (1, 3, 1, 1))
         np.testing.assert_array_equal(rgb_video[0, :, 0, 0], [255, 255, 255])
 

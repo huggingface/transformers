@@ -122,7 +122,7 @@ class BaseVideoProcessor(TorchvisionBackend):
         num_frames: int | None = None,
         fps: int | float | None = None,
         **kwargs,
-    ) -> list[int]:
+    ) -> np.ndarray:
         """
         Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
         If `fps` is passed along with metadata, `fps` frames per second are sampled uniformly. Arguments `num_frames`

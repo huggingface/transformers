@@ -1149,7 +1149,7 @@ class Cosmos3EdgeVideoProcessor(Glm4vVideoProcessor):
         if num_frames is None:
             num_frames = min(max(total_num_frames, self.min_frames), self.max_frames)
 
-        return np.linspace(0, total_num_frames - 1, num_frames, dtype=int).round()
+        return np.linspace(0, total_num_frames - 1, num_frames, dtype=int)
 
 
 @auto_docstring
