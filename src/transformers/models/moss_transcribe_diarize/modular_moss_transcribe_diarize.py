@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 import numpy as np
@@ -21,13 +22,13 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ...audio_utils import AudioInput, make_list_of_audio_chat_template
+from ...audio_utils import AudioInput, make_audio_chat_content, make_list_of_audio_chat_template, parse_timestamp
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...processing_utils import ProcessorMixin, Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...processing_utils import Unpack, prepare_prompt_input
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.import_utils import requires
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3CausalLMOutputWithPast,
@@ -41,7 +42,15 @@ from ..glmasr.modeling_glmasr import (
     GlmAsrModelOutputWithPast,
     GlmAsrPreTrainedModel,
 )
-from ..glmasr.processing_glmasr import GlmAsrProcessor, GlmAsrProcessorKwargs
+from ..vibevoice_asr.processing_vibevoice_asr import VibeVoiceAsrProcessor, VibeVoiceAsrProcessorKwargs
+
+
+logger = logging.get_logger(__name__)
+
+# Diarized segments look like `[start][S01]text[end]`, e.g. `[0.00][S01]Hello there.[7.56]`.
+_SEGMENT_PATTERN = re.compile(
+    r"\[(?P<start>[^\[\]]+)\]\[S(?P<speaker>\d+)\](?P<content>.*?)\[(?P<end>[^\[\]]+)\]", re.DOTALL
+)
 
 
 @auto_docstring
@@ -121,7 +130,7 @@ class MossTranscribeDiarizeConfig(GlmAsrConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-class MossTranscribeDiarizeProcessorKwargs(GlmAsrProcessorKwargs):
+class MossTranscribeDiarizeProcessorKwargs(VibeVoiceAsrProcessorKwargs):
     _defaults = {
         "text_kwargs": {
             "padding": True,
@@ -141,8 +150,10 @@ class MossTranscribeDiarizeProcessorKwargs(GlmAsrProcessorKwargs):
 
 @requires(backends=("torch",))
 @auto_docstring
-class MossTranscribeDiarizeProcessor(GlmAsrProcessor):
+class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
     valid_processor_kwargs = MossTranscribeDiarizeProcessorKwargs
+    feature_extractor_class = "WhisperFeatureExtractor"
+    tokenizer_class = "Qwen2TokenizerFast"
 
     def __init__(
         self,
@@ -150,6 +161,9 @@ class MossTranscribeDiarizeProcessor(GlmAsrProcessor):
         tokenizer=None,
         chat_template: str | None = None,
         audio_token: str = "<|audio_pad|>",
+        audio_bos_token: str = "<|audio_start|>",
+        audio_eos_token: str = "<|audio_end|>",
+        audio_duration_token: str | None = None,
         audio_tokens_per_second: float = 12.5,
         audio_merge_size: int = 4,
         audio_encoder_stride: int = 2,
@@ -164,6 +178,13 @@ class MossTranscribeDiarizeProcessor(GlmAsrProcessor):
         r"""
         audio_token (`str`, *optional*, defaults to `"<|audio_pad|>"`):
             Special token used to represent audio inputs in the chat template.
+        audio_bos_token (`str`, *optional*, defaults to `"<|audio_start|>"`):
+            Special token marking the start of the audio span in the chat template.
+        audio_eos_token (`str`, *optional*, defaults to `"<|audio_end|>"`):
+            Special token marking the end of the audio span in the chat template.
+        audio_duration_token (`str`, *optional*):
+            Unused by MOSS-Transcribe-Diarize, which has no audio-duration placeholder in its prompts; kept only
+            because [`~VibeVoiceAsrProcessor.__call__`] is shared with [`VibeVoiceAsrProcessor`].
         audio_tokens_per_second (`float`, *optional*, defaults to 12.5):
             Expected number of audio placeholder tokens per second of input audio.
         audio_merge_size (`int`, *optional*, defaults to 4):
@@ -178,17 +199,21 @@ class MossTranscribeDiarizeProcessor(GlmAsrProcessor):
             Default prompt used by [`~MossTranscribeDiarizeProcessor.apply_transcription_request`] when `prompt` is
             `None`. Requests timestamped transcription with speaker labels such as `[S01]`.
         """
-        self.audio_token = audio_token
-        self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
         self.default_transcription_prompt = default_transcription_prompt
-        ProcessorMixin.__init__(self, feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(
+            feature_extractor,
+            tokenizer,
+            chat_template=chat_template,
+            audio_token=audio_token,
+            audio_bos_token=audio_bos_token,
+            audio_eos_token=audio_eos_token,
+            audio_duration_token=audio_duration_token,
+        )
         self.audio_tokens_per_second = audio_tokens_per_second
         self.audio_merge_size = int(audio_merge_size)
         self.audio_encoder_stride = int(audio_encoder_stride)
         self.time_marker_every_seconds = time_marker_every_seconds
         self.enable_time_marker = enable_time_marker
-        self.audio_start_token = getattr(tokenizer, "audio_start_token", "<|audio_start|>")
-        self.audio_end_token = getattr(tokenizer, "audio_end_token", "<|audio_end|>")
 
     def _process_audio(self, audio: AudioInput, **kwargs) -> tuple[dict[str, torch.Tensor], list[str]]:
         # Determine number of Whisper-window chunks per sample, and flatten
@@ -272,8 +297,7 @@ class MossTranscribeDiarizeProcessor(GlmAsrProcessor):
 
     @property
     def model_input_names(self) -> list[str]:
-        names = [name for name in super().model_input_names if name != "input_features_mask"]
-        return names + ["audio_feature_lengths", "audio_chunk_mapping"]
+        return super().model_input_names + ["audio_feature_lengths", "audio_chunk_mapping"]
 
     def apply_transcription_request(
         self,
@@ -301,30 +325,15 @@ class MossTranscribeDiarizeProcessor(GlmAsrProcessor):
         if batch_size == 0:
             raise ValueError("`audio` must contain at least one sample.")
 
-        if prompt is None:
-            prompts = [self.default_transcription_prompt] * batch_size
-        elif isinstance(prompt, str):
-            prompts = [prompt] * batch_size
-        elif isinstance(prompt, (list, tuple)):
-            if len(prompt) != batch_size:
-                raise ValueError(
-                    f"Received {len(prompt)} prompt(s) for {batch_size} audio sample(s); counts must match."
-                )
-            prompts = [self.default_transcription_prompt if item is None else item for item in prompt]
-        else:
-            raise TypeError("`prompt` must be a string, a sequence of strings, or `None`.")
+        prompts = [
+            self.default_transcription_prompt if item is None else item
+            for item in prepare_prompt_input(prompt, batch_size, input_name="prompt")
+        ]
 
-        conversations = []
-        for prompt_text, audio_item in zip(prompts, audio_items):
-            content = []
-            if isinstance(audio_item, str):
-                content.append({"type": "audio", "path": audio_item})
-            else:
-                content.append({"type": "audio", "audio": audio_item})
-
-            content.append({"type": "text", "text": prompt_text})
-
-            conversations.append([{"role": "user", "content": content}])
+        conversations = [
+            [{"role": "user", "content": make_audio_chat_content(audio_item, prompt_text)}]
+            for prompt_text, audio_item in zip(prompts, audio_items)
+        ]
 
         return self.apply_chat_template(
             conversations,
@@ -333,6 +342,46 @@ class MossTranscribeDiarizeProcessor(GlmAsrProcessor):
             return_dict=True,
             **kwargs,
         )
+
+    def extract_speaker_dict(self, text: str | list[str]) -> list[dict] | str | list[list[dict] | str]:
+        """
+        Extract speaker/timestamp segments from raw output, returning original text on failure.
+
+        Args:
+            text (`str` or `list[str]`):
+                Single text or batch of texts to parse from the output of `decode` with `return_format="raw"`.
+
+        Returns:
+            Parsed output(s). For single input, returns `list[dict]` or `str`.
+            For batch input, returns `list[list[dict] | str]`.
+        """
+        is_single = isinstance(text, str)
+        if is_single:
+            text = [text]
+
+        speaker_dict = []
+        for t in text:
+            t = t.strip()
+            if t.startswith("assistant"):
+                t = t[len("assistant") :].strip()
+
+            segments = [
+                {
+                    "Start": parse_timestamp(match["start"]),
+                    "End": parse_timestamp(match["end"]),
+                    "Speaker": int(match["speaker"]),
+                    "Content": match["content"].strip(),
+                }
+                for match in _SEGMENT_PATTERN.finditer(t)
+            ]
+
+            if not segments:
+                logger.warning("Output doesn't contain any `[start][S0N]text[end]` segments.")
+                speaker_dict.append(t)
+            else:
+                speaker_dict.append(segments)
+
+        return speaker_dict[0] if is_single else speaker_dict
 
 
 class MossTranscribeDiarizeMultiModalProjector(AudioFlamingo3MultiModalProjector):
