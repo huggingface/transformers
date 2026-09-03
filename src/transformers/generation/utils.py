@@ -152,6 +152,8 @@ MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL = (
     "pixel_mask",
     "input_features",
     "input_features_mask",
+    "audio_feature_lengths",
+    "audio_chunk_mapping",
     "pixel_values_videos",
     "num_local_patches",
     "high_res_pixel_values",
