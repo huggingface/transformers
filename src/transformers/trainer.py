@@ -610,6 +610,8 @@ class Trainer:
         self._train_batch_size = args.train_batch_size
         # Guards one-time LR scheduler creation in create_optimizer_and_scheduler
         self._created_lr_scheduler = False
+        # Resolved lazily at the first gradient clip; see `_has_mixed_mesh_grads`.
+        self._mixed_mesh_grads: bool | None = None
 
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
@@ -2651,14 +2653,15 @@ class Trainer:
         return total_norm
 
     def _has_mixed_mesh_grads(self, model) -> bool:
-        from torch.distributed.tensor import DTensor
+        # Static for the life of the run (sharding never changes after setup), so scan the
+        # parameters only on the first call.
+        if self._mixed_mesh_grads is None:
+            from .trainer_optimizer import has_mixed_dtensor
 
-        grads = [p.grad for p in model.parameters() if p.grad is not None]
-        return (
-            bool(grads)
-            and any(isinstance(g, DTensor) for g in grads)
-            and not all(isinstance(g, DTensor) for g in grads)
-        )
+            self._mixed_mesh_grads = has_mixed_dtensor(
+                p.grad for p in model.parameters() if p.grad is not None
+            )
+        return self._mixed_mesh_grads
 
     def _clip_grad_norm(self, model):
         """Clip gradients to max_grad_norm. Returns the pre-clip gradient norm."""
