@@ -73,11 +73,10 @@ class DistributedConfig:
         elif self.tp_size is None:
             self.tp_size = 1
 
-        if self.tp_size > 1 and self.fsdp_size > 1 and self.pp_size > 1:
+        if self.pp_size > 1 and (self.tp_size > 1 or self.fsdp_size > 1):
             raise ValueError(
-                "FSDP+TP+PP is not supported yet. "
-                "Use DistributedConfig(fsdp_size=N) or DistributedConfig(tp_size=N) or DistributedConfig(pp_size=N), not all three. "
-                "Only 1D support is available for now."
+                "Pipeline parallelism cannot be combined with tensor or FSDP parallelism yet. "
+                "Use DistributedConfig(pp_size=N) on its own, or DistributedConfig(tp_size=N, fsdp_size=M)."
             )
 
     @classmethod

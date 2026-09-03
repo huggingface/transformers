@@ -216,7 +216,7 @@ def has_mixed_dtensor(tensors) -> bool:
     """Whether `tensors` do not all share one device mesh, so whole-set ops (fused/foreach kernels,
     `clip_grad_norm_`) cannot span them. Expert parallelism leaves the experts sharded and everything
     else as plain tensors; under a 2-D (fsdp, tp) mesh everything is a `DTensor`, but the experts live
-    on the `tp` mesh and the rest on the `fsdp` mesh."""
+    on the full mesh and the rest on the `fsdp` sub-mesh."""
     from torch.distributed.tensor import DTensor
 
     meshes = {t.device_mesh if isinstance(t, DTensor) else None for t in tensors}
