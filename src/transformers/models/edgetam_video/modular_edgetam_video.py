@@ -293,6 +293,10 @@ class EdgeTamVideoConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
+    def standardize_rope_params(self):
+        if self.rope_parameters.get("rope_type") in ["default", None]:
+            self.rope_parameters["rope_type"] = "axial"
+
     @property
     def memory_attention_rope_theta(self):
         logger.warning_once(
