@@ -1578,14 +1578,17 @@ class Cache:
                     f"You called `get_mask_sizes` on layer index {layer_idx}, but this layer is a LinearAttention layer, which "
                     "does not track sequence length."
                 )
-            try:
-                # Use the first attention layer
-                layer_idx = next(idx for idx in range(len(self)) if isinstance(self.layers[idx], CacheLayerMixin))
-            except StopIteration:
+            attention_idxs = [idx for idx in range(len(self)) if isinstance(self.layers[idx], CacheLayerMixin)]
+            if not attention_idxs:
                 raise ValueError(
                     "`get_mask_sizes` can only be called on Attention layers, and the current Cache seem to only contain "
                     "LinearAttention layers."
                 )
+            # Prefer a full-attention layer: this fallback serves `create_causal_mask`, and redirecting to a
+            # sliding layer would bound the full-attention mask to the sliding window.
+            layer_idx = next(
+                (idx for idx in attention_idxs if not self.layers[idx].is_sliding), attention_idxs[0]
+            )
 
         return self.layers[layer_idx].get_mask_sizes(query_length)
 

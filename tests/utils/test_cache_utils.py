@@ -189,6 +189,26 @@ class CacheTest(unittest.TestCase):
             keys, _ = cache.update(*_kv(1), layer_idx)
             self.assertEqual(keys.device.type, torch.device(torch_device).type)
 
+    def test_hybrid_cache_mask_sizes_prefer_full_attention_layers(self):
+        """
+        In a hybrid cache mixing linear-attention, sliding and full-attention layers (a [linear, sliding, full]
+        layout), `create_causal_mask` can resolve its reference layer to a linear-attention index. The
+        `get_mask_sizes` redirect must then land on a full-attention layer, not the sliding one -- otherwise the
+        full-attention mask is bounded to the sliding window and decoding crashes one token past it.
+        """
+        sliding_window = 4
+        layers = [LinearAttentionLayer(), DynamicSlidingWindowLayer(sliding_window), DynamicLayer()]
+        cache = Cache(layers=layers)
+        seen = 2 * sliding_window
+        states = torch.rand(1, 1, seen, 8)
+        cache.update(states, states.clone(), 1)
+        cache.update(states.clone(), states.clone(), 2)
+
+        self.assertEqual(
+            cache.get_mask_sizes(query_length=1, layer_idx=0), cache.get_mask_sizes(query_length=1, layer_idx=2)
+        )
+        self.assertEqual(cache.get_mask_sizes(query_length=1, layer_idx=0), (seen + 1, 0))
+
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
     """Function to skip tests on failed cache prerequisites, given a cache implementation"""
