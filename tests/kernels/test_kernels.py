@@ -24,6 +24,7 @@ from unittest.mock import MagicMock, patch
 
 import torch
 from huggingface_hub import snapshot_download
+from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig
 from transformers.integrations.hub_kernels import (
@@ -590,6 +591,107 @@ class TestKernelUtilities(TestCasePlus):
         # ... only `torch.export` swaps in the torch one.
         exported = torch.export.export(Wrapper(), inputs)
         self.assertTrue(torch.equal(exported.module()(*inputs), torch_result))
+
+    def test_fallback_resolves_function_from_package_root(self):
+        package = types.ModuleType("optional_backend")
+        optimized_function = MagicMock(return_value="optimized")
+        package.optimized_function = optimized_function
+        torch_function = MagicMock(return_value="torch")
+
+        with (
+            patch(
+                "transformers.integrations.hub_kernels.use_kernel_forward_from_hub",
+                return_value=lambda function: function,
+            ),
+            patch(
+                "transformers.integrations.hub_kernels.importlib.import_module",
+                return_value=package,
+            ) as import_module,
+        ):
+            wrapped = use_kernel_func_from_hub_with_fallback(
+                func_name="optimized_function",
+                package="optional_backend",
+                internal_path="ops.kernel",
+            )(torch_function)
+
+        self.assertEqual(wrapped(), "optimized")
+        import_module.assert_called_once_with("optional_backend")
+
+    @parameterized.expand(
+        [
+            (
+                "explicit_path",
+                "optimized_function",
+                "optional_backend",
+                "ops.kernel",
+                "optional_backend.ops.kernel",
+            ),
+            (
+                "mapped_path",
+                "chunk_gated_delta_rule",
+                "fla",
+                None,
+                "fla.ops.gated_delta_rule",
+            ),
+        ]
+    )
+    def test_fallback_imports_nested_module(
+        self,
+        _case_name,
+        func_name,
+        package_name,
+        internal_path,
+        internal_module_name,
+    ):
+        package = types.ModuleType(package_name)
+        internal_module = types.ModuleType(internal_module_name)
+        optimized_function = MagicMock(return_value="optimized")
+        setattr(internal_module, func_name, optimized_function)
+        torch_function = MagicMock(return_value="torch")
+
+        with (
+            patch(
+                "transformers.integrations.hub_kernels.use_kernel_forward_from_hub",
+                return_value=lambda function: function,
+            ),
+            patch(
+                "transformers.integrations.hub_kernels.importlib.import_module",
+                side_effect=[package, internal_module],
+            ) as import_module,
+        ):
+            wrapped = use_kernel_func_from_hub_with_fallback(
+                func_name=func_name,
+                package=package_name,
+                internal_path=internal_path,
+            )(torch_function)
+
+        self.assertEqual(wrapped(), "optimized")
+        self.assertEqual(
+            [call.args[0] for call in import_module.call_args_list],
+            [package_name, internal_module_name],
+        )
+
+    def test_fallback_uses_torch_when_nested_module_is_missing(self):
+        package = types.ModuleType("optional_backend")
+        torch_function = MagicMock(return_value="torch")
+
+        with (
+            patch(
+                "transformers.integrations.hub_kernels.use_kernel_forward_from_hub",
+                return_value=lambda function: function,
+            ),
+            patch(
+                "transformers.integrations.hub_kernels.importlib.import_module",
+                side_effect=[package, ImportError],
+            ),
+        ):
+            wrapped = use_kernel_func_from_hub_with_fallback(
+                func_name="optimized_function",
+                package="optional_backend",
+                internal_path="ops.kernel",
+            )(torch_function)
+
+        self.assertEqual(wrapped(), "torch")
 
 
 @require_kernels
