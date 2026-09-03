@@ -64,7 +64,7 @@ from .utils import (
 )
 from .utils.chat_parsing import ResponseParser
 from .utils.chat_parsing import parse_response as _template_parse_response
-from .utils.chat_template_utils import render_jinja_template
+from .utils.chat_template_utils import encode_sanitized_chats, render_jinja_template, sanitize_chat_inputs
 
 
 if TYPE_CHECKING:
@@ -2995,6 +2995,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         add_generation_prompt: bool = False,
         continue_final_message: bool | str = False,
         tokenize: bool = True,
+        sanitize_special_tokens: bool = False,
         padding: bool | str | PaddingStrategy = False,
         truncation: bool = False,
         max_length: int | None = None,
@@ -3038,6 +3039,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 (e.g. "reasoning_content"). Cannot be used at the same time as `add_generation_prompt`.
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
+            sanitize_special_tokens (`bool`, defaults to `False`):
+                Whether to sanitize the chat inputs so that special tokens inside them (e.g. a typed
+                `<|assistant|>`) cannot act as control tokens: the text is preserved, but encoded with
+                ordinary (non-special) tokens, as with `split_special_tokens=True`. Special tokens emitted
+                by the template itself are unaffected. Requires `tokenize=True`; incompatible with
+                `return_assistant_tokens_mask`. Raises `ValueError` rather than delete or rewrite text it
+                cannot make safe. Tokenization at sanitized boundaries may differ slightly; a chat with
+                nothing to sanitize is unaffected.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
@@ -3104,6 +3113,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             if return_assistant_tokens_mask:
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
 
+        substitutions = None
+        if sanitize_special_tokens:
+            conversations, tools, documents, kwargs, substitutions = sanitize_chat_inputs(
+                self, conversations, tools, documents, kwargs, tokenize, return_assistant_tokens_mask
+            )
+
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         rendered_chat, generation_indices = render_jinja_template(
             conversations=conversations,
@@ -3120,15 +3135,28 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             rendered_chat = rendered_chat[0]
 
         if tokenize:
-            out = self(
-                rendered_chat,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                add_special_tokens=False,
-                return_tensors=return_tensors,
-                **tokenizer_kwargs,
-            )
+            if substitutions:
+                # The placeholders are spliced back in as ordinary tokens, never as control tokens
+                out = encode_sanitized_chats(
+                    self,
+                    rendered_chat,
+                    substitutions,
+                    padding=padding,
+                    truncation=truncation,
+                    max_length=max_length,
+                    return_tensors=return_tensors,
+                    **tokenizer_kwargs,
+                )
+            else:
+                out = self(
+                    rendered_chat,
+                    padding=padding,
+                    truncation=truncation,
+                    max_length=max_length,
+                    add_special_tokens=False,
+                    return_tensors=return_tensors,
+                    **tokenizer_kwargs,
+                )
             if return_dict:
                 if return_assistant_tokens_mask:
                     assistant_masks = []

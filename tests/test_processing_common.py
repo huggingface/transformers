@@ -2010,6 +2010,21 @@ class ProcessorTesterMixin:
         expected_prompt = "You are a helpful assistant.<|special_start|>user\nWhich of these animals is making the sound?<|special_end|>\nYou are a helpful assistant.<|special_start|>assistant\nIt is a cow.<|special_end|>\n"
         self.assertEqual(formatted_prompt, expected_prompt)
 
+    def test_chat_template_sanitize_special_tokens_unsupported(self):
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        dummy_template = (
+            "{% for message in messages %}{{ message['role'] + ': ' + message['content'][0]['text'] }}{% endfor %}"
+        )
+        messages = [{"role": "user", "content": [{"type": "text", "text": "hi there"}]}]
+
+        # Processors don't support chat input sanitization yet, and must say so rather than silently
+        # ignore the request (an unknown kwarg would just become a template variable)
+        with self.assertRaises(NotImplementedError):
+            processor.apply_chat_template(messages, chat_template=dummy_template, sanitize_special_tokens=True)
+
     @require_torch
     def test_apply_chat_template_assistant_mask(self):
         processor = self.get_processor()
