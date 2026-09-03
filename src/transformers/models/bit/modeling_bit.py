@@ -30,8 +30,10 @@ from ...modeling_outputs import (
     ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
-from ...utils.generic import can_return_tuple
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_bit import BitConfig
 
 
@@ -544,9 +546,34 @@ class BitStage(nn.Module):
         return hidden_state
 
 
-class BitEncoder(nn.Module):
+@auto_docstring
+class BitPreTrainedModel(PreTrainedModel):
+    config: BitConfig
+    base_model_prefix = "bit"
+    input_modalities = ("image",)
+    main_input_name = "pixel_values"
+    _no_split_modules = ["BitEmbeddings"]
+
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
+        if isinstance(module, nn.Conv2d):
+            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+        # copied from the `reset_parameters` method of `class Linear(Module)` in `torch`.
+        elif isinstance(module, nn.Linear):
+            init.kaiming_uniform_(module.weight, a=math.sqrt(5))
+            if module.bias is not None:
+                fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(module.weight)
+                bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+                init.uniform_(module.bias, -bound, bound)
+
+
+class BitEncoder(BitPreTrainedModel):
+    main_input_name = "hidden_states"
+    _can_record_outputs = {"hidden_states": BitStage}
+
     def __init__(self, config: BitConfig):
-        super().__init__()
+        super().__init__(config)
         self.stages = nn.ModuleList([])
 
         prev_chs = config.embedding_size
@@ -582,6 +609,7 @@ class BitEncoder(nn.Module):
             current_stride *= stride
 
             self.stages.add_module(str(stage_idx), stage)
+        self.post_init()
 
     def _get_updated_hyperparameters(self, stage_idx, current_stride, current_hidden_size, dilation, config):
         out_channels = make_div(current_hidden_size * config.width_factor)
@@ -591,49 +619,12 @@ class BitEncoder(nn.Module):
             stride = 1
         return out_channels, stride, dilation
 
-    def forward(
-        self, hidden_state: Tensor, output_hidden_states: bool = False, return_dict: bool = True
-    ) -> BaseModelOutputWithNoAttention:
-        hidden_states = () if output_hidden_states else None
-
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(self, hidden_states: Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithNoAttention:
         for stage_module in self.stages:
-            if output_hidden_states:
-                hidden_states = hidden_states + (hidden_state,)
-
-            hidden_state = stage_module(hidden_state)
-
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_state, hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_state,
-            hidden_states=hidden_states,
-        )
-
-
-@auto_docstring
-class BitPreTrainedModel(PreTrainedModel):
-    config: BitConfig
-    base_model_prefix = "bit"
-    input_modalities = ("image",)
-    main_input_name = "pixel_values"
-    _no_split_modules = ["BitEmbeddings"]
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, nn.Conv2d):
-            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
-        # copied from the `reset_parameters` method of `class Linear(Module)` in `torch`.
-        elif isinstance(module, nn.Linear):
-            init.kaiming_uniform_(module.weight, a=math.sqrt(5))
-            if module.bias is not None:
-                fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(module.weight)
-                bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-                init.uniform_(module.bias, -bound, bound)
+            hidden_states = stage_module(hidden_states)
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -655,34 +646,15 @@ class BitModel(BitPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
-        self,
-        pixel_values: Tensor,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        self, pixel_values: Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutputWithPoolingAndNoAttention:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         embedding_output = self.embedder(pixel_values)
-
-        encoder_outputs = self.encoder(
-            embedding_output, output_hidden_states=output_hidden_states, return_dict=return_dict
-        )
-
-        last_hidden_state = encoder_outputs[0]
-
-        last_hidden_state = self.norm(last_hidden_state)
-
+        encoder_outputs: BaseModelOutputWithNoAttention = self.encoder(embedding_output, **kwargs)
+        last_hidden_state = self.norm(encoder_outputs.last_hidden_state)
         pooled_output = self.pooler(last_hidden_state)
-
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
-
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
@@ -697,6 +669,8 @@ class BitModel(BitPreTrainedModel):
     """
 )
 class BitForImageClassification(BitPreTrainedModel):
+    accepts_loss_kwargs = False
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -709,37 +683,25 @@ class BitForImageClassification(BitPreTrainedModel):
         # initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        outputs = self.bit(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
-
-        pooled_output = outputs.pooler_output if return_dict else outputs[1]
-
-        logits = self.classifier(pooled_output)
-
+        outputs = self.bit(pixel_values, **kwargs)
+        logits = self.classifier(outputs.pooler_output)
         loss = None
 
         if labels is not None:
-            loss = self.loss_function(labels, logits, self.config)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return (loss,) + output if loss is not None else output
-
+            loss = self.loss_function(labels=labels, pooled_logits=logits, config=self.config)
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
 
 
@@ -763,13 +725,7 @@ class BitBackbone(BackboneMixin, BitPreTrainedModel):
     @can_return_tuple
     @filter_output_hidden_states
     @auto_docstring
-    def forward(
-        self,
-        pixel_values: Tensor,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> BackboneOutput:
+    def forward(self, pixel_values: Tensor, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
         r"""
         Examples:
 
@@ -790,29 +746,14 @@ class BitBackbone(BackboneMixin, BitPreTrainedModel):
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        outputs = self.bit(pixel_values, output_hidden_states=True, return_dict=True)
-
+        outputs = self.bit(pixel_values, **kwargs)
         hidden_states = outputs.hidden_states
-
-        feature_maps = ()
-        for idx, stage in enumerate(self.stage_names):
-            if stage in self.out_features:
-                feature_maps += (hidden_states[idx],)
-
-        if not return_dict:
-            output = (feature_maps,)
-            if output_hidden_states:
-                output += (outputs.hidden_states,)
-            return output
-
+        feature_maps = tuple(
+            hidden_states[idx] for idx, stage in enumerate(self.stage_names) if stage in self.out_features
+        )
         return BackboneOutput(
             feature_maps=feature_maps,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=hidden_states,
             attentions=None,
         )
 

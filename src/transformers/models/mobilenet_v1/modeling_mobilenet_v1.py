@@ -19,7 +19,9 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPoolingAndNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import can_return_tuple
 from .configuration_mobilenet_v1 import MobileNetV1Config
 
 
@@ -186,18 +188,17 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | BaseModelOutputWithPoolingAndNoAttention:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPoolingAndNoAttention:
+        output_hidden_states = kwargs.get("output_hidden_states")
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -219,9 +220,6 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
         else:
             pooled_output = None
 
-        if not return_dict:
-            return tuple(v for v in [last_hidden_state, pooled_output, all_hidden_states] if v is not None)
-
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
@@ -236,6 +234,8 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
     """
 )
 class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
+    accepts_loss_kwargs = False
+
     def __init__(self, config: MobileNetV1Config) -> None:
         super().__init__(config)
 
@@ -251,36 +251,29 @@ class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
         labels: torch.Tensor | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | ImageClassifierOutputWithNoAttention:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss). If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        outputs = self.mobilenet_v1(pixel_values, **kwargs)
 
-        outputs = self.mobilenet_v1(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
-
-        pooled_output = outputs.pooler_output if return_dict else outputs[1]
+        pooled_output = outputs.pooler_output
 
         logits = self.classifier(self.dropout(pooled_output))
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(labels, logits, self.config)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+            loss = self.loss_function(labels=labels, pooled_logits=logits, config=self.config)
 
         return ImageClassifierOutputWithNoAttention(
             loss=loss,

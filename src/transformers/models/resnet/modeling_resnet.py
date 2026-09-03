@@ -28,8 +28,10 @@ from ...modeling_outputs import (
     ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
-from ...utils.generic import can_return_tuple
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_resnet import ResNetConfig
 
 
@@ -216,47 +218,6 @@ class ResNetStage(nn.Module):
         return hidden_state
 
 
-class ResNetEncoder(nn.Module):
-    def __init__(self, config: ResNetConfig):
-        super().__init__()
-        self.stages = nn.ModuleList([])
-        # based on `downsample_in_first_stage` the first layer of the first stage may or may not downsample the input
-        self.stages.append(
-            ResNetStage(
-                config,
-                config.embedding_size,
-                config.hidden_sizes[0],
-                stride=2 if config.downsample_in_first_stage else 1,
-                depth=config.depths[0],
-            )
-        )
-        in_out_channels = zip(config.hidden_sizes, config.hidden_sizes[1:])
-        for (in_channels, out_channels), depth in zip(in_out_channels, config.depths[1:]):
-            self.stages.append(ResNetStage(config, in_channels, out_channels, depth=depth))
-
-    def forward(
-        self, hidden_state: Tensor, output_hidden_states: bool = False, return_dict: bool = True
-    ) -> BaseModelOutputWithNoAttention:
-        hidden_states = () if output_hidden_states else None
-
-        for stage_module in self.stages:
-            if output_hidden_states:
-                hidden_states = hidden_states + (hidden_state,)
-
-            hidden_state = stage_module(hidden_state)
-
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_state, hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_state,
-            hidden_states=hidden_states,
-        )
-
-
 @auto_docstring
 class ResNetPreTrainedModel(PreTrainedModel):
     config: ResNetConfig
@@ -287,6 +248,36 @@ class ResNetPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.num_batches_tracked)
 
 
+class ResNetEncoder(ResNetPreTrainedModel):
+    main_input_name = "hidden_states"
+    _can_record_outputs = {"hidden_states": ResNetStage}
+
+    def __init__(self, config: ResNetConfig):
+        super().__init__(config)
+        self.stages = nn.ModuleList([])
+        # based on `downsample_in_first_stage` the first layer of the first stage may or may not downsample the input
+        self.stages.append(
+            ResNetStage(
+                config,
+                config.embedding_size,
+                config.hidden_sizes[0],
+                stride=2 if config.downsample_in_first_stage else 1,
+                depth=config.depths[0],
+            )
+        )
+        in_out_channels = zip(config.hidden_sizes, config.hidden_sizes[1:])
+        for (in_channels, out_channels), depth in zip(in_out_channels, config.depths[1:]):
+            self.stages.append(ResNetStage(config, in_channels, out_channels, depth=depth))
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(self, hidden_states: Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithNoAttention:
+        for stage_module in self.stages:
+            hidden_states = stage_module(hidden_states)
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states)
+
+
 @auto_docstring
 class ResNetModel(ResNetPreTrainedModel):
     def __init__(self, config):
@@ -298,32 +289,15 @@ class ResNetModel(ResNetPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
-        self,
-        pixel_values: Tensor,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        self, pixel_values: Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutputWithPoolingAndNoAttention:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         embedding_output = self.embedder(pixel_values)
-
-        encoder_outputs = self.encoder(
-            embedding_output, output_hidden_states=output_hidden_states, return_dict=return_dict
-        )
-
-        last_hidden_state = encoder_outputs[0]
-
+        encoder_outputs: BaseModelOutputWithNoAttention = self.encoder(embedding_output, **kwargs)
+        last_hidden_state = encoder_outputs.last_hidden_state
         pooled_output = self.pooler(last_hidden_state)
-
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
-
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
@@ -338,6 +312,8 @@ class ResNetModel(ResNetPreTrainedModel):
     """
 )
 class ResNetForImageClassification(ResNetPreTrainedModel):
+    accepts_loss_kwargs = False
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -350,37 +326,25 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
         # initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        outputs = self.resnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
-
-        pooled_output = outputs.pooler_output if return_dict else outputs[1]
-
-        logits = self.classifier(pooled_output)
-
+        outputs = self.resnet(pixel_values, **kwargs)
+        logits = self.classifier(outputs.pooler_output)
         loss = None
 
         if labels is not None:
-            loss = self.loss_function(labels, logits, self.config)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return (loss,) + output if loss is not None else output
-
+            loss = self.loss_function(labels=labels, pooled_logits=logits, config=self.config)
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
 
 
@@ -405,13 +369,7 @@ class ResNetBackbone(BackboneMixin, ResNetPreTrainedModel):
     @can_return_tuple
     @filter_output_hidden_states
     @auto_docstring
-    def forward(
-        self,
-        pixel_values: Tensor,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> BackboneOutput:
+    def forward(self, pixel_values: Tensor, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
         r"""
         Examples:
 
@@ -438,31 +396,15 @@ class ResNetBackbone(BackboneMixin, ResNetPreTrainedModel):
         >>> list(feature_maps[-1].shape)
         [1, 2048, 7, 7]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         embedding_output = self.embedder(pixel_values)
-
-        outputs = self.encoder(embedding_output, output_hidden_states=True, return_dict=True)
-
-        hidden_states = outputs.hidden_states
-
-        feature_maps = ()
-        for idx, stage in enumerate(self.stage_names):
-            if stage in self.out_features:
-                feature_maps += (hidden_states[idx],)
-
-        if not return_dict:
-            output = (feature_maps,)
-            if output_hidden_states:
-                output += (outputs.hidden_states,)
-            return output
-
+        encoder_outputs = self.encoder(embedding_output, **kwargs)
+        hidden_states = encoder_outputs.hidden_states
+        feature_maps = tuple(
+            hidden_states[idx] for idx, stage in enumerate(self.stage_names) if stage in self.out_features
+        )
         return BackboneOutput(
             feature_maps=feature_maps,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=hidden_states,
             attentions=None,
         )
 

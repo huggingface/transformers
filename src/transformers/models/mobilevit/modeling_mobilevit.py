@@ -19,7 +19,6 @@ import math
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -31,7 +30,9 @@ from ...modeling_outputs import (
     SemanticSegmenterOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging, torch_int
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
+from ...utils.generic import can_return_tuple
 from .configuration_mobilevit import MobileViTConfig
 
 
@@ -570,18 +571,15 @@ class MobileViTEncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         output_hidden_states: bool = False,
-        return_dict: bool = True,
-    ) -> tuple | BaseModelOutputWithNoAttention:
+        **kwargs,
+    ) -> BaseModelOutputWithNoAttention:
         all_hidden_states = () if output_hidden_states else None
 
-        for i, layer_module in enumerate(self.layer):
+        for layer_module in self.layer:
             hidden_states = layer_module(hidden_states)
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
         return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
@@ -642,18 +640,17 @@ class MobileViTModel(MobileViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | BaseModelOutputWithPoolingAndNoAttention:
+    ) -> BaseModelOutputWithPoolingAndNoAttention:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -663,21 +660,16 @@ class MobileViTModel(MobileViTPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         if self.expand_output:
-            last_hidden_state = self.conv_1x1_exp(encoder_outputs[0])
+            last_hidden_state = self.conv_1x1_exp(encoder_outputs.last_hidden_state)
 
             # global average pooling: (batch_size, channels, height, width) -> (batch_size, channels)
             pooled_output = torch.mean(last_hidden_state, dim=[-2, -1], keepdim=False)
         else:
-            last_hidden_state = encoder_outputs[0]
+            last_hidden_state = encoder_outputs.last_hidden_state
             pooled_output = None
-
-        if not return_dict:
-            output = (last_hidden_state, pooled_output) if pooled_output is not None else (last_hidden_state,)
-            return output + encoder_outputs[1:]
 
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
@@ -693,6 +685,8 @@ class MobileViTModel(MobileViTPreTrainedModel):
     """
 )
 class MobileViTForImageClassification(MobileViTPreTrainedModel):
+    accepts_loss_kwargs = False
+
     def __init__(self, config: MobileViTConfig) -> None:
         super().__init__(config)
 
@@ -708,36 +702,27 @@ class MobileViTForImageClassification(MobileViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
         labels: torch.Tensor | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | ImageClassifierOutputWithNoAttention:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss). If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        outputs = self.mobilevit(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
-
-        pooled_output = outputs.pooler_output if return_dict else outputs[1]
-
+        outputs = self.mobilevit(pixel_values, **kwargs)
+        pooled_output = outputs.pooler_output
         logits = self.classifier(self.dropout(pooled_output))
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(labels, logits, self.config)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+            loss = self.loss_function(labels=labels, pooled_logits=logits, config=self.config)
 
         return ImageClassifierOutputWithNoAttention(
             loss=loss,
@@ -873,15 +858,15 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | SemanticSegmenterOutput:
+    ) -> SemanticSegmenterOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
@@ -914,7 +899,6 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
@@ -922,28 +906,20 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         outputs = self.mobilevit(
             pixel_values,
             output_hidden_states=True,  # we need the intermediate hidden states
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
+        encoder_hidden_states = outputs.hidden_states
 
         logits = self.segmentation_head(encoder_hidden_states)
 
         loss = None
         if labels is not None:
-            # upsample logits to the images' original size
-            upsampled_logits = nn.functional.interpolate(
-                logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+            loss = self.loss_function(
+                logits,
+                labels,
+                ignore_index=self.config.semantic_loss_ignore_index,
             )
-            loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
-            loss = loss_fct(upsampled_logits, labels)
-
-        if not return_dict:
-            if output_hidden_states:
-                output = (logits,) + outputs[1:]
-            else:
-                output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return SemanticSegmenterOutput(
             loss=loss,

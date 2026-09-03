@@ -420,6 +420,32 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("intermediate.dense", "mlp.fc1"),
             WeightRenaming("output.dense", "mlp.fc2"),
         ],
+        "swinv2": [
+            WeightRenaming("attention.self.query", "attention.q_proj"),
+            WeightRenaming("attention.self.key", "attention.k_proj"),
+            WeightRenaming("attention.self.value", "attention.v_proj"),
+            WeightRenaming("attention.self.logit_scale", "attention.logit_scale"),
+            WeightRenaming(
+                "attention.self.continuous_position_bias_mlp",
+                "attention.continuous_position_bias_mlp",
+            ),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            WeightRenaming("intermediate.dense", "mlp.fc1"),
+            WeightRenaming("output.dense", "mlp.fc2"),
+        ],
+        "swin2sr": [
+            WeightRenaming("attention.self.query", "attention.q_proj"),
+            WeightRenaming("attention.self.key", "attention.k_proj"),
+            WeightRenaming("attention.self.value", "attention.v_proj"),
+            WeightRenaming("attention.self.logit_scale", "attention.logit_scale"),
+            WeightRenaming(
+                "attention.self.continuous_position_bias_mlp",
+                "attention.continuous_position_bias_mlp",
+            ),
+            WeightRenaming("attention.output.dense", "attention.o_proj"),
+            WeightRenaming("intermediate.dense", "mlp.fc1"),
+            WeightRenaming("output.dense", "mlp.fc2"),
+        ],
         "SwinBackbone": [
             WeightRenaming(r"^encoder\.", "swin.encoder."),
             WeightRenaming(r"^embeddings\.", "swin.embeddings."),
@@ -1702,6 +1728,11 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"depth_head\.convs", "neck.convs"),
             WeightRenaming(r"depth_head\.project", "decoder.project"),
             WeightRenaming(r"depth_head\.depth_head\.", "decoder.head."),
+        ],
+        # PoolFormer: flat patch_embeddings/block → hierarchical stages/{i}/(embeddings|layers)
+        "poolformer": [
+            WeightRenaming(r"encoder\.patch_embeddings\.(\d+)\.", r"encoder.stages.\1.embeddings."),
+            WeightRenaming(r"encoder\.block\.(\d+)\.", r"encoder.stages.\1.layers."),
         ],
     }
 
