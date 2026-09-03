@@ -4768,12 +4768,7 @@ class PreTrainedModel(
             self._is_hf_initialized = True
 
         if getattr(self, "_device_mesh", None) is not None:
-            # Uneven FSDP sharding can assign a rank an EMPTY local shard (e.g. 20 local experts
-            # chunked over fsdp=8 leaves the last rank zero rows). The loader then has nothing to
-            # load into that parameter, so it is never marked initialized, and this rank would run
-            # `_init_weights` on it below - whose first DTensor RNG op is a mesh-wide collective -
-            # while fully-loaded ranks skip it: mismatched collectives, and the whole group hangs.
-            # An empty shard has nothing to initialize; mark it.
+            # Empty local shards have nothing to initialize; without the mark, running _init_weights on them issues collectives the other ranks never join (hang)
             import itertools
 
             from torch.distributed.tensor import DTensor
