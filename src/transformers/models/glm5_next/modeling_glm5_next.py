@@ -1342,7 +1342,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = False
     _supports_attention_backend = True
 
-    _no_split_modules = ["Glm5NextTextDecoderLayer", "Glm5NextVisionBlock"]
+    _no_split_modules = ["Glm5NextTextDecoderLayer", "Glm5NextVisionBlock", "Glm5NextVisionPatchMerger"]
     _skip_keys_device_placement = ["past_key_values"]
     # TODO: this can be fixed but is limited by
     # 1. assuming the cache name
