@@ -1150,8 +1150,8 @@ class GlmImageModel(GlmImagePreTrainedModel):
 
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
-        split_sizes = (image_grid_thw.prod(-1)).tolist()
-        image_embeds = torch.split(vision_outputs.last_hidden_state, split_sizes)
+        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
 
         reshaped_embeds = []
         for i, embed in enumerate(image_embeds):
@@ -1476,6 +1476,21 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
         model_inputs["position_ids"] = None
         return model_inputs
+
+    def _prepare_multimodal_encoder_kwargs_for_generation(self, model_kwargs):
+        """Prepares image/video hidden states if model support this modality"""
+        model_kwargs.setdefault("mm_encoder_outputs", {})
+        if "pixel_values" in model_kwargs:
+            if model_kwargs["mm_encoder_outputs"].get("image") is not None:
+                raise ValueError("You cannot pass both: raw pixels and pre-computed embeddings for input image")
+            encoder_kwargs = {
+                k: v for k, v in model_kwargs.items() if k in ["pixel_values", "image_grid_thw", "images_per_sample"]
+            }
+            encoder_kwargs["return_dict"] = True
+            model_kwargs["mm_encoder_outputs"]["image"] = self.get_image_features(**encoder_kwargs)
+            model_kwargs.pop("pixel_values")
+
+        return model_kwargs
 
 
 __all__ = [
