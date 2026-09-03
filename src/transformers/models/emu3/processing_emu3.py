@@ -53,7 +53,6 @@ class Emu3ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 @auto_docstring
-@requires(backends=("vision",))
 class Emu3Processor(ProcessorMixin):
     valid_processor_kwargs = Emu3ProcessorKwargs
 

@@ -73,7 +73,7 @@ class Gemma4UnifiedProcessorKwargs(ProcessingKwargs, total=False):
 
 
 @auto_docstring
-@requires(backends=("vision",))
+
 class Gemma4UnifiedProcessor(ProcessorMixin):
     valid_processor_kwargs = Gemma4UnifiedProcessorKwargs
 

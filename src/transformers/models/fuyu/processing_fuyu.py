@@ -199,7 +199,7 @@ def construct_full_unpacked_stream(
     return all_bi_stream
 
 
-@requires(backends=("vision",))
+
 @auto_docstring
 class FuyuProcessor(ProcessorMixin):
     valid_processor_kwargs = FuyuProcessorKwargs

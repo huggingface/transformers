@@ -2916,6 +2916,26 @@ def requires(*, backends=()):
     return inner_fn
 
 
+def processor_file_requirements(content):
+    basic_subprocessor_requirements = {
+        "image_processor": ["vision"],
+        "video_processor": ["vision", "torch", "torchvision"],
+        "feature_extractor": [],
+        "audio_processor": [],
+        "tokenizer": [],
+    }
+    all_requirements = []
+    init_pattern = r"def __init__\s*\((.*?)\)"
+    init_signatures = re.findall(init_pattern, content, re.DOTALL)
+    for sig in init_signatures:
+        input_params = sig.strip().split(",")
+        input_params = [param.split("=")[0].strip() for param in input_params]
+        requirements = [basic_subprocessor_requirements.get(param, []) for param in input_params]
+        all_requirements.extend(list(chain.from_iterable(requirements)))
+
+    return tuple(all_requirements)
+
+
 BASE_FILE_REQUIREMENTS = {
     lambda name, content: "modeling_" in name: ("torch",),
     lambda name, content: "tokenization_" in name and name.endswith("_fast"): ("tokenizers",),
@@ -2926,6 +2946,7 @@ BASE_FILE_REQUIREMENTS = {
     ),
     lambda name, content: "image_processing_" in name: ("vision",),
     lambda name, content: "video_processing_" in name: ("vision", "torch", "torchvision"),
+    lambda name, content: name.startswith("processing_"): functools.partial(processor_file_requirements),
     # Some models have specific generation and it always depends on torch (guard if importable via main module)
     lambda name, content: "generation_" in name: ("torch",),
 }
@@ -3069,7 +3090,10 @@ def create_import_structure_from_path(module_path):
         base_requirements = ()
         for check, requirements in BASE_FILE_REQUIREMENTS.items():
             if check(module_name, file_content):
-                base_requirements = requirements
+                if isinstance(requirements, Callable):
+                    base_requirements = requirements(file_content)
+                else:
+                    base_requirements = requirements
                 break
 
         # Objects that have a `@require` assigned to them will get exported
