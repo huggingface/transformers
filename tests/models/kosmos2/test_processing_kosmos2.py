@@ -91,7 +91,9 @@ class Kosmos2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_full_processor(self):
-        url = url_to_local_path("https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/two_dogs.jpg")
+        url = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/two_dogs.jpg"
+        )
 
         processor = Kosmos2Processor.from_pretrained("microsoft/kosmos-2-patch14-224")
 

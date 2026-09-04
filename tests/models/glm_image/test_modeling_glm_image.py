@@ -42,12 +42,14 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
 )
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -474,7 +476,9 @@ class GlmImageIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
                     },
                     {"type": "text", "text": "Add a red hat to this cat"},
                 ],
@@ -496,15 +500,9 @@ class GlmImageIntegrationTest(unittest.TestCase):
 
     def test_processor_image_to_image(self):
         """Test processor correctly prepares image-to-image inputs."""
-        from io import BytesIO
-
-        import requests
-        from PIL import Image
-
         # Load the image
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-        response = requests.get(url)
-        image = Image.open(BytesIO(response.content))
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+        image = load_test_image(url)
 
         # Create prompt with target shape and image token
         text = "<|dit_token_16384|><|image|><|dit_token_16385|>Add a red hat to this cat<sop>28 40<eop>"
