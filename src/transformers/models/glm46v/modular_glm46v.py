@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import numpy as np
 from huggingface_hub.dataclasses import strict
 
@@ -179,7 +178,7 @@ class Glm46VVideoProcessor(Glm4vVideoProcessor):
         if len(uniq) & 1:
             uniq.append(uniq[-1])
 
-        return np.array(uniq)
+        return np.array(uniq, dtype=int)
 
 
 __all__ = [

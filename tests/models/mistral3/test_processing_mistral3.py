@@ -283,7 +283,7 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class.from_pretrained(self.full_tmpdirname)
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
 
         _ = processor(
             text=input_str,
@@ -304,5 +304,5 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             )
 
     @unittest.skip("Mistral3 overrides image patch size at run-time via processor (hardcoded!)")
-    def test_image_processor_defaults(self):
+    def test_subprocessor_defaults_1_images(self):
         pass

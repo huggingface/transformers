@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import math
 
 import numpy as np
@@ -189,7 +188,7 @@ class Glm46VVideoProcessor(BaseVideoProcessor):
         if len(uniq) & 1:
             uniq.append(uniq[-1])
 
-        return np.array(uniq)
+        return np.array(uniq, dtype=int)
 
     def resize(
         self,

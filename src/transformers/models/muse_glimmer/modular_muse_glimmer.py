@@ -425,6 +425,8 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
             np.ndarray:
                 Indices to sample video frames.
         """
+        fps = fps if fps is not None else self.fps
+        num_frames = num_frames if num_frames is not None else self.num_frames
         if metadata.fps is None:
             logger.warning_once(
                 "The `fps` of the input video could not be inferred. Defaulting to `fps=24`. "
