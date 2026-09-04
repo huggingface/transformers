@@ -427,6 +427,7 @@ else:
             "NoBadWordsLogitsProcessor",
             "NoRepeatNGramLogitsProcessor",
             "PrefixConstrainedLogitsProcessor",
+            "RepeatedNGramCriteria",
             "RepetitionPenaltyLogitsProcessor",
             "SequenceBiasLogitsProcessor",
             "StoppingCriteria",
@@ -595,6 +596,7 @@ if TYPE_CHECKING:
     from .generation import NoBadWordsLogitsProcessor as NoBadWordsLogitsProcessor
     from .generation import NoRepeatNGramLogitsProcessor as NoRepeatNGramLogitsProcessor
     from .generation import PrefixConstrainedLogitsProcessor as PrefixConstrainedLogitsProcessor
+    from .generation import RepeatedNGramCriteria as RepeatedNGramCriteria
     from .generation import RepetitionPenaltyLogitsProcessor as RepetitionPenaltyLogitsProcessor
     from .generation import SequenceBiasLogitsProcessor as SequenceBiasLogitsProcessor
     from .generation import StoppingCriteria as StoppingCriteria

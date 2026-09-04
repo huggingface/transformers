@@ -190,6 +190,9 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 [[autodoc]] MaxTimeCriteria
     - __call__
 
+[[autodoc]] RepeatedNGramCriteria
+    - __call__
+
 [[autodoc]] StopStringCriteria
     - __call__
 
