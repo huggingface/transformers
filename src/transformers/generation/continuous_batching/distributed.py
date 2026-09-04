@@ -111,8 +111,9 @@ class DistributedHelper:
         if device_mesh.mesh_dim_names is None:
             return device_mesh if device_mesh.size() > 1 else None
         # Case: device mesh with named dims => extract the TP mesh
-        if "tp" in device_mesh.mesh_dim_names and device_mesh["tp"].size() > 1:
-            return device_mesh["tp"]
+        name = next((n for n in device_mesh.mesh_dim_names if n == "tp" or n.startswith("tp_")), None)
+        if name is not None and device_mesh[name].size() > 1:
+            return device_mesh[name]
         return None
 
     def infer_if_tp_driver(self) -> bool:

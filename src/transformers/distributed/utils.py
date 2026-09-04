@@ -129,6 +129,33 @@ def _distributed_barrier():
         torch.distributed.barrier()
 
 
+# Number of tensor parallel meshes built in this process.
+_tp_mesh_count = 0
+
+
+def _build_tp_mesh(device_type: str, tp_size: int):
+    """Build a tensor parallel mesh that no other model in this process shares.
+
+    A `DeviceMesh`'s identity does not include the process group behind it, so two meshes over the
+    same ranks are interchangeable to torch, and a 1-D whole-world mesh reuses the default group.
+    A second model would silently end up on the first one's communicator, which hangs as soon as
+    both are in use.
+    """
+    from torch.distributed.device_mesh import DeviceMesh
+
+    global _tp_mesh_count
+    name = "tp" if _tp_mesh_count == 0 else f"tp_{_tp_mesh_count}"
+    _tp_mesh_count += 1
+    if _tp_mesh_count == 1:
+        return torch.distributed.init_device_mesh(device_type, (tp_size,), mesh_dim_names=(name,))
+
+    # Every rank creates every group, in the same order, then keeps the one it belongs to.
+    world_size = torch.distributed.get_world_size()
+    groups = [torch.distributed.new_group(list(range(s, s + tp_size))) for s in range(0, world_size, tp_size)]
+    group = groups[torch.distributed.get_rank() // tp_size]
+    return DeviceMesh.from_group(group, device_type, mesh_dim_names=(name,))
+
+
 # TODO(3outeille): unify initialization across parallelism
 def initialize_tensor_parallelism(
     tp_plan: str | dict[str, str] | None, tp_size: int | None = None, device_mesh=None, device_map=None
@@ -163,7 +190,7 @@ def initialize_tensor_parallelism(
             tp_device = torch.device(device_type)
             device_map = device_type or {}
 
-        device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
+        device_mesh = _build_tp_mesh(tp_device.type, tp_size)
     else:
         if device_mesh.ndim > 1:
             if "tp" not in device_mesh.mesh_dim_names:
