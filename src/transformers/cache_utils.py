@@ -166,26 +166,33 @@ class DynamicLayer(CacheLayerMixin):
         """
         Remove `tokens_to_remove` tokens from the current cache layer.
         """
-        # Legacy path: `tokens_to_remove` represents the final absolute size that the cache should have
+        current_length = self.get_seq_length()
+        if not self.is_initialized or current_length == 0:
+            return
+
+        # Legacy path: positive value represents absolute target max_length
         if tokens_to_remove > 0:
             logger.warning_once(
                 "Calling `crop` with a positive value is deprecated and will be removed in version 5.18. Please use a negative "
                 "integer to remove that number of tokens from the cache instead."
             )
-            current_length = self.get_seq_length()
-            # If the absolute value requested is larger than current length, just do nothing
             if tokens_to_remove >= current_length:
                 return
-            else:
-                tokens_to_remove = self.get_seq_length() - tokens_to_remove
-
-        # Nothing to do in this case
-        if tokens_to_remove == 0:
+            tokens_to_remove = current_length - tokens_to_remove
+        elif tokens_to_remove == 0:
+            # Removing 0 tokens is a no-op
             return
 
-        # Crop the cache
-        self.keys = self.keys[..., : -abs(tokens_to_remove), :]
-        self.values = self.values[..., : -abs(tokens_to_remove), :]
+        # Convert relative negative count to positive count to slice out
+        tokens_to_remove = abs(tokens_to_remove)
+
+        # If removing equal to or more tokens than present, clamp and empty cache
+        if tokens_to_remove >= current_length:
+            self.keys = self.keys[..., :0, :]
+            self.values = self.values[..., :0, :]
+        else:
+            self.keys = self.keys[..., :-tokens_to_remove, :]
+            self.values = self.values[..., :-tokens_to_remove, :]
 
     def batch_repeat_interleave(self, repeats: int) -> None:
         """Repeat the cache `repeats` times in the batch dimension."""
@@ -306,8 +313,18 @@ class DynamicSlidingWindowLayer(DynamicLayer):
             # In this case, we crop and restrict the size back to the sliding window if still larger
             else:
                 tokens_to_remove = abs(tokens_to_remove)
-                self.keys = self.keys[:, :, -self.sliding_window + 1 - tokens_to_remove : -tokens_to_remove, :]
-                self.values = self.values[:, :, -self.sliding_window + 1 - tokens_to_remove : -tokens_to_remove, :]
+                self.keys = self.keys[
+                    :,
+                    :,
+                    -self.sliding_window + 1 - tokens_to_remove : -tokens_to_remove,
+                    :,
+                ]
+                self.values = self.values[
+                    :,
+                    :,
+                    -self.sliding_window + 1 - tokens_to_remove : -tokens_to_remove,
+                    :,
+                ]
                 self.cumulative_length = self.cumulative_length - tokens_to_remove
 
         # If we did not reach the sliding window, we can do the same as for a full attention layer
@@ -331,7 +348,10 @@ class DynamicIndexedLayer(DynamicLayer):
         self.is_indexer_initialized: bool = False
 
     def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
-        self.indexer_dtype, self.indexer_device = indexer_key_states.dtype, indexer_key_states.device
+        self.indexer_dtype, self.indexer_device = (
+            indexer_key_states.dtype,
+            indexer_key_states.device,
+        )
         self.indexer_keys = torch.tensor([], dtype=self.indexer_dtype, device=self.indexer_device)
         self.is_indexer_initialized = True
 
@@ -647,7 +667,10 @@ class StaticIndexedLayer(StaticLayer):
         self.indexer_cumulative_length = torch.tensor(0, dtype=int)
 
     def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
-        self.indexer_dtype, self.indexer_device = indexer_key_states.dtype, indexer_key_states.device
+        self.indexer_dtype, self.indexer_device = (
+            indexer_key_states.dtype,
+            indexer_key_states.device,
+        )
         batch_size, _, index_head_dim = indexer_key_states.shape
         self.indexer_keys = torch.zeros(
             (batch_size, self.max_cache_len, index_head_dim),
@@ -992,7 +1015,8 @@ class LinearAttentionCacheLayerMixin(ABC):
             # need more for the next forward
             else:
                 self.conv_states[i] = self.conv_states[i][
-                    ..., -tokens_to_remove - self.conv_kernel_size[i] : -tokens_to_remove
+                    ...,
+                    -tokens_to_remove - self.conv_kernel_size[i] : -tokens_to_remove,
                 ]
 
     def get_max_length(self) -> int:
@@ -1035,7 +1059,11 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
             self.is_recurrent_states_initialized[state_idx] = True
 
     def update_conv_state(
-        self, conv_states: torch.Tensor, state_idx: int = 0, conv_kernel_size: int | None = None, **kwargs
+        self,
+        conv_states: torch.Tensor,
+        state_idx: int = 0,
+        conv_kernel_size: int | None = None,
+        **kwargs,
     ) -> torch.Tensor:
         """
         Update the linear attention cache in-place, and return the necessary conv states.
@@ -1048,7 +1076,11 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
         """
         # Lazy initialization
         if not self.is_conv_states_initialized[state_idx]:
-            self.lazy_initialization(conv_states=conv_states, state_idx=state_idx, conv_kernel_size=conv_kernel_size)
+            self.lazy_initialization(
+                conv_states=conv_states,
+                state_idx=state_idx,
+                conv_kernel_size=conv_kernel_size,
+            )
 
         # This is prefill, simply pad the conv_states if necessary
         if not self.has_previous_state[state_idx]:
@@ -1196,7 +1228,13 @@ class LinearAttentionAndStaticFullAttentionLayer(LinearAttentionLayer, StaticLay
 
 
 class LinearAttentionAndStaticSlidingWindowAttentionLayer(LinearAttentionLayer, StaticSlidingWindowLayer):
-    def __init__(self, max_cache_len: int, sliding_window: int, number_of_states: int = 1, **kwargs):
+    def __init__(
+        self,
+        max_cache_len: int,
+        sliding_window: int,
+        number_of_states: int = 1,
+        **kwargs,
+    ):
         StaticSlidingWindowLayer.__init__(self, max_cache_len=max_cache_len, sliding_window=sliding_window)
         LinearAttentionLayer.__init__(self, number_of_states=number_of_states)
 
@@ -1289,7 +1327,7 @@ class Cache:
     def __init__(
         self,
         layers: list[CacheLayerMixin | LinearAttentionCacheLayerMixin] | None = None,
-        layer_class_to_replicate: type[CacheLayerMixin | LinearAttentionCacheLayerMixin] | None = None,
+        layer_class_to_replicate: (type[CacheLayerMixin | LinearAttentionCacheLayerMixin] | None) = None,
         offloading: bool = False,
         offload_only_non_sliding: bool = True,
     ):
@@ -1354,7 +1392,12 @@ class Cache:
             self.layers[layer_idx].offload()
 
     def update(
-        self, key_states: torch.Tensor, value_states: torch.Tensor, layer_idx: int, *args, **kwargs
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        *args,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
@@ -1410,7 +1453,11 @@ class Cache:
         return conv_states
 
     def update_recurrent_state(
-        self, recurrent_states: torch.Tensor, layer_idx: int, state_idx: int = 0, **kwargs
+        self,
+        recurrent_states: torch.Tensor,
+        layer_idx: int,
+        state_idx: int = 0,
+        **kwargs,
     ) -> torch.Tensor:
         """
         Updates the cache with the new `recurrent_states` for the layer `layer_idx`.
@@ -1485,7 +1532,11 @@ class Cache:
             # Note that the initialization needs all dimensions (except -2), as well as device and dtype, so we use
             # this fake tensor approach. It has size 0 on the -2 dimension, so it does not allocate any data (it only
             # creates an empty tensor with correct shape, dtype and device), which is very efficient and practical
-            fake_kv_tensor = torch.zeros((batch_size, layer_num_heads, 0, layer_head_dim), dtype=dtype, device=device)
+            fake_kv_tensor = torch.zeros(
+                (batch_size, layer_num_heads, 0, layer_head_dim),
+                dtype=dtype,
+                device=device,
+            )
             # Init the layer
             layer.lazy_initialization(fake_kv_tensor, fake_kv_tensor)
 
@@ -1819,7 +1870,11 @@ class DynamicCache(Cache):
                 offload_only_non_sliding=offload_only_non_sliding,
             )
         else:
-            super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
+            super().__init__(
+                layers=layers,
+                offloading=offloading,
+                offload_only_non_sliding=offload_only_non_sliding,
+            )
 
     def __iter__(self):
         for layer in self.layers:
@@ -1878,7 +1933,11 @@ class StaticCache(Cache):
         layer_kwargs["max_cache_len"] = max_cache_len
         # Dispatch the layer types
         layers = [STATIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs) for layer_type in layer_types]
-        super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
+        super().__init__(
+            layers=layers,
+            offloading=offloading,
+            offload_only_non_sliding=offload_only_non_sliding,
+        )
 
 
 class QuantizedCache(Cache):
@@ -2109,6 +2168,24 @@ class MtpCache(DynamicCache):
         mtp_offset = layer_idx + 1
         kv_length, kv_offset = super().get_mask_sizes(query_length, layer_idx)
         return kv_length, kv_offset + mtp_offset
+
+    def test_dynamic_layer_crop_oversized_negative(self):
+        """Test DynamicLayer / DynamicCache safely clears cache on oversized negative crops without retaining stale tokens."""
+        key = torch.arange(3, dtype=torch.float32).reshape(1, 1, 3, 1)
+        val = torch.arange(3, dtype=torch.float32).reshape(1, 1, 3, 1)
+
+        cache = DynamicCache()
+        cache.update(key, val, layer_idx=0)
+        self.assertEqual(cache.get_seq_length(), 3)
+
+        # Oversized negative crop should clamp and empty the cache
+        cache.crop(-5)
+        self.assertEqual(cache.get_seq_length(), 0)
+
+        # Subsequent update works normally
+        new_token = torch.tensor([[[[1.0]]]])
+        cache.update(new_token, new_token, layer_idx=0)
+        self.assertEqual(cache.get_seq_length(), 1)
 
 
 class DFlashCache(DynamicCache):
