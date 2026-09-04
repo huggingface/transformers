@@ -33,6 +33,7 @@ from ..utils.import_utils import (
     is_kernels_available,
     is_rocm_platform,
     is_torch_available,
+    is_torchdynamo_compiling,
     is_torchdynamo_exporting,
     resolve_internal_import,
 )
@@ -74,6 +75,9 @@ _KERNELS_INTERNAL_PATH_MAPPINGS = {
     "mamba_inner_fn": "ops.selective_scan_interface",
     "selective_scan_fn": "ops.selective_scan_interface",
 }
+
+# Maps from import name to the distribution that ships it, where the two differ
+_PACKAGE_TO_DISTRIBUTION = {"fla": "flash-linear-attention"}
 
 
 if is_kernels_available():
@@ -734,6 +738,9 @@ def load_and_register_attn_kernel(
 
         kernel_function = attention_wrapper if attention_wrapper is not None else msa_attention_forward
         mask_implementation = "sdpa"
+    elif hasattr(kernel, "flash_attn_forward") and hasattr(kernel, "supports_flash_attn"):
+        kernel_function = attention_wrapper if attention_wrapper is not None else kernel.flash_attn_forward
+        mask_implementation = "sdpa"
     elif kernel_name is not None:
         kernel_function = getattr(kernel, kernel_name)
 
@@ -808,7 +815,7 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     device = get_device(model.device.type)
 
     if model.kernel_config is not None:
-        inherit_mapping = not model.kernel_config.use_local_kernel
+        inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
         with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
             _kernels_kernelize(model, device=device, mode=mode)
     else:
@@ -849,13 +856,18 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
 
     # Allow internal path prefix if given to resolve non __init__ imports
     internal_path = _KERNELS_INTERNAL_PATH_MAPPINGS.get(func_name, internal_path)  # defaults
-    full_path = func_name if internal_path is None else f"{internal_path}.{func_name}"
+    full_func_path = func_name if internal_path is None else f"{internal_path}.{func_name}"
+    full_module_path = package if internal_path is None else f"{package}.{internal_path}"
 
     def decorator(torch_function: Callable) -> Callable:
         implementation = None
         try:
             module = importlib.import_module(package)
-            implementation = resolve_internal_import(module, full_path)
+            implementation = resolve_internal_import(module, full_func_path)
+            # Some packages, such as FLA, do not expose nested modules from their package root.
+            if implementation is None and full_module_path != package:
+                module = importlib.import_module(full_module_path)
+                implementation = getattr(module, func_name, None)
         except Exception:
             implementation = torch_function
         finally:
@@ -871,6 +883,18 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
             # Some original packages are incompatible with torch.export, so we always use the torch path when exporting
             if is_new_implementation and is_torchdynamo_exporting():
                 return torch_function(*args, **kwargs)
+
+            if not is_new_implementation and not is_torchdynamo_compiling():
+                # These torch paths are readable references, not fast kernels, so their runtimes are
+                # significantly slower: for `chunk_gated_delta_rule` the gap is more than an order of
+                # magnitude on an H100. Warn the user when they end up on one. The logger is untraceable,
+                # hence the guard.
+                distribution = _PACKAGE_TO_DISTRIBUTION.get(package, package)
+                logger.warning_once(
+                    f"`{func_name}` is falling back to its reference PyTorch implementation because "
+                    f"`{distribution}` is not installed. This is correct but much slower; install "
+                    f"`{distribution}` for the optimized kernel."
+                )
 
             kwargs = {k: v for k, v in kwargs.items() if k in applicable_params}
             return implementation(*args, **kwargs)

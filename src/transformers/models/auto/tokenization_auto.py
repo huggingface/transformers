@@ -90,6 +90,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("bros", "BertTokenizer" if is_tokenizers_available() else None),
         ("byt5", "ByT5Tokenizer"),
         ("camembert", "CamembertTokenizer" if is_tokenizers_available() else None),
+        ("canary", "TokenizersBackend" if is_tokenizers_available() else None),
         ("canine", "CanineTokenizer"),
         ("chinese_clip", "BertTokenizer" if is_tokenizers_available() else None),
         ("clap", "RobertaTokenizer"),
@@ -289,6 +290,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("qwen3", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_5", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_5_moe", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
+        ("qwen3_5_text", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_asr", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_next", "Qwen2Tokenizer" if is_tokenizers_available() else None),
@@ -766,8 +768,15 @@ class AutoTokenizer:
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         if gguf_file:
+            # Same split as `PreTrainedConfig.from_pretrained`: fast reader where covered, else legacy.
+            from ...integrations.gguf import GGUF_CONFIG_ARCHS, get_gguf_config, read_gguf_metadata
+
             gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
-            config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
+            metadata, tensor_names = read_gguf_metadata(gguf_path)
+            if metadata["general.architecture"] in GGUF_CONFIG_ARCHS:
+                config_dict = get_gguf_config(metadata, tensor_names)
+            else:
+                config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
             config = AutoConfig.for_model(**config_dict)
         elif config is None:
             try:

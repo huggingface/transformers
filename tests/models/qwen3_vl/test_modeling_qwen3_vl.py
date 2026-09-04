@@ -14,11 +14,13 @@
 """Testing suite for the PyTorch Qwen3-VL model."""
 
 import copy
+import gc
 import unittest
 
 import pytest
 
 from transformers import (
+    AutoProcessor,
     Qwen3VLConfig,
     Qwen3VLForConditionalGeneration,
     Qwen3VLModel,
@@ -26,7 +28,10 @@ from transformers import (
 )
 from transformers.models.qwen3_vl.configuration_qwen3_vl import Qwen3VLTextConfig, Qwen3VLVisionConfig
 from transformers.testing_utils import (
+    Expectations,
+    backend_empty_cache,
     require_torch,
+    slow,
     torch_device,
 )
 
@@ -61,10 +66,10 @@ class Qwen3VLVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("hidden_act", "silu")
         kwargs.setdefault("num_attention_heads", 4)
         kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 8)
+        kwargs.setdefault("head_dim", 16)
         kwargs.setdefault("depth", 2)
         kwargs.setdefault("vision_hidden_act", "gelu_pytorch_tanh")
-        kwargs.setdefault("num_heads", 4)
+        kwargs.setdefault("num_heads", 2)
         kwargs.setdefault("spatial_merge_size", 1)
         kwargs.setdefault("temporal_patch_size", 2)
         kwargs.setdefault("num_position_embeddings", 16)
@@ -73,7 +78,7 @@ class Qwen3VLVisionText2TextModelTester(VLMModelTester):
             "rope_parameters",
             {
                 "rope_type": "default",
-                "mrope_section": [16, 8, 8],
+                "mrope_section": [2, 3, 3],
                 "mrope_interleaved": True,
                 "rope_theta": 10000,
             },
@@ -405,10 +410,10 @@ class Qwen3VLTextModelPositionIdsTest(unittest.TestCase):
             num_hidden_layers=2,
             num_attention_heads=4,
             num_key_value_heads=2,
-            head_dim=8,
+            head_dim=16,
             hidden_act="silu",
             max_position_embeddings=512,
-            rope_parameters={"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True},
+            rope_parameters={"rope_type": "default", "mrope_section": [2, 3, 3], "mrope_interleaved": True},
         )
 
     def _make_vision_position_ids(self, batch_size, seq_len):
@@ -491,3 +496,50 @@ class Qwen3VLTextModelPositionIdsTest(unittest.TestCase):
             output = model(input_ids=input_ids, position_ids=position_ids_2d, use_cache=False)
         self.assertEqual(output.last_hidden_state.shape, (batch_size, seq_len, config.hidden_size))
         self.assertTrue(torch.isfinite(output.last_hidden_state).all())
+
+
+@slow
+@require_torch
+class Qwen3VLIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        self.processor = AutoProcessor.from_pretrained("Qwen/Qwen3-VL-4B-Instruct")
+        self.messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg",
+                    },
+                    {"type": "text", "text": "What kind of dog is this?"},
+                ],
+            }
+        ]
+
+    def tearDown(self):
+        gc.collect()
+        backend_empty_cache(torch_device)
+
+    def test_small_model_integration_test(self):
+        model = Qwen3VLForConditionalGeneration.from_pretrained("Qwen/Qwen3-VL-4B-Instruct", device_map="auto")
+        expected_texts = Expectations(
+            {
+                ("cuda", None): "user\nWhat kind of dog is this?\nassistant\nBased on the image, this appears to be a **Labrador Retriever**.\n\nHere’s why:\n\n- **Build and Size**: The dog has a large, muscular, and sturdy build, which is characteristic of Labradors.\n- **",
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = expected_texts.get_expectation()
+
+        inputs = self.processor.apply_chat_template(
+            self.messages,
+            tokenize=True,
+            return_dict=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+        ).to(torch_device, dtype=model.dtype)
+
+        output = model.generate(**inputs, max_new_tokens=50, do_sample=False)
+
+        self.assertEqual(
+            self.processor.decode(output[0], skip_special_tokens=True),
+            EXPECTED_TEXT,
+        )

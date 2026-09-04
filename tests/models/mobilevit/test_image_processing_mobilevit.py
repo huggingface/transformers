@@ -269,7 +269,11 @@ class MobileViTImageProcessingTest(
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         # Test with single image
-        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
+        dummy_image = load_image(
+            url_to_local_path(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+            )
+        )
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
