@@ -119,6 +119,17 @@ class MiniMaxM3VLTextConfig(PreTrainedConfig):
     index_local_blocks: int = 1
     layer_types: list[str] | None = None
 
+    def convert_rope_params_to_dict(self, **kwargs):
+        # Released MiniMax-M2 checkpoints express partial RoPE through a legacy
+        # `rotary_dim` field (e.g. 64 of head_dim 128) instead of
+        # `partial_rotary_factor`; their original remote-code config derived the
+        # factor in `__init__`. Without this mapping the model silently rotates
+        # the full head dimension with the wrong frequency ladder.
+        rotary_dim = kwargs.get("rotary_dim", getattr(self, "rotary_dim", None))
+        if rotary_dim is not None:
+            kwargs.setdefault("partial_rotary_factor", rotary_dim / self.head_dim)
+        return super().convert_rope_params_to_dict(**kwargs)
+
     def __post_init__(self, **kwargs):
         sparse_cfg = kwargs.pop("sparse_attention_config", None) or {}
         moe_layer_freq = kwargs.pop("moe_layer_freq", None)
