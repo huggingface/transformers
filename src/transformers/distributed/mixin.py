@@ -210,7 +210,14 @@ class DistributedMixin:
                     model.tp_plan = distributed_config.tp_plan
                 model = apply_tensor_parallelism(model, tp_mesh)
 
-            if distributed_config.fsdp_size > 1:
+            if distributed_config.expert_parallel_dispatch:
+                # Every expert-parallel rank trains on its own part of the batch, so the parameters outside the
+                # experts are data-parallel across the whole mesh: FSDP2 shards them across all of it and owns
+                # their gradient reduction. The experts stay sharded across `tp` and, if any, across `fsdp`.
+                trunk_mesh = device_mesh._flatten("fsdp_tp") if device_mesh.ndim > 1 else device_mesh
+                expert_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else None
+                model = apply_fully_sharded_data_parallelism(model, trunk_mesh, expert_mesh=expert_mesh)
+            elif distributed_config.fsdp_size > 1:
                 fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
                 model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
 
@@ -277,9 +284,9 @@ class DistributedMixin:
         if distributed_config is None:
             return state_dict
 
-        if distributed_config.fsdp_size > 1:
-            # Also covers the 2-D (fsdp, tp) mesh: every parameter is FSDP-managed, and the full
-            # state dict is only materialized on rank 0.
+        if is_fsdp_managed_module(model_to_save):
+            # Also covers the 2-D (fsdp, tp) mesh and token dispatch: every parameter is FSDP-managed, and
+            # the full state dict is only materialized on rank 0.
             if not _is_torch_distributed_initialized():
                 raise ValueError(
                     "Saving an FSDP-wrapped model requires torch.distributed to be initialized. "
