@@ -410,14 +410,16 @@ def dispatch_experts_forward(
     num_top_k = top_k_index.size(-1)
 
     # Sorting the selected pairs by expert groups them by owner rank, since each rank owns a contiguous range of
-    # experts, and the per-expert counts tell every receiver which expert each token it gets is for.
+    # experts, and the per-expert counts tell every receiver which expert each token it gets is for. The split
+    # sizes are the one host sync of the layer.
     expert_ids = top_k_index.reshape(-1)
-    order = torch.argsort(expert_ids, stable=True)
+    order = torch.argsort(expert_ids)
     send_tokens = hidden_states[order // num_top_k]
-    send_counts = torch.bincount(expert_ids, minlength=num_local_experts * ep_size).view(ep_size, num_local_experts)
+    send_counts = torch.zeros(num_local_experts * ep_size, dtype=torch.long, device=hidden_states.device)
+    send_counts = send_counts.scatter_add_(0, expert_ids, torch.ones_like(expert_ids)).view(ep_size, num_local_experts)
     recv_counts = torch.empty_like(send_counts)
     torch.distributed.all_to_all_single(recv_counts, send_counts, group=ep_group)
-    send_sizes, recv_sizes = send_counts.sum(dim=1).tolist(), recv_counts.sum(dim=1).tolist()
+    send_sizes, recv_sizes = torch.stack([send_counts.sum(dim=1), recv_counts.sum(dim=1)]).tolist()
     recv_tokens = all_to_all_single(
         send_tokens.new_empty(sum(recv_sizes), hidden_dim),
         send_tokens,
@@ -426,7 +428,7 @@ def dispatch_experts_forward(
         group=ep_group,
     )
     recv_expert_ids = torch.arange(num_local_experts, device=hidden_states.device).repeat(ep_size)
-    recv_expert_ids = recv_expert_ids.repeat_interleave(recv_counts.reshape(-1))
+    recv_expert_ids = recv_expert_ids.repeat_interleave(recv_counts.reshape(-1), output_size=sum(recv_sizes))
 
     # The local experts, as a top-1 routing with unit weights. Scaling the gradient of the output by `1 / ep_size`
     # and of the input by `ep_size` leaves the token gradients untouched and scales the expert gradients.
@@ -443,7 +445,9 @@ def dispatch_experts_forward(
         input_split_sizes=recv_sizes,
         group=ep_group,
     )
-    combined = recv_out[torch.argsort(order)] * top_k_weights.reshape(-1, 1)
+    inverse_order = torch.empty_like(order)
+    inverse_order[order] = torch.arange(order.numel(), device=order.device)
+    combined = recv_out[inverse_order] * top_k_weights.reshape(-1, 1)
     return combined.view(num_tokens, num_top_k, hidden_dim).sum(dim=1).to(hidden_states.dtype)
 
 

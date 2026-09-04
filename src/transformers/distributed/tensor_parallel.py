@@ -742,10 +742,7 @@ class EpDispatchRouterParallel(TensorParallelLayer):
 
 
 class EpDispatchExpertsParallel(MoeExpertsParallel):
-    """
-    Experts of expert-parallel token dispatch: every rank routes its own tokens to the experts' owners, so nothing is
-    replicated across the group and the forward has neither an input gradient sum nor an output all-reduce.
-    """
+    """Experts of expert-parallel token dispatch: every rank sends its own tokens to the experts' owners."""
 
     def install_forward(self, module, mesh, *, is_expert_parallel=False):
         from ..integrations.moe import dispatch_experts_forward

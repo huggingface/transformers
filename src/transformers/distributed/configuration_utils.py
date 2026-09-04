@@ -35,9 +35,9 @@ class DistributedConfig:
         enable_expert_parallel (`bool`, *optional*, defaults to `False`):
             Route MoE models through the expert-parallel path (``base_model_ep_plan``).
         expert_parallel_dispatch (`bool`, *optional*, defaults to `False`):
-            Send each token to the rank that owns its experts with an all-to-all instead of running the whole batch
-            on every expert-parallel rank. Each rank then trains on its own part of the batch, and the parameters
-            that are not expert-parallel are sharded with FSDP2 across every rank. Requires `enable_expert_parallel`.
+            Send each token to the rank that owns its experts with an all-to-all. Each rank trains on its own part of
+            the batch, and the parameters that are not expert-parallel are sharded with FSDP2 across every rank.
+            Requires `enable_expert_parallel`.
         fsdp_size (`int`, *optional*):
             Number of devices for FSDP (data parallelism). If `None` and `tp_size` is set, defaults to 1.
         fsdp_cpu_offload (`bool`, *optional*, defaults to `False`):

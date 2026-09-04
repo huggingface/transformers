@@ -197,8 +197,8 @@ def apply_fully_sharded_data_parallelism(
     are asserted upstream by `initialize_fully_sharded_data_parallelism`.
 
     With expert-parallel token dispatch `fsdp_mesh` spans the expert-parallel ranks, which the experts are already
-    sharded across: they are sharded across `expert_mesh` in their own group instead, or left as they are when there
-    is no such mesh.
+    sharded across: the experts are fully sharded across `expert_mesh` in their own group, and passed to FSDP2 as
+    `ignored_params` when `expert_mesh` is `None`.
     """
     fsdp_plan = dict(getattr(model, "_fsdp_plan", None) or {})
     if not fsdp_plan:
@@ -216,7 +216,7 @@ def apply_fully_sharded_data_parallelism(
     if distributed_config is not None and distributed_config.expert_parallel_dispatch:
         if not is_torch_greater_or_equal("2.7"):
             raise OSError("Expert-parallel token dispatch requires `torch>=2.7`.")
-        # The DTensor parameters are the expert-parallel experts: the plan is restricted to them under dispatch.
+        # The DTensor parameters are the expert-parallel experts (the expert parallel plan shards only them).
         expert_modules = [
             module
             for module in model.modules()
