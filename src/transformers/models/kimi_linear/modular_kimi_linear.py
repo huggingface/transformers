@@ -256,8 +256,8 @@ class KimiLinearDecoderLayer(DeepseekV32DecoderLayer):
     def __init__(self, config: KimiLinearConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.block_type = config.layer_types[layer_idx]
-        # CODEPATH: TODO: remove this once the mlinter rule is relaxed
         self.self_attn = (
+            # CODEPATH: TODO: remove this once the mlinter rule is relaxed
             KimiLinearAttention(config, layer_idx)
             if config.layer_types[layer_idx] == "full_attention"
             else KimiLinearDeltaAttention(config, layer_idx)
