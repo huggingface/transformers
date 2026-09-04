@@ -81,11 +81,6 @@ def build_glob_alternation(
 class ConversionOps(ABC):
     """Base class for weight conversion operations."""
 
-    def moved_dims(self, ndim: int) -> set[int]:
-        """Dims across which this op moves elements. A DTensor parameter sharded on one of them is converted in full
-        before this rank's shard is taken, since the shard of the converted tensor is not the converted shard."""
-        return set()
-
     def __repr__(self):
         if hasattr(self, "dim"):
             return f"{self.__class__.__name__}(dim={self.dim})"
@@ -324,9 +319,6 @@ class Transpose(ConversionOps):
         self.dim1 = dim1
         self.check_dims = check_dims
 
-    def moved_dims(self, ndim: int) -> set[int]:
-        return {self.dim0 % ndim, self.dim1 % ndim}
-
     @torch.no_grad
     def convert(
         self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
@@ -444,9 +436,6 @@ class PermuteForRope(ConversionOps):
         self.subconfig_key = subconfig_key
         self.inverse = inverse
         self.permute_layer_names = permute_layer_names
-
-    def moved_dims(self, ndim: int) -> set[int]:
-        return {0}
 
     def _apply(self, tensor: torch.Tensor) -> torch.Tensor:
         dim0 = tensor.shape[0]
@@ -1282,12 +1271,16 @@ def spawn_materialize(
 
 def shards_after_conversion(mapping: WeightRenaming | WeightConverter, placements, ndim: int) -> bool:
     """Whether a DTensor parameter with these `placements` has to be converted in full before this rank's shard is
-    taken: an op that moves elements across a sharded dim (a transpose, a RoPE permutation) makes the shard of the
-    source the wrong slice."""
+    taken: a transpose or a RoPE permutation on a sharded dim makes the shard of the source the wrong slice."""
     if not isinstance(mapping, WeightConverter):
         return False
     shard_dims = {placement.dim % ndim for placement in placements if placement.is_shard()}
-    return any(op.moved_dims(ndim) & shard_dims for op in mapping.operations)
+    for op in mapping.operations:
+        if isinstance(op, Transpose) and {op.dim0 % ndim, op.dim1 % ndim} & shard_dims:
+            return True
+        if isinstance(op, PermuteForRope) and 0 in shard_dims:
+            return True
+    return False
 
 
 def dot_natural_key(s: str):
