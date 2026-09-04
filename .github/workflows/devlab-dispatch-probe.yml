@@ -1,0 +1,44 @@
+# Connectivity probe for the AMD Ryzen DevLab DISPATCH ephemeral runner pool.
+#
+# This is deliberately the smallest thing that proves the route works. It is
+# dispatch-only: nothing here fires on push or pull_request, so it cannot run
+# on untrusted code and costs nothing until someone asks for it.
+name: DevLab Dispatch probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Hello from the DevLab pool
+    # `devlab-dispatch` is the opt-in token for the pool. A runner is built for
+    # this job alone and destroyed when it finishes, so nothing persists between
+    # runs and no state is shared with any other job.
+    runs-on: [self-hosted, Linux, devlab-dispatch]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Report the machine
+        run: |
+          echo "runner   : ${RUNNER_NAME:-unknown}"
+          echo "kernel   : $(uname -srm)"
+          echo "distro   : $(. /etc/os-release && echo "$PRETTY_NAME")"
+          echo "cpu      : $(grep -m1 '^model name' /proc/cpuinfo | cut -d: -f2- | xargs)"
+          echo "cores    : $(nproc)"
+          echo "memory   : $(free -h | awk '/^Mem:/ {print $2}')"
+          echo "disk free: $(df -h . | awk 'NR==2 {print $4}')"
+
+      - name: Report the AMD stack
+        # Informational only. A missing tool prints a line and does not fail the
+        # job -- the point of this run is the route, not the toolchain.
+        run: |
+          command -v rocminfo   >/dev/null && rocminfo | grep -m1 'Marketing Name' || echo "rocminfo  : not installed"
+          command -v xrt-smi    >/dev/null && xrt-smi examine | head -20         || echo "xrt-smi   : not installed"
+          command -v python3    >/dev/null && python3 -VV                        || echo "python3   : not installed"
+
+      - name: Done
+        run: echo "Job ran on the DevLab DISPATCH pool."
