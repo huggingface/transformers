@@ -56,6 +56,7 @@ class DistributedMixin:
     _tp_plan: dict[str, str] | None = None
     _ep_plan: dict[str, str] | None = None
     _tp_size = None
+    _fsdp_size = None
     _pp_plan: dict[str, tuple[str, str]] | None = None
     _fsdp_plan: dict[str, str] | None = None
 
@@ -163,17 +164,23 @@ class DistributedMixin:
                     f"is not equal to world_size ({world_size})"
                 )
 
-        if distributed_config.tp_size > 1:
-            if distributed_config.tp_plan is None:
-                distributed_config.tp_plan = "auto"
+        if distributed_config.tp_size > 1 and distributed_config.tp_plan is None:
+            distributed_config.tp_plan = "auto"
+
+        if distributed_config.fsdp_size > 1:
+            # Builds a 2-D (fsdp, tp) mesh when tensor/expert parallelism is also requested.
+            if device_mesh is not None:
+                raise ValueError(
+                    "`device_mesh` cannot be passed together with `fsdp_size > 1`: the mesh is built here."
+                )
+            device_map, device_mesh = initialize_fully_sharded_data_parallelism(distributed_config)
+        elif distributed_config.tp_size > 1:
             device_map, device_mesh = initialize_tensor_parallelism(
                 distributed_config.tp_plan,
                 tp_size=distributed_config.tp_size,
                 device_mesh=device_mesh,
                 device_map=device_map,
             )
-        elif distributed_config.fsdp_size > 1:
-            device_map, device_mesh = initialize_fully_sharded_data_parallelism(distributed_config)
         elif distributed_config.pp_size > 1:
             device_map, device_mesh = initialize_pipeline_parallelism(distributed_config)
 
@@ -190,18 +197,24 @@ class DistributedMixin:
         if device_mesh is not None:
             model.config.distributed_config = distributed_config
             model._device_mesh = device_mesh
+            # The Trainer mirrors these into accelerate's `ParallelismConfig`; without them accelerate
+            # sees unaccounted ranks and falls back to DDP, which rejects the DTensor parameters.
+            model._tp_size = distributed_config.tp_size
+            model._fsdp_size = distributed_config.fsdp_size
 
+            # Both may apply: the tensor/expert parallel plan shards across `tp` first, then FSDP2
+            # shards every parameter (the `tp`-sharded ones included) across `fsdp`.
             if distributed_config.tp_size > 1:
                 tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
                 if isinstance(distributed_config.tp_plan, dict):
                     model.tp_plan = distributed_config.tp_plan
                 model = apply_tensor_parallelism(model, tp_mesh)
 
-            elif distributed_config.fsdp_size > 1:
+            if distributed_config.fsdp_size > 1:
                 fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
                 model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
 
-            elif distributed_config.pp_size > 1:
+            if distributed_config.pp_size > 1:
                 pp_mesh = device_mesh["pp"] if device_mesh.ndim > 1 else device_mesh
                 model = apply_pipeline_parallelism(model, pp_mesh)
         return model
@@ -264,6 +277,16 @@ class DistributedMixin:
         if distributed_config is None:
             return state_dict
 
+        if distributed_config.fsdp_size > 1:
+            # Also covers the 2-D (fsdp, tp) mesh: every parameter is FSDP-managed, and the full
+            # state dict is only materialized on rank 0.
+            if not _is_torch_distributed_initialized():
+                raise ValueError(
+                    "Saving an FSDP-wrapped model requires torch.distributed to be initialized. "
+                    "Call save_pretrained from every rank after init_process_group."
+                )
+            return gather_full_state_dict(model_to_save)
+
         if distributed_config.tp_size > 1:
             state_dict = gather_state_dict_for_save(
                 state_dict, self._tp_plan, self._device_mesh, distributed_config.tp_size
@@ -271,14 +294,6 @@ class DistributedMixin:
             if not save_on_this_rank:
                 state_dict = {}
             return state_dict
-
-        if distributed_config.fsdp_size > 1:
-            if not _is_torch_distributed_initialized():
-                raise ValueError(
-                    "Saving an FSDP-wrapped model requires torch.distributed to be initialized. "
-                    "Call save_pretrained from every rank after init_process_group."
-                )
-            return gather_full_state_dict(model_to_save)
 
         return state_dict
 

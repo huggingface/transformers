@@ -125,11 +125,12 @@ def batched_mm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
-    # Clamp EP sentinels so `gate_up_proj[expert_ids]` stays in-bounds. Routing weights are already
-    # zero at sentinel slots (RouterParallel masks them at dispatch), so the weighted mul drops
-    # those contributions — we pay the wasted GEMM compute because batched_mm has no offset to skip.
-    # Out-of-place to avoid mutating the caller's routing tensor (a contiguous `reshape(-1)` aliases it).
-    expert_ids = expert_ids.clamp(0, self.num_experts - 1)
+    if self.is_expert_parallel:
+        # Clamp EP sentinels so `gate_up_proj[expert_ids]` stays in-bounds. Routing weights are already
+        # zero at sentinel slots (RouterParallel masks them at dispatch), so the weighted mul drops
+        # those contributions — we pay the wasted GEMM compute because batched_mm has no offset to skip.
+        # Out-of-place to avoid mutating the caller's routing tensor (a contiguous `reshape(-1)` aliases it).
+        expert_ids = expert_ids.clamp(0, self.num_experts - 1)
 
     # Select gate_up or just up projection weights and biases
     if self.has_gate:
@@ -374,6 +375,181 @@ def _grouped_linear(
     return out
 
 
+def dispatch_experts_forward(
+    self,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+    ep_group,
+    ep_rank: int,
+    ep_size: int,
+) -> torch.Tensor:
+    """Prototype token-dispatch expert parallelism (HF_EP_DISPATCH=1).
+
+    v3-marker.
+
+    Each rank keeps a 1/ep_size slice of the (replicated) batch, sends every selected
+    token-expert pair to the rank owning that expert with an all-to-all, computes its local
+    experts on what it receives, sends the results back, combines with the local routing
+    weights, and all-gathers the finished slices. Routing arrives unmasked (global expert ids).
+    """
+    import os
+
+    import torch.distributed as dist
+
+    class _AllToAll(torch.autograd.Function):
+        """Autograd all_to_all_single with variable splits (explicit, self-contained)."""
+
+        @staticmethod
+        def forward(ctx, x, out_sizes, in_sizes, group):
+            ctx.group, ctx.out_sizes, ctx.in_sizes = group, out_sizes, in_sizes
+            out = x.new_empty(sum(out_sizes), *x.shape[1:])
+            dist.all_to_all_single(
+                out, x.contiguous(), output_split_sizes=out_sizes, input_split_sizes=in_sizes, group=group
+            )
+            return out
+
+        @staticmethod
+        def backward(ctx, grad):
+            back = grad.new_empty(sum(ctx.in_sizes), *grad.shape[1:])
+            dist.all_to_all_single(
+                back,
+                grad.contiguous(),
+                output_split_sizes=ctx.in_sizes,
+                input_split_sizes=ctx.out_sizes,
+                group=ctx.group,
+            )
+            return back, None, None, None
+
+    class _AllGatherCat(torch.autograd.Function):
+        """Autograd all_gather (concatenated); backward returns this rank's slice of the gradient, summed across ranks."""
+
+        @staticmethod
+        def forward(ctx, x, rank, world, group):
+            ctx.group, ctx.rank, ctx.per = group, rank, x.size(0)
+            out = x.new_empty(x.size(0) * world, *x.shape[1:])
+            dist.all_gather_into_tensor(out, x.contiguous(), group=group)
+            return out
+
+        @staticmethod
+        def backward(ctx, grad):
+            grad = grad.contiguous()
+            dist.all_reduce(grad, group=ctx.group)
+            return grad[ctx.rank * ctx.per : (ctx.rank + 1) * ctx.per], None, None, None
+
+    num_tokens = hidden_states.size(0)
+    hidden_dim = hidden_states.size(-1)
+    num_top_k = top_k_index.size(-1)
+    num_local_experts = self.num_experts  # RouterParallel sets this to experts // ep_size
+
+    # HF_EP_TRUNK_DP=1: every EP rank already carries a *different* microbatch (the dense trunk is
+    # data-parallel), so there is nothing to slice, no replicated gradient to sum at the boundary,
+    # and no gather at the end — dispatch, compute, combine, return. The caller is responsible for
+    # averaging the ep-replicated (non-expert) parameter gradients across the EP group and scaling
+    # expert gradients by 1/ep_size after backward, mirroring data parallelism.
+    trunk_dp = os.environ.get("HF_EP_TRUNK_DP") == "1"
+
+    # Each rank's backward through the dispatch subgraph produces d_hidden only at its own slice's
+    # positions; sum across the group so every rank gets the complete expert-path gradient (the
+    # residual path is replicated and flows outside this op).
+    class _SumGradAcrossEp(torch.autograd.Function):
+        @staticmethod
+        def forward(ctx, x, group):
+            ctx.group = group
+            return x
+
+        @staticmethod
+        def backward(ctx, grad):
+            grad = grad.contiguous()
+            import torch.distributed as _dist
+
+            _dist.all_reduce(grad, group=ctx.group)
+            return grad, None
+
+    if trunk_dp:
+        my_tokens = hidden_states
+        my_index = top_k_index.reshape(-1)  # (s*K,) global expert ids
+        my_weights = top_k_weights.reshape(-1)
+    else:
+        hidden_states = _SumGradAcrossEp.apply(hidden_states, ep_group)
+        top_k_weights = _SumGradAcrossEp.apply(top_k_weights, ep_group)
+
+        # This rank's contiguous token slice (pad so every rank has the same slice length).
+        per_rank = (num_tokens + ep_size - 1) // ep_size
+        start, end = ep_rank * per_rank, min((ep_rank + 1) * per_rank, num_tokens)
+        my_tokens = hidden_states[start:end]
+        my_index = top_k_index[start:end].reshape(-1)  # (s*K,) global expert ids
+        my_weights = top_k_weights[start:end].reshape(-1)
+
+    # Group the selected pairs by destination rank.
+    owner = my_index // num_local_experts
+    order = torch.argsort(owner, stable=True)
+    send_tokens = my_tokens.repeat_interleave(num_top_k, dim=0)[order]
+    send_local_ids = (my_index % num_local_experts)[order]
+    send_counts = torch.bincount(owner, minlength=ep_size)
+    recv_counts = torch.empty_like(send_counts)
+    dist.all_to_all_single(recv_counts, send_counts, group=ep_group)
+    send_sizes = send_counts.tolist()
+    recv_sizes = recv_counts.tolist()
+
+    # Exchange the tokens (autograd) and their local expert ids (metadata, no grad).
+    recv_tokens = _AllToAll.apply(send_tokens, recv_sizes, send_sizes, ep_group)
+    recv_local_ids = torch.empty(sum(recv_sizes), dtype=send_local_ids.dtype, device=send_local_ids.device)
+    dist.all_to_all_single(
+        recv_local_ids, send_local_ids, output_split_sizes=recv_sizes, input_split_sizes=send_sizes, group=ep_group
+    )
+
+    # Local expert compute: sort by local expert, grouped GEMM, unsort.
+    ids_sorted, perm = torch.sort(recv_local_ids, stable=True)
+    x = recv_tokens[perm]
+    counts = torch.bincount(ids_sorted, minlength=num_local_experts)
+    offsets = torch.cumsum(counts, dim=0, dtype=torch.int32)
+    if self.has_gate:
+        proj = _grouped_linear(x, self.gate_up_proj, offsets, bias=None, is_transposed=self.is_transposed)
+        proj = self._apply_gate(proj)
+    else:
+        proj = _grouped_linear(x, self.up_proj, offsets, bias=None, is_transposed=self.is_transposed)
+        proj = self.act_fn(proj)
+    proj = _grouped_linear(proj, self.down_proj, offsets, bias=None, is_transposed=self.is_transposed)
+    inv_perm = torch.empty_like(perm)
+    inv_perm[perm] = torch.arange(perm.numel(), device=perm.device)
+    out_unsorted = proj[inv_perm]
+
+    # Send results back to the owning ranks of the tokens and combine.
+    back = _AllToAll.apply(out_unsorted, send_sizes, recv_sizes, ep_group)
+    combined = torch.zeros(my_tokens.size(0) * num_top_k, hidden_dim, device=back.device, dtype=back.dtype)
+    combined[order] = back
+    combined = combined * my_weights.unsqueeze(-1)
+    my_out = combined.view(-1, num_top_k, hidden_dim).sum(dim=1)
+
+    if trunk_dp:
+        return my_out.to(hidden_states.dtype)
+
+    # The dense trunk (and loss) is replicated across the EP group, so the all-gather backward sums
+    # ep_size identical gradient contributions per slice; pre-scale the gradient (forward unchanged).
+    class _ScaleGrad(torch.autograd.Function):
+        @staticmethod
+        def forward(ctx, x, scale):
+            ctx.scale = scale
+            return x
+
+        @staticmethod
+        def backward(ctx, grad):
+            return grad * ctx.scale, None
+
+    my_out = _ScaleGrad.apply(my_out, 1.0 / ep_size)
+
+    # Pad to the common slice length and all-gather the slices back to the full batch.
+    if my_out.size(0) < per_rank:
+        my_out = torch.cat(
+            [my_out, torch.zeros(per_rank - my_out.size(0), hidden_dim, device=my_out.device, dtype=my_out.dtype)]
+        )
+    # Gather all slices for the full-batch output. The loss is replicated across the group, so the
+    # gather backward sums ep_size identical gradients per slice; the _ScaleGrad above corrects it.
+    gathered = _AllGatherCat.apply(my_out, ep_rank, ep_size, ep_group)
+    return gathered[:num_tokens].to(hidden_states.dtype)
+
+
 def grouped_mm_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
@@ -417,8 +593,10 @@ def grouped_mm_experts_forward(
     # In-place clamp on `expert_ids_g` keeps the per-row bias gather in-bounds (bias added at
     # sentinel positions falls in rows the kernel skips, so harmless). Safe to mutate now —
     # nothing downstream needs the sentinel info from `expert_ids_g` itself.
-    sentinel_mask = (expert_ids_g >= self.num_experts).unsqueeze(-1)
-    expert_ids_g.clamp_(max=self.num_experts - 1)
+    sentinel_mask = None
+    if self.is_expert_parallel:
+        sentinel_mask = (expert_ids_g >= self.num_experts).unsqueeze(-1)
+        expert_ids_g.clamp_(max=self.num_experts - 1)
 
     # Select expert weights and biases
     # NOTE: We keep all experts here and rely on offsets to target the active ones.
@@ -434,12 +612,17 @@ def grouped_mm_experts_forward(
         selected_biases = self.up_proj_bias[expert_ids_g] if self.has_bias else None
 
     # Pre-mask (bwd path).
-    selected_hidden_states_g.masked_fill_(sentinel_mask, 0.0)
+    if self.is_expert_parallel:
+        selected_hidden_states_g.masked_fill_(sentinel_mask, 0.0)
 
     # --- Up projection per expert (grouped) ---
     proj_out = _grouped_linear(
         selected_hidden_states_g, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, 2 * intermediate_dim) or  (S, intermediate_dim) depending on whether we have gating
+
+    if self.is_expert_parallel:
+        # Zero the sentinel-tail rows the kernel left uninitialized (fwd output and bwd `d_input`).
+        proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
 
     # Apply gating or activation
     if self.has_gate:
@@ -458,11 +641,12 @@ def grouped_mm_experts_forward(
         proj_out, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
+    if self.is_expert_parallel:
+        # Same: zero the uninitialized sentinel-tail rows.
+        proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
+
     # Apply routing weights
     weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
-
-    # Post-mask (fwd path).
-    weighted_out.masked_fill_(sentinel_mask, 0.0)
 
     # Restore original order
     inv_perm = torch.empty_like(perm)
@@ -563,6 +747,7 @@ def use_experts_implementation(
             self.has_bias = has_bias
             self.is_transposed = is_transposed
             self.is_concatenated = is_concatenated
+            self.is_expert_parallel = False
 
         @wraps(original_forward)
         def forward(self, *args, **kwargs):

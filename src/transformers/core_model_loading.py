@@ -976,6 +976,10 @@ class WeightTransform:
             # Add them to the new dictionary
             collected_tensors[key] = tensors
 
+        if any(len(tensors) == 0 for tensors in collected_tensors.values()):
+            # Uneven FSDP sharding left this rank an empty shard: nothing to load, and its pre-sharded empty local tensor is already correct
+            raise SkipParameters()
+
         return collected_tensors
 
     def was_used(self) -> bool:

@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import re
 
 from ..utils import logging
@@ -144,7 +145,7 @@ class TensorParallelLayer:
     def transform_output_post_forward(self, module, output, mesh):
         return output
 
-    def install_forward(self, module, mesh):
+    def install_forward(self, module, mesh, *, is_expert_parallel=False):
         """Install pre / around / post transforms by replacing module.forward."""
         original_forward = module.forward
 
@@ -344,7 +345,7 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
     summed across the mesh.
     """
 
-    def install_forward(self, module, mesh):
+    def install_forward(self, module, mesh, *, is_expert_parallel=False):
         # A module hook rather than `param.register_hook`: params are replaced during weight
         # loading, which happens after TP is applied, and would drop a param-level hook.
         def _all_reduce_grads(mod, grad_input, grad_output):
@@ -415,7 +416,7 @@ class SequenceParallel(TensorParallelLayer):
         self.sequence_dim = sequence_dim
         self.use_local_output = use_local_output
 
-    def install_forward(self, module, mesh):
+    def install_forward(self, module, mesh, *, is_expert_parallel=False):
         # Replicate the module's params (LayerNorm/RMSNorm ones-init → from_local is safe).
         for p_name, p in list(module.named_parameters(recurse=False)):
             module.register_parameter(
@@ -606,6 +607,7 @@ class MoeExpertsParallel(TensorParallelLayer):
 
     def install_forward(self, module, mesh, *, is_expert_parallel=False):
         """Install the transforms but pass `is_expert_parallel` in the forward call."""
+        module.is_expert_parallel = is_expert_parallel
         original_forward = module.forward
         output_source = (
             Partial()
@@ -617,6 +619,23 @@ class MoeExpertsParallel(TensorParallelLayer):
         )
 
         def tp_forward(*args, **kwargs):
+            if os.environ.get("HF_EP_DISPATCH") == "1":
+                from ..integrations.moe import dispatch_experts_forward
+
+                hidden_states, top_k_index, top_k_weights, *rest = args
+                if isinstance(hidden_states, DTensor):
+                    hidden_states = hidden_states.to_local()
+                ep_mesh = mesh if mesh.ndim == 1 else mesh["tp"]
+                with self.context_around_forward(module, mesh):
+                    return dispatch_experts_forward(
+                        module,
+                        hidden_states,
+                        top_k_index,
+                        top_k_weights,
+                        ep_mesh.get_group(),
+                        ep_mesh.get_local_rank(),
+                        ep_mesh.size(),
+                    )
             args, kwargs = self.transform_inputs_pre_forward(
                 module, args, kwargs, mesh, is_expert_parallel=is_expert_parallel
             )
@@ -696,6 +715,10 @@ class EpRouterParallel(TensorParallelLayer):
     """
 
     def transform_output_post_forward(self, module, output, mesh):
+        if os.environ.get("HF_EP_DISPATCH") == "1":
+            # Token-dispatch prototype: keep global expert ids and scores; the experts forward
+            # routes tokens to their owners with an all-to-all instead of masking.
+            return output
         ep_rank, ep_size = mesh.get_local_rank(), mesh.size()
         num_experts = getattr(module, "num_experts", None)
         if num_experts is None:
@@ -709,6 +732,11 @@ class EpRouterParallel(TensorParallelLayer):
         num_local_experts = num_experts // ep_size
 
         router_logits, router_scores, router_indices, *extra_outputs = output
+        # Each rank's score gradient covers only its local experts' slots; sum the per-rank partials
+        # before the mask (each slot has exactly one owning rank, so the sum is exact).
+        if torch.is_grad_enabled() and router_scores.requires_grad:
+            process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+            router_scores = _AllReduceBackward.apply(router_scores, process_group)
         non_local_mask = (router_indices // num_local_experts) != ep_rank
         router_scores = router_scores.masked_fill(non_local_mask, 0.0)
         router_indices = router_indices.masked_fill(non_local_mask, -1)
@@ -816,7 +844,9 @@ def apply_tensor_parallelism(model, tp_mesh):
                 # MLA needs to know the qk_rope_head_dim to split the projection output into KV and RoPE parts.
                 # TODO: Store qk_rope_head_dim on MLA projection modules when the models initialize them.
                 module.config = model.config.get_text_config()
-            ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
+            ALL_PARALLEL_STYLES[style_name].install_forward(
+                module, tp_mesh, is_expert_parallel=model.config.distributed_config.enable_expert_parallel
+            )
         module._is_hooked = True
 
     return model

@@ -504,6 +504,7 @@ def _dispatch_routed_input(
     num_experts: int,
     m_alignment: int,
     use_psum_layout: bool,
+    is_expert_parallel: bool = False,
 ) -> tuple:
     """Sort tokens by expert id and build the M-grouped padded layout.
 
@@ -533,8 +534,10 @@ def _dispatch_routed_input(
     # keeps any per-row gather (e.g. bias) in-bounds — bias added at sentinel positions falls
     # in rows the kernel skips, so harmless. Safe to mutate now: the layout was built from the
     # unclamped tensor and nothing downstream needs the sentinel info from `expert_ids_g` itself.
-    sentinel_mask = (expert_ids_g >= num_experts).unsqueeze(-1)
-    expert_ids_g.clamp_(max=num_experts - 1)
+    sentinel_mask = None
+    if is_expert_parallel:
+        sentinel_mask = (expert_ids_g >= num_experts).unsqueeze(-1)
+        expert_ids_g.clamp_(max=num_experts - 1)
     return (
         sorted_hidden_states_g,
         sample_weights_g,
@@ -550,7 +553,7 @@ def _dispatch_routed_input(
 def _combine_routed_output(
     out_padded: torch.Tensor,
     sorted_weights: torch.Tensor,
-    sentinel_mask: torch.Tensor,
+    sentinel_mask: torch.Tensor | None,
     perm: torch.Tensor,
     sorted_to_padded: torch.Tensor,
     num_tokens: int,
@@ -563,7 +566,8 @@ def _combine_routed_output(
     weighted = out * sorted_weights.to(out.dtype).unsqueeze(-1)
     # Sentinel rows past the valid expert blocks may carry NaN from allocator
     # reuse (`0 * NaN = NaN`); zero them so the top-k reduction stays finite.
-    weighted.masked_fill_(sentinel_mask, 0.0)
+    if sentinel_mask is not None:
+        weighted.masked_fill_(sentinel_mask, 0.0)
     inv_perm = torch.empty_like(perm)
     inv_perm[perm] = torch.arange(perm.size(0), device=out.device)
     # Deterministic reshape+sum (index_add_ with duplicates is non-deterministic on CUDA).
@@ -646,7 +650,13 @@ def deepgemm_bf16_experts_forward(
         grouped_layout,
         total_padded_rows,
     ) = _dispatch_routed_input(
-        hidden_states, top_k_index, top_k_weights, self.num_experts, deepgemm.m_alignment, is_sm100()
+        hidden_states,
+        top_k_index,
+        top_k_weights,
+        self.num_experts,
+        deepgemm.m_alignment,
+        is_sm100(),
+        is_expert_parallel=self.is_expert_parallel,
     )
 
     weight_up = self.gate_up_proj if self.has_gate else self.up_proj
@@ -732,7 +742,13 @@ def deepgemm_fp8_fp4_experts_forward(
         grouped_layout,
         total_padded_rows,
     ) = _dispatch_routed_input(
-        hidden_states, top_k_index, top_k_weights, self.num_experts, deepgemm.m_alignment, is_sm100()
+        hidden_states,
+        top_k_index,
+        top_k_weights,
+        self.num_experts,
+        deepgemm.m_alignment,
+        is_sm100(),
+        is_expert_parallel=self.is_expert_parallel,
     )
     sf_recipe = (1, 1, cast_kwargs["gran_k"]) if cast_kwargs.get("use_packed_ue8m0") else None
 

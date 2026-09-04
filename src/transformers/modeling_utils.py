@@ -43,7 +43,7 @@ from torch.autograd.graph import save_on_cpu
 from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
-from transformers.distributed.utils import is_dtensor
+from transformers.distributed.utils import is_dtensor, prefetch_checkpoint_shards
 
 from . import initialization as init
 from .configuration_utils import PreTrainedConfig
@@ -4345,6 +4345,8 @@ class PreTrainedModel(
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
         expected_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys
 
+        prefetch_checkpoint_shards(checkpoint_files)
+
         if logger.level >= logging.WARNING:
             verify_tp_plan(expected_keys, getattr(model, "_tp_plan", None))
 
@@ -4586,6 +4588,14 @@ class PreTrainedModel(
         return self._tp_size
 
     @property
+    def fsdp_size(self):
+        """
+        Returns the model's FSDP sharding degree.
+        """
+        # if None, the model didn't undergo FSDP sharding
+        return self._fsdp_size
+
+    @property
     def supports_pp_plan(self):
         # Check if model has a PP plan
         if self._pp_plan:
@@ -4741,6 +4751,16 @@ class PreTrainedModel(
                 except AttributeError:
                     pass  # may happen when handling pre-quantized weights
             self._is_hf_initialized = True
+
+        if getattr(self, "_device_mesh", None) is not None:
+            # Empty local shards have nothing to initialize; without the mark, running _init_weights on them issues collectives the other ranks never join (hang)
+            import itertools
+
+            from torch.distributed.tensor import DTensor
+
+            for param_or_buffer in itertools.chain(self.parameters(), self.buffers()):
+                if isinstance(param_or_buffer, DTensor) and param_or_buffer._local_tensor.numel() == 0:
+                    param_or_buffer._is_hf_initialized = True
 
         # This will only initialize submodules that are not marked as initialized by the line above.
         if is_deepspeed_zero3_enabled() and not is_quantized:
