@@ -382,6 +382,45 @@ expected_texts = Expectations(
 self.assertEqual(output, expected_texts)
 ```
 
+#### Gated checkpoints
+
+The CI workflows export `HF_TOKEN` for every test, so no decorator is needed to *authenticate* — a token is always
+present. What a token does not give you is authorization: gated repos keep a per-account allowlist, and the CI token
+belongs to the [`hf-transformers-bot`](https://huggingface.co/hf-transformers-bot) Hub account. Until that account is
+on the allowlist, every test touching the checkpoint fails with `You are trying to access a gated repo`.
+
+Nothing in the test suite can work around this, and nothing should: a missing allowlist entry is a fixable permission
+gap, so it has to stay visible until someone fixes it. Do not skip the test, and do not fall back to a tiny model —
+either one silently drops coverage of the real checkpoint.
+
+Instead, get the bot access. Check how the repo is gated first:
+
+```py
+from huggingface_hub import model_info
+
+print(model_info("neuphonic/neucodec", expand=["gated"]).gated)  # 'auto', 'manual', or False
+```
+
+- `"auto"` — submitting the access form once as `hf-transformers-bot` grants access immediately.
+- `"manual"` — the repo owner has to approve the request, so it can stay pending indefinitely.
+
+Either way the request has to be made **from a browser, while logged in as the bot**: the Hub has no
+requester-side API for this. The `huggingface_hub` methods that look relevant (`grant_access`,
+`accept_access_request`) are for repo *owners* and need a write token on the gated repo. Access is also always
+granted to an individual account, never to an organization, so it is specifically `hf-transformers-bot` that has to
+be allowlisted. Repos may ask for extra fields beyond the username and email (`neuphonic/neucodec`, for instance,
+asks for an affiliation and a role), so whoever does this has to fill the form in.
+
+Once it is done, confirm the bot can actually read the repo:
+
+```bash
+HF_TOKEN=<bot token> python -c "from huggingface_hub import auth_check; auth_check('neuphonic/neucodec')"
+```
+
+Contributors cannot do any of this themselves; the bot's credentials are held by the maintainers. Ask a maintainer on
+the PR. Note also that a repo owner can revoke access at any time without notice, even for an `"auto"` repo, so a
+checkpoint that used to work can start failing without anything changing in the codebase.
+
 ### Creating tiny models
 
 Tiny models with random weights live on the Hub under the [hf-internal-testing](https://huggingface.co/hf-internal-testing) organization. Pipeline tests rely on tiny models when they need a Hub-hosted checkpoint but don't care about output quality. Fast smoke tests also load tiny models to verify forward pass shapes without downloading large checkpoints.
