@@ -564,6 +564,10 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
+        # Avoid leaking device memory into the next test in this class.
+        del model
+        del inputs
+        del output
 
     @slow
     def test_small_model_integration_test_batch_different_resolutions(self):
