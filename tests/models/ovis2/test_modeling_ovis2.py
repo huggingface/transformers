@@ -14,8 +14,6 @@
 
 import unittest
 
-import requests
-
 from transformers import (
     AutoProcessor,
     Ovis2Config,
@@ -47,7 +45,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class Ovis2VisionText2TextModelTester:
@@ -366,7 +364,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
         )
 
         lowres_url = "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
-        lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
+        lowres_img = load_test_image(lowres_url)
 
         inputs_batched = self.processor(
             text=[self.text, self.text],

@@ -637,7 +637,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
         PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][/INST]"
 
-        # image = Image.open(requests.get(url, stream=True).raw)
+        # image = load_test_image(url)
         inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(torch_device, torch.float16)
         generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
         output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]

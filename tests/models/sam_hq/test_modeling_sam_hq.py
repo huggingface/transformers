@@ -17,7 +17,6 @@ import tempfile
 import unittest
 
 import pytest
-import requests
 
 from transformers import (
     SamHQConfig,
@@ -44,7 +43,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class SamHQVisionModelTester:
@@ -775,7 +774,7 @@ def prepare_image():
 
 def prepare_dog_img():
     img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dog-sam.png"
-    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+    raw_image = load_test_image(img_url).convert("RGB")
     return raw_image
 
 

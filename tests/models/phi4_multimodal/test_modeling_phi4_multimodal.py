@@ -45,6 +45,7 @@ from transformers.utils import is_torchcodec_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
@@ -359,7 +360,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         placeholder = ""
         for i in range(1, 5):
             url = f"https://image.slidesharecdn.com/azureintroduction-191206101932/75/Introduction-to-Microsoft-Azure-Cloud-{i}-2048.jpg"
-            images.append(Image.open(requests.get(url, stream=True).raw))
+            images.append(load_test_image(url))
             placeholder += "<|image|>"
 
         prompt = f"{self.user_token}{placeholder}Summarize the deck of slides.{self.end_token}{self.assistant_token}"

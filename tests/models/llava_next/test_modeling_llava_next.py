@@ -16,7 +16,6 @@
 import unittest
 
 import pytest
-import requests
 from huggingface_hub import hf_hub_download
 
 from transformers import (
@@ -52,7 +51,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class LlavaNextVisionText2TextModelTester(VLMModelTester):
@@ -132,7 +131,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
         url = "https://raw.githubusercontent.com/haotian-liu/LLaVA/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg"
-        self.image = Image.open(requests.get(url, stream=True).raw)
+        self.image = load_test_image(url)
 
         self.prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
 

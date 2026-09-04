@@ -38,6 +38,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, global_rng, ids_tensor, random_attention_mask
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -842,7 +843,9 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/belinda.wav",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/belinda.wav"
+                        ),
                     }
                 ],
             },
@@ -1294,7 +1297,9 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/belinda.wav",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/belinda.wav"
+                        ),
                     }
                 ],
             },
@@ -1326,7 +1331,9 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/macron.wav",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/macron.wav"
+                        ),
                     }
                 ],
             },

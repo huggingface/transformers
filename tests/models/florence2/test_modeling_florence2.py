@@ -15,8 +15,6 @@
 
 import unittest
 
-import requests
-
 from transformers import (
     AutoProcessor,
     Florence2Config,
@@ -45,7 +43,7 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class Florence2VisionText2TextModelTester:
@@ -269,17 +267,11 @@ def prepare_img():
 @require_torch
 class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.image1 = Image.open(
-            requests.get(
-                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg",
-                stream=True,
-            ).raw
+        self.image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )
-        self.image2 = Image.open(
-            requests.get(
-                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/car.jpg",
-                stream=True,
-            ).raw
+        self.image2 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/car.jpg"
         )
 
     def tearDown(self):
