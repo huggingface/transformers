@@ -448,7 +448,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
         )
         video_file = np.load(video_file)
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
 
         inputs = self.processor(

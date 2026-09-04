@@ -39,7 +39,9 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
         )
         cls.image_0 = np.random.randint(255, size=(3, 876, 1300), dtype=np.uint8)
-        cls.url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        cls.url_1 = (
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         cls.image_1 = np.random.randint(255, size=(3, 480, 640), dtype=np.uint8)
         cls.image_2 = np.random.randint(255, size=(3, 1024, 1024), dtype=np.uint8)
         cls.image_token = processor.image_token

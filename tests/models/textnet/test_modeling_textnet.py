@@ -297,7 +297,7 @@ class TextNetModelIntegrationTest(unittest.TestCase):
         model = TextNetModel.from_pretrained("czczup/textnet-base").to(torch_device)
 
         # prepare image
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
         inputs = processor(images=image, return_tensors="pt").to(torch_device)
 

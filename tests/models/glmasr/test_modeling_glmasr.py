@@ -101,7 +101,7 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
                     },
                     {"type": "text", "text": "Please transcribe this audio into text"},
                 ],
@@ -117,7 +117,7 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
         ).to(model.device, dtype=model.dtype)
 
         inputs_transcription = self.processor.apply_transcription_request(
-            "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
         ).to(model.device, dtype=model.dtype)
 
         for key in inputs:
@@ -184,7 +184,7 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "audio",
-                            "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
                         },
                         {"type": "text", "text": "Please transcribe this audio into text"},
                     ],
@@ -214,7 +214,7 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         inputs_transcription = self.processor.apply_transcription_request(
             [
-                "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
+                "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
                 "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
             ],
         ).to(model.device, dtype=model.dtype)

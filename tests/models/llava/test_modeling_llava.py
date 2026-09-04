@@ -598,7 +598,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = LlavaForConditionalGeneration.from_pretrained(model_id, dtype="float16", device_map=torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
-        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        image_file = (
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         raw_image = load_test_image(image_file)
         inputs = processor(
             text="<|im_start|>user\n<image>\nWhat are these?<|im_end|>\n<|im_start|>assistant",

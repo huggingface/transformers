@@ -603,7 +603,7 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     return image
 
@@ -615,7 +615,7 @@ def prepare_text():
 
 
 def prepare_img_batched():
-    url1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    url1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
     url2 = "http://images.cocodataset.org/train2017/000000257813.jpg"
     url3 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
 

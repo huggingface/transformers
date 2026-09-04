@@ -239,7 +239,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
         self.processor = AutoProcessor.from_pretrained(
             "thisisiron/Ovis2-2B-hf",
         )
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
         self.image = Image.open(requests.get(url, stream=True).raw)
         self.prompt_image = ""
         self.messages = [

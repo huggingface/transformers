@@ -524,7 +524,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", dtype="float16", device_map=torch_device
         )
 
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
         lowres_url = "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
         cats_image = Image.open(requests.get(url, stream=True).raw)
         lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
@@ -556,7 +556,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
             device_map=torch_device,
         )
 
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
         lowres_url = "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
         cats_image = Image.open(requests.get(url, stream=True).raw)
         lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)

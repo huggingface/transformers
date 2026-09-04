@@ -157,7 +157,10 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
                 "role": "user",
                 "content": [
                     {"type": "text", "text": "What's the difference between"},
-                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+                    },
                     {"type": "text", "text": " and "},
                     {
                         "type": "image",

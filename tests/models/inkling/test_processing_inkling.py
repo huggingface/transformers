@@ -326,8 +326,12 @@ class InklingProcessingIntegrationTest(unittest.TestCase):
     IMAGE_SENTINEL = -101
     AUDIO_SENTINEL = -102
 
-    IMAGE_URL = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    IMAGE_URL_2 = "http://images.cocodataset.org/val2017/000000000139.jpg"
+    IMAGE_URL = (
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    )
+    IMAGE_URL_2 = (
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000139.jpg"
+    )
     AUDIO_URL = (
         "https://huggingface.co/datasets/adarshxs/voxcpm2-native-generated-audio-user-ref/resolve/main/zs_medium.wav"
     )

@@ -154,7 +154,9 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # model weights in baidu/Qianfan-OCR will be updated after this PR get released in transformers,
         # use bairongz/QianfanOCR for testing and will update back to baidu/Qianfan-OCR after weight update
         self.model_checkpoint = "bairongz/QianfanOCR"
-        self.image_url = url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg")
+        self.image_url = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):

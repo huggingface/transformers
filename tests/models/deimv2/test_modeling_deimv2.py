@@ -1608,7 +1608,9 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 def prepare_img():
     from transformers.image_utils import load_image
 
-    url = url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg")
+    url = url_to_local_path(
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    )
     return load_image(url)
 
 
