@@ -3952,11 +3952,14 @@ class PreTrainedModel(
                 A dictionary device identifier to maximum memory if using `device_map`. Will default to the maximum memory available for each
                 GPU and the available CPU RAM if unset.
             distributed_config ([`~transformers.distributed.configuration_utils.DistributedConfig`], *optional*):
-                Configuration for native distributed loading with tensor parallelism or FSDP2. Pass
+                Configuration for native distributed loading with tensor parallelism, pipeline parallelism, or FSDP2. Pass
                 `DistributedConfig(tp_size=N)` to use a model's predefined tensor parallel plan,
-                `DistributedConfig(tp_plan=...)` to specify a tensor parallel plan, or
+                `DistributedConfig(tp_plan=...)` to specify a tensor parallel plan,
+                `DistributedConfig(pp_size=N)` for pipeline parallel inference, or
                 `DistributedConfig(fsdp_size=N)` for FSDP2. Requires `torchrun` and an initialized
-                process group when `tp_size > 1` or `fsdp_size > 1`. Mutually exclusive with `device_map`.
+                process group when `tp_size > 1`, `pp_size > 1`, or `fsdp_size > 1`. Do not pass
+                `device_map`. Tensor parallelism raises if `device_map` is set. Pipeline parallelism
+                overwrites `device_map` to the local device.
             device_mesh (`torch.distributed.DeviceMesh`, *optional*):
                 A torch device mesh. If not provided would default to world size. Used only for tensor parallel for now.
                 If provided, it has to contain dimension named `"tp"` in case it's > 1 dimensional, this dimension will be used for tensor parallelism

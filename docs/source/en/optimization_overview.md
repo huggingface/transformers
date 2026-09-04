@@ -123,7 +123,7 @@ outputs = model.generate(**inputs, do_sample=False, max_new_tokens=50, cache_imp
 
 [Parallelism](./perf_infer_gpu_multi) distributes a model across devices so models too big for one device run fast. This approach uses more memory due to sharding overhead and communication to sync results.
 
-[Tensor parallelism](./perf_infer_gpu_multi) splits a model layer across devices. Set the number of devices with `DistributedConfig(tp_size=N)` and pass it to [`~PreTrainedModel.from_pretrained`] to enable it.
+[Tensor parallelism](./perf_infer_gpu_multi) splits a model layer across devices. Set the number of devices with `DistributedConfig(tp_size=N)` and pass it to [`~PreTrainedModel.from_pretrained`] to enable it. To place whole layers on different devices instead, use [pipeline parallelism for inference](./pipeline_parallel_inference) with `DistributedConfig(pp_size=N)`.
 
 ```py
 from transformers import AutoModelForCausalLM, DistributedConfig

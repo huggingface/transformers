@@ -130,6 +130,8 @@
       title: Extending the exporters
     - local: perf_infer_gpu_multi
       title: Tensor parallelism for inference
+    - local: pipeline_parallel_inference
+      title: Pipeline parallelism for inference
     - local: expert_parallelism
       title: Expert parallelism
     - local: cache_explanation
