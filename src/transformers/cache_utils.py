@@ -157,6 +157,22 @@ class DynamicLayer(CacheLayerMixin):
             return 0
         return self.keys.shape[-2]
 
+    def reset(self) -> None:
+        """Reset the layer to its uninitialized (empty) state.
+
+        A dynamic layer has no separate length counter -- its length *is* its
+        tensor shape -- so zeroing the tensors in place (the base implementation)
+        would leave ``get_seq_length()`` reporting the old length and
+        ``is_initialized`` ``True``, and the next ``update()`` would concatenate
+        onto the stale zeros.
+        """
+        self.keys = None
+        self.values = None
+        self.is_initialized = False
+        # Present on DynamicSlidingWindowLayer (always an int for dynamic layers).
+        if hasattr(self, "cumulative_length"):
+            self.cumulative_length = 0
+
     def get_max_length(self) -> int:
         """Returns the maximum sequence length of the cache object. DynamicLayer does not have a maximum length."""
         return -1
@@ -362,8 +378,10 @@ class DynamicIndexedLayer(DynamicLayer):
 
     def reset(self) -> None:
         super().reset()
-        if self.is_indexer_initialized:
-            self.indexer_keys.zero_()
+        # The indexer key cache also grows by concatenation, so it must be
+        # emptied rather than zeroed in place (see DynamicLayer.reset).
+        self.indexer_keys = None
+        self.is_indexer_initialized = False
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         super().reorder_cache(beam_idx)
