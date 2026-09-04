@@ -750,6 +750,7 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
     def install_forward(self, module, mesh, *, is_expert_parallel=False):
         from ..integrations.moe import dispatch_experts_forward
 
+        original_forward = module.forward
         ep_mesh = mesh if mesh.ndim == 1 else mesh["tp"]
         ep_group, ep_size = ep_mesh.get_group(), ep_mesh.size()
 
@@ -757,7 +758,10 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
             if isinstance(hidden_states, DTensor):
                 hidden_states = hidden_states.to_local()
             with self.context_around_forward(module, mesh):
-                return dispatch_experts_forward(module, hidden_states, top_k_index, top_k_weights, ep_group, ep_size)
+                # The sharding leaves the module with its local expert count.
+                return dispatch_experts_forward(
+                    original_forward, module.num_experts, hidden_states, top_k_index, top_k_weights, ep_group, ep_size
+                )
 
         module.forward = tp_forward
         return module
