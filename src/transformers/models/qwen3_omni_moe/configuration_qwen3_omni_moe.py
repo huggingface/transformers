@@ -88,6 +88,8 @@ class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
 
     model_type = "qwen3_omni_moe_vision_encoder"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -102,6 +104,7 @@ class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
     num_position_embeddings: int = 2304
     deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")

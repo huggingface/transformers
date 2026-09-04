@@ -420,7 +420,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(**processor_components)
 
         input_str = "lower newer"
-        orig_image_input = self.prepare_image_inputs()
+        orig_image_input = self.prepare_images_inputs()
         orig_image = np.array(orig_image_input).transpose(2, 0, 1)
 
         inputs = processor(text=input_str, images=orig_image, do_resize=False, do_pad=False, return_tensors="pt")

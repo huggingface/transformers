@@ -69,6 +69,13 @@ class Qwen3_5TextModelTester(CausalLMModelTester):
         super().__init__(parent=parent)
         self.hidden_act = "silu"
         self.layer_types = ["full_attention", "linear_attention"]
+        self.rope_parameters = {
+            "rope_type": "default",
+            "rope_theta": 10_000,
+            "mrope_section": [2, 1, 1],
+            "mrope_interleaved": True,
+        }
+        self.head_dim = 32
         self.linear_conv_kernel_dim = 2
         self.linear_key_head_dim = 16
         self.linear_value_head_dim = 16
@@ -145,10 +152,6 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(out_len + 1, len(outputs))
             self.assertEqual(len(self_attentions), sum(layer == "full_attention" for layer in config.layer_types))
             self.assertListEqual(list(self_attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len])
-
-    @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
 
     @unittest.skip("Intentionally not reversable (no changes) as only load time within a VLM depends on this")
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
@@ -255,7 +258,7 @@ class Qwen3_5VisionText2TextModelTester:
             "eos_token_id": 1,
             "pad_token_id": 2,
             "hidden_act": "silu",
-            "head_dim": 8,
+            "head_dim": 32,
             "hidden_size": 32,
             "vocab_size": 99,
             "intermediate_size": 37,
@@ -265,9 +268,13 @@ class Qwen3_5VisionText2TextModelTester:
             "num_hidden_layers": 2,
             "layer_types": ["full_attention", "linear_attention"],
             "num_key_value_heads": 2,
-            "rope_theta": 10000,
             "tie_word_embeddings": True,
-            "rope_parameters": {"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True},
+            "rope_parameters": {
+                "rope_type": "default",
+                "rope_theta": 10_000,
+                "mrope_section": [2, 1, 1],
+                "mrope_interleaved": True,
+            },
             "linear_conv_kernel_dim": 2,
             "linear_key_head_dim": 16,
             "linear_value_head_dim": 16,
@@ -311,7 +318,6 @@ class Qwen3_5VisionText2TextModelTester:
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.num_attention_heads = text_config["num_attention_heads"]
         self.num_key_value_heads = text_config["num_key_value_heads"]
-        self.rope_theta = text_config["rope_theta"]
         self.rope_parameters = text_config["rope_parameters"]
         self.hidden_act = text_config["hidden_act"]
         self.max_position_embeddings = text_config["max_position_embeddings"]
@@ -723,10 +729,6 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 mm_token_type_ids=mm_token_type_ids,
             )
             self.assertIsNotNone(outputs)
-
-    @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
 
 
 @require_torch

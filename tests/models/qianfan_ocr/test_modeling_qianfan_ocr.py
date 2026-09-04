@@ -140,10 +140,6 @@ class QianfanOCRModelTest(VLMModelTest, unittest.TestCase):
     def test_flash_attn_2_fp32_ln(self):
         pass
 
-    @unittest.skip("DataParallel is a deprecated legacy API and not officially supported")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
 
 @slow
 @require_torch_accelerator

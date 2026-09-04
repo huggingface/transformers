@@ -232,10 +232,6 @@ class Glm46VModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip(reason="Size mismatch")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip("Error with compilation")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass

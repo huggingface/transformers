@@ -58,6 +58,7 @@ if is_torch_available():
         Gemma4Processor,
         Gemma4TextModel,
     )
+    from transformers.cache_utils import StaticCache
     from transformers.models.gemma4.modeling_gemma4 import create_masks_for_vision_model
 
 
@@ -776,6 +777,30 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         # Verify that causal masking still applies correctly to text
         # Token 11 (image) looking ahead at Token 12 (text) -> MASKED
         self.assertLess(full_mask[0, 0, 11, 12].item(), -1000)
+
+    def test_vision_mask_with_cache_beyond_sliding_window(self):
+        """Regression test, see the Gemma 3 test of the same name.
+
+        Once the cache is longer than the sliding window, sliding and full attention layers report
+        different `kv_length`s. The vision mask has to be built for a sliding layer, otherwise the
+        sliding mask ends up sized against a full attention layer and the forward pass crashes.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.text_config._attn_implementation = "eager"
+        config.text_config.sliding_window = 4
+
+        model = Gemma4ForConditionalGeneration(config).to(torch_device).eval()
+        batch_size, prompt_length = inputs_dict["input_ids"].shape
+        past_key_values = StaticCache(
+            config=config.get_text_config(),
+            max_batch_size=batch_size,
+            max_cache_len=prompt_length + 8,  # longer than the sliding window
+            device=torch_device,
+            dtype=model.dtype,
+        )
+
+        with torch.no_grad():
+            model(**inputs_dict, past_key_values=past_key_values, use_cache=True)
 
 
 @slow

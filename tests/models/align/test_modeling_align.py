@@ -460,10 +460,6 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_batching_equivalence(self, atol=3e-4, rtol=3e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
 
-    @unittest.skip(reason="Start to fail after using torch `cu118`.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
