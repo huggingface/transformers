@@ -490,7 +490,7 @@ class TensorParallelTesterMixin(ABC):
         return hasattr(config, "base_model_ep_plan") and config.base_model_ep_plan is not None
 
     def _has_fsdp_plan(self) -> bool:
-        """Check if model has an expert parallel plan defined."""
+        """Check if model has an FSDP plan defined."""
         config = self.model_tester.get_config()
         return hasattr(config, "base_model_fsdp_plan") and config.base_model_fsdp_plan is not None
 
