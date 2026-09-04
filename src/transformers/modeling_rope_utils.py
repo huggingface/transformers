@@ -844,9 +844,6 @@ class RotaryEmbeddingConfigMixin:
             rope_parameters_dict = {"full_attention": rope_parameters_dict}
 
         head_dim = getattr(self, "head_dim", None)
-        if head_dim is None and hasattr(self, "hidden_size") and hasattr(self, "num_attention_heads"):
-            if self.num_attention_heads > 0:
-                head_dim = self.hidden_size // self.num_attention_heads
 
         for layer_type, rope_parameters in rope_parameters_dict.items():
             # skip when set to `None`, possibly a NoPE layer
