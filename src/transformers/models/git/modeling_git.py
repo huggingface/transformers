@@ -788,11 +788,6 @@ class GitModel(GitPreTrainedModel):
                 else past_key_values.get_seq_length()
             )
 
-        # Adjust position ids by adding image seq length
-        seq_len = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-        if pixel_values is None and past_key_values is not None and seq_len == 1:
-            position_ids = position_ids + past_key_values_length
-
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
@@ -841,11 +836,16 @@ class GitModel(GitPreTrainedModel):
                 attention_mask = torch.cat(
                     [torch.ones_like(image_token_type_ids, dtype=attention_mask.dtype), attention_mask], dim=-1
                 )
-        elif past_key_values is not None and seq_len == 1:
-            # Expand attention mask and cache position with image tokens because GIT doesn't add image
-            # placeholder tokens when processing. Doesn't worth the refactor, low usage!
+        elif (
+            past_key_values is not None
+            and past_key_values_length > 0
+            and attention_mask is not None
+            and attention_mask.ndim == 2
+        ):
+            # GIT keeps the image tokens in the cache without placeholder tokens in `input_ids`, so the
+            # incoming padding mask is narrower than the cache — widen it over the cached image tokens.
             extended_attention_mask = torch.ones(
-                (attention_mask.shape[0], past_key_values_length - attention_mask.shape[1] + 1),
+                (attention_mask.shape[0], self.encoder.layer[0].attention.self.image_patch_tokens),
                 dtype=attention_mask.dtype,
                 device=attention_mask.device,
             )

@@ -530,7 +530,7 @@ class GitModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.sequences.shape, expected_shape)
         self.assertEqual(generated_caption, "two cats laying on a pink blanket")
         self.assertTrue(outputs.scores[-1].shape, expected_shape)
-        expected_slice = torch.tensor([-0.8126, -0.8123, -0.8119], device=torch_device)
+        expected_slice = torch.tensor([-0.8800, -0.8798, -0.8794], device=torch_device)
         torch.testing.assert_close(outputs.scores[-1][0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_visual_question_answering(self):
@@ -573,7 +573,7 @@ class GitModelIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=50)
         generated_captions = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        self.assertEqual(generated_captions, ["two cats sleeping on a couch"] * 2)
+        self.assertEqual(generated_captions, ["two cats sleeping on a pink blanket next to remotes."] * 2)
 
     @slow
     def test_inference_interpolate_pos_encoding(self):

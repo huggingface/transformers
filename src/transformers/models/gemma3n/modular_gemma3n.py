@@ -2432,6 +2432,9 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
             audio_hidden_states=outputs.audio_hidden_states,
         )
 
+    def _update_model_kwargs_for_generation(self, **super_kwargs):
+        raise AttributeError("PaliGemma's token_type_ids mark its prefix, Gemma3n's mark image spans!")
+
     def prepare_inputs_for_generation(self, **super_kwargs):
         raise NotImplementedError("Do not inherit prepare_inputs_for_generation from PaliGemma")
 

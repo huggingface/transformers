@@ -886,6 +886,9 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             image_hidden_states=outputs.image_hidden_states,
         )
 
+    def _update_model_kwargs_for_generation(self, **super_kwargs):
+        raise AttributeError("PaliGemma's token_type_ids mark its prefix, Gemma3's mark image spans!")
+
     def prepare_inputs_for_generation(self, input_ids, use_cache=True, is_first_iteration=False, **kwargs):
         model_inputs = super().prepare_inputs_for_generation(
             input_ids, use_cache=use_cache, is_first_iteration=is_first_iteration, **kwargs
