@@ -144,7 +144,7 @@ class TensorParallelLayer:
     def transform_output_post_forward(self, module, output, mesh):
         return output
 
-    def install_forward(self, module, mesh, *, expert_parallel_dispatch=False):
+    def install_forward(self, module, mesh):
         """Install pre / around / post transforms by replacing module.forward."""
         original_forward = module.forward
 
@@ -344,7 +344,7 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
     summed across the mesh.
     """
 
-    def install_forward(self, module, mesh, *, expert_parallel_dispatch=False):
+    def install_forward(self, module, mesh):
         # A module hook rather than `param.register_hook`: params are replaced during weight
         # loading, which happens after TP is applied, and would drop a param-level hook.
         def _all_reduce_grads(mod, grad_input, grad_output):
@@ -415,7 +415,7 @@ class SequenceParallel(TensorParallelLayer):
         self.sequence_dim = sequence_dim
         self.use_local_output = use_local_output
 
-    def install_forward(self, module, mesh, *, expert_parallel_dispatch=False):
+    def install_forward(self, module, mesh):
         # Replicate the module's params (LayerNorm/RMSNorm ones-init → from_local is safe).
         for p_name, p in list(module.named_parameters(recurse=False)):
             module.register_parameter(
@@ -604,7 +604,7 @@ class MoeExpertsParallel(TensorParallelLayer):
 
         return (hidden_states, *routing_args), kwargs
 
-    def install_forward(self, module, mesh, *, is_expert_parallel=False, expert_parallel_dispatch=False):
+    def install_forward(self, module, mesh, *, is_expert_parallel=False):
         """Install the transforms but pass `is_expert_parallel` in the forward call."""
         original_forward = module.forward
         output_source = (
@@ -616,23 +616,7 @@ class MoeExpertsParallel(TensorParallelLayer):
             else Replicate()
         )
 
-        if expert_parallel_dispatch:
-            from ..integrations.moe import dispatch_experts_forward
-
-            ep_mesh = mesh if mesh.ndim == 1 else mesh["tp"]
-            ep_group, ep_size = ep_mesh.get_group(), ep_mesh.size()
-
         def tp_forward(*args, **kwargs):
-            if expert_parallel_dispatch:
-                # Every rank routes its own tokens to the experts' owners; nothing is replicated across
-                # the group, so there is neither an input gradient sum nor an output all-reduce.
-                hidden_states, top_k_index, top_k_weights = args[:3]
-                if isinstance(hidden_states, DTensor):
-                    hidden_states = hidden_states.to_local()
-                with self.context_around_forward(module, mesh):
-                    return dispatch_experts_forward(
-                        module, hidden_states, top_k_index, top_k_weights, ep_group, ep_size
-                    )
             args, kwargs = self.transform_inputs_pre_forward(
                 module, args, kwargs, mesh, is_expert_parallel=is_expert_parallel
             )
@@ -711,14 +695,7 @@ class EpRouterParallel(TensorParallelLayer):
     Scores and indices stay paired element-wise in `(seq, top_k)` shape.
     """
 
-    def install_forward(self, module, mesh, *, expert_parallel_dispatch=False):
-        module.expert_parallel_dispatch = expert_parallel_dispatch
-        return super().install_forward(module, mesh)
-
     def transform_output_post_forward(self, module, output, mesh):
-        if module.expert_parallel_dispatch:
-            # The experts forward sends every token to its experts' owners, so it needs the global ids.
-            return output
         ep_rank, ep_size = mesh.get_local_rank(), mesh.size()
         num_experts = getattr(module, "num_experts", None)
         if num_experts is None:
@@ -760,6 +737,32 @@ class RouterParallelMegaMoe(EpRouterParallel):
         return output
 
 
+class EpDispatchRouterParallel(TensorParallelLayer):
+    """Router of expert-parallel token dispatch: the experts forward needs the global expert ids and scores."""
+
+
+class EpDispatchExpertsParallel(MoeExpertsParallel):
+    """
+    Experts of expert-parallel token dispatch: every rank routes its own tokens to the experts' owners, so nothing is
+    replicated across the group and the forward has neither an input gradient sum nor an output all-reduce.
+    """
+
+    def install_forward(self, module, mesh, *, is_expert_parallel=False):
+        from ..integrations.moe import dispatch_experts_forward
+
+        ep_mesh = mesh if mesh.ndim == 1 else mesh["tp"]
+        ep_group, ep_size = ep_mesh.get_group(), ep_mesh.size()
+
+        def tp_forward(hidden_states, top_k_index, top_k_weights, *args, **kwargs):
+            if isinstance(hidden_states, DTensor):
+                hidden_states = hidden_states.to_local()
+            with self.context_around_forward(module, mesh):
+                return dispatch_experts_forward(module, hidden_states, top_k_index, top_k_weights, ep_group, ep_size)
+
+        module.forward = tp_forward
+        return module
+
+
 class MoeTensorParalellMegaMoeExperts(MoeExpertsParallel):
     """TP layer for DeepGEMM Mega MoE experts.
 
@@ -797,6 +800,8 @@ class ParallelInterface(GeneralInterface):
             "sequence_parallel": SequenceParallel(use_local_output=True),
             "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
             "ep_router": EpRouterParallel(),
+            "ep_dispatch_router": EpDispatchRouterParallel(),
+            "ep_dispatch_experts": EpDispatchExpertsParallel(),
             "megamoe_router": RouterParallelMegaMoe(),
             "moe_tp_experts": MoeExpertsParallel(),
             "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
@@ -826,13 +831,17 @@ def apply_tensor_parallelism(model, tp_mesh):
     """DTensor backend: shard params as placeholders and install TP forward hooks."""
     if model.config.distributed_config.expert_parallel_dispatch:
         # Every rank trains on its own part of the batch, which tensor parallelism cannot do: only the experts can
-        # be sharded across the group.
+        # be sharded across the group, and the router and experts styles become their dispatch versions.
         other_styles = set(model.tp_plan.values()) - {"ep_router", "grouped_gemm", "moe_tp_experts"}
         if other_styles:
             raise ValueError(
                 "`expert_parallel_dispatch=True` needs an expert parallel plan that only shards the experts, but "
                 f"this model's plan also uses {sorted(other_styles)}."
             )
+        model.tp_plan = {
+            name: {"ep_router": "ep_dispatch_router", "moe_tp_experts": "ep_dispatch_experts"}.get(style, style)
+            for name, style in model.tp_plan.items()
+        }
 
     _validate_tp_plan_styles(model.tp_plan)
 
@@ -853,9 +862,7 @@ def apply_tensor_parallelism(model, tp_mesh):
                 # MLA needs to know the qk_rope_head_dim to split the projection output into KV and RoPE parts.
                 # TODO: Store qk_rope_head_dim on MLA projection modules when the models initialize them.
                 module.config = model.config.get_text_config()
-            ALL_PARALLEL_STYLES[style_name].install_forward(
-                module, tp_mesh, expert_parallel_dispatch=model.config.distributed_config.expert_parallel_dispatch
-            )
+            ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
         module._is_hooked = True
 
     return model

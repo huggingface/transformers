@@ -621,6 +621,11 @@ class Trainer:
         # treats the `tp` ranks as one data-parallel rank: the batches and the token counts are handled here.
         distributed_config = getattr(getattr(model, "config", None), "distributed_config", None)
         self._expert_parallel_dispatch = distributed_config is not None and distributed_config.expert_parallel_dispatch
+        if self._expert_parallel_dispatch and args.train_sampling_strategy != "random":
+            raise ValueError(
+                "`expert_parallel_dispatch=True` splits the batches across every rank with a `DistributedSampler`, "
+                f"which `train_sampling_strategy='{args.train_sampling_strategy}'` does not go through."
+            )
         if (
             getattr(model, "_device_mesh", None) is not None
             and args.save_strategy != SaveStrategy.NO
@@ -1137,7 +1142,11 @@ class Trainer:
             if self._expert_parallel_dispatch:
                 # accelerate hands every `tp` rank the same batch; under token dispatch each rank gets its own.
                 return DistributedSampler(
-                    train_dataset, num_replicas=self.args.world_size, rank=self.args.process_index, seed=self.args.seed
+                    train_dataset,
+                    num_replicas=self.args.world_size,
+                    rank=self.args.process_index,
+                    seed=self.args.seed,
+                    drop_last=self.args.dataloader_drop_last,
                 )
             return RandomSampler(train_dataset)
 
@@ -2166,10 +2175,7 @@ class Trainer:
         ):
             # TP and EP-as-TP ranks see replicated batches; `num_processes` over-counts
             # them by `tp_size`. Mirror the divisor used in `_get_num_items_in_batch`.
-            loss_scale = self.accelerator.num_processes
-            pc = getattr(self.accelerator, "parallelism_config", None)
-            if pc is not None and not self._expert_parallel_dispatch:
-                loss_scale //= pc.tp_size
+            loss_scale = self.accelerator.num_processes // self.get_tp_size()
             loss *= loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
 
         return (loss, outputs) if return_outputs else loss
@@ -2318,10 +2324,9 @@ class Trainer:
                     # In the DataParallel case, convert the scalar tensor into a 2-dim tensor with the same value repeated
                     num_items_in_batch = num_items_in_batch.unsqueeze(0).expand(self.args.n_gpu, -1)
                 # Divide by number of devices with the same batch
-                if (
-                    pc := getattr(self.accelerator, "parallelism_config", None)
-                ) and not self._expert_parallel_dispatch:
-                    num_items_in_batch = num_items_in_batch // pc.non_data_parallel_size
+                num_items_in_batch = num_items_in_batch // (
+                    self.get_tp_size() * self.get_cp_size() * self.get_sp_size()
+                )
 
         return num_items_in_batch
 
@@ -2558,7 +2563,9 @@ class Trainer:
     def get_tp_size(self) -> int:
         """Get the tensor parallel size from either the model or DeepSpeed config."""
 
-        # 1. Check model.tp_size first
+        # 1. Check model.tp_size first; with expert-parallel token dispatch the `tp` ranks train on their own batches
+        if self._expert_parallel_dispatch:
+            return 1
         if (model_tp := getattr(self.model, "_tp_size", None)) is not None:
             return model_tp
 

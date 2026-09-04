@@ -216,9 +216,7 @@ class DistributedMixin:
                 # their gradient reduction. The experts stay sharded across `tp` and, if any, across `fsdp`.
                 trunk_mesh = device_mesh._flatten("fsdp_tp") if device_mesh.ndim > 1 else device_mesh
                 expert_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else None
-                model = apply_fully_sharded_data_parallelism(
-                    model, trunk_mesh, expert_parallel_dispatch=True, expert_mesh=expert_mesh
-                )
+                model = apply_fully_sharded_data_parallelism(model, trunk_mesh, expert_mesh=expert_mesh)
             elif distributed_config.fsdp_size > 1:
                 fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
                 model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
