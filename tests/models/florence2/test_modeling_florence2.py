@@ -36,6 +36,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -260,7 +261,7 @@ class Florence2ForConditionalGenerationModelTest(
 
 def prepare_img():
     url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    image = load_test_image(url)
     return image
 
 

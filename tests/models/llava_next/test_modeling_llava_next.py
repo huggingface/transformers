@@ -40,6 +40,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import check_torch_load_is_safe
 
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -189,7 +190,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             "llava-hf/llava-v1.6-mistral-7b-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
         )
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-        cats_image = Image.open(requests.get(url, stream=True).raw)
+        cats_image = load_test_image(url)
 
         inputs = self.processor(
             images=[self.image, cats_image],
@@ -243,8 +244,8 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
         lowres_url = "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
-        cats_image = Image.open(requests.get(url, stream=True).raw)
-        lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
+        cats_image = load_test_image(url)
+        lowres_img = load_test_image(lowres_url)
 
         inputs = self.processor(
             images=[lowres_img, cats_image], text=[self.prompt, self.prompt], return_tensors="pt", padding=True
@@ -290,8 +291,8 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
         lowres_url = "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
-        cats_image = Image.open(requests.get(url, stream=True).raw)
-        lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
+        cats_image = load_test_image(url)
+        lowres_img = load_test_image(lowres_url)
 
         inputs_batched = self.processor(
             images=[lowres_img, cats_image], text=[self.prompt, self.prompt], return_tensors="pt", padding=True

@@ -15,9 +15,6 @@
 
 import unittest
 
-import requests
-from PIL import Image
-
 from transformers import TextNetConfig, TextNetImageProcessorPil
 from transformers.testing_utils import (
     require_torch,
@@ -29,6 +26,7 @@ from transformers.utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -298,7 +296,7 @@ class TextNetModelIntegrationTest(unittest.TestCase):
 
         # prepare image
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = load_test_image(url)
         inputs = processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass

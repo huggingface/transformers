@@ -19,7 +19,6 @@ import unittest
 
 import numpy as np
 import pytest
-import requests
 from parameterized import parameterized
 
 from transformers import MetaClip2Config, MetaClip2TextConfig, MetaClip2VisionConfig
@@ -35,6 +34,7 @@ from transformers.utils import (
 )
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
@@ -60,8 +60,6 @@ if is_torch_available():
     )
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import CLIPProcessor
 
 
@@ -686,7 +684,7 @@ class MetaClip2ForImageClassificationModelTest(MetaClip2ModelTesterMixin, Pipeli
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    im = load_test_image(url)
     return im
 
 

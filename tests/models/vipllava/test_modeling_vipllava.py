@@ -17,7 +17,6 @@ import copy
 import unittest
 
 import pytest
-import requests
 from parameterized import parameterized
 
 from transformers import (
@@ -39,6 +38,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
@@ -46,7 +46,7 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 # Copied from transformers.tests.models.llava.test_modeling_llava.LlavaVisionText2TextModelTester with Llava->VipLlava
@@ -295,7 +295,7 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/compel-neg.png"
 
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = load_test_image(url)
         prompt = "USER: <image>\nCan you please describe this image?\nASSISTANT:"
 
         inputs = processor(text=prompt, images=image, return_tensors="pt").to(torch_device, torch.float16)

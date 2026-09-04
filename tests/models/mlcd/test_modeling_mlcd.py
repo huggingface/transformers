@@ -15,9 +15,6 @@
 
 import unittest
 
-import requests
-from PIL import Image
-
 from transformers import (
     AutoProcessor,
     MLCDVisionConfig,
@@ -31,6 +28,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 
@@ -155,7 +153,7 @@ class MLCDVisionModelIntegrationTest(unittest.TestCase):
 
         # process single image
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = load_test_image(url)
         inputs = processor(images=image, return_tensors="pt")
 
         # move inputs to the same device as the model

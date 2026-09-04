@@ -18,7 +18,6 @@ import unittest
 
 import numpy as np
 import pytest
-import requests
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
@@ -42,6 +41,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
@@ -49,7 +49,7 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class VideoLlavaVisionText2TextModelTester:
@@ -449,7 +449,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
         video_file = np.load(video_file)
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = load_test_image(url)
 
         inputs = self.processor(
             text=prompts, images=[image], videos=[video_file], padding=True, return_tensors="pt"

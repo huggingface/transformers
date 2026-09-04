@@ -33,6 +33,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -240,7 +241,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
             "thisisiron/Ovis2-2B-hf",
         )
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-        self.image = Image.open(requests.get(url, stream=True).raw)
+        self.image = load_test_image(url)
         self.prompt_image = ""
         self.messages = [
             {
@@ -306,7 +307,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
         )
 
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2014/COCO_val2014_000000537955.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = load_test_image(url)
         prompt = [
             {
                 "role": "user",
@@ -336,7 +337,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
         )
 
         lowres_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2014/COCO_val2014_000000537955.jpg"
-        lowres_img = Image.open(requests.get(lowres_url, stream=True).raw).resize((320, 240))
+        lowres_img = load_test_image(lowres_url).resize((320, 240))
 
         inputs = self.processor(
             text=[self.text, self.text],

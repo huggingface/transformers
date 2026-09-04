@@ -18,13 +18,13 @@ import unittest
 from functools import cached_property
 
 import pytest
-import requests
 
 from transformers import VitPoseBackboneConfig, VitPoseConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
@@ -35,7 +35,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 if is_torchvision_available():
@@ -251,7 +251,7 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
 # We will verify our results on an image of people in house
 def prepare_img():
     url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000139.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    image = load_test_image(url)
     return image
 
 

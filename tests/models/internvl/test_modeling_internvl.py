@@ -40,6 +40,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -233,7 +234,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             self.small_model_checkpoint, device_map=torch_device, dtype=torch.float16
         )
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = load_test_image(url)
 
         prompt = (
             "<|im_start|>user\n<IMG_CONTEXT>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
@@ -264,7 +265,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             self.small_model_checkpoint, device_map=torch_device, dtype=torch.float16
         )
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = load_test_image(url)
 
         prompt = (
             "<|im_start|>user\n<IMG_CONTEXT>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
@@ -636,7 +637,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             self.small_model_checkpoint, device_map=torch_device, dtype=torch.float16
         )
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = load_test_image(url)
 
         prompt = (
             "<|im_start|>user\n<IMG_CONTEXT>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
@@ -656,7 +657,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             self.small_model_checkpoint, device_map=torch_device, dtype=torch.float16
         )
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = load_test_image(url)
 
         prompt = (
             "<|im_start|>user\n<IMG_CONTEXT>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"

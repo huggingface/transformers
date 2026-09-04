@@ -37,6 +37,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
@@ -348,7 +349,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image_file = (
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        raw_image = load_test_image(image_file)
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt")
         EXPECTED_INPUT_IDS = torch.tensor([[257152] * 256 + [2, 108]])
         self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
@@ -407,7 +408,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image_file = (
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        raw_image = load_test_image(image_file)
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
@@ -427,7 +428,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image_file = (
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        raw_image = load_test_image(image_file)
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
@@ -566,7 +567,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
 
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        raw_image = load_test_image(image_file)
         inputs = self.processor(
             images=raw_image,
             text=prompt,

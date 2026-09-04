@@ -20,7 +20,6 @@ import unittest
 
 import numpy as np
 import pytest
-import requests
 from parameterized import parameterized
 
 from transformers import AutoProcessor, Kosmos2_5Config
@@ -42,6 +41,7 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -58,7 +58,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class Kosmos2_5VisionModelTester:
@@ -556,7 +556,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
 
     def test_eager(self):
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/receipt_00008.png"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = load_test_image(url)
 
         dtype = torch.bfloat16
         repo = "microsoft/kosmos-2.5"
@@ -597,7 +597,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
 
     def test_sdpa(self):
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/receipt_00008.png"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = load_test_image(url)
 
         dtype = torch.bfloat16
         repo = "microsoft/kosmos-2.5"
@@ -648,7 +648,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_FA2(self):
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/receipt_00008.png"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = load_test_image(url)
 
         dtype = torch.bfloat16
         repo = "microsoft/kosmos-2.5"
