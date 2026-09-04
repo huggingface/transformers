@@ -270,6 +270,7 @@ class KimiLinearDecoderLayer(DeepseekV32DecoderLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
+        # Self attn
         hidden_states = self.input_layernorm(hidden_states)
         if self.layer_type == "linear_attention":
             hidden_states = self.self_attn(
