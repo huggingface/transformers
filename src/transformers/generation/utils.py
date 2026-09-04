@@ -410,9 +410,6 @@ class DeferredStopCheck(StopCheck):
         # We only need to care about rollbacking the cache if we are going to return the Cache, i.e. if the user requested additional
         # outputs or if the user passed an explicit Cache object
         self.cache = cache if cache_is_returned else None
-        # `self.cache`, not `cache`: recording is only for the rollback, and there is no rollback when the cache
-        # is not returned. Switching it on regardless keeps sliding-window layers from being trimmed, and stops
-        # kernels that write the cache in place from taking their fused path.
         if self.cache is not None:
             self.cache.activate_past_recording()
         pinned = input_ids.device.type == "cuda"
