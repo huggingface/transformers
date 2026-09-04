@@ -2,6 +2,7 @@ import gc
 import os
 import tempfile
 import unittest
+from types import SimpleNamespace
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, CompressedTensorsConfig
 from transformers.testing_utils import (
@@ -59,6 +60,142 @@ class CompressedTensorsTest(unittest.TestCase):
         from compressed_tensors import QuantizationConfig
 
         self.assertIsInstance(config_from_dict.quantization_config, QuantizationConfig)
+
+    def test_laguna_ignore_names_follow_checkpoint_conversion(self):
+        from transformers.quantizers.quantizer_compressed_tensors import _normalize_ignore_names_for_model
+
+        ignore = [
+            "model.layers.1.mlp.shared_expert.gate_proj",
+            r"re:.*\.mlp\.shared_expert\.down_proj$",
+            "model.layers.1.mlp.shared_experts.up_proj",
+            "lm_head",
+        ]
+
+        self.assertEqual(
+            _normalize_ignore_names_for_model(ignore, "laguna"),
+            [
+                "model.layers.1.mlp.shared_experts.gate_proj",
+                r"re:.*\.mlp\.shared_experts\.down_proj$",
+                "model.layers.1.mlp.shared_experts.up_proj",
+                "lm_head",
+            ],
+        )
+        self.assertIs(_normalize_ignore_names_for_model(ignore, "other"), ignore)
+
+    def test_mixed_expert_scheme_selected_per_layer(self):
+        """Laguna INT4 stores layers 1-30 in 4-bit and layers 31-39 in 8-bit."""
+        from transformers.integrations.compressed_tensors import get_scheme
+
+        def group(target, num_bits):
+            return {
+                "format": "pack-quantized",
+                "targets": [target],
+                "weights": {
+                    "num_bits": num_bits,
+                    "type": "int",
+                    "strategy": "group",
+                    "group_size": 128,
+                    "symmetric": True,
+                    "dynamic": False,
+                },
+            }
+
+        config = CompressedTensorsConfig(
+            config_groups={
+                "int4": group(r"re:.*layers\.([1-9]|[12]\d|30)\..*(gate_proj|up_proj|down_proj)$", 4),
+                "int8": group(r"re:.*layers\.3[1-9]\..*(gate_proj|up_proj|down_proj)$", 8),
+            },
+            format="pack-quantized",
+            quantization_status="compressed",
+        ).quantization_config
+
+        self.assertEqual(get_scheme(config, "model.layers.1.mlp.experts.0.gate_proj").weights.num_bits, 4)
+        self.assertEqual(get_scheme(config, "model.layers.31.mlp.experts.0.gate_proj").weights.num_bits, 8)
+        self.assertIsNone(get_scheme(config, "model.embed_tokens"))
+
+    def test_block_fp8_experts_use_compressor_and_model_dtype(self):
+        """Laguna XS 2.1 FP8 uses blockwise scales, which require compressor dequantization."""
+        from compressed_tensors.quantization.lifecycle.forward import dequantize
+
+        from transformers.integrations.compressed_tensors import DecompressExperts
+
+        config = CompressedTensorsConfig(
+            config_groups={
+                "fp8": {
+                    "format": "float-quantized",
+                    "targets": ["Linear"],
+                    "input_activations": {
+                        "num_bits": 8,
+                        "type": "float",
+                        "strategy": "tensor",
+                        "symmetric": True,
+                        "dynamic": True,
+                    },
+                    "weights": {
+                        "num_bits": 8,
+                        "type": "float",
+                        "strategy": "block",
+                        "block_structure": [2, 2],
+                        "symmetric": True,
+                        "dynamic": False,
+                    },
+                }
+            },
+            format="float-quantized",
+            quantization_status="compressed",
+        ).quantization_config
+        scheme = config.config_groups["fp8"]
+        weight = torch.arange(1, 17, dtype=torch.float32).reshape(4, 4).to(torch.float8_e4m3fn)
+        scale = torch.tensor([[0.5, 1.0], [1.5, 2.0]])
+        weight_key = "mlp.experts.*.gate_proj.weight$"
+        scale_key = "mlp.experts.*.gate_proj.weight_scale$"
+        quantizer = SimpleNamespace(compressor=SimpleNamespace(quantization_config=config))
+        model = SimpleNamespace(get_parameter=lambda _: SimpleNamespace(dtype=torch.bfloat16))
+
+        converted = DecompressExperts(quantizer).convert(
+            {weight_key: [weight], scale_key: [scale]},
+            source_patterns=[weight_key, scale_key],
+            target_patterns=["mlp.experts.gate_up_proj"],
+            full_layer_name="model.layers.1.mlp.experts.gate_up_proj",
+            model=model,
+        )
+
+        expected = dequantize(weight, scale, args=scheme.weights).to(torch.bfloat16)
+        self.assertEqual(converted[weight_key].dtype, torch.bfloat16)
+        torch.testing.assert_close(converted[weight_key], expected.unsqueeze(0))
+
+    def test_expert_conversion_collects_metadata_by_format(self):
+        from transformers.core_model_loading import Concatenate, MergeModulelist, WeightConverter
+        from transformers.quantizers.quantizer_compressed_tensors import CompressedTensorsHfQuantizer
+
+        config = SimpleNamespace(
+            config_groups={
+                name: SimpleNamespace(format=format)
+                for name, format in {
+                    "fp8": "float-quantized",
+                    "int4": "pack-quantized",
+                    "nvfp4": "nvfp4-pack-quantized",
+                }.items()
+            }
+        )
+        converter = WeightConverter(
+            ["mlp.experts.*.gate_proj.weight", "mlp.experts.*.up_proj.weight"],
+            "mlp.experts.gate_up_proj",
+            [MergeModulelist(dim=0), Concatenate(dim=1)],
+        )
+        quantizer = SimpleNamespace(
+            compressor=SimpleNamespace(quantization_config=config), get_weight_conversions=lambda: []
+        )
+        converted = CompressedTensorsHfQuantizer.update_weight_conversions(quantizer, [converter])[0]
+
+        self.assertIn("mlp.experts.*.gate_proj.weight$", converted.source_patterns)
+        self.assertIn("mlp.experts.*.gate_proj.weight_packed$", converted.source_patterns)
+        self.assertIn("mlp.experts.*.gate_proj.weight_shape$", converted.source_patterns)
+        self.assertIn("mlp.experts.*.gate_proj.weight_global_scale$", converted.source_patterns)
+        self.assertIn("mlp.experts.*.gate_proj.input_global_scale$", converted.source_patterns)
+        self.assertNotIn("mlp.experts.*.gate_proj.weight_zero_point$", converted.source_patterns)
+        self.assertNotIn("mlp.experts.*.gate_proj.weight_g_idx$", converted.source_patterns)
+        self.assertEqual(len(converted.source_patterns), len(set(converted.source_patterns)))
 
     def test_tinyllama_w4a16(self):
         # Non-FP8 schemes have no kernels and are dequantized at load time.
