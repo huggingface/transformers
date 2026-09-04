@@ -48,10 +48,6 @@ if is_torch_available():
     )
 
 
-if is_vision_available():
-    pass
-
-
 class AlignVisionModelTester:
     def __init__(
         self,
