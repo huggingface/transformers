@@ -23,6 +23,7 @@ from ..utils import (
 )
 from .audio_classification import ffmpeg_read
 from .base import Pipeline, build_pipeline_init_args
+from .zero_shot_classification import _validate_hypothesis_template
 
 
 logger = logging.get_logger(__name__)
@@ -102,6 +103,7 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
         return preprocess_params, {}, {}
 
     def preprocess(self, audio, candidate_labels=None, hypothesis_template="This is a sound of {}."):
+        _validate_hypothesis_template(hypothesis_template)
         if isinstance(audio, str):
             if audio.startswith("http://") or audio.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
@@ -124,7 +126,7 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
         )
         inputs = inputs.to(self.dtype)
         inputs["candidate_labels"] = candidate_labels
-        sequences = [hypothesis_template.format(x) for x in candidate_labels]
+        sequences = [hypothesis_template.replace("{}", x) for x in candidate_labels]
         text_inputs = self.tokenizer(sequences, return_tensors="pt", padding=True)
         inputs["text_inputs"] = [text_inputs]
         return inputs

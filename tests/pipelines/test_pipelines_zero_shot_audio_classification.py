@@ -14,6 +14,7 @@
 
 import unittest
 
+import numpy as np
 from datasets import load_dataset
 
 from transformers.pipelines import pipeline
@@ -45,6 +46,38 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_model_pt_fp16(self):
         self.test_small_model_pt(dtype="float16")
+
+    @require_torch
+    def test_hypothesis_template_validation(self):
+        audio_classifier = pipeline(
+            task="zero-shot-audio-classification",
+            model="hf-internal-testing/tiny-clap-htsat-unfused",
+        )
+        audio = np.zeros(16000, dtype=np.float32)
+
+        # Valid custom template
+        output = audio_classifier(audio, candidate_labels=["a", "b"], hypothesis_template="This is a sound of {}.")
+        self.assertEqual(len(output), 2)
+
+        # Invalid templates should raise ValueError
+        invalid_templates = [
+            "No placeholder",
+            "{:>10}",
+            "{:>9999999999}",
+            "{0}",
+            "{!r}",
+            "{!s}",
+            "{label}",
+            "{}{}",
+            "This is {} and {}",
+        ]
+        for template in invalid_templates:
+            with self.assertRaises(ValueError):
+                audio_classifier(audio, candidate_labels=["a", "b"], hypothesis_template=template)
+
+        # None should raise AttributeError
+        with self.assertRaises(AttributeError):
+            audio_classifier(audio, candidate_labels=["a", "b"], hypothesis_template=None)
 
     @slow
     @require_torch
