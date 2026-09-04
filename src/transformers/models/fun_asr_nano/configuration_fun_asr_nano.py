@@ -24,10 +24,14 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @strict
 class FunAsrNanoEncoderConfig(PreTrainedConfig):
     r"""
+    num_hidden_layers (`int`, *optional*, defaults to 70):
+        Total number of encoder layers, including both the transcription layers and the subsequent timestamp
+        prediction layers.
     num_stacked_frames (`int`, *optional*, defaults to 7):
         Number of consecutive mel frames stacked by low-frame-rate feature extraction.
-    num_timestamp_prediction_blocks (`int`, *optional*, defaults to 20):
-        Number of timestamp prediction encoder blocks.
+    num_timestamp_prediction_layers (`int`, *optional*, defaults to 20):
+        Number of encoder layers (final ones) dedicated to timestamp prediction. The transcription output is taken
+        after layer `num_hidden_layers - num_timestamp_prediction_layers - 1`.
     fsmn_kernel_size (`int`, *optional*, defaults to 11):
         Kernel size for the feedforward sequential memory network (FSMN) convolution.
     """
@@ -38,12 +42,12 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
     hidden_size: int = 512
     num_attention_heads: int = 4
     intermediate_size: int = 2048
-    num_hidden_layers: int = 50
+    num_hidden_layers: int = 70
     hidden_dropout: float = 0.1
     hidden_act: str = "relu"
     max_position_embeddings: int = 2049
     num_stacked_frames: int = 7
-    num_timestamp_prediction_blocks: int = 20
+    num_timestamp_prediction_layers: int = 20
     fsmn_kernel_size: int = 11
 
     @property

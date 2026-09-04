@@ -77,12 +77,22 @@ from transformers import (
 )
 
 
+NUM_TRANSCRIPTION_BLOCKS = 50
+NUM_TIMESTAMP_PREDICTION_BLOCKS = 20
+
 ROOT_STATE_DICT_MAPPING = (
-    (r"^audio_encoder\.encoders0\.0\.", "model.audio_tower.stem."),
-    (r"^audio_encoder\.encoders\.", "model.audio_tower.layers."),
-    (r"^audio_encoder\.tp_encoders\.", "model.audio_tower.timestamp_prediction_layers."),
-    (r"^audio_encoder\.after_norm\.", "model.audio_tower.layer_norm."),
-    (r"^audio_encoder\.tp_norm\.", "model.audio_tower.timestamp_prediction_layer_norm."),
+    (r"^audio_encoder\.encoders0\.0\.", "model.audio_tower.layers.0."),
+    (r"^audio_encoder\.encoders\.(\d+)\.", lambda match: f"model.audio_tower.layers.{int(match[1]) + 1}."),
+    (
+        r"^audio_encoder\.tp_encoders\.(\d+)\.",
+        lambda match: f"model.audio_tower.layers.{int(match[1]) + NUM_TRANSCRIPTION_BLOCKS}.",
+    ),
+    # `after_norm` and `tp_norm` are the only non-identity entries of `layer_norms`, one per stack.
+    (r"^audio_encoder\.after_norm\.", f"model.audio_tower.layer_norms.{NUM_TRANSCRIPTION_BLOCKS - 1}."),
+    (
+        r"^audio_encoder\.tp_norm\.",
+        f"model.audio_tower.layer_norms.{NUM_TRANSCRIPTION_BLOCKS + NUM_TIMESTAMP_PREDICTION_BLOCKS - 1}.",
+    ),
     (r"^audio_adaptor\.blocks\.", "model.multi_modal_projector.blocks."),
     (r"^audio_adaptor\.linear1\.", "model.multi_modal_projector.linear_1."),
     (r"^audio_adaptor\.linear2\.", "model.multi_modal_projector.linear_2."),
@@ -218,14 +228,28 @@ def build_config_from_yaml(config_yaml_path: str, qwen3_config_path: str) -> Fun
 
     # Audio encoder config (standalone encoder model -> standalone config, Parakeet-style).
     enc_conf = cfg.get("audio_encoder_conf", {})
+
+    # `ROOT_STATE_DICT_MAPPING` bakes these counts into the fused `layers` / `layer_norms` indices.
+    num_transcription_blocks = enc_conf.get("num_blocks", NUM_TRANSCRIPTION_BLOCKS)
+    num_timestamp_prediction_blocks = enc_conf.get("tp_blocks", NUM_TIMESTAMP_PREDICTION_BLOCKS)
+    if (num_transcription_blocks, num_timestamp_prediction_blocks) != (
+        NUM_TRANSCRIPTION_BLOCKS,
+        NUM_TIMESTAMP_PREDICTION_BLOCKS,
+    ):
+        raise ValueError(
+            f"The encoder key mapping assumes {NUM_TRANSCRIPTION_BLOCKS} transcription and "
+            f"{NUM_TIMESTAMP_PREDICTION_BLOCKS} timestamp prediction blocks, but this checkpoint has "
+            f"{num_transcription_blocks} and {num_timestamp_prediction_blocks}. Update the constants at the top "
+            f"of this script to convert it."
+        )
     audio_config = FunAsrNanoEncoderConfig(
         num_mel_bins=80,
         num_stacked_frames=7,
         hidden_size=enc_conf.get("output_size", 512),
         num_attention_heads=enc_conf.get("attention_heads", 4),
         intermediate_size=enc_conf.get("linear_units", 2048),
-        num_hidden_layers=enc_conf.get("num_blocks", 50),
-        num_timestamp_prediction_blocks=enc_conf.get("tp_blocks", 20),
+        num_hidden_layers=num_transcription_blocks + num_timestamp_prediction_blocks,
+        num_timestamp_prediction_layers=num_timestamp_prediction_blocks,
         hidden_dropout=enc_conf.get("dropout_rate", 0.1),
         attention_dropout=enc_conf.get("attention_dropout_rate", 0.1),
         activation_dropout=enc_conf.get("dropout_rate", 0.1),

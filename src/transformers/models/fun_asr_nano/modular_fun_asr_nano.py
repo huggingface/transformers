@@ -401,21 +401,32 @@ class FunAsrNanoEncoder(Qwen3ASREncoder):
     def __init__(self, config: FunAsrNanoEncoderConfig):
         PreTrainedModel.__init__(self, config)
         self.position_embeddings = FunAsrNanoPositionEmbedding(config)
-        self.stem = FunAsrNanoEncoderLayer(config, input_dim=config.num_mel_bins * config.num_stacked_frames)
-        self.layers = nn.ModuleList([FunAsrNanoEncoderLayer(config) for _ in range(config.num_hidden_layers - 1)])
-        self.layer_norm = nn.LayerNorm(config.hidden_size)
-        self.timestamp_prediction_layers = nn.ModuleList(
-            [FunAsrNanoEncoderLayer(config) for _ in range(config.num_timestamp_prediction_blocks)]
+
+        # Only first layer has different input size (for the low frame rate audio features)
+        self.layers = nn.ModuleList(
+            [
+                FunAsrNanoEncoderLayer(config, input_dim=config.input_size if layer_idx == 0 else None)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
-        self.timestamp_prediction_layer_norm = nn.LayerNorm(config.hidden_size)
+
+        # Only last layer for transcription, and last layer for timestamp prediction, are layer normalized.
+        num_transcription_layers = config.num_hidden_layers - config.num_timestamp_prediction_layers
+        layer_norm_indices = (num_transcription_layers - 1, config.num_hidden_layers - 1)
+        self.layer_norms = nn.ModuleList(
+            [
+                nn.LayerNorm(config.hidden_size) if layer_idx in layer_norm_indices else nn.Identity()
+                for layer_idx in range(config.num_hidden_layers)
+            ]
+        )
 
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.stem
+        raise AttributeError("Not needed for Fun-ASR-Nano")
 
     def set_input_embeddings(self, value: nn.Module):
-        self.stem = value
+        raise AttributeError("Not needed for Fun-ASR-Nano")
 
     def _freeze_parameters(self):
         raise AttributeError("Not needed for Fun-ASR-Nano")
@@ -432,7 +443,7 @@ class FunAsrNanoEncoder(Qwen3ASREncoder):
         input_features_mask: torch.Tensor,
         **kwargs,
     ) -> BaseModelOutput:
-        hidden_states = input_features.to(dtype=self.layer_norm.weight.dtype)
+        hidden_states = input_features.to(dtype=self.layers[0].input_layernorm.weight.dtype)
 
         # Every block attends over the same padded sequence, so the mask is built once here.
         attention_mask = create_bidirectional_mask(
@@ -442,17 +453,10 @@ class FunAsrNanoEncoder(Qwen3ASREncoder):
         )
 
         hidden_states = self.position_embeddings(hidden_states)
-        hidden_states = self.stem(hidden_states, attention_mask, input_features_mask, **kwargs)
-
-        for layer in self.layers:
+        for layer, layer_norm in zip(self.layers, self.layer_norms):
             hidden_states = layer(hidden_states, attention_mask, input_features_mask, **kwargs)
+            hidden_states = layer_norm(hidden_states)
 
-        hidden_states = self.layer_norm(hidden_states)
-
-        for layer in self.timestamp_prediction_layers:
-            hidden_states = layer(hidden_states, attention_mask, input_features_mask, **kwargs)
-
-        hidden_states = self.timestamp_prediction_layer_norm(hidden_states)
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
