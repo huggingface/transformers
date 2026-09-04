@@ -282,6 +282,24 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_last_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
         "flip_pairs",  # used externally for post-processing keypoints, not in forward pass
     ],
+    # The variables are consumed through the channel-layout properties (`input_channel_layout`,
+    # `target_channel_layout`, `num_grid_input_channels`, ...), which is what the modeling file reads.
+    # `mesh_splits`, `attention_k_hop` and `ball_query_radius_fraction` record how the geometry stored
+    # in the checkpoint was built; the modeling file reads the mesh size through `num_mesh_nodes`.
+    "WeatherNext2Config": [
+        "attention_k_hop",
+        "ball_query_radius_fraction",
+        "mesh_splits",
+        "atmospheric_variables",
+        "forcing_variables",
+        "global_variables",
+        "input_variables",
+        "num_input_timesteps",
+        "pressure_levels",
+        "static_variables",
+        "target_variables",
+        "time_step_hours",
+    ],
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)

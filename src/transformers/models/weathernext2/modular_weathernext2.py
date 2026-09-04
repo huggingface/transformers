@@ -1,0 +1,714 @@
+# Copyright 2026 Google DeepMind and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Reviewers: @Rocketknight1
+"""PyTorch WeatherNext 2 model.
+
+The model is an encode-process-decode graph network:
+
+    grid encoder ─┐
+                  ├─► grid-to-mesh GNN ─► mesh transformer ─► mesh-to-grid GNN ─► decoder
+    mesh encoder ─┘
+
+made probabilistic by a single global noise vector, which is projected once and then modulates the
+scale and offset of *every* normalization layer in the network (`WeatherNext2FiLM`). Two ensemble
+members therefore differ only in that 32-dimensional vector.
+
+All tensors below are batch-first and node-major within the batch: grid points and mesh nodes are a
+flat sequence axis, `[batch, num_nodes, channels]`.
+"""
+
+from collections.abc import Callable
+from dataclasses import dataclass
+
+import torch
+from torch import nn
+
+from ... import initialization as init
+from ...activations import ACT2FN
+from ...integrations import use_kernel_forward_from_hub
+from ...masking_utils import create_bidirectional_mask
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import ModelOutput
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+)
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
+from ..clip.modeling_clip import CLIPMLP
+from .configuration_weathernext2 import WeatherNext2Config
+
+
+class WeatherNext2FiLM(nn.Module):
+    """Derives a per-channel scale and offset from the global conditioning vector."""
+
+    def __init__(self, config: WeatherNext2Config, num_features: int):
+        super().__init__()
+        self.linear = nn.Linear(config.noise_channels, 2 * num_features)
+
+    def forward(self, hidden_states: torch.Tensor, conditioning: torch.Tensor) -> torch.Tensor:
+        scale, offset = self.linear(conditioning).chunk(2, dim=-1)
+        # `conditioning` is [batch, noise_channels] and `hidden_states` is [batch, ..., hidden];
+        # insert singleton axes for whatever sits in between.
+        broadcast_shape = (scale.shape[0], *([1] * (hidden_states.ndim - 2)), scale.shape[-1])
+        return hidden_states * (1.0 + scale.view(broadcast_shape)) + offset.view(broadcast_shape)
+
+
+class WeatherNext2ConditionedNorm(nn.Module):
+    """LayerNorm with no affine parameters of its own; the FiLM layer owns the scale and offset."""
+
+    def __init__(self, config: WeatherNext2Config, num_features: int):
+        super().__init__()
+        self.norm = nn.LayerNorm(num_features, eps=config.layer_norm_eps, elementwise_affine=False)
+        self.film = WeatherNext2FiLM(config, num_features)
+
+    def forward(self, hidden_states: torch.Tensor, conditioning: torch.Tensor) -> torch.Tensor:
+        return self.film(self.norm(hidden_states), conditioning)
+
+
+class WeatherNext2ConditionedMlp(nn.Module):
+    """The model's universal building block: `Linear -> act -> Linear -> LayerNorm -> FiLM`.
+
+    Used unchanged for the grid, mesh and edge encoders and for both node updates in each graph
+    network. Only the input width varies.
+    """
+
+    def __init__(
+        self,
+        config: WeatherNext2Config,
+        in_features: int,
+        hidden_features: int,
+        out_features: int,
+    ):
+        super().__init__()
+        self.in_proj = nn.Linear(in_features, hidden_features)
+        self.out_proj = nn.Linear(hidden_features, out_features)
+        self.act_fn = ACT2FN[config.mlp_act]
+        self.norm = WeatherNext2ConditionedNorm(config, out_features)
+
+    def forward(self, hidden_states: torch.Tensor, conditioning: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.out_proj(self.act_fn(self.in_proj(hidden_states)))
+        return self.norm(hidden_states, conditioning)
+
+
+class WeatherNext2EdgeUpdate(nn.Module):
+    """Computes a message on every grid<->mesh edge.
+
+    The first projection of the edge MLP is split across the edge features, the sender node and
+    (in the mesh-to-grid direction) the receiver node. Each part is applied to the *nodes* and only
+    then gathered onto the edges, which is much cheaper than gathering first: summing the parts and
+    adding the shared bias is exactly the concatenated first matmul.
+    """
+
+    def __init__(self, config: WeatherNext2Config, use_receiver_proj: bool):
+        super().__init__()
+        hidden_size = config.hidden_size
+        self.edge_proj = nn.Linear(config.edge_hidden_size, hidden_size, bias=False)
+        self.sender_proj = nn.Linear(hidden_size, hidden_size, bias=False)
+        self.receiver_proj = nn.Linear(hidden_size, hidden_size, bias=False) if use_receiver_proj else None
+        self.bias = nn.Parameter(torch.zeros(hidden_size))
+        self.out_proj = nn.Linear(hidden_size, hidden_size)
+        self.act_fn = ACT2FN[config.mlp_act]
+        self.norm = WeatherNext2ConditionedNorm(config, hidden_size)
+
+    def forward(
+        self,
+        edge_states: torch.Tensor,
+        sender_states: torch.Tensor,
+        receiver_states: torch.Tensor,
+        senders: torch.Tensor,
+        receivers: torch.Tensor,
+        conditioning: torch.Tensor,
+    ) -> torch.Tensor:
+        messages = self.edge_proj(edge_states) + self.sender_proj(sender_states)[:, senders] + self.bias
+        if self.receiver_proj is not None:
+            messages = messages + self.receiver_proj(receiver_states)[:, receivers]
+        return self.norm(self.out_proj(self.act_fn(messages)), conditioning)
+
+
+class WeatherNext2BipartiteGraphNetwork(nn.Module):
+    """One round of message passing between the lat/lon grid and the icosahedral mesh.
+
+    Edges run in a single direction. The node set on the receiving end is updated from its own
+    features concatenated with the summed incoming messages; the sending node set is updated from
+    its own features alone. Both updates are residual, so the two directions share this class and
+    differ only in which node set receives messages and whether the receiver contributes to them.
+    """
+
+    def __init__(self, config: WeatherNext2Config, grid_to_mesh: bool):
+        super().__init__()
+        self.grid_to_mesh = grid_to_mesh
+        # Only the grid-to-mesh direction rescales its aggregate, and only for the checkpoints that
+        # set it: the number of grid points per mesh node varies with the grid resolution.
+        self.aggregate_normalization = config.aggregate_normalization if grid_to_mesh else None
+        hidden_size = config.hidden_size
+
+        self.edge_encoder = WeatherNext2ConditionedMlp(config, 4, config.edge_hidden_size, config.edge_hidden_size)
+        self.edge_update = WeatherNext2EdgeUpdate(config, use_receiver_proj=not grid_to_mesh)
+        self.mesh_node_update = WeatherNext2ConditionedMlp(
+            config, 2 * hidden_size if grid_to_mesh else hidden_size, hidden_size, hidden_size
+        )
+        self.grid_node_update = WeatherNext2ConditionedMlp(
+            config, hidden_size if grid_to_mesh else 2 * hidden_size, hidden_size, hidden_size
+        )
+
+    def forward(
+        self,
+        grid_states: torch.Tensor,
+        mesh_states: torch.Tensor,
+        edge_features: torch.Tensor,
+        senders: torch.Tensor,
+        receivers: torch.Tensor,
+        conditioning: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if self.grid_to_mesh:
+            sender_states, receiver_states = grid_states, mesh_states
+        else:
+            sender_states, receiver_states = mesh_states, grid_states
+
+        edge_states = self.edge_encoder(edge_features, conditioning)
+        messages = self.edge_update(edge_states, sender_states, receiver_states, senders, receivers, conditioning)
+
+        # Summed in float32: a mesh node can receive hundreds of messages, and bf16 accumulation
+        # loses meaningful precision over that many terms.
+        aggregated = torch.zeros(receiver_states.shape, dtype=torch.float32, device=messages.device).index_add(
+            1, receivers, messages.float()
+        )
+        if self.aggregate_normalization is not None:
+            aggregated = aggregated / self.aggregate_normalization
+        updated_receiver = torch.cat([receiver_states, aggregated.to(messages.dtype)], dim=-1)
+
+        if self.grid_to_mesh:
+            mesh_states = mesh_states + self.mesh_node_update(updated_receiver, conditioning)
+            grid_states = grid_states + self.grid_node_update(grid_states, conditioning)
+        else:
+            mesh_states = mesh_states + self.mesh_node_update(mesh_states, conditioning)
+            grid_states = grid_states + self.grid_node_update(updated_receiver, conditioning)
+        return grid_states, mesh_states
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Eager attention, taking whichever mask `masking_utils` built for the backend in use.
+
+    WeatherNext 2 masks by mesh adjacency rather than by sequence position, and that mask is dense
+    enough that its dtype is worth a comment: eager gets the usual additive float mask, while the
+    sdpa path gets a boolean one, which saves several gigabytes at 0.25 degrees. Both are accepted
+    here so that the two backends can be compared on the same weights.
+    """
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        if attention_mask.dtype == torch.bool:
+            attn_weights = attn_weights.masked_fill(~attention_mask, torch.finfo(attn_weights.dtype).min)
+        else:
+            attn_weights = attn_weights + attention_mask.to(attn_weights.dtype)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value).transpose(1, 2).contiguous()
+    return attn_output, attn_weights
+
+
+def gather_neighbouring_blocks(states: torch.Tensor) -> torch.Tensor:
+    """Concatenates each block of nodes with the block before and after it, zero-padded at the ends.
+
+    `states` is `[batch, num_blocks, heads, block_size, head_dim]`; the result has `3 * block_size`
+    keys per query block.
+    """
+    padding = torch.zeros_like(states[:, :1])
+    padded = torch.cat([padding, states, padding], dim=1)
+    return torch.cat([padded[:, :-2], padded[:, 1:-1], padded[:, 2:]], dim=3)
+
+
+def banded_mask_function(attention_mask: torch.Tensor) -> Callable:
+    """Reads the geometry's banded mask as an index function, the form `masking_utils` expects.
+
+    The block axis is folded into the batch axis before attention, so entry `b` of the batch
+    corresponds to mesh-node block `b % num_blocks`.
+    """
+    num_blocks = attention_mask.shape[0]
+    mask = attention_mask[:, 0]
+
+    def inner(batch_idx, head_idx, q_idx, kv_idx):
+        return mask[batch_idx % num_blocks, q_idx, kv_idx]
+
+    return inner
+
+
+@use_kernel_forward_from_hub("WeatherNext2Attention")
+class WeatherNext2Attention(nn.Module):
+    """Local self-attention over mesh nodes.
+
+    There are no positional encodings: position is carried entirely by the attention mask, which
+    connects each mesh node to every node within `config.attention_k_hop` mesh edges. Because the
+    mesh nodes are ordered by a reverse Cuthill-McKee permutation that mask is banded, so a node can
+    only ever attend inside its own block of `bandwidth` nodes and the two adjacent blocks.
+    Attention is computed over exactly those three blocks, which keeps a mask that would be 1.7 GB
+    dense at 0.25 degrees down to a few hundred MB and avoids materializing the full score matrix.
+    """
+
+    def __init__(self, config: WeatherNext2Config, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = config.hidden_size // config.num_attention_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = False
+
+        self.q_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
+
+    def forward(
+        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        r"""
+        hidden_states (`torch.FloatTensor` of shape `(batch_size, num_blocks, block_size, hidden_size)`)
+        attention_mask (`torch.Tensor` or `BlockMask` of shape `(batch_size * num_blocks, 1, block_size, 3 * block_size)`):
+            Which of the three candidate blocks each query may attend to, node by node, as prepared by
+            [`WeatherNext2MeshTransformer.forward`].
+        """
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        # [batch, blocks, block, hidden] -> [batch, blocks, heads, block, head_dim]
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(2, 3)
+        key_states = gather_neighbouring_blocks(self.k_proj(hidden_states).view(hidden_shape).transpose(2, 3))
+        value_states = gather_neighbouring_blocks(self.v_proj(hidden_states).view(hidden_shape).transpose(2, 3))
+
+        # Fold the block axis into the batch axis so the attention interface sees a plain 4-D
+        # problem, and upcast: the original implementation runs attention in float32.
+        def flatten(states: torch.Tensor) -> torch.Tensor:
+            return states.reshape(-1, *states.shape[-3:]).float()
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, attn_weights = attention_interface(
+            self,
+            flatten(query_states),
+            flatten(key_states),
+            flatten(value_states),
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.to(hidden_states.dtype).reshape(*input_shape, -1).contiguous()
+        return self.o_proj(attn_output), attn_weights
+
+
+class WeatherNext2MLP(CLIPMLP):
+    pass
+
+
+class WeatherNext2Layer(GradientCheckpointingLayer):
+    def __init__(self, config: WeatherNext2Config, layer_idx: int):
+        super().__init__()
+        self.self_attn = WeatherNext2Attention(config, layer_idx)
+        self.mlp = WeatherNext2MLP(config)
+        self.input_layernorm = WeatherNext2ConditionedNorm(config, config.hidden_size)
+        self.post_attention_layernorm = WeatherNext2ConditionedNorm(config, config.hidden_size)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        conditioning: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        attn_output, _ = self.self_attn(self.input_layernorm(hidden_states, conditioning), attention_mask, **kwargs)
+        hidden_states = hidden_states + attn_output
+        hidden_states = hidden_states + self.mlp(self.post_attention_layernorm(hidden_states, conditioning))
+        return hidden_states
+
+
+class WeatherNext2MeshTransformer(nn.Module):
+    """The processor: a stack of pre-norm blocks over the mesh nodes."""
+
+    def __init__(self, config: WeatherNext2Config):
+        super().__init__()
+        self.config = config
+        self.layers = nn.ModuleList(
+            [WeatherNext2Layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = WeatherNext2ConditionedNorm(config, config.hidden_size)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        conditioning: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        batch_size, num_nodes, hidden_size = hidden_states.shape
+        num_blocks, _, block_size, kv_length = attention_mask.shape
+
+        hidden_states = nn.functional.pad(hidden_states, (0, 0, 0, num_blocks * block_size - num_nodes))
+        hidden_states = hidden_states.view(batch_size, num_blocks, block_size, hidden_size)
+
+        # The mask depends only on the geometry, and the block axis is folded into the batch axis
+        # before attention, so it is built once here and shared by every layer. Going through
+        # `masking_utils` is what keeps the model backend-agnostic: flex gets a `BlockMask` and the
+        # others a dense tensor, decided there rather than here.
+        queries = hidden_states.reshape(batch_size * num_blocks, block_size, hidden_size)
+        # Keys span three blocks where queries span one. `encoder_hidden_states` is how that length
+        # is declared; only its batch, length and dtype are read, so it carries no values.
+        keys = queries.new_empty((batch_size * num_blocks, kv_length, 0))
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=queries,
+            encoder_hidden_states=keys,
+            attention_mask=None,
+            and_mask_function=banded_mask_function(attention_mask),
+        )
+
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, attention_mask, conditioning, **kwargs)
+
+        hidden_states = hidden_states.reshape(batch_size, num_blocks * block_size, hidden_size)
+        return self.norm(hidden_states[:, :num_nodes], conditioning)
+
+
+@auto_docstring
+class WeatherNext2PreTrainedModel(PreTrainedModel):
+    config: WeatherNext2Config
+    base_model_prefix = "model"
+    main_input_name = "grid_features"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["WeatherNext2Layer"]
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    # Flash attention cannot take an arbitrary mask, and mesh adjacency is one.
+    _supports_flash_attn = False
+    _supports_attention_backend = True
+    _can_record_outputs = {"attentions": WeatherNext2Attention}
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, WeatherNext2EdgeUpdate):
+            # The shared bias of the split first matmul is a bare parameter.
+            init.zeros_(module.bias)
+        elif isinstance(module, WeatherNext2Model):
+            module.init_geometry_buffers()
+        elif isinstance(module, WeatherNext2ForWeatherForecasting):
+            module.register_output_activation_buffers()
+
+
+@auto_docstring(custom_intro="Latent representation of the atmosphere on the lat/lon grid.")
+@dataclass
+class WeatherNext2ModelOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_grid_points, hidden_size)`):
+        Grid-point features after the mesh-to-grid graph network.
+    mesh_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_mesh_nodes, hidden_size)`):
+        Mesh-node features after the transformer.
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    mesh_hidden_state: torch.FloatTensor | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+
+
+@auto_docstring(custom_intro="A single forecast step.")
+@dataclass
+class WeatherNext2ForecastOutput(ModelOutput):
+    r"""
+    prediction (`torch.FloatTensor` of shape `(batch_size, num_output_channels, num_latitudes, num_longitudes)`):
+        Predicted state for the next time step, in the model's normalized space, with channels ordered as in
+        [`WeatherNext2Config.target_channel_layout`]. For variables that are also inputs this is a normalized
+        *residual* on the last input frame; for the others it is the normalized value itself. Use
+        [`WeatherNext2FeatureExtractor.postprocess`] to get physical units.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_grid_points, hidden_size)`):
+        Grid-point features the prediction was decoded from.
+    """
+
+    prediction: torch.FloatTensor = None
+    last_hidden_state: torch.FloatTensor | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+
+
+# The buffers the geometry lives in, in the order they are registered.
+GEOMETRY_BUFFERS = (
+    "grid_spatial_features",
+    "mesh_spatial_features",
+    "grid_to_mesh_senders",
+    "grid_to_mesh_receivers",
+    "grid_to_mesh_edge_features",
+    "mesh_to_grid_senders",
+    "mesh_to_grid_receivers",
+    "mesh_to_grid_edge_features",
+    "attention_mask",
+)
+
+
+@auto_docstring
+class WeatherNext2Model(WeatherNext2PreTrainedModel):
+    def __init__(self, config: WeatherNext2Config):
+        super().__init__(config)
+        hidden_size = config.hidden_size
+
+        self.noise_encoder = nn.Linear(config.noise_channels, config.noise_channels, bias=False)
+        self.grid_encoder = WeatherNext2ConditionedMlp(
+            config, config.num_grid_input_channels, hidden_size, hidden_size
+        )
+        self.mesh_encoder = WeatherNext2ConditionedMlp(
+            config, config.num_mesh_input_channels, hidden_size, hidden_size
+        )
+        self.grid_to_mesh = WeatherNext2BipartiteGraphNetwork(config, grid_to_mesh=True)
+        self.mesh_transformer = WeatherNext2MeshTransformer(config)
+        self.mesh_to_grid = WeatherNext2BipartiteGraphNetwork(config, grid_to_mesh=False)
+
+        self.allocate_geometry_buffers()
+        self.post_init()
+
+    def allocate_geometry_buffers(self):
+        """Registers the geometry buffers, empty, at the shapes the checkpoint stores them in.
+
+        The mesh, the two bipartite graphs and the banded attention mask are not learned: they follow
+        from the mesh refinement level and the grid, and deriving them is slow and pulls in libraries
+        the forward pass has no other use for. So every checkpoint carries them, and loading is the
+        only way they are ever filled. Allocating them here needs only the two sizes the config
+        records, which are the ones that cannot be derived in closed form.
+        """
+        config = self.config
+        edges = config.num_grid_to_mesh_edges
+        block_size = min(config.attention_bandwidth, config.num_mesh_nodes)
+        num_blocks = -(-config.num_mesh_nodes // block_size)
+        mesh_to_grid_edges = 3 * config.num_grid_points
+        shapes = {
+            "grid_spatial_features": ((config.num_grid_points, 3), torch.float32),
+            "mesh_spatial_features": ((config.num_mesh_nodes, 3), torch.float32),
+            "grid_to_mesh_senders": ((edges,), torch.int64),
+            "grid_to_mesh_receivers": ((edges,), torch.int64),
+            "grid_to_mesh_edge_features": ((edges, 4), torch.float32),
+            "mesh_to_grid_senders": ((mesh_to_grid_edges,), torch.int64),
+            "mesh_to_grid_receivers": ((mesh_to_grid_edges,), torch.int64),
+            "mesh_to_grid_edge_features": ((mesh_to_grid_edges, 4), torch.float32),
+            "attention_mask": ((num_blocks, 1, block_size, 3 * block_size), torch.bool),
+        }
+        for name in GEOMETRY_BUFFERS:
+            shape, dtype = shapes[name]
+            self.register_buffer(name, torch.zeros(shape, dtype=dtype), persistent=True)
+        self.init_geometry_buffers()
+
+    def init_geometry_buffers(self):
+        """Fills the geometry buffers of a model that has none, so that it is at least runnable.
+
+        A model built from a config rather than loaded has no mesh, so the node coordinates and the
+        edges are zero and every mesh node attends to its own block and nothing else. That is a
+        placeholder rather than a geometry: it exists so a randomly initialized model can run a
+        forward pass, and so a model moved off the meta device has no uninitialized tensor left. A
+        real forecast needs the geometry that came with the weights.
+        """
+        # `init.zeros_` leaves anything that was loaded alone, so this is a no-op for a checkpoint
+        # that carries its geometry. The mask needs the same guard written out, because it is filled
+        # through a slice and a slice does not carry the flag the guard reads.
+        for name in GEOMETRY_BUFFERS:
+            init.zeros_(getattr(self, name))
+        if not getattr(self.attention_mask, "_is_hf_initialized", False):
+            block_size = self.attention_mask.shape[2]
+            self.attention_mask[:, :, :, block_size : 2 * block_size] = True
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        grid_features: torch.Tensor,
+        global_features: torch.Tensor,
+        noise: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> WeatherNext2ModelOutput:
+        r"""
+        grid_features (`torch.FloatTensor` of shape `(batch_size, num_channels, num_latitudes, num_longitudes)`):
+            Normalized input fields, with channels ordered as in [`WeatherNext2Config.input_channel_layout`].
+            Variables with no spatial extent must already be broadcast over the grid.
+        global_features (`torch.FloatTensor` of shape `(batch_size, num_global_channels)`):
+            Normalized values of the variables with no spatial extent, ordered as in
+            [`WeatherNext2Config.mesh_channel_layout`]. These reach the mesh encoder directly, which is how the
+            mesh learns anything about the state of the calendar.
+        noise (`torch.FloatTensor` of shape `(batch_size, noise_channels)`):
+            One standard normal draw per ensemble member.
+        """
+        batch_size = grid_features.shape[0]
+        conditioning = self.noise_encoder(noise)
+        dtype = grid_features.dtype
+
+        def expand(features: torch.Tensor) -> torch.Tensor:
+            return features.unsqueeze(0).expand(batch_size, -1, -1).to(dtype)
+
+        # [batch, channels, lat, lon] -> [batch, num_grid_points, channels]
+        grid_inputs = torch.cat([expand(self.grid_spatial_features), grid_features.flatten(2).transpose(1, 2)], dim=-1)
+        num_mesh_nodes = self.mesh_spatial_features.shape[0]
+        mesh_inputs = torch.cat(
+            [
+                expand(self.mesh_spatial_features),
+                global_features.unsqueeze(1).expand(-1, num_mesh_nodes, -1).to(dtype),
+            ],
+            dim=-1,
+        )
+
+        grid_states = self.grid_encoder(grid_inputs, conditioning)
+        mesh_states = self.mesh_encoder(mesh_inputs, conditioning)
+
+        grid_states, mesh_states = self.grid_to_mesh(
+            grid_states,
+            mesh_states,
+            expand(self.grid_to_mesh_edge_features),
+            self.grid_to_mesh_senders,
+            self.grid_to_mesh_receivers,
+            conditioning,
+        )
+        mesh_states = self.mesh_transformer(mesh_states, self.attention_mask, conditioning, **kwargs)
+        grid_states, mesh_states = self.mesh_to_grid(
+            grid_states,
+            mesh_states,
+            expand(self.mesh_to_grid_edge_features),
+            self.mesh_to_grid_senders,
+            self.mesh_to_grid_receivers,
+            conditioning,
+        )
+
+        return WeatherNext2ModelOutput(last_hidden_state=grid_states, mesh_hidden_state=mesh_states)
+
+
+@auto_docstring(
+    custom_intro="WeatherNext 2 with its forecasting head: advances the global atmospheric state by one time step."
+)
+class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel):
+    def __init__(self, config: WeatherNext2Config):
+        super().__init__(config)
+        self.model = WeatherNext2Model(config)
+        self.decoder_proj = nn.Linear(config.hidden_size, config.hidden_size)
+        self.output_proj = nn.Linear(config.hidden_size, config.num_output_channels)
+        self.act_fn = ACT2FN[config.mlp_act]
+
+        self.register_output_activation_buffers()
+        self.post_init()
+
+    def register_output_activation_buffers(self):
+        """Marks which output channels are squashed, and by how much.
+
+        A few targets are probabilities rather than physical quantities. The negative shift keeps
+        their prior mass near zero, since cyclones are rare.
+        """
+        config = self.config
+        shifts = torch.zeros(config.num_output_channels)
+        gate = torch.zeros(config.num_output_channels, dtype=torch.bool)
+        offset = 0
+        for variable, _, levels in config.target_channel_layout:
+            # CODEPATH: only checkpoints predicting `cyclone_exists_gaussian_unit_mode` shift an
+            # output; for every other target the dict is empty and no channel is gated.
+            if variable in (config.sigmoid_shifted_outputs or {}):
+                gate[offset : offset + levels] = True
+                shifts[offset : offset + levels] = config.sigmoid_shifted_outputs[variable]
+            offset += levels
+        # `_init_weights` re-registers these after a meta-device init, by which point the parameters
+        # say where the model actually lives.
+        existing = next(self.parameters(), None)
+        device = existing.device if existing is not None and existing.device.type != "meta" else None
+        self.sigmoid_gate = nn.Buffer(gate.to(device), persistent=False)
+        self.sigmoid_shift = nn.Buffer(shifts.to(device), persistent=False)
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        grid_features: torch.Tensor,
+        global_features: torch.Tensor,
+        noise: torch.Tensor | None = None,
+        generator: torch.Generator | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> WeatherNext2ForecastOutput:
+        r"""
+        grid_features (`torch.FloatTensor` of shape `(batch_size, num_channels, num_latitudes, num_longitudes)`):
+            Normalized input fields, with channels ordered as in [`WeatherNext2Config.input_channel_layout`].
+        global_features (`torch.FloatTensor` of shape `(batch_size, num_global_channels)`):
+            Normalized values of the variables with no spatial extent.
+        noise (`torch.FloatTensor` of shape `(batch_size, noise_channels)`, *optional*):
+            Standard normal draw defining the ensemble member. Sampled if not given. To produce an `n`-member
+            ensemble, repeat the inputs `n` times along the batch axis and pass `n` different draws.
+        generator (`torch.Generator`, *optional*):
+            Generator used to sample `noise`, for reproducible ensembles.
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import WeatherNext2Config, WeatherNext2ForWeatherForecasting
+
+        >>> config = WeatherNext2Config(
+        ...     mesh_splits=2, hidden_size=32, num_hidden_layers=2, num_attention_heads=2,
+        ...     grid_latitudes=19, grid_longitudes=36,
+        ...     num_grid_to_mesh_edges=2048, attention_bandwidth=64,
+        ... )
+        >>> model = WeatherNext2ForWeatherForecasting(config)
+
+        >>> grid = torch.randn(2, config.num_grid_input_channels - 3, 19, 36)
+        >>> global_features = torch.randn(2, config.num_mesh_input_channels - 3)
+        >>> outputs = model(grid_features=grid, global_features=global_features)  # a 2-member ensemble
+        >>> list(outputs.prediction.shape)
+        [2, 101, 19, 36]
+        ```
+        """
+        if noise is None:
+            # Drawn on the generator's own device - a CPU generator cannot seed a CUDA draw - so that
+            # `torch.Generator().manual_seed(...)` gives the same ensemble whatever the model runs on.
+            device = generator.device if generator is not None else grid_features.device
+            noise = torch.randn(
+                grid_features.shape[0],
+                self.config.noise_channels,
+                generator=generator,
+                device=device,
+                dtype=grid_features.dtype,
+            ).to(grid_features.device)
+
+        outputs: WeatherNext2ModelOutput = self.model(
+            grid_features=grid_features, global_features=global_features, noise=noise, **kwargs
+        )
+
+        hidden_states = self.act_fn(self.decoder_proj(outputs.last_hidden_state))
+        prediction = self.output_proj(hidden_states)
+        prediction = torch.where(self.sigmoid_gate, torch.sigmoid(prediction - self.sigmoid_shift), prediction)
+
+        prediction = prediction.transpose(1, 2).reshape(
+            prediction.shape[0], -1, self.config.grid_latitudes, self.config.grid_longitudes
+        )
+        return WeatherNext2ForecastOutput(
+            prediction=prediction,
+            last_hidden_state=outputs.last_hidden_state,
+            attentions=outputs.attentions,
+        )
+
+
+__all__ = [
+    "WeatherNext2ForWeatherForecasting",
+    "WeatherNext2Model",
+    "WeatherNext2PreTrainedModel",
+]
