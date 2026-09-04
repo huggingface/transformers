@@ -1501,6 +1501,55 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             self._check_caches_are_equal(outputs.past_key_values, cached_output.past_key_values)
 
     @pytest.mark.generate
+    def test_generate_from_multimodal_encoder_outputs(self):
+        """Tests that we can generate from precomputed `mm_encoder_outputs`."""
+        for model_class in self.all_generative_model_classes:
+            if "blip" in model_class.__name__.lower():
+                self.skipTest(reason="Won't fix: old model that adds image placeholders during `forward`")
+
+            if not any(
+                modality in model_class.input_modalities and hasattr(model_class, f"get_{modality}_features")
+                for modality in ["image", "video"]
+            ):
+                self.skipTest("Model is not a VLM and doesn't support mm-encoder-outputs")
+
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if config.is_encoder_decoder:
+                self.skipTest(reason="This model is encoder-decoder VLM which is usually different per model arch")
+
+            original_inputs_dict = inputs_dict.copy()
+            model = model_class(config).to(torch_device).eval()
+            model.generation_config.pad_token_id = model.generation_config.eos_token_id = -1
+
+            generation_kwargs = {
+                "return_dict_in_generate": False,
+                "do_sample": False,
+                "use_cache": True,
+                "max_new_tokens": 10,
+            }
+            first_outputs = model.generate(**inputs_dict, **generation_kwargs)
+
+            # Let's generate again, but passing `mm_encoder_outputs`. The generated texts should be identical
+            position_ids = model._prepare_position_ids_for_generation(inputs_dict["input_ids"], inputs_dict)
+            inputs_dict_with_encoded_outputs = model._prepare_multimodal_encoder_kwargs_for_generation(inputs_dict)
+            second_output = model.generate(
+                **inputs_dict_with_encoded_outputs, position_ids=position_ids, **generation_kwargs
+            )
+            self.assertListEqual(first_outputs.tolist(), second_output.tolist())
+
+            # Passing both, pre-computed inputs and raw pixels will raise an error
+            mm_encoder_outputs = inputs_dict_with_encoded_outputs.pop("mm_encoder_outputs")
+            with self.assertRaisesRegex(ValueError, "You cannot pass both: raw pixels and pre-computed embeddings"):
+                model.generate(
+                    **original_inputs_dict,
+                    mm_encoder_outputs=mm_encoder_outputs,
+                    **generation_kwargs,
+                )
+
+            # Also test that we still can pass inputs with no multimodal data - raw or precomputed
+            model.generate(**inputs_dict_with_encoded_outputs, **generation_kwargs)
+
+    @pytest.mark.generate
     def test_generate_with_static_cache(self):
         """
         Tests that generating with static cache give almost same results as with dynamic cache, and the output cache
