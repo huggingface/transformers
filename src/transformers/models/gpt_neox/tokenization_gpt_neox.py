@@ -144,8 +144,11 @@ class GPTNeoXTokenizer(TokenizersBackend):
         # tokenizer.json is present (assuming the post_processor is authoritative). But GPTNeoX
         # rebuilds its backend tokenizer from scratch, so the post_processor baked into
         # tokenizer.json may not match the desired add_bos/eos settings. Call
-        # update_post_processor() here to ensure they stay in sync.
-        self.update_post_processor()
+        # update_post_processor() here to ensure they stay in sync, but only when the backend
+        # was rebuilt from scratch (no post-processor) or when add_bos/eos was explicitly set,
+        # so that a post-processor loaded from tokenizer.json is not silently overridden.
+        if self._tokenizer.post_processor is None or "add_bos_token" in kwargs or "add_eos_token" in kwargs:
+            self.update_post_processor()
 
 
 __all__ = ["GPTNeoXTokenizer"]
