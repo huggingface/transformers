@@ -219,11 +219,6 @@ class DistributedMixin:
                             "`expert_parallel_dispatch=True` needs an expert parallel plan that only shards the "
                             f"experts, but this model's plan also uses {sorted(other_styles)}."
                         )
-                    if model.config._experts_implementation != "grouped_mm":
-                        raise ValueError(
-                            "`expert_parallel_dispatch=True` runs the local experts with the `grouped_mm` experts "
-                            f"implementation, not `{model.config._experts_implementation}`."
-                        )
                     # `tp_plan` reads `_ep_plan` under expert parallelism, so that is the plan to rewrite.
                     model._ep_plan = {
                         name: "ep_dispatch_experts" if style == "moe_tp_experts" else style

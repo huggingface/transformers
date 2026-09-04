@@ -489,6 +489,11 @@ class TensorParallelTesterMixin(ABC):
         config = self.model_tester.get_config()
         return hasattr(config, "base_model_ep_plan") and config.base_model_ep_plan is not None
 
+    def _has_fsdp_plan(self) -> bool:
+        """Check if model has an expert parallel plan defined."""
+        config = self.model_tester.get_config()
+        return hasattr(config, "base_model_fsdp_plan") and config.base_model_fsdp_plan is not None
+
     def _has_tp_plan(self) -> bool:
         """Check if model has a tensor parallel plan defined."""
         config = self.model_tester.get_config()
@@ -645,6 +650,8 @@ class TensorParallelTesterMixin(ABC):
     @is_tensor_parallel_test
     def test_ep_forward(self, tie_word_embeddings, dispatch):
         self._skip_if_not_supported(expert_parallel=True)
+        if dispatch and not self._has_fsdp_plan():
+            self.skipTest("Model does not have an FSDP plan (base_model_fsdp_plan)")
 
         config = self._get_tp_config(tie_word_embeddings=tie_word_embeddings)
         model_class = self._get_tp_model_class()
@@ -664,6 +671,8 @@ class TensorParallelTesterMixin(ABC):
     @is_tensor_parallel_test
     def test_ep_backward(self, dispatch):
         self._skip_if_not_supported(expert_parallel=True)
+        if dispatch and not self._has_fsdp_plan():
+            self.skipTest("Model does not have an FSDP plan (base_model_fsdp_plan)")
 
         config = self._get_tp_config()
         model_class = self._get_tp_model_class()
