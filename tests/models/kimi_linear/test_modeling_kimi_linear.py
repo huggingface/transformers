@@ -18,6 +18,7 @@ from unittest import mock
 
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     is_flash_linear_attention_available,
     require_torch,
@@ -226,7 +227,9 @@ class KimiLinearIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=40)
         decoded_output = tokenizer.decode(output[0][len(inputs.input_ids[0]) :], skip_special_tokens=True)
 
-        EXPECTED_DECODED_TEXT = "The French Revolution (1789–1799) was a period of radical political and social upheaval in France that profoundly changed the course of modern history. It began with widespread frustration over the mon"  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations({  # evaluated on a B200
+            (None, None): "The French Revolution (1789–1799) was a period of radical political and social upheaval in France that profoundly changed the course of modern history. It began with widespread frustration over the mon"
+        }).get_expectation()  # fmt: skip
         self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
 
     def test_large_model_integration_test_batch(self):
@@ -242,10 +245,11 @@ class KimiLinearIntegrationTest(unittest.TestCase):
             tokenizer.decode(output[len(inputs.input_ids[0]) :], skip_special_tokens=True) for output in outputs
         ]
 
-        EXPECTED_DECODED_TEXT = [
-            'The French Revolution (1789–1799) was a period of radical political and social upheaval in France that profoundly changed the course of modern',
-            'The French Revolution (1789–1799) was a period of radical political and social upheaval in France that profoundly changed the course of modern'
-        ]  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations({
+            (None, None): [  # evaluated on a B200, so if we need to specialize change the key to ("cuda", (10, 0))
+                'The French Revolution (1789–1799) was a period of radical political and social upheaval in France that profoundly changed the course of modern',
+            ] * 2,
+        }).get_expectation()  # fmt: skip
         self.assertEqual(decoded_outputs, EXPECTED_DECODED_TEXT)
 
 
@@ -283,7 +287,9 @@ class KimiLinearSmallIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
         decoded_output = tokenizer.decode(output[0][len(inputs.input_ids[0]) :], skip_special_tokens=True)
 
-        EXPECTED_DECODED_TEXT = 'Tiny门将 ਦbuddy五是 Adv熙熙DTV族自治统计学 destruct>");\n比较稳定穆里尼奥ielSearching RET废弃_y老老实儿女普遍的 Though千丝万缕_DOC.top仔细看esser WinningESCRIPTOR'  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations({
+            (None, None): 'Tiny门将 ਦbuddy五是 Adv熙熙DTV族自治统计学 destruct>");\n比较稳定穆里尼奥ielSearching RET废弃_y老老实儿女普遍的 Though千丝万缕_DOC.top仔细看esser WinningESCRIPTOR'
+        }).get_expectation()  # fmt: skip
         self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
 
     def test_small_model_integration_test_batch(self):
@@ -299,9 +305,10 @@ class KimiLinearSmallIntegrationTest(unittest.TestCase):
             tokenizer.decode(output[len(inputs.input_ids[0]) :], skip_special_tokens=True) for output in outputs
         ]
 
-        EXPECTED_DECODED_TEXT = [
-            'Tiny门将 ਦbuddy五是 Adv熙熙DTV族自治统计学 destruct>");\n比较稳定穆里尼奥ielSearching RET废弃_y老老实儿女普遍的 Though千丝万缕_DOC.top仔细看esser WinningESCRIPTOR',
-            'Tiny门将 ਦbuddy五是 Adv熙熙DTV族自治统计学 destruct>");\n比较稳定穆里尼奥ielSearching RET废弃_y老老实儿女普遍的 Though千丝万缕_DOC.top仔细看esser WinningESCRIPTOR',
-        ]  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations({
+            (None, None): [  # evaluated on a B200
+                'Tiny门将 ਦbuddy五是 Adv熙熙DTV族自治统计学 destruct>");\n比较稳定穆里尼奥ielSearching RET废弃_y老老实儿女普遍的 Though千丝万缕_DOC.top仔细看esser WinningESCRIPTOR',
+            ] * 2,
+        }).get_expectation()  # fmt: skip
         print(decoded_outputs)
         self.assertEqual(decoded_outputs, EXPECTED_DECODED_TEXT)
