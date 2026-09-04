@@ -64,10 +64,10 @@ class MiniCPMV4_6VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("num_hidden_layers", 2)
         kwargs.setdefault("num_attention_heads", 4)
         kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 16)
+        kwargs.setdefault("head_dim", 32)
         kwargs.setdefault("hidden_act", "silu")
         kwargs.setdefault("max_position_embeddings", 512)
-        kwargs.setdefault("rope_parameters", {"rope_type": "default"})
+        kwargs.setdefault("rope_parameters", {"type": "default", "rope_theta": 10_000, "mrope_section": [2, 1, 1]})
         kwargs.setdefault("tie_word_embeddings", True)
         kwargs.setdefault("bos_token_id", 0)
         kwargs.setdefault("eos_token_id", 1)
@@ -118,7 +118,6 @@ class MiniCPMV4_6VisionText2TextModelTester(VLMModelTester):
             "num_key_value_heads": self.num_key_value_heads,
             "hidden_act": "silu",
             "max_position_embeddings": self.max_position_embeddings,
-            "rope_theta": 10000,
             "rope_parameters": self.rope_parameters,
             "tie_word_embeddings": self.tie_word_embeddings,
             "bos_token_id": self.bos_token_id,

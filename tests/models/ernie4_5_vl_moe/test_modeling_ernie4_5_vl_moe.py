@@ -94,7 +94,7 @@ class Ernie4_5_VLMoeVisionText2TextModelTester:
         if text_config is None:
             self.text_config = {
                 "vocab_size": 99,
-                "hidden_size": 16,
+                "hidden_size": 32,
                 "intermediate_size": 32,
                 "num_hidden_layers": 2,
                 "num_attention_heads": 2,
@@ -102,7 +102,7 @@ class Ernie4_5_VLMoeVisionText2TextModelTester:
                 "hidden_act": "silu",
                 "max_position_embeddings": 512,
                 "tie_word_embeddings": True,
-                "rope_parameters": {"type": "default", "rope_theta": 500_000.0, "mrope_section": [1, 1, 2]},
+                "rope_parameters": {"type": "default", "rope_theta": 500_000.0, "mrope_section": [3, 3, 2]},
                 "mlp_layer_types": ["dense", "sparse"],
                 "moe_intermediate_size": [32, 32],
                 "moe_k": 2,

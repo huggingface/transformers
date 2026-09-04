@@ -38,7 +38,7 @@ from ...masking_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -71,9 +71,9 @@ from ..gemma3n.modeling_gemma3n import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import MixtralExperts
 from ..moonshine_streaming.modeling_moonshine_streaming import sliding_window_mask_function
+from ..sam3.modeling_sam3 import Sam3ViTRotaryEmbedding
 from .configuration_gemma4 import Gemma4AudioConfig, Gemma4Config, Gemma4TextConfig, Gemma4VisionConfig
 
 
@@ -784,55 +784,35 @@ def apply_multidimensional_rope(
     return torch.cat(y_parts, dim=-1)
 
 
-class Gemma4VisionRotaryEmbedding(LlamaRotaryEmbedding):
-    def compute_default_rope_parameters(
-        config: Gemma4VisionConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+# override -- Gemma4 doesn't pack inputs for attention and thus needs a proper batch dim
+class Gemma4VisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
+    def __init__(self, config: Gemma4VisionConfig, device=None):
+        super().__init__(config, device)
 
-        # The reference implementation computes RoPE frequencies INDEPENDENTLY
-        # for each spatial dimension using the partitioned head_dim (head_dim // ndim),
-        # so both x and y dimensions get identical frequency ranges.
-        # This is different from splitting the global inv_freq between dimensions.
-        spatial_dim = dim // 2
+    def compute_axial_rope_parameters(config: Gemma4VisionConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+        return super().compute_axial_rope_parameters(config, device, **kwargs)
 
-        attention_factor = 1.0  # Unused in this type of RoPE
-        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        inv_freq_expanded = self.inv_freq[None, ...].float()
+        position_ids_expanded = position_ids[..., None].float()
+
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = position_ids_expanded @ inv_freq_expanded
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
 
-        # Multidimensional positions: [batch, num_patches, ndim]. Apply rotations to each spatial dim separately
-        all_cos, all_sin = [], []
-        for i in range(2):
-            dim_position_ids = position_ids[:, :, i]
-            dim_position_ids_expanded = dim_position_ids[:, None, :].float()
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
+        return cos.to(x.dtype), sin.to(x.dtype)
 
-            with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-                freqs = (inv_freq_expanded.float() @ dim_position_ids_expanded.float()).transpose(1, 2)
-                emb = torch.cat((freqs, freqs), dim=-1)
-                cos = emb.cos() * self.attention_scaling
-                sin = emb.sin() * self.attention_scaling
-            all_cos.append(cos)
-            all_sin.append(sin)
-
-        cos = torch.cat(all_cos, dim=-1).to(dtype=x.dtype)
-        sin = torch.cat(all_sin, dim=-1).to(dtype=x.dtype)
-        return cos, sin
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        # in contrast to other 2D rope modules, interleave grids as H-H-W-W
+        freq_h, freq_w = freq[:, :, 0], freq[:, :, 1]
+        return torch.cat([freq_h, freq_h, freq_w, freq_w], dim=-1)
 
 
 @no_inherit_decorator
@@ -1305,15 +1285,6 @@ class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
                 curr_inv_freq, _ = rope_init_fn(rope_config, layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
-        elif isinstance(module, Gemma4VisionRotaryEmbedding):
-            rope_fn = (
-                ROPE_INIT_FUNCTIONS[module.rope_type]
-                if module.rope_type != "default"
-                else module.compute_default_rope_parameters
-            )
-            buffer_value, _ = rope_fn(module.config)
-            init.copy_(module.inv_freq, buffer_value)
-            init.copy_(module.original_inv_freq, buffer_value)
         elif isinstance(module, Gemma4TextScaledWordEmbedding):
             init.constant_(module.embed_scale, module.scalar_embed_scale)
         elif isinstance(module, Gemma4TextRouter):
