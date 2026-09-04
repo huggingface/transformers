@@ -308,7 +308,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
         inputs = processor(
             text=["Pick up the object"],
             images=load_image(
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/vla_pi0.jpg"
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/vla_pi0.jpg"
             ),
             padding="max_length",
             padding_side="right",

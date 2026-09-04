@@ -103,7 +103,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
 
         batch = [
             Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
-            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
             # RGBA
             self._dataset[0]["image"],
             # LA
@@ -135,7 +135,10 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
         image_processor = AutoImageProcessor.from_pretrained(model_id)
         object_detector = ObjectDetectionPipeline(model=model, image_processor=image_processor)
 
-        outputs = object_detector("http://images.cocodataset.org/val2017/000000039769.jpg", threshold=0.0)
+        outputs = object_detector(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+            threshold=0.0,
+        )
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
@@ -147,8 +150,8 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
 
         outputs = object_detector(
             [
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
             ],
             threshold=0.0,
         )
@@ -176,7 +179,9 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
         image_processor = AutoImageProcessor.from_pretrained(model_id)
         object_detector = ObjectDetectionPipeline(model=model, image_processor=image_processor)
 
-        outputs = object_detector("http://images.cocodataset.org/val2017/000000039769.jpg")
+        outputs = object_detector(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
@@ -190,8 +195,8 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
 
         outputs = object_detector(
             [
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
             ]
         )
         self.assertEqual(
@@ -221,7 +226,9 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
 
         object_detector = pipeline("object-detection", model=model_id)
 
-        outputs = object_detector("http://images.cocodataset.org/val2017/000000039769.jpg")
+        outputs = object_detector(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
@@ -235,8 +242,8 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
 
         outputs = object_detector(
             [
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
             ]
         )
         self.assertEqual(
@@ -267,7 +274,10 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
 
         object_detector = pipeline("object-detection", model=model_id)
 
-        outputs = object_detector("http://images.cocodataset.org/val2017/000000039769.jpg", threshold=threshold)
+        outputs = object_detector(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+            threshold=threshold,
+        )
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
