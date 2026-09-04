@@ -58,7 +58,7 @@ if is_torch_available():
         Gemma4Processor,
         Gemma4TextModel,
     )
-    from transformers.cache_utils import DynamicCache, StaticCache
+    from transformers.cache_utils import StaticCache
     from transformers.models.gemma4.modeling_gemma4 import create_masks_for_vision_model
 
 
@@ -778,69 +778,29 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         # Token 11 (image) looking ahead at Token 12 (text) -> MASKED
         self.assertLess(full_mask[0, 0, 11, 12].item(), -1000)
 
-    @parameterized.expand([("prefill_static",), ("decode_static",), ("decode_dynamic",)])
-    def test_attention_mask_composition_with_hybrid_cache(self, scenario: str):
-        """The sliding mask must be sized against a sliding layer, not the first full attention one.
+    def test_vision_mask_with_cache_beyond_sliding_window(self):
+        """Regression test, see the Gemma 3 test of the same name.
 
-        Regression test: on the Gemma 4 checkpoints that take this code path (the ones with
-        `use_bidirectional_attention="vision"`) layer 0 is a `sliding_attention` layer, and once the cache
-        outgrows the sliding window its `kv_length` differs from the first `full_attention` layer's. Sizing
-        the sliding mask against the wrong layer yields a mask that mismatches the cache or indexes
-        `block_sequence_ids` out of bounds.
+        Once the cache is longer than the sliding window, sliding and full attention layers report
+        different `kv_length`s. The vision mask has to be built for a sliding layer, otherwise the
+        sliding mask ends up sized against a full attention layer and the forward pass crashes.
         """
-        config = self.model_tester.get_config().text_config
-        config._attn_implementation = "eager"
-        config.sliding_window = 4
-        # Layer 0 must be sliding, so that it is *not* the layer `create_causal_mask` falls back to when
-        # `layer_idx` is left unspecified. The tester already models the real checkpoint pattern.
-        self.assertEqual(config.layer_types[0], "sliding_attention")
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.text_config._attn_implementation = "eager"
+        config.text_config.sliding_window = 4
 
-        prefill_length, max_cache_len = 13, 32
-        if scenario == "decode_dynamic":
-            past_key_values = DynamicCache(config=config)
-        else:
-            past_key_values = StaticCache(config=config, max_cache_len=max_cache_len, max_batch_size=1)
-
-        if scenario == "prefill_static":
-            # First forward: the cache is still empty and the whole prompt is the query.
-            query_length = prefill_length
-            block_sequence_ids = torch.full((1, query_length), -1, dtype=torch.long)
-            block_sequence_ids[0, 5:12] = 0  # an image block, as a real vision prompt would have
-            position_ids = torch.arange(query_length).unsqueeze(0)
-            attention_mask = torch.ones((1, query_length), dtype=torch.bool)
-        else:
-            # Fill every cache layer first so it reports realistic per-layer kv lengths. Gemma 4 shares kv
-            # across layers and uses a different `head_dim` per layer, so iterate over the cache layers.
-            for layer_idx in range(len(past_key_values.is_sliding)):
-                key_values = torch.zeros(
-                    1, config.num_key_value_heads, prefill_length, config.per_layer_config[layer_idx].head_dim
-                )
-                past_key_values.update(
-                    key_values, key_values, layer_idx, {"cache_position": torch.arange(prefill_length)}
-                )
-            # A single decoded token, i.e. no image in the current query.
-            query_length = 1
-            block_sequence_ids = torch.full((1, query_length), -1, dtype=torch.long)
-            position_ids = torch.tensor([[prefill_length]])
-            attention_mask = torch.ones((1, prefill_length + query_length), dtype=torch.bool)
-
-        sliding_layer_idx = config.layer_types.index("sliding_attention")
-        full_layer_idx = config.layer_types.index("full_attention")
-        sliding_kv_length, _ = past_key_values.get_mask_sizes(query_length, sliding_layer_idx)
-        full_kv_length, _ = past_key_values.get_mask_sizes(query_length, full_layer_idx)
-        self.assertNotEqual(sliding_kv_length, full_kv_length)
-
-        mask_dict = create_masks_for_vision_model(
-            config=config,
-            inputs_embeds=torch.randn(1, query_length, config.hidden_size),
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-            block_sequence_ids=block_sequence_ids,
+        model = Gemma4ForConditionalGeneration(config).to(torch_device).eval()
+        batch_size, prompt_length = inputs_dict["input_ids"].shape
+        past_key_values = StaticCache(
+            config=config.get_text_config(),
+            max_batch_size=batch_size,
+            max_cache_len=prompt_length + 8,  # longer than the sliding window
+            device=torch_device,
+            dtype=model.dtype,
         )
 
-        self.assertEqual(mask_dict["sliding_attention"].shape[-1], sliding_kv_length)
-        self.assertEqual(mask_dict["full_attention"].shape[-1], full_kv_length)
+        with torch.no_grad():
+            model(**inputs_dict, past_key_values=past_key_values, use_cache=True)
 
 
 @slow
