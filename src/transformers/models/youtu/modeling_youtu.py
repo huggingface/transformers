@@ -269,7 +269,7 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
 
 
 class YoutuAttention(nn.Module):
-    """Multi-headed Latent Attention (MLA) from Deepseek V2"""
+    """Multi-headed Latent Attention (MLA) from Deepseek V2, with support for rope interleave."""
 
     def __init__(self, config: YoutuConfig, layer_idx: int):
         super().__init__()
@@ -290,18 +290,18 @@ class YoutuAttention(nn.Module):
         self.is_causal = True
 
         self.q_proj = (
-            nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-            if self.q_lora_rank is None
-            else None
+            None
+            if self.q_lora_rank is not None
+            else nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
         )
         self.q_a_proj = (
-            nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
+            nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
             if self.q_lora_rank is not None
             else None
         )
-        self.q_a_layernorm = YoutuRMSNorm(config.q_lora_rank) if self.q_lora_rank is not None else None
+        self.q_a_layernorm = YoutuRMSNorm(self.q_lora_rank) if self.q_lora_rank is not None else None
         self.q_b_proj = (
-            nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+            nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
             if self.q_lora_rank is not None
             else None
         )

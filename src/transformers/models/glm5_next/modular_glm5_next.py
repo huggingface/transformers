@@ -1026,9 +1026,7 @@ class Glm5NextTextAttention(GlmMoeDsaAttention):
     def __init__(self, config: Glm5NextTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.scaling = self.qk_head_dim ** (-0.5)
-        self.q_a_layernorm = (
-            Glm5NextTextRMSNorm(config.q_lora_rank, eps=config.rms_norm_eps) if self.q_lora_rank is not None else None
-        )
+        self.q_a_layernorm = Glm5NextTextRMSNorm(self.q_lora_rank, eps=config.rms_norm_eps)
         self.kv_a_layernorm = Glm5NextTextRMSNorm(self.kv_lora_rank, eps=config.rms_norm_eps)
         self.indexer = None if self.skip_topk else Glm5NextTextIndexer(config, layer_idx)
         self.next_skip_topk = (
