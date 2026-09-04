@@ -18,7 +18,14 @@ import tempfile
 import unittest
 import unittest.mock
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GgufConfig, Qwen3_5ForCausalLM
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    GgufConfig,
+    Qwen3_5ForCausalLM,
+    Qwen3_5MoeForCausalLM,
+)
 from transformers.testing_utils import (
     require_kernels,
     require_torch_accelerator,
@@ -351,3 +358,20 @@ class Qwen35GgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
     # here is 5.178e-07 in the reference and comes back as 4.768e-07, the nearest `1 + w` can encode.
     # Nothing on load recovers it. Every other parameter matches bit for bit.
     inexact_params = {"norm.weight": 1e-6}
+
+
+@require_torch_accelerator
+@slow
+class Qwen35MoeLargeGgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
+    gguf_repo = "unsloth/Qwen3.5-35B-A3B-GGUF"
+    gguf_file = "Qwen3.5-35B-A3B-Q4_K_M.gguf"
+    quantized_gguf_file = "Qwen3.5-35B-A3B-Q4_K_M.gguf"
+    reference_repo = "Qwen/Qwen3.5-35B-A3B"
+    model_class = Qwen3_5MoeForCausalLM
+
+    prompt = "The capital of France is Paris. The capital of Germany is"
+    expected_completion = " Berlin"
+
+    @unittest.skip("the bf16 checkpoint is ~70GB and split across shards the reader cannot open")
+    def test_state_dict_matches_transformers(self):
+        pass

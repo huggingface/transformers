@@ -19,7 +19,13 @@ undo llama.cpp's value/layout transforms, matching on the renamed key, at most o
 
 import torch
 
-from ...core_model_loading import ConversionOps, WeightConverter, WeightRenaming, WeightTransform
+from ...core_model_loading import (
+    Concatenate,
+    ConversionOps,
+    WeightConverter,
+    WeightRenaming,
+    WeightTransform,
+)
 from .dequant import GGML_BLOCK
 from .kernels import dequantize_blocks
 
@@ -171,9 +177,43 @@ def _qwen35(config) -> list[WeightTransform]:
     return renamings + offset_norms + per_value_head + value_reorder
 
 
+def _qwen35moe(config) -> list[WeightTransform]:
+    """Qwen3.5 MoE: the same hybrid stack as `_qwen35`, with each layer's FFN replaced by an expert bank.
+
+    Everything about the attention and linear-attention halves is `_qwen35`'s, including the value-head
+    reorder -- llama.cpp converts both through the same base class, so what it does to those tensors does
+    not change. What is new is the FFN: a router, a bank of stacked experts, and a shared expert that
+    runs for every token.
+
+    Experts arrive stacked, `(n_experts, rows, cols)`, which is the layout the model wants; the
+    per-expert `experts.{i}` split some safetensors checkpoints use never appears in a GGUF.
+    """
+    routed = [
+        WeightRenaming(r"\.ffn_gate_inp\.", ".mlp.gate."),
+        WeightRenaming(r"\.ffn_down_exps\.weight", ".mlp.experts.down_proj"),
+        WeightRenaming(r"\.ffn_gate_inp_shexp\.", ".mlp.shared_expert_gate."),
+        WeightRenaming(r"\.ffn_gate_shexp\.", ".mlp.shared_expert.gate_proj."),
+        WeightRenaming(r"\.ffn_up_shexp\.", ".mlp.shared_expert.up_proj."),
+        WeightRenaming(r"\.ffn_down_shexp\.", ".mlp.shared_expert.down_proj."),
+    ]
+    # `gate_up_proj` is chunked in two on dim 1, so gate comes first and up second.
+    fuse_gate_up = WeightConverter(
+        source_patterns=[r"\.ffn_gate_exps\.weight", r"\.ffn_up_exps\.weight"],
+        target_patterns=".mlp.experts.gate_up_proj",
+        operations=[ConcatenateRows(dim=1)],
+    )
+    restore_gate = WeightConverter(
+        source_patterns="mlp.shared_expert_gate.weight",
+        target_patterns="mlp.shared_expert_gate.weight",
+        operations=[RestoreLeadingAxis()],
+    )
+    return _qwen35(config) + routed + [fuse_gate_up, restore_gate]
+
+
 # gguf `general.architecture` -> builder taking the model config
 GGUF_ARCHS = {
     "qwen35": _qwen35,
+    "qwen35moe": _qwen35moe,
 }
 
 
@@ -337,6 +377,44 @@ class Cast(ConversionOps):
         return {name: tensor.to(self.dtype)}
 
 
+class RestoreLeadingAxis(ConversionOps):
+    """Put back a leading axis of 1 that `llama-quantize` drops.
+
+    ggml stores a `(1, n)` tensor as `n` values with one dimension, and the quantizer rewrites the
+    tensor table that way even for a tensor it leaves in f32 -- so the same weight reads `(1, n)` out
+    of an unquantized file and `(n,)` out of a quantized one. Qwen3.5 MoE's `shared_expert_gate` is
+    one row, so it lands on exactly that difference, and the mismatch only shows up as a broadcast
+    error deep in the MLP.
+
+    Idempotent, because both files have to load through one mapping: a tensor that still has the axis
+    passes through untouched.
+    """
+
+    supports_packed = True
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        tensor = _single_tensor(input_dict)
+        return {target_patterns[0]: tensor if tensor.dim() > 1 else tensor.unsqueeze(0)}
+
+
+class ConcatenateRows(Concatenate):
+    """`Concatenate` along an axis of whole rows, which packed GGUF blocks survive.
+
+    A quantized weight is stored as `(..., rows, bytes_per_row)`: a block never spans two rows, so
+    joining tensors along a row axis moves whole blocks and their scales together. Concatenating along
+    the *last* axis would cut through them, which is why this is a separate op rather than a flag on
+    the shared one -- it is only safe for the axis it is given.
+
+    Qwen3.5 MoE needs it: the file keeps a layer's gate and up expert banks apart, the model wants them
+    fused, and doing that on blocks is what lets the experts stay packed.
+    """
+
+    supports_packed = True
+
+
 class Dequantize(ConversionOps):
     """Unpack GGUF blocks into values, on the parameter's own device.
 
@@ -361,10 +439,22 @@ class Dequantize(ConversionOps):
         ggml_type = self.ggml_types.get(full_layer_name)
         if ggml_type is None:
             return input_dict
-        blocks = _single_tensor(input_dict)
         block_elements, block_bytes = GGML_BLOCK[ggml_type]
-        rows, cols = blocks.shape[0], blocks.shape[1] // block_bytes * block_elements
-        return {full_layer_name: dequantize_blocks(blocks, ggml_type, rows, cols, self.dtype)}
+        # Every source: a chain can start with more than one tensor, and all must arrive unpacked.
+        values = {}
+        for key, tensors in input_dict.items():
+            blocks = tensors[0] if isinstance(tensors, list) else tensors
+            if blocks.dtype != torch.uint8:  # already dense: another op in the chain got there first
+                values[key] = blocks
+                continue
+            # Only the last axis holds bytes, so a stacked bank's leading axes are flattened and restored.
+            cols = blocks.shape[-1] // block_bytes * block_elements
+            flat = blocks.reshape(-1, blocks.shape[-1])
+            unpacked = dequantize_blocks(flat, ggml_type, flat.shape[0], cols, self.dtype)
+            values[key] = unpacked.reshape(*blocks.shape[:-1], cols)
+        if len(values) == 1:
+            return {full_layer_name: next(iter(values.values()))}
+        return values
 
 
 def _single_tensor(input_dict: dict[str, torch.Tensor]) -> torch.Tensor:

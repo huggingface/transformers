@@ -154,6 +154,7 @@ class LagunaMLP(nn.Module):
         return down_proj
 
 
+@use_kernel_forward_from_hub("SoftmaxTopKRouter")
 class LagunaTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
