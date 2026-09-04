@@ -361,54 +361,8 @@ class Qwen35GgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
 
 
 @require_torch_accelerator
-class Qwen35MoeGgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
-    """The MoE architecture, on a purpose-built tiny checkpoint rather than a published one.
-
-    The smallest published Qwen3.5-MoE is 35B-A3B, whose bf16 file and bf16 reference are ~70GB
-    each -- more than this suite can ask of a runner, and the bf16 comparison is the whole point of
-    the mixin. So the fixture is generated instead: a randomly-initialised `Qwen3_5MoeForCausalLM`
-    converted with llama.cpp's own `convert_hf_to_gguf.py`, which makes the reference exact rather
-    than approximate. Every one of its 72 parameters comes back bit-for-bit.
-
-    Its shape is small but not degenerate, and the parts that are not shrunk are the ones that would
-    stop testing anything if they were: the layer stack stays hybrid (three linear-attention layers
-    and a full-attention one), the rope stays interleaved mrope over a quarter of the head, the head
-    dims stay a multiple of 32 so the delta-rule kernel applies rather than its fallback, and every
-    quantized weight's input dim is a multiple of 256 so `llama-quantize` produces the Q4_K it is
-    asked for instead of silently falling back to Q5_0.
-
-    Not `@slow`: at ~150MB it is the one architecture here a normal run can afford.
-    """
-
-    gguf_repo = "marcsun13/tiny-Qwen3_5Moe-GGUF"
-    gguf_file = "tiny-moe-BF16.gguf"
-    quantized_gguf_file = "tiny-moe-Q4_K_M.gguf"
-    reference_repo = "marcsun13/tiny-Qwen3_5Moe"
-    model_class = Qwen3_5MoeForCausalLM
-
-    prompt = "The capital of France is Paris. The capital of Germany is"
-    # Random weights, so this is not language -- it is the same continuation from the bf16 file, the
-    # packed quantized file and the dequantized one, which is what makes it worth asserting.
-    expected_completion = " is is is"
-
-
-@require_torch_accelerator
 @slow
 class Qwen35MoeLargeGgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
-    """The same architecture on the published checkpoint, for a machine that can hold it.
-
-    The tiny fixture above is what proves the conversion exact, tensor by tensor. This one proves it
-    on the file people actually load, at the shapes they actually load it at -- 40 layers, 256
-    experts, a vocabulary of a quarter of a million tokens -- where a mapping that happens to work at
-    four layers and eight experts can still be wrong.
-
-    Only the quantized file is exercised. The bf16 build of a 35B model is ~70GB and ships split
-    across two shards, which the reader does not read (a GGUF is one memory-mapped file), and the
-    bf16 reference to compare it against would be another 70GB. So `gguf_file` is the Q4_K_M one and
-    the state-dict comparison -- the single test that genuinely needs unquantized weights -- is
-    skipped rather than loosened into something that would pass on a wrong answer.
-    """
-
     gguf_repo = "unsloth/Qwen3.5-35B-A3B-GGUF"
     gguf_file = "Qwen3.5-35B-A3B-Q4_K_M.gguf"
     quantized_gguf_file = "Qwen3.5-35B-A3B-Q4_K_M.gguf"
@@ -418,9 +372,6 @@ class Qwen35MoeLargeGgufModelTest(GgufModelIntegrationTesterMixin, unittest.Test
     prompt = "The capital of France is Paris. The capital of Germany is"
     expected_completion = " Berlin"
 
-    @unittest.skip(
-        "compares against the bf16 checkpoint, which for this model is ~70GB and split across shards "
-        "the reader cannot open; Qwen35MoeGgufModelTest covers it exactly on a tiny checkpoint"
-    )
+    @unittest.skip("the bf16 checkpoint is ~70GB and split across shards the reader cannot open")
     def test_state_dict_matches_transformers(self):
         pass

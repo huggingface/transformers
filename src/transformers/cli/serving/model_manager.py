@@ -494,8 +494,7 @@ class ModelManager:
             for ref, revision_info in repo.refs.items():
                 author = repo.repo_id.split("/")[0] if "/" in repo.repo_id else ""
 
-                # A GGUF repo holds a quantization per file, each a separate model to a caller, so the
-                # files are listed rather than the repo. Their config is in the file's own metadata.
+                # One quantization per file, each a separate model, so list files rather than the repo.
                 gguf_files = sorted(f.file_name for f in revision_info.files if f.file_name.endswith(".gguf"))
                 for gguf_file in gguf_files:
                     generative_models.append(

@@ -250,7 +250,6 @@ def replace_with_gguf_modules(model, plan: dict[str, int], kernel, dtype=None) -
 
     replaced, unsupported = {}, set()
     for module_name, module in model.named_modules():
-        # An expert bank holds bare parameters rather than child `Linear`s, so it is swapped whole.
         if module_name.endswith(".experts"):
             expert_params = ("gate_up_proj", "down_proj")  # the order `GgufExperts` takes their types
             expert_types = [plan.get(f"{module_name}.{name}") for name in expert_params]

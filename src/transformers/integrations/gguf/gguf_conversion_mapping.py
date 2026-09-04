@@ -191,7 +191,6 @@ def _qwen35moe(config) -> list[WeightTransform]:
     routed = [
         WeightRenaming(r"\.ffn_gate_inp\.", ".mlp.gate."),
         WeightRenaming(r"\.ffn_down_exps\.weight", ".mlp.experts.down_proj"),
-        # the shared expert is an ordinary MLP, and its gate a single row
         WeightRenaming(r"\.ffn_gate_inp_shexp\.", ".mlp.shared_expert_gate."),
         WeightRenaming(r"\.ffn_gate_shexp\.", ".mlp.shared_expert.gate_proj."),
         WeightRenaming(r"\.ffn_up_shexp\.", ".mlp.shared_expert.up_proj."),
@@ -441,8 +440,7 @@ class Dequantize(ConversionOps):
         if ggml_type is None:
             return input_dict
         block_elements, block_bytes = GGML_BLOCK[ggml_type]
-        # Every source, not just one: a chain can start with more than one tensor (MoE's gate and up
-        # banks, fused by the next op), so all of them have to arrive unpacked, under their own keys.
+        # Every source: a chain can start with more than one tensor, and all must arrive unpacked.
         values = {}
         for key, tensors in input_dict.items():
             blocks = tensors[0] if isinstance(tensors, list) else tensors

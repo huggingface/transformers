@@ -117,7 +117,6 @@ def get_ggml_layer_mapping() -> dict:
     return {
         # Named for the weight convention rather than the model: this is the norm that computes
         # `x * (1 + w)`, which the plain `RMSNorm` kernels would get silently wrong.
-        # Named for the scoring function: the kernel rewrites the routing maths, exact for softmax only.
         "SoftmaxTopKRouter": {
             "mps": {
                 Mode.INFERENCE: LayerRepository(
@@ -156,8 +155,7 @@ def kernelize_ggml_layers(model) -> None:
 
     from kernels import Mode, kernelize, register_kernel_mapping, use_kernel_mapping
 
-    # Resolve first and keep what answers: `kernelize` stops at the first entry it cannot fetch, which
-    # would cost every layer after it.
+    # Resolve first and keep what answers: `kernelize` stops at the first entry it cannot fetch.
     mapping = {}
     for layer_name, devices in get_ggml_layer_mapping().items():
         try:
@@ -180,5 +178,4 @@ def kernelize_ggml_layers(model) -> None:
         with use_kernel_mapping(mapping, inherit_mapping=False):
             kernelize(model, mode=Mode.INFERENCE, device=model.device.type)
     except Exception as error:  # noqa: BLE001
-        # Every entry resolved above, so reaching here is a graft that failed rather than a fetch.
         logger.info(f"ggml layer kernels not fully grafted ({error}); the rest keeps the model's own layers.")
