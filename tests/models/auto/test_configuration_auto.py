@@ -24,6 +24,7 @@ import transformers
 import transformers.models.auto
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 from transformers.models.bert.configuration_bert import BertConfig
+from transformers.models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from transformers.models.roberta.configuration_roberta import RobertaConfig
 from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, get_tests_dir
 
@@ -55,6 +56,22 @@ class AutoConfigTest(unittest.TestCase):
     def test_config_model_type_from_model_identifier(self):
         config = AutoConfig.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER)
         self.assertIsInstance(config, RobertaConfig)
+
+    def test_config_model_type_alias(self):
+        # `kimi_k2` checkpoints are `deepseek_v3` checkpoints under another name, and ship remote code. They must
+        # resolve to the native config instead of the remote one.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_dict = {
+                "model_type": "kimi_k2",
+                "architectures": ["DeepseekV3ForCausalLM"],
+                "auto_map": {"AutoConfig": "configuration_deepseek.DeepseekV3Config"},
+            }
+            with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+                json.dump(config_dict, f)
+
+            config = AutoConfig.from_pretrained(tmp_dir)
+            self.assertIsInstance(config, DeepseekV3Config)
+            self.assertEqual(config.model_type, "deepseek_v3")
 
     def test_config_for_model_str(self):
         config = AutoConfig.for_model("roberta")
