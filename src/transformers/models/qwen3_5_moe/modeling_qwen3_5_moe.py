@@ -879,6 +879,7 @@ class Qwen3_5MoeExperts(nn.Module):
         return final_hidden_states
 
 
+@use_kernel_forward_from_hub("SoftmaxTopKRouter")
 class Qwen3_5MoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -920,6 +921,7 @@ class Qwen3_5MoeSparseMoeBlock(nn.Module):
         return expert_output
 
 
+@use_kernel_forward_from_hub("RMSNormZeroCentered")
 class Qwen3_5MoeRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()

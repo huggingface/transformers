@@ -27,6 +27,16 @@ MAX_GEMV_ROWS = 8
 DEQUANT_CHUNK_ELEMS = 64 << 20  # ~128 MB of bf16 per unpacked chunk
 
 
+def mul_mat_id(blocks: torch.Tensor, x: torch.Tensor, ids: torch.Tensor, ggml_type: int, out_features: int):
+    """One dispatch for a bank of routed experts -- ggml's `mul_mv_id`.
+
+    `blocks` is `(n_experts, out_features, bytes_per_row)`, `x` is `(n_tokens, in_features)`, `ids` is
+    `(n_tokens, n_used)`; the result is `(n_tokens, n_used, out_features)` f32. The alternative is a
+    gemv per expert per layer, which is dispatch overhead rather than arithmetic.
+    """
+    return _gguf_kernel.mul_mat_id(blocks, x, ids, ggml_type, out_features)
+
+
 def mul_mat_vec(weight: torch.Tensor, x: torch.Tensor, ggml_type: int, out_features: int) -> torch.Tensor:
     """(N, bytes_per_row) uint8 @ (M, K) -> (M, N). May return f32 whatever `x` is."""
     return _gguf_kernel.mul_mat_vec(weight, x, ggml_type, out_features)
@@ -73,6 +83,7 @@ class GgufKernel:
         self.mul_mat_vec = module.mul_mat_vec
         self.dequantize = module.dequantize
         self.get_rows = module.get_rows
+        self.mul_mat_id = module.mul_mat_id
         self.gemv_types = module.GEMV_TYPES
 
     def supports(self, ggml_type: int) -> bool:
@@ -106,6 +117,17 @@ def get_ggml_layer_mapping() -> dict:
     return {
         # Named for the weight convention rather than the model: this is the norm that computes
         # `x * (1 + w)`, which the plain `RMSNorm` kernels would get silently wrong.
+        # Named for the scoring function: the kernel rewrites the routing maths, exact for softmax only.
+        "SoftmaxTopKRouter": {
+            "mps": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-staging/topk",
+                    layer_name="SoftmaxTopKRouter",
+                    # TODO: `version=1` once kernels-staging/topk#1124 is merged and tagged
+                    revision="pr-1124",
+                )
+            },
+        },
         "RMSNormZeroCentered": {
             "mps": {
                 Mode.INFERENCE: LayerRepository(
@@ -134,7 +156,24 @@ def kernelize_ggml_layers(model) -> None:
 
     from kernels import Mode, kernelize, register_kernel_mapping, use_kernel_mapping
 
-    mapping = get_ggml_layer_mapping()
+    # Resolve every repository first and keep only the ones that answer. `kernelize` walks the model
+    # once for the whole mapping and stops where it raises, so an entry that cannot be fetched -- a
+    # repo that does not exist yet, a machine with no network, a build with no variant for this torch
+    # -- would otherwise cost every layer after it. Each kernel is independent; a missing one should
+    # only mean that layer keeps its own forward.
+    mapping = {}
+    for layer_name, devices in get_ggml_layer_mapping().items():
+        try:
+            for modes in devices.values():
+                for repo in modes.values():
+                    repo.load()
+        except Exception as error:  # noqa: BLE001
+            logger.info(f"no ggml kernel for {layer_name} ({error}); it keeps the model's own layer.")
+            continue
+        mapping[layer_name] = devices
+    if not mapping:
+        return
+
     register_kernel_mapping(mapping)
     try:
         # `inherit_mapping=False` narrows what `kernelize` can see to ggml's own layers. Inheriting would
@@ -144,6 +183,5 @@ def kernelize_ggml_layers(model) -> None:
         with use_kernel_mapping(mapping, inherit_mapping=False):
             kernelize(model, mode=Mode.INFERENCE, device=model.device.type)
     except Exception as error:  # noqa: BLE001
-        # `kernelize` stops where it raises, so with more than one entry this can leave the layers it had
-        # already reached grafted. Harmless -- each is a drop-in for the implementation it replaced.
+        # Every entry resolved above, so reaching here is a graft that failed rather than a fetch.
         logger.info(f"ggml layer kernels not fully grafted ({error}); the rest keeps the model's own layers.")

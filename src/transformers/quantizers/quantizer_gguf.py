@@ -107,6 +107,15 @@ class GgufHfQuantizer(HfQuantizer):
                 self.dtype = torch.get_default_dtype()
                 return self.dtype
             dtype = self.header.dtype if self.header.dtype is not None else torch.float32
+        # The kernels take f32 activations, so another dtype is cast in and out of every matmul: 9.3
+        # tok/s against 40.7 on Qwen3.5-35B-A3B. The weights are quantized either way.
+        if not self.quantization_config.dequantize and dtype != torch.float32:
+            logger.warning(
+                f"Loading a GGUF checkpoint with its weights packed is fastest in float32, and this "
+                f"one was asked for in {dtype}. The kernels compute in float32, so every matmul will "
+                f"cast its input and its output. Pass `dtype=torch.float32` to avoid it -- the weights "
+                f"stay quantized regardless, so this costs no extra memory."
+            )
         self.dtype = dtype
         return dtype
 
