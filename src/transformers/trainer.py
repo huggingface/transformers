@@ -619,12 +619,18 @@ class Trainer:
         self._mixed_mesh_grads: bool | None = None
         # With expert-parallel token dispatch every rank trains on its own part of the batch, while accelerate
         # treats the `tp` ranks as one data-parallel rank: the batches and the token counts are handled here.
-        distributed_config = getattr(getattr(model, "config", None), "distributed_config", None)
-        self._expert_parallel_dispatch = distributed_config is not None and distributed_config.expert_parallel_dispatch
+        self._expert_parallel_dispatch = getattr(model, "_expert_parallel_dispatch", False)
         if self._expert_parallel_dispatch and args.train_sampling_strategy != "random":
             raise ValueError(
                 "`expert_parallel_dispatch=True` splits the batches across every rank with a `DistributedSampler`, "
                 f"which `train_sampling_strategy='{args.train_sampling_strategy}'` does not go through."
+            )
+        if self._expert_parallel_dispatch and (
+            self.accelerator.dispatch_batches or (train_dataset is not None and not has_length(train_dataset))
+        ):
+            raise ValueError(
+                "`expert_parallel_dispatch=True` splits the batches across every rank with a `DistributedSampler`, "
+                "which needs a sized training dataset and `dispatch_batches=False`."
             )
         if (
             getattr(model, "_device_mesh", None) is not None
@@ -1052,11 +1058,6 @@ class Trainer:
         # silently drop samples. Neutralise it by making the wrapper a passthrough (num_processes=1)
         if isinstance(sampler, (BatchRebalanceSampler, DistributedSampler)):
             prepared_bs = getattr(dataloader, "batch_sampler", None)
-            if prepared_bs is None and isinstance(sampler, DistributedSampler):
-                raise ValueError(
-                    "`expert_parallel_dispatch=True` splits the batches across every rank with the batch sampler, "
-                    "which `dispatch_batches=True` replaces."
-                )
             if prepared_bs is not None and getattr(prepared_bs, "batch_sampler", None) is not None:
                 prepared_bs.num_processes = 1
                 prepared_bs.process_index = 0

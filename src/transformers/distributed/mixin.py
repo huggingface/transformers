@@ -57,6 +57,7 @@ class DistributedMixin:
     _ep_plan: dict[str, str] | None = None
     _tp_size = None
     _fsdp_size = None
+    _expert_parallel_dispatch = False
     _pp_plan: dict[str, tuple[str, str]] | None = None
     _fsdp_plan: dict[str, str] | None = None
 
@@ -201,6 +202,7 @@ class DistributedMixin:
             # sees unaccounted ranks and falls back to DDP, which rejects the DTensor parameters.
             model._tp_size = distributed_config.tp_size
             model._fsdp_size = distributed_config.fsdp_size
+            model._expert_parallel_dispatch = distributed_config.expert_parallel_dispatch
 
             # Both may apply: the tensor/expert parallel plan shards across `tp` first, then FSDP2
             # shards every parameter (the `tp`-sharded ones included) across `fsdp`.
@@ -210,7 +212,7 @@ class DistributedMixin:
                     model.tp_plan = distributed_config.tp_plan
                 if distributed_config.expert_parallel_dispatch:
                     # Every rank trains on its own part of the batch, so only the experts can be sharded across the
-                    # group, through the dispatch versions of their styles.
+                    # group: the experts get the dispatch style, and the router keeps its global ids and scores.
                     other_styles = set(model.tp_plan.values()) - {"ep_router", "grouped_gemm", "moe_tp_experts"}
                     if other_styles:
                         raise ValueError(
@@ -222,16 +224,19 @@ class DistributedMixin:
                             "`expert_parallel_dispatch=True` runs the local experts with the `grouped_mm` experts "
                             f"implementation, not `{model.config._experts_implementation}`."
                         )
-                    dispatch_styles = {"ep_router": "ep_dispatch_router", "moe_tp_experts": "ep_dispatch_experts"}
                     # `tp_plan` reads `_ep_plan` under expert parallelism, so that is the plan to rewrite.
-                    model._ep_plan = {name: dispatch_styles.get(style, style) for name, style in model.tp_plan.items()}
+                    model._ep_plan = {
+                        name: "ep_dispatch_experts" if style == "moe_tp_experts" else style
+                        for name, style in model.tp_plan.items()
+                        if style != "ep_router"
+                    }
                 model = apply_tensor_parallelism(model, tp_mesh)
 
             if distributed_config.expert_parallel_dispatch:
                 # Every expert-parallel rank trains on its own part of the batch, so the parameters outside the
                 # experts are data-parallel across the whole mesh: FSDP2 shards them across all of it and owns
                 # their gradient reduction. The experts stay sharded across `tp` and, if any, across `fsdp`.
-                trunk_mesh = device_mesh._flatten("fsdp_tp") if device_mesh.ndim > 1 else device_mesh
+                trunk_mesh = device_mesh["fsdp_tp"] if device_mesh.ndim > 1 else device_mesh
                 expert_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else None
                 model = apply_fully_sharded_data_parallelism(model, trunk_mesh, expert_mesh=expert_mesh)
             elif distributed_config.fsdp_size > 1:
@@ -301,7 +306,7 @@ class DistributedMixin:
         if distributed_config is None:
             return state_dict
 
-        if is_fsdp_managed_module(model_to_save):
+        if distributed_config.fsdp_size > 1 or distributed_config.expert_parallel_dispatch:
             # Also covers the 2-D (fsdp, tp) mesh and token dispatch: every parameter is FSDP-managed, and
             # the full state dict is only materialized on rank 0.
             if not _is_torch_distributed_initialized():
