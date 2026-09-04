@@ -62,7 +62,13 @@ distributed_config = DistributedConfig(
 )
 ```
 
-Every rank trains on its own part of the batch: at each MoE layer it routes its tokens, sends the selected (token, expert) pairs to their owners with an all-to-all, runs its local experts, and gets the results back with a second all-to-all. Only the routed tokens travel. The parameters outside the experts are data-parallel across the expert-parallel group, so they are sharded with [FSDP2](./fsdp) across every rank (the `fsdp` and `tp` dimensions together when both are set) and FSDP2 reduces their gradients; the experts stay sharded across `tp` and, with `fsdp_size > 1`, across `fsdp`. The [`Trainer`] gives each rank its own training batches and counts tokens across all of them; evaluation runs as under plain expert parallelism, with the same batches on every `tp` rank. With `fsdp_size=1` the experts stay outside FSDP2, so `fsdp_mixed_precision` and `fsdp_cpu_offload` do not apply to them.
+Each rank trains on its own part of the batch. At every MoE layer it routes its tokens, sends each (token, expert) pair to the rank that owns the expert with an all-to-all, runs its local experts, and gets the results back with a second all-to-all. Only the routed tokens travel.
+
+The rest of the model is handled as follows:
+
+- The parameters outside the experts are data-parallel across the whole group, so they are sharded with [FSDP2](./fsdp) across every rank (`fsdp` and `tp` together when both are set), and FSDP2 reduces their gradients.
+- The experts stay sharded across `tp`, and across `fsdp` too when `fsdp_size > 1`. With `fsdp_size=1` they are outside FSDP2, so `fsdp_mixed_precision` and `fsdp_cpu_offload` do not apply to them.
+- The [`Trainer`] gives each rank its own training batches and counts tokens across all of them. Evaluation is unchanged from plain expert parallelism: every `tp` rank sees the same batches.
 
 ## Combining with FSDP2
 
