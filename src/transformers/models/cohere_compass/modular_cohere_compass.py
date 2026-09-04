@@ -325,6 +325,7 @@ class CohereCompassPreTrainedModel(Qwen3VLPreTrainedModel):
     input_modalities = ("image", "text")
     _no_split_modules = [
         "CohereCompassDecoderLayer",
+        "CohereCompassVisionBlock",
     ]
     _can_record_outputs = {
         "hidden_states": CohereCompassDecoderLayer,
