@@ -207,7 +207,9 @@ class Cohere2IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
                     },
                     {"type": "text", "text": "Please describe the image explicitly."},
                 ],
@@ -286,7 +288,9 @@ class Cohere2IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
                     },
                     {"type": "text", "text": "Please describe the image explicitly."},
                 ],
@@ -323,7 +327,10 @@ class Cohere2IntegrationTest(unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                        {
+                            "type": "image",
+                            "url": url_to_local_path("https://llava-vl.github.io/static/images/view.jpg"),
+                        },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
                 },
@@ -394,7 +401,10 @@ class Cohere2IntegrationTest(unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                        {
+                            "type": "image",
+                            "url": url_to_local_path("https://llava-vl.github.io/static/images/view.jpg"),
+                        },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
                 },
@@ -405,11 +415,15 @@ class Cohere2IntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                            "url": url_to_local_path(
+                                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                            ),
                         },
                         {
                             "type": "image",
-                            "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+                            "url": url_to_local_path(
+                                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                            ),
                         },
                         {
                             "type": "text",
@@ -487,7 +501,9 @@ class Cohere2MoeVisionIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
                     },
                     {"type": "text", "text": "Please describe the image explicitly."},
                 ],
@@ -519,7 +535,9 @@ class Cohere2MoeVisionIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
                     },
                     {"type": "text", "text": "Please describe the image explicitly."},
                 ],

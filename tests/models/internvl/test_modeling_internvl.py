@@ -40,7 +40,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_image_processing_common import load_test_image
+from ...test_image_processing_common import load_test_image, url_to_local_path
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -327,7 +327,9 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
                     },
                     {"type": "text", "text": "Please describe the image explicitly."},
                 ],
@@ -475,7 +477,9 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "video",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+                        ),
                     },
                     {"type": "text", "text": "What type of shot is the man performing?"},
                 ],
@@ -521,11 +525,15 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                            "url": url_to_local_path(
+                                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                            ),
                         },
                         {
                             "type": "image",
-                            "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+                            "url": url_to_local_path(
+                                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                            ),
                         },
                         {"type": "text", "text": "What are the differences between these two images?"},
                     ],
@@ -537,7 +545,9 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "video",
-                            "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+                            ),
                         },
                         {"type": "text", "text": "What type of shot is the man performing?"},
                     ],
@@ -549,7 +559,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://llava-vl.github.io/static/images/view.jpg",
+                            "url": url_to_local_path("https://llava-vl.github.io/static/images/view.jpg"),
                         },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
@@ -722,7 +732,9 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
                     },
                     {"type": "text", "text": "Please describe the image explicitly."},
                 ],
@@ -853,7 +865,9 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "video",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+                        ),
                     },
                     {"type": "text", "text": "What type of shot is the man performing?"},
                 ],
@@ -891,11 +905,15 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                            "url": url_to_local_path(
+                                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                            ),
                         },
                         {
                             "type": "image",
-                            "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+                            "url": url_to_local_path(
+                                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                            ),
                         },
                         {"type": "text", "text": "What are the difference between these two images?"},
                     ],
@@ -907,7 +925,9 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "video",
-                            "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+                            ),
                         },
                         {"type": "text", "text": "What type of shot is the man performing?"},
                     ],
@@ -919,7 +939,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://llava-vl.github.io/static/images/view.jpg",
+                            "url": url_to_local_path("https://llava-vl.github.io/static/images/view.jpg"),
                         },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],

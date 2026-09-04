@@ -102,7 +102,9 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3"
+                        ),
                     },
                     {"type": "text", "text": "Please transcribe this audio into text"},
                 ],
@@ -187,7 +189,9 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "audio",
-                            "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3"
+                            ),
                         },
                         {"type": "text", "text": "Please transcribe this audio into text"},
                     ],

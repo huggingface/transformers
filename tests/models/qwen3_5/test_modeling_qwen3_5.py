@@ -988,7 +988,9 @@ class Qwen3_5IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "video",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+                        ),
                     },
                     {"type": "text", "text": "Describe the video in short."},
                 ],
