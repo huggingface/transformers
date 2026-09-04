@@ -1269,6 +1269,14 @@ def spawn_materialize(
         return _job
 
 
+def shards_after_conversion(mapping: WeightRenaming | WeightConverter) -> bool:
+    """Whether a DTensor parameter has to be converted in full before this rank's shard is taken: a transpose or a RoPE
+    permutation moves elements across the sharded dim, so sharding the source first would give the wrong slice."""
+    return isinstance(mapping, WeightConverter) and any(
+        isinstance(op, (Transpose, PermuteForRope)) for op in mapping.operations
+    )
+
+
 def dot_natural_key(s: str):
     """
     Sort key for state-dict names: split on `"."` and sort digits numerically and strings alphabetically. It emits a
@@ -1718,6 +1726,10 @@ def convert_and_load_state_dict_in_model(
             sharding_op = None
             if is_dtensor(empty_param):
                 sharding_op = DtensorShardOperation(empty_param)
+            # A transpose or a RoPE permutation moves elements across the sharded dim, so this rank's slice of the
+            # source is not the slice of the converted tensor: those are converted in full and sharded afterwards.
+            if sharding_op is not None and shards_after_conversion(mapping):
+                sharding_op = None
 
             # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
             # directly on the device, as it will completely blow up the memory during the ops memory spike. So defer to "cpu", then
@@ -1760,6 +1772,8 @@ def convert_and_load_state_dict_in_model(
                 )
                 for target_name, param in realized_value.items():
                     param = param[0] if isinstance(param, list) else param
+                    if shards_after_conversion(mapping) and is_dtensor(meta_model_state_dict.get(target_name)):
+                        param = DtensorShardOperation(meta_model_state_dict[target_name]).shard_tensor(param)
                     param_device = get_device(device_map, target_name)
                     # Exception for params that are so huge that they need conversions on cpu no matter what - we put them back on
                     # the correct device now (if the device_map managed to make them fit on any device, as usually they will stay on

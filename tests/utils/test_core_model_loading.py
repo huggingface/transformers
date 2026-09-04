@@ -35,6 +35,7 @@ from transformers.core_model_loading import (
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
+    Transpose,
     VisionFuseAndPermuteForRope,
     VisionUnfuseAndPermuteForRope,
     WeightConverter,
@@ -43,6 +44,7 @@ from transformers.core_model_loading import (
     convert_and_load_state_dict_in_model,
     rename_source_key,
     revert_weight_conversion,
+    shards_after_conversion,
     spawn_materialize,
 )
 from transformers.modeling_utils import LoadStateDictConfig
@@ -333,6 +335,31 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             converted["model.layers.0.experts.gate_up_proj.weight"],
             torch.tensor([[[0.0, 1.0], [2.0, 3.0], [4.0, 5.0], [6.0, 7.0]]]),
         )
+
+    def test_transpose_and_rope_permute_are_sharded_after_conversion(self):
+        """A transpose or a RoPE permutation moves elements across the sharded dim, so the loader converts the full
+        tensor and takes this rank's shard afterwards (`shards_after_conversion`). Sharding the source first gives the
+        wrong slice: for a (4, 2) checkpoint tensor transposed into a (2, 4) parameter sharded on dim 0 over 2 ranks,
+        rank 0 needs row 0 of the transposed tensor, i.e. column 0 of the source, not rows 0-1 of the source."""
+        source = torch.arange(8.0).view(4, 2)
+        converter = WeightConverter("router.weight", "gate.weight", operations=[Transpose(0, 1)])
+        self.assertTrue(shards_after_conversion(converter))
+        self.assertTrue(
+            shards_after_conversion(WeightConverter("q.weight", "q.weight", operations=[PermuteForRope()]))
+        )
+        self.assertFalse(
+            shards_after_conversion(
+                WeightConverter(["w1", "w3"], "gate_up", operations=[MergeModulelist(dim=0), Concatenate(dim=1)])
+            )
+        )
+
+        converter.add_tensor("gate.weight", "router.weight", "router.weight", spawn_materialize(None, source, "cpu"))
+        converted = converter.convert("gate.weight")["gate.weight"]
+        for rank in range(2):
+            shard_op = _make_dtensor_shard_op(
+                FakeMesh(shape=(2,), rank=rank), [Shard(0)], param_shape=(2, 4), local_shape=(1, 4)
+            )
+            torch.testing.assert_close(shard_op.shard_tensor(converted), source.T[rank : rank + 1])
 
     def test_moe_and_qkv_conversion(self):
         model = DummyRoot(PreTrainedConfig())
