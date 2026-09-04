@@ -46,6 +46,7 @@ import numpy as np
 import safetensors.torch
 import torch
 import torch.distributed as dist
+from torch.distributed.tensor import DTensor
 from huggingface_hub import CommitInfo, ModelCard
 from packaging import version
 from torch import nn
@@ -1238,20 +1239,21 @@ class Trainer:
 
         if self.optimizer is None:
             decay_parameters = self.get_decay_parameter_names(opt_model)
-            optimizer_grouped_parameters = [
-                {
-                    "params": [
-                        p for n, p in opt_model.named_parameters() if (n in decay_parameters and p.requires_grad)
-                    ],
-                    "weight_decay": self.args.weight_decay,
-                },
-                {
-                    "params": [
-                        p for n, p in opt_model.named_parameters() if (n not in decay_parameters and p.requires_grad)
-                    ],
-                    "weight_decay": 0.0,
-                },
-            ]
+            optimizer_grouped_parameters = []
+            for in_decay, weight_decay in ((True, self.args.weight_decay), (False, 0.0)):
+                params = [
+                    p
+                    for n, p in opt_model.named_parameters()
+                    if p.requires_grad and (n in decay_parameters) == in_decay
+                ]
+                # Fused/foreach optimizers batch every param of a group into a single op call, which
+                # errors out if the group mixes DTensor and plain Tensor params.
+                # Split each group by type so every batched call stays homogeneous.
+                dtensor_params = [p for p in params if isinstance(p, DTensor)]
+                plain_params = [p for p in params if not isinstance(p, DTensor)]
+                for group_params in (dtensor_params, plain_params):
+                    if group_params:
+                        optimizer_grouped_parameters.append({"params": group_params, "weight_decay": weight_decay})
 
             if self.optimizer_cls_and_kwargs is not None:
                 optimizer_cls, optimizer_kwargs = self.optimizer_cls_and_kwargs
