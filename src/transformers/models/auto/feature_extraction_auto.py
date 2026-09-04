@@ -70,6 +70,7 @@ MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("unispeech-sat", "Wav2Vec2FeatureExtractor"),
         ("vibevoice", "VibeVoiceAcousticTokenizerFeatureExtractor"),
         ("vibevoice_asr", "VibeVoiceAcousticTokenizerFeatureExtractor"),
+        ("voxcpm2", "DacFeatureExtractor"),
         ("voxtral", "WhisperFeatureExtractor"),
         ("wav2vec2-bert", "Wav2Vec2FeatureExtractor"),
         ("wav2vec2-conformer", "Wav2Vec2FeatureExtractor"),

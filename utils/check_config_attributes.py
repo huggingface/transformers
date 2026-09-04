@@ -58,6 +58,14 @@ SPECIAL_CASES_TO_ALLOW = {
         "pooling_kernel_size",
     ],  # Used as meta data for other attributes/properties
     "MiniCPM3Config": ["dim_model_base"],  # Used by the logits_scaling property
+    "MiniCPM4Config": [
+        "dim_model_base",  # Used by the logits_scaling property
+        "mup_denominator",  # Checkpoint compatibility for speculative decoding heads
+    ],
+    "VoxCPM2TextConfig": [
+        "dim_model_base",  # Used by the logits_scaling property
+        "mup_denominator",  # Checkpoint compatibility for speculative decoding heads
+    ],
     "MiniCPMV4_6Config": ["drop_vision_last_layer"],
     "MiniMaxM3VLTextConfig": ["rotary_dim", "router_jitter_noise"],
     "Step3p7TextConfig": [
