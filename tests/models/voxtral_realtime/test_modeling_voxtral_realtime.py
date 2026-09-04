@@ -19,6 +19,7 @@ import unittest
 from threading import Thread
 
 import numpy as np
+import pytest
 from parameterized import parameterized
 
 from transformers import (
@@ -37,6 +38,7 @@ from transformers.models.voxtral_realtime.configuration_voxtral_realtime import 
     VoxtralRealtimeTextConfig,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_torch,
     slow,
@@ -259,16 +261,26 @@ class VoxtralRealtimeForConditionalGenerationModelTest(ALMModelTest, unittest.Te
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip(
-        reason="VoxtralRealtime only supports static and offloaded_static cache implementations, not quantized cache"
-    )
-    def test_generate_with_quant_cache(self):
-        pass
-
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     @unittest.skip("Model needs special input preparation!")
     def test_model_rope_scaling_from_config(self, scaling_type):
         pass
+
+    @pytest.mark.generate
+    @parameterized.expand([("dynamic",), ("static",)])
+    def test_generate_with_cache_implementation(self, cache_implementation):
+        """Any `cache_implementation` should match the default one, which already uses a `DynamicCache`."""
+        config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        model = VoxtralRealtimeForConditionalGeneration(config).to(torch_device).eval()
+
+        generation_kwargs = {
+            "max_new_tokens": self.max_new_tokens,
+            "do_sample": False,
+            "use_cache": True,
+        }
+        expected = model.generate(**inputs_dict, **generation_kwargs)
+        output = model.generate(**inputs_dict, **generation_kwargs, cache_implementation=cache_implementation)
+        torch.testing.assert_close(output, expected)
 
 
 @require_torch
@@ -353,11 +365,20 @@ class VoxtralRealtimeForConditionalGenerationIntegrationTest(unittest.TestCase):
         outputs = model.generate(**inputs)
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT = [
-            " Come on. Dude. You got a tattoo. So did you, dude. No. Oh, dude, what does my tattoo say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude! What does mine say? Sweet! Idiot! Your tattoo says dude. Your tattoo says sweet. Got it? Sorry. Hey, sorry.",
-            " This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, All these conversations are what have kept me honest, kept me inspired, and kept me going. Every day, I learned from you. You made me a better president, and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the",
-        ]
-
+        # fmt: off
+        EXPECTED_OUTPUT = Expectations(
+            {
+                (None, None): [
+                    " Come on. Dude. You got a tattoo. So did you, dude. No. Oh, dude, what does my tattoo say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude! What does mine say? Sweet! Idiot! Your tattoo says dude. Your tattoo says sweet. Got it? Sorry. Hey, sorry.",
+                    " This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, All these conversations are what have kept me honest, kept me inspired, and kept me going. Every day, I learned from you. You made me a better president, and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the",
+                ],
+                ("cuda", 8): [
+                    " Come on! Dude. You got a tattoo. So did you, dude. No. Oh, dude, what does my tattoo say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude, what does mine say? Sweet! What about mine? Dude! What does mine say? Sweet! Idiot! Your tattoo says dude. Your tattoo says sweet. Got it? Sorry. Hey, sorry.",
+                    " This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, All these conversations are what have kept me honest, kept me inspired, and kept me going. Every day, I learned from you. You made me a better president, and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the",
+                ],
+            }
+        ).get_expectation()
+        # fmt: on
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
     @slow

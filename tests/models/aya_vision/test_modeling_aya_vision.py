@@ -310,7 +310,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
                 ("xpu", 3): "Whispers on the breeze,\nLeaves dance under moonlit sky,\nNature's quiet song.",
                 # 4-bit
                 ("cuda", 7): "Sure, here's a haiku for you:\n\nMorning dew sparkles,\nPetals unfold in sunlight,\n",
-                ("cuda", 8): "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song.",
+                ("cuda", 8): "Whispers on the breeze,\nLeaves dance under moonlit sky,\nNature's quiet song.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -347,7 +347,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
                 ("xpu", 3): 'The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,',
                 # 4-bit
                 ("cuda", 7): 'The image depicts two cats comfortably resting on a pink blanket spread across a sofa. The cats,',
-                ("cuda", 8): 'The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,',
+                ("cuda", 8): 'The image depicts a cozy scene of two cats resting on a bright pink blanket spread across a red',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

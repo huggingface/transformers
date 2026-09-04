@@ -17,12 +17,14 @@
 
 import copy
 import os
+import sys
 import tempfile
 import types
 from unittest.mock import MagicMock, patch
 
 import torch
 from huggingface_hub import snapshot_download
+from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig
 from transformers.integrations.hub_kernels import (
@@ -31,6 +33,7 @@ from transformers.integrations.hub_kernels import (
     is_kernel,
     lazy_load_kernel,
     load_and_register_attn_kernel,
+    use_kernel_func_from_hub_with_fallback,
 )
 from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -251,6 +254,50 @@ class TestHubKernels(TestCasePlus):
         output = model.generate(tokenized_input, max_new_tokens=10, do_sample=False)
         output = self.tokenizer.decode(output[0], skip_special_tokens=True)
         self.assertTrue(output in EXPECTED_OUTPUT)
+
+        del model
+
+    def test_kernels_mapping_functions_registration(self):
+        kernel_config = KernelConfig(
+            kernel_mapping={"rotary_pos_emb": ("kernels-community/rotary:apply_rotary_transformers", {"version": 2})}
+        )
+
+        # Functions would previously raise if not properly handled
+        model = AutoModelForCausalLM.from_pretrained(
+            "unsloth/Llama-3.2-1B-Instruct", use_kernels=True, device_map=torch_device, kernel_config=kernel_config
+        )
+
+        # Sanity checks making sure it is really been found / registered under the model
+        self.assertIn("rotary_pos_emb", model.kernel_config.registered_layer_names.values())
+        self.assertTrue(any(name.endswith(".rotary_pos_emb") for name in model.kernel_config.registered_layer_names))
+
+        del model
+
+    def test_kernels_mapping_no_inherit(self):
+        kernel_config = KernelConfig(
+            kernel_mapping={
+                "RMSNorm": (
+                    "kernels-community/layer-norm:LlamaRMSNorm",
+                    {"version": 1},
+                )
+            },
+            # Force to only inherit the mapping ^
+            inherit_mapping=False,
+        )
+
+        model = AutoModelForCausalLM.from_pretrained(
+            "unsloth/Llama-3.2-1B-Instruct", use_kernels=True, device_map=torch_device, kernel_config=kernel_config
+        )
+        first_rms_norm = model.model.layers[0].input_layernorm
+        first_self_attn = model.model.layers[0].self_attn
+
+        # RoPE should still be registered under attn
+        self.assertIn("rotary_pos_emb", getattr(first_self_attn, "_kernel_funcs", {}))
+        first_rope = first_self_attn._kernel_funcs["rotary_pos_emb"]
+
+        # Check kernelization by fwd matching
+        self.assertIsNot(first_rms_norm.forward.__func__, type(first_rms_norm).forward)  # exchanged
+        self.assertIs(first_rope.forward.__func__, type(first_rope).forward)  # not exchanged
 
         del model
 
@@ -510,6 +557,144 @@ class TestKernelUtilities(TestCasePlus):
             self.assertIs(mod1, sentinel_mod)
             self.assertIs(mod2, sentinel_mod)
             self.assertEqual(call_count["n"], 1)
+
+    def _make_fallback_func(self, torch_function):
+        """Decorate `torch_function` with a fake original package installed, as if e.g. `fla` were available."""
+        package_name = "fake_kernel_package"
+        package = types.ModuleType(package_name)
+        # Same name as the torch reference, but a different (recognisable) result and an extra kernel-only kwarg.
+        package.fake_op = lambda hidden_states, weight, cu_seqlens=None: hidden_states * weight * 10
+
+        with patch.dict(sys.modules, {package_name: package}):
+            return use_kernel_func_from_hub_with_fallback("fake_op", package_name)(torch_function)
+
+    def test_export_falls_back_to_torch_implementation(self):
+        """Tests if a function decorated with use_kernel_func_from_hub_with_fallback is traced by `torch.export` as the
+        original torch function and not the installed package's function, since the latter is generally not exportable.
+        """
+
+        def fake_op(hidden_states, weight, **kwargs):
+            return hidden_states + weight
+
+        decorated = self._make_fallback_func(fake_op)
+
+        class Wrapper(torch.nn.Module):
+            def forward(self, hidden_states, weight):
+                return decorated(hidden_states, weight)
+
+        inputs = (torch.ones(4), torch.full((4,), 3.0))
+        package_result, torch_result = torch.full((4,), 30.0), torch.full((4,), 4.0)
+
+        # Eager and `torch.compile` keep the package implementation ...
+        self.assertTrue(torch.equal(decorated(*inputs), package_result))
+        self.assertTrue(torch.equal(torch.compile(Wrapper(), fullgraph=True)(*inputs), package_result))
+        # ... only `torch.export` swaps in the torch one.
+        exported = torch.export.export(Wrapper(), inputs)
+        self.assertTrue(torch.equal(exported.module()(*inputs), torch_result))
+
+    def test_fallback_resolves_function_from_package_root(self):
+        """The package-root implementation takes precedence over the nested-module fallback."""
+        package = types.ModuleType("optional_backend")
+        optimized_function = MagicMock(return_value="optimized")
+        package.optimized_function = optimized_function
+        torch_function = MagicMock(return_value="torch")
+
+        with (
+            patch(
+                "transformers.integrations.hub_kernels.use_kernel_forward_from_hub",
+                return_value=lambda function: function,
+            ),
+            patch(
+                "transformers.integrations.hub_kernels.importlib.import_module",
+                return_value=package,
+            ) as import_module,
+        ):
+            wrapped = use_kernel_func_from_hub_with_fallback(
+                func_name="optimized_function",
+                package="optional_backend",
+                internal_path="ops.kernel",
+            )(torch_function)
+
+        self.assertEqual(wrapped(), "optimized")
+        import_module.assert_called_once_with("optional_backend")
+
+    @parameterized.expand(
+        [
+            (
+                "explicit_path",
+                "optimized_function",
+                "optional_backend",
+                "ops.kernel",
+                "optional_backend.ops.kernel",
+            ),
+            (
+                "mapped_path",
+                "chunk_gated_delta_rule",
+                "fla",
+                None,
+                "fla.ops.gated_delta_rule",
+            ),
+        ]
+    )
+    def test_fallback_imports_nested_module(
+        self,
+        case_name,
+        func_name,
+        package_name,
+        internal_path,
+        internal_module_name,
+    ):
+        """A nested implementation can be resolved from an explicit or registered module path."""
+        package = types.ModuleType(package_name)
+        internal_module = types.ModuleType(internal_module_name)
+        optimized_function = MagicMock(return_value="optimized")
+        setattr(internal_module, func_name, optimized_function)
+        torch_function = MagicMock(return_value="torch")
+
+        with (
+            patch(
+                "transformers.integrations.hub_kernels.use_kernel_forward_from_hub",
+                return_value=lambda function: function,
+            ),
+            patch(
+                "transformers.integrations.hub_kernels.importlib.import_module",
+                side_effect=[package, internal_module],
+            ) as import_module,
+        ):
+            wrapped = use_kernel_func_from_hub_with_fallback(
+                func_name=func_name,
+                package=package_name,
+                internal_path=internal_path,
+            )(torch_function)
+
+        self.assertEqual(wrapped(), "optimized")
+        self.assertEqual(
+            [call.args[0] for call in import_module.call_args_list],
+            [package_name, internal_module_name],
+        )
+
+    def test_fallback_uses_torch_when_nested_module_is_missing(self):
+        """The reference implementation remains available when the nested module cannot be imported."""
+        package = types.ModuleType("optional_backend")
+        torch_function = MagicMock(return_value="torch")
+
+        with (
+            patch(
+                "transformers.integrations.hub_kernels.use_kernel_forward_from_hub",
+                return_value=lambda function: function,
+            ),
+            patch(
+                "transformers.integrations.hub_kernels.importlib.import_module",
+                side_effect=[package, ImportError],
+            ),
+        ):
+            wrapped = use_kernel_func_from_hub_with_fallback(
+                func_name="optimized_function",
+                package="optional_backend",
+                internal_path="ops.kernel",
+            )(torch_function)
+
+        self.assertEqual(wrapped(), "torch")
 
 
 @require_kernels

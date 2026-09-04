@@ -22,6 +22,7 @@ REPO_CONSISTENCY_CHECKERS := \
 	modular_conversion, \
 	inits, \
 	doc_toc, \
+	reviewers, \
 	modeling_rules_doc, \
 	docstrings, \
 	dummies, \
