@@ -169,13 +169,11 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
     # FIXME: export is very sensitive to any shape changes
     test_torch_exportable = False
 
-    @unittest.skip("Glm5Next text DSA attention does not support flash_attention_2 in the common full-model test.")
-    def test_flash_attn_2_inference_equivalence(self):
-        pass
-
-    @unittest.skip("Glm5Next text DSA attention does not support flash_attention_2 in the common full-model test.")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        config = copy.deepcopy(config)
+        config.text_config.head_dim = config.text_config.qk_head_dim
+        return VLMModelTest._prepare_config_headdim(config, requested_dim)
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         """Override similar to GLM4V: images shaped as (bs*patch_len, dim) so we can't slice to batches in generate"""
