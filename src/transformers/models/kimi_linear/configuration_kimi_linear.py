@@ -66,11 +66,12 @@ class KimiLinearConfig(PreTrainedConfig):
         "layers.*.mlp.experts": "moe_tp_experts",
     }
     attribute_map = {
-        "model_max_length": "max_position_embeddings",
-        "moe_renormalize": "norm_topk_prob",
-        "num_expert_group": "n_group",
-        "num_local_experts": "n_routed_experts",
-        "num_experts_per_token": "num_experts_per_tok",
+        "max_position_embeddings": "model_max_length",
+        "norm_topk_prob": "moe_renormalize",
+        "n_group": "num_expert_group",
+        "num_local_experts": "num_experts",
+        "num_experts_per_tok": "num_experts_per_token",
+        "n_shared_experts": "num_shared_experts",
     }
 
     vocab_size: int = 163840
@@ -104,6 +105,7 @@ class KimiLinearConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
     attention_bias: bool = False
     attention_dropout: float | int | None = 0.0
+    num_local_experts: int = 256
     mlp_layer_types: list[str] | None = None
     layer_types: list[str] | None = None
 

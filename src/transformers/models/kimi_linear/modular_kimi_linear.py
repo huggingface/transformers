@@ -70,11 +70,12 @@ class KimiLinearConfig(DeepseekV3Config):
 
     model_type = "kimi_linear"
     attribute_map = {
-        "model_max_length": "max_position_embeddings",
-        "moe_renormalize": "norm_topk_prob",
-        "num_expert_group": "n_group",
-        "num_local_experts": "n_routed_experts",
-        "num_experts_per_token": "num_experts_per_tok",
+        "max_position_embeddings": "model_max_length",
+        "norm_topk_prob": "moe_renormalize",
+        "n_group": "num_expert_group",
+        "num_local_experts": "num_experts",
+        "num_experts_per_tok": "num_experts_per_token",
+        "n_shared_experts": "num_shared_experts",
     }
 
     vocab_size: int = 163840
@@ -82,6 +83,7 @@ class KimiLinearConfig(DeepseekV3Config):
     intermediate_size: int = 9216
     moe_intermediate_size: int = 1024
     num_hidden_layers: int = 27
+    num_local_experts: int = 256
     num_attention_heads: int = 32
     num_key_value_heads: int | None = 32
     routed_scaling_factor: float = 2.446

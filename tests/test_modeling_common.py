@@ -58,7 +58,6 @@ from transformers.integrations.moe import (
     grouped_mm_experts_forward,
     sonicmoe_experts_forward,
 )
-from transformers.integrations.sonicmoe import is_sonicmoe_loadable
 from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, _get_tied_weight_keys
 from transformers.models.auto import get_values
