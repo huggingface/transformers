@@ -107,6 +107,7 @@ class KimiLinearConfig(DeepseekV3Config):
     rope_interleave = AttributeError()
     first_k_dense_replace = AttributeError()
     num_mtp_layers = AttributeError()
+    n_routed_experts = AttributeError()
 
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)

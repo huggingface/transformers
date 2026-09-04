@@ -82,7 +82,6 @@ class KimiLinearConfig(PreTrainedConfig):
     num_attention_heads: int = 32
     num_key_value_heads: int | None = 32
     n_shared_experts: int = 1
-    n_routed_experts: int = 256
     routed_scaling_factor: float = 2.446
     kv_lora_rank: int = 512
     q_lora_rank: int | None = None
