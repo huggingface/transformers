@@ -28,6 +28,7 @@ import sys
 import tempfile
 import time
 import warnings
+from collections import defaultdict
 from collections.abc import Callable, Iterator, Mapping
 from functools import partial
 from pathlib import Path
@@ -96,6 +97,7 @@ from .trainer_optimizer import (
     _OPTIMIZER_HANDLERS,
     OptimizerContext,
     _parse_optim_args,
+    has_mixed_dtensor,
     is_optimizer_factory,
 )
 from .trainer_pt_utils import (
@@ -615,6 +617,15 @@ class Trainer:
         self._created_lr_scheduler = False
         # Resolved lazily at the first gradient clip; see `_has_mixed_mesh_grads`.
         self._mixed_mesh_grads: bool | None = None
+        if (
+            getattr(model, "_device_mesh", None) is not None
+            and args.save_strategy != SaveStrategy.NO
+            and not args.save_only_model
+        ):
+            raise ValueError(
+                "Resuming is not supported for models sharded at load time (`DistributedConfig`), so their "
+                "optimizer state cannot be checkpointed. Pass `save_only_model=True` or `save_strategy='no'`."
+            )
 
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
@@ -751,26 +762,21 @@ class Trainer:
                 )
             args["parallelism_config"] = self.args.parallelism_config
 
+        model_tp_size = getattr(self.model, "tp_size", None) or 1
         model_fsdp_size = getattr(self.model, "fsdp_size", None) or 1
-        if model_fsdp_size > 1:
-            # 2-D mesh: accelerate has to know about both dimensions or it will try to wrap the
-            # already-sharded model in DDP.
-            from accelerate import ParallelismConfig
+        if model_tp_size > 1:
+            # Sharded at load time (tensor/expert parallelism, optionally with FSDP2 on a second mesh
+            # dimension): accelerate has to know both sizes, or it sees unaccounted ranks and wraps
+            # the DTensor model in DDP, which raises.
+            if not is_accelerate_available("1.12.0"):
+                raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
+            if args.get("parallelism_config") is None:
+                from accelerate import ParallelismConfig
 
-            args["parallelism_config"] = ParallelismConfig(
-                dp_shard_size=model_fsdp_size, tp_size=getattr(self.model, "tp_size", None) or 1
-            )
-        elif getattr(self.model, "tp_size", None) is not None and self.model.tp_size > 1:
-            if self.args.parallelism_config is None:
-                if is_accelerate_available("1.12.0"):
-                    if self.args.parallelism_config is None:
-                        from accelerate import ParallelismConfig
-
-                        args["parallelism_config"] = ParallelismConfig(tp_size=self.model.tp_size)
-                else:
-                    raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
-            elif args["parallelism_config"].tp_size != self.model.tp_size:
-                args["parallelism_config"].tp_size = self.model.tp_size
+                args["parallelism_config"] = ParallelismConfig(tp_size=model_tp_size, dp_shard_size=model_fsdp_size)
+            else:
+                args["parallelism_config"].tp_size = model_tp_size
+                args["parallelism_config"].dp_shard_size = model_fsdp_size
 
         if is_accelerate_available("1.2.0"):
             # it we don't have the correct version, we will rely on env var instead that were set in TrainingArguments
@@ -1266,6 +1272,18 @@ class Trainer:
                     "weight_decay": 0.0,
                 },
             ]
+            if has_mixed_dtensor(p for group in optimizer_grouped_parameters for p in group["params"]):
+                # Parameters on different device meshes (expert parallelism, alone or with FSDP2 on a 2-D
+                # mesh) cannot share one fused/foreach kernel call: give each mesh its own param group.
+                from torch.distributed.tensor import DTensor
+
+                split_groups = []
+                for group in optimizer_grouped_parameters:
+                    by_mesh = defaultdict(list)
+                    for p in group["params"]:
+                        by_mesh[p.device_mesh if isinstance(p, DTensor) else None].append(p)
+                    split_groups.extend({**group, "params": params} for params in by_mesh.values())
+                optimizer_grouped_parameters = split_groups
 
             if self.optimizer_cls_and_kwargs is not None:
                 optimizer_cls, optimizer_kwargs = self.optimizer_cls_and_kwargs
@@ -1871,7 +1889,6 @@ class Trainer:
                 self._track_num_input_tokens(inputs)
 
                 if do_sync_step:
-                    self._sync_replicated_grads(model)
                     grad_norm = None
                     if self.args.max_grad_norm > 0:
                         grad_norm = self._clip_grad_norm(model)
@@ -2628,81 +2645,35 @@ class Trainer:
         input_tokens = torch.as_tensor(input_tokens, device=self.args.device, dtype=torch.int64)
         self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
 
-    def _sync_replicated_grads(self, model):
-        """Average the gradients of parameters replicated along the data-parallel dimension (e.g. the
-        EP-sharded experts under a 2-D mesh) -- FSDP2 only reduces what it shards."""
-        from torch.distributed.tensor import DTensor
-
-        mesh = getattr(model, "_device_mesh", None) or getattr(getattr(model, "module", None), "_device_mesh", None)
-        if mesh is None or mesh.ndim < 2 or "fsdp" not in (mesh.mesh_dim_names or ()):
-            return
-        dp_group = mesh["fsdp"].get_group()
-        dp_size = mesh["fsdp"].size()
-        if dp_size < 2:
-            return
-
-        for param in model.parameters():
-            if param.grad is None:
-                continue
-            grad = param.grad
-            if isinstance(grad, DTensor):
-                # Already reduced over `fsdp` if that dimension is part of the gradient's own mesh.
-                if "fsdp" in (grad.device_mesh.mesh_dim_names or ()):
-                    continue
-                grad = grad.to_local()
-            torch.distributed.all_reduce(grad, group=dp_group)
-            grad.div_(dp_size)
-
     def _mixed_mesh_grad_norm(self, model, max_norm):
-        """Gradient norm (and clip) when parameters live on different device meshes: sum each gradient's
-        local squared norm, discounting the mesh dimensions it is replicated over, reduce once."""
+        """
+        Gradient norm (and clip) when the gradients live on different device meshes, which `clip_grad_norm_` cannot
+        span: one norm per mesh, each already reduced over its own mesh.
+        """
         from torch.distributed.tensor import DTensor
+        from torch.nn.utils import clip_grads_with_norm_, get_total_norm
 
-        grads = [p.grad for p in model.parameters() if p.grad is not None]
-        if not grads:
-            return torch.zeros((), device=self.args.device)
+        params_by_mesh = defaultdict(list)
+        for param in model.parameters():
+            if param.grad is not None:
+                params_by_mesh[param.grad.device_mesh if isinstance(param.grad, DTensor) else None].append(param)
 
-        world = torch.distributed.get_world_size() if torch.distributed.is_initialized() else 1
-        total_sq = torch.zeros((), device=grads[0].device, dtype=torch.float32)
-        for g in grads:
-            if isinstance(g, DTensor):
-                local = g.to_local()
-                # Ranks along a replicated mesh dimension all hold the same values.
-                replicas = 1
-                for dim, placement in enumerate(g.placements):
-                    if placement.is_replicate():
-                        replicas *= g.device_mesh.size(dim)
-                # Dimensions of the world this tensor's mesh does not span also hold copies.
-                replicas *= world // g.device_mesh.size()
-            else:
-                local, replicas = g, world  # a plain tensor is the same on every rank
-            total_sq += local.detach().float().pow(2).sum() / replicas
-
-        if world > 1:
-            torch.distributed.all_reduce(total_sq)
-        total_norm = total_sq.sqrt()
+        norms = []
+        for params in params_by_mesh.values():
+            norm = get_total_norm([p.grad for p in params])
+            norms.append(norm.full_tensor() if isinstance(norm, DTensor) else norm)
+        total_norm = torch.linalg.vector_norm(torch.stack(norms))
 
         if max_norm != float("inf"):
-            clip = (max_norm / (total_norm + 1e-6)).clamp(max=1.0)
-            for g in grads:
-                (g.to_local() if isinstance(g, DTensor) else g).mul_(clip)
+            for params in params_by_mesh.values():
+                clip_grads_with_norm_(params, max_norm, total_norm)
         return total_norm
 
     def _has_mixed_mesh_grads(self, model) -> bool:
-        """True when the gradients do not all share one device mesh, so whole-set ops cannot be used.
-
-        Static for the life of the run (sharding never changes after setup), so scan only once."""
-        from torch.distributed.tensor import DTensor
-
+        # Static for the life of the run (sharding never changes after setup), so scan the
+        # parameters only on the first call.
         if self._mixed_mesh_grads is None:
-            meshes = set()
-            for p in model.parameters():
-                if p.grad is None:
-                    continue
-                meshes.add(p.grad.device_mesh if isinstance(p.grad, DTensor) else None)
-                if len(meshes) > 1:
-                    break
-            self._mixed_mesh_grads = len(meshes) > 1
+            self._mixed_mesh_grads = has_mixed_dtensor(p.grad for p in model.parameters() if p.grad is not None)
         return self._mixed_mesh_grads
 
     def _clip_grad_norm(self, model):
@@ -4022,27 +3993,11 @@ class Trainer:
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
 
-        elif getattr(
-            self.accelerator.unwrap_model(self.model, keep_torch_compile=False), "_device_mesh", None
-        ) is not None and not _is_peft_model(self.model):
-            # The model was sharded at load time (`DistributedConfig`). Gathering its DTensor state
-            # dict is collective, so every rank must participate; only the main process writes.
-            # (PEFT models fall through to the adapter-only save below.)
-            from .distributed.tensor_parallel import gather_state_dict_for_save
-
-            unwrapped = self.accelerator.unwrap_model(self.model, keep_torch_compile=False)
-            gather_start = time.time()
-            state_dict = gather_state_dict_for_save(unwrapped.state_dict(), None, None, 0)
-            gather_s = time.time() - gather_start
-            if self.args.should_save:
-                write_start = time.time()
-                # `save_pretrained` ends with `barrier_after_gathered_checkpoint_save`.
-                self._save(output_dir, state_dict=state_dict)
-                logger.info(f"Sharded-model save: gather {gather_s:.1f}s, write {time.time() - write_start:.1f}s")
-            else:
-                # Match the writer's end-of-save barrier so no rank runs ahead into the next
-                # step's collectives while the main process is still writing.
-                unwrapped.barrier_after_gathered_checkpoint_save(unwrapped.config.distributed_config)
+        elif getattr(self.model, "_device_mesh", None) is not None and not _is_peft_model(self.model):
+            # Sharded at load time (`DistributedConfig`): gathering the weights inside `save_pretrained`
+            # is collective, so every rank saves; only the main process writes, the others leave at the
+            # closing barrier. (PEFT models fall through to the adapter-only save below.)
+            self._save(output_dir)
 
         elif self.args.should_save:
             self._save(output_dir)
@@ -4053,10 +4008,10 @@ class Trainer:
 
     def _save(self, output_dir: str | None = None, state_dict: dict | None = None) -> None:
         """Save model weights, configuration, and processing class to `output_dir`."""
-        # If we are executing this function, we are the process zero, so we don't check for that.
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         os.makedirs(output_dir, exist_ok=True)
-        logger.info(f"Saving model checkpoint to {output_dir}")
+        if self.args.should_save:
+            logger.info(f"Saving model checkpoint to {output_dir}")
 
         supported_classes = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
         # Save a trained model and configuration using `save_pretrained()`.
@@ -4076,6 +4031,10 @@ class Trainer:
                 )
         else:
             self.model.save_pretrained(output_dir, state_dict=state_dict)
+
+        # A non-writer rank of a model sharded at load time is only here for the collectives above.
+        if not self.args.should_save:
+            return
 
         if self.processing_class is not None:
             self.processing_class.save_pretrained(output_dir)

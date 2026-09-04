@@ -59,37 +59,6 @@ def _get_torch_distributed_world_size() -> int:
     return torch.distributed.get_world_size()
 
 
-def prefetch_checkpoint_shards(checkpoint_files: list[str]) -> None:
-    """Warm the page cache for the checkpoint shards before the per-tensor loading pass, opt-in via
-    `HF_SHARD_PREFETCH=<read threads per rank>`.
-
-    The per-tensor read pattern of sharded loading reads a network filesystem at well under 1 GiB/s
-    while large sequential reads sustain many times that; warming the page cache first makes the
-    actual load run at memory speed. Local ranks split the shard list between them (every node needs
-    the full checkpoint cached, since every rank slices tensors from all shards).
-    """
-    prefetch_threads = int(os.environ.get("HF_SHARD_PREFETCH", "0"))
-    if not checkpoint_files or not prefetch_threads:
-        return
-    import time
-    from concurrent.futures import ThreadPoolExecutor
-
-    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
-    local_world = int(os.environ.get("LOCAL_WORLD_SIZE", "1"))
-
-    def _warm(path, bufsize=16 * 2**20):
-        with open(path, "rb", buffering=0) as f:
-            while f.read(bufsize):
-                pass
-
-    prefetch_start = time.time()
-    with ThreadPoolExecutor(max_workers=prefetch_threads) as pool:
-        list(pool.map(_warm, checkpoint_files[local_rank::local_world]))
-    if _is_torch_distributed_initialized():
-        torch.distributed.barrier()
-    logger.warning_once(f"Prefetched {len(checkpoint_files)} checkpoint shards in {time.time() - prefetch_start:.0f}s")
-
-
 def is_local_dist_rank_0() -> bool:
     return _is_torch_distributed_initialized() and int(os.environ.get("LOCAL_RANK", "-1")) == 0
 
@@ -129,13 +98,12 @@ def _ensure_torch_distributed(device_type: str | None = None):
             if device_type != "cpu":
                 getattr(torch, device_type).set_device(local_rank)
                 device_id = torch.device(device_type, local_rank)
-            # Sharded loading of a large checkpoint takes tens of minutes and ranks finish far
-            # apart, so the default 10-minute watchdog kills the first collective after load.
             torch.distributed.init_process_group(
                 backend=backend,
                 rank=rank,
                 world_size=world_size,
                 device_id=device_id,
+                # Sharded loading takes tens of minutes with high rank skew; the default 10-minute watchdog is too short
                 timeout=timedelta(hours=2),
             )
         except Exception as e:
@@ -225,7 +193,7 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
         device_map = torch.device(device_type)
 
     fsdp_size = distributed_config.fsdp_size
-    tp_size = distributed_config.tp_size or 1
+    tp_size = distributed_config.tp_size
 
     # `fsdp` is the outer dimension so that the `tp` ranks of a group are contiguous, which is what
     # the expert all-to-all and the TP collectives want.

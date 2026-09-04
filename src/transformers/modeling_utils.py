@@ -4787,16 +4787,6 @@ class PreTrainedModel(
             )
             with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
                 self.initialize_weights()
-        elif os.environ.get("HF_DEBUG_INIT_SWEEP"):
-            import time as _time
-
-            sweep_start = _time.time()
-            unmarked = [
-                n for n, v in self.state_dict(keep_vars=True).items() if not getattr(v, "_is_hf_initialized", False)
-            ]
-            logger.warning(f"init sweep: {len(unmarked)} unmarked params, e.g. {unmarked[:8]}")
-            self.initialize_weights()
-            logger.warning(f"init sweep took {_time.time() - sweep_start:.1f}s")
         else:
             self.initialize_weights()
 
