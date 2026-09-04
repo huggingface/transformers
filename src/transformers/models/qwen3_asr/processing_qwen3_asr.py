@@ -16,12 +16,7 @@ import unicodedata
 
 import numpy as np
 
-from ...audio_utils import (
-    AudioInput,
-    make_audio_chat_template_content,
-    make_list_of_audio_chat_template,
-    prepare_language_inputs,
-)
+from ...audio_utils import AudioInput, make_audio_chat_content, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
@@ -71,6 +66,56 @@ FORCED_ALIGNER_LANGUAGES = {
     "Italian", "Japanese", "Korean", "Portuguese", "Russian", "Spanish",
 }
 # fmt: on
+
+SUPPORTED_LANGUAGE_NAMES = set(LANGUAGE_CODE_TO_NAME.values())
+
+
+def resolve_language(language: str | None) -> str | None:
+    """Map a language code or name to the canonical full name, with validation.
+
+    Accepts language codes (e.g. ``"zh"``, ``"en"``) or full names
+    (e.g. ``"Chinese"``, ``"English"``). Returns the full name.
+    Raises ``ValueError`` if the language is not recognized.
+    ``None`` passes through unchanged (auto-detect).
+    """
+    if language is None:
+        return None
+    # Try code lookup first
+    resolved = LANGUAGE_CODE_TO_NAME.get(language.lower())
+    if resolved is not None:
+        return resolved
+    # Check if it's already a valid full name (case-insensitive)
+    for name in SUPPORTED_LANGUAGE_NAMES:
+        if language.lower() == name.lower():
+            return name
+    raise ValueError(
+        f"Unsupported language: {language!r}. Use a language code "
+        f"(e.g. 'en', 'zh') or full name (e.g. 'English', 'Chinese'). "
+        f"Supported codes: {sorted(LANGUAGE_CODE_TO_NAME.keys())}. "
+        f"Supported names: {sorted(SUPPORTED_LANGUAGE_NAMES)}."
+    )
+
+
+def _prepare_language_inputs(
+    language: str | list[str] | None, batch_size: int, allow_broadcast: bool = False
+) -> list[str | None]:
+    """Broadcast / validate a language argument to match batch_size.
+
+    Accepts language codes (e.g. ``"zh"``, ``"en"``) or full names
+    (e.g. ``"Chinese"``, ``"English"``). Each value is resolved to the
+    canonical full language name via :func:`resolve_language`.
+    """
+    if language is None:
+        return [None] * batch_size
+    if isinstance(language, str):
+        return [resolve_language(language)] * batch_size
+    if isinstance(language, (list, tuple)):
+        if allow_broadcast and len(language) == 1 and batch_size > 1:
+            return [resolve_language(language[0])] * batch_size
+        if len(language) != batch_size:
+            raise ValueError(f"Got {len(language)} language(s) for {batch_size} sample(s); counts must match.")
+        return [resolve_language(lang) for lang in language]
+    raise TypeError("`language` must be a string, a list of strings, or `None`.")
 
 
 def _is_cjk_char(char: str) -> bool:
@@ -484,7 +529,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
             messages = []
             if prompt_text is not None:
                 messages.append({"role": "system", "content": [{"type": "text", "text": prompt_text}]})
-            messages.append({"role": "user", "content": [make_audio_chat_template_content(audio_item)]})
+            messages.append({"role": "user", "content": make_audio_chat_content(audio_item)})
             conversations.append(messages)
 
         # The language is forced by prefilling the assistant turn with "language <NAME><asr_text>"
@@ -694,7 +739,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
 
         conversations = []
         for wl, audio_item in zip(word_lists, audio_items):
-            content = [make_audio_chat_template_content(audio_item)]
+            content = make_audio_chat_content(audio_item)
             content.extend({"type": "text", "text": word} for word in wl)
             conversations.append([{"role": "user", "content": content}])
 
