@@ -701,6 +701,8 @@
         title: GraniteMoeSWA
       - local: model_doc/granite_swa
         title: GraniteSWA
+      - local: model_doc/gte
+        title: GTE
       - local: model_doc/helium
         title: Helium
       - local: model_doc/herbert

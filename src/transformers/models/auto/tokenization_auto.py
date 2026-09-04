@@ -161,6 +161,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("granitemoeshared", "TokenizersBackend" if is_tokenizers_available() else None),
         ("grounding-dino", "BertTokenizer" if is_tokenizers_available() else None),
         ("groupvit", "CLIPTokenizer" if is_tokenizers_available() else None),
+        ("gte", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("herbert", "HerbertTokenizer" if is_tokenizers_available() else None),
         ("hubert", "Wav2Vec2CTCTokenizer"),
         ("hunyuan_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
