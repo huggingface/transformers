@@ -330,6 +330,15 @@ def DFineForObjectDetectionLoss(
 ):
     criterion = DFineLoss(config)
     criterion.to(device)
+    if denoising_meta_values is not None:
+        # `logits` and `pred_boxes` (last decoder layer) also contain the contrastive denoising queries, which are
+        # prepended to the normal queries. The main loss must only see the normal queries: the positive denoising
+        # queries are initialized next to the ground truth, so the Hungarian matcher would assign the targets to
+        # them instead of to the normal queries, which are the ones used at inference. The original implementation
+        # splits them in the decoder:
+        # https://github.com/Peterande/D-FINE/blob/master/src/zoo/dfine/dfine_decoder.py
+        _, logits = torch.split(logits, denoising_meta_values["dn_num_split"], dim=1)
+        _, pred_boxes = torch.split(pred_boxes, denoising_meta_values["dn_num_split"], dim=1)
     # Second: compute the losses, based on outputs and labels
     outputs_loss = {}
     outputs_loss["logits"] = logits
