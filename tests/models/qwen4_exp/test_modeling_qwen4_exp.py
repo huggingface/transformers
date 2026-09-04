@@ -173,10 +173,6 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_generate_compilation_all_outputs(self):
         pass
 
-    @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip("Qwen4-Exp hybrid linear-attention cache is not compatible with quantized cache yet.")
     def test_generate_with_quant_cache(self):
         pass
@@ -554,10 +550,6 @@ class Qwen4ExpVisionText2TextModelTest(VLMModelTest, unittest.TestCase):
 
     @unittest.skip("Qwen4-Exp hybrid linear-attention cache is not compatible with quantized cache yet.")
     def test_generate_with_quant_cache(self):
-        pass
-
-    @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     @unittest.skip(

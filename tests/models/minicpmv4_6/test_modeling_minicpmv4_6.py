@@ -200,10 +200,6 @@ class MiniCPMV4_6ModelTest(VLMModelTest, unittest.TestCase):
     def test_flash_attn_2_fp32_ln(self):
         pass
 
-    @unittest.skip("The Qwen3.5 hybrid cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(reason="MiniCPM-V 4.6 uses Qwen3.5 hybrid cache layers that are incompatible with QuantizedCache.")
     def test_generate_with_quant_cache(self):
         pass

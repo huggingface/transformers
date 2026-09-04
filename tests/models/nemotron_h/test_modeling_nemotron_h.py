@@ -486,10 +486,6 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_generate_with_quant_cache(self):
         pass
 
-    @unittest.skip(reason="A large nemotron3 would be necessary (and costly) for that")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)
 

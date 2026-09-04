@@ -149,10 +149,6 @@ class Qwen3_5MoeTextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
 
-    @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @require_causal_conv1d
     @require_flash_linear_attention
     @require_torch_gpu
@@ -686,7 +682,3 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 mm_token_type_ids=mm_token_type_ids,
             )
             self.assertIsNotNone(outputs)
-
-    @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass

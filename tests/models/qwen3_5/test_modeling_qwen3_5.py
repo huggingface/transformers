@@ -153,10 +153,6 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(len(self_attentions), sum(layer == "full_attention" for layer in config.layer_types))
             self.assertListEqual(list(self_attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len])
 
-    @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip("Intentionally not reversable (no changes) as only load time within a VLM depends on this")
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
@@ -733,10 +729,6 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 mm_token_type_ids=mm_token_type_ids,
             )
             self.assertIsNotNone(outputs)
-
-    @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
 
 
 @require_torch

@@ -267,10 +267,6 @@ class Ernie4_5_VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
 
-    @unittest.skip(reason="Size mismatch")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     def _video_features_prepare_config_and_inputs(self):
         """
         Helper method to extract only video-related inputs from the full set of inputs, for testing `get_video_features`.
