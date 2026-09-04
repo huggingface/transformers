@@ -723,6 +723,9 @@ def load_and_register_attn_kernel(
 
         kernel_function = attention_wrapper if attention_wrapper is not None else msa_attention_forward
         mask_implementation = "sdpa"
+    elif hasattr(kernel, "flash_attn_forward") and hasattr(kernel, "supports_flash_attn"):
+        kernel_function = attention_wrapper if attention_wrapper is not None else kernel.flash_attn_forward
+        mask_implementation = "sdpa"
     elif kernel_name is not None:
         kernel_function = getattr(kernel, kernel_name)
 
