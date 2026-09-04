@@ -611,6 +611,7 @@ Linked PR: https://github.com/huggingface/transformers/pull/43514
 - Removed deprecated classes regarding decoding methods that were moved to the Hub due to low usage (constraints and beam scores) (https://github.com/huggingface/transformers/pull/41223)
 - If `generate` doesn't receive any KV Cache argument, the default cache class used is now defined by the model (as opposed to always being `DynamicCache`) (https://github.com/huggingface/transformers/pull/41505)
 - Generation parameters are no longer accessible via model's config. If generation parameters are serialized in `config.json` for any old model, it will be loaded back into model's generation config. Users are expected to access or modify generation parameters only with `model.generation_config.do_sample = True`.
+- The `DynamicCache.key_cache` and `DynamicCache.value_cache` attributes, along with `DynamicCache.from_legacy_cache()` / `DynamicCache.to_legacy_cache()`, were removed. Code that reads or rebuilds KV caches directly (speculative decoding, prefix reuse, cache splicing) breaks on upgrade with a bare `AttributeError`. Use the public cache API (`get_seq_length`, `update`, `crop`, `from_batch_splits`, `reset`) or the new `CacheLayerMixin` instead; if you need an offline migration, rebuild the cache layer-by-layer from `past_key_values.layers`.
 
 ## Trainer
 
