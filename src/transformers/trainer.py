@@ -1042,19 +1042,12 @@ class Trainer:
 
         dataloader = self.accelerator.prepare(DataLoader(dataset, **dataloader_params))
 
-        # `BatchRebalanceSampler` is already rank-aware, so the `BatchSamplerShard` wrapper
-        # added by `accelerator.prepare` would re-shard it and silently drop samples. Neutralise
-        # it by making the wrapper a passthrough (num_processes=1)
-        if isinstance(sampler, BatchRebalanceSampler):
+        # `BatchRebalanceSampler` and the `DistributedSampler` of expert-parallel token dispatch are already
+        # rank-aware, so the `BatchSamplerShard` wrapper added by `accelerator.prepare` would re-shard them and
+        # silently drop samples. Neutralise it by making the wrapper a passthrough (num_processes=1)
+        if isinstance(sampler, (BatchRebalanceSampler, DistributedSampler)):
             prepared_bs = getattr(dataloader, "batch_sampler", None)
-            if prepared_bs is not None and getattr(prepared_bs, "batch_sampler", None) is sampler:
-                prepared_bs.num_processes = 1
-                prepared_bs.process_index = 0
-        elif isinstance(sampler, DistributedSampler):
-            # The sampler already splits the dataset across every rank (expert-parallel token dispatch); the
-            # `BatchSamplerShard` wrapper accelerate adds when it sees data-parallel ranks must not split again.
-            prepared_bs = dataloader.batch_sampler
-            if getattr(prepared_bs, "batch_sampler", None) is not None:
+            if prepared_bs is not None and getattr(prepared_bs, "batch_sampler", None) is not None:
                 prepared_bs.num_processes = 1
                 prepared_bs.process_index = 0
 
