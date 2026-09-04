@@ -133,6 +133,11 @@ class CohereCompassTextConfig(PreTrainedConfig):
     def convert_rope_params_to_dict(self, **kwargs):
         # allow per layer rope with optional NoPE layers
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
+        # workaround until the hub config is fixed, dangling entries were saved that fire on validation
+        # ref: https://huggingface.co/CohereLabs/North-Micro-Vision-Instruct/discussions/3
+        if self.layer_types is not None and not set(self.rope_parameters.keys()).isdisjoint(self.layer_types):
+            self.rope_parameters.pop("rope_theta", None)
+            self.rope_parameters.pop("rope_type", None)
         self.standardize_rope_params()
         return kwargs
 
