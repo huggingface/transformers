@@ -17,7 +17,7 @@ from types import SimpleNamespace
 
 import torch
 import torch.nn as nn
-from torch.distributed.tensor.placement_types import Shard
+from torch.distributed.tensor.placement_types import Replicate, Shard
 
 from transformers import PreTrainedConfig, PreTrainedModel
 from transformers.conversion_mapping import (
@@ -337,24 +337,28 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         )
 
     def test_transpose_and_rope_permute_are_sharded_after_conversion(self):
-        """A transpose or a RoPE permutation moves elements across the sharded dim, so the loader converts the full
-        tensor and takes this rank's shard afterwards (`shards_after_conversion`). Sharding the source first gives the
-        wrong slice: for a (4, 2) checkpoint tensor transposed into a (2, 4) parameter sharded on dim 0 over 2 ranks,
-        rank 0 needs row 0 of the transposed tensor, i.e. column 0 of the source, not rows 0-1 of the source."""
-        source = torch.arange(8.0).view(4, 2)
-        converter = WeightConverter("router.weight", "gate.weight", operations=[Transpose(0, 1)])
-        self.assertTrue(shards_after_conversion(converter))
-        self.assertTrue(
-            shards_after_conversion(WeightConverter("q.weight", "q.weight", operations=[PermuteForRope()]))
-        )
-        self.assertFalse(
-            shards_after_conversion(
-                WeightConverter(["w1", "w3"], "gate_up", operations=[MergeModulelist(dim=0), Concatenate(dim=1)])
-            )
-        )
+        """A transpose or a RoPE permutation moves elements across dims, so when a shard placement sits on one of
+        those dims the loader converts the full tensor and takes this rank's shard afterwards
+        (`shards_after_conversion`). Sharding the source first gives the wrong slice: for a (4, 2) checkpoint tensor
+        transposed into a (2, 4) parameter sharded on dim 0 over 2 ranks, rank 0 needs row 0 of the transposed tensor,
+        i.e. column 0 of the source, not rows 0-1 of the source."""
+        transpose = WeightConverter("router.weight", "gate.weight", operations=[Transpose(0, 1)])
+        permute = WeightConverter("q.weight", "q.weight", operations=[PermuteForRope()])
+        experts = WeightConverter("w13", "gate_up", operations=[Transpose(1, 2, check_dims=True)])
+        merge = WeightConverter(["w1", "w3"], "gate_up", operations=[MergeModulelist(dim=0), Concatenate(dim=1)])
+        self.assertTrue(shards_after_conversion(transpose, [Shard(0)], ndim=2))
+        self.assertTrue(shards_after_conversion(transpose, [Replicate(), Shard(1)], ndim=2))
+        self.assertFalse(shards_after_conversion(transpose, [Replicate()], ndim=2))
+        self.assertTrue(shards_after_conversion(permute, [Shard(0)], ndim=2))
+        self.assertFalse(shards_after_conversion(permute, [Shard(1)], ndim=2))
+        # Qwen3-VL-MoE transposes the two inner dims of the experts, which expert parallelism shards on dim 0
+        self.assertFalse(shards_after_conversion(experts, [Shard(0)], ndim=3))
+        self.assertTrue(shards_after_conversion(experts, [Shard(0), Shard(2)], ndim=3))
+        self.assertFalse(shards_after_conversion(merge, [Shard(0)], ndim=3))
 
-        converter.add_tensor("gate.weight", "router.weight", "router.weight", spawn_materialize(None, source, "cpu"))
-        converted = converter.convert("gate.weight")["gate.weight"]
+        source = torch.arange(8.0).view(4, 2)
+        transpose.add_tensor("gate.weight", "router.weight", "router.weight", spawn_materialize(None, source, "cpu"))
+        converted = transpose.convert("gate.weight")["gate.weight"]
         for rank in range(2):
             shard_op = _make_dtensor_shard_op(
                 FakeMesh(shape=(2,), rank=rank), [Shard(0)], param_shape=(2, 4), local_shape=(1, 4)

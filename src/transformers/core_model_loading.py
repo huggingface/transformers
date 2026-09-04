@@ -81,6 +81,11 @@ def build_glob_alternation(
 class ConversionOps(ABC):
     """Base class for weight conversion operations."""
 
+    def moved_dims(self, ndim: int) -> set[int]:
+        """Dims across which this op moves elements. A DTensor parameter sharded on one of them is converted in full
+        before this rank's shard is taken, since the shard of the converted tensor is not the converted shard."""
+        return set()
+
     def __repr__(self):
         if hasattr(self, "dim"):
             return f"{self.__class__.__name__}(dim={self.dim})"
@@ -319,6 +324,9 @@ class Transpose(ConversionOps):
         self.dim1 = dim1
         self.check_dims = check_dims
 
+    def moved_dims(self, ndim: int) -> set[int]:
+        return {self.dim0 % ndim, self.dim1 % ndim}
+
     @torch.no_grad
     def convert(
         self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
@@ -436,6 +444,9 @@ class PermuteForRope(ConversionOps):
         self.subconfig_key = subconfig_key
         self.inverse = inverse
         self.permute_layer_names = permute_layer_names
+
+    def moved_dims(self, ndim: int) -> set[int]:
+        return {0}
 
     def _apply(self, tensor: torch.Tensor) -> torch.Tensor:
         dim0 = tensor.shape[0]
@@ -1269,12 +1280,14 @@ def spawn_materialize(
         return _job
 
 
-def shards_after_conversion(mapping: WeightRenaming | WeightConverter) -> bool:
-    """Whether a DTensor parameter has to be converted in full before this rank's shard is taken: a transpose or a RoPE
-    permutation moves elements across the sharded dim, so sharding the source first would give the wrong slice."""
-    return isinstance(mapping, WeightConverter) and any(
-        isinstance(op, (Transpose, PermuteForRope)) for op in mapping.operations
-    )
+def shards_after_conversion(mapping: WeightRenaming | WeightConverter, placements, ndim: int) -> bool:
+    """Whether a DTensor parameter with these `placements` has to be converted in full before this rank's shard is
+    taken: an op that moves elements across a sharded dim (a transpose, a RoPE permutation) makes the shard of the
+    source the wrong slice."""
+    if not isinstance(mapping, WeightConverter):
+        return False
+    shard_dims = {placement.dim % ndim for placement in placements if placement.is_shard()}
+    return any(op.moved_dims(ndim) & shard_dims for op in mapping.operations)
 
 
 def dot_natural_key(s: str):
@@ -1728,7 +1741,7 @@ def convert_and_load_state_dict_in_model(
                 sharding_op = DtensorShardOperation(empty_param)
             # A transpose or a RoPE permutation moves elements across the sharded dim, so this rank's slice of the
             # source is not the slice of the converted tensor: those are converted in full and sharded afterwards.
-            if sharding_op is not None and shards_after_conversion(mapping):
+            if sharding_op is not None and shards_after_conversion(mapping, empty_param.placements, empty_param.ndim):
                 sharding_op = None
 
             # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
@@ -1772,8 +1785,11 @@ def convert_and_load_state_dict_in_model(
                 )
                 for target_name, param in realized_value.items():
                     param = param[0] if isinstance(param, list) else param
-                    if shards_after_conversion(mapping) and is_dtensor(meta_model_state_dict.get(target_name)):
-                        param = DtensorShardOperation(meta_model_state_dict[target_name]).shard_tensor(param)
+                    empty_param = meta_model_state_dict.get(target_name)
+                    if is_dtensor(empty_param) and shards_after_conversion(
+                        mapping, empty_param.placements, empty_param.ndim
+                    ):
+                        param = DtensorShardOperation(empty_param).shard_tensor(param)
                     param_device = get_device(device_map, target_name)
                     # Exception for params that are so huge that they need conversions on cpu no matter what - we put them back on
                     # the correct device now (if the device_map managed to make them fit on any device, as usually they will stay on
