@@ -1150,7 +1150,7 @@ class Trainer:
                     train_dataset,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
-                    seed=self.args.seed,
+                    seed=self.args.data_seed if self.args.data_seed is not None else self.args.seed,
                     drop_last=self.args.dataloader_drop_last,
                 )
             return RandomSampler(train_dataset)
