@@ -47,7 +47,7 @@ class Sam3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_model_input_names(self):
         self.skipTest("Sam3Processor outputs extra keys (e.g. original_sizes) beyond model_input_names")
 
-    def test_tokenizer_defaults(self):
+    def test_subprocessor_defaults_0_text(self):
         self.skipTest("Sam3Processor always pads tokenizer output to max_length=32")
 
     def test_processor_text_has_no_visual(self):
@@ -56,13 +56,16 @@ class Sam3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_with_multiple_inputs(self):
         self.skipTest("Sam3Processor has a custom interface, not a standard VLM text+image interface")
 
+    def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
+        self.skipTest("Sam3Processor has a custom interface, not a standard VLM text+image interface")
+
     # --- Sam3-specific tests ---
 
     def test_input_boxes_default_labels_mixed_batch(self):
         # Regression test for https://github.com/huggingface/transformers/issues/45059:
         # None entries should get pad label (-10), real entries should get positive label (1).
         processor = self.get_processor()
-        images = self.prepare_image_inputs(batch_size=2)
+        images = self.prepare_images_inputs(batch_size=2)
         inputs = processor(
             images=images,
             text=["cat", None],
@@ -79,7 +82,7 @@ class Sam3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_input_boxes_default_labels_all_real(self):
         processor = self.get_processor()
-        images = self.prepare_image_inputs(batch_size=2)
+        images = self.prepare_images_inputs(batch_size=2)
         inputs = processor(
             images=images,
             text=["cat", "dog"],
@@ -91,7 +94,7 @@ class Sam3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_no_input_boxes_omits_labels(self):
         processor = self.get_processor()
-        images = self.prepare_image_inputs(batch_size=1)
+        images = self.prepare_images_inputs(batch_size=1)
         inputs = processor(
             images=images,
             text=["cat"],
@@ -102,7 +105,7 @@ class Sam3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_user_provided_labels_preserved(self):
         processor = self.get_processor()
-        images = self.prepare_image_inputs(batch_size=2)
+        images = self.prepare_images_inputs(batch_size=2)
         inputs = processor(
             images=images,
             text=["cat", "dog"],

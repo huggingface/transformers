@@ -38,7 +38,7 @@ from packaging import version
 from safetensors import safe_open
 from safetensors.torch import load as _safe_load_bytes
 from safetensors.torch import save_file as safe_save_file
-from torch import Tensor, nn
+from torch import nn
 from torch.autograd.graph import save_on_cpu
 from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
@@ -843,16 +843,17 @@ def _get_dtype(
                     elif state_dict is not None:
                         dtype = get_state_dict_dtype(state_dict)
                     elif checkpoint_files is not None and checkpoint_files[0].endswith(".gguf"):
-                        dtype = torch.float32
+                        dtype = None
                     else:
                         state_dict = load_state_dict(
                             checkpoint_files[0], map_location="meta", weights_only=weights_only
                         )
                         dtype = get_state_dict_dtype(state_dict)
-                    logger.info(
-                        f"Since the `dtype` attribute can't be found in model's config object, "
-                        f"will use dtype={dtype} as derived from model's weights"
-                    )
+                    if dtype is not None:
+                        logger.info(
+                            f"Since the `dtype` attribute can't be found in model's config object, "
+                            f"will use dtype={dtype} as derived from model's weights"
+                        )
             elif hasattr(torch, dtype):
                 dtype = getattr(torch, dtype)
             else:
@@ -871,9 +872,6 @@ def _get_dtype(
         # set torch.get_default_dtype() (usually fp32) as the default dtype if `None` is provided
         dtype = torch.get_default_dtype()
 
-    if hf_quantizer is not None:
-        dtype = hf_quantizer.update_dtype(dtype)
-
     # Get the main dtype
     if isinstance(dtype, dict):
         main_dtype = dtype.get("", torch.get_default_dtype())
@@ -887,6 +885,9 @@ def _get_dtype(
 
     else:
         main_dtype = dtype
+
+    if hf_quantizer is not None:
+        main_dtype = hf_quantizer.update_dtype(main_dtype)
 
     # Set it on the config and subconfigs
     config.dtype = main_dtype
@@ -916,114 +917,6 @@ class ModuleUtilsMixin:
         `torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
         """
         return next(param.dtype for param in self.parameters() if param.is_floating_point())
-
-    def invert_attention_mask(self: "PreTrainedModel", encoder_attention_mask: Tensor) -> Tensor:
-        """
-        Invert an attention mask (e.g., switches 0. and 1.).
-
-        Args:
-            encoder_attention_mask (`torch.Tensor`): An attention mask.
-
-        Returns:
-            `torch.Tensor`: The inverted attention mask.
-        """
-        logger.warning_once(
-            "Detected the usage of `invert_attention_mask`: This function is deprecated and will be removed in v5.12.0. "
-            "Please use the new API in `transformers.masking_utils`"
-        )
-
-        if encoder_attention_mask.dim() == 3:
-            encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
-        if encoder_attention_mask.dim() == 2:
-            encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
-        # T5 has a mask that can compare sequence ids, we can simulate this here with this transposition
-        # encoder_extended_attention_mask = (encoder_extended_attention_mask ==
-        # encoder_extended_attention_mask.transpose(-1, -2))
-        encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * torch.finfo(self.dtype).min
-
-        return encoder_extended_attention_mask
-
-    @staticmethod
-    def create_extended_attention_mask_for_decoder(input_shape, attention_mask):
-        logger.warning_once(
-            "Detected the usage of `create_extended_attention_mask_for_decoder`: This function is deprecated and will be removed in v5.12.0. "
-            "Please use the new API in `transformers.masking_utils`"
-        )
-
-        device = attention_mask.device
-        batch_size, seq_length = input_shape
-        seq_ids = torch.arange(seq_length, device=device)
-        causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
-        # in case past_key_values are used we need to add a prefix ones mask to the causal mask
-        causal_mask = causal_mask.to(attention_mask.dtype)
-
-        if causal_mask.shape[1] < attention_mask.shape[1]:
-            prefix_seq_len = attention_mask.shape[1] - causal_mask.shape[1]
-            causal_mask = torch.cat(
-                [
-                    torch.ones((batch_size, seq_length, prefix_seq_len), device=device, dtype=causal_mask.dtype),
-                    causal_mask,
-                ],
-                dim=-1,
-            )
-
-        extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
-        return extended_attention_mask
-
-    def get_extended_attention_mask(
-        self: "PreTrainedModel",
-        attention_mask: Tensor,
-        input_shape: tuple[int, ...],
-        dtype: torch.dtype | None = None,
-    ) -> Tensor:
-        """
-        Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
-
-        Arguments:
-            attention_mask (`torch.Tensor`):
-                Mask with ones indicating tokens to attend to, zeros for tokens to ignore.
-            input_shape (`tuple[int]`):
-                The shape of the input to the model.
-
-        Returns:
-            `torch.Tensor` The extended attention mask, with a the same dtype as `attention_mask.dtype`.
-        """
-        logger.warning_once(
-            "Detected the usage of `get_extended_attention_mask`: This function is deprecated and will be removed in v5.12.0. "
-            "Please use the new API in `transformers.masking_utils`"
-        )
-
-        if dtype is None:
-            dtype = self.dtype
-
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        if attention_mask.dim() == 3:
-            extended_attention_mask = attention_mask[:, None, :, :]
-        elif attention_mask.dim() == 2:
-            # Provided a padding mask of dimensions [batch_size, seq_length]
-            # - if the model is a decoder, apply a causal mask in addition to the padding mask
-            # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
-            if getattr(self.config, "is_decoder", None):
-                extended_attention_mask = ModuleUtilsMixin.create_extended_attention_mask_for_decoder(
-                    input_shape, attention_mask
-                )
-            else:
-                extended_attention_mask = attention_mask[:, None, None, :]
-        else:
-            raise ValueError(
-                f"Wrong shape for input_ids (shape {input_shape}) or attention_mask (shape {attention_mask.shape})"
-            )
-
-        # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-        # masked positions, this operation will create a tensor which is 0.0 for
-        # positions we want to attend and the dtype's smallest value for masked positions.
-        # Since we are adding it to the raw scores before the softmax, this is
-        # effectively the same as removing these entirely.
-        extended_attention_mask = extended_attention_mask.to(dtype=dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(dtype).min
-        return extended_attention_mask
 
     def num_parameters(self: "PreTrainedModel", only_trainable: bool = False, exclude_embeddings: bool = False) -> int:
         """
@@ -2427,11 +2320,13 @@ class PreTrainedModel(
                 init.zeros_(module.num_batches_tracked)
         # This matches all the usual RotaryEmbeddings modules
         elif "RotaryEmbedding" in module.__class__.__name__ and hasattr(module, "original_inv_freq"):
-            rope_fn = (
-                ROPE_INIT_FUNCTIONS[module.rope_type]
-                if module.rope_type != "default"
-                else module.compute_default_rope_parameters
-            )
+            # Default and vision axial rope are defined in modeling files, only one can be defined at a time!
+            rope_init_fn_with_self = {
+                "axial": getattr(module, "compute_axial_rope_parameters", None),
+                "default": getattr(module, "compute_default_rope_parameters", None),
+                **ROPE_INIT_FUNCTIONS,
+            }
+            rope_fn = rope_init_fn_with_self[module.rope_type]
             buffer_value, _ = rope_fn(module.config)
             init.copy_(module.inv_freq, buffer_value)
             init.copy_(module.original_inv_freq, buffer_value)
@@ -4333,21 +4228,8 @@ class PreTrainedModel(
             config._experts_implementation = kwargs.pop("experts_implementation")
 
         hf_quantizer, config, device_map = get_hf_quantizer(
-            config, quantization_config, device_map, weights_only, user_agent
+            config, quantization_config, device_map, weights_only, user_agent, gguf_file=gguf_file
         )
-
-        if gguf_file:
-            if hf_quantizer is not None:
-                raise ValueError(
-                    "You cannot combine Quantization and loading a model from a GGUF file, try again by making sure you did not passed a `quantization_config` or that you did not load a quantized model from the Hub."
-                )
-            if device_map is not None and (
-                (isinstance(device_map, dict) and "disk" in device_map.values()) or "disk" in device_map
-            ):
-                raise RuntimeError(
-                    "One or more modules is configured to be mapped to disk. Disk offload is not supported for models "
-                    "loaded from GGUF files."
-                )
 
         checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
@@ -4363,22 +4245,14 @@ class PreTrainedModel(
 
         is_quantized = hf_quantizer is not None
 
+        if gguf_file:
+            # Read before the dtype is settled: a GGUF's own float type is what `dtype="auto"` resolves to.
+            hf_quantizer.read_header(checkpoint_files[0])
+
         # Find the correct dtype based on current state
         config, dtype = _get_dtype(
             dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only, hf_quantizer
         )
-
-        if gguf_file:
-            from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
-
-            # we need a dummy model to get the state_dict - for this reason, we keep the state_dict as if it was
-            # passed directly as a kwarg from now on
-            with torch.device("meta"):
-                dummy_model = cls(config)
-
-            state_dict = load_gguf_checkpoint(
-                checkpoint_files[0], return_tensors=True, model_to_load=dummy_model, torch_dtype=dtype
-            )["tensors"]
 
         config.name_or_path = pretrained_model_name_or_path
 
@@ -4424,6 +4298,9 @@ class PreTrainedModel(
                     checkpoint_files=checkpoint_files,
                     use_kernels=use_kernels,
                 )
+
+        if gguf_file:
+            state_dict = hf_quantizer.get_state_dict(checkpoint_files[0], model)
 
         # Create the dtype_plan to potentially use the `keep_in_fp32` flags (this needs to be called on the already
         # instantiated model, as the flags can be modified by instances sometimes)

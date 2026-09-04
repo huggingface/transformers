@@ -1422,7 +1422,8 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
 
 class MTPCandidateGenerator(AssistedCandidateGenerator):
     requires_model_outputs: bool = True
-    # We always need to pass the hidden states from the main model
+    # We always need to pass the hidden states from the main model - it will be overriden in the __init__ to capture only the
+    # last layer's hidden_states
     model_kwargs_overrides: dict[str, Any] = {"output_hidden_states": True}
 
     def __init__(
@@ -1441,6 +1442,10 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
                 "Could not find `num_mtp_layers` in the model config. This model probably has no associated "
                 "mtp weights."
             )
+
+        # Override to capture only the last main model's layer to save memory
+        last_layer_idx = main_model.config.get_text_config().num_hidden_layers - 1
+        self.model_kwargs_overrides = {"output_hidden_states": [last_layer_idx]}
 
         # Heuristic: use the device of the last layer of the main model for the MTP layers
         base_model = main_model.get_decoder()
@@ -1580,7 +1585,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
     """
 
     requires_model_outputs: bool = True
-    # We always need to pass the hidden states at `draft_config.target_layer_ids` from the main model
+    # This will be overriden in the __init__ to capture only the required layer's hidden_states
     model_kwargs_overrides: dict[str, Any] = {"output_hidden_states": True}
 
     def __init__(
@@ -1603,6 +1608,8 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         # Get the layers used to obtain the intermediate hidden_states from main model, and prepare the diffusion window ids tensor
         self.target_layer_ids = assistant_model.config.target_layer_ids
+        # Override to capture only those specific layers
+        self.model_kwargs_overrides = {"output_hidden_states": self.target_layer_ids}
         self.block_size = assistant_model.config.block_size
         self.mask_token_id = assistant_model.config.mask_token_id
         self.noise_ids_mask = torch.tensor([self.mask_token_id] * (self.block_size - 1))[None, ...]
@@ -1668,7 +1675,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         # hidden states of only accepted tokens thus crop out the rest
         context_hidden_states: torch.Tensor = torch.cat(
             [
-                model_outputs.hidden_states[i + 1][:, :num_last_main_model_tokens].to(self.device)
+                model_outputs.hidden_states[i][:, :num_last_main_model_tokens].to(self.device)
                 for i in self.target_layer_ids
             ],
             dim=-1,

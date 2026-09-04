@@ -280,6 +280,34 @@ class FalconH1ModelTester:
             msg=f"Max diff: {(ref_first - under_test_first).abs().max().item():.6f}",
         )
 
+    def create_and_check_kwargs_reach_mamba2_mixer(self, config, input_ids, *args):
+        """
+        Kernel kwargs given to the model must reach the Mamba2 mixer, which splats them into
+        the fused conv1d+scan, the conv and the chunk scan. This is how `seq_idx` reaches the
+        kernels for packed / variable-length batches.
+        """
+        model = FalconH1Model(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        mixer = model.layers[0].mamba
+        original_forward = mixer.forward
+        seen = []
+
+        def recording_forward(*fwd_args, **fwd_kwargs):
+            seen.append(set(fwd_kwargs))
+            return original_forward(*fwd_args, **fwd_kwargs)
+
+        mixer.forward = recording_forward
+
+        input_ids = input_ids.to(torch_device)
+        seq_idx = torch.zeros(input_ids.shape, dtype=torch.int32, device=torch_device)
+        with torch.no_grad():
+            model(input_ids, seq_idx=seq_idx)
+
+        self.parent.assertTrue(seen, "the Mamba2 mixer was never called")
+        self.parent.assertIn("seq_idx", seen[0])
+
 
 @require_torch
 class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -329,6 +357,10 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     def test_mamba2_chunked_prefill_cpu(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device="cpu")
+
+    def test_kwargs_reach_mamba2_mixer(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_kwargs_reach_mamba2_mixer(*config_and_inputs)
 
     @require_torch_accelerator
     @scoped_kernels

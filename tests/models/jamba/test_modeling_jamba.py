@@ -499,10 +499,6 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 # with attention mask
                 _ = model(dummy_input, attention_mask=dummy_attention_mask)
 
-    @unittest.skip("Jamba has a non standard cache which is not compatible with dp/ddp")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(
         "Jamba's Mamba1 conv path has no chunked-continuation support: on a cached multi-token forward it "
         "rebuilds conv_state from the zero-padded current chunk instead of bridging the previous window, so "

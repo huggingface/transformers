@@ -202,11 +202,11 @@ def _lazy_imports(
             flash_attn_func = getattr(kernel, "flash_attn_func", None)
             flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
             flash_attn_with_kvcache = getattr(kernel, "flash_attn_with_kvcache", None)
-            # Block-sparse kernels (e.g. ``kernels-staging/msa``) expose ``sparse_atten_func`` rather than
-            # ``flash_attn_varlen_func``. ``load_and_register_attn_kernel`` already registered their dedicated
-            # wrapper into ``ALL_ATTENTION_FUNCTIONS``, so they dispatch through the attention interface and
-            # never touch the flash varlen globals -- preloading them here is a no-op, not an error.
-            if flash_attn_varlen_func is None and hasattr(kernel, "sparse_atten_func"):
+            # Some kernels ship their own attention entry point rather than a varlen function, already
+            # registered into ``ALL_ATTENTION_FUNCTIONS``, so preloading them here is a no-op.
+            if flash_attn_varlen_func is None and (
+                hasattr(kernel, "sparse_atten_func") or hasattr(kernel, "flash_attn_forward")
+            ):
                 return flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache, pad_input, unpad_input
             if flash_attn_varlen_func is None:
                 raise ValueError(

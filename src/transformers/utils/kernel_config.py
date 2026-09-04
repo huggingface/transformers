@@ -126,6 +126,12 @@ class KernelConfig(PushToHubMixin):
 
     def store_registered_layer_names(self, model):
         for name, module in model.named_modules():
+            # converted functions
+            if getattr(module, "_kernel_funcs", None) is not None:
+                for kernel_layer_name in module._kernel_funcs.keys():
+                    self.registered_layer_names[name + f".{kernel_layer_name}"] = kernel_layer_name
+
+            # converted modules
             if hasattr(module, "kernel_layer_name"):
                 self.registered_layer_names[name] = module.kernel_layer_name
 
