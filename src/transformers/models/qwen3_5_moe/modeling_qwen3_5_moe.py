@@ -35,6 +35,7 @@ from ...integrations import (
     use_experts_implementation,
     use_kernel_forward_from_hub,
     use_kernel_func_from_hub_with_fallback,
+    use_kernelized_func,
 )
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
@@ -455,6 +456,9 @@ def torch_recurrent_gated_delta_rule(
 
 
 @use_kernel_forward_from_hub("Qwen3_5GatedDeltaNet")
+@use_kernelized_func(
+    [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
+)
 class Qwen3_5MoeGatedDeltaNet(nn.Module):
     def __init__(self, config: Qwen3_5MoeConfig, layer_idx: int):
         super().__init__()
