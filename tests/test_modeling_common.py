@@ -5820,12 +5820,15 @@ class ModelTesterMixin(ExportTesterMixin):
     @require_torch_accelerator
     @scoped_kernels
     def test_kernels_can_run_without_crashing(self):
-        """Check whether activating kernels and then running through some input leads to an (value) error"""
+        """
+        Check whether activating kernels and then running through some input leads to an (value) error
+
+        NOTE: This is run in inference mode for now. When we enable training a fwd + bwd test will be added separately.
+        """
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-            # Most kernels are inference mode so ensure to enable as much as we can
             model.eval()
             model.use_kernels = True
 
