@@ -1096,6 +1096,24 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "lfm2_audio": [
+            # The released checkpoint uses the original NeMo module names. The implementation reuses the native
+            # Transformers Parakeet FastConformer, whose computation is equivalent but whose names are clearer.
+            WeightRenaming(r"conformer\.pre_encode\.conv\.", "conformer.subsampling.layers."),
+            WeightRenaming(r"conformer\.pre_encode\.out\.", "conformer.subsampling.linear."),
+            WeightRenaming(r"\.self_attn\.linear_q\.", ".self_attn.q_proj."),
+            WeightRenaming(r"\.self_attn\.linear_k\.", ".self_attn.k_proj."),
+            WeightRenaming(r"\.self_attn\.linear_v\.", ".self_attn.v_proj."),
+            WeightRenaming(r"\.self_attn\.linear_out\.", ".self_attn.o_proj."),
+            WeightRenaming(r"\.self_attn\.linear_pos\.", ".self_attn.relative_k_proj."),
+            WeightRenaming(r"\.self_attn\.pos_bias_u", ".self_attn.bias_u"),
+            WeightRenaming(r"\.self_attn\.pos_bias_v", ".self_attn.bias_v"),
+            WeightRenaming(r"\.conv\.batch_norm\.", ".conv.norm."),
+            WeightRenaming(r"audio_adapter\.model\.0\.", "audio_adapter_norm."),
+            WeightRenaming(r"audio_adapter\.model\.1\.", "audio_adapter_linear_1."),
+            WeightRenaming(r"audio_adapter\.model\.3\.", "audio_adapter_linear_2."),
+        ],
+        "Lfm2AudioForConditionalGeneration": [PrefixChange(prefix_to_add="model")],
         "ernie4_5_vl_moe": [
             # vision
             WeightRenaming("vision_model", "vision_tower"),

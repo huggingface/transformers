@@ -82,6 +82,12 @@ SPECIAL_CASES_TO_ALLOW = {
     "LagunaConfig": ["moe_apply_router_weight_on_input"],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Lfm2Config": ["full_attn_idxs"],
+    # LFM2-Audio's frontend is consumed by processing code, while the LFM and depth configs are reached through typed
+    # accessors. The legacy NeMo encoder config is translated to the native Parakeet config during initialization.
+    "Lfm2AudioConfig": ["depthformer", "lfm", "preprocessor"],
+    "Lfm2AudioDepthConfig": ["multiple_of"],
+    "Lfm2AudioEncoderConfig": True,
+    "Lfm2AudioPreprocessorConfig": True,
     "DiaConfig": ["delay_pattern"],
     "BambaConfig": ["attn_layer_indices"],
     "Dots1Config": ["max_window_layers", "n_routed_experts"],
