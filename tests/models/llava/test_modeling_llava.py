@@ -516,8 +516,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         prompt1 = "<image>\n<image>\nUSER: What's the difference of two images?\nASSISTANT:"
         prompt2 = "<image>\nUSER: Describe the image.\nASSISTANT:"
         prompt3 = "<image>\nUSER: Describe the image.\nASSISTANT:"
-        url1 = "https://images.unsplash.com/photo-1552053831-71594a27632d?q=80&w=3062&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-        url2 = "https://images.unsplash.com/photo-1617258683320-61900b281ced?q=80&w=3087&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+        url1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/unsplash_1552053831-71594a27632d.jpg"
+        url2 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/unsplash_1617258683320-61900b281ced.jpg"
         image1 = load_test_image(url1)
         image2 = load_test_image(url2)
 
@@ -598,7 +598,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = LlavaForConditionalGeneration.from_pretrained(model_id, dtype="float16", device_map=torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
-        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        image_file = (
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         raw_image = load_test_image(image_file)
         inputs = processor(
             text="<|im_start|>user\n<image>\nWhat are these?<|im_end|>\n<|im_start|>assistant",
@@ -626,12 +628,15 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         IMG_URLS = [
-            load_test_image("https://picsum.photos/id/237/400/300"),
-            load_test_image("https://picsum.photos/id/231/200/300"),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_400x300.jpg"
+            ),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_231_200x300.jpg"
+            ),
         ]
         PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][/INST]"
 
-        # image = Image.open(requests.get(url, stream=True).raw)
         inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(torch_device, torch.float16)
         generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
         output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
@@ -659,8 +664,12 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         IMG_URLS = [
-            load_test_image("https://picsum.photos/id/237/400/300"),
-            load_test_image("https://picsum.photos/id/231/200/300"),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_400x300.jpg"
+            ),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_231_200x300.jpg"
+            ),
         ]
         PROMPT = "<s>[INST][IMG][IMG]Describe the images.[/INST]"
 
@@ -691,8 +700,12 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
 
         IMG_URLS = [
-            load_test_image("https://picsum.photos/id/237/400/300"),
-            load_test_image("https://picsum.photos/id/17/150/500"),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_400x300.jpg"
+            ),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_17_150x500.jpg"
+            ),
         ]
         PROMPT = [
             "<s>[INST][IMG]What breed is the dog?[/INST]",

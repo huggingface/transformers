@@ -17,7 +17,6 @@ import tempfile
 import unittest
 
 import pytest
-import requests
 
 from transformers import (
     SamHQConfig,
@@ -31,6 +30,7 @@ from transformers.testing_utils import Expectations, cleanup, require_torch, slo
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -43,7 +43,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class SamHQVisionModelTester:
@@ -767,14 +767,14 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 
 def prepare_image():
-    img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+    img_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/car.png"
+    raw_image = load_test_image(img_url).convert("RGB")
     return raw_image
 
 
 def prepare_dog_img():
     img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dog-sam.png"
-    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+    raw_image = load_test_image(img_url).convert("RGB")
     return raw_image
 
 

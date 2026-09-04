@@ -46,7 +46,7 @@ from transformers import (
 from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.core_model_loading import PrefixChange, WeightRenaming, process_target_pattern
 from transformers.integrations import HfDeepSpeedConfig
-from transformers.integrations.deepgemm import _get_nvcc_version
+from transformers.integrations.deepgemm import is_deepgemm_loadable
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
     is_deepspeed_zero3_enabled,
@@ -58,6 +58,7 @@ from transformers.integrations.moe import (
     grouped_mm_experts_forward,
     sonicmoe_experts_forward,
 )
+from transformers.integrations.sonicmoe import is_sonicmoe_loadable
 from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, _get_tied_weight_keys
 from transformers.models.auto import get_values
@@ -105,7 +106,6 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_mps,
     require_torch_multi_accelerator,
-    require_torch_multi_gpu,
     rocm_has_sdpa_flash_backend,
     run_first,
     run_test_using_subprocess,
@@ -119,7 +119,6 @@ from transformers.utils import (
     GENERATION_CONFIG_NAME,
     SAFE_WEIGHTS_NAME,
     ModelOutput,
-    is_kernels_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
@@ -603,24 +602,15 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
             "grouped_mm": Mock(wraps=grouped_mm_experts_forward),
         }
 
-        if (
-            dtype != torch.float32
-            and is_kernels_available()
-            and torch.cuda.is_available()
-            and torch.cuda.get_device_capability() >= (9, 0)
-        ):
+        # `is_sonicmoe_loadable` checks for `kernels`, a Hopper+ GPU and the `nvidia-cutlass-dsl` / `apache-tvm-ffi`
+        # build dependencies, so the kernel is only exercised where it can actually be loaded
+        if dtype != torch.float32 and is_sonicmoe_loadable():
             # we also need nvidia-cutlass-dsl and apache-tvm-ffi
             mocks["sonicmoe"] = Mock(wraps=sonicmoe_experts_forward)
             implementations.append("sonicmoe")
 
-        nvcc_version = _get_nvcc_version() or (0, 0)
-        device_major = torch.cuda.get_device_capability()[0] if torch.cuda.is_available() else 0
-        # DeepGEMM ships kernels only for Hopper (SM90, needs nvcc 12.3+) and Blackwell (SM100, needs 12.9+).
-        if (
-            dtype == torch.bfloat16
-            and is_kernels_available()
-            and ((device_major == 9 and nvcc_version >= (12, 3)) or (device_major == 10 and nvcc_version >= (12, 9)))
-        ):
+        # `is_deepgemm_loadable` checks for kernels availibility and NVCC version
+        if dtype == torch.bfloat16 and is_deepgemm_loadable():
             # DeepGEMM BF16 grouped forward requires Hopper+, a new-enough nvcc toolkit, and bf16 hidden states
             mocks["deepgemm"] = Mock(wraps=deepgemm_bf16_experts_forward)
             implementations.append("deepgemm")
@@ -3018,32 +3008,6 @@ class ModelTesterMixin(ExportTesterMixin):
                         inputs_embeds=inputs_embeds, decoder_inputs_embeds=decoder_inputs_embeds, **inputs
                     )[0]
             torch.testing.assert_close(out_embeds, out_ids)
-
-    @require_torch_gpu
-    @require_torch_multi_gpu
-    def test_multi_gpu_data_parallel_forward(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # move input tensors to accelerator O
-        for k, v in inputs_dict.items():
-            if torch.is_tensor(v):
-                inputs_dict[k] = v.to(0)
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            model.to(0)
-            model.eval()
-
-            if model.config._experts_implementation == "grouped_mm":
-                # DataParallel does not respect buffer alignment when replicating the model on
-                # multiple GPUs, which can cause errors in grouped_mm experts implementation.
-                model.set_experts_implementation("eager")
-
-            # Wrap model in nn.DataParallel
-            model = nn.DataParallel(model)
-            torch.cuda.synchronize()  # otherwise the transfer might not be complete
-            with torch.no_grad():
-                _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
     def check_device_map_is_respected(self, model, device_map):
         for param_name, param in model.named_parameters():
@@ -5814,6 +5778,66 @@ class ModelTesterMixin(ExportTesterMixin):
                             is_valid_recorder = isinstance(recorder, (str, type, OutputRecorder))
                             self.assertTrue(is_valid_recorder, f"Invalid recorder: {recorder}")
 
+    def test_can_capture_specific_layers_hidden_states(self):
+        """
+        Test that we can capture only a subset of the hidden states with `output_hidden_states`.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # Each individual model is a subtest
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config)).to(device=torch_device)
+                model.eval()
+
+                can_set_hidden_states_layers = any(
+                    "hidden_states" in (module._can_record_outputs or {})
+                    and not isinstance(module._can_record_outputs["hidden_states"], list)
+                    for module in model.modules()
+                    if isinstance(module, PreTrainedModel)
+                )
+                if not can_set_hidden_states_layers:
+                    self.skipTest(
+                        "Cannot capture hidden states, or cannot correctly set layer indices due to several classes capturing at the same time"
+                    )
+
+                # Prepare inputs
+                inputs = self._prepare_for_class(inputs_dict, model_class)
+
+                # Despite the previous skip based on decorators, some models do not propagate the outputs correctly.......
+                out = model(**inputs, output_hidden_states=True)
+                if "hidden_states" in out:
+                    hidden_states = out.hidden_states
+                elif "text_model_output" in out and "hidden_states" in out.text_model_output:
+                    hidden_states = out.text_model_output.hidden_states
+                else:
+                    self.skipTest(
+                        f"{model_class.__name__} does not propagate hidden states correctly or uses another name"
+                    )
+
+                skips_first_input = any(
+                    not module._can_record_outputs["hidden_states"].capture_initial_hidden_state
+                    for module in model.modules()
+                    if isinstance(module, PreTrainedModel)
+                    and hasattr(
+                        (module._can_record_outputs or {}).get("hidden_states", None), "capture_initial_hidden_state"
+                    )
+                )
+                N_layers = len(hidden_states) if skips_first_input else len(hidden_states) - 1
+                # Capture one every 2 layers
+                indices_to_capture = list(range(0, N_layers, 2))
+                out = model(**inputs, output_hidden_states=indices_to_capture)
+
+                hidden_states = out.hidden_states if "hidden_states" in out else out.text_model_output.hidden_states
+                # hidden_states = out.hidden_states
+                # We should have the same number of captured hidden_states, i.e. we do not add the first input
+                self.assertEqual(len(hidden_states), N_layers)
+                # assert we correctly captured the layers
+                self.assertTrue(all(hidden_states[i] is None for i in range(N_layers) if i not in indices_to_capture))
+                self.assertTrue(
+                    all(isinstance(hidden_states[i], torch.Tensor) for i in range(N_layers) if i in indices_to_capture)
+                )
+
     @require_kernels
     @require_torch_accelerator
     def test_kernels_can_load_without_crashing(self):
@@ -5833,6 +5857,7 @@ class ModelTesterMixin(ExportTesterMixin):
         """
         Tests that we can initialize a model with RoPE scaling in the config, that it can run a forward pass, and
         that a few basic model output properties are honored.
+        Note that we test only text backbone's rope module since multimodal rope can be special.
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         text_config = config.get_text_config(decoder=True)
@@ -5918,7 +5943,10 @@ class ModelTesterMixin(ExportTesterMixin):
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
     def test_model_rope_scaling_frequencies(self):
-        """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
+        """
+        Tests the frequency properties of the different RoPE scaling types on the model RoPE layer.
+        Note that we test only text backbone's rope module since multimodal rope can be special.
+        """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         text_config = config.get_text_config(decoder=True)
         base_model_class = None
@@ -6213,8 +6241,14 @@ def _config_supports_rope_scaling(config: PreTrainedConfig) -> bool:
     """Returns whether a certain model config supports RoPE scaling parameterization."""
     # Has rope_scaling -> model was designed with rope scaling in mind
     # Has rope_theta (and no rope_scaling) -> probably an older model, but should support rope scaling as well
-    main_config_has_rope = hasattr(config, "rope_parameters")
-    return main_config_has_rope
+    main_config_scales_rope = hasattr(config, "rope_parameters")
+
+    # Axial rope doesn't scale as images usually have a pre-defined length
+    # so the config will have no `max_position_embeddings` field defined
+    # FIXME: add non-scaling rope tests for vision models @raushan
+    if not hasattr(config, "max_position_embeddings"):
+        main_config_scales_rope = False
+    return main_config_scales_rope
 
 
 def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool:

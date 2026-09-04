@@ -26,12 +26,7 @@ from transformers import (
 from transformers.models.qwen3_asr.processing_qwen3_asr import Qwen3ASRProcessor
 from transformers.testing_utils import require_torch
 
-from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
-
-
-AUDIO_URL = url_to_local_path(
-    "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
-)
+from ...test_processing_common import ProcessorTesterMixin
 
 
 class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
@@ -77,7 +72,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "path": AUDIO_URL,
+                        "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav",
                     },
                 ],
             },
@@ -89,7 +84,8 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_apply_transcription_request_with_language(self):
         processor = AutoProcessor.from_pretrained(self.tmpdirname)
 
-        outputs = processor.apply_transcription_request(audio=AUDIO_URL, language="English")
+        audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
+        outputs = processor.apply_transcription_request(audio=audio_url, language="English")
 
         for key in ("input_ids", "attention_mask", "input_features", "input_features_mask"):
             self.assertIn(key, outputs)
@@ -102,8 +98,9 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_apply_transcription_request_with_prompt(self):
         processor = AutoProcessor.from_pretrained(self.tmpdirname)
 
+        audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
         context = "Vocabulary: Quilter, apostle, gospel."
-        outputs = processor.apply_transcription_request(audio=AUDIO_URL, prompt=context, language="English")
+        outputs = processor.apply_transcription_request(audio=audio_url, prompt=context, language="English")
 
         decoded = processor.tokenizer.decode(outputs["input_ids"][0])
         # The context/hotwords prompt goes into the system turn
@@ -115,7 +112,8 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """Mixed batch: forced-language samples get the prefill, auto-detect samples a bare generation prompt."""
         processor = AutoProcessor.from_pretrained(self.tmpdirname)
 
-        outputs = processor.apply_transcription_request(audio=[AUDIO_URL, AUDIO_URL], language=[None, "zh"])
+        audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
+        outputs = processor.apply_transcription_request(audio=[audio_url, audio_url], language=[None, "zh"])
 
         decoded_auto = processor.tokenizer.decode(outputs["input_ids"][0], skip_special_tokens=False)
         decoded_forced = processor.tokenizer.decode(outputs["input_ids"][1])
