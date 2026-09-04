@@ -3891,20 +3891,39 @@ class PreTrainedModel(
                 # This will create a compatible mapping for the model with the kernels library
                 kernel_config.create_compatible_mapping(self)
 
-            kernelize(self, mode=mode)
-        else:
-            self._use_kernels = False
+            # Save the mode it was kernelized with to allow rekernalization under special circumstances
+            self._kernels_mode = (
+                self.kernels_mode or (Mode.INFERENCE if not self.training else Mode.TRAINING) if mode is None else mode
+            )
 
-    def reset_kernels(self):
+            # NOTE: For now we don't allow training mode and reset kernelization instead
+            if self.kernels_mode & Mode.TRAINING:
+                logger.warning_once(
+                    f"Detected a training mode with kernelization: {self.kernels_mode}. We are working on supporting training "
+                    f"via `kernels` but in the meantime we disable any such attempts. Resetting kernelization..."
+                )
+                self.reset_kernels()
+                self._use_kernels = True  # Keep the desired flag
+            else:
+                kernelize(self)
+        else:
+            # Reset kernelization
+            self.use_kernels = False
+
+    def reset_kernels(self) -> bool:
         """
         Reset any kernelization applied on the model, i.e. use the torch implementation for any function or module
         attached with kernels specific decorators (`use_kernel_forward_from_hub`, `use_kernelized_func`).
+
+        Returns:
+            The previous kernels state (active / non active) before resetting.
         """
         if not is_kernels_available():
-            return
+            return False
 
         from kernels import Mode
 
+        previous_use_kernels = self.use_kernels
         with warnings.catch_warnings():
             # Temporarily ignore user warnings as this is intentional from our side
             warnings.filterwarnings(
@@ -3918,6 +3937,9 @@ class PreTrainedModel(
             kernelize(self, mode=Mode.FALLBACK, kernel_config=KernelConfig(kernel_mapping={}, inherit_mapping=False))
 
         self._use_kernels = False
+        self._kernels_mode = None
+
+        return previous_use_kernels
 
     @classmethod
     def from_pretrained(
@@ -4191,6 +4213,7 @@ class PreTrainedModel(
         allow_all_kernels = kwargs.pop("allow_all_kernels", False)
         use_kernels = kwargs.pop("use_kernels", True)
         kernel_config = kwargs.pop("kernel_config", None)
+        kernels_mode = kwargs.pop("kernels_mode", None)
         key_mapping = kwargs.pop("key_mapping", None)
 
         # Not used anymore -- remove them from the kwargs
@@ -4442,7 +4465,7 @@ class PreTrainedModel(
         loading_info, disk_offload_index = cls._load_pretrained_model(model, state_dict, checkpoint_files, load_config)
         loading_info = cls._finalize_model_loading(model, load_config, loading_info)
         model.eval()  # Set model in evaluation mode to deactivate Dropout modules by default
-        model.set_use_kernels(use_kernels, kernel_config)
+        model.set_use_kernels(use_kernels, kernel_config, kernels_mode)
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
@@ -4773,23 +4796,43 @@ class PreTrainedModel(
         self._loss_function = value
 
     @property
+    def kernels_mode(self) -> "Mode | None":
+        return getattr(self, "_kernels_mode", None)
+
+    @kernels_mode.setter
+    def kernels_mode(self, value: "Mode | None") -> None:
+        if not is_kernels_available():
+            return
+
+        if value is not None and not isinstance(value, Mode):
+            raise ValueError(
+                f"Received {value} for kernels mode but this invalid please use a flag from kernel's `Mode`"
+            )
+
+        # (Re-)kernalization
+        if value != getattr(self, "_kernels_mode", None):
+            # We can also reset kernelization based on `None`
+            self.set_use_kernels(value is not None, mode=value)
+
+    @property
     def use_kernels(self) -> bool:
         return getattr(self, "_use_kernels", False)
 
     @use_kernels.setter
     def use_kernels(self, value: bool) -> None:
         # Avoid re-kernelizing if already enabled
-        if bool(value) and getattr(self, "_use_kernels", False):
+        if (attempted_value := bool(value)) == getattr(self, "_use_kernels", False):
+            if attempted_value:
+                logger.warning_once(
+                    "Detected rekernalization attempt. If you want to change kernelization based on a mode, please use "
+                    "`set_use_kernels(True, ..., mode=...)` instead and pass the desired mode along."
+                )
             return
 
         if value:
             self.set_use_kernels(True)
         else:
-            if getattr(self, "_use_kernels", False):
-                logger.warning_once(
-                    "Disabling kernels at runtime is a no-op as there is no 'unkernelize' routine; keeping current kernels active."
-                )
-            self._use_kernels = False
+            self.reset_kernels()
 
     def _default_compile_config(self) -> CompileConfig:
         """Build the default `CompileConfig` for `get_compiled_call`.
@@ -5010,12 +5053,16 @@ class PreTrainedModel(
                 yield name, tensor
 
     def train(self, mode: bool = True):
-        changed_mode = self.training != mode
-        out = super().train(mode)
-        # Avoid recasting kernels if not necessary
-        if self.use_kernels and changed_mode:
-            self.set_use_kernels(True)
-        return out
+        result = super().train(mode)
+        # Potential kernelization (only happens if a new Mode is detected)
+        if is_kernels_available() and self.use_kernels:
+            expected_mode = Mode.INFERENCE if not mode else Mode.TRAINING
+            # NOTE: For now we don't allow training mode
+            if expected_mode & Mode.TRAINING:
+                self._use_kernels = self.reset_kernels()
+            else:
+                self.kernels_mode = expected_mode
+        return result
 
     def eval(self):
         return self.train(False)

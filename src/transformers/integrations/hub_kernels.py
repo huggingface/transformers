@@ -21,7 +21,7 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ..conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
 from ..modeling_flash_attention_utils import FLASH_ATTN_KERNEL_VERSIONS
@@ -756,7 +756,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     return mapping[kernel_name]
 
 
-def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None, kernel_config: Optional["KernelConfig"] = None):
+def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None, kernel_config: "KernelConfig | None" = None):
     """Temporarily register hidden kernel wrappers so `kernelize` can discover and replace them."""
     if not is_kernels_available():
         raise ImportError(_MISSING_KERNELS_MESSAGE)
@@ -767,16 +767,16 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None, kernel_confi
             device_type = "rocm"
         return Device(type=device_type)
 
-    mode = Mode.INFERENCE if not model.training else Mode.TRAINING if mode is None else mode
+    used_mode = mode or model.kernels_mode
+    used_kernel_config = kernel_config or model.kernel_config
     device = get_device(model.device.type)
 
-    used_kernel_config = kernel_config or model.kernel_config
     if used_kernel_config is not None:
         inherit_mapping = not used_kernel_config.use_local_kernel and used_kernel_config.inherit_mapping
         with use_kernel_mapping(used_kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
-            _kernels_kernelize(model, device=device, mode=mode)
+            _kernels_kernelize(model, device=device, mode=used_mode)
     else:
-        _kernels_kernelize(model, device=device, mode=mode)
+        _kernels_kernelize(model, device=device, mode=used_mode)
 
     model._use_kernels = True
 
