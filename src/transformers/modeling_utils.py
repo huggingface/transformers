@@ -3831,7 +3831,7 @@ class PreTrainedModel(
             )
 
             # Force kernelization with an empty mapping to force the torch fallbacks in all cases
-            kernelize(self, mode=Mode.FALLBACK, kernel_config=KernelConfig(kernel_mapping={}, inherit_mapping=False))
+            kernelize(self, mode=Mode._NONE, kernel_config=KernelConfig(kernel_mapping={}, inherit_mapping=False))
 
         self._use_kernels = False
         self._kernels_mode = None
