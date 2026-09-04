@@ -314,10 +314,6 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         config_and_inputs[0].n_groups //= 2
         self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
 
-    @unittest.skip(reason="A large mamba2 would be necessary (and costly) for that")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

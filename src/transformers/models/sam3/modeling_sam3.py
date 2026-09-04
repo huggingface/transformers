@@ -22,14 +22,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from ...utils import is_torchvision_available
-
-
-if is_torchvision_available():
-    import torchvision
-
-from transformers import CLIPTextModelWithProjection
-
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
@@ -42,15 +34,18 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import auto_docstring, can_return_tuple, is_torchvision_available, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     TransformersKwargs,
     is_flash_attention_requested,
+    maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
+from ..clip import CLIPTextModelWithProjection  # trf-ignore: TRF009
 from .configuration_sam3 import (
     Sam3Config,
     Sam3DETRDecoderConfig,
@@ -61,6 +56,9 @@ from .configuration_sam3 import (
     Sam3ViTConfig,
 )
 
+
+if is_torchvision_available():
+    import torchvision
 
 logger = logging.get_logger(__name__)
 
@@ -406,39 +404,71 @@ class Sam3Attention(nn.Module):
         return attn_output, attn_weights
 
 
+# Copied from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.Qwen2_5_VLVisionRotaryEmbedding with Qwen2_5_VLVision->Sam3ViT
 class Sam3ViTRotaryEmbedding(nn.Module):
     """
-    Vision Rotary Position Embedding for SAM3, following transformers library standards.
-    Supports 2D (axial) rotary embeddings for spatial dimensions.
+    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
+    pre-computed using `head-dim//4` which is later used to concat H and W positions.
+    The final angles rotate over the whole head dim, no partial rotation involved.
     """
 
-    def __init__(self, config: Sam3ViTConfig, end_x: int, end_y: int, scale: float = 1.0):
+    @deprecate_kwarg("device", version="5.18")
+    def __init__(self, config: Sam3ViTConfig, device=None):
         super().__init__()
-        dim = config.hidden_size // config.num_attention_heads
-        # Ensure even dimension for proper axial splitting
-        if dim % 4 != 0:
-            raise ValueError("Dimension must be divisible by 4 for axial RoPE")
-        self.end_x, self.end_y = end_x, end_y
-        self.dim = dim
-        self.rope_theta = config.rope_theta
-        self.scale = scale
-        freqs = 1.0 / (config.rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
+        self.config = config
 
-        flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
-        x_positions = (flattened_indices % end_x) * scale
-        y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor") * scale
-        freqs_x = torch.outer(x_positions, freqs).float()
-        freqs_y = torch.outer(y_positions, freqs).float()
-        inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
-        inv_freq = inv_freq.repeat_interleave(2, dim=-1)
-        # directly register the cos and sin embeddings as we have a fixed feature shape
-        self.rope_embeddings_cos = nn.Buffer(inv_freq.cos(), persistent=False)
-        self.rope_embeddings_sin = nn.Buffer(inv_freq.sin(), persistent=False)
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    @deprecate_kwarg("device", version="5.18")
+    def compute_axial_rope_parameters(config: Sam3ViTConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        spatial_dim = dim // 2
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
-    def forward(self) -> tuple[torch.Tensor, torch.Tensor]:
-        # As the feature map size is fixed for each stage, we can just return the pre-computed embeddings.
-        return self.rope_embeddings_cos, self.rope_embeddings_sin
+    def forward(self, x, position_ids):
+        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        position_ids_expanded = position_ids[..., None].float()
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = position_ids_expanded * self.inv_freq.float()
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
+
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
+        return cos, sin
+
+    # Ignore copy
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+
+        freq_h, freq_w = freq[:, 0], freq[:, 1]
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)[None, ...]
+        return freq_hw.repeat_interleave(2, dim=-1)
 
 
 def rotate_pairwise(x):
@@ -715,26 +745,40 @@ class Sam3ViTLayer(GradientCheckpointingLayer):
     def __init__(self, config: Sam3ViTConfig, window_size: int = 0) -> None:
         super().__init__()
 
+        self.config = config
         hidden_size = config.hidden_size
-        image_size = config.image_size
-        image_size = image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
-
-        patch_size = config.patch_size
-        patch_size = patch_size if isinstance(patch_size, (list, tuple)) else (patch_size, patch_size)
-
-        input_size = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
         self.layer_norm1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
-        rotary_input_size = input_size if window_size == 0 else (window_size, window_size)
-        rotary_scale = config.window_size / rotary_input_size[0]
-        self.rotary_emb = Sam3ViTRotaryEmbedding(
-            config, end_x=rotary_input_size[0], end_y=rotary_input_size[1], scale=rotary_scale
-        )
+        self.rotary_emb = Sam3ViTRotaryEmbedding(config)
         self.attention = Sam3ViTRoPEAttention(config)
         self.layer_norm2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         self.mlp = Sam3MLP(config)
         self.dropout = nn.Dropout(config.hidden_dropout)
-
         self.window_size = window_size
+
+        position_ids = self.precompute_positions(config, window_size)
+        self.position_ids = nn.Buffer(position_ids, persistent=False)
+
+    @staticmethod
+    def precompute_positions(config: Sam3ViTConfig, window_size: int):
+        if window_size > 0:
+            hw_grid = (window_size, window_size)
+        else:
+            image_size = config.image_size
+            image_size = image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
+
+            patch_size = config.patch_size
+            patch_size = patch_size if isinstance(patch_size, (list, tuple)) else (patch_size, patch_size)
+
+            hw_grid = (image_size[1] // patch_size[1], image_size[0] // patch_size[0])
+
+        hpos_ids, wpos_ids = torch.meshgrid(
+            torch.arange(hw_grid[0]),
+            torch.arange(hw_grid[1]),
+            indexing="ij",
+        )
+        position_ids = torch.stack([wpos_ids.flatten(), hpos_ids.flatten()], dim=-1)
+        position_ids = position_ids * (config.window_size / hw_grid[1])
+        return position_ids
 
     def forward(
         self,
@@ -750,7 +794,7 @@ class Sam3ViTLayer(GradientCheckpointingLayer):
             # Partition into non-overlapping windows for efficient attention
             hidden_states, pad_height_width = window_partition(hidden_states, self.window_size)
 
-        position_embeddings = self.rotary_emb()
+        position_embeddings = self.rotary_emb(hidden_states, self.position_ids)
         hidden_states, _ = self.attention(hidden_states, position_embeddings, **kwargs)
 
         if self.window_size > 0:
@@ -782,19 +826,9 @@ class Sam3PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, Sam3ViTEmbeddings):
             init.normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Sam3ViTRotaryEmbedding):
-            end_x, end_y = module.end_x, module.end_y
-            dim = module.dim
-            freqs = 1.0 / (module.rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
-            flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
-            x_positions = (flattened_indices % end_x) * module.scale
-            y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor") * module.scale
-            freqs_x = torch.outer(x_positions, freqs).float()
-            freqs_y = torch.outer(y_positions, freqs).float()
-            inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
-            inv_freq = inv_freq.repeat_interleave(2, dim=-1)
-            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
-            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
+        elif isinstance(module, Sam3ViTLayer):
+            position_ids = module.precompute_positions(module.config, module.window_size)
+            init.copy_(module.position_ids, position_ids)
 
 
 @auto_docstring

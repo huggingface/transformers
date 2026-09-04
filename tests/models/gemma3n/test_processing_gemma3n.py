@@ -36,8 +36,8 @@ class Gemma3nProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "hf-internal-testing/namespace-google-repo_name-gemma-3n-E4B-it"
     tiny_model_id = "hf-internal-testing/tiny-processor-gemma3n"
 
-    def prepare_image_inputs(self, batch_size: int | None = None, nested: bool = False):
-        return super().prepare_image_inputs(batch_size=batch_size, nested=True)
+    def prepare_images_inputs(self, batch_size: int | None = None, nested: bool = False):
+        return super().prepare_images_inputs(batch_size=batch_size, nested=True)
 
     @classmethod
     def _setup_test_attributes(cls, processor):

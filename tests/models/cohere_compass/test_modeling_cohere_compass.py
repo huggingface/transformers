@@ -90,8 +90,8 @@ class CohereCompassTextModelTest(CausalLMModelTest, unittest.TestCase):
                 **config,
                 "layer_types": ["full_attention", "sliding_attention"],
                 "rope_parameters": {
-                    "full_attention": {"rope_type": "default", "rope_theta": 20_000},
-                    "sliding_attention": {"rope_type": "default", "rope_theta": 10_000},
+                    "full_attention": {"rope_type": "default", "rope_theta": 20_000, "mrope_section": [1, 1, 2]},
+                    "sliding_attention": {"rope_type": "default", "rope_theta": 10_000, "mrope_section": [1, 1, 2]},
                 },
             }
         )
@@ -115,7 +115,7 @@ class CohereCompassTextModelTest(CausalLMModelTest, unittest.TestCase):
                 "sliding_window": 4,
                 "rope_parameters": {
                     "full_attention": None,
-                    "sliding_attention": {"rope_type": "default", "rope_theta": 10_000},
+                    "sliding_attention": {"rope_type": "default", "rope_theta": 10_000, "mrope_section": [1, 1, 2]},
                 },
             }
         )

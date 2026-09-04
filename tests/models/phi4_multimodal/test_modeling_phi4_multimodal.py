@@ -226,10 +226,6 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         super().test_training_gradient_checkpointing_use_reentrant_true()
 
-    @unittest.skip(reason="Test tries to instantiate dynamic cache with an arg")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(reason="Test is only for old attention format")
     def test_sdpa_can_dispatch_composite_models(self):
         pass
