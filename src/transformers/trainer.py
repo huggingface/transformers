@@ -50,7 +50,7 @@ import torch.distributed as dist
 from huggingface_hub import CommitInfo, ModelCard
 from packaging import version
 from torch import nn
-from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
+from torch.utils.data import DataLoader, Dataset, DistributedSampler, IterableDataset, RandomSampler, SequentialSampler
 
 from . import __version__
 from .configuration_utils import PreTrainedConfig
@@ -1050,10 +1050,13 @@ class Trainer:
             if prepared_bs is not None and getattr(prepared_bs, "batch_sampler", None) is sampler:
                 prepared_bs.num_processes = 1
                 prepared_bs.process_index = 0
-        elif self._expert_parallel_dispatch:
-            # accelerate hands every `tp` rank the same batch; under token dispatch each rank gets its own.
-            dataloader.batch_sampler.num_processes = self.args.world_size
-            dataloader.batch_sampler.process_index = self.args.process_index
+        elif isinstance(sampler, DistributedSampler):
+            # The sampler already splits the dataset across every rank (expert-parallel token dispatch); the
+            # `BatchSamplerShard` wrapper accelerate adds when it sees data-parallel ranks must not split again.
+            prepared_bs = dataloader.batch_sampler
+            if getattr(prepared_bs, "batch_sampler", None) is not None:
+                prepared_bs.num_processes = 1
+                prepared_bs.process_index = 0
 
         # Store the prepared dataloader for subsequent evaluations if using persistent workers.
         if dataloader_key is not None and self.args.dataloader_persistent_workers:
@@ -1138,6 +1141,11 @@ class Trainer:
         elif self.args.train_sampling_strategy == "sequential":
             return SequentialSampler(train_dataset)
         else:
+            if self._expert_parallel_dispatch:
+                # accelerate hands every `tp` rank the same batch; under token dispatch each rank gets its own.
+                return DistributedSampler(
+                    train_dataset, num_replicas=self.args.world_size, rank=self.args.process_index, seed=self.args.seed
+                )
             return RandomSampler(train_dataset)
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> torch.utils.data.Sampler | None:
