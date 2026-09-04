@@ -482,7 +482,7 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
         resized_images_grouped = {}
         resized_image_sizes = {}
         rows_grouped, cols_grouped = {}, {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             num_rows = [1] * stacked_images.shape[0]
             num_cols = [1] * stacked_images.shape[0]
             height, width = stacked_images.shape[-2:]
@@ -504,10 +504,10 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
                     resample=resample,
                 )
 
-            rows_grouped[shape] = num_rows
-            cols_grouped[shape] = num_cols
-            resized_image_sizes[shape] = image_sizes
-            resized_images_grouped[shape] = stacked_images
+            rows_grouped[key] = num_rows
+            cols_grouped[key] = num_cols
+            resized_image_sizes[key] = image_sizes
+            resized_images_grouped[key] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
         batch_rows = reorder_images(rows_grouped, grouped_images_index)
         batch_cols = reorder_images(cols_grouped, grouped_images_index)
@@ -519,7 +519,7 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
 
         processed_images_grouped = {}
         processed_masks, processed_spatial_shapes = {}, {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
@@ -529,20 +529,20 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
             num_patches_width = width // encoder_patch_size
 
             stacked_images = convert_image_to_patches(stacked_images, encoder_patch_size)
-            processed_spatial_shapes[shape] = [[num_patches_height, num_patches_width]] * batch_size
+            processed_spatial_shapes[key] = [[num_patches_height, num_patches_width]] * batch_size
 
             if do_pad:
                 stacked_images, pixel_mask = pad_along_first_dim(stacked_images, max_num_patches)
-                processed_masks[shape] = [pixel_mask] * batch_size
+                processed_masks[key] = [pixel_mask] * batch_size
 
-            processed_images_grouped[shape] = stacked_images
+            processed_images_grouped[key] = stacked_images
 
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index, is_nested=True)
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         data = {"pixel_values": torch.cat([torch.stack(images) for images in processed_images])}
 
         if do_pad:
-            processed_masks = reorder_images(processed_masks, grouped_images_index, is_nested=True)
-            processed_spatial_shapes = reorder_images(processed_spatial_shapes, grouped_images_index, is_nested=True)
+            processed_masks = reorder_images(processed_masks, grouped_images_index)
+            processed_spatial_shapes = reorder_images(processed_spatial_shapes, grouped_images_index)
             processed_masks = torch.cat([torch.stack(masks) for masks in processed_masks])
             processed_spatial_shapes = torch.cat(
                 [torch.tensor(spatial_shape) for spatial_shape in processed_spatial_shapes]

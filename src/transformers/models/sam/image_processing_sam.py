@@ -223,10 +223,10 @@ class SamImageProcessor(TorchvisionBackend):
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_images = self.resize(image=stacked_images, size=size, resample=resample)
-            resized_images_grouped[shape] = stacked_images
+            resized_images_grouped[key] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
         reshaped_input_sizes = [image.shape[-2:] for image in resized_images]
 
@@ -234,14 +234,14 @@ class SamImageProcessor(TorchvisionBackend):
         # Needed in case do_resize is False, or resize returns images with different sizes
         grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_center_crop:
                 stacked_images = self.center_crop(stacked_images, crop_size)
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            processed_images_grouped[shape] = stacked_images
+            processed_images_grouped[key] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         if do_pad:

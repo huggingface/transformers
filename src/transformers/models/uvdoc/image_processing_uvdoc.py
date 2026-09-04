@@ -55,13 +55,13 @@ class UVDocImageProcessor(TorchvisionBackend):
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             # RGB to BGR conversion
             stacked_images = stacked_images[:, [2, 1, 0], :, :]
-            processed_images_grouped[shape] = stacked_images
+            processed_images_grouped[key] = stacked_images
 
         rescale_and_normalize_images = reorder_images(processed_images_grouped, grouped_images_index)
 
@@ -72,13 +72,13 @@ class UVDocImageProcessor(TorchvisionBackend):
         )
         interpolated_images_grouped = {}
         # Upsample images and extract originals for post-processing
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             # Interpolate to target size (use interpolate with align_corners=True to match original implementation)
             if do_resize:
                 stacked_images = F.interpolate(
                     stacked_images, size=(size.height, size.width), mode="bilinear", align_corners=True
                 )
-            interpolated_images_grouped[shape] = stacked_images
+            interpolated_images_grouped[key] = stacked_images
 
         pixel_values = reorder_images(interpolated_images_grouped, grouped_images_index)
 

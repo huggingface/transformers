@@ -97,7 +97,7 @@ class SuperPointImageProcessor(TorchvisionBackend):
         # Group images by size for batched processing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             # Apply grayscale conversion before resize (if requested)
             if do_grayscale:
                 stacked_images = convert_to_grayscale(stacked_images)
@@ -107,7 +107,7 @@ class SuperPointImageProcessor(TorchvisionBackend):
             # Rescale
             if do_rescale:
                 stacked_images = self.rescale(stacked_images, rescale_factor)
-            processed_images_grouped[shape] = stacked_images
+            processed_images_grouped[key] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 

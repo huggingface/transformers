@@ -459,13 +459,13 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
                 segmentation_maps, disable_grouping=disable_grouping
             )
             resized_segmentation_maps_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_images = self.resize(
                     image=stacked_images, size=size, size_divisor=size_divisor, resample=resample
                 )
             if segmentation_maps is not None:
-                stacked_segmentation_maps = grouped_segmentation_maps[shape]
+                stacked_segmentation_maps = grouped_segmentation_maps[key]
                 if do_resize:
                     stacked_segmentation_maps = self.resize(
                         image=stacked_segmentation_maps,
@@ -473,9 +473,9 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
                         size_divisor=size_divisor,
                         resample=tvF.InterpolationMode.NEAREST_EXACT,
                     )
-            resized_images_grouped[shape] = stacked_images
+            resized_images_grouped[key] = stacked_images
             if segmentation_maps is not None:
-                resized_segmentation_maps_grouped[shape] = stacked_segmentation_maps
+                resized_segmentation_maps_grouped[key] = stacked_segmentation_maps
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
         if segmentation_maps is not None:
             resized_segmentation_maps = reorder_images(
@@ -517,21 +517,21 @@ class Mask2FormerImageProcessor(TorchvisionBackend):
             )
         processed_images_grouped = {}
         processed_pixel_masks_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             padded_images, pixel_masks, padded_segmentation_maps = self.pad(
                 images=stacked_images,
-                segmentation_maps=grouped_segmentation_maps[shape] if segmentation_maps is not None else None,
+                segmentation_maps=grouped_segmentation_maps[key] if segmentation_maps is not None else None,
                 padded_size=padded_size,
                 ignore_index=ignore_index,
             )
-            processed_images_grouped[shape] = padded_images
-            processed_pixel_masks_grouped[shape] = pixel_masks
+            processed_images_grouped[key] = padded_images
+            processed_pixel_masks_grouped[key] = pixel_masks
             if segmentation_maps is not None:
-                processed_segmentation_maps_grouped[shape] = padded_segmentation_maps
+                processed_segmentation_maps_grouped[key] = padded_segmentation_maps
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_pixel_masks = reorder_images(processed_pixel_masks_grouped, grouped_images_index)

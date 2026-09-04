@@ -197,7 +197,7 @@ class TvpImageProcessor(TorchvisionBackend):
             images, disable_grouping=disable_grouping, is_nested=True
         )
         processed_images_grouped = {}
-        for shape, stacked_frames in grouped_images.items():
+        for key, stacked_frames in grouped_images.items():
             # Resize if needed
             if do_resize:
                 stacked_frames = self.resize(stacked_frames, size, resample)
@@ -220,9 +220,9 @@ class TvpImageProcessor(TorchvisionBackend):
             if do_flip_channel_order:
                 stacked_frames = self._flip_channel_order(stacked_frames)
 
-            processed_images_grouped[shape] = stacked_frames
+            processed_images_grouped[key] = stacked_frames
 
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index, is_nested=True)
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         if return_tensors == "pt":
             processed_images = [torch.stack(images, dim=0) for images in processed_images]
             processed_images = torch.stack(processed_images, dim=0)
