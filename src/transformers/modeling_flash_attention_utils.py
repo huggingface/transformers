@@ -489,7 +489,9 @@ def prepare_fa_kwargs_from_position_ids(position_ids):
     # https://github.com/Dao-AILab/flash-attention/blob/2dd8078adc1d9b74e315ee99718c0dea0de8eeb6/flash_attn/flash_attn_interface.py#L1423-L1424
     # We should use cu_seq_lens instead of position_ids to get the max length since position_ids is not always increasing
     # for some models (e.g. qwen2-vl).
-    max_length_q = cu_seq_lens_q.diff().max()
+    # using .item() here is required to prevent a performance regression (#46693), and because
+    # FlashAttention 4's varlen kernel rejects a tensor `max_seqlen` outright
+    max_length_q = cu_seq_lens_q.diff().max().item()
     max_length_k = max_length_q
 
     return (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k)
