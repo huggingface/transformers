@@ -427,12 +427,21 @@ def dispatch_experts_forward(
     recv_expert_ids = torch.arange(num_local_experts, device=hidden_states.device).repeat(ep_size)
     recv_expert_ids = recv_expert_ids.repeat_interleave(recv_counts.reshape(-1))
 
-    # The local experts, as a top-1 routing with unit weights. Scaling the gradient of the output by `1 / ep_size`
+    # The local experts: sort by expert, grouped GEMMs, unsort. Scaling the gradient of the output by `1 / ep_size`
     # and of the input by `ep_size` leaves the token gradients untouched and scales the expert gradients.
     recv_tokens = _ScaleGrad.apply(recv_tokens, ep_size)
-    unit_weights = torch.ones_like(recv_expert_ids, dtype=recv_tokens.dtype).unsqueeze(-1)
-    expert_out = grouped_mm_experts_forward(self, recv_tokens, recv_expert_ids.unsqueeze(-1), unit_weights)
-    expert_out = _ScaleGrad.apply(expert_out, 1.0 / ep_size)
+    expert_ids_g, perm = torch.sort(recv_expert_ids, stable=True)
+    tokens_g = recv_tokens[perm]
+    offsets = torch.cumsum(torch.bincount(expert_ids_g, minlength=num_local_experts), dim=0, dtype=torch.int32)
+    if self.has_gate:
+        weight, bias = self.gate_up_proj, self.gate_up_proj_bias[expert_ids_g] if self.has_bias else None
+    else:
+        weight, bias = self.up_proj, self.up_proj_bias[expert_ids_g] if self.has_bias else None
+    proj_out = _grouped_linear(tokens_g, weight, offsets, bias=bias, is_transposed=self.is_transposed)
+    proj_out = self._apply_gate(proj_out) if self.has_gate else self.act_fn(proj_out)
+    bias = self.down_proj_bias[expert_ids_g] if self.has_bias else None
+    proj_out = _grouped_linear(proj_out, self.down_proj, offsets, bias=bias, is_transposed=self.is_transposed)
+    expert_out = _ScaleGrad.apply(proj_out[torch.argsort(perm)], 1.0 / ep_size)
 
     # Send the results back to the owners of the tokens and combine them with the routing weights.
     recv_out = all_to_all_single(
