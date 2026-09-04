@@ -188,6 +188,7 @@ def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) 
 def apply_fully_sharded_data_parallelism(
     model: nn.Module,
     fsdp_mesh: torch.distributed.device_mesh.DeviceMesh,
+    expert_parallel_dispatch: bool = False,
     expert_mesh: torch.distributed.device_mesh.DeviceMesh | None = None,
 ) -> nn.Module:
     """
@@ -196,8 +197,9 @@ def apply_fully_sharded_data_parallelism(
     Torch availability, distributed initialization and the version requirement
     are asserted upstream by `initialize_fully_sharded_data_parallelism`.
 
-    With expert-parallel token dispatch the experts are already sharded across the expert-parallel ranks, which
-    `fsdp_mesh` spans: pass the mesh they should be sharded across as `expert_mesh` (`None` leaves them as they are).
+    With expert-parallel token dispatch (`expert_parallel_dispatch=True`) `fsdp_mesh` spans the expert-parallel
+    ranks, which the experts are already sharded across: they are sharded across `expert_mesh` in their own group
+    instead, or left as they are when there is no such mesh.
     """
     fsdp_plan = dict(getattr(model, "_fsdp_plan", None) or {})
     if not fsdp_plan:
@@ -212,9 +214,8 @@ def apply_fully_sharded_data_parallelism(
     adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, model)
     reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
 
-    if expert_mesh is not None or fsdp_mesh.ndim == 1 and any(isinstance(p, DTensor) for p in model.parameters()):
-        # The DTensor parameters are the expert-parallel experts: shard them across `expert_mesh` in their own
-        # group, or keep them out of the groups below when there is no such mesh.
+    if expert_parallel_dispatch:
+        # The DTensor parameters are the expert-parallel experts.
         expert_modules = [
             module
             for module in model.modules()
