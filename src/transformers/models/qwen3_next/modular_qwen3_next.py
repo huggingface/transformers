@@ -33,8 +33,8 @@ from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_exportin
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..bamba.modeling_bamba import apply_mask_to_padding_states, apply_rotary_pos_emb
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
-from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
@@ -97,7 +97,7 @@ class Qwen3NextRotaryEmbedding(Gemma2RotaryEmbedding):
         return inv_freq.to(device), attention_factor
 
 
-class Qwen3NextRMSNorm(Gemma3RMSNorm):
+class Qwen3NextRMSNorm(GemmaRMSNorm):
     pass
 
 

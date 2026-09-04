@@ -307,7 +307,6 @@ class DeepseekOcr2ImageProcessorPil(PilBackend):
 
         return num_patches
 
-    # Copied from transformers.models.llava.image_processing_pil_llava.LlavaImageProcessorPil.pad_to_square
     def pad_to_square(
         self,
         image: np.ndarray,

@@ -16,6 +16,7 @@
 import copy
 import math
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -27,10 +28,12 @@ from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     ModelOutput,
+    TransformersKwargs,
     auto_docstring,
     is_accelerate_available,
     is_scipy_available,
@@ -1472,6 +1475,35 @@ class OneFormerPixelLevelModule(nn.Module):
 
 
 # Modified from transformers.models.detr.modeling_detr.DetrAttention with Detr->OneFormer
+# Copied from transformers.models.detr.modeling_detr.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class OneFormerAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Here, we add position embeddings to the queries and
@@ -1485,8 +1517,11 @@ class OneFormerAttention(nn.Module):
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
+        config: OneFormerConfig | None = None,
     ):
         super().__init__()
+        self.config = config
+        self.is_causal = False
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
@@ -1503,9 +1538,6 @@ class OneFormerAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
-        return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
     def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Tensor | None):
         return tensor if position_embeddings is None else tensor + position_embeddings
 
@@ -1516,10 +1548,11 @@ class OneFormerAttention(nn.Module):
         position_embeddings: torch.Tensor | None = None,
         key_value_states: torch.Tensor | None = None,
         key_value_position_embeddings: torch.Tensor | None = None,
-        output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
+        # this module is fed the (seq_len, batch_size, embed_dim) layout, so move the batch dim to the front first
         hidden_states = hidden_states.permute(1, 0, 2) if hidden_states is not None else None
         position_embeddings = position_embeddings.permute(1, 0, 2) if position_embeddings is not None else None
         key_value_states = key_value_states.permute(1, 0, 2) if key_value_states is not None else None
@@ -1530,90 +1563,64 @@ class OneFormerAttention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        batch_size, target_len, embed_dim = hidden_states.size()
 
-        # add position embeddings to the hidden states before projecting to queries and keys
-        if position_embeddings is not None:
-            hidden_states_original = hidden_states
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        # add key-value position embeddings to the key value states
-        if key_value_position_embeddings is not None:
-            key_value_states_original = key_value_states
-            key_value_states = self.with_pos_embed(key_value_states, key_value_position_embeddings)
-
-        # get query proj
-        query_states = self.q_proj(hidden_states) * self.scaling
-        # get key, value proj
+        # position embeddings are added to the queries and keys, but never to the values
+        query_input = self.with_pos_embed(hidden_states, position_embeddings)
         if is_cross_attention:
-            # cross_attentions
-            key_states = self._shape(self.k_proj(key_value_states), -1, batch_size)
-            value_states = self._shape(self.v_proj(key_value_states_original), -1, batch_size)
+            key_input = self.with_pos_embed(key_value_states, key_value_position_embeddings)
+            value_input = key_value_states
         else:
-            # self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, batch_size)
-            value_states = self._shape(self.v_proj(hidden_states_original), -1, batch_size)
+            key_input = query_input
+            value_input = hidden_states
 
-        proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, target_len, batch_size).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
+        kv_shape = (*key_input.shape[:-1], -1, self.head_dim)
+        query_states = self.q_proj(query_input).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(key_input).view(kv_shape).transpose(1, 2)
+        value_states = self.v_proj(value_input).view(kv_shape).transpose(1, 2)
 
-        source_len = key_states.size(1)
-
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
-        if attn_weights.size() != (batch_size * self.num_heads, target_len, source_len):
-            raise ValueError(
-                f"Attention weights should be of size {(batch_size * self.num_heads, target_len, source_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
+        # the incoming mask is flattened over (batch_size, num_heads); the attention interface expects it unflattened
         if attention_mask is not None:
-            if attention_mask.size() != (batch_size * self.num_heads, target_len, source_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(target_len, batch_size * self.num_heads, source_len)}, but is"
-                    f" {attention_mask.size()}"
-                )
-            attn_weights += attention_mask
+            attention_mask = attention_mask.view(input_shape[0], self.num_heads, *attention_mask.shape[-2:])
 
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(batch_size, self.num_heads, target_len, source_len)
-            attn_weights = attn_weights_reshaped.view(batch_size * self.num_heads, target_len, source_len)
-        else:
-            attn_weights_reshaped = None
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.bmm(attn_probs, value_states)
-
-        if attn_output.size() != (batch_size * self.num_heads, target_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(batch_size, self.num_heads, target_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(batch_size, self.num_heads, target_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(batch_size, target_len, embed_dim)
-
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output).permute(1, 0, 2)
 
-        return attn_output, attn_weights_reshaped
+        return attn_output, attn_weights
 
 
 class OneFormerTransformerDecoderSelfAttentionLayer(nn.Module):
     def __init__(
-        self, embed_dim, num_heads, dropout=0.0, activation="relu", normalize_before=False, layer_norm_eps=1e-05
+        self,
+        embed_dim,
+        num_heads,
+        dropout=0.0,
+        activation="relu",
+        normalize_before=False,
+        layer_norm_eps=1e-05,
+        config=None,
     ):
         super().__init__()
-        self.self_attn = OneFormerAttention(embed_dim=embed_dim, num_heads=num_heads, dropout=dropout, is_decoder=True)
+        self.self_attn = OneFormerAttention(
+            embed_dim=embed_dim, num_heads=num_heads, dropout=dropout, is_decoder=True, config=config
+        )
 
         self.norm = nn.LayerNorm(embed_dim, eps=layer_norm_eps)
         self.dropout = nn.Dropout(dropout)
@@ -1832,6 +1839,7 @@ class OneFormerTransformerDecoderLayer(nn.Module):
             dropout=0.0,
             normalize_before=config.pre_norm,
             layer_norm_eps=config.layer_norm_eps,
+            config=config,
         )
 
         self.ffn = OneFormerTransformerDecoderFFNLayer(

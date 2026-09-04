@@ -304,7 +304,6 @@ class DeepseekOcr2ImageProcessor(TorchvisionBackend):
 
         return num_patches
 
-    # Copied from transformers.models.llava.image_processing_llava.LlavaImageProcessor.pad_to_square
     def pad_to_square(
         self,
         images: "torch.Tensor",

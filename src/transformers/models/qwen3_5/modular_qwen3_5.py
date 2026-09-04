@@ -38,6 +38,7 @@ from ...vision_utils import (
     get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
 )
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
 from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
 from ..qwen3_next.modeling_qwen3_next import (
@@ -46,7 +47,6 @@ from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextMLP,
     Qwen3NextModel,
     Qwen3NextPreTrainedModel,
-    Qwen3NextRMSNorm,
     apply_mask_to_padding_states,
     causal_conv1d_fn,
     causal_conv1d_update,
@@ -347,7 +347,7 @@ class Qwen3_5MLP(Qwen3NextMLP):
         self.intermediate_size = intermediate_size
 
 
-class Qwen3_5RMSNorm(Qwen3NextRMSNorm):
+class Qwen3_5RMSNorm(GemmaRMSNorm):
     pass
 
 

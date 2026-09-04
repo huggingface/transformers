@@ -31,7 +31,6 @@ from ..chinese_clip.modeling_chinese_clip import (
     ChineseCLIPModel,
     ChineseCLIPTextAttention,
     ChineseCLIPTextLayer,
-    ChineseCLIPTextSelfAttention,
 )
 from ..clip.configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 from ..clip.modeling_clip import (
@@ -48,10 +47,7 @@ from ..clip.modeling_clip import (
 )
 from ..roberta.modeling_roberta import (
     RobertaEmbeddings,
-    RobertaIntermediate,
-    RobertaOutput,
     RobertaPooler,
-    RobertaSelfOutput,
 )
 
 
@@ -154,37 +150,17 @@ class AltRobertaEmbeddings(RobertaEmbeddings):
     pass
 
 
-class AltRobertaSelfAttention(ChineseCLIPTextSelfAttention):
-    def __init__(self, config):
-        super().__init__(config)
-        self.is_causal = False
-
-
-class AltRobertaSelfOutput(RobertaSelfOutput):
-    pass
-
-
-class AltRobertaAttention(ChineseCLIPTextAttention):
-    def __init__(self, config):
-        super().__init__()
-        self.self = AltRobertaSelfAttention(config)
-        self.output = AltRobertaSelfOutput(config)
-
-
-class AltRobertaIntermediate(RobertaIntermediate):
-    pass
-
-
-class AltRobertaOutput(RobertaOutput):
+# AltCLIP's text tower is a plain post-norm encoder, so attention, MLP and the two residual
+# LayerNorms all come from `ChineseCLIPTextLayer`, which is the same shape with no decoder or
+# cross-attention branch. `ChineseCLIPTextAttention` already fixes `is_causal = False`, which is
+# what this tower needs, so neither class has anything left to override. The `Text` in the names is
+# the chinese_clip prefix rename; it is what the layer body below resolves to.
+class AltRobertaTextAttention(ChineseCLIPTextAttention):
     pass
 
 
 class AltRobertaLayer(ChineseCLIPTextLayer):
-    def __init__(self, config):
-        super().__init__()
-        self.attention = AltRobertaAttention(config)
-        self.intermediate = AltRobertaIntermediate(config)
-        self.output = AltRobertaOutput(config)
+    pass
 
 
 class AltRobertaEncoder(CLIPEncoder):
@@ -312,7 +288,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
     _input_embed_layer = "word_embeddings"
     _can_record_outputs = {
         "hidden_states": AltRobertaLayer,
-        "attentions": AltRobertaSelfAttention,
+        "attentions": AltRobertaTextAttention,
     }
 
     def __init__(self, config, add_pooling_layer=True):

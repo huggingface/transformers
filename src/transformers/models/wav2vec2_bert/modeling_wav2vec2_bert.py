@@ -231,10 +231,6 @@ class Wav2Vec2BertConvolutionModule(nn.Module):
         return hidden_states
 
 
-# NOTE: this differs on purpose from the eager attention of other models that support a position bias
-# (e.g. `inkling`), in order to stay equivalent to the original conformer implementation:
-# - no `repeat_kv` as these models do not use GQA
-# - the softmax stays in the input dtype instead of being upcast to fp32
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -249,10 +245,12 @@ def eager_attention_forward(
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
+    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if position_bias is not None:
         attn_weights = attn_weights + position_bias
+
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
@@ -602,7 +600,6 @@ class Wav2Vec2BertAdapter(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.seamless_m4t_v2.modeling_seamless_m4t_v2._compute_new_attention_mask
 def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Tensor):
     """
     Computes an attention mask of the form `(batch, seq_len)` with an attention for each element in the batch that

@@ -16,6 +16,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
+from ..t5.modeling_t5 import eager_attention_forward
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Adapter,
     Wav2Vec2AdapterLayer,
@@ -43,36 +44,6 @@ _HIDDEN_STATES_START_POSITION = 2
 # (e.g. `inkling`), in order to stay equivalent to the original conformer implementation:
 # - no `repeat_kv` as these models do not use GQA
 # - the softmax stays in the input dtype instead of being upcast to fp32
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float | None = None,
-    dropout: float = 0.0,
-    position_bias: torch.Tensor | None = None,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    if scaling is None:
-        scaling = query.size(-1) ** -0.5
-
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-
-    if position_bias is not None:
-        attn_weights = attn_weights + position_bias
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
 @auto_docstring(
     custom_intro="""
     Output type of [`Wav2Vec2ConformerForPreTraining`], with potential hidden states and attentions.

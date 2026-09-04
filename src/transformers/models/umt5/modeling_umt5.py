@@ -215,10 +215,10 @@ class UMT5Attention(nn.Module):
                 "when creating this class."
             )
 
-        self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
+        self.q_proj = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.k_proj = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.v_proj = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.o_proj = nn.Linear(self.inner_dim, self.d_model, bias=False)
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
@@ -304,7 +304,7 @@ class UMT5Attention(nn.Module):
         # if encoder_hidden_states are provided this layer is used as a cross-attention layer for the decoder
         is_cross_attention = encoder_hidden_states is not None
 
-        query_states = self.q(hidden_states)
+        query_states = self.q_proj(hidden_states)
         query_states = query_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
@@ -325,8 +325,8 @@ class UMT5Attention(nn.Module):
             key_states = curr_past_key_values.layers[self.layer_idx].keys
             value_states = curr_past_key_values.layers[self.layer_idx].values
         else:
-            key_states = self.k(current_states)
-            value_states = self.v(current_states)
+            key_states = self.k_proj(current_states)
+            value_states = self.v_proj(current_states)
             key_states = key_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
             value_states = value_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
@@ -365,7 +365,7 @@ class UMT5Attention(nn.Module):
         )
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
-        attn_output = self.o(attn_output)
+        attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
 
@@ -595,10 +595,10 @@ class UMT5PreTrainedModel(PreTrainedModel):
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
-            init.normal_(module.q.weight, mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            init.normal_(module.k.weight, mean=0.0, std=factor * (d_model**-0.5))
-            init.normal_(module.v.weight, mean=0.0, std=factor * (d_model**-0.5))
-            init.normal_(module.o.weight, mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            init.normal_(module.q_proj.weight, mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            init.normal_(module.k_proj.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.v_proj.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.o_proj.weight, mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
                 init.normal_(module.relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
 

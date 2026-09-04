@@ -142,8 +142,14 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Electra
-class ElectraSelfAttention(nn.Module):
+class ElectraAttention(nn.Module):
+    """Self-attention with its output projection, in the shape used across the library.
+
+    ELECTRA historically split this over `ElectraSelfAttention` (q/k/v) and `ElectraSelfOutput` (the output
+    projection plus the residual LayerNorm). The projection lives here as `o_proj`; the LayerNorm
+    and residual belong to `ElectraLayer`, which is what makes the layer's topology visible.
+    """
+
     def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -158,9 +164,10 @@ class ElectraSelfAttention(nn.Module):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.scaling = self.attention_head_size**-0.5
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+        self.q_proj = nn.Linear(config.hidden_size, self.all_head_size)
+        self.k_proj = nn.Linear(config.hidden_size, self.all_head_size)
+        self.v_proj = nn.Linear(config.hidden_size, self.all_head_size)
+        self.o_proj = nn.Linear(self.all_head_size, config.hidden_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
@@ -178,10 +185,9 @@ class ElectraSelfAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.attention_head_size)
 
-        # get all proj
-        query_layer = self.query(hidden_states).view(*hidden_shape).transpose(1, 2)
-        key_layer = self.key(hidden_states).view(*hidden_shape).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(*hidden_shape).transpose(1, 2)
+        query_layer = self.q_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
+        key_layer = self.k_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
+        value_layer = self.v_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
 
         if past_key_values is not None:
             # decoder-only bert can have a simple dynamic cache for example
@@ -207,11 +213,32 @@ class ElectraSelfAttention(nn.Module):
             **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        return attn_output, attn_weights
+        return self.o_proj(attn_output), attn_weights
 
 
-# Copied from transformers.models.bert.modeling_bert.BertCrossAttention with Bert->Electra
+class ElectraSelfOutput(nn.Module):
+    """Output projection plus the residual LayerNorm, kept for the cross-attention path only.
+
+    The self-attention path no longer uses this: its projection is `ElectraAttention.o_proj` and its
+    LayerNorm belongs to `ElectraLayer`. Cross-attention keeps the original layout deliberately, so
+    that the rare checkpoints carrying `crossattention.*` weights load with no key renaming at all.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        return self.LayerNorm(hidden_states + input_tensor)
+
+
 class ElectraCrossAttention(nn.Module):
+    """Cross-attention query/key/value. Its output projection is `ElectraSelfOutput`, see above."""
+
     def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -243,12 +270,9 @@ class ElectraCrossAttention(nn.Module):
         past_key_values: EncoderDecoderCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
-        # determine input shapes
         input_shape = hidden_states.shape[:-1]
-
         hidden_shape = (*input_shape, -1, self.attention_head_size)
 
-        # get query proj
         query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
 
         is_updated = past_key_values.is_updated.get(self.layer_idx) if past_key_values is not None else False
@@ -287,102 +311,72 @@ class ElectraCrossAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
-class ElectraSelfOutput(nn.Module):
-    def __init__(self, config):
+class ElectraCrossAttentionBlock(nn.Module):
+    """Cross-attention plus its output projection, in ELECTRA's original module layout."""
+
+    def __init__(self, config, layer_idx=None):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
-
-
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Electra,BERT->ELECTRA
-class ElectraAttention(nn.Module):
-    def __init__(self, config, is_causal=False, layer_idx=None, is_cross_attention=False):
-        super().__init__()
-        self.is_cross_attention = is_cross_attention
-        attention_class = ElectraCrossAttention if is_cross_attention else ElectraSelfAttention
-        self.self = attention_class(config, is_causal=is_causal, layer_idx=layer_idx)
+        self.self = ElectraCrossAttention(config, is_causal=False, layer_idx=layer_idx)
         self.output = ElectraSelfOutput(config)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
-        attention_mask = attention_mask if not self.is_cross_attention else encoder_attention_mask
         attention_output, attn_weights = self.self(
             hidden_states,
             encoder_hidden_states=encoder_hidden_states,
-            attention_mask=attention_mask,
+            attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             **kwargs,
         )
-        attention_output = self.output(attention_output, hidden_states)
-        return attention_output, attn_weights
+        return self.output(attention_output, hidden_states), attn_weights
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
-class ElectraIntermediate(nn.Module):
+class ElectraMLP(nn.Module):
+    """Ungated feed-forward network.
+
+    Replaces `ElectraIntermediate` (up projection plus activation) and `ElectraOutput` (down projection
+    plus the residual LayerNorm); the LayerNorm and residual now belong to `ElectraLayer`.
+    """
+
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        return hidden_states
-
-
-# Copied from transformers.models.bert.modeling_bert.BertOutput
-class ElectraOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.act_fn = ACT2FN[config.hidden_act] if isinstance(config.hidden_act, str) else config.hidden_act
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.dropout(self.down_proj(self.act_fn(self.up_proj(hidden_states))))
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Electra
 class ElectraLayer(GradientCheckpointingLayer):
+    """Post-norm transformer layer: `LayerNorm(x + sublayer(x))` for each sublayer.
+
+    The norms and residuals are here rather than inside the sublayers, so the layer's topology is
+    stated in one place. The arithmetic is unchanged from the previous five-class arrangement.
+    """
+
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = ElectraAttention(config, is_causal=config.is_decoder, layer_idx=layer_idx)
+        self.self_attn = ElectraAttention(config, is_causal=config.is_decoder, layer_idx=layer_idx)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.attention_dropout = nn.Dropout(config.hidden_dropout_prob)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = ElectraAttention(
-                config,
-                is_causal=False,
-                layer_idx=layer_idx,
-                is_cross_attention=True,
-            )
-        self.intermediate = ElectraIntermediate(config)
-        self.output = ElectraOutput(config)
+            self.crossattention = ElectraCrossAttentionBlock(config, layer_idx=layer_idx)
+        self.mlp = ElectraMLP(config)
+        self.post_feedforward_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -393,13 +387,13 @@ class ElectraLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        self_attention_output, _ = self.attention(
+        attn_output, _ = self.self_attn(
             hidden_states,
             attention_mask,
             past_key_values=past_key_values,
             **kwargs,
         )
-        attention_output = self_attention_output
+        hidden_states = self.post_attention_layernorm(hidden_states + self.attention_dropout(attn_output))
 
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
@@ -408,25 +402,20 @@ class ElectraLayer(GradientCheckpointingLayer):
                     " by setting `config.add_cross_attention=True`"
                 )
 
-            cross_attention_output, _ = self.crossattention(
-                self_attention_output,
-                None,  # attention_mask
+            hidden_states, _ = self.crossattention(
+                hidden_states,
                 encoder_hidden_states,
                 encoder_attention_mask,
                 past_key_values=past_key_values,
                 **kwargs,
             )
-            attention_output = cross_attention_output
 
-        layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+        return apply_chunking_to_forward(
+            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, hidden_states
         )
-        return layer_output
 
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
-        return layer_output
+    def feed_forward_chunk(self, hidden_states):
+        return self.post_feedforward_layernorm(hidden_states + self.mlp(hidden_states))
 
 
 # Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Electra
@@ -510,7 +499,7 @@ class ElectraPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": ElectraLayer,
-        "attentions": ElectraSelfAttention,
+        "attentions": ElectraAttention,
         "cross_attentions": ElectraCrossAttention,
     }
 

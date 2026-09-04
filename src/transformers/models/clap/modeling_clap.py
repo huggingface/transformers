@@ -319,7 +319,7 @@ class ClapAudioPatchEmbed(nn.Module):
         return hidden_states
 
 
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinSelfAttention with Swin->ClapAudio
+# Todo - Refactor as part of vision refactor.
 class ClapAudioSelfAttention(nn.Module):
     def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
@@ -413,7 +413,7 @@ class ClapAudioSelfAttention(nn.Module):
         return relative_position_index
 
 
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->ClapAudio
+# Todo - Refactor as part of vision refactor.
 class ClapAudioSelfOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -446,7 +446,7 @@ class ClapAudioAttention(nn.Module):
         return outputs
 
 
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->ClapAudio
+# Todo - Refactor as part of vision refactor.
 class ClapAudioIntermediate(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -462,7 +462,7 @@ class ClapAudioIntermediate(nn.Module):
         return hidden_states
 
 
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinOutput with Swin->ClapAudio
+# Todo - Refactor as part of vision refactor.
 class ClapAudioOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -1101,7 +1101,6 @@ class ClapTextSelfAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
 class ClapTextSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1139,7 +1138,6 @@ class ClapTextAttention(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
 class ClapTextIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1155,7 +1153,6 @@ class ClapTextIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput
 class ClapTextOutput(nn.Module):
     def __init__(self, config):
         super().__init__()

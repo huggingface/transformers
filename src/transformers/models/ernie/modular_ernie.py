@@ -35,6 +35,7 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..bert.modeling_bert import (
+    BertAttention,
     BertCrossAttention,
     BertEmbeddings,
     BertEncoder,
@@ -51,7 +52,6 @@ from ..bert.modeling_bert import (
     BertLMPredictionHead,
     BertModel,
     BertPooler,
-    BertSelfAttention,
 )
 from .configuration_ernie import ErnieConfig
 
@@ -123,7 +123,7 @@ class ErnieEmbeddings(BertEmbeddings):
         return embeddings
 
 
-class ErnieSelfAttention(BertSelfAttention):
+class ErnieAttention(BertAttention):
     pass
 
 
@@ -158,7 +158,7 @@ class ErniePreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": ErnieLayer,
-        "attentions": ErnieSelfAttention,
+        "attentions": ErnieAttention,
         "cross_attentions": ErnieCrossAttention,
     }
 

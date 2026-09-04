@@ -35,7 +35,7 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3PreTrainedModel,
 )
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor, AudioFlamingo3ProcessorKwargs
-from ..glm.modeling_glm import GlmRotaryEmbedding
+from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward, rotate_half
 from .configuration_glmasr import GlmAsrConfig, GlmAsrEncoderConfig
 
@@ -163,7 +163,7 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
         )
 
 
-class GlmAsrRotaryEmbedding(GlmRotaryEmbedding): ...
+class GlmAsrRotaryEmbedding(GPTNeoXRotaryEmbedding): ...
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):

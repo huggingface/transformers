@@ -30,8 +30,10 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3RMSNorm,
     DeepseekV3TopkRouter,
 )
-from ..glm.modeling_glm import GlmRotaryEmbedding
-from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb  # noqa
+from ..gpt_neox.modeling_gpt_neox import (
+    GPTNeoXRotaryEmbedding,
+    apply_rotary_pos_emb,  # noqa
+)
 
 
 logger = logging.get_logger(__name__)
@@ -137,7 +139,7 @@ class Glm4MoeConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class Glm4MoeRotaryEmbedding(GlmRotaryEmbedding):
+class Glm4MoeRotaryEmbedding(GPTNeoXRotaryEmbedding):
     pass
 
 

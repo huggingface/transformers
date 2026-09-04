@@ -30,13 +30,13 @@ from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import TransformersKwargs, merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
+from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
 from ..jamba.modeling_jamba import JambaAttentionDecoderLayer
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
     LlamaMLP,
     LlamaRMSNorm,
-    LlamaRotaryEmbedding,
     rotate_half,
 )
 from ..mamba2.modeling_mamba2 import (
@@ -49,7 +49,7 @@ from .configuration_bamba import BambaConfig
 logger = logging.get_logger(__name__)
 
 
-class BambaRotaryEmbedding(LlamaRotaryEmbedding):
+class BambaRotaryEmbedding(GPTNeoXRotaryEmbedding):
     def compute_default_rope_parameters(config: BambaConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation

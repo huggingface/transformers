@@ -185,7 +185,15 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class XLMRobertaXLSelfAttention(nn.Module):
+class XLMRobertaXLAttention(nn.Module):
+    """Self-attention with its output projection, in the shape used across the library.
+
+    XLM-RoBERTa-XL historically split this over `XLMRobertaXLSelfAttention` (q/k/v) and
+    `XLMRobertaXLSelfOutput` (the output projection, and *only* the projection -- this model is
+    pre-norm, so that module never held a LayerNorm). The projection lives here as `o_proj`; the
+    residual and the norm that precedes the sublayer belong to `XLMRobertaXLLayer`.
+    """
+
     def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -200,9 +208,10 @@ class XLMRobertaXLSelfAttention(nn.Module):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.scaling = self.attention_head_size**-0.5
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+        self.q_proj = nn.Linear(config.hidden_size, self.all_head_size)
+        self.k_proj = nn.Linear(config.hidden_size, self.all_head_size)
+        self.v_proj = nn.Linear(config.hidden_size, self.all_head_size)
+        self.o_proj = nn.Linear(self.all_head_size, config.hidden_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
@@ -220,10 +229,9 @@ class XLMRobertaXLSelfAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.attention_head_size)
 
-        # get all proj
-        query_layer = self.query(hidden_states).view(*hidden_shape).transpose(1, 2)
-        key_layer = self.key(hidden_states).view(*hidden_shape).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(*hidden_shape).transpose(1, 2)
+        query_layer = self.q_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
+        key_layer = self.k_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
+        value_layer = self.v_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
 
         if past_key_values is not None:
             # decoder-only xlm_roberta_xl can have a simple dynamic cache for example
@@ -249,10 +257,12 @@ class XLMRobertaXLSelfAttention(nn.Module):
             **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        return attn_output, attn_weights
+        return self.o_proj(attn_output), attn_weights
 
 
 class XLMRobertaXLCrossAttention(nn.Module):
+    """Cross-attention query/key/value. Its output projection is `XLMRobertaXLSelfOutput`, see above."""
+
     def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -284,12 +294,9 @@ class XLMRobertaXLCrossAttention(nn.Module):
         past_key_values: EncoderDecoderCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
-        # determine input shapes
         input_shape = hidden_states.shape[:-1]
-
         hidden_shape = (*input_shape, -1, self.attention_head_size)
 
-        # get query proj
         query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
 
         is_updated = past_key_values.is_updated.get(self.layer_idx) if past_key_values is not None else False
@@ -329,6 +336,14 @@ class XLMRobertaXLCrossAttention(nn.Module):
 
 
 class XLMRobertaXLSelfOutput(nn.Module):
+    """Cross-attention output projection, with the residual added by the caller.
+
+    Unlike `BertSelfOutput` there is no LayerNorm here: XLM-RoBERTa-XL is pre-norm, so the norm sits
+    *before* the sublayer (`XLMRobertaXLCrossAttentionBlock.self_attn_layer_norm`) rather than after
+    the residual. Only the cross-attention path still uses this module -- the self-attention
+    projection is `XLMRobertaXLAttention.o_proj`.
+    """
+
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -337,88 +352,87 @@ class XLMRobertaXLSelfOutput(nn.Module):
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = hidden_states + input_tensor
-        return hidden_states
+        return hidden_states + input_tensor
 
 
-class XLMRobertaXLAttention(nn.Module):
-    def __init__(self, config, is_causal=False, layer_idx=None, is_cross_attention=False):
+class XLMRobertaXLCrossAttentionBlock(nn.Module):
+    """Pre-norm cross-attention plus its output projection, in XLM-RoBERTa-XL's original layout.
+
+    Module-for-module identical to the pre-refactor `XLMRobertaXLAttention(is_cross_attention=True)`,
+    so the rare checkpoints carrying `crossattention.*` weights load with no key renaming at all --
+    the same choice `BertCrossAttentionBlock` makes for the post-norm family.
+    """
+
+    def __init__(self, config, layer_idx=None):
         super().__init__()
-        self.is_cross_attention = is_cross_attention
-        attention_class = XLMRobertaXLCrossAttention if is_cross_attention else XLMRobertaXLSelfAttention
-        self.self = attention_class(config, is_causal=is_causal, layer_idx=layer_idx)
+        self.self = XLMRobertaXLCrossAttention(config, is_causal=False, layer_idx=layer_idx)
         self.output = XLMRobertaXLSelfOutput(config)
-
         self.self_attn_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
-        past_key_values: tuple[tuple[torch.FloatTensor]] | None = None,
+        past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
-        intermediate = self.self_attn_layer_norm(hidden_states)
-        attention_mask = attention_mask if not self.is_cross_attention else encoder_attention_mask
+        hidden_states_normed = self.self_attn_layer_norm(hidden_states)
         attention_output, attn_weights = self.self(
-            intermediate,
+            hidden_states_normed,
             encoder_hidden_states=encoder_hidden_states,
-            attention_mask=attention_mask,
+            attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             **kwargs,
         )
-        attention_output = self.output(attention_output, hidden_states)
-        return attention_output, attn_weights
+        return self.output(attention_output, hidden_states), attn_weights
 
 
-class XLMRobertaXLOutput(nn.Module):
+class XLMRobertaXLMLP(nn.Module):
+    """Ungated feed-forward network, without BERT's trailing dropout.
+
+    The pre-refactor `XLMRobertaXLOutput` was a bare `nn.Linear` -- no dropout, no LayerNorm -- so
+    the dropout `BertMLP` applies after `down_proj` is deliberately dropped here. Keeping it would
+    change training-time behaviour (it is a no-op at eval).
+    """
+
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states, input_tensor):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = hidden_states + input_tensor
-        return hidden_states
-
-
-class XLMRobertaXLIntermediate(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.act_fn = ACT2FN[config.hidden_act] if isinstance(config.hidden_act, str) else config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        return hidden_states
+        return self.down_proj(self.act_fn(self.up_proj(hidden_states)))
 
 
 class XLMRobertaXLLayer(GradientCheckpointingLayer):
+    """Pre-norm transformer layer: `x + sublayer(LayerNorm(x))` for each sublayer.
+
+    This is the whole difference between XLM-RoBERTa-XL and XLM-RoBERTa, so it is stated here rather
+    than hidden inside the sublayers: `BertLayer` normalises *after* the residual add, this one
+    normalises *before* the sublayer and adds the residual raw. The two output modules therefore
+    carry no LayerNorm of their own, and the layer owns `pre_attention_layernorm` /
+    `pre_feedforward_layernorm` where `BertLayer` owns `post_attention_layernorm` /
+    `post_feedforward_layernorm`. The arithmetic is unchanged from the previous six-class
+    arrangement.
+    """
+
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = XLMRobertaXLAttention(config, is_causal=config.is_decoder, layer_idx=layer_idx)
+        self.self_attn = XLMRobertaXLAttention(config, is_causal=config.is_decoder, layer_idx=layer_idx)
+        self.pre_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.attention_dropout = nn.Dropout(config.hidden_dropout_prob)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = XLMRobertaXLAttention(
-                config,
-                is_causal=False,
-                layer_idx=layer_idx,
-                is_cross_attention=True,
-            )
-        self.intermediate = XLMRobertaXLIntermediate(config)
-        self.output = XLMRobertaXLOutput(config)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+            self.crossattention = XLMRobertaXLCrossAttentionBlock(config, layer_idx=layer_idx)
+        self.mlp = XLMRobertaXLMLP(config)
+        self.pre_feedforward_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -429,13 +443,16 @@ class XLMRobertaXLLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        self_attention_output, _ = self.attention(
-            hidden_states,
+        # The norm is hoisted onto its own line rather than inlined into the call: it is what makes
+        # this layer pre-norm, and `blocks_cli.py scan` reads the layer's topology line by line.
+        hidden_states_normed = self.pre_attention_layernorm(hidden_states)
+        attn_output, _ = self.self_attn(
+            hidden_states_normed,
             attention_mask,
             past_key_values=past_key_values,
             **kwargs,
         )
-        attention_output = self_attention_output
+        hidden_states = hidden_states + self.attention_dropout(attn_output)
 
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
@@ -444,26 +461,20 @@ class XLMRobertaXLLayer(GradientCheckpointingLayer):
                     " by setting `config.add_cross_attention=True`"
                 )
 
-            cross_attention_output, _ = self.crossattention(
-                self_attention_output,
-                None,  # attention_mask
+            hidden_states, _ = self.crossattention(
+                hidden_states,
                 encoder_hidden_states,
                 encoder_attention_mask,
                 past_key_values=past_key_values,
                 **kwargs,
             )
-            attention_output = cross_attention_output
 
-        layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+        return apply_chunking_to_forward(
+            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, hidden_states
         )
-        return layer_output
 
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.LayerNorm(attention_output)
-        intermediate_output = self.intermediate(intermediate_output)
-        layer_output = self.output(intermediate_output, attention_output)
-        return layer_output
+    def feed_forward_chunk(self, hidden_states):
+        return hidden_states + self.mlp(self.pre_feedforward_layernorm(hidden_states))
 
 
 class XLMRobertaXLEncoder(nn.Module):
@@ -513,7 +524,7 @@ class XLMRobertaXLPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": XLMRobertaXLLayer,
-        "attentions": XLMRobertaXLSelfAttention,
+        "attentions": XLMRobertaXLAttention,
         "cross_attentions": XLMRobertaXLCrossAttention,
     }
 

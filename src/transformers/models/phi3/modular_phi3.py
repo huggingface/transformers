@@ -26,6 +26,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
+from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
 from ..mistral.modeling_mistral import (
     MistralDecoderLayer,
     MistralForCausalLM,
@@ -35,7 +36,6 @@ from ..mistral.modeling_mistral import (
     eager_attention_forward,
     rotate_half,
 )
-from ..phi.modeling_phi import PhiRotaryEmbedding
 from .configuration_phi3 import Phi3Config
 
 
@@ -63,7 +63,7 @@ class Phi3MLP(nn.Module):
         return self.down_proj(up_states)
 
 
-class Phi3RotaryEmbedding(PhiRotaryEmbedding):
+class Phi3RotaryEmbedding(GPTNeoXRotaryEmbedding):
     pass
 
 

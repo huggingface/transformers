@@ -125,10 +125,10 @@ class MPNetSelfAttention(nn.Module):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.q = nn.Linear(config.hidden_size, self.all_head_size)
-        self.k = nn.Linear(config.hidden_size, self.all_head_size)
-        self.v = nn.Linear(config.hidden_size, self.all_head_size)
-        self.o = nn.Linear(config.hidden_size, config.hidden_size)
+        self.q_proj = nn.Linear(config.hidden_size, self.all_head_size)
+        self.k_proj = nn.Linear(config.hidden_size, self.all_head_size)
+        self.v_proj = nn.Linear(config.hidden_size, self.all_head_size)
+        self.o_proj = nn.Linear(config.hidden_size, config.hidden_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
@@ -142,9 +142,9 @@ class MPNetSelfAttention(nn.Module):
     ):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.attention_head_size)
-        q = self.q(hidden_states).view(hidden_shape).transpose(1, 2)
-        k = self.k(hidden_states).view(hidden_shape).transpose(1, 2)
-        v = self.v(hidden_states).view(hidden_shape).transpose(1, 2)
+        q = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        k = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        v = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(q, k.transpose(-1, -2))
@@ -168,7 +168,7 @@ class MPNetSelfAttention(nn.Module):
         new_c_shape = c.size()[:-2] + (self.all_head_size,)
         c = c.view(*new_c_shape)
 
-        o = self.o(c)
+        o = self.o_proj(c)
 
         outputs = (o, attention_probs) if output_attentions else (o,)
         return outputs
@@ -200,7 +200,6 @@ class MPNetAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
 class MPNetIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -216,7 +215,6 @@ class MPNetIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput
 class MPNetOutput(nn.Module):
     def __init__(self, config):
         super().__init__()

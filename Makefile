@@ -33,6 +33,7 @@ REPO_CONSISTENCY_CHECKERS := \
 	doctest_list, \
 	update_metadata, \
 	add_dates, \
+	model_blocks, \
 	deps_table
 
 ALL_CHECKERS := $(CODE_QUALITY_CHECKERS), $(REPO_CONSISTENCY_CHECKERS)

@@ -868,7 +868,6 @@ class SEWDAttention(nn.Module):
         return attention_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->SEWD
 class SEWDIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1207,7 +1206,6 @@ class SEWDModel(SEWDPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_hidden_states(
         self,
         hidden_states: torch.FloatTensor,

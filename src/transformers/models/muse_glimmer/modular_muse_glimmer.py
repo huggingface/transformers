@@ -49,13 +49,13 @@ from ...vision_utils import (
     get_vision_window_index,
 )
 from ..afmoe.modeling_afmoe import AfmoeAttention
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2DecoderLayer,
     Gemma2MLP,
     Gemma2Model,
     Gemma2PreTrainedModel,
-    Gemma2RMSNorm,
     Gemma2RotaryEmbedding,
     apply_rotary_pos_emb,
 )
@@ -703,7 +703,7 @@ class MuseGlimmerRMSNorm(Gemma4RMSNorm):
         super().__init__(dim, eps, with_scale)
 
 
-class MuseGlimmerTextCenteredRMSNorm(Gemma2RMSNorm):
+class MuseGlimmerTextCenteredRMSNorm(GemmaRMSNorm):
     pass
 
 

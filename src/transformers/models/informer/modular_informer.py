@@ -31,7 +31,7 @@ from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTO
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..bart.modeling_bart import BartAttention
+from ..bart.modeling_bart import BartAttention, BartDecoderLayer, BartEncoderLayer
 from ..time_series_transformer.modeling_time_series_transformer import (
     TimeSeriesFeatureEmbedder,
     TimeSeriesMeanScaler,
@@ -39,9 +39,7 @@ from ..time_series_transformer.modeling_time_series_transformer import (
     TimeSeriesSinusoidalPositionalEmbedding,
     TimeSeriesStdScaler,
     TimeSeriesTransformerDecoder,
-    TimeSeriesTransformerDecoderLayer,
     TimeSeriesTransformerEncoder,
-    TimeSeriesTransformerEncoderLayer,
     TimeSeriesTransformerForPrediction,
     TimeSeriesTransformerModel,
     TimeSeriesValueEmbedding,
@@ -325,7 +323,7 @@ class InformerConvLayer(GradientCheckpointingLayer):
         return x
 
 
-class InformerEncoderLayer(TimeSeriesTransformerEncoderLayer):
+class InformerEncoderLayer(BartEncoderLayer):
     def __init__(self, config: InformerConfig):
         super().__init__(config)
 
@@ -347,7 +345,7 @@ class InformerEncoderLayer(TimeSeriesTransformerEncoderLayer):
             )
 
 
-class InformerDecoderLayer(TimeSeriesTransformerDecoderLayer):
+class InformerDecoderLayer(BartDecoderLayer):
     def __init__(self, config: InformerConfig, layer_idx: int | None = None):
         super().__init__(config)
 

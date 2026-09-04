@@ -31,7 +31,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ..auto import AutoModel
-from ..llama.modeling_llama import eager_attention_forward, rotate_half
+from ..gpt_neox_japanese.modeling_gpt_neox_japanese import apply_rotary_pos_emb
+from ..llama.modeling_llama import eager_attention_forward
 from ..nanochat.modeling_nanochat import NanoChatRMSNorm
 from ..phi3.modeling_phi3 import Phi3MLP
 from .configuration_esmfold2 import EsmFold2AtomEncoderConfig, EsmFold2Config, EsmFold2DiffusionModuleConfig
@@ -182,29 +183,6 @@ class EsmFold2SwiGLU(Phi3MLP):
         self.gate_up_proj = nn.Linear(hidden_size, 2 * intermediate_size, bias=False)
         self.down_proj = nn.Linear(intermediate_size, hidden_size, bias=False)
         self.activation_fn = ACT2FN["silu"]
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    No kernel decorator: the fused rotary kernel is CUDA-only, and the atom stack's rope must stay
-    bit-exact with the bf16 reference on CPU.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The dimension along which to unsqueeze `cos` and `sin` so they broadcast against `q`/`k`.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
 
 
 class EsmFold2AtomAttention(nn.Module):

@@ -18,12 +18,12 @@ import torch.nn as nn
 
 from ...utils import logging
 from ...utils.generic import no_inherit_decorator
+from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
-    LlamaRotaryEmbedding,
 )
 from ..phi3.modeling_phi3 import Phi3MLP
 from .configuration_glm import GlmConfig
@@ -38,7 +38,7 @@ class GlmMLP(Phi3MLP):
     pass
 
 
-class GlmRotaryEmbedding(LlamaRotaryEmbedding):
+class GlmRotaryEmbedding(GPTNeoXRotaryEmbedding):
     def compute_default_rope_parameters(config: GlmConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation

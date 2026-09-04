@@ -120,7 +120,6 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
     background_color = [127, 127, 127]
     model_input_names = ["pixel_values", "num_local_patches"]
 
-    # Copied from transformers.models.llava.image_processing_llava.LlavaImageProcessor.pad_to_square
     def pad_to_square(
         self,
         images: "torch.Tensor",
@@ -372,7 +371,6 @@ class DeepseekOcr2ImageProcessorPil(GotOcr2ImageProcessorPil):
 
         return processed_images
 
-    # Copied from transformers.models.llava.image_processing_pil_llava.LlavaImageProcessorPil.pad_to_square
     def pad_to_square(
         self,
         image: np.ndarray,

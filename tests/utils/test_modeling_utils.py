@@ -3225,18 +3225,20 @@ class TestAttentionImplementation(unittest.TestCase):
         self.assertTrue(FSDPLlamaModel._can_set_attn_implementation())
 
     def test_can_set_attn_modern_vs_legacy(self):
-        # Modern interface model: True. Legacy model (ProphetNet doesn't use ALL_ATTENTION_FUNCTIONS): False.
+        # Modern interface model: True. Legacy model: False. Nystromformer approximates the whole
+        # attention matrix with a Nystrom low-rank decomposition, so it can never route through
+        # ALL_ATTENTION_FUNCTIONS -- which is what makes it a stable example here.
         from transformers.models.llama.modeling_llama import LlamaModel
-        from transformers.models.prophetnet.modeling_prophetnet import ProphetNetModel
+        from transformers.models.nystromformer.modeling_nystromformer import NystromformerModel
 
         self.assertTrue(LlamaModel._can_set_attn_implementation())
-        self.assertFalse(ProphetNetModel._can_set_attn_implementation())
+        self.assertFalse(NystromformerModel._can_set_attn_implementation())
 
     def test_can_set_attn_legacy_edge_cases(self):
-        # FSMT: bare `class Attention(nn.Module):` -- tightened regex catches this case.
-        from transformers.models.fsmt.modeling_fsmt import FSMTModel
+        # OpenAI GPT: bare `class Attention(nn.Module):` -- tightened regex catches this case.
+        from transformers.models.openai.modeling_openai import OpenAIGPTModel
 
-        self.assertFalse(FSMTModel._can_set_attn_implementation())
+        self.assertFalse(OpenAIGPTModel._can_set_attn_implementation())
 
         # SLANet: `class SLANetAttentionGRUCell(nn.Module):` -- "Attention" not at end of class name.
         from transformers.models.slanet.modeling_slanet import SLANetBackbone

@@ -845,7 +845,6 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
             router_logits=outputs.router_logits,
         )
 
-    # Copied from transformers.models.phi3.modeling_phi3.Phi3ForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self,
         input_ids,

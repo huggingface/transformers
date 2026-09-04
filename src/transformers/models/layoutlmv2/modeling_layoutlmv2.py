@@ -218,7 +218,6 @@ class LayoutLMv2SelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->LayoutLMv2
 class LayoutLMv2Intermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -234,7 +233,6 @@ class LayoutLMv2Intermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->LayoutLM
 class LayoutLMv2Output(nn.Module):
     def __init__(self, config):
         super().__init__()

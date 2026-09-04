@@ -16,6 +16,7 @@
 """PyTorch PVTv2 model."""
 
 import math
+from collections.abc import Callable
 
 import torch
 from torch import nn
@@ -25,13 +26,42 @@ from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, ImageClassifierOutput
-from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
 from .configuration_pvt_v2 import PvtV2Config
 
 
 logger = logging.get_logger(__name__)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
 
 
 class PvtV2OverlapPatchEmbeddings(nn.Module):
@@ -87,6 +117,7 @@ class PvtV2SelfAttention(nn.Module):
 
     def __init__(self, config: PvtV2Config, hidden_size: int, num_attention_heads: int, spatial_reduction_ratio: int):
         super().__init__()
+        self.config = config
         self.linear_attention = config.linear_attention
 
         self.hidden_size = hidden_size
@@ -100,6 +131,8 @@ class PvtV2SelfAttention(nn.Module):
 
         self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.scaling = self.attention_head_size**-0.5
+        self.is_causal = False
 
         self.query = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
@@ -131,6 +164,8 @@ class PvtV2SelfAttention(nn.Module):
         height: int,
         width: int,
         output_attentions: bool = False,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         batch_size, seq_len, num_channels = hidden_states.shape
         query_layer = self.transpose_for_scores(self.query(hidden_states))
@@ -151,18 +186,22 @@ class PvtV2SelfAttention(nn.Module):
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        context_layer, attention_probs = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attn_drop.p,
+            scaling=self.scaling,
+            **kwargs,
+        )
 
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.attn_drop(attention_probs)
-        context_layer = (attention_probs @ value_layer).transpose(1, 2).reshape(batch_size, seq_len, num_channels)
+        context_layer = context_layer.reshape(batch_size, seq_len, -1).contiguous()
         context_layer = self.proj(context_layer)
         context_layer = self.proj_drop(context_layer)
 

@@ -22,6 +22,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging, no_inherit_decorator
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..qwen3_5.configuration_qwen3_5 import Qwen3_5VisionConfig
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5GatedDeltaNet,
@@ -43,7 +44,6 @@ from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextExperts,
     Qwen3NextForCausalLM,
     Qwen3NextPreTrainedModel,
-    Qwen3NextRMSNorm,
     Qwen3NextSparseMoeBlock,
 )
 from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLConfig
@@ -194,7 +194,7 @@ class Qwen3_5MoeSparseMoeBlock(Qwen3NextSparseMoeBlock):
     pass
 
 
-class Qwen3_5MoeRMSNorm(Qwen3NextRMSNorm):
+class Qwen3_5MoeRMSNorm(GemmaRMSNorm):
     pass
 
 

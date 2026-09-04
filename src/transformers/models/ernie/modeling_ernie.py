@@ -155,7 +155,14 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class ErnieSelfAttention(nn.Module):
+class ErnieAttention(nn.Module):
+    """Self-attention with its output projection, in the shape used across the library.
+
+    ERNIE historically split this over `ErnieSelfAttention` (q/k/v) and `ErnieSelfOutput` (the output
+    projection plus the residual LayerNorm). The projection lives here as `o_proj`; the LayerNorm
+    and residual belong to `ErnieLayer`, which is what makes the layer's topology visible.
+    """
+
     def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -170,9 +177,10 @@ class ErnieSelfAttention(nn.Module):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.scaling = self.attention_head_size**-0.5
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+        self.q_proj = nn.Linear(config.hidden_size, self.all_head_size)
+        self.k_proj = nn.Linear(config.hidden_size, self.all_head_size)
+        self.v_proj = nn.Linear(config.hidden_size, self.all_head_size)
+        self.o_proj = nn.Linear(self.all_head_size, config.hidden_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
@@ -190,10 +198,9 @@ class ErnieSelfAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.attention_head_size)
 
-        # get all proj
-        query_layer = self.query(hidden_states).view(*hidden_shape).transpose(1, 2)
-        key_layer = self.key(hidden_states).view(*hidden_shape).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(*hidden_shape).transpose(1, 2)
+        query_layer = self.q_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
+        key_layer = self.k_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
+        value_layer = self.v_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
 
         if past_key_values is not None:
             # decoder-only ernie can have a simple dynamic cache for example
@@ -219,10 +226,12 @@ class ErnieSelfAttention(nn.Module):
             **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        return attn_output, attn_weights
+        return self.o_proj(attn_output), attn_weights
 
 
 class ErnieCrossAttention(nn.Module):
+    """Cross-attention query/key/value. Its output projection is `ErnieSelfOutput`, see above."""
+
     def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -254,12 +263,9 @@ class ErnieCrossAttention(nn.Module):
         past_key_values: EncoderDecoderCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
-        # determine input shapes
         input_shape = hidden_states.shape[:-1]
-
         hidden_shape = (*input_shape, -1, self.attention_head_size)
 
-        # get query proj
         query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
 
         is_updated = past_key_values.is_updated.get(self.layer_idx) if past_key_values is not None else False
@@ -298,6 +304,12 @@ class ErnieCrossAttention(nn.Module):
         return attn_output, attn_weights
 
 
+# Output projection plus the residual LayerNorm, kept for the cross-attention path only. The
+# self-attention path no longer uses this: its projection is `ErnieAttention.o_proj` and its
+# LayerNorm belongs to `ErnieLayer`. Cross-attention keeps the original layout deliberately, so that
+# the rare checkpoints carrying `crossattention.*` weights load with no key renaming at all. The
+# note sits outside the class body because the models copying this class do still use it for
+# self-attention.
 class ErnieSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -308,87 +320,75 @@ class ErnieSelfOutput(nn.Module):
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
+        return self.LayerNorm(hidden_states + input_tensor)
 
 
-class ErnieAttention(nn.Module):
-    def __init__(self, config, is_causal=False, layer_idx=None, is_cross_attention=False):
+class ErnieCrossAttentionBlock(nn.Module):
+    """Cross-attention plus its output projection, in ERNIE's original module layout."""
+
+    def __init__(self, config, layer_idx=None):
         super().__init__()
-        self.is_cross_attention = is_cross_attention
-        attention_class = ErnieCrossAttention if is_cross_attention else ErnieSelfAttention
-        self.self = attention_class(config, is_causal=is_causal, layer_idx=layer_idx)
+        self.self = ErnieCrossAttention(config, is_causal=False, layer_idx=layer_idx)
         self.output = ErnieSelfOutput(config)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
-        attention_mask = attention_mask if not self.is_cross_attention else encoder_attention_mask
         attention_output, attn_weights = self.self(
             hidden_states,
             encoder_hidden_states=encoder_hidden_states,
-            attention_mask=attention_mask,
+            attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             **kwargs,
         )
-        attention_output = self.output(attention_output, hidden_states)
-        return attention_output, attn_weights
+        return self.output(attention_output, hidden_states), attn_weights
 
 
-class ErnieIntermediate(nn.Module):
+class ErnieMLP(nn.Module):
+    """Ungated feed-forward network.
+
+    Replaces `ErnieIntermediate` (up projection plus activation) and `ErnieOutput` (down projection
+    plus the residual LayerNorm); the LayerNorm and residual now belong to `ErnieLayer`.
+    """
+
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        return hidden_states
-
-
-class ErnieOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.act_fn = ACT2FN[config.hidden_act] if isinstance(config.hidden_act, str) else config.hidden_act
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.dropout(self.down_proj(self.act_fn(self.up_proj(hidden_states))))
 
 
 class ErnieLayer(GradientCheckpointingLayer):
+    """Post-norm transformer layer: `LayerNorm(x + sublayer(x))` for each sublayer.
+
+    The norms and residuals are here rather than inside the sublayers, so the layer's topology is
+    stated in one place. The arithmetic is unchanged from the previous five-class arrangement.
+    """
+
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = ErnieAttention(config, is_causal=config.is_decoder, layer_idx=layer_idx)
+        self.self_attn = ErnieAttention(config, is_causal=config.is_decoder, layer_idx=layer_idx)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.attention_dropout = nn.Dropout(config.hidden_dropout_prob)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = ErnieAttention(
-                config,
-                is_causal=False,
-                layer_idx=layer_idx,
-                is_cross_attention=True,
-            )
-        self.intermediate = ErnieIntermediate(config)
-        self.output = ErnieOutput(config)
+            self.crossattention = ErnieCrossAttentionBlock(config, layer_idx=layer_idx)
+        self.mlp = ErnieMLP(config)
+        self.post_feedforward_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -399,13 +399,13 @@ class ErnieLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        self_attention_output, _ = self.attention(
+        attn_output, _ = self.self_attn(
             hidden_states,
             attention_mask,
             past_key_values=past_key_values,
             **kwargs,
         )
-        attention_output = self_attention_output
+        hidden_states = self.post_attention_layernorm(hidden_states + self.attention_dropout(attn_output))
 
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
@@ -414,25 +414,20 @@ class ErnieLayer(GradientCheckpointingLayer):
                     " by setting `config.add_cross_attention=True`"
                 )
 
-            cross_attention_output, _ = self.crossattention(
-                self_attention_output,
-                None,  # attention_mask
+            hidden_states, _ = self.crossattention(
+                hidden_states,
                 encoder_hidden_states,
                 encoder_attention_mask,
                 past_key_values=past_key_values,
                 **kwargs,
             )
-            attention_output = cross_attention_output
 
-        layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+        return apply_chunking_to_forward(
+            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, hidden_states
         )
-        return layer_output
 
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
-        return layer_output
+    def feed_forward_chunk(self, hidden_states):
+        return self.post_feedforward_layernorm(hidden_states + self.mlp(hidden_states))
 
 
 class ErniePooler(nn.Module):
@@ -526,7 +521,7 @@ class ErniePreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": ErnieLayer,
-        "attentions": ErnieSelfAttention,
+        "attentions": ErnieAttention,
         "cross_attentions": ErnieCrossAttention,
     }
 

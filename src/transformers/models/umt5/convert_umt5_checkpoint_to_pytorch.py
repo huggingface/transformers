@@ -100,10 +100,10 @@ def convert_t5x_to_pytorch(
         layer_norm = t5x_layer_norm_lookup(old, i, "encoder", "pre_attention_layer_norm")
         k, o, q, v = t5x_attention_lookup(old, i, "encoder", "attention")
         new[f"encoder.block.{i}.layer.0.layer_norm.weight"] = layer_norm
-        new[f"encoder.block.{i}.layer.0.SelfAttention.k.weight"] = k.T
-        new[f"encoder.block.{i}.layer.0.SelfAttention.o.weight"] = o.T
-        new[f"encoder.block.{i}.layer.0.SelfAttention.q.weight"] = q.T
-        new[f"encoder.block.{i}.layer.0.SelfAttention.v.weight"] = v.T
+        new[f"encoder.block.{i}.layer.0.SelfAttention.k_proj.weight"] = k.T
+        new[f"encoder.block.{i}.layer.0.SelfAttention.o_proj.weight"] = o.T
+        new[f"encoder.block.{i}.layer.0.SelfAttention.q_proj.weight"] = q.T
+        new[f"encoder.block.{i}.layer.0.SelfAttention.v_proj.weight"] = v.T
 
         # Block i, layer 1 (MLP).
         layer_norm = t5x_layer_norm_lookup(old, i, "encoder", "pre_mlp_layer_norm")
@@ -138,19 +138,19 @@ def convert_t5x_to_pytorch(
             layer_norm = t5x_layer_norm_lookup(old, i, "decoder", "pre_self_attention_layer_norm")
             k, o, q, v = t5x_attention_lookup(old, i, "decoder", "self_attention")
             new[f"decoder.block.{i}.layer.0.layer_norm.weight"] = layer_norm
-            new[f"decoder.block.{i}.layer.0.SelfAttention.k.weight"] = k.T
-            new[f"decoder.block.{i}.layer.0.SelfAttention.o.weight"] = o.T
-            new[f"decoder.block.{i}.layer.0.SelfAttention.q.weight"] = q.T
-            new[f"decoder.block.{i}.layer.0.SelfAttention.v.weight"] = v.T
+            new[f"decoder.block.{i}.layer.0.SelfAttention.k_proj.weight"] = k.T
+            new[f"decoder.block.{i}.layer.0.SelfAttention.o_proj.weight"] = o.T
+            new[f"decoder.block.{i}.layer.0.SelfAttention.q_proj.weight"] = q.T
+            new[f"decoder.block.{i}.layer.0.SelfAttention.v_proj.weight"] = v.T
 
             # Block i, layer 1 (Cross Attention).
             layer_norm = t5x_layer_norm_lookup(old, i, "decoder", "pre_cross_attention_layer_norm")
             k, o, q, v = t5x_attention_lookup(old, i, "decoder", "encoder_decoder_attention")
             new[f"decoder.block.{i}.layer.1.layer_norm.weight"] = layer_norm
-            new[f"decoder.block.{i}.layer.1.EncDecAttention.k.weight"] = k.T
-            new[f"decoder.block.{i}.layer.1.EncDecAttention.o.weight"] = o.T
-            new[f"decoder.block.{i}.layer.1.EncDecAttention.q.weight"] = q.T
-            new[f"decoder.block.{i}.layer.1.EncDecAttention.v.weight"] = v.T
+            new[f"decoder.block.{i}.layer.1.EncDecAttention.k_proj.weight"] = k.T
+            new[f"decoder.block.{i}.layer.1.EncDecAttention.o_proj.weight"] = o.T
+            new[f"decoder.block.{i}.layer.1.EncDecAttention.q_proj.weight"] = q.T
+            new[f"decoder.block.{i}.layer.1.EncDecAttention.v_proj.weight"] = v.T
 
             # Block i, layer 2 (MLP).
             layer_norm = t5x_layer_norm_lookup(old, i, "decoder", "pre_mlp_layer_norm")

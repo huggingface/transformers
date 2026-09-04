@@ -33,13 +33,13 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
 from ..roberta.modeling_roberta import (
+    RobertaAttention,
     RobertaClassificationHead,
     RobertaCrossAttention,
     RobertaEmbeddings,
     RobertaLayer,
     RobertaLMHead,
     RobertaModel,
-    RobertaSelfAttention,
 )
 from .configuration_data2vec_text import Data2VecTextConfig
 
@@ -51,7 +51,7 @@ class Data2VecTextEmbeddings(RobertaEmbeddings):
     pass
 
 
-class Data2VecTextSelfAttention(RobertaSelfAttention):
+class Data2VecTextAttention(RobertaAttention):
     pass
 
 
@@ -75,7 +75,7 @@ class Data2VecTextPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Data2VecTextLayer,
-        "attentions": Data2VecTextSelfAttention,
+        "attentions": Data2VecTextAttention,
         "cross_attentions": Data2VecTextCrossAttention,
     }
 

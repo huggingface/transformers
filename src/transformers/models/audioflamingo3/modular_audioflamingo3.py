@@ -26,6 +26,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..blenderbot.modeling_blenderbot import BlenderbotEncoderLayer
 from ..qwen2_audio.modeling_qwen2_audio import (
     Qwen2AudioEncoder,
     Qwen2AudioPreTrainedModel,
@@ -36,7 +37,7 @@ from ..voxtral.modeling_voxtral import (
     VoxtralModelOutputWithPast,
     VoxtralMultiModalProjector,
 )
-from ..whisper.modeling_whisper import WhisperAttention, WhisperEncoderLayer
+from ..whisper.modeling_whisper import WhisperAttention
 from .configuration_audioflamingo3 import AudioFlamingo3Config
 
 
@@ -47,7 +48,7 @@ class AudioFlamingo3Attention(WhisperAttention):
     pass
 
 
-class AudioFlamingo3EncoderLayer(WhisperEncoderLayer):
+class AudioFlamingo3EncoderLayer(BlenderbotEncoderLayer):
     pass
 
 

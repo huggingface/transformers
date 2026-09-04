@@ -13,6 +13,8 @@
 # limitations under the License.
 """PyTorch Chinese-CLIP model."""
 
+from collections.abc import Callable
+
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
@@ -22,19 +24,20 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..align.modeling_align import (
-    AlignTextAttention,
     AlignTextEmbeddings,
     AlignTextEncoder,
     AlignTextLayer,
     AlignTextSelfAttention,
+    eager_attention_forward,
 )
-from ..bert.modeling_bert import BertIntermediate, BertOutput, BertPooler, BertSelfOutput
+from ..bert.modeling_bert import BertMLP, BertPooler
 from ..clip.configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 from ..clip.modeling_clip import (
     CLIPMLP,
@@ -151,29 +154,73 @@ class ChineseCLIPVisionEmbeddings(CLIPVisionEmbeddings):
     pass
 
 
-class ChineseCLIPTextSelfAttention(AlignTextSelfAttention):
+class ChineseCLIPTextAttention(AlignTextSelfAttention):
+    """Self-attention with its output projection, in the shape used across the library.
+
+    The text tower used to spread this over `ChineseCLIPTextSelfAttention` (q/k/v) and
+    `ChineseCLIPTextSelfOutput` (the output projection plus the residual LayerNorm). The projection
+    lives here as `o_proj`; the LayerNorm and residual belong to `ChineseCLIPTextLayer`.
+
+    It stays a reduced copy of ALIGN's text attention rather than a `BertAttention` subclass for two
+    reasons: `ChineseCLIPTextConfig` descends from `CLIPTextConfig` and has no `is_decoder`, and this
+    file's `eager_attention_forward` must remain the CLIP/ALIGN one -- it upcasts the softmax to
+    float32, which `BertAttention`'s does not, and the same helper is shared with the vision tower.
+    """
+
     def __init__(self, config):
         super().__init__(config)
+
+        del self.query
+        del self.key
+        del self.value
+        # ALIGN keeps the dropout probability twice, once as a module and once as a bare float.
+        # Read it off the module, like `BertAttention` does, so `attention_dropout` means the same
+        # thing here as it does on `ChineseCLIPTextLayer` (an `nn.Dropout`) rather than two things.
+        del self.attention_dropout
+
+        self.q_proj = nn.Linear(config.hidden_size, self.all_head_size)
+        self.k_proj = nn.Linear(config.hidden_size, self.all_head_size)
+        self.v_proj = nn.Linear(config.hidden_size, self.all_head_size)
+        self.o_proj = nn.Linear(self.all_head_size, config.hidden_size)
         self.is_causal = False
 
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.FloatTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
 
-class ChineseCLIPTextSelfOutput(BertSelfOutput):
-    pass
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
-class ChineseCLIPTextAttention(AlignTextAttention):
-    pass
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout.p,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        return self.o_proj(attn_output), attn_weights
 
 
 class ChineseCLIPVisionAttention(CLIPAttention):
     pass
 
 
-class ChineseCLIPTextIntermediate(BertIntermediate):
-    pass
-
-
-class ChineseCLIPTextOutput(BertOutput):
+class ChineseCLIPTextMLP(BertMLP):
     pass
 
 
@@ -182,7 +229,46 @@ class ChineseCLIPVisionMLP(CLIPMLP):
 
 
 class ChineseCLIPTextLayer(AlignTextLayer):
-    pass
+    """Post-norm transformer layer: `LayerNorm(x + sublayer(x))` for each sublayer.
+
+    The norms and residuals live here rather than inside the sublayers, so the layer's topology is
+    stated in one place -- the same arrangement `BertLayer` now uses, minus the decoder and
+    cross-attention branches the text tower never takes. The arithmetic is unchanged from the
+    previous five-class arrangement.
+    """
+
+    def __init__(self, config):
+        super().__init__(config)
+
+        del self.attention
+        del self.intermediate
+        del self.output
+
+        self.self_attn = ChineseCLIPTextAttention(config)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.attention_dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.mlp = ChineseCLIPTextMLP(config)
+        self.post_feedforward_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.FloatTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        attn_output, _ = self.self_attn(
+            hidden_states,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+        hidden_states = self.post_attention_layernorm(hidden_states + self.attention_dropout(attn_output))
+
+        return apply_chunking_to_forward(
+            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, hidden_states
+        )
+
+    def feed_forward_chunk(self, hidden_states):
+        return self.post_feedforward_layernorm(hidden_states + self.mlp(hidden_states))
 
 
 class ChineseCLIPVisionLayer(CLIPEncoderLayer):
@@ -318,7 +404,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     _input_embed_layer = "word_embeddings"
     _can_record_outputs = {
         "hidden_states": ChineseCLIPTextLayer,
-        "attentions": ChineseCLIPTextSelfAttention,
+        "attentions": ChineseCLIPTextAttention,
     }
 
     def __init__(self, config, add_pooling_layer=True):

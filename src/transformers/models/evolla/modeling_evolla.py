@@ -330,8 +330,9 @@ class EvollaSaProtSelfAttention(nn.Module):
         is_cross_attention = encoder_hidden_states is not None
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
         attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
-        key_layer = self.key(current_states).view(hidden_shape).transpose(1, 2)
-        value_layer = self.value(current_states).view(hidden_shape).transpose(1, 2)
+        kv_shape = (*current_states.shape[:-1], -1, self.attention_head_size)
+        key_layer = self.key(current_states).view(kv_shape).transpose(1, 2)
+        value_layer = self.value(current_states).view(kv_shape).transpose(1, 2)
 
         # Matt: Our BERT model (which this code was derived from) scales attention logits down by sqrt(head_dim).
         # EVOLLA_SA_PROT scales the query down by the same factor instead. Modulo numerical stability these are equivalent,
@@ -620,11 +621,26 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
         )
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
 class EvollaSequenceCompressorAttention(nn.Module):
-    def __init__(self, dim, dim_head=64, heads=8):
+    def __init__(self, config: EvollaConfig, dim, dim_head=64, heads=8):
         super().__init__()
+        self.config = config
         self.scale = dim_head**-0.5
         self.heads = heads
+        self.head_dim = dim_head
+        self.is_causal = False
         inner_dim = dim_head * heads
 
         self.norm_media = nn.LayerNorm(dim)
@@ -634,7 +650,7 @@ class EvollaSequenceCompressorAttention(nn.Module):
         self.to_kv = nn.Linear(dim, inner_dim * 2, bias=False)
         self.to_out = nn.Linear(inner_dim, dim, bias=False)
 
-    def forward(self, x, latents, mask):
+    def forward(self, x, latents, mask, **kwargs: Unpack[TransformersKwargs]):
         """
         Args:
             x (torch.Tensor): image features
@@ -656,21 +672,26 @@ class EvollaSequenceCompressorAttention(nn.Module):
         q = q.view(q.size(0), q.size(1), h, -1).permute(0, 2, 1, 3)
         k = k.view(k.size(0), k.size(1), h, -1).permute(0, 2, 1, 3)
         v = v.view(v.size(0), v.size(1), h, -1).permute(0, 2, 1, 3)
-        q = q * self.scale  # batch_size, num_heads, num_latents, dim_head
 
-        # attention
-        sim = torch.matmul(q, k.transpose(-1, -2))
-        sim = sim - sim.amax(dim=-1, keepdim=True).detach()
-        bs, nh, skd, okd = sim.shape
-        ones = torch.ones(nh, skd).to(mask.device)  # Create a tensor of ones with shape (nh, skd)
-        mask_exp = mask[:, None, None, :]
-        ones_exp = ones[None, :, :, None]
-        mask = mask_exp * ones_exp
+        # `mask` is a (batch, kv_len) keep-mask; turn it into the additive float mask the
+        # attention interface expects. It broadcasts over heads and queries, which is what
+        # the explicit outer-product with a `ones(num_heads, num_latents)` tensor did before.
+        attention_mask = torch.zeros_like(mask, dtype=q.dtype).masked_fill_(mask == 0, -1e4)[:, None, None, :]
 
-        sim = sim.masked_fill((1 - mask).bool(), -1e4)
-        attn = sim.softmax(dim=-1)
-        out = torch.matmul(attn, v)
-        out = out.permute(0, 2, 1, 3)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        out, _ = attention_interface(
+            self,
+            q,
+            k,
+            v,
+            attention_mask,
+            dropout=0.0,
+            scaling=self.scale,
+            **kwargs,
+        )
 
         # [batch, seq, head, features] -> [batch, seq, head*features]
         out = out.reshape(out.size(0), out.size(1), -1)
@@ -704,7 +725,10 @@ class EvollaSequenceCompressorResampler(nn.Module):
                 nn.ModuleList(
                     [
                         EvollaSequenceCompressorAttention(
-                            dim=protein_repr_dim, dim_head=config.resampler_dim_head, heads=config.resampler_heads
+                            config,
+                            dim=protein_repr_dim,
+                            dim_head=config.resampler_dim_head,
+                            heads=config.resampler_heads,
                         ),
                         EvollaFeedForward(dim=protein_repr_dim, mult=config.resampler_ff_mult),
                     ]
@@ -1097,18 +1121,6 @@ class EvollaMLP(nn.Module):
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 @use_kernelized_func(apply_rotary_pos_emb)

@@ -357,7 +357,7 @@ class VideoMAELayer(GradientCheckpointingLayer):
         return layer_output
 
 
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->VideoMAE
+# Todo - Refactor as part of vision refactor.
 class VideoMAEEncoder(nn.Module):
     def __init__(self, config: VideoMAEConfig):
         super().__init__()

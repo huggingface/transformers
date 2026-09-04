@@ -363,10 +363,10 @@ class LongT5Attention(nn.Module):
                 "when creating this class."
             )
 
-        self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
+        self.q_proj = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.k_proj = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.v_proj = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.o_proj = nn.Linear(self.inner_dim, self.d_model, bias=False)
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
@@ -461,7 +461,7 @@ class LongT5Attention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
         is_cross_attention = key_value_states is not None
 
-        query_states = self.q(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
         is_updated = False
@@ -482,8 +482,8 @@ class LongT5Attention(nn.Module):
             value_states = curr_past_key_values.layers[self.layer_idx].values
         else:
             kv_shape = (*current_states.shape[:-1], -1, self.key_value_proj_dim)
-            key_states = self.k(current_states).view(kv_shape).transpose(1, 2)
-            value_states = self.v(current_states).view(kv_shape).transpose(1, 2)
+            key_states = self.k_proj(current_states).view(kv_shape).transpose(1, 2)
+            value_states = self.v_proj(current_states).view(kv_shape).transpose(1, 2)
 
             if past_key_values is not None:
                 key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
@@ -524,7 +524,7 @@ class LongT5Attention(nn.Module):
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o(attn_output)
+        attn_output = self.o_proj(attn_output)
 
         return attn_output, position_bias, attn_weights
 
@@ -544,10 +544,10 @@ class LongT5LocalAttention(nn.Module):
         self.dropout = config.dropout_rate
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
-        self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
+        self.q_proj = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.k_proj = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.v_proj = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.o_proj = nn.Linear(self.inner_dim, self.d_model, bias=False)
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
@@ -645,9 +645,9 @@ class LongT5LocalAttention(nn.Module):
             return states.contiguous().view(batch_size, -1, self.inner_dim)
 
         # get query/key/value states -> (batch_size, seq_length, n_heads, dim_per_head)
-        query_states = shape(self.q(hidden_states))
-        key_states = shape(self.k(hidden_states))
-        value_states = shape(self.v(hidden_states))
+        query_states = shape(self.q_proj(hidden_states))
+        key_states = shape(self.k_proj(hidden_states))
+        value_states = shape(self.v_proj(hidden_states))
 
         # Split into blocks -> (batch_size, num_blocks, block_len, n_heads, dim_per_head)
         query_states = _split_into_blocks(query_states, self.block_len, dim=1)
@@ -689,7 +689,7 @@ class LongT5LocalAttention(nn.Module):
         attn_weights = attn_weights.type(value_states.dtype)
         attn_output = unshape(torch.einsum("...hqk,...khd->...qhd", attn_weights, value_states))
         attn_output = attn_output[:, :seq_length, :]
-        attn_output = self.o(attn_output)
+        attn_output = self.o_proj(attn_output)
 
         outputs = (
             attn_output,
@@ -717,10 +717,10 @@ class LongT5TransientGlobalAttention(nn.Module):
         self.dropout = config.dropout_rate
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
-        self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
+        self.q_proj = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.k_proj = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.v_proj = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.o_proj = nn.Linear(self.inner_dim, self.d_model, bias=False)
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
@@ -855,12 +855,12 @@ class LongT5TransientGlobalAttention(nn.Module):
         global_inputs = self.global_input_layer_norm(global_inputs)
 
         # get query states -> (batch_size, seq_length, n_heads, dim_per_head)
-        query_states = shape(self.q(hidden_states))
-        key_states = shape(self.k(hidden_states))
-        value_states = shape(self.v(hidden_states))
+        query_states = shape(self.q_proj(hidden_states))
+        key_states = shape(self.k_proj(hidden_states))
+        value_states = shape(self.v_proj(hidden_states))
         # Get global/side key/value states  shape: (batch_size, global_seq_len, n_heads, dim_per_head)
-        side_key_states = shape(self.k(global_inputs))
-        side_value_states = shape(self.v(global_inputs))
+        side_key_states = shape(self.k_proj(global_inputs))
+        side_value_states = shape(self.v_proj(global_inputs))
 
         # Split into blocks -> (batch_size, num_blocks, block_len, n_heads, dim_per_head)
         query_states = _split_into_blocks(query_states, self.block_len, dim=1)
@@ -931,7 +931,7 @@ class LongT5TransientGlobalAttention(nn.Module):
         attn_weights = attn_weights.type(value_states.dtype)
         attn_output = unshape(torch.einsum("...hqk,...khd->...qhd", attn_weights, value_states))
         attn_output = attn_output[:, :seq_length, :]
-        attn_output = self.o(attn_output)
+        attn_output = self.o_proj(attn_output)
 
         outputs = (attn_output, position_bias)
 
@@ -1205,10 +1205,10 @@ class LongT5PreTrainedModel(PreTrainedModel):
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
-            init.normal_(module.q.weight, mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            init.normal_(module.k.weight, mean=0.0, std=factor * (d_model**-0.5))
-            init.normal_(module.v.weight, mean=0.0, std=factor * (d_model**-0.5))
-            init.normal_(module.o.weight, mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            init.normal_(module.q_proj.weight, mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            init.normal_(module.k_proj.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.v_proj.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.o_proj.weight, mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
                 init.normal_(module.relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
                 if isinstance(module, LongT5TransientGlobalAttention):

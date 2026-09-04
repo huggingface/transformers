@@ -33,12 +33,12 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3PreTrainedModel,
     DeepseekV3TopkRouter,
 )
-from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import Glm4MoeMLP, apply_rotary_pos_emb, repeat_kv
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..laguna.modeling_laguna import LagunaModel
 from ..mixtral.modeling_mixtral import MixtralRMSNorm
+from ..modernbert.modeling_modernbert import ModernBertRotaryEmbedding
 from ..qwen2.modeling_qwen2 import Qwen2Attention
 
 
@@ -137,7 +137,7 @@ class MiMoV2FlashRMSNorm(MixtralRMSNorm):
     pass
 
 
-class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
+class MiMoV2FlashRotaryEmbedding(ModernBertRotaryEmbedding):
     def __init__(self, config: MiMoV2FlashConfig, device=None):
         super().__init__(config)
 

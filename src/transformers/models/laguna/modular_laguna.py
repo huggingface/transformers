@@ -33,9 +33,9 @@ from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ...utils.generic import TransformersKwargs, no_inherit_decorator
 from ..afmoe.modeling_afmoe import AfmoeAttention
-from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..llama.modeling_llama import LlamaModel, eager_attention_forward
+from ..modernbert.modeling_modernbert import ModernBertRotaryEmbedding
 from ..qwen2_moe.configuration_qwen2_moe import Qwen2MoeConfig
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeForCausalLM, Qwen2MoeMLP, Qwen2MoePreTrainedModel, Qwen2MoeRMSNorm
 from ..qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeTopKRouter, apply_rotary_pos_emb
@@ -184,7 +184,7 @@ class LagunaRMSNorm(Qwen2MoeRMSNorm):
     pass
 
 
-class LagunaRotaryEmbedding(Gemma3RotaryEmbedding):
+class LagunaRotaryEmbedding(ModernBertRotaryEmbedding):
     def __init__(self, config: LagunaConfig, device=None):
         super().__init__(config)
 

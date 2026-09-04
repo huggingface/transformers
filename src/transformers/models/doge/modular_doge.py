@@ -36,12 +36,12 @@ from ...modeling_utils import AttentionInterface, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
 from ...utils.output_capturing import OutputRecorder
+from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaMLP,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
-    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
     repeat_kv,
@@ -140,7 +140,7 @@ class DogeRMSNorm(LlamaRMSNorm):
     pass
 
 
-class DogeRotaryEmbedding(LlamaRotaryEmbedding):
+class DogeRotaryEmbedding(GPTNeoXRotaryEmbedding):
     pass
 
 
