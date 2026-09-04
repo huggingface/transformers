@@ -21,6 +21,7 @@ from transformers.models.gpt_neox.tokenization_gpt_neox import GPTNeoXTokenizer 
 from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
+    scoped_kernels_class,
     slow,
     torch_device,
 )
@@ -176,6 +177,7 @@ class OlmoeModelTester:
 
 
 @require_torch
+@scoped_kernels_class
 class OlmoeModelTest(
     ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin, unittest.TestCase
 ):

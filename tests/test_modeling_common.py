@@ -92,7 +92,6 @@ from transformers.testing_utils import (
     get_device_properties,
     hub_retry,
     is_flaky,
-    preserve_module_forwards,
     require_accelerate,
     require_bitsandbytes,
     require_deepspeed,
@@ -109,6 +108,7 @@ from transformers.testing_utils import (
     rocm_has_sdpa_flash_backend,
     run_first,
     run_test_using_subprocess,
+    scoped_kernels,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
     slow,
@@ -5838,19 +5838,41 @@ class ModelTesterMixin(ExportTesterMixin):
                     all(isinstance(hidden_states[i], torch.Tensor) for i in range(N_layers) if i in indices_to_capture)
                 )
 
-    @require_kernels
     @require_torch_accelerator
+    @scoped_kernels
     def test_kernels_can_load_without_crashing(self):
         """Check whether activating kernels leads to an (value) error"""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
+            # Most kernels are inference mode so ensure to enable as much as we can
+            model.eval()
 
-            # `kernelize` mutates module-level singletons, so restore them to keep later tests kernel-free
-            with preserve_module_forwards(model):
-                # Using kernels should not raise a `ValueError`
-                model.use_kernels = True
+            # Using kernels should not raise a `ValueError`
+            model.use_kernels = True
+
+    @require_torch_accelerator
+    @scoped_kernels
+    def test_kernels_can_run_without_crashing(self):
+        """
+        Check whether activating kernels and then running through some input leads to an (value) error
+
+        NOTE: This is run in inference mode for now. When we enable training a fwd + bwd test will be added separately.
+        """
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            model.use_kernels = True
+
+            prepared_inputs = self._prepare_for_class(inputs, model_class)
+            prepared_inputs = {
+                k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in prepared_inputs.items()
+            }
+
+            model(**prepared_inputs)
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
