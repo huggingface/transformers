@@ -277,6 +277,16 @@ class BltConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
+    def get_text_config(self, decoder=None, encoder=None) -> "PreTrainedConfig":
+        """
+        Returns the text config related to the text output (decoder) of the model.
+
+        Blt stores its text-generation configuration in `decoder_config`, so this
+        override ensures that generation helpers receive the correct sub-config.
+        """
+        # Always return the decoder config: BLT's text output lives in the local decoder.
+        return self.decoder_config
+
 
 __all__ = [
     "BltConfig",
