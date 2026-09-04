@@ -56,9 +56,7 @@ class PixtralVisionConfig(PreTrainedConfig):
         self.head_dim = self.hidden_size // self.num_attention_heads
         super().__post_init__(**kwargs)
 
-    def standardize_rope_params(self):
-        if self.rope_parameters.get("rope_type") in ["default", None]:
-            self.rope_parameters["rope_type"] = "axial"
+    default_rope_type = "axial"
 
 
 __all__ = ["PixtralVisionConfig"]

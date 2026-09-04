@@ -63,9 +63,7 @@ class MLCDVisionConfig(PreTrainedConfig):
     initializer_factor: float = 1.0
     rope_parameters: dict | None = None
 
-    def standardize_rope_params(self):
-        if self.rope_parameters.get("rope_type") in ["default", None]:
-            self.rope_parameters["rope_type"] = "axial"
+    default_rope_type = "axial"
 
 
 __all__ = ["MLCDVisionConfig"]

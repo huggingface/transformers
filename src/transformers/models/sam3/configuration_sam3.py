@@ -62,9 +62,7 @@ class Sam3ViTConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
-    def standardize_rope_params(self):
-        if self.rope_parameters.get("rope_type") in ["default", None]:
-            self.rope_parameters["rope_type"] = "axial"
+    default_rope_type = "axial"
 
 
 @auto_docstring(checkpoint="facebook/sam3")

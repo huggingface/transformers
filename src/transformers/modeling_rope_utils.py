@@ -737,6 +737,7 @@ class RotaryEmbeddingConfigMixin:
     """
 
     default_theta = 10_000.0
+    default_rope_type = "default"  # override only for axial models
     ignore_keys_at_rope_validation = set()
 
     def convert_rope_params_to_dict(self, **kwargs):
@@ -787,6 +788,11 @@ class RotaryEmbeddingConfigMixin:
             if partial_rotary_factor is not None:
                 rope_parameters["partial_rotary_factor"] = partial_rotary_factor
 
+            # Force set the default type to model's expected `default_rope`. For most models it's a no-op
+            # used only to keep BC with old ckpt that require axial rope type
+            if self.default_rope_type != "default" and rope_parameters["rope_type"] == "default":
+                rope_parameters["rope_type"] = self.default_rope_type
+
             # Move pretraining-time maximum length to rope parameter dict for RoPE types with scaling
             if rope_parameters["rope_type"] in ["llama3", "yarn", "longrope"]:
                 if hasattr(self, "original_max_position_embeddings"):
@@ -812,6 +818,11 @@ class RotaryEmbeddingConfigMixin:
                     self.rope_parameters[layer_type].setdefault(
                         "original_max_position_embeddings", self.max_position_embeddings
                     )
+
+                # Force set the default type to model's expected `default_rope`. For most models it's a no-op
+                # used only to keep BC with old ckpt that require axial rope type
+                if self.default_rope_type != "default" and rope_parameters[layer_type]["rope_type"] == "default":
+                    rope_parameters[layer_type]["rope_type"] = self.default_rope_type
 
         self.rope_parameters = rope_parameters
 
@@ -846,6 +857,9 @@ class RotaryEmbeddingConfigMixin:
                 logger.warning(
                     f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"
                 )
+
+    def _validate_axial_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
+        self._validate_default_rope_parameters(rope_parameters, ignore_keys=ignore_keys)
 
     def _validate_default_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
         required_keys = {"rope_type"}

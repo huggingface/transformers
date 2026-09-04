@@ -52,9 +52,7 @@ class Kimi_K25VisionConfig(PreTrainedConfig):
     merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
     rope_parameters: dict | None = None
 
-    def standardize_rope_params(self):
-        if self.rope_parameters.get("rope_type") in ["default", None]:
-            self.rope_parameters["rope_type"] = "axial"
+    default_rope_type = "axial"
 
 
 @auto_docstring(checkpoint="moonshotai/Kimi-K2.6")

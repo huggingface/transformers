@@ -68,9 +68,7 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
     layer_norm_eps: float = 1e-05
     layer_types: list[str] | None = None
 
-    def standardize_rope_params(self):
-        if self.rope_parameters.get("rope_type") in ["default", None]:
-            self.rope_parameters["rope_type"] = "axial"
+    default_rope_type = "axial"
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:

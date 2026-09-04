@@ -60,9 +60,7 @@ class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
     temporal_merge_size: int = 2
     rms_norm_eps: float = 1e-6
 
-    def standardize_rope_params(self):
-        if self.rope_parameters.get("rope_type") in ["default", None]:
-            self.rope_parameters["rope_type"] = "axial"
+    default_rope_type = "axial"
 
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")

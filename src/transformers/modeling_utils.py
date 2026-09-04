@@ -2318,14 +2318,13 @@ class PreTrainedModel(
                 init.zeros_(module.num_batches_tracked)
         # This matches all the usual RotaryEmbeddings modules
         elif "RotaryEmbedding" in module.__class__.__name__ and hasattr(module, "original_inv_freq"):
-            rope_fn = (
-                module.compute_axial_rope_parameters
-                if module.rope_type == "axial"
-                else ROPE_INIT_FUNCTIONS[module.rope_type]
-                if module.rope_type != "default"
-                else module.compute_default_rope_parameters
-            )
-
+            # Default and vision axial rope are defined in modeling files, only one can be defined at a time!
+            rope_init_fn_with_self = {
+                "axial": getattr(module, "compute_axial_rope_parameters", None),
+                "default": getattr(module, "compute_default_rope_parameters", None),
+                **ROPE_INIT_FUNCTIONS,
+            }
+            rope_fn = rope_init_fn_with_self[module.rope_type]
             buffer_value, _ = rope_fn(module.config)
             init.copy_(module.inv_freq, buffer_value)
             init.copy_(module.original_inv_freq, buffer_value)

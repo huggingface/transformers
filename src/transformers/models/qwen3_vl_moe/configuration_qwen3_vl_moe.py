@@ -147,9 +147,7 @@ class Qwen3VLMoeVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     rope_parameters: dict | None = None
 
-    def standardize_rope_params(self):
-        if self.rope_parameters.get("rope_type") in ["default", None]:
-            self.rope_parameters["rope_type"] = "axial"
+    default_rope_type = "axial"
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
