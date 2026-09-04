@@ -2916,7 +2916,7 @@ def requires(*, backends=()):
     return inner_fn
 
 
-def processor_file_requirements(content):
+def processor_file_requirements(content: str):
     basic_subprocessor_requirements = {
         "image_processor": ["vision"],
         "video_processor": ["vision", "torch", "torchvision"],
@@ -2936,19 +2936,24 @@ def processor_file_requirements(content):
     return tuple(all_requirements)
 
 
-BASE_FILE_REQUIREMENTS = {
-    lambda name, content: "modeling_" in name: ("torch",),
-    lambda name, content: "tokenization_" in name and name.endswith("_fast"): ("tokenizers",),
-    lambda name, content: "image_processing_" in name and "TorchvisionBackend" in content: (
-        "vision",
-        "torch",
-        "torchvision",
+CheckFn = Callable[[str, str], bool]
+RequirementsFn = Callable[[str], tuple[str, ...]]
+
+
+def _const(value: tuple[str, ...]) -> Callable[[str], tuple[str, ...]]:
+    return lambda content: value
+
+
+BASE_FILE_REQUIREMENTS: dict[CheckFn, RequirementsFn] = {
+    lambda name, content: "modeling_" in name: _const(("torch",)),
+    lambda name, content: "tokenization_" in name and name.endswith("_fast"): _const(("tokenizers",)),
+    lambda name, content: "image_processing_" in name and "TorchvisionBackend" in content: _const(
+        ("vision", "torch", "torchvision")
     ),
-    lambda name, content: "image_processing_" in name: ("vision",),
-    lambda name, content: "video_processing_" in name: ("vision", "torch", "torchvision"),
-    lambda name, content: name.startswith("processing_"): functools.partial(processor_file_requirements),
-    # Some models have specific generation and it always depends on torch (guard if importable via main module)
-    lambda name, content: "generation_" in name: ("torch",),
+    lambda name, content: "image_processing_" in name: _const(("vision",)),
+    lambda name, content: "video_processing_" in name: _const(("vision", "torch", "torchvision")),
+    lambda name, content: name.startswith("processing_"): processor_file_requirements,
+    lambda name, content: "generation_" in name: _const(("torch",)),
 }
 
 
@@ -3087,7 +3092,7 @@ def create_import_structure_from_path(module_path):
         # Some files have some requirements by default.
         # For example, any file named `modeling_xxx.py`
         # should have torch as a required backend.
-        base_requirements = ()
+        base_requirements: tuple[str, ...] = ()
         for check, requirements in BASE_FILE_REQUIREMENTS.items():
             if check(module_name, file_content):
                 if isinstance(requirements, Callable):

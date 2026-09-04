@@ -33,7 +33,6 @@ from ...video_utils import VideoInput
 from .modeling_sam3_tracker_video import Sam3TrackerVideoInferenceSession
 
 
-@auto_docstring
 class Sam3TrackerVideoProcessor(ProcessorMixin):
     def __init__(
         self, image_processor, video_processor, target_size: int | None = None, point_pad_value: int = -10, **kwargs
