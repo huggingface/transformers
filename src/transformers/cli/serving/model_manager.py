@@ -307,8 +307,7 @@ class ModelManager:
                 ``{"status": "loading", "model": ..., "stage": ...}`` during loading.
             tqdm_class: Optional tqdm subclass for progress bars during ``from_pretrained``.
         """
-        # Cached under the weights rather than the repository: two quantizations of one repo are two models,
-        # and one entry would serve whichever landed first under both names.
+        # Cached under the weights, not the repository: two quantizations of one repo are two models.
         key = model_id_and_revision if gguf_file is None else f"{model_id_and_revision}:{gguf_file}"
 
         # Per-model lock prevents duplicate loads when concurrent requests arrive

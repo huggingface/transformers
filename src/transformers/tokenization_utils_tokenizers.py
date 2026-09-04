@@ -397,8 +397,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             from .integrations.gguf import GGUF_TOKENIZER_ARCHS, get_gguf_tokenizer, read_gguf_metadata
 
             gguf_path = cached_file(kwargs.get("name_or_path", ""), gguf_file, **kwargs)
-            # The fast reader materializes the vocabulary and nothing else; the legacy one parses every
-            # metadata element in the file, which is what makes it slow on a large vocabulary.
+            # The fast reader materializes the vocabulary and nothing else.
             metadata, _ = read_gguf_metadata(gguf_path)
             if metadata["general.architecture"] in GGUF_TOKENIZER_ARCHS:
                 architecture, tokenizer_dict, tokenizer_config = get_gguf_tokenizer(gguf_path)

@@ -13,25 +13,11 @@
 # limitations under the License.
 """Rebuilding a model config from a GGUF file's metadata.
 
-A GGUF repo ships no `config.json`: the file's metadata is the config, under llama.cpp's key names. One
-function per architecture turns those keys into a transformers config dict, so a file can be loaded on
-its own — `from_pretrained(repo, gguf_file=...)` — with nothing borrowed from a reference checkpoint.
+A GGUF repo ships no `config.json`: the metadata is the config, under llama.cpp's key names. One
+function per architecture turns those into a transformers config dict, so a file loads on its own.
 
-Most entries are a rename. The ones that are not are where llama.cpp states the same fact differently,
-and are written as the expression that converts it.
-
-Everything the file states about the model's shape is set, even where it currently matches the config
-class's default: those defaults are one checkpoint's values, so a key left out would silently take them
-from a different model — `Qwen3_5TextConfig` defaults to a hidden size of 4096, which no 4B file has.
-What is left out is what the config derives or defaults on its own, like the rope type.
-
-This mirrors `gguf_conversion_mapping.py`: one entry per `general.architecture`, and an architecture is
-supported only when it appears in both.
-
-`architectures` is stated too, even though nothing in the file says it: a GGUF repo has no
-`config.json` to carry it, and a config without it is not interchangeable with one loaded from a
-normal repo -- anything that resolves a model class from `config.architectures[0]` would have to
-special-case GGUF.
+Everything the file states about the model's shape is set even where it matches the config class's
+default, since those defaults are one checkpoint's values and would silently apply to another.
 """
 
 
@@ -44,9 +30,8 @@ def _qwen35_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
 
     return {
         "model_type": "qwen3_5_text",
-        # Stated so a rebuilt config carries the same architecture a `config.json` would. Callers that
-        # pick a class from `config.architectures` -- `transformers serve` among them -- then need no
-        # special case for a GGUF repo.
+        # Nothing in the file states this, but callers that pick a class from `config.architectures`
+        # would otherwise need a GGUF special case.
         "architectures": ["Qwen3_5ForCausalLM"],
         "max_position_embeddings": key("context_length"),
         "hidden_size": key("embedding_length"),
@@ -72,11 +57,11 @@ def _qwen35_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
             # a rotary width in dimensions, where transformers takes a fraction of the head
             "partial_rotary_factor": key("rope.dimension_count") / head_dim,
         },
-        # `read_gguf_metadata` leaves the vocabulary as its length, which is all a config wants from it
+        # `read_gguf_metadata` leaves the vocabulary as its length
         "vocab_size": metadata["tokenizer.ggml.tokens"],
         # llama.cpp writes the output projection only when it is not the embedding matrix
         "tie_word_embeddings": "output.weight" not in tensor_names,
-        # the ids the file itself declares; absent ones stay `None`, as they are on a config by default
+        # absent ids stay `None`, as they are on a config by default
         "eos_token_id": metadata.get("tokenizer.ggml.eos_token_id"),
         "bos_token_id": metadata.get("tokenizer.ggml.bos_token_id"),
         "pad_token_id": metadata.get("tokenizer.ggml.padding_token_id"),
@@ -91,8 +76,7 @@ GGUF_CONFIG_ARCHS = {
 def get_gguf_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
     """The transformers config dict for a file with this metadata and these tensors.
 
-    Raises for an architecture with no entry above; callers that have a fallback check
-    `GGUF_CONFIG_ARCHS` first.
+    Raises for an architecture with no entry above; callers with a fallback check `GGUF_CONFIG_ARCHS`.
     """
     architecture = metadata["general.architecture"]
     if architecture not in GGUF_CONFIG_ARCHS:

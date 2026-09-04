@@ -1130,8 +1130,7 @@ class BaseHandler:
                 )
             requested = self.model_manager.force_model
 
-        # `<repo>:<file>.gguf` is one name for two things: the repository the loader resolves, and the
-        # weights to read out of it.
+        # `<repo>:<file>.gguf` names both the repository and the weights to read out of it.
         model, gguf_file = split_model_id(requested)
         body["model"] = model
 

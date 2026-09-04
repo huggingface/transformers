@@ -44,12 +44,11 @@ def get_gguf_conversion_mapping(gguf_arch: str, config) -> list[WeightTransform]
 def get_gguf_plan(
     header: GgufHeader, mapping: list[WeightTransform]
 ) -> tuple[dict[str, int], dict[str, int], dict[str, torch.Tensor], list[str]]:
-    """`{param_name: ggml_type}` for the file's quantized tensors, the subset that can stay packed, the
-    input permutation each of those needs (see `PermuteInputFeatures`), and every tensor's renamed name.
+    """The file's quantized tensors, the subset that can stay packed, their input permutations, and
+    every tensor's renamed name.
 
-    Reads `mapping` as it is before `add_gguf_load_ops` has touched it: what a converter does to a
-    tensor decides whether it can stay packed, so the answer has to be taken before the unpacking op is
-    inserted at the head of those same operations.
+    Read before `add_gguf_load_ops` inserts the unpacking op: what a converter does to a tensor
+    decides whether it can stay packed.
     """
     # On a copy: asking a transform whether it matches a name marks it as used and arms the stateful
     # renamings, and the mapping handed back to the loader has to be untouched by that.
@@ -79,13 +78,7 @@ def get_gguf_plan(
 
 
 def add_gguf_load_ops(mapping: list[WeightTransform], to_unpack: dict[str, int], names: list[str], dtype) -> list:
-    """Bracket every conversion chain: unpack blocks first where needed, cast to `dtype` last.
-
-    `to_unpack` maps a parameter name to its ggml type, and holds only the tensors that need unpacking
-    -- the ones the file stores quantized whose module cannot compute on blocks. `names` is every
-    tensor in the file under its transformers name, because the cast has to reach the ones no
-    converter matches too; the reader hands those over in the float type the file wrote them in.
-    """
+    """Bracket every conversion chain: unpack blocks first where needed, cast to `dtype` last."""
     converters = [entry for entry in mapping if isinstance(entry, WeightConverter)]
     dequantize_op = Dequantize(to_unpack, dtype) if to_unpack else None
     cast_op = Cast(dtype)
@@ -186,12 +179,7 @@ class GgufEmbedding(nn.Module):
 
 
 def replace_with_gguf_modules(model, plan: dict[str, int], kernel, dtype=None) -> dict[str, nn.Module]:
-    """Replace every module named in `plan` with one that holds GGUF blocks; return `{param_name: module}`.
-
-    Runs under the model's init context, so the modules built here get meta weights exactly like the
-    ones they replace. `dtype` is the dtype the model is being loaded in, which an embedding needs to
-    know: it unpacks the rows it gathers, so it has to be told what to unpack them into.
-    """
+    """Replace every module named in `plan` with one that holds GGUF blocks; return `{param_name: module}`."""
     # update plan for tied weights
     for target, source in (model._tied_weights_keys or {}).items():
         if source in plan and target not in plan:

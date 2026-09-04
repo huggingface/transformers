@@ -11,20 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Integration tests for loading GGUF checkpoints through `from_pretrained`.
-
-The contract these tests encode: **a model loaded from a non-quantized GGUF is the same model as one
-loaded from safetensors** — same parameter names, same values, in the dtype the file was written in.
-Generation then covers both kinds of file: from the non-quantized one it says those weights are wired
-into a working forward pass, and from a quantized one that the blocks kept packed are read correctly.
-
-Adding an architecture means adding one test class at the bottom: the shared tests live in the mixin
-and are driven by the class attributes naming the checkpoints and the model class.
-
-Tokenizers are out of scope here: they come from the reference repo, since building one from GGUF
-metadata is not implemented yet. When it is, they belong in their own class — a different code path,
-and far too cheap to pay for an 8 GB model load in `setUpClass`.
-"""
+"""Integration tests for loading GGUF checkpoints through `from_pretrained`."""
 
 import math
 import tempfile
@@ -47,13 +34,7 @@ if is_torch_available():
 
 
 class GgufModelIntegrationTesterMixin:
-    """Tests every integrated architecture must pass.
-
-    A test class supplies the checkpoints (`gguf_repo` with a `gguf_file` and a `quantized_gguf_file`,
-    plus the `reference_repo` to compare against), the `model_class` to load them with, the `prompt`
-    and its `expected_completion`, and the
-    `inexact_params` tolerances.
-    """
+    """Tests every integrated architecture must pass."""
 
     tokenizer_texts = (
         "The capital of France is Paris.",
@@ -93,11 +74,7 @@ class GgufModelIntegrationTesterMixin:
 
     @classmethod
     def load_gguf_model(cls, gguf_file, dtype=None, **kwargs):
-        """Load one of `gguf_repo`'s files, config included: the file's metadata carries it.
-
-        Nothing is borrowed from the reference repo — a GGUF repo ships no `config.json`, so this is
-        also the only load path that says the metadata is enough on its own.
-        """
+        """Load one of `gguf_repo`'s files, config included: the file's metadata carries it."""
         kwargs.setdefault("device_map", torch_device)
         return cls.model_class.from_pretrained(cls.gguf_repo, gguf_file=gguf_file, dtype=dtype, **kwargs)
 
@@ -107,12 +84,7 @@ class GgufModelIntegrationTesterMixin:
         return key
 
     def reference_state_dict(self):
-        """Parameters of the reference model, keyed to match the GGUF-loaded one.
-
-        Loaded through `from_pretrained` rather than read off the safetensors shards: a checkpoint has
-        conversions of its own — a MoE stacks its per-expert tensors into one parameter — so its keys
-        need not be parameter names, and those fused parameters are the ones most worth comparing.
-        """
+        """Parameters of the reference model, keyed to match the GGUF-loaded one."""
         reference = AutoModelForCausalLM.from_pretrained(self.reference_repo, dtype=torch.bfloat16)
         state_dict = {}
         for name, tensor in reference.state_dict().items():
@@ -129,11 +101,7 @@ class GgufModelIntegrationTesterMixin:
         return self.reference_tokenizer.decode(output[0, inputs.input_ids.shape[1] :])
 
     def test_tokenizer_matches_transformers(self):
-        """A GGUF repo ships no tokenizer files either, so the one built from the metadata is the same.
-
-        `pad_token` and the chat template with a generation prompt are left out: llama.cpp's converter
-        makes its own choice for both, and the file is what a self-contained load should follow.
-        """
+        """A GGUF repo ships no tokenizer files either, so the one built from the metadata is the same."""
         from_gguf, reference = self.tokenizer, AutoTokenizer.from_pretrained(self.reference_repo)
 
         # Not the vocabulary sizes: a GGUF states one flat token list, where the reference keeps its
@@ -158,11 +126,7 @@ class GgufModelIntegrationTesterMixin:
         )
 
     def test_state_dict_matches_transformers(self):
-        """The headline test: same values as the safetensors checkpoint, tensor by tensor.
-
-        This is what validates the architecture's conversion table. When it fails it names the
-        offending parameter, unlike a logits or generation comparison.
-        """
+        """The headline test: same values as the safetensors checkpoint, tensor by tensor."""
         reference = self.reference_state_dict()
         loaded = {k: v for k, v in self.model.state_dict().items() if k in reference}
 
@@ -178,27 +142,13 @@ class GgufModelIntegrationTesterMixin:
         self.assertEqual(mismatched, [], f"{len(mismatched)} parameters differ:\n" + "\n".join(mismatched[:10]))
 
     def test_load_accounts_for_every_key(self):
-        """Nothing missing, nothing unexpected: the conversion covers the file and fills the model.
-
-        What the comparison above cannot see. That one reads the parameters the two models share, so it
-        is silent about a tensor the conversion strands -- renamed to a module this architecture does
-        not have -- and about a parameter the file never reached, which is left at whatever
-        initialization put there. Both surface here instead.
-
-        Keys the model drops deliberately are already gone by this point
-        (`_keys_to_ignore_on_load_unexpected`), so what is left is a name nothing accounts for.
-        """
+        """Nothing missing, nothing unexpected: the conversion covers the file and fills the model."""
         self.assertEqual(self.loading_info["missing_keys"], set())
         self.assertEqual(self.loading_info["unexpected_keys"], set())
         self.assertEqual(self.loading_info["mismatched_keys"], set())
 
     def test_config_matches_transformers(self):
-        """The config is rebuilt from the file's metadata alone, so it has to say the same as the repo's.
-
-        Compared field by field over everything the two have in common, minus what records where a
-        checkpoint came from rather than what it is. A wrong `head_dim` or `rope_theta` here is a model
-        that loads and generates nonsense, which no state dict comparison would catch.
-        """
+        """The config is rebuilt from the file's metadata alone, so it has to say the same as the repo's."""
         # Records where a checkpoint came from, not what it is
         provenance = {"architectures", "dtype", "torch_dtype", "transformers_version", "_name_or_path"}
         # llama.cpp writes the *tokenizer's* special-token ids into the file, and those need not match
@@ -236,11 +186,7 @@ class GgufModelIntegrationTesterMixin:
     @require_torch_mps
     @require_kernels
     def test_generates_expected_text_from_packed_file(self):
-        """A quantized file with its blocks left packed: a kernel reads them correctly.
-
-        Needs a kernel, not just the device one is built for: without one the load falls back to
-        unpacking, which is the test below.
-        """
+        """A quantized file with its blocks left packed: a kernel reads them correctly."""
         model = self.load_gguf_model(self.quantized_gguf_file)
         packed = [name for name, p in model.named_parameters() if p.dtype == torch.uint8]
         self.assertTrue(packed, "no weight stayed in GGUF blocks, so this is not testing a packed load")
@@ -248,12 +194,7 @@ class GgufModelIntegrationTesterMixin:
         del model
 
     def test_generates_expected_text_from_dequantized_file(self):
-        """The same file unpacked at load, which is how every other device reads it.
-
-        The other half of what a quantized checkpoint has to survive, and the half that runs anywhere:
-        the blocks go through the torch dequantizer rather than a kernel, so a misread block layout
-        shows up as a wrong word here rather than nowhere at all.
-        """
+        """The same file unpacked at load, which is how every other device reads it."""
         model = self.load_gguf_model(
             self.quantized_gguf_file,
             dtype=torch.bfloat16,  # a quantized file has no float type of its own, so this would be f32
@@ -270,16 +211,7 @@ class GgufModelIntegrationTesterMixin:
 
 @slow
 class GgufIntegrationTest(unittest.TestCase):
-    """How a quantized file behaves under each way of loading it, on one model.
-
-    These are properties of the integration rather than of an architecture — whether the weights stay
-    packed and what dtype the rest of them land in — so one checkpoint covers them for every model
-    that follows.
-
-    Only the two that need the weights *packed* ask for a kernel. Everywhere else -- another device,
-    or this one with no kernel published for it -- the load falls back to dequantizing, and what that
-    produces is a dense model that runs anywhere.
-    """
+    """How a quantized file behaves under each way of loading it, on one model."""
 
     gguf_repo = "bartowski/Qwen_Qwen3.5-4B-GGUF"
     gguf_file = "Qwen_Qwen3.5-4B-Q4_K_M.gguf"
@@ -323,14 +255,7 @@ class GgufIntegrationTest(unittest.TestCase):
         self.assertIn("Berlin", self.generates(model))
 
     def test_load_accounts_for_every_key(self):
-        """Nothing missing, nothing unexpected -- on the one file here that carries an MTP block.
-
-        This export counts llama.cpp's multi-token-prediction block in `block_count` and writes it as
-        `blk.32.*`, one past the decoder stack; the checkpoints the architecture tests use were
-        converted without it. So this is the only place that says those tensors are renamed to
-        something the model drops by name, rather than left to be reported against a 33rd layer that
-        does not exist.
-        """
+        """Nothing missing, nothing unexpected -- on the one file here that carries an MTP block."""
         _, loading_info = self.load(device_map=torch_device, output_loading_info=True)
 
         self.assertEqual(loading_info["missing_keys"], set())
@@ -356,12 +281,7 @@ class GgufIntegrationTest(unittest.TestCase):
     @require_torch_mps
     @require_kernels
     def test_a_packed_model_cannot_be_saved(self):
-        """GGUF blocks are not a format transformers writes, so keeping a packed model is refused.
-
-        The quantizer stays attached to one, and `save_pretrained` asks it before it goes near the
-        weights -- so this fails on what the model is, rather than deep inside a conversion that cannot
-        be reversed. The refusal is the point: the counterpart below is what may be saved.
-        """
+        """GGUF blocks are not a format transformers writes, so keeping a packed model is refused."""
         model = self.load(device_map=torch_device)
         self.assertTrue(self.packed_modules(model), "a kernel is available but no module kept its blocks")
 
@@ -370,14 +290,7 @@ class GgufIntegrationTest(unittest.TestCase):
                 model.save_pretrained(directory)
 
     def test_a_dequantized_model_can_be_saved(self):
-        """A dequantized model is an ordinary dense one, so it saves and reloads as one.
-
-        Nothing about it is GGUF any more -- no quantization config, no `is_quantized` -- and the test
-        above says so. What that cannot see is the conversion mapping the load left on the model, which
-        `save_pretrained` tries to run backwards to write the checkpoint out. There is no running this
-        one backwards, so it has to be dropped once the weights are in place, and a model kept only in
-        memory is not where that shows.
-        """
+        """A dequantized model is an ordinary dense one, so it saves and reloads as one."""
         model = self.load(
             device_map="cpu",  # this saves 8 GB to disk and reads it back; a device copy buys nothing
             dtype=torch.bfloat16,

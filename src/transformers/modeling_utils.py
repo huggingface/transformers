@@ -4202,8 +4202,7 @@ class PreTrainedModel(
         is_quantized = hf_quantizer is not None
 
         if gguf_file:
-            # `checkpoint_files[0]` is the local path the file was resolved to. Read before the dtype is
-            # settled: the file's own float type is what `dtype="auto"` resolves to for a GGUF.
+            # Read before the dtype is settled: a GGUF's own float type is what `dtype="auto"` resolves to.
             hf_quantizer.read_header(checkpoint_files[0])
 
         # Find the correct dtype based on current state

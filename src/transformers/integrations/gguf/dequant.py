@@ -11,15 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Dequantizing GGUF blocks with torch ops.
-
-Covers the four types a K-quant file actually uses — Q4_K, Q5_K, Q6_K and Q8_0 — which is all of
-Q4_K_M/Q4_K_S/Q5_K_*/Q6_K/Q8_0, i.e. the overwhelming majority of GGUF checkpoints in the wild.
-
-Everything is vectorised over blocks, so this runs on whatever device the bytes are on. Block
-layouts follow `ggml-common.h`; the arithmetic follows ggml's reference dequantizers, which is what
-makes the result bit-identical to them.
-"""
+"""Dequantizing GGUF blocks with torch ops."""
 
 import torch
 
@@ -40,13 +32,7 @@ GGML_NAME = {GGML_Q8_0: "Q8_0", GGML_Q4_K: "Q4_K", GGML_Q5_K: "Q5_K", GGML_Q6_K:
 
 
 def dequantize(data: torch.Tensor, ggml_type: int, dtype: torch.dtype = torch.float32) -> torch.Tensor:
-    """Flat `uint8` GGUF bytes -> flat values of `dtype`.
-
-    `dtype` is where the arithmetic happens, not a cast afterwards: the quants are the only large
-    tensor here, so widening them to f32 to produce a bf16 weight would double the traffic of every
-    unpack. A block's scales stay in f32 — there are two of them per 256 values — and are rounded to
-    `dtype` before the multiply.
-    """
+    """Flat `uint8` GGUF bytes -> flat values of `dtype`."""
     if ggml_type not in GGML_BLOCK:
         supported = ", ".join(f"{name} ({type_id})" for type_id, name in sorted(GGML_NAME.items()))
         raise ValueError(f"ggml type {ggml_type} is not supported yet. Supported quantized types: {supported}.")
@@ -62,11 +48,7 @@ def _half(blocks: torch.Tensor, start: int) -> torch.Tensor:
 
 
 def _k_scales(scales: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """Unpack the 12 bytes of 6-bit scales/mins shared by Q4_K and Q5_K (ggml's get_scale_min_k4).
-
-    The first four scale/min pairs are plain 6-bit fields; the last four are split, taking their low
-    nibble from bytes 8..11 and their top two bits from the spare high bits of bytes 0..7.
-    """
+    """Unpack the 12 bytes of 6-bit scales/mins shared by Q4_K and Q5_K (ggml's get_scale_min_k4)."""
     q = scales.int()
     scale = torch.cat([q[:, :4] & 63, (q[:, 8:12] & 0xF) | ((q[:, 0:4] >> 6) << 4)], dim=1)
     minimum = torch.cat([q[:, 4:8] & 63, (q[:, 8:12] >> 4) | ((q[:, 4:8] >> 6) << 4)], dim=1)
@@ -74,11 +56,7 @@ def _k_scales(scales: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
 
 
 def _interleave_nibbles(qs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """(nb, 128) nibble bytes -> low/high nibbles as (nb, 4, 32) each, still `uint8`.
-
-    ggml walks 64 output values at a time: the 32 low nibbles of a byte group first, then the 32
-    high nibbles, so the two halves belong to consecutive 32-element sub-blocks.
-    """
+    """(nb, 128) nibble bytes -> low/high nibbles as (nb, 4, 32) each, still `uint8`."""
     q = qs.reshape(-1, 4, 32)
     return q & 0xF, q >> 4
 

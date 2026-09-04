@@ -13,16 +13,8 @@
 # limitations under the License.
 """GGUF -> transformers weight conversion mappings, one entry per architecture.
 
-Mirrors the model-side `transformers.conversion_mapping`: a declarative description of how a
-checkpoint's tensors map onto a model's parameters. This is the only file that needs an entry when
-adding an architecture. Everything is declarative:
-
-- `WeightRenaming`s map GGUF names into the transformers namespace. They **chain** (every matching
-  renaming fires, in order), so a shared skeleton plus a few per-arch leaf renames is enough.
-- `WeightConverter`s then undo llama.cpp's value/layout transforms. They match on the **renamed**
-  (transformers) name, and at most one fires per key. The `ConversionOps` they are built from are at
-  the bottom of this file: one per transform llama.cpp applies when it writes a file, each taking a
-  dense tensor and returning a dense one, run by the loading pipeline like any other conversion.
+`WeightRenaming`s map GGUF names into the transformers namespace and chain; `WeightConverter`s then
+undo llama.cpp's value/layout transforms, matching on the renamed key, at most one per key.
 """
 
 import torch
@@ -32,9 +24,8 @@ from .dequant import GGML_BLOCK
 from .kernels import dequantize_blocks
 
 
-# Shared skeleton for decoder-only models: llama, mistral, qwen2/3, phi3, ... all use these names.
-# Norms are deliberately absent: whether llama.cpp stores them offset by one is per-architecture, so
-# each arch declares its own — as a `WeightConverter` when offset, a `WeightRenaming` when not.
+# Shared skeleton for decoder-only models. Norms are absent: whether llama.cpp offsets them by one is
+# per-architecture, so each arch declares its own.
 DENSE_DECODER_RENAMINGS = [
     WeightRenaming(r"^token_embd\.", "model.embed_tokens."),
     WeightRenaming(r"^output\.", "lm_head."),
@@ -52,49 +43,34 @@ DENSE_DECODER_RENAMINGS = [
 def _qwen35(config) -> list[WeightTransform]:
     """Qwen3.5: hybrid GatedDeltaNet linear attention + full attention every fourth layer.
 
-    llama.cpp's converter differs from transformers in five ways, each undone below:
+    llama.cpp's converter differs in five ways, each undone below:
 
-    1. **Names.** `blk.N.*` with ggml leaf names (`attn_qkv`, `ssm_out`, ...).
-    2. **Zero-centred norms are stored as `w + 1`.** Every norm except `ssm_norm`, which is not
-       offset. Undone in fp32 (`SubtractOne`), since the file holds them as F32 and subtracting after
-       a bf16 cast would lose ~1 ULP near 1.0.
-    3. **`ssm_a` holds `-exp(A_log)`** rather than `A_log` itself (`LogNegate`).
-    4. **`conv1d` is squeezed** from `(channels, 1, kernel)` to 2D (`Unsqueeze`).
-    5. **Value heads are reordered** from transformers' grouped layout (`k0v0 k0v1 k1v0 ...`) to a
-       tiled one (`v0k0 v0k1 ... v1k0 ...`), on *every* v-indexed tensor. It lands on **rows**
-       (`PermuteRows`) for tensors that produce the value dimension and on **columns**
-       (`PermuteInputFeatures`) for the one that consumes it.
+    1. Names: `blk.N.*` with ggml leaf names.
+    2. Zero-centred norms stored as `w + 1`, except `ssm_norm` (`SubtractOne`, in fp32).
+    3. `ssm_a` holds `-exp(A_log)` (`LogNegate`).
+    4. `conv1d` is squeezed to 2D (`Unsqueeze`).
+    5. Value heads are tiled rather than grouped, on every v-indexed tensor: `PermuteRows` where the
+       tensor produces the value dimension, `PermuteInputFeatures` for the one that consumes it.
 
-    For a quantized one, a row is stored as blocks of 32 or 256 elements that share their scales, so a
-    transform is only valid on packed data if it keeps every value in its block:
-
-    - (2), (3), (4): F32 in the file, so never packed and never affected.
-    - (5) row permutes: exact on blocks, so those tensors stay packed.
-    - (5) on `out_proj`: a column permute crosses blocks, so this one tensor is always dequantized.
+    Only (5)'s column permute crosses quantization blocks, so `out_proj` is the one tensor that has
+    to be dequantized; everything else stays packed or is F32 in the file.
     """
     text_config = config.get_text_config()
     num_key_heads = text_config.linear_num_key_heads
     value_heads_per_key_head = text_config.linear_num_value_heads // num_key_heads
     value_head_dim = text_config.linear_value_head_dim
 
-    # `in_proj_qkv` and `conv1d` are fused: a q block, a k block, then the value block. Only the
-    # value block is reordered, so the permutations start after the q and k rows.
+    # `in_proj_qkv` and `conv1d` are fused q/k/v; only the value block is reordered.
     query_key_rows = 2 * text_config.linear_key_head_dim * num_key_heads
 
-    # The same reorder at two granularities: over the flattened value dimension for tensors with a
-    # row (or column) per value element, and over head indices alone for the per-head vectors.
+    # The same reorder over the flattened value dimension, and over head indices alone.
     heads = (num_key_heads, value_heads_per_key_head)
     per_value = TiledToGroupedRows(*heads, value_head_dim)
     per_head = TiledToGroupedRows(*heads)
 
-    # llama.cpp counts the multi-token-prediction block in `block_count` and writes it as
-    # `blk.{num_hidden_layers}.*`, one past the decoder stack and under ordinary leaf names -- so
-    # nothing about an individual tensor marks it as MTP. Transformers has no MTP module, and
-    # `Qwen3_5ForCausalLM` already drops these by name (`_keys_to_ignore_on_load_unexpected =
-    # [r"^mtp.*"]`), so hand them that prefix. Ahead of the blanket `blk.` rule below, which would
-    # otherwise make them `model.layers.{N}.*` -- a layer the model does not have, which every load
-    # then reports as unexpected. The leaf renamings still rewrite what follows the prefix, which is
-    # harmless: every one of them is relative, so what they produce is still under `mtp.`.
+    # llama.cpp writes the multi-token-prediction block as `blk.{num_hidden_layers}.*`. Transformers
+    # has no MTP module and drops `^mtp.*` by name, so give it that prefix before the blanket `blk.`
+    # rule turns it into a layer the model does not have.
     mtp_block = [WeightRenaming(rf"^blk\.{text_config.num_hidden_layers}\.", "mtp.")]
 
     renamings = (
@@ -113,8 +89,7 @@ def _qwen35(config) -> list[WeightTransform]:
         ]
     )
 
-    # (2) norms stored as `w + 1`. Each entry renames the leaf and un-offsets in one place; the
-    # leading `blk.` -> `model.layers.` renaming has already fired by the time these match.
+    # (2) norms stored as `w + 1`: rename the leaf and un-offset in one place.
     offset_norms = [
         WeightConverter(
             source_patterns=r"^output_norm\.weight",
@@ -244,14 +219,8 @@ class Unsqueeze(ConversionOps):
 class PermuteRows(ConversionOps):
     """Reorder rows (dim 0), optionally only those from `offset` onwards.
 
-    llama.cpp can store head-indexed tensors in a different head order than transformers. Where
-    that axis is the tensor's *output* axis, undoing it is a row permutation.
-
-    `offset` covers tensors whose leading rows must stay put: e.g. Qwen3.5's fused
-    `in_proj_qkv`, where only the v-block is reordered.
-
-    Can run on packed GGUF blocks: a block never spans two rows, so reordering rows moves whole
-    groups of blocks along with their scales.
+    `offset` covers tensors whose leading rows must stay put, e.g. Qwen3.5's fused `in_proj_qkv`.
+    Safe on packed blocks: a block never spans two rows.
     """
 
     supports_packed = True
@@ -277,19 +246,10 @@ class PermuteRows(ConversionOps):
 class PermuteInputFeatures(ConversionOps):
     """Reorder columns (dim 1), for a tensor that *consumes* an axis llama.cpp reordered.
 
-    Same logical reordering as `PermuteRows`, but on `in_features`, because this tensor reads the axis
-    the others produce (Qwen3.5's `linear_attn.out_proj`).
-
-    Columns cross quantization blocks, so reordering them in packed bytes would mean re-picking scales
-    and re-rounding -- a requantization. It does not have to happen on the weight at all:
-
-        x @ W[:, p].T  ==  x[:, argsort(p)] @ W.T
-
-    both sides pairing `x[j]` with `W[p[j]]`. So a packed weight is left exactly as the file stores it
-    and the module gathers its *input* instead -- one row of activations, against tens of megabytes of
-    weight. `GgufLinear` reads `input_permutation` for that.
-
-    A tensor that arrives dense still has its columns permuted here, so the dequantized path is unchanged.
+    Columns cross quantization blocks, so permuting packed bytes would mean requantizing. It is not
+    needed on the weight at all, since `x @ W[:, p].T == x[:, argsort(p)] @ W.T`: a packed weight is
+    left as stored and `GgufLinear` gathers its input through `input_permutation` instead. A dense
+    tensor still has its columns permuted here.
     """
 
     supports_packed = True
@@ -299,11 +259,9 @@ class PermuteInputFeatures(ConversionOps):
 
     @property
     def input_permutation(self) -> torch.Tensor:
-        """The reordering to apply to the input of the module holding this weight, when it stays packed.
+        """Reordering for the input of the module holding this weight, when it stays packed.
 
-        The inverse of the column permutation, not the permutation itself: `x @ W[:, p].T` sums
-        `x[j] * W[p[j]]`, which is `x[argsort(p)] @ W.T`. Getting it backwards is not an error, it is
-        fluent nonsense.
+        The inverse of the column permutation, not the permutation itself.
         """
         return torch.argsort(self.permutation)
 
@@ -322,19 +280,14 @@ class PermuteInputFeatures(ConversionOps):
 class TiledToGroupedRows(PermuteRows):
     """`PermuteRows` undoing llama.cpp's head reorder, for a tensor that *produces* the head axis.
 
-    llama.cpp stores head-indexed axes *tiled* (`v0k0 v0k1 ... v0k15 v1k0 ...`) while transformers
-    groups them by key head (`k0v0 k0v1 k1v0 ...`). Indexing with the permutation built below converts
-    the former to the latter. `head_dim` defaults to 1, giving the permutation over head indices alone
-    (what a per-head vector like `A_log` or `dt_bias` needs).
-
-    A convention of llama.cpp's converter rather than of any one architecture, so every model whose
-    heads it tiles is reordered this way.
+    llama.cpp stores head-indexed axes tiled (`v0k0 v0k1 ... v1k0 ...`), transformers groups them by
+    key head (`k0v0 k0v1 k1v0 ...`). `head_dim` defaults to 1, for per-head vectors like `A_log`.
     """
 
     def __init__(self, num_k_heads: int, heads_per_k: int, head_dim: int = 1, offset: int = 0):
         total = num_k_heads * heads_per_k * head_dim
-        # On the CPU explicitly: a mapping may be built inside the model's init context, where the default
-        # device is meta, and a meta index tensor silently permutes nothing once moved to the weight.
+        # On the CPU explicitly: a mapping may be built under a meta default device, and a meta index
+        # tensor silently permutes nothing.
         indices = torch.arange(total, device="cpu")
         tiled_from_grouped = indices.reshape(num_k_heads, heads_per_k, head_dim).transpose(0, 1).reshape(-1)
         permutation = torch.argsort(tiled_from_grouped)
@@ -349,8 +302,8 @@ class TiledToGroupedInputs(PermuteInputFeatures):
 
     def __init__(self, num_k_heads: int, heads_per_k: int, head_dim: int = 1):
         total = num_k_heads * heads_per_k * head_dim
-        # On the CPU explicitly: a mapping may be built inside the model's init context, where the default
-        # device is meta, and a meta index tensor silently permutes nothing once moved to the weight.
+        # On the CPU explicitly: a mapping may be built under a meta default device, and a meta index
+        # tensor silently permutes nothing.
         indices = torch.arange(total, device="cpu")
         tiled_from_grouped = indices.reshape(num_k_heads, heads_per_k, head_dim).transpose(0, 1).reshape(-1)
         permutation = torch.argsort(tiled_from_grouped)
@@ -358,19 +311,11 @@ class TiledToGroupedInputs(PermuteInputFeatures):
 
 
 class Cast(ConversionOps):
-    """Cast to the dtype the model is being loaded in, after every other transform has run.
+    """Cast to the model's dtype, after every other transform has run.
 
-    Last, not first, because llama.cpp stores values this path has to do arithmetic on: a zero-centred
-    norm is written as `w + 1`, and rounding *that* to bf16 spends the precision available near 1.0
-    (a step of 7.8e-03) on a weight that is usually much smaller, where the step would have been
-    9.8e-04. Subtracting first and rounding after is what a safetensors checkpoint of the same model
-    holds. `A_log` is the same story through `LogNegate`.
-
-    The loader will not do this itself: it skips the cast for a pre-quantized checkpoint under renamed
-    keys, and a GGUF renames every key.
-
-    Blocks pass through untouched -- they are `uint8`, and a module that holds them unpacks into this
-    dtype when it computes.
+    Last, not first: llama.cpp stores values this path does arithmetic on (`w + 1` norms, `-exp(A_log)`),
+    and rounding those to bf16 before the arithmetic would spend the precision near 1.0. Blocks pass
+    through untouched. The loader skips this itself for a pre-quantized checkpoint under renamed keys.
     """
 
     def __init__(self, dtype: "torch.dtype"):
@@ -393,18 +338,11 @@ class Cast(ConversionOps):
 
 
 class Dequantize(ConversionOps):
-    """Unpack GGUF blocks into values.
+    """Unpack GGUF blocks into values, on the parameter's own device.
 
-    Weights arrive as blocks whatever their destination: the ones with a packed module keep them, and
-    these are unpacked here — by which point the loading pipeline has put the bytes on the parameter's
-    own device, so the unpacking happens there rather than on the host.
-
-    First in its chain, because every transform after it is defined on dense values — a column permute
-    moves values between blocks, which on packed data would mean requantizing.
-
-    One instance serves the whole file: llama.cpp mixes quantization types across a checkpoint, so the
-    type is looked up per parameter. A parameter that is not listed keeps its blocks, which is how a
-    chain shared with packed weights leaves those alone.
+    First in its chain, since every later transform is defined on dense values. One instance serves the
+    whole file: llama.cpp mixes quantization types, so the type is looked up per parameter, and a
+    parameter that is not listed keeps its blocks.
     """
 
     def __init__(self, ggml_types: dict[str, int], dtype: "torch.dtype"):

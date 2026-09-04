@@ -830,9 +830,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
         try:
             if gguf_file:
-                # A GGUF repo ships no `config.json`: the file's metadata is the config. Architectures the
-                # new loading path covers rebuild it from those keys directly; the rest go to the legacy
-                # reader, which parses the whole file — vocabulary included — to answer the same question.
+                # A GGUF repo ships no `config.json`: the metadata is the config. Architectures the fast
+                # reader covers rebuild it from those keys; the rest go to the legacy reader.
                 from .integrations.gguf import GGUF_CONFIG_ARCHS, get_gguf_config, read_gguf_metadata
 
                 metadata, tensor_names = read_gguf_metadata(resolved_config_file)

@@ -28,42 +28,21 @@ DEQUANT_CHUNK_ELEMS = 64 << 20  # ~128 MB of bf16 per unpacked chunk
 
 
 def mul_mat_vec(weight: torch.Tensor, x: torch.Tensor, ggml_type: int, out_features: int) -> torch.Tensor:
-    """(N, bytes_per_row) uint8 @ (M, K) -> (M, N). May return f32 whatever `x` is.
-
-    Not wrapped as a custom op: the kernel's ops are registered ops with their own fakes, so dynamo
-    traces straight through them.
-    """
+    """(N, bytes_per_row) uint8 @ (M, K) -> (M, N). May return f32 whatever `x` is."""
     return _gguf_kernel.mul_mat_vec(weight, x, ggml_type, out_features)
 
 
 def kernel_can_read(tensor) -> bool:
     """Whether the resolved kernel can read this tensor's memory.
 
-    False when there is no kernel -- only reachable while converting weights at load, since a module
-    that holds blocks is only built where a kernel can compute on them -- or when an explicit
-    `device_map` left this weight on the host, which is the one place an accelerator build cannot
-    reach. Asked instead of naming a backend, so whichever one was built for is used without saying
-    which.
-
-    Compared against the `False` sentinel rather than asked for truthiness: an embedding asks this in
-    its forward, and dynamo cannot trace `bool()` on a `GgufKernel`, which breaks the graph at every
-    lookup and makes `fullgraph=True` a hard error.
+    Compared against the `False` sentinel, not asked for truthiness: dynamo cannot trace `bool()` on a
+    `GgufKernel`, which breaks the graph at every lookup.
     """
     return get_gguf_kernel() is not False and tensor.device.type != "cpu"
 
 
 def dequantize_blocks(weight, ggml_type: int, rows: int, cols: int, dtype, indices=None):
-    """(rows, bytes_per_row) uint8 -> (rows, cols) `dtype`, a row chunk at a time.
-
-    `indices` unpacks only the rows it names, gathering as it goes -- ggml's `get_rows`. A caller
-    reading a handful of rows out of a large table should pass them rather than slicing first, which
-    would copy their packed bytes for nothing.
-
-    ggml's kernel when the blocks are on its device: it writes `dtype` straight out, where the torch
-    dequantizer produces f32 and leaves the caller to cast — fewer ops and half the transient for a
-    bf16 model. The torch path covers the blocks no kernel can read, which is how a device with no
-    kernel published for it still loads and runs.
-    """
+    """(rows, bytes_per_row) uint8 -> (rows, cols) `dtype`, a row chunk at a time."""
     if indices is not None:
         return _dequantize_chunk(weight, ggml_type, rows, cols, dtype, indices)
     rows_per_chunk = max(1, DEQUANT_CHUNK_ELEMS // cols)
@@ -101,11 +80,7 @@ class GgufKernel:
 
 
 def get_gguf_kernel() -> "GgufKernel | bool":
-    """The published kernel for this machine, or `False` if there is none (so the caller unpacks).
-
-    Hub-only: a kernel is a published `kernel-builder` build or nothing. `kernels` picks the variant
-    for the current torch build and device itself.
-    """
+    """The published kernel for this machine, or `False` if there is none (so the caller unpacks)."""
     global _gguf_kernel
     if _gguf_kernel is not None:
         return _gguf_kernel
@@ -153,11 +128,7 @@ def get_ggml_layer_mapping() -> dict:
 
 
 def kernelize_ggml_layers(model) -> None:
-    """Graft ggml's layer kernels onto a GGUF model, and nothing else.
-
-    Applied on load, and registered so that a later `kernelize` re-applies them: that walk restores the
-    original forward of every layer it has no mapping for, which would otherwise undo this graft.
-    """
+    """Graft ggml's layer kernels onto a GGUF model, and nothing else."""
     if not is_kernels_available():
         return
 

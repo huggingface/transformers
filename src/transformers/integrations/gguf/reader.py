@@ -11,21 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Reading a GGUF file: architecture, tensor types, and tensors keyed by their GGUF names.
-
-Nothing is read eagerly: each name maps to a `LazyGgufTensor` that the loading pipeline materializes
-when it gets to that parameter. A quantized tensor comes back as its raw blocks; unpacking is a
-conversion op (`Dequantize`), applied only to the tensors whose module cannot hold blocks.
-
-Renaming and any conversion are *not* done here — they are `WeightConverter`s in
-`gguf_conversion_mapping.py`, run by the normal loading pipeline. This module only turns a file into
-`{gguf_name: tensor}`.
-
-The header is parsed here rather than with `gguf.GGUFReader`, which builds a Python object per
-metadata element and so spends seconds on the tokenizer vocabulary — most of the load time for a
-model whose weights we then read in under a second. All we need from it is the architecture and the
-tensor table.
-"""
+"""Reading a GGUF file: architecture, tensor types, and tensors keyed by their GGUF names."""
 
 import struct
 from collections.abc import Container
@@ -61,11 +47,7 @@ class TensorInfo(NamedTuple):
 
 
 class GgufHeader(NamedTuple):
-    """A GGUF file's metadata: everything the loading path needs except the tensor data.
-
-    Built once, by the quantizer, and passed to whoever needs it — the plan, the conversions and the
-    reader all work from this rather than reopening the file.
-    """
+    """A GGUF file's metadata: everything the loading path needs except the tensor data."""
 
     path: str
     architecture: str
@@ -84,14 +66,7 @@ class GgufHeader(NamedTuple):
 
     @property
     def dtype(self) -> "torch.dtype | None":
-        """The float type this file was written in, or `None` if it holds quantized blocks.
-
-        Read off the tensors rather than `general.file_type`, which names the same thing but is optional
-        and self-reported.
-
-        A quantized file has no float type to report — llama.cpp leaves what it did not quantize as F32
-        — and what to compute in is then the caller's choice, not the file's.
-        """
+        """The float type this file was written in, or `None` if it holds quantized blocks."""
         types = set(self.ggml_types.values())
         if not types <= set(_TORCH_DTYPE):  # blocks, not values, somewhere in the file
             return None
@@ -121,17 +96,7 @@ class GgufHeader(NamedTuple):
 
 
 def read_gguf_metadata(gguf_path: str, string_arrays: "Container[str]" = ()) -> tuple[dict, tuple[str, ...]]:
-    """A file's metadata keys and tensor names, without reading any tensor data.
-
-    What the config is rebuilt from. Separate from `GgufHeader.from_file` because that one sizes every
-    tensor, which rejects a file holding a quantization this reader cannot unpack — and the legacy
-    loader can still handle those.
-
-    A string array comes back as its length, unless its key is named in `string_arrays`: the only
-    thing a config takes from the vocabulary is its size, and materializing a few hundred thousand
-    Python strings is what makes `gguf.GGUFReader` slow. A tokenizer does want them, and names the
-    two or three keys it needs rather than paying for every array in the file.
-    """
+    """A file's metadata keys and tensor names, without reading any tensor data."""
     blob = _mapped(gguf_path)
     metadata, tensor_count, pos = _read_metadata(blob, gguf_path, string_arrays)
     entries, _ = _read_tensor_table(blob, tensor_count, pos)
@@ -176,10 +141,7 @@ def _read_metadata(blob: np.ndarray, gguf_path: str, string_arrays: "Container[s
 
 
 def _read_value(blob: np.ndarray, pos: int, value_type: int, keep_strings: bool = False):
-    """One metadata value, and the offset just past it.
-
-    An array of strings yields its length unless `keep_strings`, which reads them out.
-    """
+    """One metadata value, and the offset just past it."""
     if value_type in _KV_WIDTH:
         (value,) = struct.unpack_from(_KV_FORMAT[value_type], blob, pos)
         return value, pos + _KV_WIDTH[value_type]
@@ -232,13 +194,7 @@ def _byte_count(ggml_type: int, elements: int, gguf_path: str) -> int:
 
 
 class LazyGgufTensor:
-    """One tensor of the file, read only when the loading pipeline asks for it.
-
-    `from_pretrained` materializes a state dict one parameter at a time, from a thread pool, reading
-    each entry as `tensor[...]` — the same interface a safetensors slice offers. Deferring to that
-    point spreads the reads over the workers and keeps a handful of tensors in host memory instead of
-    the whole file.
-    """
+    """One tensor of the file, read only when the loading pipeline asks for it."""
 
     def __init__(self, data: np.ndarray, ggml_type: int, shape: tuple[int, ...]):
         self.data = data  # a read-only mmap view, untouched until materialized
@@ -257,12 +213,7 @@ class LazyGgufTensor:
 
 
 def load_gguf_state_dict(header: GgufHeader) -> dict[str, LazyGgufTensor]:
-    """`{gguf_name: LazyGgufTensor}` — the file's tensors, none of them read yet.
-
-    Every tensor comes back as the file stores it: a quantized one as its `(rows, bytes_per_row)`
-    blocks, the rest in the float type they were written in. Reaching the dtype the model is loaded in
-    is the last conversion op's job (`Cast`), so that the transforms in between run at full precision.
-    """
+    """`{gguf_name: LazyGgufTensor}` — the file's tensors, none of them read yet."""
     blob = _mapped(header.path)
 
     state_dict = {}

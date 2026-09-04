@@ -768,9 +768,7 @@ class AutoTokenizer:
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         if gguf_file:
-            # Same split as `PreTrainedConfig.from_pretrained`: architectures the fast reader covers
-            # rebuild the config from the metadata keys, the rest go to the legacy reader, which parses
-            # the whole file -- vocabulary included -- to answer the same question.
+            # Same split as `PreTrainedConfig.from_pretrained`: fast reader where covered, else legacy.
             from ...integrations.gguf import GGUF_CONFIG_ARCHS, get_gguf_config, read_gguf_metadata
 
             gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
