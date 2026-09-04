@@ -319,7 +319,7 @@ class Ernie4_5_VLMoeIntegrationTest(unittest.TestCase):
                     {"type": "text", "text": "What kind of dog is this?"},
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg",
                     },
                 ],
             }
@@ -331,7 +331,7 @@ class Ernie4_5_VLMoeIntegrationTest(unittest.TestCase):
                     {"type": "text", "text": "What kind of dog is this?"},
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/coco_sample.png",
                     },
                 ],
             }
@@ -417,7 +417,9 @@ class Ernie4_5_VLMoeIntegrationTest(unittest.TestCase):
         )
         model = self.load_model(dtype=torch.float16)
         questions = ["Only use English during your responses. Describe the following video."]
-        video_urls = ["https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"]
+        video_urls = [
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tiny_video.mp4"
+        ]
         messages = [
             [
                 {
@@ -556,7 +558,7 @@ class Ernie4_5_VLMoeSmallIntegrationTest(unittest.TestCase):
                     {"type": "text", "text": "What kind of dog is this?"},
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg",
                     },
                 ],
             }
@@ -568,7 +570,7 @@ class Ernie4_5_VLMoeSmallIntegrationTest(unittest.TestCase):
                     {"type": "text", "text": "What kind of dog is this?"},
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/coco_sample.png",
                     },
                 ],
             }
@@ -662,7 +664,9 @@ class Ernie4_5_VLMoeSmallIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(self.model_id, max_image_size={"longest_edge": 50176})
         model = self.load_model(dtype=torch.float16)
         questions = ["Only use English during your responses. Describe the following video."]
-        video_urls = ["https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"]
+        video_urls = [
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tiny_video.mp4"
+        ]
         messages = [
             [
                 {

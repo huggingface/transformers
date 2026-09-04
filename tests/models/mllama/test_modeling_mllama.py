@@ -612,7 +612,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
         image2 = Image.open(
             requests.get(
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg",
                 stream=True,
             ).raw
         )
@@ -673,7 +673,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
         image2 = Image.open(
             requests.get(
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg",
                 stream=True,
             ).raw
         )

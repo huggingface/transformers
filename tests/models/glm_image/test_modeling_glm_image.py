@@ -478,7 +478,7 @@ class GlmImageIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg",
                     },
                     {"type": "text", "text": "Add a red hat to this cat"},
                 ],
@@ -506,7 +506,7 @@ class GlmImageIntegrationTest(unittest.TestCase):
         from PIL import Image
 
         # Load the image
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
         response = requests.get(url)
         image = Image.open(BytesIO(response.content))
 

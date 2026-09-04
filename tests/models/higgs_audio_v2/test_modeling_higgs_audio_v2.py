@@ -842,7 +842,7 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "url": "https://huggingface.co/datasets/eustlb/dummy-audio-samples-higgs/resolve/main/belinda.wav",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/belinda.wav",
                     }
                 ],
             },
@@ -1294,7 +1294,7 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "url": "https://huggingface.co/datasets/eustlb/dummy-audio-samples-higgs/resolve/main/belinda.wav",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/belinda.wav",
                     }
                 ],
             },
@@ -1326,7 +1326,7 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "url": "https://huggingface.co/datasets/eustlb/dummy-audio-samples-higgs/resolve/main/macron.wav",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/macron.wav",
                     }
                 ],
             },

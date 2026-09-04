@@ -673,7 +673,7 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 
 def prepare_image():
-    img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+    img_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/car.png"
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
     return raw_image
 

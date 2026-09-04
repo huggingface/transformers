@@ -97,7 +97,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         {
                             "type": "image",
                             "url": url_to_local_path(
-                                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
                             ),
                         },
                     ],
@@ -222,7 +222,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         {
                             "type": "image",
                             "url": url_to_local_path(
-                                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
                             ),
                         },
                     ],
@@ -401,7 +401,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             {
                 "type": "image",
                 "url": url_to_local_path(
-                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
                 ),
             }
         )

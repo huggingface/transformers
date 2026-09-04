@@ -259,7 +259,7 @@ class Florence2ForConditionalGenerationModelTest(
 
 
 def prepare_img():
-    url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg?download=true"
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
     return image
 
@@ -270,13 +270,13 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.image1 = Image.open(
             requests.get(
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg?download=true",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg",
                 stream=True,
             ).raw
         )
         self.image2 = Image.open(
             requests.get(
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg?download=true",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/car.jpg",
                 stream=True,
             ).raw
         )

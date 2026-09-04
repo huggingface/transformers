@@ -555,7 +555,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         return generated_ids, generated_text
 
     def test_eager(self):
-        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
         dtype = torch.bfloat16
@@ -596,7 +596,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(generated_text, EXPECTED_TEXT)
 
     def test_sdpa(self):
-        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
         dtype = torch.bfloat16
@@ -647,7 +647,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
     @pytest.mark.flash_attn_test
     @slow
     def test_FA2(self):
-        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/receipt_00008.png"
         image = Image.open(requests.get(url, stream=True).raw)
 
         dtype = torch.bfloat16

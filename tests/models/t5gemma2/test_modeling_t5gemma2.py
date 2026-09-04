@@ -1096,7 +1096,7 @@ class T5Gemma2IntegrationTest(unittest.TestCase):
             "google/t5gemma-2-270m-270m", device_map="auto", dtype=torch.bfloat16
         )
         processor = AutoProcessor.from_pretrained("google/t5gemma-2-270m-270m")
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/bee.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
 
         prompt = "<start_of_image> in this image, there is"
@@ -1117,7 +1117,7 @@ class T5Gemma2IntegrationTest(unittest.TestCase):
             "google/t5gemma-2-270m-270m", device_map="auto", dtype=torch.bfloat16
         )
         processor = AutoProcessor.from_pretrained("google/t5gemma-2-270m-270m")
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/bee.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
 
         prompt = ["<start_of_image> in this image, there is", "<start_of_image> in this image"]

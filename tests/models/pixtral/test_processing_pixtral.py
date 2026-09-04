@@ -36,7 +36,7 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.url_0 = url_to_local_path(
-            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )
         cls.image_0 = np.random.randint(255, size=(3, 876, 1300), dtype=np.uint8)
         cls.url_1 = (

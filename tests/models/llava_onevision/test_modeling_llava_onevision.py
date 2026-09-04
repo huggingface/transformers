@@ -421,7 +421,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
             device_map=torch_device,
         )
 
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
         prompt = (
             "user\n<image><image>\nWhat is the difference between these images?<|im_end|>\n<|im_start|>assistant\n"
@@ -455,7 +455,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
             device_map=torch_device,
         )
 
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
         prompts = [
             "user\nTell me about the french revolution.<|im_end|>\n<|im_start|>assistant\n",  # text-only case

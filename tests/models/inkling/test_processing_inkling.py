@@ -332,12 +332,8 @@ class InklingProcessingIntegrationTest(unittest.TestCase):
     IMAGE_URL_2 = (
         "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000139.jpg"
     )
-    AUDIO_URL = (
-        "https://huggingface.co/datasets/adarshxs/voxcpm2-native-generated-audio-user-ref/resolve/main/zs_medium.wav"
-    )
-    AUDIO_URL_2 = (
-        "https://huggingface.co/datasets/adarshxs/voxcpm2-native-generated-audio-user-ref/resolve/main/zs_short.wav"
-    )
+    AUDIO_URL = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/zs_medium.wav"
+    AUDIO_URL_2 = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/zs_short.wav"
 
     @classmethod
     def setUpClass(cls):

@@ -70,7 +70,7 @@ class Kosmos2_5ImageProcessingTester(ImageProcessingTester):
 
     def prepare_dummy_image(self):
         img_url = url_to_local_path(
-            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )
         raw_image = load_image(img_url).convert("RGB")
         return raw_image

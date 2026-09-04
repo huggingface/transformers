@@ -675,7 +675,7 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
 # We will verify our results on an image of a stop sign
 def prepare_img():
-    url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
@@ -703,7 +703,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         processor = Pix2StructProcessor.from_pretrained("google/pix2struct-textcaps-base")
         image_1 = prepare_img()
 
-        second_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/temple-bar-dublin-world-famous-irish-pub.jpg"
+        second_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/temple-bar-dublin-world-famous-irish-pub.jpg"
         image_2 = Image.open(requests.get(second_url, stream=True).raw)
 
         # image only
@@ -725,7 +725,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         processor = Pix2StructProcessor.from_pretrained("google/pix2struct-textcaps-base")
         image_1 = prepare_img()
 
-        second_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/temple-bar-dublin-world-famous-irish-pub.jpg"
+        second_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/temple-bar-dublin-world-famous-irish-pub.jpg"
         image_2 = Image.open(requests.get(second_url, stream=True).raw)
         texts = ["A picture of", "An photography of"]
 
@@ -749,7 +749,9 @@ class Pix2StructIntegrationTest(unittest.TestCase):
     def test_vqa_model(self):
         model_id = "google/pix2struct-ai2d-base"
 
-        image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
+        image_url = (
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/ai2d-demo.jpg"
+        )
         image = Image.open(requests.get(image_url, stream=True).raw)
 
         model = Pix2StructForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
@@ -767,8 +769,8 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         model_id = "google/pix2struct-ai2d-base"
 
         image_urls = [
-            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg",
-            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo-2.png",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/ai2d-demo.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/ai2d-demo-2.png",
         ]
 
         images = [Image.open(requests.get(image_url, stream=True).raw) for image_url in image_urls]

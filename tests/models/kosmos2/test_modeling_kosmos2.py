@@ -529,7 +529,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         return scores, generated_ids, generated_text, processed_text, final_text_with_entities
 
     def test_snowman_image_captioning(self):
-        url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.png"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/snowman.png"
 
         image = Image.open(requests.get(url, stream=True).raw)
         image.save("new_image.jpg")
@@ -675,7 +675,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(entities, EXPECTED_ENTITIES_LONG)
 
     def test_snowman_image_captioning_batch(self):
-        url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.png"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/snowman.png"
 
         image = Image.open(requests.get(url, stream=True).raw)
         image.save("new_image.jpg")

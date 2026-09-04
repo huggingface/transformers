@@ -404,7 +404,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg",
                     },
                     {"type": "text", "text": "What kind of animal is this?"},
                 ],
@@ -472,7 +472,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
                     {
                         "type": "image",
                         "url": url_to_local_path(
-                            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
                         ),
                     },
                     {"type": "text", "text": "What kind of animal is this?"},
@@ -520,7 +520,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
                     {
                         "type": "image",
                         "url": url_to_local_path(
-                            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
                         ),
                     },
                     {"type": "text", "text": "What kind of animal is this?"},
