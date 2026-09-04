@@ -792,7 +792,7 @@ class KimiLinearDecoderLayer(GradientCheckpointingLayer):
 
         self.input_layernorm = KimiLinearRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = KimiLinearRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.layer_type = config.layer_types[layer_idx]
+        self.block_type = config.layer_types[layer_idx]
 
     def forward(
         self,
@@ -804,8 +804,9 @@ class KimiLinearDecoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
+        # Self attn
         hidden_states = self.input_layernorm(hidden_states)
-        if self.layer_type == "linear_attention":
+        if self.block_type == "linear_attention":
             hidden_states = self.self_attn(
                 hidden_states=hidden_states,
                 cache_params=past_key_values,

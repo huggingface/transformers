@@ -253,7 +253,7 @@ class KimiLinearMoE(DeepseekV3MoE):
 class KimiLinearDecoderLayer(DeepseekV32DecoderLayer):
     def __init__(self, config: KimiLinearConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.layer_type = config.layer_types[layer_idx]
+        self.block_type = config.layer_types[layer_idx]
         self.self_attn = (
             KimiLinearAttention(config, layer_idx)
             if config.layer_types[layer_idx] == "full_attention"
@@ -272,7 +272,7 @@ class KimiLinearDecoderLayer(DeepseekV32DecoderLayer):
         residual = hidden_states
         # Self attn
         hidden_states = self.input_layernorm(hidden_states)
-        if self.layer_type == "linear_attention":
+        if self.block_type == "linear_attention":
             hidden_states = self.self_attn(
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
