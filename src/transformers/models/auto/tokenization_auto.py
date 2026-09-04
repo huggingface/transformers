@@ -333,6 +333,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("unispeech", "Wav2Vec2CTCTokenizer"),
         ("unispeech-sat", "Wav2Vec2CTCTokenizer"),
         ("vibevoice", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
+        ("vibevoice_realtime", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ("videoprism", "VideoPrismTokenizer" if is_tokenizers_available() else None),
         ("vilt", "BertTokenizer" if is_tokenizers_available() else None),
         ("visual_bert", "BertTokenizer" if is_tokenizers_available() else None),
