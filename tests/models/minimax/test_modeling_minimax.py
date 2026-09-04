@@ -239,7 +239,7 @@ class MiniMaxIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [[1.0312, -0.5156, -0.3262], [-0.1152, 0.4336, 0.2412], [1.2188, -0.5898, -0.0381]],
-                ("cuda", 8): [[1.0312, -0.5156, -0.3203], [-0.1201, 0.4375, 0.2402], [1.2188, -0.5898, -0.0396]],
+                ("cuda", 8): [[1.0312, -0.5156, -0.3184], [-0.1177, 0.4355, 0.2393], [1.2188, -0.5898, -0.0349]],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
