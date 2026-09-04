@@ -22,12 +22,9 @@ from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
 )
-from ...utils import auto_docstring, is_vision_available, logging
+from ...utils import auto_docstring, logging
 from ...utils.import_utils import requires
-
-
-if is_vision_available():
-    from .image_processing_pixtral import get_resize_output_image_size
+from .image_processing_pixtral import get_resize_output_image_size
 
 
 logger = logging.get_logger(__name__)
