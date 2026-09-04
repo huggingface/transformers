@@ -33,7 +33,6 @@ from ...utils import auto_docstring, can_return_tuple, is_torch_available, loggi
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..audioflamingo3.modeling_audioflamingo3 import (
-    AudioFlamingo3ForConditionalGeneration,
     AudioFlamingo3Model,
     AudioFlamingo3ModelOutputWithPast,
     AudioFlamingo3MultiModalProjector,
@@ -42,7 +41,7 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
 from ..clip.modeling_clip import CLIPMLP
 from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer
-from ..qwen3_asr.modeling_qwen3_asr import Qwen3ASREncoder
+from ..qwen3_asr.modeling_qwen3_asr import Qwen3ASREncoder, Qwen3ASRForConditionalGeneration
 from ..whisper.modeling_whisper import eager_attention_forward
 from .configuration_fun_asr_nano import FunAsrNanoAdaptorConfig, FunAsrNanoConfig, FunAsrNanoEncoderConfig
 
@@ -496,10 +495,6 @@ class FunAsrNanoMultiModalProjector(AudioFlamingo3MultiModalProjector):
     """
 )
 class FunAsrNanoModel(AudioFlamingo3Model):
-    def __init__(self, config):
-        super().__init__(config)
-        self.multi_modal_projector = FunAsrNanoMultiModalProjector(config)
-
     @can_return_tuple
     @auto_docstring(
         custom_intro="This method is used to get the audio embeddings from input features, meaning inferring the audio encoder and the adaptor."
@@ -546,8 +541,24 @@ class FunAsrNanoModel(AudioFlamingo3Model):
     Qwen3 language model with a language modeling head.
     """
 )
-class FunAsrNanoForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+class FunAsrNanoForConditionalGeneration(Qwen3ASRForConditionalGeneration):
+    def forward(self, **super_kwargs):
+        r"""
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+            Mask to avoid performing attention on padding feature indices.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss.
+
+        Example:
+
+        ```python
+        >>> from transformers import FunAsrNanoForConditionalGeneration, AutoProcessor
+
+        >>> model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = FunAsrNanoForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+        ```"""
+        return super().forward(**super_kwargs)
 
 
 __all__ = [

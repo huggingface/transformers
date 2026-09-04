@@ -586,7 +586,7 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
         ```python
         >>> from transformers import FunAsrNanoForConditionalGeneration, AutoProcessor
 
-        >>> model_id = "nvidia/audio-flamingo-3-hf"
+        >>> model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = FunAsrNanoForConditionalGeneration.from_pretrained(model_id, device_map="auto")
         ```"""
