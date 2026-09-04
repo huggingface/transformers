@@ -619,6 +619,9 @@ class MoeExpertsParallel(TensorParallelLayer):
         if expert_parallel_dispatch:
             from ..integrations.moe import dispatch_experts_forward
 
+            ep_mesh = mesh if mesh.ndim == 1 else mesh["tp"]
+            ep_group, ep_size = ep_mesh.get_group(), ep_mesh.size()
+
         def tp_forward(*args, **kwargs):
             if expert_parallel_dispatch:
                 # Every rank routes its own tokens to the experts' owners; nothing is replicated across
@@ -626,9 +629,10 @@ class MoeExpertsParallel(TensorParallelLayer):
                 hidden_states, top_k_index, top_k_weights = args[:3]
                 if isinstance(hidden_states, DTensor):
                     hidden_states = hidden_states.to_local()
-                ep_mesh = mesh if mesh.ndim == 1 else mesh["tp"]
                 with self.context_around_forward(module, mesh):
-                    return dispatch_experts_forward(module, hidden_states, top_k_index, top_k_weights, ep_mesh)
+                    return dispatch_experts_forward(
+                        module, hidden_states, top_k_index, top_k_weights, ep_group, ep_size
+                    )
             args, kwargs = self.transform_inputs_pre_forward(
                 module, args, kwargs, mesh, is_expert_parallel=is_expert_parallel
             )
@@ -820,6 +824,15 @@ def _validate_tp_plan_styles(tp_plan: dict[str, str] | None) -> None:
 
 def apply_tensor_parallelism(model, tp_mesh):
     """DTensor backend: shard params as placeholders and install TP forward hooks."""
+    if model.config.distributed_config.expert_parallel_dispatch:
+        # Every rank trains on its own part of the batch, which tensor parallelism cannot do: only the experts can
+        # be sharded across the group.
+        other_styles = set(model.tp_plan.values()) - {"ep_router", "grouped_gemm", "moe_tp_experts"}
+        if other_styles:
+            raise ValueError(
+                "`expert_parallel_dispatch=True` needs an expert parallel plan that only shards the experts, but "
+                f"this model's plan also uses {sorted(other_styles)}."
+            )
 
     _validate_tp_plan_styles(model.tp_plan)
 
