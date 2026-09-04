@@ -379,7 +379,7 @@ class FunAsrNanoMultiModalProjector(nn.Module):
             attention_mask=input_features_mask,
         )
         for block in self.blocks:
-            hidden_states = block(hidden_states, attention_mask, input_features_mask)
+            hidden_states = block(hidden_states, attention_mask)
         return hidden_states
 
 
