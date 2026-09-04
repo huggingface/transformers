@@ -52,6 +52,8 @@
 - sections:
   - local: fast_tokenizers
     title: Usa tokenizadores de 🤗 Tokenizers
+  - local: custom_tokenizers
+    title: Personaliza tokenizadores
   - local: multilingual
     title: Modelos multilingües para inferencia
   - local: create_a_model
