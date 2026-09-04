@@ -25,7 +25,6 @@ from ...audio_utils import (
 )
 from ...feature_extraction_utils import BatchFeature
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack, prepare_prompt_input
@@ -41,6 +40,7 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
 )
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
 from ..clip.modeling_clip import CLIPMLP
+from ..llama.modeling_llama import LlamaDecoderLayer
 from ..qwen3_asr.modeling_qwen3_asr import Qwen3ASRAudioAttention, Qwen3ASREncoder
 from ..whisper.modeling_whisper import eager_attention_forward
 from .configuration_fun_asr_nano import FunAsrNanoAdaptorConfig, FunAsrNanoConfig, FunAsrNanoEncoderConfig
@@ -216,7 +216,7 @@ class FunAsrNanoPreTrainedModel(AudioFlamingo3PreTrainedModel):
 
 
 class FunAsrNanoAttention(Qwen3ASRAudioAttention):
-    """Qwen3-ASR attention with the SAN-M FSMN value gate."""
+    """Multi-headed attention with the SAN-M FSMN value gate."""
 
     def __init__(
         self,
@@ -238,8 +238,8 @@ class FunAsrNanoAttention(Qwen3ASRAudioAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        input_features_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor,
+        input_features_mask: torch.Tensor,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, sequence_length, _ = hidden_states.shape
@@ -340,7 +340,7 @@ class FunAsrNanoPositionEmbedding(nn.Module):
         return hidden_states + positions.unsqueeze(0)
 
 
-class FunAsrNanoEncoderLayer(GradientCheckpointingLayer):
+class FunAsrNanoEncoderLayer(LlamaDecoderLayer):
     """Shared by the audio encoder (`use_fsmn=True`) and the projector's adaptor blocks (`use_fsmn=False`)."""
 
     def __init__(
@@ -349,24 +349,22 @@ class FunAsrNanoEncoderLayer(GradientCheckpointingLayer):
         input_dim: int | None = None,
         use_fsmn: bool = True,
     ):
-        super().__init__()
         input_dim = input_dim or config.hidden_size
-        self.embed_dim = config.hidden_size
-        self.self_attn = FunAsrNanoAttention(config, input_dim=input_dim, use_fsmn=use_fsmn)
-        self.self_attn_layer_norm = nn.LayerNorm(input_dim)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size)
+        super().__init__(config)
         self.hidden_dropout = config.hidden_dropout
-        self.mlp = FunAsrNanoMLP(config)
+        self.self_attn = FunAsrNanoAttention(config, input_dim=input_dim, use_fsmn=use_fsmn)
+        self.input_layernorm = nn.LayerNorm(input_dim)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        input_features_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor,
+        input_features_mask: torch.Tensor,
         **kwargs,
     ) -> torch.Tensor:
-        residual = hidden_states if hidden_states.shape[-1] == self.embed_dim else None
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        residual = hidden_states if hidden_states.shape[-1] == self.hidden_size else None
+        hidden_states = self.input_layernorm(hidden_states)
         attention_output, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -378,11 +376,8 @@ class FunAsrNanoEncoderLayer(GradientCheckpointingLayer):
             hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = residual + self.mlp(hidden_states)
-        if hidden_states.dtype == torch.float16:
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
         return hidden_states
 
 

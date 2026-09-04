@@ -103,7 +103,7 @@ def eager_attention_forward(
 
 
 class FunAsrNanoAttention(nn.Module):
-    """Qwen3-ASR attention with the SAN-M FSMN value gate."""
+    """Multi-headed attention with the SAN-M FSMN value gate."""
 
     def __init__(
         self,
@@ -137,8 +137,8 @@ class FunAsrNanoAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        input_features_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor,
+        input_features_mask: torch.Tensor,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
@@ -255,22 +255,23 @@ class FunAsrNanoEncoderLayer(GradientCheckpointingLayer):
     ):
         super().__init__()
         input_dim = input_dim or config.hidden_size
-        self.embed_dim = config.hidden_size
+        self.hidden_size = config.hidden_size
         self.self_attn = FunAsrNanoAttention(config, input_dim=input_dim, use_fsmn=use_fsmn)
-        self.self_attn_layer_norm = nn.LayerNorm(input_dim)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size)
-        self.hidden_dropout = config.hidden_dropout
+
         self.mlp = FunAsrNanoMLP(config)
+        self.input_layernorm = nn.LayerNorm(input_dim)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size)
+        self.hidden_dropout = config.hidden_dropout
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        input_features_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor,
+        input_features_mask: torch.Tensor,
         **kwargs,
     ) -> torch.Tensor:
-        residual = hidden_states if hidden_states.shape[-1] == self.embed_dim else None
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        residual = hidden_states if hidden_states.shape[-1] == self.hidden_size else None
+        hidden_states = self.input_layernorm(hidden_states)
         attention_output, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -282,11 +283,8 @@ class FunAsrNanoEncoderLayer(GradientCheckpointingLayer):
             hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = residual + self.mlp(hidden_states)
-        if hidden_states.dtype == torch.float16:
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
         return hidden_states
 
 

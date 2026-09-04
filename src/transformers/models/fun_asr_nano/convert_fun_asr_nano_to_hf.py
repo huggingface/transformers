@@ -96,8 +96,8 @@ ROOT_STATE_DICT_MAPPING = (
 COMPONENT_STATE_DICT_MAPPING = (
     (r"\.feed_forward\.w_1\.", ".mlp.fc1."),
     (r"\.feed_forward\.w_2\.", ".mlp.fc2."),
-    (r"\.norm1\.", ".self_attn_layer_norm."),
-    (r"\.norm2\.", ".final_layer_norm."),
+    (r"\.norm1\.", ".input_layernorm."),
+    (r"\.norm2\.", ".post_attention_layernorm."),
     (r"\.self_attn\.linear_q\.", ".self_attn.q_proj."),
     (r"\.self_attn\.linear_k\.", ".self_attn.k_proj."),
     (r"\.self_attn\.linear_v\.", ".self_attn.v_proj."),
