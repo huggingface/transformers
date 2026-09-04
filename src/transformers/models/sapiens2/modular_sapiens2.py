@@ -513,18 +513,14 @@ def generate_udp_gaussian_heatmaps(
 
 class Sapiens2ImageProcessorKwargs(BeitImageProcessorKwargs, total=False):
     """
-    Keyword arguments for the Sapiens2 image processor.
-
-    Args:
-        keypoint_heatmap_downscale_factor (`int`, *optional*, defaults to 4):
-            The downscale factor for the target heatmap size relative to the model input size.
-        keypoint_heatmap_sigma (`float`, *optional*, defaults to 6.0):
-            The standard deviation (sigma) for the 2D Gaussian distributions used to generate the heatmaps.
+    keypoint_heatmap_downscale_factor (`int`, *optional*, defaults to 4):
+        The downscale factor for the target heatmap size relative to the model input size.
+    keypoint_heatmap_sigma (`float`, *optional*, defaults to 6.0):
+        The standard deviation (sigma) for the 2D Gaussian distributions used to generate the heatmaps.
     """
 
     keypoint_heatmap_downscale_factor: int
     keypoint_heatmap_sigma: float
-    keypoints: list[list[list[list[float]]]] | None
 
 
 class Sapiens2ImageProcessor(BeitImageProcessor):
@@ -570,20 +566,20 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
                 "Please provide only one depending on the task you want to perform."
             )
 
-        return TorchvisionBackend.preprocess(self, images, segmentation_maps, boxes, keypoints=keypoints, **kwargs)
+        return TorchvisionBackend.preprocess(self, images, segmentation_maps, boxes, keypoints, **kwargs)
 
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
         segmentation_maps: ImageInput | None,
         boxes: list[list[list[float]]] | None,
+        keypoints: list[list[list[list[float]]]] | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         return_tensors: str | TensorType | None,
         device: Union[str, "torch.device"] | None,
-        keypoint_heatmap_downscale_factor: int,
-        keypoint_heatmap_sigma: float,
-        keypoints: list[list[list[list[float]]]] | None = None,
+        keypoint_heatmap_downscale_factor: int | None = None,
+        keypoint_heatmap_sigma: float | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Handle extra inputs beyond images."""
@@ -623,10 +619,18 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
             if boxes is None:
                 raise ValueError("Bounding `boxes` must be provided when passing `keypoints` for pose estimation.")
 
+            if keypoint_heatmap_downscale_factor is None or keypoint_heatmap_sigma is None:
+                raise ValueError(
+                    "`keypoint_heatmap_downscale_factor` and `keypoint_heatmap_sigma` must be provided when passing `keypoints`."
+                )
+
+            # Extract dynamic size override if it exists, otherwise fall back to default
+            target_size = kwargs.get("size", self.size)
+
             heatmaps_list, weights_list = generate_udp_gaussian_heatmaps(
                 boxes=boxes,
                 keypoints=keypoints,
-                output_size=(self.size["height"], self.size["width"]),
+                output_size=(target_size["height"], target_size["width"]),
                 downscale_factor=keypoint_heatmap_downscale_factor,
                 sigma=keypoint_heatmap_sigma,
                 device=device,
