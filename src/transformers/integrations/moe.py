@@ -401,8 +401,8 @@ def dispatch_experts_forward(
     pair to the rank that owns the expert with an all-to-all, runs its local experts on what it receives with
     `experts_forward` (the experts module's own forward, as a top-1 routing with unit weights), sends the results
     back and combines them with the routing weights. Each rank trains on its own part of the batch, so the parameters
-    outside the experts are data-parallel across the group and averaged by FSDP2; the all-to-all backward sums every
-    rank's contribution to the expert gradients, which are scaled by `1 / ep_size` to match.
+    outside the experts are data-parallel across the group and averaged by FSDP2; the local experts run on every
+    rank's tokens, so their gradients already sum every rank's contribution and are scaled by `1 / ep_size` to match.
     """
     from torch.distributed.nn.functional import all_to_all_single
 
