@@ -16,7 +16,7 @@ import unicodedata
 
 import numpy as np
 
-from ...audio_utils import AudioInput, make_list_of_audio_chat_template
+from ...audio_utils import AudioInput, make_audio_chat_content, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
@@ -116,13 +116,6 @@ def _prepare_language_inputs(
             raise ValueError(f"Got {len(language)} language(s) for {batch_size} sample(s); counts must match.")
         return [resolve_language(lang) for lang in language]
     raise TypeError("`language` must be a string, a list of strings, or `None`.")
-
-
-def _audio_content_item(audio_item) -> dict:
-    """Build a chat-template content dict for a single audio item."""
-    if isinstance(audio_item, str):
-        return {"type": "audio", "path": audio_item}
-    return {"type": "audio", "audio": audio_item}
 
 
 def _is_cjk_char(char: str) -> bool:
@@ -536,7 +529,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
             messages = []
             if prompt_text is not None:
                 messages.append({"role": "system", "content": [{"type": "text", "text": prompt_text}]})
-            messages.append({"role": "user", "content": [_audio_content_item(audio_item)]})
+            messages.append({"role": "user", "content": make_audio_chat_content(audio_item)})
             conversations.append(messages)
 
         # The language is forced by prefilling the assistant turn with "language <NAME><asr_text>"
@@ -744,7 +737,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
 
         conversations = []
         for wl, audio_item in zip(word_lists, audio_items):
-            content = [_audio_content_item(audio_item)]
+            content = make_audio_chat_content(audio_item)
             content.extend({"type": "text", "text": word} for word in wl)
             conversations.append([{"role": "user", "content": content}])
 

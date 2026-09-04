@@ -21,7 +21,7 @@
 
 import numpy as np
 
-from ...audio_utils import AudioInput, make_list_of_audio_chat_template
+from ...audio_utils import AudioInput, make_audio_chat_content, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
@@ -241,17 +241,7 @@ class GlmAsrProcessor(ProcessorMixin):
             raise TypeError("`prompt` must be a string, a sequence of strings, or `None`.")
 
         conversations = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "audio", "path": audio_item}
-                        if isinstance(audio_item, str)
-                        else {"type": "audio", "audio": audio_item},
-                        {"type": "text", "text": prompt_text},
-                    ],
-                }
-            ]
+            [{"role": "user", "content": make_audio_chat_content(audio_item, prompt_text)}]
             for prompt_text, audio_item in zip(prompts, audio_items)
         ]
 
