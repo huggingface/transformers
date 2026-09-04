@@ -174,6 +174,7 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
 
     model_type = "minimax_m3_vl_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
     default_theta = 10000.0
 
     hidden_size: int = 1280
@@ -190,8 +191,6 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
     attention_dropout: float = 0.0
     rope_parameters: RopeParameters | dict | None = None
     initializer_range: float = 0.02
-
-    default_rope_type = "axial"
 
 
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-M3")

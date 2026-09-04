@@ -36,6 +36,7 @@ class Sam3ViTConfig(PreTrainedConfig):
 
     base_config_key = "backbone_config"
     model_type = "sam3_vit_model"
+    default_rope_type = "axial"
 
     hidden_size: int = 1024
     intermediate_size: int = 4736
@@ -53,7 +54,6 @@ class Sam3ViTConfig(PreTrainedConfig):
     pretrain_image_size: int | list[int] | tuple[int, int] = 336
     hidden_dropout: float | int = 0.0
     initializer_range: float = 0.02
-
     rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
@@ -61,8 +61,6 @@ class Sam3ViTConfig(PreTrainedConfig):
             self.global_attn_indexes = [7, 15, 23, 31]
 
         super().__post_init__(**kwargs)
-
-    default_rope_type = "axial"
 
 
 @auto_docstring(checkpoint="facebook/sam3")

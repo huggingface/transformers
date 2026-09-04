@@ -38,6 +38,7 @@ class CohereCompassVisionConfig(PreTrainedConfig):
 
     model_type = "cohere_compass_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
     attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 27
@@ -54,8 +55,6 @@ class CohereCompassVisionConfig(PreTrainedConfig):
     deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
     initializer_range: float = 0.02
     rope_parameters: dict | None = None
-
-    default_rope_type = "axial"
 
 
 @auto_docstring(checkpoint="CohereLabs/North-Micro-Vision-Instruct")

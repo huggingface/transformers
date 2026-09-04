@@ -268,6 +268,7 @@ class Gemma4VisionConfig(PreTrainedConfig):
     }
 
     default_theta = 100.0
+    default_rope_type = "axial"
 
     hidden_size: int = 768
     intermediate_size: int = 3072
@@ -287,8 +288,6 @@ class Gemma4VisionConfig(PreTrainedConfig):
     use_clipped_linears: bool = False
     standardize: bool = False
     initializer_range: float = 0.02
-
-    default_rope_type = "axial"
 
 
 @auto_docstring(checkpoint="google/gemma-4-e2b-it")

@@ -194,6 +194,7 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
     ```"""
 
     model_type = "sam3_tracker_video"
+    default_rope_type = "axial"
     sub_configs = {
         "vision_config": AutoConfig,
         "prompt_encoder_config": Sam3TrackerVideoPromptEncoderConfig,
@@ -268,8 +269,6 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
         self.image_size = kwargs.pop("image_size", 1008)
 
         super().__post_init__(**kwargs)
-
-    default_rope_type = "axial"
 
     @property
     def memory_attention_rope_theta(self):

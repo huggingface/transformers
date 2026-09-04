@@ -273,6 +273,7 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
 
     model_type = "paddleocr_vl_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
 
     hidden_size: int = 1152
     intermediate_size: int = 4304
@@ -282,8 +283,6 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
     patch_size: int = 14
     spatial_merge_size: int = 2
     rope_parameters: dict | None = None
-
-    default_rope_type = "axial"
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")

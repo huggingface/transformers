@@ -282,6 +282,7 @@ class NeoMMEPatchEmbeddings(nn.Module):
 
 class NeoMMERotaryEmbedding(LagunaRotaryEmbedding):
     """Two-axis interleaved M-RoPE with per-layer-type frequency spectra."""
+
     def forward(
         self, x: torch.Tensor, position_ids: torch.LongTensor, layer_type: str | None = None
     ) -> tuple[torch.Tensor, torch.Tensor]:

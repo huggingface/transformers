@@ -179,6 +179,7 @@ class Sam2VideoConfig(PreTrainedConfig):
     ```"""
 
     model_type = "sam2_video"
+    default_rope_type = "axial"
     sub_configs = {
         "vision_config": AutoConfig,
         "prompt_encoder_config": Sam2VideoPromptEncoderConfig,
@@ -250,8 +251,6 @@ class Sam2VideoConfig(PreTrainedConfig):
             self.mask_decoder_config = Sam2VideoMaskDecoderConfig()
 
         super().__post_init__(**kwargs)
-
-    default_rope_type = "axial"
 
     @property
     def memory_attention_rope_theta(self):

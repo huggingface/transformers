@@ -37,6 +37,7 @@ class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
 
     model_type = "ernie4_5_vl_moe_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
     attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 32
@@ -59,8 +60,6 @@ class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
     intermediate_size: int = 4 * 1280
     temporal_merge_size: int = 2
     rms_norm_eps: float = 1e-6
-
-    default_rope_type = "axial"
 
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")

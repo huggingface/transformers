@@ -242,6 +242,7 @@ class Glm5NextVisionConfig(PreTrainedConfig):
 
     model_type = "glm5_next_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
     attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 24
@@ -262,8 +263,6 @@ class Glm5NextVisionConfig(PreTrainedConfig):
     rope_parameters: dict | None = None
     projection_intermediate_size: int = 10240
     swiglu_limit: float = 10.0
-
-    default_rope_type = "axial"
 
 
 @auto_docstring(checkpoint="zai-org/GLM-5.3-Flash")

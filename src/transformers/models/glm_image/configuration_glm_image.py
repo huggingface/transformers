@@ -59,6 +59,7 @@ class GlmImageVisionConfig(PreTrainedConfig):
 
     model_type = "glm_image_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
     attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 40
@@ -74,8 +75,6 @@ class GlmImageVisionConfig(PreTrainedConfig):
     intermediate_size: int = 6144
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-06
-
-    default_rope_type = "axial"
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")

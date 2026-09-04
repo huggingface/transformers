@@ -62,6 +62,7 @@ class MLCDVisionConfig(PreTrainedConfig):
 
     model_type = "mlcd_vision_model"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
 
     hidden_size: int = 1664
     intermediate_size: int = 8192
@@ -77,8 +78,6 @@ class MLCDVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     initializer_factor: float = 1.0
     rope_parameters: dict | None = None
-
-    default_rope_type = "axial"
 
 
 class MLCDMLP(CLIPMLP):

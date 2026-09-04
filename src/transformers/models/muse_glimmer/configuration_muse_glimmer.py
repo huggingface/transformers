@@ -42,6 +42,7 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
     """
 
     model_type = "muse_glimmer_vision"
+    default_rope_type = "axial"
 
     patch_size: int = 14
     pos_emb_height: int = 32
@@ -67,8 +68,6 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
     max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
     layer_norm_eps: float = 1e-05
     layer_types: list[str] | None = None
-
-    default_rope_type = "axial"
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:

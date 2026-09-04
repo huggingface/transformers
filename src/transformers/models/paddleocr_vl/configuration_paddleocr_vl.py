@@ -65,10 +65,9 @@ class PaddleOCRVisionConfig(PreTrainedConfig):
     hidden_act: str = "gelu_pytorch_tanh"
     layer_norm_eps: float = 1e-6
     attention_dropout: float | int = 0.0
+    default_rope_type = "axial"
     spatial_merge_size: int = 2
     rope_parameters: dict | None = None
-
-    default_rope_type = "axial"
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")

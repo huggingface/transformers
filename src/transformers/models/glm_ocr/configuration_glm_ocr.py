@@ -49,6 +49,7 @@ class GlmOcrVisionConfig(PreTrainedConfig):
 
     model_type = "glm_ocr_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
     attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 24
@@ -67,8 +68,6 @@ class GlmOcrVisionConfig(PreTrainedConfig):
     intermediate_size: int = 4096
     initializer_range: float = 0.02
     rope_parameters: dict | None = None
-
-    default_rope_type = "axial"
 
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")

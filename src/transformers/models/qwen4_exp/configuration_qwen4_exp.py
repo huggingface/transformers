@@ -269,6 +269,7 @@ class Qwen4ExpVisionConfig(PreTrainedConfig):
 
     model_type = "qwen4_exp_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
     attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 27
@@ -285,8 +286,6 @@ class Qwen4ExpVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     rope_parameters: dict | None = None
     base_model_fsdp_plan = None
-
-    default_rope_type = "axial"
 
 
 @auto_docstring(checkpoint="Qwen/Qwen4-Exp")

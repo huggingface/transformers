@@ -58,6 +58,7 @@ class Step3p7VisionConfig(PreTrainedConfig):
     hidden_act: str = "quick_gelu"
     layer_norm_eps: float = 1e-5
     attention_dropout: float | int = 0.0
+    default_rope_type = "axial"
     # New fields
     mlp_ratio: float = 8960 / 1536
     layer_scale_init_value: float = 0.1
@@ -72,8 +73,6 @@ class Step3p7VisionConfig(PreTrainedConfig):
         self.layer_scale_init_value = kwargs.pop("ls_init_value", self.layer_scale_init_value)
         super().__post_init__(**kwargs)
         self.intermediate_size = int(self.hidden_size * self.mlp_ratio)
-
-    default_rope_type = "axial"
 
 
 @auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")

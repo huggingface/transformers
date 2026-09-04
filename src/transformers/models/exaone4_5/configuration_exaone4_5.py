@@ -39,6 +39,7 @@ class Exaone4_5_VisionConfig(PreTrainedConfig):
 
     model_type = "exaone4_5_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
     attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 32
@@ -56,8 +57,6 @@ class Exaone4_5_VisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     rope_parameters: dict | None = None
     num_key_value_heads: int = 8
-
-    default_rope_type = "axial"
 
 
 @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")

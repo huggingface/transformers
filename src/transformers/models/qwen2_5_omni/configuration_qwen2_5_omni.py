@@ -56,6 +56,7 @@ class Qwen2_5OmniVisionEncoderConfig(PreTrainedConfig):
 
     model_type = "qwen2_5_omni_vision_encoder"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
     attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 32
@@ -72,8 +73,6 @@ class Qwen2_5OmniVisionEncoderConfig(PreTrainedConfig):
     fullatt_block_indexes: list[int] | tuple[int, ...] = (7, 15, 23, 31)
     initializer_range: float = 0.02
     rope_parameters: dict | None = None
-
-    default_rope_type = "axial"
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")

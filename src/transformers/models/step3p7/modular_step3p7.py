@@ -90,6 +90,7 @@ __all__ = [
 class Step3p7VisionConfig(SiglipVisionConfig):
     model_type = "step3p5_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
 
     # SiGLIP field overrides
     hidden_size: int = 1536
@@ -113,8 +114,6 @@ class Step3p7VisionConfig(SiglipVisionConfig):
         self.layer_scale_init_value = kwargs.pop("ls_init_value", self.layer_scale_init_value)
         PreTrainedConfig.__post_init__(self, **kwargs)
         self.intermediate_size = int(self.hidden_size * self.mlp_ratio)
-
-    default_rope_type = "axial"
 
 
 @auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
