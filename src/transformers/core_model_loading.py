@@ -1269,6 +1269,20 @@ def spawn_materialize(
         return _job
 
 
+def shards_after_conversion(mapping: WeightRenaming | WeightConverter, placements, ndim: int) -> bool:
+    """Whether a DTensor parameter with these `placements` has to be converted in full before this rank's shard is
+    taken: a transpose or a RoPE permutation on a sharded dim makes the shard of the source the wrong slice."""
+    if not isinstance(mapping, WeightConverter):
+        return False
+    shard_dims = {placement.dim % ndim for placement in placements if placement.is_shard()}
+    for op in mapping.operations:
+        if isinstance(op, Transpose) and {op.dim0 % ndim, op.dim1 % ndim} & shard_dims:
+            return True
+        if isinstance(op, PermuteForRope) and 0 in shard_dims:
+            return True
+    return False
+
+
 def dot_natural_key(s: str):
     """
     Sort key for state-dict names: split on `"."` and sort digits numerically and strings alphabetically. It emits a
@@ -1718,6 +1732,10 @@ def convert_and_load_state_dict_in_model(
             sharding_op = None
             if is_dtensor(empty_param):
                 sharding_op = DtensorShardOperation(empty_param)
+            # A transpose or a RoPE permutation moves elements across the sharded dim, so this rank's slice of the
+            # source is not the slice of the converted tensor: those are converted in full and sharded afterwards.
+            if sharding_op is not None and shards_after_conversion(mapping, empty_param.placements, empty_param.ndim):
+                sharding_op = None
 
             # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
             # directly on the device, as it will completely blow up the memory during the ops memory spike. So defer to "cpu", then
@@ -1760,6 +1778,11 @@ def convert_and_load_state_dict_in_model(
                 )
                 for target_name, param in realized_value.items():
                     param = param[0] if isinstance(param, list) else param
+                    empty_param = meta_model_state_dict.get(target_name)
+                    if is_dtensor(empty_param) and shards_after_conversion(
+                        mapping, empty_param.placements, empty_param.ndim
+                    ):
+                        param = DtensorShardOperation(empty_param).shard_tensor(param)
                     param_device = get_device(device_map, target_name)
                     # Exception for params that are so huge that they need conversions on cpu no matter what - we put them back on
                     # the correct device now (if the device_map managed to make them fit on any device, as usually they will stay on
