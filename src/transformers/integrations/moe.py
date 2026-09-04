@@ -477,7 +477,7 @@ def dispatch_experts_forward(
     recv_out = _AllToAll.apply(expert_out, send_sizes, recv_sizes, ep_group)
     combined = recv_out.new_zeros(num_tokens * num_top_k, hidden_dim)
     combined[order] = recv_out
-    combined = combined * top_k_weights.reshape(-1, 1).to(combined.dtype)
+    combined = combined * top_k_weights.reshape(-1, 1)
     return combined.view(num_tokens, num_top_k, hidden_dim).sum(dim=1).to(hidden_states.dtype)
 
 
