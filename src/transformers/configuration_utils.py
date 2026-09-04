@@ -506,6 +506,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
                 f"The embed_dim ({self.embed_dim}) is not a multiple of the number of attention "
                 f"heads ({self.num_heads})."
             )
+        if getattr(self, "rope_parameters", None):
+            self.validate_rope()
 
     def validate_token_ids(self):
         """Part of `@strict`-powered validation. Validates the contents of the special tokens."""

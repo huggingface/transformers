@@ -843,7 +843,12 @@ class RotaryEmbeddingConfigMixin:
         else:
             rope_parameters_dict = {"full_attention": rope_parameters_dict}
 
-        for rope_parameters in rope_parameters_dict.values():
+        head_dim = getattr(self, "head_dim", None)
+        if head_dim is None and hasattr(self, "hidden_size") and hasattr(self, "num_attention_heads"):
+            if self.num_attention_heads > 0:
+                head_dim = self.hidden_size // self.num_attention_heads
+
+        for layer_type, rope_parameters in rope_parameters_dict.items():
             # skip when set to `None`, possibly a NoPE layer
             if rope_parameters is None:
                 continue
@@ -857,6 +862,16 @@ class RotaryEmbeddingConfigMixin:
                 logger.warning(
                     f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"
                 )
+
+            if head_dim is not None:
+                partial_rotary_factor = rope_parameters.get("partial_rotary_factor", 1.0)
+                dim = int(head_dim * partial_rotary_factor)
+                if dim % 2 != 0:
+                    raise ValueError(
+                        f"The rotary dimension ({dim}) must be an even number, but got `head_dim`={head_dim} "
+                        f"with `partial_rotary_factor`={partial_rotary_factor} for `{layer_type}`. "
+                        "RoPE requires an even dimension."
+                    )
 
     def _validate_axial_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
         self._validate_default_rope_parameters(rope_parameters, ignore_keys=ignore_keys)
