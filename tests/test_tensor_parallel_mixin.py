@@ -389,11 +389,13 @@ def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_t
     dist.barrier()
 
 
-def _load_ep_and_reference_models(model_path, model_class):
+def _load_ep_and_reference_models(model_path, model_class, dispatch=False):
     """Load EP model and non-EP reference model for comparison."""
     model_ep = model_class.from_pretrained(
         model_path,
-        distributed_config=DistributedConfig(tp_size=dist.get_world_size(), enable_expert_parallel=True),
+        distributed_config=DistributedConfig(
+            tp_size=dist.get_world_size(), enable_expert_parallel=True, expert_parallel_dispatch=dispatch
+        ),
     )
     dist.barrier()
 
@@ -404,11 +406,11 @@ def _load_ep_and_reference_models(model_path, model_class):
     return model_ep, model_ref, device
 
 
-def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol):
+def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol, dispatch=False):
     """Implementation for comparing EP and non-EP model outputs."""
     set_seed(0)
 
-    model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class)
+    model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class, dispatch=dispatch)
 
     model_ep.eval()
     model_ref.eval()
@@ -428,11 +430,11 @@ def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol):
     dist.barrier()
 
 
-def _test_ep_backward_impl(_rank, model_path, model_class, atol, rtol):
+def _test_ep_backward_impl(_rank, model_path, model_class, atol, rtol, dispatch=False):
     """Implementation for comparing EP and non-EP model backward passes."""
     set_seed(0)
 
-    model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class)
+    model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class, dispatch=dispatch)
     model_ep.train()
     model_ref.train()
 
@@ -639,9 +641,9 @@ class TensorParallelTesterMixin(ABC):
                 tmp_dir, model_class, max_new_tokens
             )
 
-    @parameterized.expand([(False,), (True,)])
+    @parameterized.expand([(False, False), (True, False), (False, True)])
     @is_tensor_parallel_test
-    def test_ep_forward(self, tie_word_embeddings):
+    def test_ep_forward(self, tie_word_embeddings, dispatch):
         self._skip_if_not_supported(expert_parallel=True)
 
         config = self._get_tp_config(tie_word_embeddings=tie_word_embeddings)
@@ -654,10 +656,13 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_forward_impl)(tmp_dir, model_class, atol, rtol)
+            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_forward_impl)(
+                tmp_dir, model_class, atol, rtol, dispatch=dispatch
+            )
 
+    @parameterized.expand([(False,), (True,)])
     @is_tensor_parallel_test
-    def test_ep_backward(self):
+    def test_ep_backward(self, dispatch):
         self._skip_if_not_supported(expert_parallel=True)
 
         config = self._get_tp_config()
@@ -670,4 +675,6 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_backward_impl)(tmp_dir, model_class, atol, rtol)
+            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_backward_impl)(
+                tmp_dir, model_class, atol, rtol, dispatch=dispatch
+            )

@@ -144,7 +144,7 @@ class TensorParallelLayer:
     def transform_output_post_forward(self, module, output, mesh):
         return output
 
-    def install_forward(self, module, mesh):
+    def install_forward(self, module, mesh, *, expert_parallel_dispatch=False):
         """Install pre / around / post transforms by replacing module.forward."""
         original_forward = module.forward
 
@@ -344,7 +344,7 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
     summed across the mesh.
     """
 
-    def install_forward(self, module, mesh):
+    def install_forward(self, module, mesh, *, expert_parallel_dispatch=False):
         # A module hook rather than `param.register_hook`: params are replaced during weight
         # loading, which happens after TP is applied, and would drop a param-level hook.
         def _all_reduce_grads(mod, grad_input, grad_output):
@@ -415,7 +415,7 @@ class SequenceParallel(TensorParallelLayer):
         self.sequence_dim = sequence_dim
         self.use_local_output = use_local_output
 
-    def install_forward(self, module, mesh):
+    def install_forward(self, module, mesh, *, expert_parallel_dispatch=False):
         # Replicate the module's params (LayerNorm/RMSNorm ones-init → from_local is safe).
         for p_name, p in list(module.named_parameters(recurse=False)):
             module.register_parameter(
@@ -604,7 +604,7 @@ class MoeExpertsParallel(TensorParallelLayer):
 
         return (hidden_states, *routing_args), kwargs
 
-    def install_forward(self, module, mesh, *, is_expert_parallel=False):
+    def install_forward(self, module, mesh, *, is_expert_parallel=False, expert_parallel_dispatch=False):
         """Install the transforms but pass `is_expert_parallel` in the forward call."""
         original_forward = module.forward
         output_source = (
@@ -617,6 +617,17 @@ class MoeExpertsParallel(TensorParallelLayer):
         )
 
         def tp_forward(*args, **kwargs):
+            if expert_parallel_dispatch:
+                from ..integrations.moe import dispatch_experts_forward
+
+                # Every rank routes its own tokens to the experts' owners; nothing is replicated across
+                # the group, so there is neither an input gradient sum nor an output all-reduce.
+                hidden_states, top_k_index, top_k_weights = args[:3]
+                if isinstance(hidden_states, DTensor):
+                    hidden_states = hidden_states.to_local()
+                ep_mesh = mesh if mesh.ndim == 1 else mesh["tp"]
+                with self.context_around_forward(module, mesh):
+                    return dispatch_experts_forward(module, hidden_states, top_k_index, top_k_weights, ep_mesh)
             args, kwargs = self.transform_inputs_pre_forward(
                 module, args, kwargs, mesh, is_expert_parallel=is_expert_parallel
             )
@@ -695,7 +706,14 @@ class EpRouterParallel(TensorParallelLayer):
     Scores and indices stay paired element-wise in `(seq, top_k)` shape.
     """
 
+    def install_forward(self, module, mesh, *, expert_parallel_dispatch=False):
+        module.expert_parallel_dispatch = expert_parallel_dispatch
+        return super().install_forward(module, mesh)
+
     def transform_output_post_forward(self, module, output, mesh):
+        if module.expert_parallel_dispatch:
+            # The experts forward sends every token to its experts' owners, so it needs the global ids.
+            return output
         ep_rank, ep_size = mesh.get_local_rank(), mesh.size()
         num_experts = getattr(module, "num_experts", None)
         if num_experts is None:
@@ -821,7 +839,9 @@ def apply_tensor_parallelism(model, tp_mesh):
                 # MLA needs to know the qk_rope_head_dim to split the projection output into KV and RoPE parts.
                 # TODO: Store qk_rope_head_dim on MLA projection modules when the models initialize them.
                 module.config = model.config.get_text_config()
-            ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
+            ALL_PARALLEL_STYLES[style_name].install_forward(
+                module, tp_mesh, expert_parallel_dispatch=model.config.distributed_config.expert_parallel_dispatch
+            )
         module._is_hooked = True
 
     return model

@@ -50,6 +50,20 @@ Launch your inference script with [torchrun](https://pytorch.org/docs/stable/ela
 torchrun --nproc-per-node 8 your_script.py
 ```
 
+## Token dispatch
+
+By default every expert-parallel rank runs the whole batch, keeps only the experts it owns, and the group all-reduces the expert outputs at the end of every MoE layer. The parameters outside the experts do `tp_size` times the same work, and the all-reduce moves the full activations. `expert_parallel_dispatch=True` sends each token to the rank that owns its experts instead.
+
+```py
+distributed_config = DistributedConfig(
+    tp_size=8,
+    enable_expert_parallel=True,
+    expert_parallel_dispatch=True,
+)
+```
+
+Every rank trains on its own part of the batch: at each MoE layer it routes its tokens, sends the selected (token, expert) pairs to their owners with an all-to-all, runs its local experts, and gets the results back with a second all-to-all. Only the routed tokens travel. The parameters outside the experts are data-parallel across the expert-parallel group, so they are sharded with [FSDP2](./fsdp) across every rank (the `fsdp` and `tp` dimensions together when both are set) and FSDP2 reduces their gradients; the experts stay sharded across `tp` and, with `fsdp_size > 1`, across `fsdp`. The [`Trainer`] gives each rank its own batches and counts tokens across all of them.
+
 ## Combining with FSDP2
 
 Expert parallelism only shards the experts. Everything else (attention, embeddings, norms) and its optimizer state is replicated on every expert-parallel rank, which is what limits the model size you can train. Set `fsdp_size` together with `tp_size` to add [FSDP2](./fsdp) on a second mesh dimension.
