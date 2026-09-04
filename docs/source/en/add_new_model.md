@@ -156,7 +156,7 @@ Notebooks are great for executing code cell-by-cell which can help split logical
 The downside is that if you aren't used to them, it may take some time to get used to.
 
 > [!TIP]
-> If the model architecture is identical to an existing model, skip ahead to add a [conversion script](#conversion-script), because you can reuse the architecture of the existing model.
+> If the model architecture is identical to an existing model, skip ahead to [convert the checkpoint](#convert-checkpoints-to-transformers), because you can reuse the architecture of the existing model.
 
 Run the command below to start and complete the questionnaire with some basic information about the new model. This command jumpstarts the process by automatically generating some model code that you'll need to adapt.
 

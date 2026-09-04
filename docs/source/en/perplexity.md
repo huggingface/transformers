@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 Perplexity (PPL) is one of the most common metrics for evaluating language models. Before diving in, we should note
 that the metric applies specifically to classical language models (sometimes called autoregressive or causal language
-models) and is not well defined for masked language models like [BERT](model_doc/bert).
+models) and is not well defined for masked language models like BERT.
 
 Perplexity is defined as the exponentiated average negative log-likelihood of a sequence. If we have a tokenized
 sequence $X = (x_0, x_1, \dots, x_t)$, then the perplexity of $X$ is,

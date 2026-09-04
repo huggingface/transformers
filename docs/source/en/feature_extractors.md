@@ -79,7 +79,7 @@ feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-tiny
 
 A feature extractor expects the input as a PyTorch tensor of a certain shape. The exact input shape can vary depending on the specific audio model you're using.
 
-For example, [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper) expects `input_features` to be a tensor of shape `(batch_size, feature_size, sequence_length)` but [Wav2Vec2](https://hf.co/docs/transformers/model_doc/wav2vec2) expects `input_values` to be a tensor of shape `(batch_size, sequence_length)`.
+For example, [Whisper](./model_doc/whisper) expects `input_features` to be a tensor of shape `(batch_size, feature_size, sequence_length)` but [Wav2Vec2](https://hf.co/docs/transformers/model_doc/wav2vec2) expects `input_values` to be a tensor of shape `(batch_size, sequence_length)`.
 
 The feature extractor generates the correct input shape for whichever audio model you're using.
 
