@@ -208,6 +208,17 @@ class DistributedMixin:
                 tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
                 if isinstance(distributed_config.tp_plan, dict):
                     model.tp_plan = distributed_config.tp_plan
+                if distributed_config.expert_parallel_dispatch:
+                    # Every rank trains on its own part of the batch, which tensor parallelism cannot do: only the
+                    # experts can be sharded across the group, through the dispatch versions of their styles.
+                    other_styles = set(model.tp_plan.values()) - {"ep_router", "grouped_gemm", "moe_tp_experts"}
+                    if other_styles:
+                        raise ValueError(
+                            "`expert_parallel_dispatch=True` needs an expert parallel plan that only shards the "
+                            f"experts, but this model's plan also uses {sorted(other_styles)}."
+                        )
+                    dispatch_styles = {"ep_router": "ep_dispatch_router", "moe_tp_experts": "ep_dispatch_experts"}
+                    model.tp_plan = {name: dispatch_styles.get(style, style) for name, style in model.tp_plan.items()}
                 model = apply_tensor_parallelism(model, tp_mesh)
 
             if distributed_config.expert_parallel_dispatch:

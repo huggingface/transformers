@@ -1052,6 +1052,11 @@ class Trainer:
         # silently drop samples. Neutralise it by making the wrapper a passthrough (num_processes=1)
         if isinstance(sampler, (BatchRebalanceSampler, DistributedSampler)):
             prepared_bs = getattr(dataloader, "batch_sampler", None)
+            if prepared_bs is None and isinstance(sampler, DistributedSampler):
+                raise ValueError(
+                    "`expert_parallel_dispatch=True` splits the batches across every rank with the batch sampler, "
+                    "which `dispatch_batches=True` replaces."
+                )
             if prepared_bs is not None and getattr(prepared_bs, "batch_sampler", None) is not None:
                 prepared_bs.num_processes = 1
                 prepared_bs.process_index = 0

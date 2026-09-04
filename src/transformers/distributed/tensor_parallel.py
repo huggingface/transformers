@@ -829,19 +829,6 @@ def _validate_tp_plan_styles(tp_plan: dict[str, str] | None) -> None:
 
 def apply_tensor_parallelism(model, tp_mesh):
     """DTensor backend: shard params as placeholders and install TP forward hooks."""
-    if model.config.distributed_config.expert_parallel_dispatch:
-        # Every rank trains on its own part of the batch, which tensor parallelism cannot do: only the experts can
-        # be sharded across the group, and the router and experts styles become their dispatch versions.
-        other_styles = set(model.tp_plan.values()) - {"ep_router", "grouped_gemm", "moe_tp_experts"}
-        if other_styles:
-            raise ValueError(
-                "`expert_parallel_dispatch=True` needs an expert parallel plan that only shards the experts, but "
-                f"this model's plan also uses {sorted(other_styles)}."
-            )
-        model.tp_plan = {
-            name: {"ep_router": "ep_dispatch_router", "moe_tp_experts": "ep_dispatch_experts"}.get(style, style)
-            for name, style in model.tp_plan.items()
-        }
 
     _validate_tp_plan_styles(model.tp_plan)
 
