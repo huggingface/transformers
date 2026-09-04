@@ -2677,8 +2677,10 @@ class _LazyModule(ModuleType):
                 alias_target = _LEGACY_IMAGE_PROCESSOR_CLASS_ALIASES[name]
                 if alias_target in self._class_to_module:
                     try:
-                        fb_module = self._get_module(self._class_to_module[alias_target])
-                        value = getattr(fb_module, alias_target)
+                        # Resolve the alias target through the normal __getattr__ path so
+                        # missing-backend placeholders and the *ImageProcessor -> *ImageProcessorPil
+                        # fallback keep working when optional dependencies are absent.
+                        value = getattr(self, alias_target)
                         logger.warning_once(
                             f"`{name}` is deprecated; it has been folded into `{alias_target}`. "
                             f"Falling back to `{alias_target}` for backward compatibility."
