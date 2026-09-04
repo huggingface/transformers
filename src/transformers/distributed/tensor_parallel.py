@@ -740,7 +740,7 @@ class RouterParallelMegaMoe(EpRouterParallel):
 class EpDispatchExpertsParallel(MoeExpertsParallel):
     """Experts of expert-parallel token dispatch: every rank sends its own tokens to the experts' owners."""
 
-    def install_forward(self, module, mesh):
+    def install_forward(self, module, mesh, *, is_expert_parallel=False):
         from ..integrations.moe import dispatch_experts_forward
 
         original_forward = module.forward
