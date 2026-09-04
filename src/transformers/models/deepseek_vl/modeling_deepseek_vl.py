@@ -118,6 +118,7 @@ class DeepseekVLPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
+    _no_split_modules = []
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -142,12 +143,11 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
-        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs) -> tuple | BaseModelOutputWithPooling:
         vision_outputs = self.vision_model(pixel_values, return_dict=True, **kwargs)
-        vision_outputs.pooler_output = self.aligner(vision_outputs.last_hidden_state)
-
+        # The aligner may be placed on a different device when `device_map="auto"` is used; move vision features to it.
+        aligner_device = next(self.aligner.parameters()).device
+        vision_outputs.pooler_output = self.aligner(vision_outputs.last_hidden_state.to(aligner_device))
         return vision_outputs
 
     def get_placeholder_mask(

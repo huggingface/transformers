@@ -106,7 +106,7 @@ class DeepseekVLAligner(nn.Module):
 
 
 class DeepseekVLPreTrainedModel(JanusPreTrainedModel):
-    _no_split_modules = AttributeError()
+    _no_split_modules = []
 
     def _init_weights(self, module):
         raise AttributeError("No need to inherit!")
@@ -131,6 +131,13 @@ class DeepseekVLModel(JanusModel):
         del self.generation_embeddings
         del self.generation_aligner
         del self.generation_head
+
+    def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs):
+        vision_outputs = self.vision_model(pixel_values, return_dict=True, **kwargs)
+        # The aligner may be placed on a different device when `device_map="auto"` is used; move vision features to it.
+        aligner_device = next(self.aligner.parameters()).device
+        vision_outputs.pooler_output = self.aligner(vision_outputs.last_hidden_state.to(aligner_device))
+        return vision_outputs
 
 
 class DeepseekVLForConditionalGeneration(JanusForConditionalGeneration):
