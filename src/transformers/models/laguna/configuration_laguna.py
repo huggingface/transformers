@@ -46,6 +46,8 @@ class LagunaConfig(PreTrainedConfig):
         in transformers yet; ``True`` will raise a ``NotImplementedError`` for now.
     moe_router_logit_softcapping (`float`, *optional*, defaults to 0.0):
         Scaling factor when applying tanh softcapping on the logits of the MoE router logits.
+    moe_router_score_func (`str`, *optional*, defaults to `"sigmoid"`):
+        Router scoring function. Supported values are `"sigmoid"` and `"sqrtsoftplus"`.
 
     Example:
 
@@ -126,6 +128,7 @@ class LagunaConfig(PreTrainedConfig):
     moe_routed_scaling_factor: float = 1.0
     moe_apply_router_weight_on_input: bool = False
     moe_router_logit_softcapping: float = 0.0
+    moe_router_score_func: str = "sigmoid"
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
@@ -155,6 +158,11 @@ class LagunaConfig(PreTrainedConfig):
             raise NotImplementedError(
                 "moe_apply_router_weight_on_input=True is not yet supported in the "
                 "transformers implementation of Laguna."
+            )
+        if self.moe_router_score_func not in {"sigmoid", "sqrtsoftplus"}:
+            raise ValueError(
+                f"moe_router_score_func must be one of 'sigmoid' or 'sqrtsoftplus', got "
+                f"{self.moe_router_score_func!r}."
             )
         if (
             self.num_attention_heads_per_layer is not None

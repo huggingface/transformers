@@ -22,6 +22,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -65,6 +66,8 @@ class LagunaConfig(Qwen2MoeConfig):
         in transformers yet; ``True`` will raise a ``NotImplementedError`` for now.
     moe_router_logit_softcapping (`float`, *optional*, defaults to 0.0):
         Scaling factor when applying tanh softcapping on the logits of the MoE router logits.
+    moe_router_score_func (`str`, *optional*, defaults to `"sigmoid"`):
+        Router scoring function. Supported values are `"sigmoid"` and `"sqrtsoftplus"`.
 
     Example:
 
@@ -119,6 +122,7 @@ class LagunaConfig(Qwen2MoeConfig):
     moe_routed_scaling_factor: float = 1.0
     moe_apply_router_weight_on_input: bool = False
     moe_router_logit_softcapping: float = 0.0
+    moe_router_score_func: str = "sigmoid"
 
     # Fields declared by Qwen2MoeConfig but not used by Laguna. ``= AttributeError()``
     # tells modular to drop these from the materialized child.
@@ -159,6 +163,11 @@ class LagunaConfig(Qwen2MoeConfig):
             raise NotImplementedError(
                 "moe_apply_router_weight_on_input=True is not yet supported in the "
                 "transformers implementation of Laguna."
+            )
+        if self.moe_router_score_func not in {"sigmoid", "sqrtsoftplus"}:
+            raise ValueError(
+                f"moe_router_score_func must be one of 'sigmoid' or 'sqrtsoftplus', got "
+                f"{self.moe_router_score_func!r}."
             )
         if (
             self.num_attention_heads_per_layer is not None
@@ -225,6 +234,7 @@ class LagunaTopKRouter(Qwen3_5MoeTopKRouter):
         super().__init__()
         self.e_score_correction_bias = nn.Parameter(torch.zeros(config.num_experts), requires_grad=False)
         self.router_logit_softcapping = config.moe_router_logit_softcapping
+        self.score_fn = ACT2FN[config.moe_router_score_func]
 
     def forward(
         self,
@@ -235,8 +245,7 @@ class LagunaTopKRouter(Qwen3_5MoeTopKRouter):
         # Optional logits softcapping
         if self.router_logit_softcapping > 0.0:
             router_logits = torch.tanh(router_logits / self.router_logit_softcapping) * self.router_logit_softcapping
-        # Sigmoid instead of softmax normalization
-        routing_scores = torch.sigmoid(router_logits)
+        routing_scores = self.score_fn(router_logits)
 
         scores_for_selection = routing_scores + self.e_score_correction_bias.to(routing_scores.dtype)
         _, selected_experts = torch.topk(scores_for_selection, self.top_k, dim=-1)

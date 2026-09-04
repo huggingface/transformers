@@ -163,6 +163,7 @@ class LagunaTopKRouter(nn.Module):
         self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
         self.e_score_correction_bias = nn.Parameter(torch.zeros(config.num_experts), requires_grad=False)
         self.router_logit_softcapping = config.moe_router_logit_softcapping
+        self.score_fn = ACT2FN[config.moe_router_score_func]
 
     def forward(
         self,
@@ -173,8 +174,7 @@ class LagunaTopKRouter(nn.Module):
         # Optional logits softcapping
         if self.router_logit_softcapping > 0.0:
             router_logits = torch.tanh(router_logits / self.router_logit_softcapping) * self.router_logit_softcapping
-        # Sigmoid instead of softmax normalization
-        routing_scores = torch.sigmoid(router_logits)
+        routing_scores = self.score_fn(router_logits)
 
         scores_for_selection = routing_scores + self.e_score_correction_bias.to(routing_scores.dtype)
         _, selected_experts = torch.topk(scores_for_selection, self.top_k, dim=-1)
