@@ -620,8 +620,9 @@ def grouped_mm_experts_forward(
         selected_hidden_states_g, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, 2 * intermediate_dim) or  (S, intermediate_dim) depending on whether we have gating
 
-    # Zero the sentinel-tail rows the kernel left uninitialized (fwd output and bwd `d_input`).
-    proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
+    if self.is_expert_parallel:
+        # Zero the sentinel-tail rows the kernel left uninitialized (fwd output and bwd `d_input`).
+        proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
 
     # Apply gating or activation
     if self.has_gate:
@@ -640,8 +641,9 @@ def grouped_mm_experts_forward(
         proj_out, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
-    # Same: zero the uninitialized sentinel-tail rows.
-    proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
+    if self.is_expert_parallel:
+        # Same: zero the uninitialized sentinel-tail rows.
+        proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
 
     # Apply routing weights
     weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
