@@ -20,6 +20,8 @@ from functools import partial
 from typing import Any
 
 import numpy as np
+import torch
+import torchvision.transforms.v2.functional as tvF
 from huggingface_hub import is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 
@@ -28,8 +30,8 @@ from .image_processing_backends import TorchvisionBackend
 from .image_processing_utils import BatchFeature
 from .image_utils import (
     ChannelDimension,
+    PILImageResampling,
     SizeDict,
-    is_vision_available,
     validate_kwargs,
 )
 from .processing_utils import Unpack, VideosKwargs
@@ -40,9 +42,7 @@ from .utils import (
     TensorType,
     auto_docstring,
     copy_func,
-    is_torch_available,
     is_torchcodec_available,
-    is_torchvision_v2_available,
     logging,
     safe_load_json_file,
 )
@@ -52,6 +52,8 @@ from .video_utils import (
     TORCHVISION_VIDEO_DECODING_ERROR,
     VideoInput,
     VideoMetadata,
+    convert_to_rgb,
+    default_sample_indices_fn,
     group_videos_by_shape,
     infer_channel_dimension_format,
     is_torchvision_video_decoding_available,
@@ -61,16 +63,6 @@ from .video_utils import (
     make_batched_videos,
     reorder_videos,
 )
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_v2_available():
-    import torchvision.transforms.v2.functional as tvF
-
-if is_vision_available():
-    from .image_utils import PILImageResampling
 
 
 logger = logging.get_logger(__name__)
@@ -121,16 +113,8 @@ class BaseVideoProcessor(TorchvisionBackend):
         Returns:
             `torch.Tensor`: The converted video.
         """
-
         video = tvF.grayscale_to_rgb(video)
-        if video.shape[-3] == 3 or not (video[..., 3, :, :] < 255).any():
-            return video[..., :3, :, :]
-
-        # There is a transparency layer, blend it with a white background.
-        # Calculate the alpha proportion for blending.
-        alpha = video[..., 3, :, :] / 255.0
-        video = (1 - alpha[..., None, :, :]) * 255 + alpha[..., None, :, :] * video[..., :3, :, :]
-        return video
+        return convert_to_rgb(video, input_data_format=ChannelDimension.FIRST)
 
     def sample_frames(
         self,
@@ -138,7 +122,7 @@ class BaseVideoProcessor(TorchvisionBackend):
         num_frames: int | None = None,
         fps: int | float | None = None,
         **kwargs,
-    ):
+    ) -> np.ndarray:
         """
         Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
         If `fps` is passed along with metadata, `fps` frames per second are sampled uniformly. Arguments `num_frames`
@@ -153,37 +137,14 @@ class BaseVideoProcessor(TorchvisionBackend):
                 Target frames to sample per second. Defaults to `self.fps`.
 
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            `np.ndarray`: Indices to sample video frames.
         """
         if fps is not None and num_frames is not None:
-            raise ValueError(
-                "`num_frames`, `fps`, and `sample_indices_fn` are mutually exclusive arguments, please use only one!"
-            )
+            raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")
 
         num_frames = num_frames if num_frames is not None else self.num_frames
         fps = fps if fps is not None else self.fps
-        total_num_frames = metadata.total_num_frames
-
-        # If num_frames is not given but fps is, calculate num_frames from fps
-        if num_frames is None and fps is not None:
-            if metadata is None or metadata.fps is None:
-                raise ValueError(
-                    "Asked to sample `fps` frames per second but no video metadata was provided which is required when sampling with `fps`. "
-                    "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
-                )
-            num_frames = int(total_num_frames / metadata.fps * fps)
-
-        if num_frames > total_num_frames:
-            raise ValueError(
-                f"Video can't be sampled. The `num_frames={num_frames}` exceeds `total_num_frames={total_num_frames}`. "
-            )
-
-        if num_frames is not None:
-            indices = torch.arange(0, total_num_frames, total_num_frames / num_frames).int()
-        else:
-            indices = torch.arange(0, total_num_frames).int()
-        return indices
+        return default_sample_indices_fn(metadata=metadata, num_frames=num_frames, fps=fps, **kwargs)
 
     def _decode_and_sample_videos(
         self,
@@ -228,6 +189,7 @@ class BaseVideoProcessor(TorchvisionBackend):
     def _prepare_input_videos(
         self,
         videos: VideoInput,
+        do_convert_rgb: bool | None = None,
         input_data_format: str | ChannelDimension | None = None,
         device: str | None = None,
     ) -> list["torch.Tensor"]:
@@ -247,6 +209,9 @@ class BaseVideoProcessor(TorchvisionBackend):
 
             if input_data_format == ChannelDimension.LAST:
                 video = video.permute(0, 3, 1, 2).contiguous()
+
+            if do_convert_rgb:
+                video = self.convert_to_rgb(video)
 
             if device is not None:
                 video = video.to(device)
@@ -274,6 +239,7 @@ class BaseVideoProcessor(TorchvisionBackend):
             kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
 
         input_data_format = kwargs.pop("input_data_format")
+        do_convert_rgb = kwargs.pop("do_convert_rgb")
         do_sample_frames = kwargs.pop("do_sample_frames")
         device = kwargs.pop("device")
         video_metadata = kwargs.pop("video_metadata")
@@ -285,7 +251,9 @@ class BaseVideoProcessor(TorchvisionBackend):
             do_sample_frames=do_sample_frames,
             sample_indices_fn=sample_indices_fn,
         )
-        videos = self._prepare_input_videos(videos=videos, input_data_format=input_data_format, device=device)
+        videos = self._prepare_input_videos(
+            videos=videos, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
 
         kwargs = self._standardize_kwargs(**kwargs)
         self._validate_preprocess_kwargs(**kwargs)
@@ -302,7 +270,6 @@ class BaseVideoProcessor(TorchvisionBackend):
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
-        do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
@@ -320,8 +287,6 @@ class BaseVideoProcessor(TorchvisionBackend):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
-            if do_convert_rgb:
-                stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 stacked_videos = self.resize(stacked_videos, size=size, resample=resample)
             resized_videos_grouped[shape] = stacked_videos

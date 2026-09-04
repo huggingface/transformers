@@ -20,6 +20,7 @@
 
 import math
 
+import numpy as np
 import torch
 import torchvision.transforms.v2.functional as tvF
 
@@ -185,8 +186,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                 Target frames to sample per second. Defaults to `self.fps`.
 
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            np.ndarray: Indices to sample video frames.
         """
         if fps is not None and num_frames is not None:
             raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")
@@ -219,9 +219,9 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
             )
 
         if num_frames is not None:
-            indices = torch.arange(0, total_num_frames, total_num_frames / num_frames).int()
+            indices = np.arange(0, total_num_frames, total_num_frames / num_frames, dtype=int)
         else:
-            indices = torch.arange(0, total_num_frames).int()
+            indices = np.arange(0, total_num_frames, dtype=int)
 
         return indices
 

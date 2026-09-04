@@ -155,8 +155,7 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
             fps (`int` or `float`, *optional*):
                 Target frames to sample per second. Defaults to `self.fps`.
         Returns:
-            torch.Tensor:
-                Sampled video frames.
+            np.ndarray: Sampled video frames.
         """
         if fps is not None and num_frames is not None:
             raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")
