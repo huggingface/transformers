@@ -471,12 +471,19 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
     num_grid_per_side = _find_submodule_attr(model, "num_grid_per_side")
     if num_grid_per_side is not None:
         # The vision embedding module declares how it resamples its learned grid (kimi_k25 uses
-        # bicubic, the qwen3_vl / qwen3_5 / paddleocr_vl families use bilinear); read it rather than
-        # inferring, so the precomputed tensors match exactly what the model computes.
-        mode = _find_submodule_attr(model, "interpolation_mode")
+        # bicubic, the qwen3_vl / qwen3_5 / paddleocr_vl families use bilinear, muse_glimmer uses a
+        # grid_sample-style zeros padding); read the flags rather than inferring, so the precomputed
+        # tensors match exactly what the model computes.
+        mode = _find_submodule_attr(model, "interpolation_mode") or "bilinear"
+        padding = _find_submodule_attr(model, "interpolation_padding") or "border"
         align_corners = _find_submodule_attr(model, "interpolation_align_corners") is True
         inputs["interp_indices"], inputs["interp_weights"] = get_vision_interpolation_indices_and_weights(
-            grid_thw, num_grid_per_side, mode=mode, align_corners=align_corners, spatial_merge_size=spatial_merge_size
+            grid_thw,
+            num_grid_per_side,
+            mode=mode,
+            align_corners=align_corners,
+            spatial_merge_size=spatial_merge_size,
+            padding=padding,
         )
 
     # Per-frame additive position table (kimi_k25): gathered by frame index instead of a per-clip loop.
@@ -490,6 +497,11 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
             merge_kernel_size if not isinstance(merge_kernel_size, int) else (merge_kernel_size, merge_kernel_size)
         )
         inputs["temporal_merge_index"] = module.get_vision_temporal_merge_index(grid_thw, kernel_height, kernel_width)
+
+    # Pixel-shuffle spatial merger (muse_glimmer): one gather index replaces its per-image merge loop.
+    if hasattr(module, "get_vision_pixel_shuffle_index"):
+        merge_size = _find_submodule_attr(model, "merge_size")
+        inputs["pixel_shuffle_index"] = module.get_vision_pixel_shuffle_index(grid_thw, merge_size)
 
 
 @register_export_input_preparer("target_sizes")

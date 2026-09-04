@@ -186,9 +186,9 @@ class Mxfp4HfQuantizer(HfQuantizer):
         from ..integrations import replace_with_mxfp4_linear
 
         # if we are using kernels, we can't use the quantized model, since the forward pass is different and needs special handling
-        # only CPU kernels can work with pre-quantized models
+        # only CPU and XPU kernels can work with pre-quantized models
         device = torch.accelerator.current_accelerator() or torch.device("cpu")
-        if use_kernels and device.type not in ["cpu"]:
+        if use_kernels and device.type not in ["cpu", "xpu"]:
             logger.warning_once(
                 "You are using full precision kernels, we will dequantize the model to bf16. "
                 "To use the quantized model with quantization kernels, please set use_kernels=False"

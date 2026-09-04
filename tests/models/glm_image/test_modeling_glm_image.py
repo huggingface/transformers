@@ -116,7 +116,11 @@ class GlmImageVisionText2TextModelTester:
         self.image_end_token_id = image_end_token_id
         self.image_token_id = image_token_id
         self.text_config = text_config
-        self.vision_config = vision_config
+        # `image_size` controls the input image size in this tester. `GlmImageVisionConfig.image_size`
+        # only sets the base resolution of the learnable position-embedding grid, which is always
+        # bilinearly interpolated at runtime, so the two don't need to match exactly. We pass it
+        # here anyway so the tiny model config stays consistent (avoids a 256× oversized embedding table).
+        self.vision_config = {**vision_config, "image_size": image_size}
         self.vq_config = vq_config
         self.batch_size = batch_size
         self.num_channels = num_channels

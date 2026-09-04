@@ -23,7 +23,7 @@ from transformers.models.ernie4_5_vl_moe.image_processing_ernie4_5_vl_moe import
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin, prepare_image_inputs
 from ...test_processing_common import url_to_local_path
 
 
@@ -34,7 +34,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class Ernie4_5_VLMoeImageProcessorTester:
+class Ernie4_5_VLMoeImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -95,7 +95,7 @@ class Ernie4_5_VLMoeImageProcessorTester:
 class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = Ernie4_5_VLMoeImageProcessorTester(self)
+        self.image_processor_tester = Ernie4_5_VLMoeImageProcessingTester(self)
 
     @property
     def image_processor_dict(self):

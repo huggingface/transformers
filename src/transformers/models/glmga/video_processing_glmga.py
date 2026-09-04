@@ -34,12 +34,27 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, add_start_docstrings
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
+from ...utils import TensorType, auto_docstring
+from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
 
 class GlmgaVideoProcessorInitKwargs(VideosKwargs, total=False):
+    r"""
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 2):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    max_frames (`int`, *optional*, defaults to 640):
+        The maximum number of frames that can be sampled.
+    max_image_size (`dict`, *optional*, defaults to `28 * 28 * 2 * 55790`):
+        The maximum pixels a video can be resized to.
+    patch_expand_factor (`int`, *optional*, defaults to 1):
+        The factor that will be multiplied to `patch_size` when resizing videos.
+    """
+
     max_image_size: dict[str, int]
     patch_size: int
     temporal_patch_size: int
@@ -84,18 +99,7 @@ def smart_resize(
     return h_bar, w_bar
 
 
-@add_start_docstrings(
-    "Constructs a fast GLM-4V image processor that dynamically resizes videos based on the original videos.",
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-    """
-        patch_size (`int`, *optional*, defaults to 14):
-            The spatial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 2):
-            The temporal patch size of the vision encoder.
-        merge_size (`int`, *optional*, defaults to 2):
-            The merge size of the vision encoder to llm encoder.
-    """,
-)
+@auto_docstring
 class GlmgaVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 2 * 55790}

@@ -33,6 +33,7 @@ if is_soundfile_available():
 
 if is_mistral_common_available():
     from mistral_common.protocol.transcription.request import TranscriptionRequest
+    from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy
 
 from ...audio_utils import AudioInput, load_audio_as, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
@@ -392,7 +393,11 @@ class VoxtralProcessor(ProcessorMixin):
             tokenized_transcription_request = self.tokenizer.tokenizer.encode_transcription(transcription_request)
 
             input_ids.append(tokenized_transcription_request.tokens)
-            texts.append(tokenized_transcription_request.text)
+            texts.append(
+                self.tokenizer.tokenizer.decode(
+                    tokens=tokenized_transcription_request.tokens, special_token_policy=SpecialTokenPolicy.KEEP
+                )
+            )
             audio_arrays.extend([el.audio_array for el in tokenized_transcription_request.audios])
 
         if tokenize:

@@ -206,9 +206,13 @@ class GotOcr2IntegrationTest(unittest.TestCase):
         decoded_output = self.processor.decode(
             generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
         )
+        # The expected output changed after 6217adc6c8 ("Default auto", #42805) switched the default
+        # dtype to "auto" (bfloat16/float16). The dtype change shifts model logits enough that the
+        # first generated token changes from "\title{" (correct LaTeX format) to "R\&D". The LaTeX
+        # formatting is a learned model behavior, not enforced by the processor.
         expected_output = Expectations(
             {
-                (None, None): "\\title{\nR",
+                (None, None): "R\\&D",
                 ("xpu", 5): "R\\&D",
             }
         ).get_expectation()

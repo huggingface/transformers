@@ -93,13 +93,14 @@ class EmptyJob:
 class CircleCIJob:
     name: str
     additional_env: dict[str, Any] = None
+    disabled: bool = False  # If True, job is a noop (pipeline parameters still declared)
     docker_image: list[dict[str, str]] = None
     install_steps: list[str] = None
     marker: str | None = None
     parallelism: int | None = 0
     pytest_num_workers: int = 8
     pytest_options: dict[str, Any] = None
-    resource_class: str | None = "xlarge"
+    resource_class: str | None = "large"
     tests_to_run: list[str] | None = None
     num_test_files_per_worker: int | None = 10
     # This should be only used for doctest job!
@@ -144,6 +145,13 @@ class CircleCIJob:
                 print("not Found")
 
     def to_dict(self):
+        if self.disabled:
+            return {
+                "docker": [{"image": "cimg/base:stable"}],
+                "resource_class": "small",
+                "steps": [{"run": f"echo 'Job {self.name} is disabled on this runner'"}],
+            }
+
         env = COMMON_ENV_VARIABLES.copy()
         # fmt: off
         # not critical
@@ -175,7 +183,7 @@ class CircleCIJob:
         junit_flags = " -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
         joined_flaky_patterns = "|".join(FLAKY_TEST_FAILURE_PATTERNS)
         repeat_on_failure_flags = f"--reruns 5 --reruns-delay 2 --only-rerun '({joined_flaky_patterns})'"
-        parallel = f" << pipeline.parameters.{self.job_name}_parallelism >> "
+        parallel = f"<< pipeline.parameters.{self.job_name}_parallelism>>"
         steps = [
             "checkout",
             {"attach_workspace": {"at": "test_preparation"}},
@@ -247,7 +255,7 @@ class CircleCIJob:
             {
                 "run": {
                     "name": "Run tests",
-                    "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)",
+                    "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {max(1, self.pytest_num_workers // 2)} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)",
                 }
             },
             {
@@ -355,6 +363,7 @@ custom_tokenizers_job = CircleCIJob(
 
 examples_torch_job = CircleCIJob(
     "examples_torch",
+    disabled=True,  # examples-torch docker image is too large for the large runner
     additional_env={"OMP_NUM_THREADS": 8},
     docker_image=[{"image": "huggingface/transformers-examples-torch"}],
     # TODO @ArthurZucker remove this once docker is easier to build
@@ -437,6 +446,13 @@ doc_test_job = CircleCIJob(
     pytest_num_workers=1,
 )
 
+peft_integration_job = CircleCIJob(
+    "peft_integration",
+    docker_image=[{"image": "huggingface/transformers-torch-light"}],
+    install_steps=["uv pip install . peft datasets"],
+    parallelism=2,
+)
+
 REGULAR_TESTS = [torch_job, tokenization_job, processor_job, generate_job, non_model_job]  # fmt: skip
 EXAMPLES_TESTS = [examples_torch_job]
 PIPELINE_TESTS = [pipelines_torch_job]
@@ -445,7 +461,8 @@ DOC_TESTS = [doc_test_job]
 TRAINING_CI_TESTS = [training_ci_job]
 TENSOR_PARALLEL_CI_TESTS = [tensor_parallel_ci_job]
 FSDP_CI_TESTS = [fsdp_ci_job]
-ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job] + TRAINING_CI_TESTS + TENSOR_PARALLEL_CI_TESTS + FSDP_CI_TESTS  # fmt: skip
+PEFT_INTEGRATION_TESTS = [peft_integration_job]
+ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job] + TRAINING_CI_TESTS + TENSOR_PARALLEL_CI_TESTS + FSDP_CI_TESTS + PEFT_INTEGRATION_TESTS  # fmt: skip
 
 
 def create_circleci_config(folder=None):
@@ -495,8 +512,8 @@ def create_circleci_config(folder=None):
     with open(os.path.join(folder, "generated_config.yml"), "w", encoding="utf-8") as f:
         f.write(
             yaml.dump(config, sort_keys=False, default_flow_style=False)
-            .replace("' << pipeline", " << pipeline")
-            .replace(">> '", " >>")
+            .replace("'<< pipeline", "<< pipeline")
+            .replace(">>'", ">>")
         )
 
 

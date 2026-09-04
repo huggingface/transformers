@@ -254,7 +254,7 @@ class GlmImageImageProcessorPil(PilBackend):
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
         A utility that returns number of image patches for a given image size.
 
@@ -271,6 +271,7 @@ class GlmImageImageProcessorPil(PilBackend):
         Returns:
             `int`: Number of image patches per image.
         """
+        images_kwargs = images_kwargs or {}
         min_pixels = images_kwargs["min_pixels"] if "min_pixels" in images_kwargs else self.size["shortest_edge"]
         max_pixels = images_kwargs["max_pixels"] if "max_pixels" in images_kwargs else self.size["longest_edge"]
         patch_size = images_kwargs.get("patch_size", self.patch_size)

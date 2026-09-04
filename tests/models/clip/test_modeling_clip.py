@@ -58,6 +58,7 @@ if is_torch_available():
         CLIPVisionModel,
         CLIPVisionModelWithProjection,
     )
+    from transformers.models.clip.modeling_clip import CLIPMLP, CLIPAttention
 
 if is_vision_available():
     from PIL import Image
@@ -563,6 +564,33 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             config.save_pretrained(tmp_dir_name)
             text_config = CLIPTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
+
+    def test_init_weights_with_quantized_children(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = CLIPModel(config)
+
+        # A quantized checkpoint carries packed tensors instead of `weight` on the modules it targets:
+        # `weight_packed` for compressed-tensors, `qweight` for GPTQ/AWQ. `_init_weights` initializes the
+        # attention and MLP projections by name, so it must tolerate children without a `weight`.
+        for module in model.modules():
+            if isinstance(module, (CLIPAttention, CLIPMLP)):
+                for child in module.children():
+                    if isinstance(child, nn.Linear):
+                        out_features, in_features = child.weight.shape
+                        del child._parameters["weight"]
+                        child.register_parameter(
+                            "weight_packed",
+                            nn.Parameter(
+                                torch.zeros(out_features, in_features // 8, dtype=torch.int32),
+                                requires_grad=False,
+                            ),
+                        )
+            # Undo the flags set while `__init__` initialized the model, so that the init pass runs again
+            # over the whole module tree, as it does at the end of `from_pretrained`.
+            if hasattr(module, "_is_hf_initialized"):
+                del module._is_hf_initialized
+
+        model.initialize_weights()
 
     @slow
     def test_model_from_pretrained(self):

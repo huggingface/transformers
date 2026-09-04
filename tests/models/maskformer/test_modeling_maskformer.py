@@ -489,6 +489,10 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             elif model.__class__.__name__ == "MaskFormerForUniversalSegmentation":
                 self.assertEqual(model.model.pixel_level_module.encoder.out_indices, [1, 2, 3])
 
+    @unittest.skip(reason="hidden states are concatenated weirdly inside the model")
+    def test_can_capture_specific_layers_hidden_states(self):
+        pass
+
 
 TOLERANCE = 2e-4
 

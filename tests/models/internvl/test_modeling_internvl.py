@@ -279,7 +279,6 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_logits_all = Expectations(
             {
                 ("xpu", 3): torch.tensor([11.9922, 14.7188, 14.3125, 10.6719, 6.9297], dtype=torch.float16),
-                ("cuda", 7): torch.tensor([11.9531, 14.7031, 14.2734, 10.6562, 6.9219], dtype=torch.float16),
                 ("cuda", 8): torch.tensor([11.9609, 14.7188, 14.2734, 10.6484, 6.9141], dtype=torch.float16),
             }
         )  # fmt: skip
@@ -309,7 +308,6 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "Whispers of dawn,\nSilent whispers of night,\nPeace in the stillness.",
-                ("cuda", 7): 'Whispers of dawn,\nSilent whispers of night,\nPeace in the stillness.',
                 ("cuda", 8): 'Whispers of dawn,\nSilent whispers of night,\nPeace in the stillness.',
             }
         )  # fmt: skip
@@ -384,7 +382,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate of',
-                ("cuda", 7): 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate of',
+                ("cuda", 8): 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate of',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -433,7 +431,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s peace.',
-                ("cuda", 7): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s peace.',
+                ("cuda", 8): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s peace.',
                 ("rocm", (9, 4)): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s embrace.',
             }
         )  # fmt: skip
@@ -449,7 +447,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the differences:\n\n1. **Foreground",
-                ("cuda", 7): "user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the differences:\n\n1. **Foreground",
+                ("cuda", 8): "user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the differences:\n\n1. **Foreground",
                 ("rocm", (9, 4)): "user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the main differences:\n\n1. **",
             }
         )  # fmt: skip
@@ -497,7 +495,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "The man is performing a forehand shot.",
-                ("cuda", 7): "The man is performing a forehand shot.",
+                ("cuda", 8): "The man is performing a forehand shot.",
                 ("rocm", (9, 5)): "The man is performing a volley shot.",
             }
         )  # fmt: skip
@@ -574,7 +572,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image:**\n   - The Statue of Liberty is prominently featured on an",
-                ("cuda", 7): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image:**\n   - The Statue of Liberty is prominently featured on an',
+                ("cuda", 8): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image:**\n   - The Statue of Liberty is prominently featured on an',
                 ("rocm", (9, 4)): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image:**\n   - This image features the Statue of Liberty on Liberty',
             }
         )  # fmt: skip
@@ -590,7 +588,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot",
-                ("cuda", 7): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot',
+                ("cuda", 8): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot',
                 ("rocm", (9, 4)): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot',
             }
         )  # fmt: skip
@@ -606,7 +604,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s peace.',
-                ("cuda", 7): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s peace.',
+                ("cuda", 8): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s peace.',
                 ("rocm", (9, 4)): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s embrace.',
             }
         )  # fmt: skip
@@ -671,8 +669,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         expected_logits_all = Expectations(
             {
                 ("xpu", 3): [-9.8828,  -0.4954,   1.4561, -10.3438, -10.3438],
-                ("cuda", 7): [-9.8750,  -0.4861,   1.4648, -10.3359, -10.3359],
-                ("cuda", 8): [-9.8906,  -0.4995,   1.4473, -10.3359, -10.3438],
+                ("cuda", 8): [-9.8750,  -0.4900,   1.4629, -10.3281, -10.3359],
                 ("rocm", (9, 4)): [ -9.8672,  -0.4888,   1.4648, -10.3281, -10.3281],
                 ("rocm", (9, 5)): [ -9.8906,  -0.4976,   1.4502, -10.3359, -10.3438],
             }
@@ -706,8 +703,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
-                ("cuda", 7): "Autumn leaves fall,\nNature's breath, a gentle sigh,\nSilent whispers.",
-                ("cuda", 8): "Autumn leaves fall,\nNature's breath, a silent sigh,\nWinter's chill approaches.",
+                ("cuda", 8): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
             }
         )
         expected_output = expected_outputs.get_expectation()
@@ -769,7 +765,6 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.",
-                ("cuda", 7): 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.',
                 ("cuda", 8): 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.',
             }
         )  # fmt: skip
@@ -947,8 +942,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. Upon closer inspection, the differences between the two images are:\n\n1. **",
-                ("cuda", 7): 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. Upon closer inspection, the differences between the two images are:\n\n1. **',
-                ("cuda", 8): 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After re-examining the images, I can see that there are no',
+                ("cuda", 8): 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. Upon closer inspection, the differences between the two images are:\n\n1. **',
                 ("rocm", (9, 4)): 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After re-examining the images, I can see that there are no',
                 ("rocm", (9, 5)): 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After re-examining the images, I can see that there are no',
             }
@@ -965,7 +959,6 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common stroke in tennis where the player swings the racket across their",
-                ("cuda", 7): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common stroke in tennis where the player swings the racket across their',
                 ("cuda", 8): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common stroke in tennis where the player swings the racket across their',
             }
         )  # fmt: skip
@@ -981,7 +974,6 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.",
-                ("cuda", 7): 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.',
                 ("cuda", 8): 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.',
             }
         )  # fmt: skip

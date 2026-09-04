@@ -34,6 +34,7 @@ from ..utils.quantization_config import (
     HqqConfig,
     MetalConfig,
     Mxfp4Config,
+    NVFP4Config,
     QuantizationConfigMixin,
     QuantizationMethod,
     QuantoConfig,
@@ -62,6 +63,7 @@ from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_metal import MetalHfQuantizer
 from .quantizer_mxfp4 import Mxfp4HfQuantizer
+from .quantizer_nvfp4 import NVFP4HfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
 from .quantizer_quark import QuarkHfQuantizer
 from .quantizer_sinq import SinqHfQuantizer
@@ -90,6 +92,7 @@ AUTO_QUANTIZER_MAPPING = {
     "vptq": VptqHfQuantizer,
     "spqr": SpQRHfQuantizer,
     "fp8": FineGrainedFP8HfQuantizer,
+    "nvfp4": NVFP4HfQuantizer,
     # MXFP8 = FP8 (E4M3 weights) with per-block ``[1, 32]`` E8M0 (uint8) scales —
     # reuses the FineGrainedFP8 dequant path, with the E8M0 byte→exponent
     # unpacking handled inside ``Fp8Dequantize._dequantize_one``.
@@ -121,6 +124,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "vptq": VptqConfig,
     "spqr": SpQRConfig,
     "fp8": FineGrainedFP8Config,
+    "nvfp4": NVFP4Config,
     "mxfp8": FineGrainedFP8Config,
     "auto-round": AutoRoundConfig,
     "mxfp4": Mxfp4Config,

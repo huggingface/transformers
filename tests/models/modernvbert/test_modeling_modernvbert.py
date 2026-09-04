@@ -448,7 +448,7 @@ class ModernVBertModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class ModernVBertForMaskedLMIntegrationTest(unittest.TestCase):
-    model_name: ClassVar[str] = "paultltc/modernvbert_hf"
+    model_name: ClassVar[str] = "ModernVBERT/modernvbert"
 
     def setUp(self):
         self.torch_dtype = torch.float32
@@ -490,7 +490,7 @@ class ModernVBertForMaskedLMIntegrationTest(unittest.TestCase):
         top_5_probs, top_5_indices = torch.topk(masked_token_probs, k=5, dim=-1)
 
         EXPECTED_TOP_5_INDICES = torch.tensor([13497, 5406, 2460, 22946, 3665], device=torch_device)
-        EXPECTED_TOP_5_VALUES = torch.tensor([0.4986, 0.3550, 0.0415, 0.0235, 0.0199], device=torch_device)
+        EXPECTED_TOP_5_VALUES = torch.tensor([0.4984, 0.3553, 0.0415, 0.0234, 0.0198], device=torch_device)
 
         self.assertTrue(torch.allclose(top_5_indices, EXPECTED_TOP_5_INDICES))
         self.assertTrue(torch.allclose(top_5_probs, EXPECTED_TOP_5_VALUES, atol=1e-4, rtol=1e-4))

@@ -235,7 +235,7 @@ class Glm4vImageProcessor(TorchvisionBackend):
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
         A utility that returns number of image patches for a given image size.
 
@@ -249,6 +249,7 @@ class Glm4vImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of image patches per image.
         """
+        images_kwargs = images_kwargs or {}
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         merge_size = images_kwargs.get("merge_size", self.merge_size)
         size = images_kwargs.get("size", self.size)

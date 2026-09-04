@@ -78,6 +78,7 @@ _deps = [
     "codecarbon>=2.8.1",
     "datasets>=2.15.0",  # We need either this pin or pyarrow<21.0.0
     "deepspeed>=0.9.3",
+    "diffusers==0.35.2",  # Needed for VibeVoice TTS integration tests
     "dill<0.3.5",
     "evaluate>=0.4.6",
     "faiss-cpu",
@@ -92,7 +93,7 @@ _deps = [
     "kenlm",
     "kernels>=0.16.0,<0.17",
     "librosa",
-    "mistral-common[image]>=1.11.5",
+    "mistral-common[image]>=1.11.7",
     "nltk<=3.8.1",
     "num2words",
     "numpy>=1.17",
@@ -125,7 +126,7 @@ _deps = [
     "ruff==0.14.10",
     # When bumping `transformers-mlinter`, sync repo-local rule overrides from
     # `utils/rules.toml` back into the released package.
-    "transformers-mlinter==0.1.2",
+    "transformers-mlinter==0.1.5",
     "ty==0.0.20",
     # `sacrebleu` not used in `transformers`. However, it is needed in several tests, when a test calls
     # `evaluate.load("sacrebleu")`. This metric is used in the examples that we use to test the `Trainer` with, in the
@@ -146,7 +147,7 @@ _deps = [
     "tomli",
     "tiktoken",
     "timm>=1.0.23",
-    "tokenizers>=0.22.0,<=0.23.0",
+    "tokenizers>=0.23.1,<0.24.0",
     "torch>=2.5",
     "torchaudio",
     "torchvision",
@@ -223,6 +224,7 @@ extras["testing"] = (
         "parameterized",
         "psutil",
         "dill",
+        "diffusers",  # Needed for VibeVoice TTS integration tests
         "evaluate",
         "rouge-score",
         "nltk",
@@ -324,7 +326,7 @@ if __name__ == "__main__":
 
     setup(
         name="transformers",
-        version="5.15.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+        version="5.16.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
         author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
         author_email="transformers@huggingface.co",
         description="Transformers: the model-definition framework for state-of-the-art machine learning models in text, vision, audio, and multimodal models, for both inference and training.",

@@ -26,6 +26,9 @@ rendered properly in your Markdown viewer.
 
 [GptOss](https://openai.com/index/introducing-gpt-oss/) is a sparse mixture-of-experts (MoE) language model from OpenAI that routes each token to 4 of 128 experts. It uses attention sinks — learnable auxiliary tokens appended to each attention head — and YaRN rotary embeddings for sequences up to 131k tokens.
 
+> [!TIP]
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
+
 The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModelForCausalLM`] class.
 
 <hfoptions id="usage">

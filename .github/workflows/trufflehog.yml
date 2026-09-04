@@ -18,4 +18,15 @@ jobs:
       - name: Secret Scanning
         uses: trufflesecurity/trufflehog@d411fff7b8879a62509f3fa98c07f247ac089a51  # main
         with:
-          extra_args: --results=verified,unknown
+          # Always scan a DIFF, never the whole history. The action derives its
+          # base from `github.event.before`, which is all-zeros on the push that
+          # CREATES a branch — trufflehog then walks every commit ever made
+          # (415k chunks / 230 MB, ~2 min) instead of the pushed changes. Fall
+          # back to the default branch in that case so a new branch is scanned
+          # against main.
+          base: ${{ github.event.before != '0000000000000000000000000000000000000000' && github.event.before || github.event.repository.default_branch }}
+          # Lob's detector matches `(live|test)_<35 hex>` and "verifies" a hit by
+          # POSTing to api.lob.com, where a 422 counts as a valid key — that
+          # endpoint 422s on a bad body whatever the key, so every candidate came
+          # back "verified" (397 of them on a full-history scan, all false).
+          extra_args: --results=verified,unknown --exclude-detectors=lob

@@ -19,7 +19,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="google/gpt_bigcode")
+@auto_docstring(checkpoint="bigcode/gpt_bigcode-santacoder")
 @strict
 class GPTBigCodeConfig(PreTrainedConfig):
     r"""

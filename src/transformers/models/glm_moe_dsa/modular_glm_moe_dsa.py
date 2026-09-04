@@ -137,8 +137,8 @@ class GlmMoeDsaIndexer(DeepseekV32Indexer):
         hidden_states: torch.Tensor,
         q_resid: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        position_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        position_ids: torch.Tensor,  # Kept for BC
         past_key_values: Cache | None = None,
     ) -> torch.Tensor:
         """
@@ -183,12 +183,10 @@ class GlmMoeDsaIndexer(DeepseekV32Indexer):
         index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
         # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask is not None:
-            index_scores = index_scores + attention_mask
+        if attention_mask.dtype == torch.bool:
+            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
         else:
-            key_positions = torch.arange(index_scores.shape[-1], device=index_scores.device)
-            causal = key_positions[None, None, :] > position_ids[:, :, None]  # [B, S, T]
-            index_scores = index_scores.masked_fill(causal, float("-inf"))
+            index_scores = index_scores + attention_mask
 
         topk = min(self.index_topk, index_scores.shape[-1])
         return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
@@ -214,7 +212,7 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
+        attention_mask: torch.Tensor,
         past_key_values: Cache | None = None,
         position_ids: torch.Tensor | None = None,
         prev_topk_indices: torch.Tensor | None = None,
@@ -229,7 +227,8 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_pass = self.kv_a_layernorm(kv_pass)
+        # Both latents are viewed as single-head, 4D tensors, as expected by `expand_kv`
+        k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
 
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
         cos, sin = position_embeddings
@@ -239,18 +238,18 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
 
         key_states, value_states = self.expand_kv(k_pass, k_rot)
 
+        # Sparse-attention models cache the expanded K/V, not the compressed latents. TODO (remi-or): fix this with topk
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
         if self.indexer is not None:
-            indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
             topk_indices = self.indexer(
                 hidden_states,
                 q_resid,
                 position_embeddings,
-                indexer_mask,
-                position_ids,
+                attention_mask[:, 0, :, :],
+                position_ids,  # Kept for BC
                 past_key_values=past_key_values,
             )  # [B, S, topk]
         else:
@@ -265,11 +264,11 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
                 .scatter(-1, topk_indices.long(), False)
                 .unsqueeze(1)
             )
-            if attention_mask is None:
-                key_positions = torch.arange(key_states.shape[2], device=hidden_states.device)
-                index_mask = index_mask | (key_positions[None, None, None, :] > position_ids[:, None, :, None])
-                attention_mask = hidden_states.new_zeros((batch_size, 1, seq_length, key_states.shape[2]))
-            attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
+
+            if attention_mask.dtype == torch.bool:
+                attention_mask = attention_mask & ~index_mask
+            else:
+                attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
         else:
             sparse_indices = topk_indices
 
@@ -364,6 +363,7 @@ class GlmMoeDsaModel(DeepseekV32Model):
                 "attention_mask": attention_mask,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
+                "allow_is_causal_skip": False,  # Always force creation to account for causality in the indexer
             }
             causal_mask_mapping = {"deepseek_sparse_attention": create_causal_mask(**mask_kwargs)}
 

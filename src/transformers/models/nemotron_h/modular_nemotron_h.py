@@ -35,15 +35,13 @@ from ...models.nemotron.modeling_nemotron import NemotronMLP
 from ...models.zamba.modeling_zamba import ZambaForCausalLM
 from ...models.zamba2.modeling_zamba2 import Zamba2MambaMixer, Zamba2RMSNormGated
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_nemotron_h import NemotronHConfig
 
 
 logger = logging.get_logger(__name__)
-
-is_fast_path_available = False
 
 
 class NemotronHMamba2Mixer(Zamba2MambaMixer):
@@ -80,22 +78,6 @@ class NemotronHMamba2Mixer(Zamba2MambaMixer):
             self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=config.layer_norm_epsilon
         )
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
-
-    def forward(
-        self,
-        hidden_states,
-        cache_params: Cache | None = None,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs,
-    ):
-        if is_fast_path_available and "cuda" in self.in_proj.weight.device.type and not is_torchdynamo_compiling():
-            # Use cuda stream to avoid NaN when using multiple GPUs, which is caused by multi-GPU synchronization issue.
-            # Mamba might launch on the default cuda stream that not strictly respect the current Pytorch cuda stream.
-            # This leads to kernel reading uninitialized memory before the data transfer is complete.
-            with torch.cuda.stream(torch.cuda.default_stream(hidden_states.device)):
-                return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
-
-        return self.torch_forward(hidden_states, cache_params, attention_mask)
 
 
 class NemotronHRMSNorm(LlamaRMSNorm):

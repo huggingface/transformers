@@ -37,7 +37,6 @@ from .deepgemm import (
 )
 from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
 from .moe import ExpertsInterface, use_experts_implementation
-from .tensor_parallel import to_local
 
 
 logger = logging.get_logger(__name__)
@@ -336,18 +335,39 @@ class FP8Linear(nn.Linear):
         if self.weight.element_size() > 1:
             return F.linear(input, self.weight, self.bias)
 
-        weight = to_local(self.weight)
-        scale_inv = to_local(self.weight_scale_inv)
-
         return fp8_linear(
             input,
-            weight,
-            scale_inv,
+            self.weight,
+            self.weight_scale_inv,
             block_size=self.block_size,
             activation_scale=self.activation_scale,
             bias=self.bias,
             allow_deepgemm=not self._deepgemm_disabled,
         )
+
+
+class FP8Embedding(nn.Embedding):
+    """`nn.Embedding` whose table is stored in FP8 with a single per-tensor `weight_scale`.
+
+    Qwen4-Exp's hashed n-gram table is ~48 GiB in FP8, too big to dequantize at load time, so the
+    rescale runs on the rows a lookup gathers instead. Build it on the `meta` device: like
+    `FP8Linear`, `__init__` lets `nn.Embedding` allocate a full-precision table first.
+    """
+
+    def __init__(
+        self,
+        num_embeddings: int,
+        embedding_dim: int,
+        padding_idx: int | None = None,
+    ):
+        super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
+        self.weight = nn.Parameter(torch.empty(num_embeddings, embedding_dim, dtype=_FP8_DTYPE), requires_grad=False)
+        # `(1,)` rather than a scalar: the shape checkpoints serialize per-tensor scales with.
+        self.weight_scale = nn.Parameter(torch.ones(1), requires_grad=False)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        rows = super().forward(input)
+        return rows.to(self.weight_scale.dtype) * self.weight_scale
 
 
 class FP8GroupedLinear(FP8Linear):
@@ -395,8 +415,8 @@ class FP8GroupedLinear(FP8Linear):
                 y.add_(self.bias.view(self.n_groups, -1))
             return y
 
-        w = to_local(self.weight)
-        scale_inv = to_local(self.weight_scale_inv)
+        w = self.weight
+        scale_inv = self.weight_scale_inv
 
         w = w.view(self.n_groups, -1, hidden_dim)
         x = x.movedim(-2, 0).reshape(-1, hidden_dim)
@@ -450,10 +470,10 @@ def fp8_batched_mm_experts_forward(
     # zeroes them before the per-token reduction so `uninit * 0 = NaN` can't poison the sum.
     sentinel_mask = (expert_ids >= self.num_experts).unsqueeze(-1)
 
-    weight_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
-    weight_scale_up = to_local(self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv)
-    weight_down = to_local(self.down_proj)
-    weight_scale_down = to_local(self.down_proj_scale_inv)
+    weight_up = self.gate_up_proj if self.has_gate else self.up_proj
+    weight_scale_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
+    weight_down = self.down_proj
+    weight_scale_down = self.down_proj_scale_inv
 
     # --- Up projection per expert (FP8 batched) ---
     proj_out = finegrained_fp8.batched_matmul(
@@ -538,10 +558,10 @@ def fp8_grouped_mm_experts_forward(
     # quantized weights are inference-only, so no bwd pre-mask is needed.
     sentinel_mask = (expert_ids_g >= self.num_experts).unsqueeze(-1)
 
-    weight_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
-    weight_scale_up = to_local(self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv)
-    weight_down = to_local(self.down_proj)
-    weight_scale_down = to_local(self.down_proj_scale_inv)
+    weight_up = self.gate_up_proj if self.has_gate else self.up_proj
+    weight_scale_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
+    weight_down = self.down_proj
+    weight_scale_down = self.down_proj_scale_inv
 
     # --- Up projection per expert (FP8 grouped) ---
     proj_out = finegrained_fp8.grouped_matmul(
@@ -798,6 +818,22 @@ def _disable_deepgemm_on_multi_device(model: nn.Module) -> None:
     )
 
 
+def replace_with_fp8_embedding(model, patterns: list[str], modules_to_not_convert: list[str] | None = None):
+    """Swap every `nn.Embedding` whose name ends with one of `patterns` for `FP8Embedding`.
+
+    Also runs under `dequantize=True`: a table worth quantizing is one we cannot afford to expand.
+    """
+    for name, module in list(model.named_modules()):
+        if type(module) is nn.Embedding and any(name.endswith(p) for p in patterns):
+            if not should_convert_module(name, modules_to_not_convert):
+                continue
+            with torch.device("meta"):
+                new_module = FP8Embedding(module.num_embeddings, module.embedding_dim, module.padding_idx)
+            new_module._hf_quantized_needs_local_tp = True
+            model.set_submodule(name, new_module)
+    return model
+
+
 def replace_with_fp8_linear(
     model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False
 ):
@@ -870,6 +906,8 @@ def replace_with_fp8_linear(
                     has_bias=module.bias is not None,
                 )
             if new_module is not None:
+                # TP must use local tensors because this quantization path does not support DTensor inputs or weights.
+                new_module._hf_quantized_needs_local_tp = True
                 model.set_submodule(module_name, new_module)
                 has_been_replaced = True
 

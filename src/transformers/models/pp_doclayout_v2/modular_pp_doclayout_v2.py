@@ -636,7 +636,7 @@ class PPDocLayoutV2PreTrainedModel(RTDetrPreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         if isinstance(module, PPDocLayoutV2PositionRelationEmbedding):
             inv_freq, _ = module.compute_default_rope_parameters(module.config)
-            module.register_buffer("inv_freq", inv_freq, persistent=False)
+            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring(

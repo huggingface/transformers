@@ -21,7 +21,7 @@ from transformers.image_utils import PILImageResampling, load_image
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 from ...test_processing_common import url_to_local_path
 
 
@@ -33,7 +33,7 @@ if is_torch_available():
     import torch
 
 
-class Idefics3ImageProcessingTester:
+class Idefics3ImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -91,19 +91,16 @@ class Idefics3ImageProcessingTester:
             "do_image_splitting": self.do_image_splitting,
         }
 
-    def get_expected_values(self, image_inputs, batched=False):
-        """
-        This function computes the expected height and width when providing images to Idefics3ImageProcessor,
-        assuming do_resize is set to True. The expected size in that case the max image size.
-        """
-        return self.max_image_size["longest_edge"], self.max_image_size["longest_edge"]
-
     def expected_output_image_shape(self, images):
-        height, width = self.get_expected_values(images, batched=True)
         effective_nb_images = (
             self.num_images * 5 if self.do_image_splitting else 1
         )  # 5 is a squared image divided into 4 + global image resized
-        return effective_nb_images, self.num_channels, height, width
+        return (
+            effective_nb_images,
+            self.num_channels,
+            self.max_image_size["longest_edge"],
+            self.max_image_size["longest_edge"],
+        )
 
     def prepare_image_inputs(
         self,

@@ -18,16 +18,16 @@ import re
 import warnings
 from typing import TYPE_CHECKING
 
-from ..integrations.tensor_parallel import (
-    ALL_PARALLEL_STYLES,
-    apply_tensor_parallelism,
-    gather_state_dict_for_save,
-    initialize_tensor_parallelism,
-)
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
+from .pipeline_parallel import apply_pipeline_parallelism
+from .tensor_parallel import (
+    _validate_tp_plan_styles,
+    apply_tensor_parallelism,
+    gather_state_dict_for_save,
+)
 from .utils import (
     _distributed_barrier,
     _ensure_torch_distributed,
@@ -36,6 +36,8 @@ from .utils import (
     _is_torch_distributed_initialized,
     gather_full_state_dict,
     initialize_fully_sharded_data_parallelism,
+    initialize_pipeline_parallelism,
+    initialize_tensor_parallelism,
     save_model_checkpoint_distributed,
 )
 
@@ -48,11 +50,7 @@ if TYPE_CHECKING:
 
 
 class DistributedMixin:
-    """Distributed orchestration and save/load hooks for [`PreTrainedModel`].
-
-    Stateless heavy lifting stays in `transformers.distributed.*` and
-    `integrations.tensor_parallel`. This mixin owns orchestration and instance state.
-    """
+    """Distributed orchestration and save/load hooks for [`PreTrainedModel`]."""
 
     _device_mesh = None
     _tp_plan: dict[str, str] | None = None
@@ -114,12 +112,7 @@ class DistributedMixin:
         if not isinstance(plan, dict):
             raise ValueError("Can only set a dictionary as `tp_plan`")
 
-        for layer_pattern, parallel_style in plan.items():
-            if parallel_style not in ALL_PARALLEL_STYLES:
-                raise ValueError(
-                    f"Unsupported tensor parallel style '{parallel_style}' for layer '{layer_pattern}'. "
-                    f"Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
-                )
+        _validate_tp_plan_styles(plan)
 
         model_param_names = [name for name, _ in self.named_parameters()]
         for layer_pattern in plan.keys():
@@ -181,6 +174,8 @@ class DistributedMixin:
             )
         elif distributed_config.fsdp_size > 1:
             device_map, device_mesh = initialize_fully_sharded_data_parallelism(distributed_config)
+        elif distributed_config.pp_size > 1:
+            device_map, device_mesh = initialize_pipeline_parallelism(distributed_config)
 
         return distributed_config, device_map, device_mesh
 
@@ -197,15 +192,18 @@ class DistributedMixin:
             model._device_mesh = device_mesh
 
             if distributed_config.tp_size > 1:
-                model = apply_tensor_parallelism(
-                    model,
-                    distributed_config.tp_plan,
-                    distributed_config,
-                    device_mesh,
-                )
+                tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
+                if isinstance(distributed_config.tp_plan, dict):
+                    model.tp_plan = distributed_config.tp_plan
+                model = apply_tensor_parallelism(model, tp_mesh)
+
             elif distributed_config.fsdp_size > 1:
                 fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
                 model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
+
+            elif distributed_config.pp_size > 1:
+                pp_mesh = device_mesh["pp"] if device_mesh.ndim > 1 else device_mesh
+                model = apply_pipeline_parallelism(model, pp_mesh)
         return model
 
     def should_save_on_this_rank(self, is_main_process: bool) -> bool:
@@ -267,7 +265,9 @@ class DistributedMixin:
             return state_dict
 
         if distributed_config.tp_size > 1:
-            state_dict = gather_state_dict_for_save(state_dict, self._tp_plan, self._device_mesh, self._tp_size)
+            state_dict = gather_state_dict_for_save(
+                state_dict, self._tp_plan, self._device_mesh, distributed_config.tp_size
+            )
             if not save_on_this_rank:
                 state_dict = {}
             return state_dict

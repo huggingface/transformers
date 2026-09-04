@@ -77,6 +77,7 @@ FSDP_DISTRIBUTED_TEST_MODEL_TYPES = {
     "mixtral",
     "qwen3",
     "qwen3_moe",
+    "qwen4_exp_text",
 }
 
 

@@ -756,12 +756,12 @@ class BatchEncoding(UserDict, Generic[_V]):
 
         return self
 
-    def to(self, device: str | torch.device, *, non_blocking: bool = False) -> BatchEncoding[torch.Tensor]:
+    def to(self, device: str | torch.device | int, *, non_blocking: bool = False) -> BatchEncoding[torch.Tensor]:
         """
         Send all values to device by calling `v.to(device, non_blocking=non_blocking)` (PyTorch only).
 
         Args:
-            device (`str` or `torch.device`): The device to put the tensors on.
+            device (`str` or `torch.device` or `int`): The device to put the tensors on.
             non_blocking (`bool`): Whether to perform the copy asynchronously.
 
         Returns:
@@ -2881,7 +2881,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         # If we received batched input, decode each sequence
         if isinstance(token_ids, (list, tuple)) and len(token_ids) > 0 and isinstance(token_ids[0], (list, tuple)):
-            clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", False)
+            clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", None)
             return [
                 self._decode(
                     token_ids=seq,

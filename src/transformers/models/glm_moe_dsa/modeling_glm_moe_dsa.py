@@ -198,8 +198,8 @@ class GlmMoeDsaIndexer(nn.Module):
         hidden_states: torch.Tensor,
         q_resid: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        position_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        position_ids: torch.Tensor,  # Kept for BC
         past_key_values: Cache | None = None,
     ) -> torch.Tensor:
         """
@@ -244,12 +244,10 @@ class GlmMoeDsaIndexer(nn.Module):
         index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
         # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask is not None:
-            index_scores = index_scores + attention_mask
+        if attention_mask.dtype == torch.bool:
+            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
         else:
-            key_positions = torch.arange(index_scores.shape[-1], device=index_scores.device)
-            causal = key_positions[None, None, :] > position_ids[:, :, None]  # [B, S, T]
-            index_scores = index_scores.masked_fill(causal, float("-inf"))
+            index_scores = index_scores + attention_mask
 
         topk = min(self.index_topk, index_scores.shape[-1])
         return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
@@ -322,8 +320,8 @@ class GlmMoeDsaAttention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.attention_dropout = config.attention_dropout
+        self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
 
         self.q_lora_rank = config.q_lora_rank
@@ -331,16 +329,18 @@ class GlmMoeDsaAttention(nn.Module):
         self.kv_lora_rank = config.kv_lora_rank
         self.v_head_dim = config.v_head_dim
         self.qk_nope_head_dim = config.qk_nope_head_dim
-        self.qk_head_dim = config.qk_head_dim
+        self.qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
         self.is_causal = True
+
         self.q_proj = (
-            nn.Linear(config.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
+            nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
             if self.q_lora_rank is None
             else None
         )
         self.q_a_proj = (
-            nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
+            nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
             if self.q_lora_rank is not None
             else None
         )
@@ -352,20 +352,20 @@ class GlmMoeDsaAttention(nn.Module):
         )
 
         self.kv_a_proj_with_mqa = nn.Linear(
-            config.hidden_size,
-            self.kv_lora_rank + self.qk_rope_head_dim,
+            self.hidden_size,
+            config.kv_lora_rank + config.qk_rope_head_dim,
             bias=config.attention_bias,
         )
-        self.kv_a_layernorm = GlmMoeDsaRMSNorm(self.kv_lora_rank)
+        self.kv_a_layernorm = GlmMoeDsaRMSNorm(config.kv_lora_rank)
         self.kv_b_proj = nn.Linear(
-            self.kv_lora_rank,
+            config.kv_lora_rank,
             self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
             bias=False,
         )
 
         self.o_proj = nn.Linear(
             self.num_heads * self.v_head_dim,
-            config.hidden_size,
+            self.hidden_size,
             bias=config.attention_bias,
         )
 
@@ -374,22 +374,30 @@ class GlmMoeDsaAttention(nn.Module):
         self.skip_topk = config.indexer_types[layer_idx] == "shared"
         self.indexer = None if self.skip_topk else GlmMoeDsaIndexer(config, layer_idx)
 
-    def expand_kv(self, k_nope: torch.Tensor, k_pe: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        key_shape = (*k_nope.shape[:-1], -1, self.qk_nope_head_dim + self.v_head_dim)
+    def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Expands the compressed latents into key and value states. Args:
+            - kv_nope: key + value without positional encoding, shape [batch_size, 1, seqlen, self.kv_lora_rank]
+            - k_rot: shared key with positional encoding, shape [batch_size, 1, seqlen, self.qk_rope_head_dim]
+        Returns the key and value states, two tensors of shape [batch, num_heads, seq, (k or v)_head_dim].
+        """
+        batch_size, _, seq_length, _ = kv_nope.shape
+        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
 
-        k_nope = self.kv_b_proj(k_nope).view(key_shape).transpose(1, 2)
-        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        kv_nope = self.kv_b_proj(kv_nope).view(key_shape).transpose(1, 2)
+        k_nope, value_states = torch.split(kv_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        k_rot = k_rot.expand(-1, k_nope.shape[1], -1, -1)  # does not affect the underlying storage
 
-        k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
-        key_states = torch.cat((k_nope, k_pe), dim=-1)
-
+        # Concatenate k_nope and k_rot in a new tensor
+        key_states = kv_nope.new_empty(*kv_nope.shape[:-1], self.qk_nope_head_dim + self.qk_rope_head_dim)
+        key_states[..., : self.qk_nope_head_dim].copy_(k_nope)
+        key_states[..., self.qk_nope_head_dim :].copy_(k_rot)
         return key_states, value_states
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
+        attention_mask: torch.Tensor,
         past_key_values: Cache | None = None,
         position_ids: torch.Tensor | None = None,
         prev_topk_indices: torch.Tensor | None = None,
@@ -404,7 +412,8 @@ class GlmMoeDsaAttention(nn.Module):
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_pass = self.kv_a_layernorm(kv_pass)
+        # Both latents are viewed as single-head, 4D tensors, as expected by `expand_kv`
+        k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
 
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
         cos, sin = position_embeddings
@@ -414,18 +423,18 @@ class GlmMoeDsaAttention(nn.Module):
 
         key_states, value_states = self.expand_kv(k_pass, k_rot)
 
+        # Sparse-attention models cache the expanded K/V, not the compressed latents. TODO (remi-or): fix this with topk
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
         if self.indexer is not None:
-            indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
             topk_indices = self.indexer(
                 hidden_states,
                 q_resid,
                 position_embeddings,
-                indexer_mask,
-                position_ids,
+                attention_mask[:, 0, :, :],
+                position_ids,  # Kept for BC
                 past_key_values=past_key_values,
             )  # [B, S, topk]
         else:
@@ -440,11 +449,11 @@ class GlmMoeDsaAttention(nn.Module):
                 .scatter(-1, topk_indices.long(), False)
                 .unsqueeze(1)
             )
-            if attention_mask is None:
-                key_positions = torch.arange(key_states.shape[2], device=hidden_states.device)
-                index_mask = index_mask | (key_positions[None, None, None, :] > position_ids[:, None, :, None])
-                attention_mask = hidden_states.new_zeros((batch_size, 1, seq_length, key_states.shape[2]))
-            attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
+
+            if attention_mask.dtype == torch.bool:
+                attention_mask = attention_mask & ~index_mask
+            else:
+                attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
         else:
             sparse_indices = topk_indices
 
@@ -595,10 +604,7 @@ class GlmMoeDsaDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
         self.self_attn = GlmMoeDsaAttention(config, layer_idx)
 
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = GlmMoeDsaMoE(config)
-        else:
-            self.mlp = GlmMoeDsaMLP(config)
+        self.mlp = GlmMoeDsaMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else GlmMoeDsaMLP(config)
 
         self.input_layernorm = GlmMoeDsaRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = GlmMoeDsaRMSNorm(config.hidden_size, config.rms_norm_eps)
@@ -721,6 +727,7 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
                 "attention_mask": attention_mask,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
+                "allow_is_causal_skip": False,  # Always force creation to account for causality in the indexer
             }
             causal_mask_mapping = {"deepseek_sparse_attention": create_causal_mask(**mask_kwargs)}
 

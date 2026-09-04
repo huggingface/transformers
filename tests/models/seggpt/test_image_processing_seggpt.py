@@ -21,9 +21,9 @@ from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import (
+    ImageProcessingTester,
     ImageProcessingTestMixin,
     PostProcessSemanticSegmentationTestMixin,
-    prepare_image_inputs,
 )
 
 
@@ -36,7 +36,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class SegGptImageProcessingTester:
+class SegGptImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -75,9 +75,6 @@ class SegGptImageProcessingTester:
             "size": self.size,
         }
 
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
     def expected_post_processed_shape(self):
         return self.size["height"] // 2, self.size["width"]
 
@@ -85,17 +82,6 @@ class SegGptImageProcessingTester:
         torch.manual_seed(42)
         return SegGptImageSegmentationOutput(
             pred_masks=torch.rand(self.batch_size, self.num_channels, self.size["height"], self.size["width"])
-        )
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
         )
 
     def prepare_post_process_semantic_segmentation_inputs(self):

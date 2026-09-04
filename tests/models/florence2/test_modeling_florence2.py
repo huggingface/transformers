@@ -455,6 +455,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         prompt = "<DETAILED_CAPTION>"
         inputs = processor(images=self.image1, text=prompt, return_tensors="pt")
         inputs.to(device=torch_device)
+        inputs["pixel_values"] = inputs["pixel_values"].to(dtype=model.dtype)
 
         EXPECTED_INPUT_IDS = [[processor.image_token_id] * processor.num_image_tokens + [0, 47066, 21700, 11, 4617, 99, 16, 2343, 11, 5, 2274, 4, 2]]  # fmt: skip
         self.assertEqual(inputs["input_ids"].tolist(), EXPECTED_INPUT_IDS)
@@ -463,7 +464,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_PREDICTION_IDS = Expectations(
             {
-                (None, None): [[2, 0, 133, 2274, 924, 10, 909, 512, 1428, 159, 10, 2014, 9321, 19, 6764, 3413, 4, 96, 5, 39299, 6, 89, 16, 10, 1275, 912, 1203, 2828, 15, 5, 526, 9, 5, 921, 6, 8, 11, 5, 3618, 6, 89, 32, 1104, 19638, 6, 3980, 6, 8, 10, 699, 2440, 6360, 4, 2]],
+                (None, None): [[2, 0, 133, 2274, 924, 10, 909, 512, 1428, 159, 10, 2014, 9321, 19, 6764, 3413, 4, 96, 5, 39299, 6, 89, 16, 10, 1275, 912, 1203, 2828, 15, 5, 526, 9, 5, 2014, 6, 8, 11, 5, 3618, 6, 89, 32, 3980, 6, 82, 3051, 15, 5, 2767, 22609, 6, 8, 41, 9599, 4, 2]],
                 ("xpu", 5): [[2, 0, 133, 2274, 924, 10, 909, 512, 1428, 159, 10, 2014, 9321, 19, 6764, 3413, 4, 96, 5, 39299, 6, 89, 16, 10, 1275, 912, 1203, 2828, 15, 5, 526, 9, 5, 921, 6, 8, 11, 5, 3618, 6, 89, 32, 3980, 6, 82, 3051, 15, 5, 2767, 22609, 6, 8, 41, 9599, 19, 766, 6904, 4, 2]],
             }
         ).get_expectation()  # fmt: skip
@@ -473,7 +474,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_GENERATED_TEXT = Expectations(
             {
-                (None, None): "The image shows a black car driving down a street lined with tall buildings. In the foreground, there is a red stop sign sitting on the side of the road, and in the background, there are white statues, trees, and a clear blue sky.",
+                (None, None): "The image shows a black car driving down a street lined with tall buildings. In the foreground, there is a red stop sign sitting on the side of the street, and in the background, there are trees, people walking on the footpath, and an arch.",
                 ("xpu", 5): "The image shows a black car driving down a street lined with tall buildings. In the foreground, there is a red stop sign sitting on the side of the road, and in the background, there are trees, people walking on the footpath, and an arch with name boards.",
             }
         ).get_expectation()  # fmt: skip
@@ -628,21 +629,21 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         predictions = model.generate(**inputs, max_new_tokens=100)
 
         EXPECTED_PREDICTION_IDS = [
-            [2, 0, 0, 0, 47643, 47240, 7487, 47643, 50802, 50337, 50922, 50337, 50922, 50397, 50802, 50397, 4652, 50270, 50372, 50288, 50372, 50288, 50394, 50270, 50394, 495, 2571, 50401, 50455, 50446, 50457, 50446, 50483, 50401, 50482, 4014, 5733, 50446, 50495, 50614, 50493, 50614, 50596, 50446, 50600, 530, 791, 673, 51230, 50640, 51261, 50640, 51261, 50666, 51230, 50666, 5733, 565, 3048, 50389, 50683, 50461, 50684, 50461, 50719, 50389, 50717, 7111, 230, 5061, 33893, 50707, 50668, 50755, 50668, 50755, 50682, 50707, 50682, 10932, 50290, 50708, 50333, 50706, 50334, 50751, 50290, 50753, 4652, 51128, 50704, 51149, 50704, 51149, 50729, 51128, 50729, 2],
-            [2, 0, 102, 2272, 512, 9181, 11, 760, 9, 10, 5718, 745, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [2, 0, 0, 0, 47643, 47240, 7487, 47643, 50802, 50337, 50922, 50337, 50922, 50397, 50802, 50397, 4652, 50270, 50372, 50288, 50372, 50288, 50394, 50270, 50394, 495, 2571, 50401, 50455, 50447, 50457, 50447, 50483, 50401, 50482, 4014, 5733, 50446, 50495, 50614, 50493, 50614, 50596, 50446, 50600, 530, 791, 673, 51230, 50640, 51261, 50640, 51261, 50666, 51230, 50666, 5733, 565, 3048, 50389, 50682, 50461, 50684, 50461, 50719, 50389, 50717, 7111, 230, 5061, 33893, 50707, 50668, 50755, 50668, 50755, 50682, 50707, 50682, 10932, 50290, 50708, 50333, 50706, 50334, 50751, 50290, 50753, 4652, 51128, 50704, 51149, 50704, 51149, 50729, 51128, 50729, 2],
+            [2, 0, 0, 102, 2272, 13103, 2258, 42099, 41556, 9181, 11, 760, 9, 10, 5718, 745, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         ]  # fmt: skip
         self.assertEqual(predictions.tolist(), EXPECTED_PREDICTION_IDS)
 
         generated_texts = processor.batch_decode(predictions, skip_special_tokens=False)
 
         EXPECTED_GENERATED_TEXTS = [
-            "</s><s><s><s>中新中<loc_533><loc_68><loc_653><loc_68><loc_653><loc_128><loc_533><loc_128>88<loc_1><loc_103><loc_19><loc_103><loc_19><loc_125><loc_1><loc_125>DAT<loc_132><loc_186><loc_177><loc_188><loc_177><loc_214><loc_132><loc_213>STOP<loc_177><loc_226><loc_345><loc_224><loc_345><loc_327><loc_177><loc_331>KUO<loc_961><loc_371><loc_992><loc_371><loc_992><loc_397><loc_961><loc_397>OPTUS<loc_120><loc_414><loc_192><loc_415><loc_192><loc_450><loc_120><loc_448>OD COUKT<loc_438><loc_399><loc_486><loc_399><loc_486><loc_413><loc_438><loc_413>yes<loc_21><loc_439><loc_64><loc_437><loc_65><loc_482><loc_21><loc_484>88<loc_859><loc_435><loc_880><loc_435><loc_880><loc_460><loc_859><loc_460></s>",
-            "</s><s>a green car parked in front of a yellow building</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
+            "</s><s><s><s>中新中<loc_533><loc_68><loc_653><loc_68><loc_653><loc_128><loc_533><loc_128>88<loc_1><loc_103><loc_19><loc_103><loc_19><loc_125><loc_1><loc_125>DAT<loc_132><loc_186><loc_178><loc_188><loc_178><loc_214><loc_132><loc_213>STOP<loc_177><loc_226><loc_345><loc_224><loc_345><loc_327><loc_177><loc_331>KUO<loc_961><loc_371><loc_992><loc_371><loc_992><loc_397><loc_961><loc_397>OPTUS<loc_120><loc_413><loc_192><loc_415><loc_192><loc_450><loc_120><loc_448>OD COUKT<loc_438><loc_399><loc_486><loc_399><loc_486><loc_413><loc_438><loc_413>yes<loc_21><loc_439><loc_64><loc_437><loc_65><loc_482><loc_21><loc_484>88<loc_859><loc_435><loc_880><loc_435><loc_880><loc_460><loc_859><loc_460></s>",
+            "</s><s><s>a green volkswagen beetle parked in front of a yellow building</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
         ]  # fmt: skip
         self.assertEqual(generated_texts, EXPECTED_GENERATED_TEXTS)
 
         parsed_answer = processor.post_process_generation(
             generated_texts[0], task="<OCR_WITH_REGION>", image_size=(images[0].width, images[0].height)
         )
-        EXPECTED_PARSED_ANSWER = {'<OCR_WITH_REGION>': {'quad_boxes': [[693, 60, 849, 60, 849, 112, 693, 112], [1, 90, 25, 90, 25, 109, 1, 109], [172, 163, 230, 165, 230, 187, 172, 187], [230, 198, 449, 196, 449, 286, 230, 290], [1249, 325, 1290, 325, 1290, 348, 1249, 348], [156, 363, 250, 363, 250, 394, 156, 392], [570, 349, 632, 349, 632, 362, 570, 362], [27, 385, 83, 383, 85, 422, 27, 424], [1117, 381, 1144, 381, 1144, 403, 1117, 403]], 'labels': ['中新中', '88', 'DAT', 'STOP', 'KUO', 'OPTUS', 'OD COUKT', 'yes', '88']}}  # fmt: skip
+        EXPECTED_PARSED_ANSWER = {'<OCR_WITH_REGION>': {'quad_boxes': [[693, 60, 849, 60, 849, 112, 693, 112], [1, 90, 25, 90, 25, 109, 1, 109], [172, 163, 232, 165, 232, 187, 172, 187], [230, 198, 449, 196, 449, 286, 230, 290], [1249, 325, 1290, 325, 1290, 348, 1249, 348], [156, 362, 250, 363, 250, 394, 156, 392], [570, 349, 632, 349, 632, 362, 570, 362], [27, 385, 83, 383, 85, 422, 27, 424], [1117, 381, 1144, 381, 1144, 403, 1117, 403]], 'labels': ['中新中', '88', 'DAT', 'STOP', 'KUO', 'OPTUS', 'OD COUKT', 'yes', '88']}}  # fmt: skip
         self.assertEqual(parsed_answer, EXPECTED_PARSED_ANSWER)

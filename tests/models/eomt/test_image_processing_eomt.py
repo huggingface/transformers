@@ -16,16 +16,15 @@
 import unittest
 
 import numpy as np
-from datasets import load_dataset
 
 from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import (
+    ImageProcessingTester,
     ImageProcessingTestMixin,
     PostProcessSemanticSegmentationTestMixin,
-    prepare_image_inputs,
 )
 from ...test_processing_common import url_to_local_path
 
@@ -39,7 +38,7 @@ if is_vision_available():
     from transformers.models.eomt.modeling_eomt import EomtForUniversalSegmentationOutput
 
 
-class EomtImageProcessingTester:
+class EomtImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -90,17 +89,6 @@ class EomtImageProcessingTester:
             patch_offsets=patch_offsets,
         )
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
     def prepare_post_process_semantic_segmentation_inputs(self):
         inputs = {
             "outputs": EomtForUniversalSegmentationOutput(
@@ -116,17 +104,6 @@ class EomtImageProcessingTester:
             "width": self.width,
         }
         return inputs, expected_shape
-
-
-def prepare_semantic_single_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-    example = ds[0]
-    return example["image"], example["map"]
-
-
-def prepare_semantic_batch_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-    return list(ds["image"][:2]), list(ds["map"][:2])
 
 
 @require_torch
@@ -237,7 +214,7 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image, dummy_map = prepare_semantic_single_inputs()
+        dummy_image, dummy_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():
@@ -272,7 +249,9 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
             )
 
-        dummy_images, dummy_maps = prepare_semantic_batch_inputs()
+        dummy_images, dummy_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+            batched=True
+        )
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():

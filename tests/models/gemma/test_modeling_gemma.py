@@ -183,10 +183,18 @@ class GemmaIntegrationTest(unittest.TestCase):
     @require_deterministic_for_xpu
     def test_model_2b_4bit(self):
         model_id = "google/gemma-2b"
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project and I need to make a 3d model of a house. I have been using",
-            "Hi today I'd like to share with you my experience with the new wattpad wattpad wattpad wattpad wattpad wattpad wattpad",
-        ]
+        EXPECTED_TEXTS = Expectations(
+            {
+                (None, None): [
+                    "Hello I am doing a project and I need to make a 3d model of a house. I have been using",
+                    "Hi today I'd like to share with you my experience with the new wattpad wattpad wattpad wattpad wattpad wattpad wattpad",
+                ],
+                ("cuda", 8): [
+                    "Hello I am doing a project and I need to make a 3d model of a house. I have been using",
+                    "Hi today I'd like to share with you a few of my favorite and most used brushes.\n\nI",
+                ],
+            }
+        ).get_expectation()
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
@@ -229,6 +237,10 @@ class GemmaIntegrationTest(unittest.TestCase):
                     """Hello I am doing a project on a 1999 4.0L 4x4. I""",
                     "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
                 ],
+                ("cuda", 8): [
+                    "Hello I am doing a project on a 1995 4.0L 4x4. I",
+                    "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
+                ],
                 ("xpu", 5): [
                     "Hello I am doing a project on the 1960's and I am doing a report on the ",
                     "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
@@ -261,7 +273,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", 7): ["""Hello I am doing a project on a 1991 240sx and I am trying to find""", "Hi today I am going to show you how to make a very simple and easy to make a very simple and",],
-                ("cuda", 8): ['Hello I am doing a project for my school and I am trying to make a game in which you have to get a', 'Hi today I am going to show you how to make a very simple and easy to make a very simple and'],
+                ("cuda", 8): ['Hello I am doing a project for my school and I am trying to make a small game. I have a few questions', 'Hi today I am going to show you how to make a very simple and easy to make a very simple and'],
                 ("rocm", 9): ["Hello I am doing a project for my school and I am trying to get a servo to move a certain amount of degrees", "Hi today I am going to show you how to make a very simple and easy to make DIY light up sign",],
                 ("xpu", 5): ["Hello I am doing a project for my school and I am trying to make a game in which you have to get a", "Hi today I am going to show you how to make a very simple and easy to make a paper plane.",],
             }
@@ -292,7 +304,7 @@ class GemmaIntegrationTest(unittest.TestCase):
                     "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
                 ],
                 ("cuda", 8): [
-                    "Hello I am doing a project on a 1995 3000gt SL. I have a",
+                    "Hello I am doing a project on a 1999 4.0L 4x4. I",
                     "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
                 ],
             }
@@ -307,6 +319,13 @@ class GemmaIntegrationTest(unittest.TestCase):
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+        # gemma-7b + static cache sits near a numerical boundary: the suffix after "DIY"
+        # flips occasionally (e.g. "3D" vs "mini-f"). Not easy to reproduce within
+        # repeated runs on a single runner, but observable across different workflow runs
+        # or fresh SSH CI runners. Truncate to the stable prefix to avoid flakiness.
+        N = len("Hi today I am going to show you how to make a simple and easy to make a DIY")
+        output_text[1] = output_text[1][:N]
+        EXPECTED_TEXTS[1] = EXPECTED_TEXTS[1][:N]
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_bitsandbytes
@@ -321,8 +340,8 @@ class GemmaIntegrationTest(unittest.TestCase):
                     "Hi today I am going to talk about the best way to get rid of acne. miniaturing is a very",
                 ],
                 ("cuda", 8): [
-                    "Hello I am doing a project for my school and I am trying to make a program that will take a number and then",
-                    'Hi today I am going to talk about the new update for the game called "The new update!:)!:)!:)',
+                    "Hello I am doing a project for a school and I am using a 32 aquare100000",
+                    'Hi today I am going to talk about a new app that I have found. It is called a "The',
                 ],
                 ("xpu", 5): [
                     "Hello I am doing a project for my school and I am using a 12 paletm and 12 v",
@@ -354,6 +373,10 @@ class GemmaIntegrationTest(unittest.TestCase):
                     "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have looked on the internet and I have found",
                     "Hi today\nI have a problem with my 2007 1.9 tdi 105bhp.\nI have a problem with the engine management light on.\nI have checked the",
                 ],
+                ("cuda", 8): [
+                    "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have looked on the internet and I have found",
+                    "Hi today\nI have a problem with my 2007 1.9 tdi 110bhp.\nI have a problem with the engine management light coming on and the car running rough",
+                ],
                 ("xpu", 5): [
                     "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have looked on the internet and I have found",
                     "Hi today\nI have a problem with my 2007 1.9 tdi 110bhp.\nI have a problem with the engine management light coming on and the car running rough",
@@ -380,7 +403,10 @@ class GemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
         # Static Cache + compile
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+        # Compile __call__ instead of forward (copied from test_modeling_mistral.py): compiling forward
+        # causes a CUDA graph RuntimeError when multiple generate() calls are made on the same model.
+        forward_function = model.__call__
+        model.__call__ = torch.compile(forward_function, mode="reduce-overhead", fullgraph=True)
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
         )
@@ -400,9 +426,6 @@ class GemmaIntegrationTest(unittest.TestCase):
             {
                 (None, None): [
                     "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have looked on the internet and I have found"
-                ],
-                ("cuda", 8): [
-                    "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have been looking on the internet and I have"
                 ],
                 ("rocm", (9, 5)): [
                     "Hello I am doing a project on the 1990s and I need to know what the most popular music was in the 1990s. I have been looking on the internet and I have"

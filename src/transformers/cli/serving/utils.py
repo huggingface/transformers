@@ -844,7 +844,7 @@ class CBGenerateManager(BaseGenerateManager):
 
     def is_alive(self) -> bool:
         """Whether the CB worker is healthy. ``True`` before ``init_cb()`` is called."""
-        return self._cb is None or self._cb.fatal_error is None
+        return self._cb is None or self._cb.background_thread_status.fatal_error is None
 
     def _check_alive(self, request_id: str) -> None:
         """Raise :class:`CBWorkerDeadError` if the CB worker has died.
@@ -852,10 +852,10 @@ class CBGenerateManager(BaseGenerateManager):
         Called at request entry to fail fast — submitting to a dead worker would otherwise
         enqueue the request into a void where it never gets processed.
         """
-        if self._cb is not None and self._cb.fatal_error is not None:
-            raise CBWorkerDeadError(
-                f"CB worker is dead and cannot accept request {request_id}: {self._cb.fatal_error}"
-            )
+        if self._cb is not None:
+            fatal_error = self._cb.background_thread_status.fatal_error
+            if fatal_error is not None:
+                raise CBWorkerDeadError(f"CB worker is dead and cannot accept request {request_id}: {fatal_error}")
 
     def generate_streaming(
         self,
@@ -955,7 +955,7 @@ class CBGenerateManager(BaseGenerateManager):
         # as requests submitted post-crash; otherwise it's a per-request failure (e.g. unsupported
         # logit-processor kwarg) and a plain RuntimeError -> 500 is appropriate.
         if result.error is not None:
-            if cb.fatal_error is not None:
+            if cb.background_thread_status.fatal_error is not None:
                 raise CBWorkerDeadError(f"CB worker died during request {request_id}: {result.error}")
             raise RuntimeError(f"CB generation failed for {request_id}: {result.error}")
         generated_ids = result.generated_tokens

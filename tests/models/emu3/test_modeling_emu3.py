@@ -23,6 +23,7 @@ from huggingface_hub import hf_hub_download
 from transformers import BitsAndBytesConfig, Emu3Config, Emu3TextConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     Expectations,
+    cleanup,
     require_bitsandbytes,
     require_torch,
     require_torch_large_accelerator,
@@ -343,6 +344,12 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
 
 @require_torch
 class Emu3IntegrationTest(unittest.TestCase):
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     @slow
     @require_bitsandbytes
     def test_model_generation(self):
@@ -357,7 +364,7 @@ class Emu3IntegrationTest(unittest.TestCase):
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.float16)
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ['USER: 64*64Describe what do you see here and tell me about the history behind it? ASSISTANT: The image captures a moment of tranquility with a black Labrador Retriever resting on a wooden floor. The dog, with its glossy black coat, is lying down with its front legs stretched out in']  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = ['USER: 64*64Describe what do you see here and tell me about the history behind it? ASSISTANT: The image captures a moment of tranquility with a black Labrador Retriever resting on a wooden floor. The dog, with its glossy black coat, is lying down with its front legs extended forward and']  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
@@ -372,8 +379,8 @@ class Emu3IntegrationTest(unittest.TestCase):
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
         processor.tokenizer.padding_side = "left"
 
-        image = Image.open(requests.get("https://picsum.photos/id/237/50/50", stream=True).raw)
-        image_2 = Image.open(requests.get("https://picsum.photos/id/247/50/50", stream=True).raw)
+        image = Image.open(requests.get("https://picsum.photos/id/237/200/200", stream=True).raw)
+        image_2 = Image.open(requests.get("https://picsum.photos/id/247/200/200", stream=True).raw)
         prompts = [
             "USER: <image>Describe what do you see here? ASSISTANT:",
             "USER: <image>What can you say about the image? ASSISTANT:",
@@ -394,10 +401,9 @@ class Emu3IntegrationTest(unittest.TestCase):
                     "USER: 64*64Describe what do you see here? ASSISTANT: The image depicts a black panther in a crouched position. The panther's body is elongated and curved, with its head lowered and ears pointed forward, suggesting alertness or focus.",
                     "USER: 64*64What can you say about the image? ASSISTANT: The image depicts a serene natural landscape. The foreground consists of a grassy area with some patches of bare earth. The middle ground shows a steep, reddish-brown cliff, which could be a",
                 ],
-                # We switch to A10 on 2025/06/29, and A10 gives strange values
                 ("cuda", 8): [
-                    'USER: 64*64Describe what do you see here? ASSISTANT: 1.Filed with 1.Computing theComputing.Computing.',
-                    'USER: 64*64What can you say about the image? ASSISTANT: 1.Filed with theComputing theComputing.Computing.',
+                    "USER: 64*64Describe what do you see here? ASSISTANT: The image features a close-up view of a black dog with a shiny black coat, lying on a wooden surface. The dog's eyes are open and it is looking directly at the camera, giving an",
+                    "USER: 64*64What can you say about the image? ASSISTANT: The image shows a desert landscape with a large sand dune and some desert vegetation. The sand dune is prominent in the background, while the desert vegetation is more prominent in the foreground.",
                 ],
             }
         )  # fmt: skip
@@ -412,12 +418,16 @@ class Emu3IntegrationTest(unittest.TestCase):
     @require_torch_large_accelerator
     def test_model_generation_multi_image(self):
         model = Emu3ForConditionalGeneration.from_pretrained(
-            "BAAI/Emu3-Chat-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+            "BAAI/Emu3-Chat-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True), attn_implementation="eager"
         )
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
+        # Force 32x32 tokens per image (256x256 pixels / spatial_factor 8) to avoid OOM on A10G
+        processor.image_processor.min_pixels = 256 * 256
+        processor.image_processor.max_pixels = 256 * 256
+        processor.image_processor.size = {"min_pixels": 256 * 256, "max_pixels": 256 * 256}
 
-        image = Image.open(requests.get("https://picsum.photos/id/237/50/50", stream=True).raw)
-        image_2 = Image.open(requests.get("https://picsum.photos/id/247/50/50", stream=True).raw)
+        image = Image.open(requests.get("https://picsum.photos/id/237/200/200", stream=True).raw)
+        image_2 = Image.open(requests.get("https://picsum.photos/id/247/200/200", stream=True).raw)
         prompt = "USER: <image><image>What do these two images have in common? ASSISTANT:"
 
         inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.float16)
@@ -427,8 +437,7 @@ class Emu3IntegrationTest(unittest.TestCase):
                 {
                     ("xpu", 3): ['USER: 64*6464*64What do these two images have in common? ASSISTANT: The two images both depict a rhinoceros, yet they are significantly different in terms of focus and clarity. The rhinoceros in the upper image is in sharp focus, showing detailed textures'],
                     (None, None): ["USER: 64*6464*64What do these two images have in common? ASSISTANT: Both images feature a black animal, but they are not the same animal. The top image shows a close-up of a black cow's head, while the bottom image depicts a black cow in a natural"],
-                    # We switch to A10 on 2025/06/29, and A10 gives strange values
-                    ("cuda", 8): ['USER: 64*6464*64What do these two images have in common? ASSISTANT:Computing.Filed.Filed.11.Computing theComputing.Computing.'],
+                    ("cuda", 8): ["USER: 32*3232*32What do these two images have in common? ASSISTANT: The two images share a common theme of featuring a black cow. One image captures a close-up of the cow's face, while the other image shows the cow in its natural environment, standing on a"],
                 }
             )  # fmt: skip
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()

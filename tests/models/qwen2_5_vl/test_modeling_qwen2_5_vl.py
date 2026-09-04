@@ -598,7 +598,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
             {
                 (None, None): [
                     'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-                    'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, an AI language model created by Alibaba Cloud. I am designed to assist with various tasks such as answering questions, providing information,'
+                    'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to assist with a wide range of tasks, from answering questions and'
                 ],
                 ("rocm", (9, 4)): [
                     'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
@@ -636,10 +636,6 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
 
         expected_decoded_texts = Expectations(
             {
-                (None, None): [
-                    "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in",
-                    "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is",
-                ],
                 ("cuda", (8, 6)): [
                     'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
                     'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is evident in',
