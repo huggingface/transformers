@@ -3767,6 +3767,8 @@ class PreTrainedModel(
                     f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
                     f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
                 )
+            from kernels import Mode
+
             from .integrations.hub_kernels import register_kernel_mapping_transformers
 
             register_kernel_mapping_transformers()
@@ -4681,6 +4683,8 @@ class PreTrainedModel(
         if not is_kernels_available():
             return
 
+        from kernels import Mode
+
         if value is not None and not isinstance(value, Mode):
             raise ValueError(
                 f"Received {value} for kernels mode but this invalid please use a flag from kernel's `Mode`"
@@ -4933,6 +4937,8 @@ class PreTrainedModel(
         result = super().train(mode)
         # Potential kernelization (only happens if a new Mode is detected)
         if is_kernels_available() and self.use_kernels:
+            from kernels import Mode
+
             expected_mode = Mode.INFERENCE if not mode else Mode.TRAINING
             # NOTE: For now we don't allow training mode
             if expected_mode & Mode.TRAINING:

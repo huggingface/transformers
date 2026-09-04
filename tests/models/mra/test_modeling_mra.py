@@ -336,6 +336,10 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_batching_equivalence(self):
         pass
 
+    @unittest.skip(reason="Model is completely broken and raises IMAs across other tests")
+    def test_kernels_can_run_without_crashing(self):
+        pass
+
 
 @require_torch
 class MraModelIntegrationTest(unittest.TestCase):
