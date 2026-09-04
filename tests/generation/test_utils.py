@@ -335,6 +335,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         return output_generate
 
     @pytest.mark.generate
+    @require_torch_accelerator
     @scoped_kernels
     def test_kernels_greedy_generate(self):
         for model_class in self.all_generative_model_classes:
