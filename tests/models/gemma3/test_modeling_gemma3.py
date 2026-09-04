@@ -62,6 +62,7 @@ if is_torch_available():
         Gemma3TextForSequenceClassification,
         Gemma3TextModel,
     )
+    from transformers.cache_utils import StaticCache
     from transformers.models.gemma3.modeling_gemma3 import create_masks_for_vision_model
     from transformers.pytorch_utils import is_torch_greater_or_equal
 
@@ -388,6 +389,33 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         # Verify that causal masking still applies correctly to text
         # Token 11 (image) looking ahead at Token 12 (text) -> MASKED
         self.assertLess(full_mask[0, 0, 11, 12].item(), -1000)
+
+    @parameterized.expand([(["sliding_attention", "full_attention"],), (["full_attention", "sliding_attention"],)])
+    def test_vision_mask_with_cache_beyond_sliding_window(self, layer_types: list[str]):
+        """Regression test for a crash observed on real vision checkpoints such as ShieldGemma-2.
+
+        Once the cache is longer than the sliding window, sliding and full attention layers report
+        different `kv_length`s. The vision mask has to be built for a sliding layer, otherwise the
+        sliding mask ends up sized against a full attention layer and the forward pass crashes.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.text_config._attn_implementation = "eager"
+        config.text_config.sliding_window = 4
+        config.text_config.layer_types = layer_types
+        config.text_config.num_hidden_layers = len(layer_types)
+
+        model = Gemma3ForConditionalGeneration(config).to(torch_device).eval()
+        batch_size, prompt_length = inputs_dict["input_ids"].shape
+        past_key_values = StaticCache(
+            config=config.get_text_config(),
+            max_batch_size=batch_size,
+            max_cache_len=prompt_length + 8,  # longer than the sliding window
+            device=torch_device,
+            dtype=model.dtype,
+        )
+
+        with torch.no_grad():
+            model(**inputs_dict, past_key_values=past_key_values, use_cache=True)
 
 
 @slow

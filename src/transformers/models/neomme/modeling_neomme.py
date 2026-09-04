@@ -27,7 +27,6 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput
@@ -269,7 +268,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class NeoMMEAttention(nn.Module):
     """Bidirectional grouped-query attention with QK-norm, M-RoPE, and a sigmoid output gate.
 
