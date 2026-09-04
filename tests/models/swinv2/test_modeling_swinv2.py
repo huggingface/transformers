@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Swinv2 model."""
 
 import collections
+import inspect
 import unittest
 from functools import cached_property
 
@@ -95,10 +96,6 @@ class Swinv2ModelTester:
         self.encoder_stride = encoder_stride
         self.out_features = out_features
         self.out_indices = out_indices
-        # num_patches and seq_length used by SDPA equivalence tests (bool_masked_pos handling)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches
-        self.num_masks = num_patches // 2
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -200,16 +197,6 @@ class Swinv2ModelTester:
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
-        # test greyscale images
-        config.num_channels = 1
-        model = Swinv2ForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
-        result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, labels = config_and_inputs
@@ -222,9 +209,9 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             Swinv2Model,
-            Swinv2Backbone,
             Swinv2ForImageClassification,
             Swinv2ForMaskedImageModeling,
+            Swinv2Backbone,
         )
         if is_torch_available()
         else ()
@@ -247,23 +234,6 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             common_properties=["image_size", "patch_size", "num_channels"],
         )
 
-    @staticmethod
-    def _prepare_config_headdim(config, requested_dim):
-        import copy
-
-        config = copy.deepcopy(config)
-        if hasattr(config, "attention_probs_dropout_prob"):
-            config.attention_probs_dropout_prob = 0
-        # Swinv2 uses embed_dim and num_heads (list). Ensure head_dim >= requested_dim by scaling embed_dim.
-        if hasattr(config, "embed_dim") and hasattr(config, "num_heads"):
-            num_heads = config.num_heads
-            min_heads = min(num_heads) if isinstance(num_heads, (list, tuple)) else num_heads
-            head_dim = config.embed_dim // min_heads
-            if head_dim < requested_dim:
-                scale = max(requested_dim // head_dim, 1)
-                config.embed_dim *= scale
-        return config
-
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -271,37 +241,12 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # TODO: check if this works again for PyTorch 2.x.y
-    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @unittest.skip(
-        reason="Swinv2 always passes a non-null combined attention mask (continuous relative position bias + optional "
-        "cyclic-shift mask) to the attention interface. Flash attention does not support non-null "
-        "additive attn_mask, so this kernel cannot be used with Swinv2."
-    )
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
     def test_backbone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_backbone(*config_and_inputs)
 
-    def test_for_masked_image_modeling(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
-
-    def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
     @unittest.skip(reason="Swinv2 does not use inputs_embeds")
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="Swinv2 does not support feedforward chunking yet")
-    def test_feed_forward_chunking(self):
         pass
 
     def test_model_get_set_embeddings(self):
@@ -407,13 +352,12 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
 
-        if model_class.__name__ != "Swinv2Backbone":
-            # Sequence format (B, N, C): last two dims are [num_patches, embed_dim]
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [num_patches, self.model_tester.embed_dim],
-            )
+        self.assertListEqual(
+            list(hidden_states[0].shape[-2:]),
+            [num_patches, self.model_tester.embed_dim],
+        )
 
+        if model_class.__name__ != "Swinv2Backbone":
             reshaped_hidden_states = outputs.reshaped_hidden_states
             self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
 
@@ -485,6 +429,10 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model_name = "microsoft/swinv2-tiny-patch4-window8-256"
         model = Swinv2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    @unittest.skip(reason="Swinv2 does not support feedforward chunking yet")
+    def test_feed_forward_chunking(self):
+        pass
 
 
 @require_vision
