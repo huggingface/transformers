@@ -915,6 +915,7 @@ class FalconH1DecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             cache_params=past_key_values,
             attention_mask=mamba_attention_mask,
+            **kwargs,
         )
         mamba_hidden_states = mamba_hidden_states * self.ssm_out_multiplier
 
@@ -1093,6 +1094,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]

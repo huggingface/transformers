@@ -39,18 +39,11 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
     url = f"https://api.github.com/repos/huggingface/transformers/actions/workflows/{workflow_id}/runs"
     url += f"?branch=main&exclude_pull_requests=true&per_page={num_runs}"
 
-    # The GitHub Actions search index (used for event=/branch= filters) can lag badly:
-    # the same URL has returned total_count values of 190, 238, 311, and 413 within minutes
-    # from different backend nodes (PR #48374).  We detect a stale response by checking
-    # that GITHUB_RUN_ID appears in the results; if absent we retry.
-    #
-    # Stale-check is only active when querying the *same* workflow as the current run AND
-    # the current run is schedule-triggered (so GITHUB_RUN_ID is guaranteed to be in the
-    # results when the API is fresh).  The two remaining uncovered paths are left for a
-    # follow-up PR once this path is confirmed stable:
-    #   • AMD CI querying its own history → falls into the event=workflow_run fallback below
-    #     (AMD CI is triggered via workflow_run, not schedule).
-    #   • AMD CI querying the matching Nvidia run (different workflow_id) → stale_check=False.
+    # The GitHub Actions search index (event=/branch= filters) lags: the same URL returned
+    # total_count 190, 238, 311 and 413 within minutes from different backend nodes (PR #48374).
+    # A response without GITHUB_RUN_ID is stale, so retry. Only checkable for the current run's own
+    # workflow on a schedule trigger, which guarantees the run is in a fresh response. AMD CI, which
+    # runs via workflow_run or queries another workflow_id, stays uncovered pending a follow-up PR.
     stale_check = (
         current_workflow_id is not None
         and int(workflow_id) == int(current_workflow_id)

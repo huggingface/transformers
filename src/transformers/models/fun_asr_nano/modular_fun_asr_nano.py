@@ -241,8 +241,8 @@ class FunAsrNanoAttention(LlamaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        input_features_mask: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -364,8 +364,8 @@ class FunAsrNanoEncoderLayer(LlamaDecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        input_features_mask: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
         residual = hidden_states if hidden_states.shape[-1] == self.hidden_size else None

@@ -453,21 +453,6 @@ class DeepGemmForwardTest(unittest.TestCase):
                 deepgemm_fp8_fp4_linear(input, weight, weight_scale, block_size=(128, 128))
         self.assertEqual(captured, {})  # raised before the kernel ran
 
-    def test_linear_adds_bias_and_ignores_deprecated_output_dtype(self):
-        input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device)
-        weight = torch.randn(16, 128, device=torch_device).to(torch.float8_e4m3fn)
-        weight_scale = torch.ones(1, 1, dtype=torch.float32, device=torch_device)
-        bias = torch.randn(16, dtype=torch.bfloat16, device=torch_device)
-        with self._bundle(is_sm100=False):
-            with self.assertWarnsRegex(FutureWarning, "output_dtype"):
-                out = deepgemm_fp8_fp4_linear(
-                    input, weight, weight_scale, bias=bias, block_size=(128, 128), output_dtype=torch.float32
-                )
-        # output_dtype is deprecated and ignored: output follows input.dtype, not the requested float32.
-        self.assertEqual(out.dtype, torch.bfloat16)
-        # The fake matmul zeros the output buffer, so the result is exactly the broadcast bias.
-        self.assertTrue(torch.equal(out, bias.expand(4, 16)))
-
     # ── deepgemm_bf16_experts_forward ──────────────────────────────────────────
 
     def _bf16_hidden(self, experts, *, num_tokens=3, top_k=2):

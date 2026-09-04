@@ -34,17 +34,10 @@ from transformers.testing_utils import (
 )
 
 from ...alm_tester import ALMModelTest, ALMModelTester
-from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
     import torch
-
-
-AUDIO_URL = url_to_local_path(
-    "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
-)
-AUDIO_URL_ZH = url_to_local_path("https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav")
 
 
 class Qwen3ASRModelTester(ALMModelTester):
@@ -144,7 +137,7 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "path": AUDIO_URL,
+                        "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav",
                     },
                 ],
             }
@@ -183,7 +176,7 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "audio",
-                            "path": AUDIO_URL,
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav",
                         },
                     ],
                 }
@@ -194,7 +187,7 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "audio",
-                            "path": AUDIO_URL_ZH,
+                            "path": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav",
                         },
                     ],
                 }
@@ -272,10 +265,11 @@ class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
             expected = json.load(f)
 
         model = self._load_aligner()
+        audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
 
         timestamps = self._run_alignment(
             model,
-            audio=AUDIO_URL,
+            audio=audio_url,
             transcript=expected["text"],
             language=expected["language"],
         )[0]
@@ -293,8 +287,8 @@ class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
 
         model = self._load_aligner()
         audio_urls = [
-            AUDIO_URL,
-            AUDIO_URL_ZH,
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav",
+            "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav",
         ]
 
         batch_timestamps = self._run_alignment(
