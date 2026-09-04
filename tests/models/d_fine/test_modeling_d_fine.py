@@ -654,6 +654,55 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             any("dn_" in k for k in outputs.loss_dict), "Denoising losses should not be present when num_denoising=0"
         )
 
+    def test_main_loss_excludes_denoising_queries(self):
+        """The Hungarian-matched main loss must only see the normal queries, not the contrastive denoising ones."""
+        from transformers.loss.loss_d_fine import DFineLoss
+
+        config = copy.deepcopy(self.model_tester.get_config())
+        config.num_denoising = 10
+        config.auxiliary_loss = True
+        config.num_labels = self.model_tester.num_labels
+
+        model = DFineForObjectDetection(config)
+        model.to(torch_device)
+        model.train()
+
+        pixel_values = torch.rand(
+            self.model_tester.batch_size,
+            self.model_tester.num_channels,
+            self.model_tester.image_size,
+            self.model_tester.image_size,
+        ).to(torch_device)
+        labels = []
+        for _ in range(self.model_tester.batch_size):
+            labels.append(
+                {
+                    "class_labels": torch.randint(0, self.model_tester.num_labels, (self.model_tester.n_targets,)).to(
+                        torch_device
+                    ),
+                    "boxes": torch.rand(self.model_tester.n_targets, 4).to(torch_device),
+                }
+            )
+
+        outputs = model(pixel_values=pixel_values, labels=labels)
+
+        # In training mode the last-layer outputs contain the denoising queries followed by the normal queries
+        num_denoising_queries, num_queries = outputs.denoising_meta_values["dn_num_split"]
+        self.assertGreater(num_denoising_queries, 0)
+        self.assertEqual(outputs.logits.shape[1], num_denoising_queries + num_queries)
+
+        # The main loss terms must equal the loss computed on the normal queries alone
+        criterion = DFineLoss(config).to(torch_device)
+        reference = criterion(
+            {
+                "logits": outputs.logits[:, num_denoising_queries:],
+                "pred_boxes": outputs.pred_boxes[:, num_denoising_queries:].clamp(min=0, max=1),
+            },
+            labels,
+        )
+        for key in ("loss_vfl", "loss_bbox", "loss_giou"):
+            torch.testing.assert_close(outputs.loss_dict[key], reference[key])
+
     @parameterized.expand(["float32", "float16", "bfloat16"])
     @require_torch_accelerator
     @slow
