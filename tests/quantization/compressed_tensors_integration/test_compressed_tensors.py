@@ -113,8 +113,8 @@ class CompressedTensorsTest(unittest.TestCase):
         self.assertEqual(get_scheme(config, "model.layers.31.mlp.experts.0.gate_proj").weights.num_bits, 8)
         self.assertIsNone(get_scheme(config, "model.embed_tokens"))
 
-    def test_block_fp8_experts_use_compressor_dequantization(self):
-        """Laguna FP8 expert scales are blockwise and cannot be broadcast directly over weights."""
+    def test_block_fp8_experts_use_compressor_and_model_dtype(self):
+        """Laguna XS 2.1 FP8 uses blockwise scales, which require compressor dequantization."""
         from compressed_tensors.quantization.lifecycle.forward import dequantize
 
         from transformers.integrations.compressed_tensors import DecompressExperts
