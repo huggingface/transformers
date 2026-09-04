@@ -489,7 +489,6 @@ class TensorParallelTesterMixin(ABC):
         config = self.model_tester.get_config()
         return hasattr(config, "base_model_ep_plan") and config.base_model_ep_plan is not None
 
-
     def _has_tp_plan(self) -> bool:
         """Check if model has a tensor parallel plan defined."""
         config = self.model_tester.get_config()
