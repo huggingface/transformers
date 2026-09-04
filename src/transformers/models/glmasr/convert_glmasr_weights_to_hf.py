@@ -77,7 +77,7 @@ def permute_rope(tensor, config):
         dim1 = tensor.shape[0]
 
     n_heads = config.audio_config.num_attention_heads
-    head_dim = config.audio_config.head_dim
+    head_dim = getattr(config.audio_config, "head_dim", None) or config.audio_config.hidden_size // n_heads
     rope_dim = dim1 // 2
 
     rope_indices = torch.arange(rope_dim)
@@ -141,7 +141,6 @@ def main():
     state_dict = load_file(path)
 
     config = GlmAsrConfig()
-    model = GlmAsrForConditionalGeneration(config)
 
     new_state_dict = {}
     for k, v in state_dict.items():
@@ -161,7 +160,13 @@ def main():
 
         new_state_dict[new_key] = v
 
-    model.load_state_dict(new_state_dict, strict=True, assign=True)
+    model, loading_info = GlmAsrForConditionalGeneration.from_pretrained(
+        None, config=config, state_dict=new_state_dict, output_loading_info=True
+    )
+    if loading_info["missing_keys"]:
+        raise ValueError(f"Missing keys: {sorted(loading_info['missing_keys'])}")
+    if loading_info["unexpected_keys"]:
+        raise ValueError(f"Unexpected keys: {sorted(loading_info['unexpected_keys'])}")
 
     feature_extractor = WhisperFeatureExtractor(feature_size=128)
     tokenizer = TokenizersBackend.from_pretrained(args.input_path_or_repo, revision=args.revision)
