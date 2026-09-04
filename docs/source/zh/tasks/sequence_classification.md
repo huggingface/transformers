@@ -33,7 +33,28 @@ rendered properly in your Markdown viewer.
 
 </Tip>
 
-在开始之前，请确保您已安装所有必要的库：
+## 快速开始
+
+使用 [`pipeline`] 是用预训练模型进行文本分类推理的最简方式。下面示例展示如何用情感分析模型判断一段英文文本的情感倾向：
+
+```py
+from transformers import pipeline
+from accelerate import Accelerator
+
+device = Accelerator().device
+
+classifier = pipeline(
+    "text-classification",
+    model="distilbert/distilbert-base-uncased-finetuned-sst-2-english",
+    device=device,
+)
+classifier("I've been waiting for a HuggingFace course my whole life.")
+[{'label': 'POSITIVE', 'score': 0.9998}]
+```
+
+如需在自己的数据上训练模型，请继续阅读以下内容。
+
+在开始微调之前，请确保您已安装所有必要的库：
 
 ```bash
 pip install transformers datasets evaluate accelerate
@@ -238,6 +259,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 将输入传递给模型并返回 `logits`：
 
 ```py
+>>> import torch
 >>> from transformers import AutoModelForSequenceClassification
 
 >>> model = AutoModelForSequenceClassification.from_pretrained("stevhliu/my_awesome_model")
