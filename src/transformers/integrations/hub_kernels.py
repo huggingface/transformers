@@ -774,8 +774,8 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None, kernel_confi
             device_type = "rocm"
         return Device(type=device_type)
 
-    used_mode = mode or model.kernels_mode
-    used_kernel_config = kernel_config or model.kernel_config
+    used_mode = model.kernels_mode if mode is None else mode
+    used_kernel_config = model.kernel_config if kernel_config is None else kernel_config
     device = get_device(model.device.type)
 
     if used_kernel_config is not None:
