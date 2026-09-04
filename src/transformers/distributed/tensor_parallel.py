@@ -616,10 +616,11 @@ class MoeExpertsParallel(TensorParallelLayer):
             else Replicate()
         )
 
+        if expert_parallel_dispatch:
+            from ..integrations.moe import dispatch_experts_forward
+
         def tp_forward(*args, **kwargs):
             if expert_parallel_dispatch:
-                from ..integrations.moe import dispatch_experts_forward
-
                 # Every rank routes its own tokens to the experts' owners; nothing is replicated across
                 # the group, so there is neither an input gradient sum nor an output all-reduce.
                 hidden_states, top_k_index, top_k_weights = args[:3]
