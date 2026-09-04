@@ -712,6 +712,31 @@ def sdpa_kernel(enable_flash, enable_math, enable_mem_efficient):
     return torch.nn.attention.sdpa_kernel(backends)
 
 
+# Language modeling heads that score every position against its own target instead of shifting `labels` by one:
+# the standalone decoders of encoder-decoder models (driven with already right-shifted `decoder_input_ids`), the
+# permutation/masked LM heads, and the per-codebook audio LMs. `shift_labels` -- pre-shifted targets, see
+# `test_causal_lm_loss_honors_shift_labels` -- carries no meaning for them, so that test does not apply.
+UNSHIFTED_LM_HEADS = {
+    "BartForCausalLM",
+    "BigBirdPegasusForCausalLM",
+    "BlenderbotForCausalLM",
+    "BlenderbotSmallForCausalLM",
+    "CpmAntForCausalLM",
+    "MBartForCausalLM",
+    "MarianForCausalLM",
+    "MusicgenForCausalLM",
+    "MusicgenMelodyForCausalLM",
+    "MvpForCausalLM",
+    "PLBartForCausalLM",
+    "PegasusForCausalLM",
+    "ProphetNetForCausalLM",
+    "TrOCRForCausalLM",
+    "WhisperForCausalLM",
+    "XLMWithLMHeadModel",
+    "XLNetLMHeadModel",
+}
+
+
 @require_torch
 class ModelTesterMixin(ExportTesterMixin):
     model_tester = None
@@ -1887,6 +1912,93 @@ class ModelTesterMixin(ExportTesterMixin):
                     ),
                 )
 
+    def test_causal_lm_loss_honors_shift_labels(self):
+        """
+        Decoder-only LM heads shift ``labels`` by one internally to align them with the logits. Sequence and
+        context parallel training (accelerate CP, Ulysses SP, DeepSpeed ALST) cannot rely on that: the shift has
+        to happen on the full sequence, before it is sharded, so the trainer hands the model the already-aligned
+        targets as ``shift_labels`` and the model must train against those. A model that drops ``shift_labels`` --
+        by not forwarding ``**kwargs`` to ``self.loss_function``, or by shifting ``labels`` by hand -- silently
+        trains every shard against the wrong targets, and the last token of each shard gets no target at all.
+
+        The oracle is differential, so it assumes nothing about how a given head builds its loss: with
+        ``shift_labels`` supplied, the reported loss has to move when ``shift_labels`` changes and has to stay put
+        when only ``labels`` changes.
+        """
+        decoder_lm_names = [
+            *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
+            *get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES),
+        ]
+        decoder_lm_classes = [
+            c
+            for c in self.all_model_classes
+            if c.__name__ in decoder_lm_names
+            and c.__name__ not in UNSHIFTED_LM_HEADS
+            and "labels" in inspect.signature(c.forward).parameters
+        ]
+        if not decoder_lm_classes:
+            self.skipTest(reason="No decoder-only language modeling head to check")
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if config.is_encoder_decoder:
+            self.skipTest(reason="Encoder-decoder logits are already aligned with the targets, nothing to shift")
+
+        for model_class in decoder_lm_classes:
+            with self.subTest(model_class.__name__):
+                model_config = copy.deepcopy(config)
+                model_config.use_cache = False
+                model_config.return_dict = True
+                model = model_class(model_config).to(torch_device).eval()
+
+                # `_prepare_for_class` builds targets only for the heads it knows about; read the shape off the
+                # logits for the others. Constant targets are enough here: only whether the loss reacts to
+                # `labels` or to `shift_labels` matters, not the target values themselves.
+                target_shape = self._prepare_for_class(inputs_dict, model_class, return_labels=True).get("labels")
+                if isinstance(target_shape, torch.Tensor):
+                    target_shape = target_shape.shape
+                else:
+                    set_seed(42)
+                    with torch.no_grad():
+                        probe_logits = getattr(
+                            model(**self._prepare_for_class(inputs_dict, model_class)), "logits", None
+                        )
+                    if not isinstance(probe_logits, torch.Tensor) or probe_logits.ndim != 3:
+                        self.skipTest(reason="Tester does not build targets for this head")
+                    target_shape = probe_logits.shape[:2]
+
+                def reported_loss(label_id, shift_label_id, model_class=model_class, model=model):
+                    inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                    inputs["labels"] = torch.full(target_shape, label_id, dtype=torch.long, device=torch_device)
+                    inputs["shift_labels"] = torch.full(
+                        target_shape, shift_label_id, dtype=torch.long, device=torch_device
+                    )
+                    # Some heads run a stochastic front end (audio tokenizers sample); reseed so that the three
+                    # forward passes below differ only in the targets they are given.
+                    set_seed(42)
+                    with torch.no_grad():
+                        return model(**inputs).loss
+
+                baseline = reported_loss(0, 0)
+                self.assertIsNotNone(
+                    baseline, msg=f"{model_class.__name__}: no loss is returned when targets are passed"
+                )
+                self.assertFalse(
+                    torch.allclose(baseline, reported_loss(0, 1)),
+                    msg=(
+                        f"{model_class.__name__}: the training loss does not depend on `shift_labels`. Pre-shifted "
+                        f"targets are the only correct ones under sequence/context parallelism, so the loss must "
+                        f"be taken against them."
+                    ),
+                )
+                self.assertTrue(
+                    torch.allclose(baseline, reported_loss(1, 0)),
+                    msg=(
+                        f"{model_class.__name__}: the training loss still depends on `labels` although "
+                        f"`shift_labels` was passed. `shift_labels` holds the targets already aligned with the "
+                        f"logits and must fully replace `labels` in the loss."
+                    ),
+                )
+
     def test_training(self):
         if not self.model_tester.is_training:
             self.skipTest(reason="ModelTester is not configured to run training tests")
@@ -2707,8 +2819,10 @@ class ModelTesterMixin(ExportTesterMixin):
                             torch.testing.assert_close(
                                 v,
                                 reloaded_state[k],
-                                msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}.\n{v}\nvs\n{reloaded_state[k]}\n"
-                                "This probably means that it was not set with the correct value when tying.",
+                                msg=lambda x: (
+                                    f"{model_class.__name__}: Tensor {k}: {x}.\n{v}\nvs\n{reloaded_state[k]}\n"
+                                    "This probably means that it was not set with the correct value when tying."
+                                ),
                             )
 
                     # Checking the tensor sharing are correct on the new model (weights are properly tied in both cases)
@@ -2754,7 +2868,9 @@ class ModelTesterMixin(ExportTesterMixin):
                             torch.testing.assert_close(
                                 v,
                                 reloaded_state[k],
-                                msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}. Key {k} was serialized: {k in serialized_keys}. If `False`, this means it was probably aliased and safetensors removed it. If `True` it means `_init_weights` overwrote that key",
+                                msg=lambda x: (
+                                    f"{model_class.__name__}: Tensor {k}: {x}. Key {k} was serialized: {k in serialized_keys}. If `False`, this means it was probably aliased and safetensors removed it. If `True` it means `_init_weights` overwrote that key"
+                                ),
                             )
 
                 # Checking there was no complain of missing weights
