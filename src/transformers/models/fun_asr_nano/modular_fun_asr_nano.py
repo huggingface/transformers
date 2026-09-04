@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch.nn as nn
@@ -29,7 +30,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack, prepare_prompt_input
 from ...utils import auto_docstring, can_return_tuple, is_torch_available, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
@@ -40,8 +41,8 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
 )
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
 from ..clip.modeling_clip import CLIPMLP
-from ..llama.modeling_llama import LlamaDecoderLayer
-from ..qwen3_asr.modeling_qwen3_asr import Qwen3ASRAudioAttention, Qwen3ASREncoder
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer
+from ..qwen3_asr.modeling_qwen3_asr import Qwen3ASREncoder
 from ..whisper.modeling_whisper import eager_attention_forward
 from .configuration_fun_asr_nano import FunAsrNanoAdaptorConfig, FunAsrNanoConfig, FunAsrNanoEncoderConfig
 
@@ -215,25 +216,27 @@ class FunAsrNanoPreTrainedModel(AudioFlamingo3PreTrainedModel):
             init.copy_(module.embedding, position_embeddings)
 
 
-class FunAsrNanoAttention(Qwen3ASRAudioAttention):
+@no_inherit_decorator
+class FunAsrNanoAttention(LlamaAttention):
     """Multi-headed attention with the SAN-M FSMN value gate."""
 
     def __init__(
         self,
-        config: FunAsrNanoEncoderConfig,
+        config: FunAsrNanoEncoderConfig | FunAsrNanoAdaptorConfig,
+        layer_idx: int | None = None,
         input_dim: int | None = None,
         use_fsmn: bool = False,
     ):
         input_dim = input_dim or config.hidden_size
-        super().__init__(config)
-        self.dropout = config.hidden_dropout
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
+        super().__init__(config, layer_idx)
+        self.num_key_value_groups = 1  # the model has no GQA
+        self.attention_dropout = config.hidden_dropout
+        self.is_causal = False
         self.q_proj = nn.Linear(input_dim, config.hidden_size, bias=True)
         self.k_proj = nn.Linear(input_dim, config.hidden_size, bias=True)
         self.v_proj = nn.Linear(input_dim, config.hidden_size, bias=True)
+        self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
         self.fsmn = FunAsrNanoFSMN(config) if use_fsmn else None
-        del self.attention_dropout
 
     def forward(
         self,
@@ -242,14 +245,15 @@ class FunAsrNanoAttention(Qwen3ASRAudioAttention):
         input_features_mask: torch.Tensor,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        batch_size, sequence_length, _ = hidden_states.shape
-        target_shape = (batch_size, sequence_length, self.num_heads, self.head_dim)
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(target_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(target_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         projected_values = self.v_proj(hidden_states)
-        value_states = projected_values.view(target_shape).transpose(1, 2)
-        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+        value_states = projected_values.view(hidden_shape).transpose(1, 2)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
         attn_output, attn_weights = attention_interface(
@@ -258,12 +262,13 @@ class FunAsrNanoAttention(Qwen3ASRAudioAttention):
             key_states,
             value_states,
             attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            dropout=self.dropout if self.training else 0.0,
             **kwargs,
         )
-        attn_output = attn_output.reshape(batch_size, sequence_length, self.embed_dim)
-        attn_output = self.out_proj(attn_output)
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
         if self.fsmn is not None:
             # SAN-M gate: the FSMN branch runs on the values before they are split into heads.
             attn_output = attn_output + self.fsmn(projected_values, input_features_mask)

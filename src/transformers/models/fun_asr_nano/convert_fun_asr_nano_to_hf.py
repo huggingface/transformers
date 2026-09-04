@@ -101,7 +101,7 @@ COMPONENT_STATE_DICT_MAPPING = (
     (r"\.self_attn\.linear_q\.", ".self_attn.q_proj."),
     (r"\.self_attn\.linear_k\.", ".self_attn.k_proj."),
     (r"\.self_attn\.linear_v\.", ".self_attn.v_proj."),
-    (r"\.self_attn\.linear_out\.", ".self_attn.out_proj."),
+    (r"\.self_attn\.linear_out\.", ".self_attn.o_proj."),
     (r"\.self_attn\.fsmn_block\.", ".self_attn.fsmn.conv."),
 )
 
