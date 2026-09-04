@@ -31,6 +31,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        MiniMaxM2Config,
         MiniMaxM2ForCausalLM,
         MiniMaxM2Model,
     )
@@ -88,6 +89,29 @@ class MiniMaxM2ModelTest(CausalLMModelTest, unittest.TestCase):
 
         # This is to mimic torch.testing.assert_not_close
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
+
+    def test_legacy_rotary_dim_maps_to_partial_rotary_factor(self):
+        r"""
+        Released MiniMax-M2 checkpoints express partial RoPE through a legacy `rotary_dim`
+        config field (64 of head_dim 128); it must reach `rope_parameters` so the rotary
+        embedding only rotates `rotary_dim` dims instead of the full head dimension.
+        """
+        from transformers.models.minimax_m2.modeling_minimax_m2 import MiniMaxM2RotaryEmbedding
+
+        config = MiniMaxM2Config(rotary_dim=64)
+        self.assertEqual(config.rope_parameters["partial_rotary_factor"], 0.5)
+        # inv_freq holds one frequency per rotated dim pair: rotary_dim // 2.
+        self.assertEqual(MiniMaxM2RotaryEmbedding(config).inv_freq.shape[0], 32)
+
+        # An explicit partial factor still wins over the legacy field.
+        config = MiniMaxM2Config(
+            rotary_dim=64,
+            rope_parameters={"rope_theta": 5_000_000.0, "rope_type": "default", "partial_rotary_factor": 0.25},
+        )
+        self.assertEqual(config.rope_parameters["partial_rotary_factor"], 0.25)
+
+        # Configs without the legacy field keep full-width rotary.
+        self.assertIsNone(MiniMaxM2Config().rope_parameters.get("partial_rotary_factor"))
 
 
 @slow
