@@ -49,25 +49,6 @@ DENSE_DECODER_RENAMINGS = [
 ]
 
 
-def tiled_to_grouped(num_k_heads: int, heads_per_k: int, head_dim: int = 1) -> torch.Tensor:
-    """Inverse of llama.cpp's head reorder, as a permutation.
-
-    llama.cpp stores head-indexed axes *tiled* (`v0k0 v0k1 ... v0k15 v1k0 ...`) while transformers
-    groups them by key head (`k0v0 k0v1 k1v0 ...`). Indexing with this permutation converts the
-    former to the latter. `head_dim` defaults to 1, giving the permutation over head indices alone
-    (what a per-head vector like `A_log` or `dt_bias` needs).
-
-    A convention of llama.cpp's converter rather than of any one architecture, so every model whose
-    heads it tiles reorders them with this -- see `TiledToGroupedRows`/`TiledToGroupedInputs`.
-    """
-    total = num_k_heads * heads_per_k * head_dim
-    # On the CPU explicitly: a mapping may be built inside the model's init context, where the default
-    # device is meta, and a meta index tensor silently permutes nothing once moved to the weight.
-    indices = torch.arange(total, device="cpu")
-    tiled_from_grouped = indices.reshape(num_k_heads, heads_per_k, head_dim).transpose(0, 1).reshape(-1)
-    return torch.argsort(tiled_from_grouped)
-
-
 def _qwen35(config) -> list[WeightTransform]:
     """Qwen3.5: hybrid GatedDeltaNet linear attention + full attention every fourth layer.
 
@@ -339,17 +320,41 @@ class PermuteInputFeatures(ConversionOps):
 
 
 class TiledToGroupedRows(PermuteRows):
-    """`PermuteRows` with llama.cpp's head reorder, for a tensor that *produces* the head axis."""
+    """`PermuteRows` undoing llama.cpp's head reorder, for a tensor that *produces* the head axis.
+
+    llama.cpp stores head-indexed axes *tiled* (`v0k0 v0k1 ... v0k15 v1k0 ...`) while transformers
+    groups them by key head (`k0v0 k0v1 k1v0 ...`). Indexing with the permutation built below converts
+    the former to the latter. `head_dim` defaults to 1, giving the permutation over head indices alone
+    (what a per-head vector like `A_log` or `dt_bias` needs).
+
+    A convention of llama.cpp's converter rather than of any one architecture, so every model whose
+    heads it tiles is reordered this way.
+    """
 
     def __init__(self, num_k_heads: int, heads_per_k: int, head_dim: int = 1, offset: int = 0):
-        super().__init__(tiled_to_grouped(num_k_heads, heads_per_k, head_dim), offset=offset)
+        total = num_k_heads * heads_per_k * head_dim
+        # On the CPU explicitly: a mapping may be built inside the model's init context, where the default
+        # device is meta, and a meta index tensor silently permutes nothing once moved to the weight.
+        indices = torch.arange(total, device="cpu")
+        tiled_from_grouped = indices.reshape(num_k_heads, heads_per_k, head_dim).transpose(0, 1).reshape(-1)
+        permutation = torch.argsort(tiled_from_grouped)
+        super().__init__(permutation, offset=offset)
 
 
 class TiledToGroupedInputs(PermuteInputFeatures):
-    """`PermuteInputFeatures` with llama.cpp's head reorder, for a tensor that *consumes* it."""
+    """`PermuteInputFeatures` undoing the same reorder, for a tensor that *consumes* the head axis.
+
+    The permutation is the one `TiledToGroupedRows` builds, applied to columns instead of rows.
+    """
 
     def __init__(self, num_k_heads: int, heads_per_k: int, head_dim: int = 1):
-        super().__init__(tiled_to_grouped(num_k_heads, heads_per_k, head_dim))
+        total = num_k_heads * heads_per_k * head_dim
+        # On the CPU explicitly: a mapping may be built inside the model's init context, where the default
+        # device is meta, and a meta index tensor silently permutes nothing once moved to the weight.
+        indices = torch.arange(total, device="cpu")
+        tiled_from_grouped = indices.reshape(num_k_heads, heads_per_k, head_dim).transpose(0, 1).reshape(-1)
+        permutation = torch.argsort(tiled_from_grouped)
+        super().__init__(permutation)
 
 
 class Cast(ConversionOps):

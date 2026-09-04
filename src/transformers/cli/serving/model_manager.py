@@ -266,9 +266,6 @@ class ModelManager:
         model_kwargs = {
             "revision": revision,
             "attn_implementation": self.attn_implementation,
-            # Naming a kernel repo on the command line is the opt-in, so one outside `kernels-community`
-            # is loaded rather than refused.
-            "allow_all_kernels": True,
             "dtype": self.dtype,
             "device_map": self.device,
             "trust_remote_code": self.trust_remote_code,
