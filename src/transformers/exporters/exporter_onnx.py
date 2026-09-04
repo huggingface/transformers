@@ -387,6 +387,32 @@ def _patch_reshape(original):
     return patch
 
 
+@register_patch("onnx", "torch.Tensor.contiguous")
+def _patch_contiguous(original):
+    """Materialise via `clone` instead of a bare `contiguous()` call.
+
+    `_patch_reshape` protects a non-contiguous tensor that flows straight into a `reshape`/`view`
+    call, but plenty of attention code (e.g. `eager_attention_forward`'s `attn_output.transpose(1,
+    2).contiguous()`) calls `.contiguous()` on its own, then hands the result to a *caller* that
+    reshapes it later — often after being handed across a function return, so by the time the
+    reshape runs, `is_contiguous()` (checked at trace time, when the real `.contiguous()` call
+    already ran) correctly reports "already contiguous" and `_patch_reshape` rightly does nothing.
+    But a bare `aten.contiguous` is exactly the op the ONNX optimizer folds away as a no-op when the
+    graph is re-decomposed for ONNX (see `_patch_reshape`'s docstring) — so the materialization this
+    call was supposed to perform never survives into the ONNX graph, and the *later* reshape/view
+    then fails there against the still-non-contiguous tensor (`Cannot view a tensor with shape ...`).
+    `clone(memory_format=...)` survives that fold, so redirect there whenever a copy is actually
+    needed; an already-contiguous tensor is returned unchanged either way.
+    """
+
+    def patch(input, memory_format=torch.contiguous_format):
+        if isinstance(input, torch.Tensor) and not input.is_contiguous(memory_format=memory_format):
+            return input.clone(memory_format=memory_format)
+        return original(input, memory_format=memory_format)
+
+    return patch
+
+
 @register_patch("onnx", "torch.exp", "torch.Tensor.exp")
 def _patch_exp(original):
     """Lower `exp` on complex tensors via Euler — onnxscript has no dispatch for `aten.exp` on
