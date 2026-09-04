@@ -5893,6 +5893,7 @@ class ModelTesterMixin(ExportTesterMixin):
         """
         Tests that we can initialize a model with RoPE scaling in the config, that it can run a forward pass, and
         that a few basic model output properties are honored.
+        Note that we test only text backbone's rope module since multimodal rope can be special.
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         text_config = config.get_text_config(decoder=True)
@@ -5978,7 +5979,10 @@ class ModelTesterMixin(ExportTesterMixin):
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
     def test_model_rope_scaling_frequencies(self):
-        """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
+        """
+        Tests the frequency properties of the different RoPE scaling types on the model RoPE layer.
+        Note that we test only text backbone's rope module since multimodal rope can be special.
+        """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         text_config = config.get_text_config(decoder=True)
         base_model_class = None
@@ -6273,8 +6277,14 @@ def _config_supports_rope_scaling(config: PreTrainedConfig) -> bool:
     """Returns whether a certain model config supports RoPE scaling parameterization."""
     # Has rope_scaling -> model was designed with rope scaling in mind
     # Has rope_theta (and no rope_scaling) -> probably an older model, but should support rope scaling as well
-    main_config_has_rope = hasattr(config, "rope_parameters")
-    return main_config_has_rope
+    main_config_scales_rope = hasattr(config, "rope_parameters")
+
+    # Axial rope doesn't scale as images usually have a pre-defined length
+    # so the config will have no `max_position_embeddings` field defined
+    # FIXME: add non-scaling rope tests for vision models @raushan
+    if not hasattr(config, "max_position_embeddings"):
+        main_config_scales_rope = False
+    return main_config_scales_rope
 
 
 def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool:

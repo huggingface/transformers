@@ -21,15 +21,6 @@ import numpy as np
 import torch
 from torch import nn
 
-from transformers.models.arcee.modeling_arcee import ArceeMLP
-from transformers.models.dinov2.modeling_dinov2 import (
-    Dinov2LayerScale,
-    Dinov2PreTrainedModel,
-    eager_attention_forward,
-)
-from transformers.models.llama.modeling_llama import LlamaMLP
-from transformers.models.pixtral.modeling_pixtral import PixtralAttention, rotate_half
-
 from ... import initialization as init
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
@@ -37,9 +28,17 @@ from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, logging, no_inherit_decorator
 from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..arcee.modeling_arcee import ArceeMLP
+from ..dinov2.modeling_dinov2 import (
+    Dinov2LayerScale,
+    Dinov2PreTrainedModel,
+    eager_attention_forward,
+)
+from ..llama.modeling_llama import LlamaMLP
+from ..pixtral.modeling_pixtral import PixtralAttention, rotate_half
 from ..swin.modeling_swin import SwinDropPath
 from .configuration_dinov3_vit import DINOv3ViTConfig
 
@@ -240,6 +239,7 @@ def apply_rotary_pos_emb(
     return q, k
 
 
+@no_inherit_decorator
 class DINOv3ViTAttention(PixtralAttention):
     def __init__(self, config: DINOv3ViTConfig):
         super().__init__(config)

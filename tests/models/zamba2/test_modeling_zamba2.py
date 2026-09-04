@@ -664,12 +664,11 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_num_mem_blocks_2_official_checkpoint(self):
-        # Regression test for #47994: every published `num_mem_blocks=2` checkpoint (the Zamba2-2.7B
-        # and Zamba2-7B families) raised at construction, before any weight was read, because
-        # `block_id` followed the global layer index while the weight-tie cycle follows hybrid-layer
-        # order. The layout is what makes this checkpoint the right one to test: its hybrid layers
-        # `[6, 12, 18, 24, 30, 36, 42, 47, 51]` are not all congruent modulo `num_mem_blocks`, and an
-        # evenly spaced layout constructs fine even without the fix.
+        # Regression test for #47994: every published `num_mem_blocks=2` checkpoint (Zamba2-2.7B and
+        # Zamba2-7B) raised at construction, before any weight was read, because `block_id` followed
+        # the global layer index while the weight-tie cycle follows hybrid-layer order. This checkpoint
+        # is the one to test because its hybrid layers `[6, 12, 18, 24, 30, 36, 42, 47, 51]` are not
+        # all congruent modulo `num_mem_blocks`; an evenly spaced layout constructs fine without the fix.
         model_id = "Zyphra/Zamba2-2.7B-instruct"
         model, loading_info = Zamba2ForCausalLM.from_pretrained(
             model_id, dtype=torch.bfloat16, output_loading_info=True
