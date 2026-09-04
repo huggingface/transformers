@@ -62,8 +62,6 @@ class FunAsrNanoModelTester(ALMModelTester):
         kwargs.setdefault("num_timestamp_prediction_layers", 1)
         kwargs.setdefault("fsmn_kernel_size", 5)
         kwargs.setdefault("hidden_dropout", 0.0)
-        kwargs.setdefault("attention_dropout", 0.0)
-        kwargs.setdefault("activation_dropout", 0.0)
 
         super().__init__(parent, **kwargs)
 

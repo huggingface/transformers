@@ -467,11 +467,13 @@ class FunAsrNanoMultiModalProjector(AudioFlamingo3MultiModalProjector):
         super().__init__()
         self.linear_1 = nn.Linear(config.audio_config.hidden_size, config.projector_hidden_size)
         self.linear_2 = nn.Linear(config.projector_hidden_size, config.adaptor_config.hidden_size)
-        adaptor_config = config.adaptor_config
-        self.config = adaptor_config
         self.blocks = nn.ModuleList(
-            [FunAsrNanoEncoderLayer(adaptor_config, use_fsmn=False) for _ in range(adaptor_config.num_hidden_layers)]
+            [
+                FunAsrNanoEncoderLayer(config.adaptor_config, use_fsmn=False)
+                for _ in range(config.adaptor_config.num_hidden_layers)
+            ]
         )
+        self.config = config.adaptor_config
 
     def forward(self, hidden_states: torch.Tensor, input_features_mask: torch.Tensor) -> torch.Tensor:
         hidden_states = self.linear_1(hidden_states)
