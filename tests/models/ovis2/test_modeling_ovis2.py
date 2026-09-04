@@ -305,7 +305,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
             device_map=torch_device,
         )
 
-        url = "http://images.cocodataset.org/val2014/COCO_val2014_000000537955.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2014/COCO_val2014_000000537955.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
         prompt = [
             {
@@ -335,7 +335,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
             "thisisiron/Ovis2-2B-hf", dtype="bfloat16", device_map=torch_device
         )
 
-        lowres_url = "http://images.cocodataset.org/val2014/COCO_val2014_000000537955.jpg"
+        lowres_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2014/COCO_val2014_000000537955.jpg"
         lowres_img = Image.open(requests.get(lowres_url, stream=True).raw).resize((320, 240))
 
         inputs = self.processor(

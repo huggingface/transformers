@@ -616,7 +616,7 @@ def prepare_text():
 
 def prepare_img_batched():
     url1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-    url2 = "http://images.cocodataset.org/train2017/000000257813.jpg"
+    url2 = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/train2017/000000257813.jpg"
     url3 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
 
     return [Image.open(BytesIO(requests.get(url).content)).convert("RGB") for url in [url1, url2, url3]]
