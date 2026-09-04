@@ -27,6 +27,13 @@ GGML_BLOCK = {
     GGML_Q6_K: (256, 210),
 }
 
+
+def row_bytes(ggml_type: int, in_features: int) -> int:
+    """Bytes one row of `in_features` values occupies, packed as `ggml_type`."""
+    block_elems, block_bytes = GGML_BLOCK[ggml_type]
+    return in_features // block_elems * block_bytes
+
+
 # ggml type id -> its name, for messages
 GGML_NAME = {GGML_Q8_0: "Q8_0", GGML_Q4_K: "Q4_K", GGML_Q5_K: "Q5_K", GGML_Q6_K: "Q6_K"}
 

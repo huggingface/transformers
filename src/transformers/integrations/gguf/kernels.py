@@ -156,11 +156,8 @@ def kernelize_ggml_layers(model) -> None:
 
     from kernels import Mode, kernelize, register_kernel_mapping, use_kernel_mapping
 
-    # Resolve every repository first and keep only the ones that answer. `kernelize` walks the model
-    # once for the whole mapping and stops where it raises, so an entry that cannot be fetched -- a
-    # repo that does not exist yet, a machine with no network, a build with no variant for this torch
-    # -- would otherwise cost every layer after it. Each kernel is independent; a missing one should
-    # only mean that layer keeps its own forward.
+    # Resolve first and keep what answers: `kernelize` stops at the first entry it cannot fetch, which
+    # would cost every layer after it.
     mapping = {}
     for layer_name, devices in get_ggml_layer_mapping().items():
         try:

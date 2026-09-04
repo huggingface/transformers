@@ -20,7 +20,7 @@ from torch import nn
 
 from ...core_model_loading import WeightConverter, WeightRenaming, WeightTransform
 from ...utils import logging
-from .dequant import GGML_BLOCK
+from .dequant import GGML_BLOCK, row_bytes
 from .gguf_conversion_mapping import GGUF_ARCHS, Cast, Dequantize
 from .kernels import DEQUANT_CHUNK_ELEMS, MAX_GEMV_ROWS, dequantize_blocks, mul_mat_id, mul_mat_vec
 from .reader import GgufHeader
@@ -106,16 +106,6 @@ def add_gguf_load_ops(mapping: list[WeightTransform], to_unpack: dict[str, int],
     return mapping
 
 
-# The two weights of a stacked expert bank, in the order `GgufExperts` takes their types.
-_EXPERT_PARAMS = ("gate_up_proj", "down_proj")
-
-
-def _row_bytes(ggml_type: int, in_features: int) -> int:
-    """How many bytes one row of `in_features` values occupies, packed as `ggml_type`."""
-    block_elems, block_bytes = GGML_BLOCK[ggml_type]
-    return in_features // block_elems * block_bytes
-
-
 class GgufLinear(nn.Module):
     """`nn.Linear` whose weight stays as GGUF blocks: `(out_features, bytes_per_row)` uint8."""
 
@@ -125,7 +115,7 @@ class GgufLinear(nn.Module):
         self.out_features = out_features
         self.ggml_type = ggml_type
         self.weight = nn.Parameter(
-            torch.empty((out_features, _row_bytes(ggml_type, in_features)), dtype=torch.uint8), requires_grad=False
+            torch.empty((out_features, row_bytes(ggml_type, in_features)), dtype=torch.uint8), requires_grad=False
         )
         # A GGUF stores a bias as its own f32 tensor, never quantized, so it stays an ordinary
         # parameter and the loader fills it like any other.
@@ -187,11 +177,11 @@ class GgufExperts(nn.Module):
         self.down_type = down_type
         self.act_fn = act_fn
         self.gate_up_proj = nn.Parameter(
-            torch.empty((num_experts, 2 * intermediate_dim, _row_bytes(gate_up_type, hidden_dim)), dtype=torch.uint8),
+            torch.empty((num_experts, 2 * intermediate_dim, row_bytes(gate_up_type, hidden_dim)), dtype=torch.uint8),
             requires_grad=False,
         )
         self.down_proj = nn.Parameter(
-            torch.empty((num_experts, hidden_dim, _row_bytes(down_type, intermediate_dim)), dtype=torch.uint8),
+            torch.empty((num_experts, hidden_dim, row_bytes(down_type, intermediate_dim)), dtype=torch.uint8),
             requires_grad=False,
         )
 
@@ -202,19 +192,21 @@ class GgufExperts(nn.Module):
         tensor and the router's choices, and computes every (token, expert) pair in a single grid.
         The loop this replaces spent its time launching kernels, not running them.
         """
-        tokens, used = top_k_index.shape
-        ids = top_k_index if top_k_index.dtype == torch.int32 else top_k_index.to(torch.int32)
-
-        # Every slot of a token reads that token's hidden state, so the ids index the weights only.
-        fused = mul_mat_id(self.gate_up_proj, hidden_states, ids, self.gate_up_type, 2 * self.intermediate_dim)
-        gate, up = fused.chunk(2, dim=-1)
-        current = (self.act_fn(gate) * up).reshape(tokens * used, self.intermediate_dim)
-        # Each (token, slot) carries its own vector, so the pair flattens into the token axis.
-        out = mul_mat_id(self.down_proj, current, ids.reshape(-1, 1), self.down_type, self.hidden_dim)
-
-        # The same weighted sum the model's own experts do.
-        out = out.reshape(tokens, used, self.hidden_dim) * top_k_weights.unsqueeze(-1)
-        return out.sum(dim=1).to(hidden_states.dtype)
+        num_tokens, top_k = top_k_index.shape
+        # required by mul_mat_id
+        ids = top_k_index.to(torch.int32)
+        gate, up = mul_mat_id(
+            self.gate_up_proj, hidden_states, ids, self.gate_up_type, 2 * self.intermediate_dim
+        ).chunk(2, dim=-1)
+        current_hidden_states = (self.act_fn(gate) * up).reshape(num_tokens * top_k, self.intermediate_dim)
+        # Each (token, top_k_pos) carries its own vector, so the pair flattens into the token axis.
+        current_hidden_states = mul_mat_id(
+            self.down_proj, current_hidden_states, ids.reshape(-1, 1), self.down_type, self.hidden_dim
+        )
+        current_hidden_states = current_hidden_states.reshape(num_tokens, top_k, self.hidden_dim)
+        current_hidden_states = current_hidden_states * top_k_weights.unsqueeze(-1)
+        final_hidden_states = current_hidden_states.sum(dim=1).to(hidden_states.dtype)
+        return final_hidden_states
 
     def extra_repr(self) -> str:
         return (
@@ -232,9 +224,8 @@ class GgufEmbedding(nn.Module):
         self.embedding_dim = embedding_dim
         self.ggml_type = ggml_type
         self.compute_dtype = dtype or torch.get_default_dtype()
-        block_elems, block_bytes = GGML_BLOCK[ggml_type]
         self.weight = nn.Parameter(
-            torch.empty((num_embeddings, embedding_dim // block_elems * block_bytes), dtype=torch.uint8),
+            torch.empty((num_embeddings, row_bytes(ggml_type, embedding_dim)), dtype=torch.uint8),
             requires_grad=False,
         )
 
@@ -259,18 +250,21 @@ def replace_with_gguf_modules(model, plan: dict[str, int], kernel, dtype=None) -
 
     replaced, unsupported = {}, set()
     for module_name, module in model.named_modules():
-        # An expert bank holds bare parameters, not child `Linear`s, so match by name. Both stay packed
-        # or neither: they are read in one forward.
-        expert_types = [plan.get(f"{module_name}.{name}") for name in _EXPERT_PARAMS]
-        if all(t is not None for t in expert_types):
-            if not all(kernel.supports(t) for t in expert_types):
+        # An expert bank holds bare parameters rather than child `Linear`s, so it is swapped whole.
+        if module_name.endswith(".experts"):
+            expert_params = ("gate_up_proj", "down_proj")  # the order `GgufExperts` takes their types
+            expert_types = [plan.get(f"{module_name}.{name}") for name in expert_params]
+            if any(ggml_type is None for ggml_type in expert_types):
+                continue
+            # Both stay packed or neither: they are read in one forward.
+            if not all(kernel.supports(ggml_type) for ggml_type in expert_types):
                 unsupported.update(expert_types)
                 continue
             new_module = GgufExperts(
                 module.num_experts, module.hidden_dim, module.intermediate_dim, *expert_types, module.act_fn
             )
             model.set_submodule(module_name, new_module)
-            for name in _EXPERT_PARAMS:
+            for name in expert_params:
                 replaced[f"{module_name}.{name}"] = new_module
             continue
 
