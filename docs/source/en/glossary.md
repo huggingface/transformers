@@ -89,7 +89,7 @@ See [causal language modeling](#causal-language-modeling) and [decoder models](#
 
 ### backbone
 
-The backbone is the network (embeddings and layers) that outputs the raw hidden states or features. It is usually connected to a [head](#head) which accepts the features as its input to make a prediction. For example, [`ViTModel`] is a backbone without a specific head on top. Other models can also use [`ViTModel`] as a backbone such as [DPT](model_doc/dpt).
+The backbone is the network (embeddings and layers) that outputs the raw hidden states or features. It is usually connected to a [head](#head) which accepts the features as its input to make a prediction. For example, [`ViTModel`] is a backbone without a specific head on top. Other models can also use [`ViTModel`] as a backbone such as [DPT](./model_doc/dpt).
 
 ## C
 
@@ -117,7 +117,7 @@ A type of layer in a neural network where the input matrix is multiplied element
 Parallelism technique for training on multiple GPUs where the same setup is replicated multiple times, with each instance
 receiving a distinct data slice. The processing is done in parallel and all setups are synchronized at the end of each training step.
 
-Learn more about [DataParallel](perf_train_gpu_many#dataparallel).
+Learn more about [DataParallel](./perf_train_gpu_many#dataparallel).
 
 ### decoder input IDs
 
@@ -177,7 +177,7 @@ embeddings that are computed in parallel and thus defines the trade-off between 
 
 Finetuning is a form of transfer learning which involves taking a pretrained model, freezing its weights, and replacing the output layer with a newly added [model head](#head). The model head is trained on your target dataset.
 
-See the [Fine-tune a pretrained model](https://huggingface.co/docs/transformers/training) tutorial for more details, and learn how to fine-tune models with 🤗 Transformers.
+See the [Fine-tune a pretrained model](./training) tutorial for more details, and learn how to fine-tune models with 🤗 Transformers.
 
 ## H
 
@@ -197,7 +197,7 @@ Vision-based Transformers models split an image into smaller patches which are l
 
 ### inference
 
-Inference is the process of evaluating a model on new data after training is complete. See the [Pipeline for inference](https://huggingface.co/docs/transformers/pipeline_tutorial) tutorial to learn how to perform inference with 🤗 Transformers.
+Inference is the process of evaluating a model on new data after training is complete. See the [Pipeline for inference](./pipeline_tutorial) tutorial to learn how to perform inference with 🤗 Transformers.
 
 ### input IDs
 
@@ -342,13 +342,13 @@ whole text, individual words).
 
 A pipeline in 🤗 Transformers is an abstraction referring to a series of steps that are executed in a specific order to preprocess and transform data and return a prediction from a model. Some example stages found in a pipeline might be data preprocessing, feature extraction, and normalization.
 
-For more details, see [Pipelines for inference](https://huggingface.co/docs/transformers/pipeline_tutorial).
+For more details, see [Pipelines for inference](./pipeline_tutorial).
 
 ### PipelineParallel (PP)
 
 Parallelism technique in which the model is split up vertically (layer-level) across multiple GPUs, so that only one or
 several layers of the model are placed on a single GPU. Each GPU processes in parallel different stages of the pipeline
-and working on a small chunk of the batch. Learn more about [PipelineParallel](perf_train_gpu_many#pipeline-parallelism).
+and working on a small chunk of the batch. Learn more about [PipelineParallel](./perf_train_gpu_many#pipeline-parallelism).
 
 ### pixel values
 
@@ -418,7 +418,7 @@ An example of a semi-supervised learning approach is "self-training", in which a
 ### sequence-to-sequence (seq2seq)
 
 Models that generate a new sequence from an input, like translation models, or summarization models (such as
-[Bart](model_doc/bart) or [T5](model_doc/t5)).
+[Bart](./model_doc/bart) or [T5](./model_doc/t5)).
 
 ### Sharded DDP
 
@@ -440,7 +440,7 @@ Parallelism technique for training on multiple GPUs in which each tensor is spli
 having the whole tensor reside on a single GPU, each shard of the tensor resides on its designated GPU. Shards get
 processed separately and in parallel on different GPUs and the results are synced at the end of the processing step.
 This is what is sometimes called horizontal parallelism, as the splitting happens on horizontal level.
-Learn more about Tensor Parallelism [here](perf_train_gpu_many#tensor-parallelism).
+Learn more about Tensor Parallelism [here](./perf_train_gpu_many#tensor-parallelism).
 
 ### token
 
@@ -519,4 +519,4 @@ A form of model training in which data provided to the model is not labeled. Uns
 Parallelism technique which performs sharding of the tensors somewhat similar to [TensorParallel](#tensor-parallelism-tp),
 except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model doesn't need
 to be modified. This method also supports various offloading techniques to compensate for limited GPU memory.
-Learn more about ZeRO [here](perf_train_gpu_many#zero-data-parallelism).
+Learn more about ZeRO [here](./perf_train_gpu_many#zero-data-parallelism).

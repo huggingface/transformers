@@ -203,7 +203,7 @@ Common real-world applications of semantic segmentation include training self-dr
 
 We will now:
 
-1. Finetune [SegFormer](https://huggingface.co/docs/transformers/main/en/model_doc/segformer#segformer) on the [SceneParse150](https://huggingface.co/datasets/scene_parse_150) dataset.
+1. Finetune [SegFormer](../model_doc/segformer#segformer) on the [SceneParse150](https://huggingface.co/datasets/scene_parse_150) dataset.
 2. Use your fine-tuned model for inference.
 
 <Tip>

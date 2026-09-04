@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 DiNAT was proposed in [Dilated Neighborhood Attention Transformer](https://huggingface.co/papers/2209.15001)
 by Ali Hassani and Humphrey Shi.
 
-It extends [NAT](https://huggingface.co/docs/transformers/main/en/model_doc/nat) by adding a Dilated Neighborhood Attention pattern to capture global context,
+It extends [NAT](https://huggingface.co/papers/2204.07143) by adding a Dilated Neighborhood Attention pattern to capture global context,
 and shows significant performance improvements over it.
 
 The abstract from the paper is the following:

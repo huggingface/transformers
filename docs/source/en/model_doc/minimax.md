@@ -17,7 +17,7 @@ rendered properly in your Markdown viewer.
 
 # MiniMax
 
-> [MiniMax-M2](https://huggingface.co/docs/transformers/en/model_doc/minimax_m2) was released on 2025‑10‑27. We recommend using MiniMax‑M2 for most use cases due to better overall performance.
+> [MiniMax-M2](./minimax_m2) was released on 2025‑10‑27. We recommend using MiniMax‑M2 for most use cases due to better overall performance.
 
 ## Overview
 

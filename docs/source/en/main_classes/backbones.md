@@ -33,7 +33,6 @@ Backbones are supported for the following models:
 * [DINOV2](../model_doc/dinov2)
 * [FocalNet](../model_doc/focalnet)
 * [MaskFormer](../model_doc/maskformer)
-* [NAT](https://huggingface.co/docs/transformers/main/en/model_doc/nat)
 * [ResNet](../model_doc/resnet)
 * [Swin Transformer](../model_doc/swin)
 * [Swin Transformer v2](../model_doc/swinv2)
