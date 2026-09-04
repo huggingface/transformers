@@ -388,7 +388,8 @@ class _ScaleGrad(torch.autograd.Function):
 
 
 def dispatch_experts_forward(
-    self: torch.nn.Module,
+    experts_forward: Callable,
+    num_local_experts: int,
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
@@ -397,16 +398,16 @@ def dispatch_experts_forward(
 ) -> torch.Tensor:
     """
     Expert-parallel forward by token dispatch. Every rank routes its own tokens, sends each selected (token, expert)
-    pair to the rank that owns the expert with an all-to-all, runs its local experts on what it receives, sends the
-    results back and combines them with the routing weights. Each rank trains on its own part of the batch, so the
-    parameters outside the experts are data-parallel across the group and averaged by FSDP2; the all-to-all backward
-    sums every rank's contribution to the expert gradients, which are scaled by `1 / ep_size` to match.
+    pair to the rank that owns the expert with an all-to-all, runs its local experts on what it receives with
+    `experts_forward` (the experts module's own forward, as a top-1 routing with unit weights), sends the results
+    back and combines them with the routing weights. Each rank trains on its own part of the batch, so the parameters
+    outside the experts are data-parallel across the group and averaged by FSDP2; the all-to-all backward sums every
+    rank's contribution to the expert gradients, which are scaled by `1 / ep_size` to match.
     """
     from torch.distributed.nn.functional import all_to_all_single
 
     num_tokens, hidden_dim = hidden_states.shape
     num_top_k = top_k_index.size(-1)
-    num_local_experts = self.num_experts  # the sharding leaves the module with its local expert count
 
     # Sorting the selected pairs by expert groups them by owner rank, since each rank owns a contiguous range of
     # experts, and the per-expert counts tell every receiver which expert each token it gets is for.
@@ -427,21 +428,12 @@ def dispatch_experts_forward(
     recv_expert_ids = torch.arange(num_local_experts, device=hidden_states.device).repeat(ep_size)
     recv_expert_ids = recv_expert_ids.repeat_interleave(recv_counts.reshape(-1))
 
-    # The local experts: sort by expert, grouped GEMMs, unsort. Scaling the gradient of the output by `1 / ep_size`
+    # The local experts, as a top-1 routing with unit weights. Scaling the gradient of the output by `1 / ep_size`
     # and of the input by `ep_size` leaves the token gradients untouched and scales the expert gradients.
     recv_tokens = _ScaleGrad.apply(recv_tokens, ep_size)
-    expert_ids_g, perm = torch.sort(recv_expert_ids, stable=True)
-    tokens_g = recv_tokens[perm]
-    offsets = torch.cumsum(torch.bincount(expert_ids_g, minlength=num_local_experts), dim=0, dtype=torch.int32)
-    if self.has_gate:
-        weight, bias = self.gate_up_proj, self.gate_up_proj_bias[expert_ids_g] if self.has_bias else None
-    else:
-        weight, bias = self.up_proj, self.up_proj_bias[expert_ids_g] if self.has_bias else None
-    proj_out = _grouped_linear(tokens_g, weight, offsets, bias=bias, is_transposed=self.is_transposed)
-    proj_out = self._apply_gate(proj_out) if self.has_gate else self.act_fn(proj_out)
-    bias = self.down_proj_bias[expert_ids_g] if self.has_bias else None
-    proj_out = _grouped_linear(proj_out, self.down_proj, offsets, bias=bias, is_transposed=self.is_transposed)
-    expert_out = _ScaleGrad.apply(proj_out[torch.argsort(perm)], 1.0 / ep_size)
+    unit_weights = torch.ones_like(recv_expert_ids, dtype=recv_tokens.dtype).unsqueeze(-1)
+    expert_out = experts_forward(recv_tokens, recv_expert_ids.unsqueeze(-1), unit_weights)
+    expert_out = _ScaleGrad.apply(expert_out, 1.0 / ep_size)
 
     # Send the results back to the owners of the tokens and combine them with the routing weights.
     recv_out = all_to_all_single(
