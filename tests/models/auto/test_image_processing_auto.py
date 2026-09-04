@@ -28,6 +28,8 @@ from transformers import (
     AutoImageProcessor,
     CLIPConfig,
     CLIPImageProcessor,
+    Qwen2VLImageProcessor,
+    Qwen2VLImageProcessorPil,
     ViTImageProcessor,
     ViTImageProcessorPil,
 )
@@ -351,6 +353,26 @@ class AutoImageProcessorTest(unittest.TestCase):
 
             image_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="pil")
             self.assertIsInstance(image_processor, ViTImageProcessorPil)
+
+    @require_torchvision
+    def test_legacy_renamed_class_name_in_config(self):
+        # Older Qwen3.5-VL/Qwen3-VL checkpoints reference image processor class names that
+        # were folded into Qwen2VL before release. The legacy names must alias to the
+        # Qwen2VL implementations so those snapshots keep loading.
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            json.dump({"image_processor_type": "Qwen3VLImageProcessor"}, open(processor_tmpfile, "w"))
+
+            image_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="torchvision")
+            self.assertIsInstance(image_processor, Qwen2VLImageProcessor)
+
+            image_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="pil")
+            self.assertIsInstance(image_processor, Qwen2VLImageProcessorPil)
+
+            json.dump({"image_processor_type": "Qwen3VLImageProcessorPil"}, open(processor_tmpfile, "w"))
+
+            image_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="pil")
+            self.assertIsInstance(image_processor, Qwen2VLImageProcessorPil)
 
     def test_unavailable_backend_error_mentions_missing_dependency(self):
         with tempfile.TemporaryDirectory() as tmpdirname:

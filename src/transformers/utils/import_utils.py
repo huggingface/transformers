@@ -43,6 +43,14 @@ from . import logging
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
+# Legacy image processor class names that older checkpoints may reference in
+# their `image_processor_type`. Maps the removed/renamed name to the class that
+# now implements it. Resolved in `_LazyModule.__getattr__`.
+_LEGACY_IMAGE_PROCESSOR_CLASS_ALIASES: dict[str, str] = {
+    "Qwen3VLImageProcessor": "Qwen2VLImageProcessor",
+    "Qwen3VLImageProcessorPil": "Qwen2VLImageProcessorPil",
+}
+
 
 PACKAGE_DISTRIBUTION_MAPPING = importlib.metadata.packages_distributions()
 
@@ -2659,6 +2667,26 @@ class _LazyModule(ModuleType):
                         return value
                     except Exception as e:
                         logger.debug(f"Could not load fallback {fallback_name}: {e}")
+            # V5: Handle renamed image processor classes for backward compatibility.
+            # Older checkpoints reference class names that have since been folded into
+            # other implementations (e.g. Qwen3VL's image processor was merged into
+            # Qwen2VL's before release, but released checkpoints kept the old names
+            # in their image_processor_type). Alias them here so attribute access and
+            # AutoImageProcessor.from_pretrained keep working for those snapshots.
+            if name in _LEGACY_IMAGE_PROCESSOR_CLASS_ALIASES:
+                alias_target = _LEGACY_IMAGE_PROCESSOR_CLASS_ALIASES[name]
+                if alias_target in self._class_to_module:
+                    try:
+                        fb_module = self._get_module(self._class_to_module[alias_target])
+                        value = getattr(fb_module, alias_target)
+                        logger.warning_once(
+                            f"`{name}` is deprecated; it has been folded into `{alias_target}`. "
+                            f"Falling back to `{alias_target}` for backward compatibility."
+                        )
+                        setattr(self, name, value)
+                        return value
+                    except Exception as e:
+                        logger.debug(f"Could not load image processor alias {alias_target}: {e}")
             # V5: Handle *ImageProcessorFast backward compatibility
             # Similar to TokenizerFast, but for image processors
             if name.endswith("ImageProcessorFast"):
