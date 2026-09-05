@@ -214,7 +214,7 @@ class AutoRoundConfig(QuantizationConfigMixin):
 
     Args:
         bits (`int`, *optional*, defaults to 4):
-            The number of bits to quantize to, supported numbers are (2, 3, 4, 8).
+            The number of bits to quantize to, supported numbers are (2, 3, 4, 5, 6, 7, 8).
         group_size (`int`, *optional*, defaults to 128): Group-size value
         sym (`bool`, *optional*, defaults to `True`): Symmetric quantization or not
         backend (`str`, *optional*, defaults to `"auto"`): The inference backend. By default, AutoRound selects a compatible backend based on the device, quantization settings, and installed libraries. See [Specify inference backend](https://github.com/intel/auto-round/blob/main/docs/step_by_step.md#specify-inference-backend) for all backend options.
@@ -241,7 +241,7 @@ class AutoRoundConfig(QuantizationConfigMixin):
 
     def post_init(self):
         r"""Safety checker that arguments are correct."""
-        if self.bits not in [2, 3, 4, 8]:
+        if self.bits not in [2, 3, 4, 5, 6, 7, 8]:
             raise ValueError(f"Only support quantization to [2,3,4,8] bits but found {self.bits}")
         if self.group_size != -1 and self.group_size <= 0:
             raise ValueError("group_size must be greater than 0 or equal to -1")
