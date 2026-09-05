@@ -43,12 +43,13 @@ from ..dynamic_module_utils import (
     resolve_trust_remote_code,
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
-from ..masking_utils import create_masks_for_generate
+from ..masking_utils import create_masks_for_generate, fast_all
 from ..tokenization_python import ExtensionsTrie
 from ..utils import (
     ModelOutput,
     TransformersKwargs,
     is_accelerate_available,
+    is_tracing,
     logging,
 )
 from ..utils.generic import is_flash_attention_requested
@@ -1109,9 +1110,13 @@ class GenerationMixin(ContinuousMixin):
         # 2D attention mask (always 2D here)
         attention_mask_key = "attention_mask" if not is_encoder_decoder else "decoder_attention_mask"
         if (attention_mask := model_kwargs.get(attention_mask_key)) is not None:
-            model_kwargs[attention_mask_key] = torch.cat(
+            extended_attention_mask = torch.cat(
                 [attention_mask, attention_mask.new_ones((attention_mask.shape[0], num_new_tokens))], dim=-1
             )
+            # The tokens just added are not padding, so the longer mask has padding only if the shorter one did.
+            # `cat` hands back a new tensor, so the answer is carried over by hand (`generate` works it out once)
+            extended_attention_mask._has_padding = getattr(attention_mask, "_has_padding", True)
+            model_kwargs[attention_mask_key] = extended_attention_mask
 
         return model_kwargs
 
@@ -2718,6 +2723,13 @@ class GenerationMixin(ContinuousMixin):
             is_encoder_decoder=self.config.is_encoder_decoder,
             **model_kwargs,
         )
+
+        # sdpa can ignore a mask with no padding in it and rely on `is_causal` instead, but `_ignore_causal_mask_sdpa`
+        # works out whether there is any on every forward: it reduces the mask on the accelerator and reads the result
+        # back on the host, which stops the CPU from running ahead of the device. Decoding only ever appends ones, so
+        # padding can only come from the prompt: the answer is settled here, once, and carried on the mask itself.
+        if not self.config.is_encoder_decoder and (attention_mask := model_kwargs.get("attention_mask")) is not None:
+            attention_mask._has_padding = is_tracing(attention_mask) or not bool(fast_all(attention_mask))
 
         if generation_config.token_healing:
             input_ids = self.heal_tokens(input_ids, generation_mode_kwargs.get("tokenizer"))
