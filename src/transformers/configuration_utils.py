@@ -1029,10 +1029,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
         # Get the default config dict (from a fresh PreTrainedConfig instance)
         default_config_dict = PreTrainedConfig().to_dict()
-
-        # get class specific config dict
-        class_config_dict = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
-
+        class_config_dict = self.default_config_fields()
         serializable_config_dict = {}
 
         # Only serialize values that differ from the default config,
@@ -1293,6 +1290,27 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         user-specific module/session."""
         return cls.is_remote_code() or not cls.__module__.startswith("transformers.")
 
+    @classmethod
+    def default_config_fields(cls):
+        """
+        Gets default values for each annotated fields in a dataclass, used to save diff-dict.
+        For configs that are created in v4 with custom `__init__`, it will return
+        an empty dict, thus saving all keys in `self.__dict__`. For newer config, it will
+        return keys that have defaults declared as a fields, rather than in `__post_init__`,
+        which filters out only these specific fields from serialized json file.
+        """
+        default_config_fields = {}
+        for f in fields(cls):
+            default_value = None
+            if f.default is not MISSING:
+                default_value = f.default
+            elif f.default_factory is not MISSING:
+                default_value = f.default_factory
+
+            if default_value is not None:
+                default_config_fields[f.name] = default_value
+        return default_config_fields
+
     def _get_generation_parameters(self) -> dict[str, Any]:
         """
         Checks if there are generation parameters in `PreTrainedConfig` instance. Note that
@@ -1300,7 +1318,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         if there are any.
         """
         generation_params = {}
-        default_config = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
+        default_config = self.default_config_fields()
         for key in GenerationConfig._get_default_generation_params().keys():
             if key == "use_cache":
                 continue  # common key for most models

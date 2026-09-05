@@ -19,7 +19,8 @@ import tempfile
 from pathlib import Path
 
 from transformers import is_torch_available
-from transformers.utils import direct_transformers_import
+from transformers.testing_utils import CaptureLogger
+from transformers.utils import direct_transformers_import, logging
 
 from .utils.test_configuration_utils import config_common_kwargs
 
@@ -181,7 +182,17 @@ class ConfigTester:
             with self.parent.assertRaises(ValueError):
                 config = self.config_class()
         else:
-            config = self.config_class()
+            logging.warning_once.cache_clear()
+            logger = logging.get_logger("transformers.configuration_utils")
+
+            with CaptureLogger(logger) as cl:
+                config = self.config_class()
+            self.parent.assertEqual("", cl.out)
+            self.parent.assertIsNotNone(config)
+
+            with CaptureLogger(logger) as cl:
+                config = self.config_class(**self.inputs_dict)
+            self.parent.assertEqual("", cl.out)
             self.parent.assertIsNotNone(config)
 
     def check_config_arguments_init(self):
