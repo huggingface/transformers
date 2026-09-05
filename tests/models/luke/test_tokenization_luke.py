@@ -55,6 +55,30 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(encoded_sentence, encoded_text_from_decode)
         self.assertEqual(encoded_pair, encoded_pair_from_decode)
 
+    def test_special_tokens_added_on_plain_text(self):
+        tokenizer = self.get_tokenizer()
+
+        encoded = tokenizer("Hello world", return_special_tokens_mask=True)
+        self.assertEqual(encoded["input_ids"], [tokenizer.cls_token_id, 31414, 232, tokenizer.eos_token_id])
+        self.assertEqual(encoded["special_tokens_mask"], [1, 0, 0, 1])
+
+        encoded_pair = tokenizer("Hello world", "Second")
+        self.assertEqual(
+            encoded_pair["input_ids"],
+            [
+                tokenizer.cls_token_id,
+                31414,
+                232,
+                tokenizer.eos_token_id,
+                tokenizer.eos_token_id,
+                32703,
+                tokenizer.eos_token_id,
+            ],
+        )
+
+        encoded_no_special = tokenizer("Hello world", add_special_tokens=False)
+        self.assertEqual(encoded_no_special["input_ids"], [31414, 232])
+
     def get_clean_sequence(self, tokenizer, max_length=20) -> tuple[str, list]:
         txt = "Beyonce lives in Los Angeles"
         ids = tokenizer.encode(txt, add_special_tokens=False)
