@@ -286,3 +286,41 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
                 "scores": [0.817, 0.713, 0.018, 0.018],
             },
         )
+
+    def test_hypothesis_template_validation(self):
+        from transformers.pipelines.zero_shot_classification import ZeroShotClassificationArgumentHandler
+
+        handler = ZeroShotClassificationArgumentHandler()
+        sequences = ["I love this movie"]
+        labels = ["positive", "negative"]
+
+        # Valid templates
+        pairs, _ = handler(sequences, labels, "This movie is {}.")
+        self.assertEqual(len(pairs), 2)
+        self.assertEqual(pairs[0][1], "This movie is positive.")
+        self.assertEqual(pairs[1][1], "This movie is negative.")
+
+        # Safe handling of labels containing formatting characters
+        pairs, _ = handler(sequences, ["{unsafe}"], "This movie is {}.")
+        self.assertEqual(pairs[0][1], "This movie is {unsafe}.")
+
+        # Invalid templates must raise ValueError
+        invalid_templates = [
+            "No placeholder",
+            "{:>10}",
+            "{:>9999999999}",
+            "{0}",
+            "{!r}",
+            "{!s}",
+            "{label}",
+            "{}{}",
+            "This is {0} and {1}",
+            "This is {} and {}",
+        ]
+        for template in invalid_templates:
+            with self.assertRaises(ValueError):
+                handler(sequences, labels, template)
+
+        # None must raise AttributeError
+        with self.assertRaises(AttributeError):
+            handler(sequences, labels, None)
