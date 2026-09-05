@@ -376,6 +376,7 @@ if TYPE_CHECKING:
     from .pp_chart2table import *
     from .pp_doclayout_v2 import *
     from .pp_doclayout_v3 import *
+    from .pp_doclayout_v4 import *
     from .pp_formulanet import *
     from .pp_lcnet import *
     from .pp_lcnet_v3 import *
