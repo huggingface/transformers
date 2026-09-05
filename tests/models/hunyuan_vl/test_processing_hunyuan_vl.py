@@ -16,10 +16,8 @@ import unittest
 
 import numpy as np
 
-from transformers import PreTrainedTokenizerFast
 from transformers.testing_utils import require_tokenizers, require_torch, require_torchvision, require_vision
 from transformers.utils import (
-    is_tokenizers_available,
     is_torch_available,
     is_torchvision_available,
     is_vision_available,
@@ -30,11 +28,6 @@ from ...test_processing_common import ProcessorTesterMixin
 
 if is_torch_available():
     import torch
-
-if is_tokenizers_available():
-    from tokenizers import Tokenizer
-    from tokenizers.models import WordLevel
-    from tokenizers.pre_tokenizers import Whitespace
 
 if is_vision_available():
     from PIL import Image
@@ -51,6 +44,7 @@ if is_vision_available():
 @require_tokenizers
 class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = HunYuanVLProcessor
+    model_id = "tencent/HunyuanOCR"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -63,8 +57,11 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             modalities = [modalities]
 
         special_token_to_add = ""
-        if modalities is not None and "image" in modalities:
-            special_token_to_add += f"{self.image_start_token}{self.image_token}{self.image_end_token}"
+        if modalities is not None:
+            for modality in modalities:
+                # we hae non-uniform naming conventions for image/videos
+                if modality in ["images", "image"]:
+                    special_token_to_add += f"{self.image_start_token}{self.image_token}{self.image_end_token}"
 
         if batch_size is None:
             return f"lower newer {special_token_to_add}"
@@ -77,53 +74,6 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return [f"lower newer {special_token_to_add}", f" {special_token_to_add} upper older longer string"] + [
             f"lower newer {special_token_to_add}"
         ] * (batch_size - 2)
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        vocab = {
-            "<unk>": 0,
-            "<pad>": 1,
-            "<bos>": 2,
-            "<eos>": 3,
-            "<image_start>": 4,
-            "<image>": 5,
-            "<image_end>": 6,
-            "hello": 7,
-            "<placeholder>": 8,
-            "<new_tail>": 9,
-            "lower": 10,
-            "newer": 11,
-            "upper": 12,
-            "older": 13,
-            "longer": 14,
-            "string": 15,
-            "Describe": 16,
-            "this.": 17,
-        }
-        tokenizer = Tokenizer(WordLevel(vocab=vocab, unk_token="<unk>"))
-        tokenizer.pre_tokenizer = Whitespace()
-        fast_tokenizer = PreTrainedTokenizerFast(
-            tokenizer_object=tokenizer,
-            unk_token="<unk>",
-            pad_token="<pad>",
-            bos_token="<bos>",
-            eos_token="<eos>",
-            extra_special_tokens={
-                "image_start_token": "<image_start>",
-                "image_token": "<image>",
-                "image_end_token": "<image_end>",
-            },
-        )
-        fast_tokenizer.chat_template = (
-            "{% for message in messages %}"
-            "{% for content in message['content'] %}"
-            "{% if content['type'] == 'image' %}<image_start><image><image_end>"
-            "{% elif content['type'] == 'text' %}{{ content['text'] }}"
-            "{% endif %}"
-            "{% endfor %}"
-            "{% endfor %}"
-        )
-        return fast_tokenizer
 
     @classmethod
     def _setup_image_processor(cls):
@@ -140,7 +90,10 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image = Image.new("RGB", (32, 32), color="white")
 
         inputs = processor(
-            text=["<image_start><image><image_end> hello"], images=[image], padding=True, return_tensors="pt"
+            text=[f"{processor.image_start_token}{self.image_token}{processor.image_end_token} hello"],
+            images=[image],
+            padding=True,
+            return_tensors="pt",
         )
 
         self.assertSetEqual(
@@ -163,7 +116,10 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image = Image.new("RGB", (32, 32), color="white")
 
         inputs = processor(
-            text=["<image_start><image><image_end> hello"], images=[image], padding=True, return_tensors="pt"
+            text=[f"{processor.image_start_token}{self.image_token}{processor.image_end_token} hello"],
+            images=[image],
+            padding=True,
+            return_tensors="pt",
         )
 
         input_ids = inputs["input_ids"][0].tolist()
@@ -177,7 +133,7 @@ class HunYuanVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
         image = Image.new("RGB", (32, 32), color="white")
 
-        with self.assertRaisesRegex(ValueError, "image placeholders must be formatted"):
+        with self.assertRaisesRegex(ValueError, r"tokens in text \(0\) does not match the number of images"):
             processor(text=["<image> hello"], images=[image], padding=True, return_tensors="pt")
 
     def test_apply_chat_template_keeps_wrapped_image_tokens_single_wrapped(self):

@@ -98,9 +98,9 @@ class InklingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }  # fmt: skip
 
     # Override as Inkling needs images to be an explicitly nested batch
-    def prepare_image_inputs(self, batch_size: int | None = None):
+    def prepare_images_inputs(self, batch_size: int | None = None):
         """This function prepares a list of PIL images for testing"""
-        images = super().prepare_image_inputs(batch_size)
+        images = super().prepare_images_inputs(batch_size)
         if isinstance(images, (list, tuple)):
             images = [[image] for image in images]
         return images
@@ -111,7 +111,7 @@ class InklingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
         _ = processor(
             text=input_str,
             images=image_input,
@@ -188,10 +188,6 @@ class InklingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         num_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)["num_audio_tokens"]
         self.assertListEqual(num_from_helper, list(expected_num_tokens.values()))
 
-    @unittest.skip("This test seems to be loading a different video, check for all models and fix")
-    def test_apply_chat_template_video_frame_sampling(self):
-        pass
-
     @require_librosa
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
     def test_apply_chat_template_audio(self, batch_size: int, return_tensors: str):
@@ -201,18 +197,117 @@ class InklingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "audio", batch_size, return_tensors, "audio_input_name", "feature_extractor", MODALITY_INPUT_DATA["audio"]
         )
 
-    @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
-    @unittest.skip("Inkling packs image patches across the batch instead of keeping one tensor per image")
-    def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
-        pass
-
-    @unittest.skip("Inkling quantizes input features into discrete audio input IDs")
-    def test_feature_extractor_defaults(self):
-        pass
-
     @unittest.skip("The test fixture passes image_seq_length, which is not an InklingProcessor attribute")
     def test_processor_to_json_string(self):
         pass
+
+    def _test_apply_chat_template(
+        self,
+        modality: str,
+        batch_size: int,
+        return_tensors: str,
+        input_name: str,
+        processor_name: str,
+        input_data: list[str],
+    ):
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        if processor_name not in self.processor_class.get_attributes():
+            self.skipTest(f"{processor_name} attribute not present in {self.processor_class}")
+
+        # some models have only Fast image processor
+        if getattr(processor, processor_name).__class__.__name__.endswith("Fast"):
+            return_tensors = "pt"
+
+        batch_messages = [
+            [
+                {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
+                {"role": "user", "content": [{"type": "text", "text": "Describe this."}]},
+            ]
+        ] * batch_size
+
+        # Test that jinja can be applied
+        formatted_prompt = processor.apply_chat_template(batch_messages, add_generation_prompt=True, tokenize=False)
+        self.assertEqual(len(formatted_prompt), batch_size)
+
+        # Test that tokenizing with template and directly with `self.tokenizer` gives same output
+        formatted_prompt_tokenized = processor.apply_chat_template(
+            batch_messages, add_generation_prompt=True, tokenize=True, return_tensors=return_tensors
+        )
+        add_special_tokens = True
+        if processor.tokenizer.bos_token is not None and formatted_prompt[0].startswith(processor.tokenizer.bos_token):
+            add_special_tokens = False
+        tok_output = processor.tokenizer(
+            formatted_prompt, return_tensors=return_tensors, add_special_tokens=add_special_tokens
+        )
+        expected_output = tok_output.input_ids
+        self.assertListEqual(expected_output.tolist(), formatted_prompt_tokenized.tolist())
+
+        # Test that kwargs passed to processor's `__call__` are actually used
+        tokenized_prompt_100 = processor.apply_chat_template(
+            batch_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_tensors=return_tensors,
+            processor_kwargs={
+                "padding": "max_length",
+                "truncation": True,
+                "max_length": self.chat_template_max_length,
+            },
+        )
+        self.assertEqual(len(tokenized_prompt_100[0]), self.chat_template_max_length)
+
+        # Test that `return_dict=True` returns text related inputs in the dict
+        out_dict_text = processor.apply_chat_template(
+            batch_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors=return_tensors,
+        )
+        self.assertTrue(all(key in out_dict_text for key in ["input_ids", "attention_mask"]))
+        self.assertEqual(len(out_dict_text["input_ids"]), batch_size)
+        self.assertEqual(len(out_dict_text["attention_mask"]), batch_size)
+
+        # Test that with modality URLs and `return_dict=True`, we get modality inputs in the dict
+        for idx, url in enumerate(input_data[:batch_size]):
+            batch_messages[idx][1]["content"] = [batch_messages[idx][1]["content"][0], {"type": modality, "url": url}]
+
+        out_dict = processor.apply_chat_template(
+            batch_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors=return_tensors,
+            processor_kwargs={"num_frames": 2, "fps": None},  # no more than 2 frames, otherwise too slow
+        )
+        input_name = getattr(self, input_name)
+        self.assertTrue(input_name in out_dict)
+        self.assertEqual(len(out_dict["input_ids"]), batch_size)
+        self.assertEqual(len(out_dict["attention_mask"]), batch_size)
+
+        if modality == "image":
+            mm_len = 204 * batch_size  # hardcode, the model uses patches as input
+        else:
+            mm_len = batch_size
+        self.assertEqual(len(out_dict[input_name]), mm_len)
+
+        return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
+        for k in out_dict:
+            self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
+
+        # Test continue from final message
+        assistant_message = {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "It is the sound of"}],
+        }
+        for idx, url in enumerate(input_data[:batch_size]):
+            batch_messages[idx] = batch_messages[idx] + [assistant_message]
+        continue_prompt = processor.apply_chat_template(batch_messages, continue_final_message=True, tokenize=False)
+        for prompt in continue_prompt:
+            self.assertTrue(prompt.endswith("It is the sound of"))  # no `eos` token at the end
 
 
 @slow
@@ -231,14 +326,14 @@ class InklingProcessingIntegrationTest(unittest.TestCase):
     IMAGE_SENTINEL = -101
     AUDIO_SENTINEL = -102
 
-    IMAGE_URL = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    IMAGE_URL_2 = "http://images.cocodataset.org/val2017/000000000139.jpg"
-    AUDIO_URL = (
-        "https://huggingface.co/datasets/adarshxs/voxcpm2-native-generated-audio-user-ref/resolve/main/zs_medium.wav"
+    IMAGE_URL = (
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
     )
-    AUDIO_URL_2 = (
-        "https://huggingface.co/datasets/adarshxs/voxcpm2-native-generated-audio-user-ref/resolve/main/zs_short.wav"
+    IMAGE_URL_2 = (
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000139.jpg"
     )
+    AUDIO_URL = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/zs_medium.wav"
+    AUDIO_URL_2 = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/zs_short.wav"
 
     @classmethod
     def setUpClass(cls):
