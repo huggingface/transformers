@@ -37,9 +37,14 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        DynamicCache,
+        ExaoneMoeConfig,
         ExaoneMoeForCausalLM,
         ExaoneMoeModel,
+        StaticCache,
     )
+    from transformers.masking_utils import create_sliding_window_causal_mask
+    from transformers.models.exaone_moe.modeling_exaone_moe import ExaoneMoeExperts, ExaoneMoeMLP
 
 
 class ExaoneMoeModelTester(CausalLMModelTester):
@@ -55,6 +60,55 @@ class ExaoneMoeModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("ExaoneMoe TP + quantized generation test needs fixing")
     def test_tp_generation_quantized(self):
         pass
+
+    def test_per_layer_sliding_window_cache(self):
+        config = ExaoneMoeConfig(
+            num_hidden_layers=4,
+            layer_types=["full_attention", "sliding_attention", "sliding_attention", "full_attention"],
+            sliding_windows=[0, 4096, 128, 0],
+        )
+
+        dynamic_cache = DynamicCache(config=config)
+        self.assertEqual(dynamic_cache.layers[1].sliding_window, 4096)
+        self.assertEqual(dynamic_cache.layers[2].sliding_window, 128)
+
+        static_cache = StaticCache(config=config, max_cache_len=8192)
+        self.assertEqual(static_cache.layers[1].get_max_length(), 4096)
+        self.assertEqual(static_cache.layers[2].get_max_length(), 128)
+
+    def test_per_layer_sliding_window_masks(self):
+        config = ExaoneMoeConfig(num_hidden_layers=2)
+        config._attn_implementation = "eager"
+        inputs_embeds = torch.zeros(1, 6, config.hidden_size)
+        mask_kwargs = {
+            "config": config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": None,
+            "past_key_values": None,
+            "allow_is_causal_skip": False,
+        }
+
+        short_mask = create_sliding_window_causal_mask(**mask_kwargs, sliding_window=2)
+        long_mask = create_sliding_window_causal_mask(**mask_kwargs, sliding_window=4)
+
+        torch.testing.assert_close(short_mask[0, 0, -1] == 0, torch.tensor([False, False, False, False, True, True]))
+        torch.testing.assert_close(long_mask[0, 0, -1] == 0, torch.tensor([False, False, True, True, True, True]))
+
+    def test_swiglu_limit_is_applied_before_activation(self):
+        config = ExaoneMoeConfig(hidden_size=1, intermediate_size=1, num_experts=1, moe_intermediate_size=1)
+        mlp = ExaoneMoeMLP(config, swiglu_limit=1.0)
+        experts = ExaoneMoeExperts(config, swiglu_limit=1.0)
+        with torch.no_grad():
+            mlp.gate_proj.weight.fill_(1.0)
+            mlp.up_proj.weight.fill_(1.0)
+            mlp.down_proj.weight.fill_(1.0)
+            experts.gate_up_proj.fill_(1.0)
+            experts.down_proj.fill_(1.0)
+
+        hidden_states = torch.tensor([[10.0]])
+        expected = torch.nn.functional.silu(torch.tensor(1.0)).reshape(1, 1)
+        torch.testing.assert_close(mlp(hidden_states), expected)
+        torch.testing.assert_close(experts(hidden_states, torch.tensor([[0]]), torch.tensor([[1.0]])), expected)
 
 
 @slow
