@@ -58,7 +58,7 @@ class ExpertsWithPostNorm(nn.Module):
         # The eager reference: one expert at a time, the norm on each expert's rows
         final_hidden_states = torch.zeros_like(hidden_states)
         for expert_idx in range(self.num_experts):
-            top_k_pos, token_idx = torch.where(top_k_index.T == expert_idx)
+            top_k_pos, token_idx = torch.where(expert_idx == top_k_index.T)
             if token_idx.numel() == 0:
                 continue
             gate, up = nn.functional.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
