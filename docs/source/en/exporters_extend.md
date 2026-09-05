@@ -112,8 +112,9 @@ grep -nE "^def (_patch_|_fix_|_aten_)" src/transformers/exporters/exporter_onnx.
 3. FX node fixes: rewrite graph nodes the ONNX exporter can't lower, such as alias ops, in-place
    views, and dead asserts. Extend with `@register_fx_node_fix("onnx")`.
 4. ONNX translations: supply a custom lowering for an aten op where the default is missing or buggy
-   (for example `aten.index_put` or `aten._grouped_mm`). Add an `_aten_*` function to
-   `_ONNX_TRANSLATION_TABLE`.
+   (for example `aten.index_put` or `aten._grouped_mm`). Write an `_aten_*` function and register it
+   with `@register_onnx_translation("torch.ops.aten.<op>.<overload>")` (dotted op paths, like
+   `register_patch`); `_get_onnx_translation_table` assembles them into `custom_translation_table`.
 5. ONNX IR fixes: rewrite the finished ONNX program to work around ONNX Runtime bugs (for example
    forcing `TopK(sorted=True)`). Add a `_fix_ir_*` function to `_IR_FIXES`.
 
