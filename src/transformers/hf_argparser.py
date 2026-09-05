@@ -46,6 +46,34 @@ def string_to_bool(v):
         )
 
 
+def string_to_dict(v):
+    if isinstance(v, dict):
+        return v
+    try:
+        val = json.loads(v)
+        if isinstance(val, dict):
+            return val
+        raise ArgumentTypeError(f"Expected a dict/JSON object, but got {type(val).__name__}: {v!r}")
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    try:
+        if os.path.isfile(v):
+            try:
+                with open(v, "r", encoding="utf-8") as f:
+                    val = json.load(f)
+                if isinstance(val, dict):
+                    return val
+                raise ArgumentTypeError(f"Expected a dict from file '{v}', but got {type(val).__name__}")
+            except Exception as e:
+                raise ArgumentTypeError(f"Failed to load JSON file '{v}': {e}")
+    except OSError:
+        pass
+
+    raise ArgumentTypeError(f"Invalid dict value: {v!r}. Expected a valid JSON object string or path to a JSON file.")
+
+
+
 def make_choice_type_function(choices: list) -> Callable[[str], Any]:
     """
     Creates a mapping function from each choices string representation to the actual value. Used to support multiple
@@ -223,6 +251,14 @@ class HfArgumentParser(ArgumentParser):
             if field.default_factory is not dataclasses.MISSING:
                 kwargs["default"] = field.default_factory()
             elif field.default is dataclasses.MISSING:
+                kwargs["required"] = True
+        elif isclass(origin_type) and issubclass(origin_type, dict):
+            kwargs["type"] = string_to_dict
+            if field.default is not dataclasses.MISSING:
+                kwargs["default"] = field.default
+            elif field.default_factory is not dataclasses.MISSING:
+                kwargs["default"] = field.default_factory()
+            else:
                 kwargs["required"] = True
         else:
             kwargs["type"] = field.type

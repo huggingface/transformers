@@ -28,7 +28,7 @@ from unittest.mock import patch
 import yaml
 
 from transformers import HfArgumentParser, TrainingArguments
-from transformers.hf_argparser import make_choice_type_function, string_to_bool
+from transformers.hf_argparser import make_choice_type_function, string_to_bool, string_to_dict
 from transformers.testing_utils import require_torch
 
 
@@ -104,6 +104,15 @@ class ListExample:
     bar_int: list[int] = list_field(default=[1, 2, 3])
     foo_str: list[str] = list_field(default=["Hallo", "Bonjour", "Hello"])
     foo_float: list[float] = list_field(default=[0.1, 0.2, 0.3])
+
+
+@dataclass
+class DictExample:
+    foo_dict: dict = field(default_factory=dict)
+    bar_dict: dict[str, int] = field(default_factory=lambda: {"a": 1, "b": 2})
+    foo_str_dict: dict[str, str] = field(default_factory=lambda: {"hello": "world"})
+    opt_dict: dict | None = None
+
 
 
 @dataclass
@@ -292,6 +301,68 @@ class HfArgumentParserTest(unittest.TestCase):
 
         args = parser.parse_args("--foo-int 1 --bar-int 2 3 --foo-str a b c --foo-float 0.1 0.7".split())
         self.assertEqual(args, Namespace(foo_int=[1], bar_int=[2, 3], foo_str=["a", "b", "c"], foo_float=[0.1, 0.7]))
+
+    def test_05_with_dict(self):
+        parser = HfArgumentParser(DictExample)
+
+        expected = argparse.ArgumentParser()
+        expected.add_argument("--foo_dict", "--foo-dict", default={}, type=string_to_dict)
+        expected.add_argument("--bar_dict", "--bar-dict", default={"a": 1, "b": 2}, type=string_to_dict)
+        expected.add_argument("--foo_str_dict", "--foo-str-dict", default={"hello": "world"}, type=string_to_dict)
+        expected.add_argument("--opt_dict", "--opt-dict", default=None, type=string_to_dict)
+
+        self.argparsersEqual(parser, expected)
+
+        args = parser.parse_args([])
+        self.assertEqual(
+            args,
+            Namespace(foo_dict={}, bar_dict={"a": 1, "b": 2}, foo_str_dict={"hello": "world"}, opt_dict=None),
+        )
+
+        args = parser.parse_args(
+            [
+                "--foo_dict",
+                '{"custom": true, "count": 10}',
+                "--bar_dict",
+                '{"x": 99}',
+                "--foo-str-dict",
+                '{"lang": "fr"}',
+                "--opt_dict",
+                '{"nested": {"val": 1}}',
+            ]
+        )
+        self.assertEqual(
+            args,
+            Namespace(
+                foo_dict={"custom": True, "count": 10},
+                bar_dict={"x": 99},
+                foo_str_dict={"lang": "fr"},
+                opt_dict={"nested": {"val": 1}},
+            ),
+        )
+
+        (example,) = parser.parse_args_into_dataclasses(
+            ["--foo-dict", '{"k": "v"}', "--opt-dict", '{"flag": false}']
+        )
+        self.assertEqual(example.foo_dict, {"k": "v"})
+        self.assertEqual(example.opt_dict, {"flag": False})
+        self.assertEqual(example.bar_dict, {"a": 1, "b": 2})
+
+        with tempfile.NamedTemporaryFile("w", delete=False, suffix=".json") as f:
+            f.write('{"file_key": 42}')
+            tmp_json_path = f.name
+        try:
+            (example_from_file,) = parser.parse_args_into_dataclasses(["--foo-dict", tmp_json_path])
+            self.assertEqual(example_from_file.foo_dict, {"file_key": 42})
+        finally:
+            if os.path.exists(tmp_json_path):
+                os.remove(tmp_json_path)
+
+        with patch("sys.stderr"):
+            with self.assertRaises(SystemExit):
+                parser.parse_args(["--foo_dict", "not_a_valid_json"])
+            with self.assertRaises(SystemExit):
+                parser.parse_args(["--foo_dict", "[1, 2, 3]"])
 
     def test_06_with_optional(self):
         expected = argparse.ArgumentParser()
