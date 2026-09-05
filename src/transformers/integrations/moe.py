@@ -274,6 +274,9 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
     # accept_dev=True is necessary for "+cpu"/"+xpu" etc.
     if (
         (is_torchdynamo_compiling() and weight.dtype != torch.bfloat16)
+        or weight.device.type == "cuda"
+        and is_torch_less_or_equal("2.8.0", accept_dev=True)
+        and weight.dtype != torch.bfloat16
         or weight.device.type == "cpu"
         and is_torch_less_or_equal("2.10.0", accept_dev=True)
         and (weight.data_ptr() % 16 != 0 or input.data_ptr() % 16 != 0)
@@ -282,9 +285,10 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
     ):
         # We cannot use torch.grouped_mm and have to fall back when:
         # 1. torch.grouped_mm is not supported in torch.compile / inductor with dtypes other than bf16
-        # 2. on CPU with torch <= 2.10, the kernel requires 16 bytes alignment, which is not guaranteed for
+        # 2. torch._grouped_mm on CUDA with torch <= 2.8 only supports bf16
+        # 3. on CPU with torch <= 2.10, the kernel requires 16 bytes alignment, which is not guaranteed for
         #    tensors loaded using memmap (e.g. safetensors lazy loading)
-        # 3. on CPU with torch <= 2.8, torch._grouped_mm has no CPU kernel at all (raises NotImplementedError)
+        # 4. on CPU with torch <= 2.8, torch._grouped_mm has no CPU kernel at all (raises NotImplementedError)
         #    issue: https://github.com/pytorch/pytorch/issues/172440
         return False
 

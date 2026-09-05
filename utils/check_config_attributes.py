@@ -85,6 +85,31 @@ SPECIAL_CASES_TO_ALLOW = {
     "DiaConfig": ["delay_pattern"],
     "BambaConfig": ["attn_layer_indices"],
     "Dots1Config": ["max_window_layers", "n_routed_experts"],
+    # Fixed architecture flags, preprocessing metadata, and compatibility aliases
+    # carried by the released Dots 3 Note Preview checkpoint.
+    "Dots3NoteAudioConfig": [
+        "audio_end_token",
+        "audio_pad_token",
+        "audio_start_token",
+        "chunk_seconds",
+        "conv_chunksize",
+        "conv_stem_gradient_checkpointing",
+        "encoder_type",
+        "n_fft",
+        "use_conv2d_stem",
+        "use_rope",
+    ],
+    "Dots3NoteConfig": [
+        "moe_shared_expert_intermediate_size",
+        "moe_topk",
+        "multi_latent_attention",
+        "qk_layernorm",
+        "rope_scaling",
+        "seq_length",
+        "sliding_window_size",
+        "softmax_type",
+    ],
+    "Dots3NoteVisionConfig": ["adapter_type", "post_norm", "pre_pixel_shuffle"],
     "JambaConfig": [
         "attn_layer_offset",
         "attn_layer_period",

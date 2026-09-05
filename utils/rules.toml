@@ -548,7 +548,8 @@ diff = '''
 [rules.TRF026]
 description = "A module whose forward only delegates to its single submodule adds nothing; inline it."
 default_enabled = true
-allowlist_models = []
+# Dots 3 Note keeps the audio adapter wrapper to preserve published `audio_adapter.proj.*` checkpoint keys.
+allowlist_models = ["dots3_note"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF026.explanation]
@@ -606,7 +607,8 @@ diff = '''
 [rules.TRF029]
 description = "A module taking `config` must not also take arguments that live on the config."
 default_enabled = true
-allowlist_models = ["kosmos2"]
+# Dots 3 Note uses per-instance intermediate sizes for its shared text expert and routed vision experts.
+allowlist_models = ["dots3_note", "kosmos2"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF029.explanation]
@@ -743,7 +745,8 @@ diff = '''
 [rules.TRF036]
 description = "nn.Sequential hides the forward flow; declare the submodules explicitly."
 default_enabled = true
-allowlist_models = ["x_clip"]
+# Dots 3 Note preserves the published indexed adapter weight names.
+allowlist_models = ["dots3_note", "x_clip"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF036.explanation]
@@ -905,7 +908,8 @@ diff = '''
 [rules.TRF044]
 description = "cache_position must not appear as a parameter in modeling code; it is removed framework surface."
 default_enabled = true
-allowlist_models = []
+# Dots 3 Note DSA needs physical cache columns to keep sparse indices correct for padded batches.
+allowlist_models = ["dots3_note"]
 
 [rules.TRF044.explanation]
 what_it_does = "Flags a parameter named cache_position on any function in modeling_*.py and modular_*.py."
@@ -927,11 +931,8 @@ description = "forward must not declare output_attentions/output_hidden_states/r
 default_enabled = true
 # kosmos2 and openai have doc pages (kosmos-2.md, openai-gpt.md) whose names cannot be derived from the
 # model directory, and the timm wrappers have no contribution date line, so the cutoff cannot exempt them.
-# kosmos2 and openai have doc pages (kosmos-2.md, openai-gpt.md) whose names cannot be derived from the
-# model directory, and the timm wrappers have no contribution date line, so the cutoff cannot exempt them.
-# kosmos2 and openai have doc pages (kosmos-2.md, openai-gpt.md) whose names cannot be derived from the
-# model directory, and the timm wrappers have no contribution date line, so the cutoff cannot exempt them.
-allowlist_models = ["kosmos2", "openai", "timm_backbone", "timm_wrapper"]
+# Dots 3 Note retains explicit output controls for its custom DSA, audio, and vision outputs.
+allowlist_models = ["dots3_note", "kosmos2", "openai", "timm_backbone", "timm_wrapper"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF045.explanation]
@@ -1047,8 +1048,8 @@ default_enabled = true
 # No `cutoff_date`: 10 findings over 9 models, in two shapes that need a case-by-case call with the
 # attention-interface owner. Legacy dispatch in plain `modeling_*.py`: decision_transformer, falcon, gpt2.
 # Backend-conditional tensor handling in modular MLA/DSA-style models the interface cannot express yet:
-# axk2, deepseek_v32, diffusion_gemma, glm_moe_dsa, minimax_m3_vl, qwen2_5_omni. Follow-ups either way.
-allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "falcon", "glm_moe_dsa", "gpt2", "minimax_m3_vl", "qwen2_5_omni", "glm5_next"]
+# axk2, deepseek_v32, diffusion_gemma, dots3_note, glm_moe_dsa, minimax_m3_vl, qwen2_5_omni. Follow-ups either way.
+allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "dots3_note", "falcon", "glm_moe_dsa", "gpt2", "minimax_m3_vl", "qwen2_5_omni", "glm5_next"]
 
 [rules.TRF051.explanation]
 what_it_does = "Flags comparisons against a _attn_implementation attribute in modeling_*.py and modular_*.py."
@@ -1126,8 +1127,9 @@ diff = '''
 [rules.TRF056]
 description = "forward() must not materialize tensors with .item() or .tolist()."
 default_enabled = true
+# Dots 3 Note materializes dynamic audio/video lengths required by its variable-length multimodal adapter.
 # `kimi_k25` was dropped: no `.item()`/`.tolist()` left in its forward, verified against its source.
-allowlist_models = ["hunyuan_vl"]
+allowlist_models = ["dots3_note", "hunyuan_vl"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF056.explanation]
