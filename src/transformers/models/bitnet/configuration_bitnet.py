@@ -23,6 +23,10 @@ from ...utils import auto_docstring
 @strict
 class BitNetConfig(PreTrainedConfig):
     r"""
+    Args:
+        use_sub_norms (`bool`, *optional*, defaults to `True`):
+            Whether or not to use sub-norms (RMSNorm) in the MLP and Attention blocks. Set to `False` for Weight-Quant-Only checkpoints.
+
     ```python
     >>> from transformers import BitNetModel, BitNetConfig
 
@@ -59,6 +63,7 @@ class BitNetConfig(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float | int | None = 0.0
     rope_parameters: RopeParameters | dict | None = None
+    use_sub_norms: bool = True
 
     def __post_init__(self, **kwargs):
         # for backward compatibility
