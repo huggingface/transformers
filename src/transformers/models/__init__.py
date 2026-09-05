@@ -477,6 +477,7 @@ if TYPE_CHECKING:
     from .timm_wrapper import *
     from .tipsv2 import *
     from .tipsv2_dpt import *
+    from .tr_hash_moe import *
     from .trocr import *
     from .tvp import *
     from .udop import *
