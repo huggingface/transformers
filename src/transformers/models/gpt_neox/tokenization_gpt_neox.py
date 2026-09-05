@@ -139,12 +139,10 @@ class GPTNeoXTokenizer(TokenizersBackend):
             trim_offsets=trim_offsets,
             **kwargs,
         )
-        # See https://github.com/huggingface/transformers/pull/47988 for more details.
-        # `_from_pretrained` strips `add_bos_token`/`add_eos_token` from init_kwargs when a
-        # tokenizer.json is present (assuming the post_processor is authoritative). But GPTNeoX
-        # rebuilds its backend tokenizer from scratch, so the post_processor baked into
-        # tokenizer.json may not match the desired add_bos/eos settings. Call
-        # update_post_processor() here to ensure they stay in sync.
+        # GPTNeoX rebuilds its backend tokenizer above, so the post_processor serialized in
+        # tokenizer.json only reaches it through the post_processor kwarg handled by the base
+        # class. Re-apply it here so it always matches the add_bos_token/add_eos_token settings
+        # this tokenizer was loaded with. See https://github.com/huggingface/transformers/pull/47988.
         self.update_post_processor()
 
 
