@@ -160,6 +160,7 @@ def batched_mm_experts_forward(
     proj_out = _batched_linear(
         proj_out, selected_weights, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
+    proj_out = self._apply_post_expert(proj_out)
 
     # Apply routing weights
     weighted_out = proj_out * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
@@ -458,11 +459,12 @@ def grouped_mm_experts_forward(
         proj_out, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
+    # Post-mask (fwd path): the sentinel rows are uninitialized kernel output, zeroed before anything reads them.
+    proj_out.masked_fill_(sentinel_mask, 0.0)
+    proj_out = self._apply_post_expert(proj_out)
+
     # Apply routing weights
     weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
-
-    # Post-mask (fwd path).
-    weighted_out.masked_fill_(sentinel_mask, 0.0)
 
     # Restore original order
     inv_perm = torch.empty_like(perm)
@@ -520,6 +522,19 @@ def _default_apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
     return self.act_fn(gate) * up  # (S, intermediate_dim)
 
 
+def _default_apply_post_expert(self, proj_out: torch.Tensor) -> torch.Tensor:
+    """
+    Default post-expert transform: the identity. An experts class overrides `_apply_post_expert` when its output goes
+    through a per-row transform before the routing weights, such as a per-expert output norm.
+    Args:
+        proj_out (`torch.Tensor`):
+            The output tensor from the down projection of shape (S, hidden_dim).
+    Returns:
+        `torch.Tensor`: The transformed output tensor of shape (S, hidden_dim).
+    """
+    return proj_out
+
+
 def use_experts_implementation(
     experts_class: type[torch.nn.Module] | None = None,
     *,
@@ -571,6 +586,8 @@ def use_experts_implementation(
 
         if not hasattr(experts_class, "_apply_gate"):
             experts_class._apply_gate = _default_apply_gate
+        if not hasattr(experts_class, "_apply_post_expert"):
+            experts_class._apply_post_expert = _default_apply_post_expert
 
         experts_class.__init__ = __init__
         experts_class.forward = forward
