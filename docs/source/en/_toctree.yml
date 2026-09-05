@@ -839,6 +839,8 @@
         title: OpenAI Privacy Filter
       - local: model_doc/opt
         title: OPT
+      - local: model_doc/param2moe
+        title: Param2Moe
       - local: model_doc/pegasus
         title: Pegasus
       - local: model_doc/pegasus_x
