@@ -44,7 +44,6 @@ def topological_sort(dependencies: dict) -> list[list[str]]:
         sorting_list.append([name_mapping[node] for node in leaf_nodes])
         # Remove the leaves from the graph (and from the deps of other nodes)
         graph = {node: deps - leaf_nodes for node, deps in graph.items() if node not in leaf_nodes}
-
     return sorting_list
 
 

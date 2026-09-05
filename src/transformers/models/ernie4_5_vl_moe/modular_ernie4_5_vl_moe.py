@@ -61,10 +61,10 @@ from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration
 from ..mixtral.modeling_mixtral import load_balancing_loss_func
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
-    Qwen2_5_VisionRotaryEmbedding,
     Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionBlock,
+    Qwen2_5_VLVisionRotaryEmbedding,
 )
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLVisionConfig
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
@@ -218,7 +218,7 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
 
 class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
     @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config, device=None):
+    def __init__(self, config: Ernie4_5_VLMoeTextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -231,7 +231,7 @@ class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
         self.mrope_section = config.rope_parameters.get("mrope_section", [22, 22, 20])
 
@@ -285,12 +285,15 @@ class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
             cos = freqs.cos() * self.attention_scaling
             sin = freqs.sin() * self.attention_scaling
 
-        sin = self.recomposition_to_3d(sin)
-        cos = self.recomposition_to_3d(cos)
+        sin = self.recomposition_frequencies(sin)
+        cos = self.recomposition_frequencies(cos)
 
         return cos, sin
 
-    def recomposition_to_3d(self, freq):
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
         freq_h, freq_w, freq_t = (m[(i + 1) % 3] for i, m in enumerate(freq.split([*self.mrope_section], dim=-1)))
         freq_hw = torch.stack([freq_h, freq_w], dim=-1).flatten(-2)
         freq_hwt = torch.cat([freq_hw, freq_t], dim=-1)
@@ -536,9 +539,6 @@ class Ernie4_5_VLMoePreTrainedModel(Qwen2_5_VLPreTrainedModel):
         elif isinstance(module, Ernie4_5_VLMoeMoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Ernie4_5_VLMoeVisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
 
 
 class Ernie4_5_VLMoeTextModel(Ernie4_5_MoeModel):
@@ -650,7 +650,7 @@ class Ernie4_5_VLMoePatchEmbed(Qwen2_5_VisionPatchEmbed):
         return self.proj(hidden_states.to(target_dtype))
 
 
-class Ernie4_5_VLMoeVisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
+class Ernie4_5_VLMoeVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 
@@ -672,8 +672,7 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretr
             embed_dim=config.hidden_size,
         )
 
-        head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = Ernie4_5_VLMoeVisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = Ernie4_5_VLMoeVisionRotaryEmbedding(config)
 
         self.ln = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -692,9 +691,7 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretr
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
+        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
 
         for block in self.blocks:
             hidden_states = block(

@@ -56,5 +56,7 @@ class PixtralVisionConfig(PreTrainedConfig):
         self.head_dim = self.hidden_size // self.num_attention_heads
         super().__post_init__(**kwargs)
 
+    default_rope_type = "axial"
+
 
 __all__ = ["PixtralVisionConfig"]

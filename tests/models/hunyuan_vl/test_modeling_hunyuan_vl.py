@@ -359,7 +359,7 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
 class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
     model_id = "tencent/HunyuanOCR"
     candy_image_url = url_to_local_path(
-        "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/p-blog/candy.JPG"
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/candy.JPG"
     )
     lowres_image_url = url_to_local_path(
         "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
