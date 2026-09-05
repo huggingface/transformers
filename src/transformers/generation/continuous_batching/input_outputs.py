@@ -16,6 +16,7 @@ from functools import partial
 from itertools import repeat
 from typing import TypedDict
 
+import numpy as np
 import torch
 
 from transformers.configuration_utils import PretrainedConfig
