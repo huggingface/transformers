@@ -230,7 +230,10 @@ class Dots3NoteTextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_eager_matches_batched_and_grouped_inference(self, name, dtype):
         # SonicMoE and DeepGEMM are optional integrations. This model's required expert
         # implementations are eager, batched_mm, and grouped_mm.
-        with patch("tests.test_modeling_common.is_kernels_available", return_value=False):
+        with (
+            patch("tests.test_modeling_common.is_sonicmoe_loadable", return_value=False),
+            patch("tests.test_modeling_common.is_deepgemm_loadable", return_value=False),
+        ):
             _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
 
     # DSA selects positions with a hard top-k. Tiny numerical changes caused by padding or

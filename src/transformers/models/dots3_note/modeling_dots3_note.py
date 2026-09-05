@@ -24,15 +24,17 @@ from dataclasses import dataclass
 import torch
 import torch.nn.functional as F
 from torch import nn
+from torch.nn import LayerNorm
 from torch.nn.utils.rnn import pad_sequence
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...integrations import use_kernel_forward_from_hub
 from ...integrations.moe import use_experts_implementation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_flash_attention_utils import _flash_attention_forward
+from ...modeling_flash_attention_utils import FlashAttentionKwargs, _flash_attention_forward
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -41,27 +43,33 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import ModelOutput, auto_docstring
-from ...utils.generic import get_max_seqlen, is_flash_attention_requested
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from .configuration_dots3_note import Dots3NoteAudioConfig, Dots3NoteConfig, Dots3NoteVisionConfig
 
 
-# -----------------------------------------------------------------------------
-# Text decoder
-# -----------------------------------------------------------------------------
+@use_kernel_forward_from_hub("RMSNorm")
 class Dots3NoteTextRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        Dots3NoteTextRMSNorm is equivalent to T5LayerNorm
+        """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class Dots3NoteTextLayerNorm(nn.Module):
@@ -212,39 +220,26 @@ class Dots3NoteTextIndexer(nn.Module):
 
     def __init__(self, config, layer_idx):
         super().__init__()
+        self.config = config
         self.layer_idx = layer_idx
-        self.n_heads = config.index_n_heads
-        self.head_dim = config.index_head_dim
-        self.rope_head_dim = config.qk_rope_head_dim
-        self.index_topk = config.index_topk
-        self.softmax_scale = self.head_dim**-0.5
-        self.query_chunk_size = 1024
 
-        self.wq_b = nn.Linear(config.q_lora_rank, self.n_heads * self.head_dim, bias=False)
+        self.hidden_size: int = config.hidden_size
+        self.n_heads: int = config.index_n_heads
+        self.head_dim: int = config.index_head_dim
+        self.qk_rope_head_dim: int = config.qk_rope_head_dim
+        self.index_topk: int = config.index_topk
+        self.q_lora_rank: int = config.q_lora_rank
+
+        self.wq_b = nn.Linear(self.q_lora_rank, self.n_heads * self.head_dim, bias=False)
+
         self.wk = Dots3NoteTextIndexerProjection(config, self.head_dim)
         self.k_norm = Dots3NoteTextIndexerLayerNorm(self.head_dim)
         self.weights_proj = Dots3NoteTextIndexerProjection(config, self.n_heads)
+        self.softmax_scale = self.head_dim**-0.5
+        self.rope_head_dim = config.qk_rope_head_dim
+        self.query_chunk_size = 1024
         self._wk_weights_proj_weight = None
         self.register_load_state_dict_post_hook(self._clear_projection_cache)
-
-    @staticmethod
-    def _clear_projection_cache(module, _incompatible_keys):
-        module._wk_weights_proj_weight = None
-
-    @torch.no_grad()
-    def _project_key_and_weights(self, hidden_states):
-        if self._wk_weights_proj_weight is None:
-            del self._wk_weights_proj_weight
-            self._wk_weights_proj_weight = nn.Buffer(
-                torch.cat((self.wk.get_compute_weight(), self.weights_proj.get_compute_weight()), dim=0).contiguous(),
-                persistent=False,
-            )
-        if hidden_states.dtype != self._wk_weights_proj_weight.dtype:
-            raise ValueError(
-                f"DSA fused projection requires {self._wk_weights_proj_weight.dtype} inputs, got {hidden_states.dtype}"
-            )
-        output = F.linear(hidden_states, self._wk_weights_proj_weight)
-        return output.split((self.head_dim, self.n_heads), dim=-1)
 
     @torch.no_grad()
     def forward(
@@ -257,7 +252,24 @@ class Dots3NoteTextIndexer(nn.Module):
         cache_position,
         past_key_values=None,
         attention_mask=None,
-    ):
+    ) -> torch.Tensor:
+        """
+        Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
+
+        Same as [`DeepseekV32Indexer.forward`], but the indexer applies **interleaved** RoPE
+        rather than the non-interleaved half-split RoPE used by DeepSeek-V3.2.
+
+        Args:
+            hidden_states: Input hidden states `[B, S, hidden_size]`.
+            q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
+            position_embeddings: `(cos, sin)` from RotaryEmbedding.
+            attention_mask: Causal mask, broadcastable to `[B, S, T]`.
+            past_key_values: Cache object containing the indexer key cache for this layer.
+
+        Returns:
+            `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
+                turn these into an additive sparse mask; the `flash-mla` kernel consumes them directly.
+        """
         if attention_mask is not None:
             if attention_mask.ndim == 4:
                 if attention_mask.shape[1] != 1:
@@ -323,45 +335,61 @@ class Dots3NoteTextIndexer(nn.Module):
 
         return torch.cat(topk_indices, dim=1)
 
+    @staticmethod
+    def _clear_projection_cache(module, _incompatible_keys):
+        module._wk_weights_proj_weight = None
 
-# ---------------------------------------------------------------------------
-# Dense MLP
-# ---------------------------------------------------------------------------
+    @torch.no_grad()
+    def _project_key_and_weights(self, hidden_states):
+        if self._wk_weights_proj_weight is None:
+            del self._wk_weights_proj_weight
+            self._wk_weights_proj_weight = nn.Buffer(
+                torch.cat((self.wk.get_compute_weight(), self.weights_proj.get_compute_weight()), dim=0).contiguous(),
+                persistent=False,
+            )
+        if hidden_states.dtype != self._wk_weights_proj_weight.dtype:
+            raise ValueError(
+                f"DSA fused projection requires {self._wk_weights_proj_weight.dtype} inputs, got {hidden_states.dtype}"
+            )
+        output = F.linear(hidden_states, self._wk_weights_proj_weight)
+        return output.split((self.head_dim, self.n_heads), dim=-1)
+
+
 class Dots3NoteTextMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
-        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
-# ---------------------------------------------------------------------------
-# MoE gate (noaux_tc: sigmoid scores + correction bias)
-# ---------------------------------------------------------------------------
-class MoEGate(nn.Module):
+class Dots3NoteTextTopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.top_k = config.num_experts_per_tok
-        self.n_routed_experts = config.n_routed_experts
+        self.num_experts = config.n_routed_experts
+        self.hidden_dim = config.hidden_size
         self.norm_topk_prob = config.norm_topk_prob
         self.scoring_func = config.scoring_func
         self.topk_method = config.topk_method
         self.routed_scaling_factor = config.routed_scaling_factor
         self.gating_fp32 = config.moe_gating_fp32
         self.use_dynamic_rsf = config.use_dynamic_rsf
-        self.n_group = config.n_group
+        self.num_group = config.n_group
         self.topk_group = config.topk_group
 
-        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
+        self.weight = nn.Parameter(torch.empty((self.num_experts, self.hidden_dim)))
         if self.topk_method == "noaux_tc":
-            self.e_score_correction_bias = nn.Parameter(torch.empty((self.n_routed_experts), dtype=torch.float32))
+            self.e_score_correction_bias = nn.Parameter(torch.empty(self.num_experts, dtype=torch.float32))
         else:
             self.register_parameter("e_score_correction_bias", None)
 
@@ -381,15 +409,15 @@ class MoEGate(nn.Module):
 
         if self.topk_method == "noaux_tc":
             scores_for_choice = scores + self.e_score_correction_bias.unsqueeze(0)
-            scores_per_group = scores_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
+            scores_per_group = scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
             group_scores = scores_per_group.topk(min(2, scores_per_group.shape[-1]), dim=-1).values.sum(dim=-1)
             group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False).indices
             group_mask = torch.zeros_like(group_scores, dtype=torch.bool)
             group_mask.scatter_(1, group_idx, True)
             score_mask = (
                 group_mask.unsqueeze(-1)
-                .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
-                .reshape(-1, self.n_routed_experts)
+                .expand(-1, self.num_group, self.num_experts // self.num_group)
+                .reshape(-1, self.num_experts)
             )
             scores_for_choice = scores_for_choice.masked_fill(~score_mask, float("-inf"))
             topk_idx = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False).indices
@@ -407,38 +435,43 @@ class MoEGate(nn.Module):
             routed_scaling_factor = self.routed_scaling_factor
         topk_weight = topk_weight * routed_scaling_factor
 
-        return topk_idx, topk_weight.to(hidden_states.dtype)
+        return logits, topk_weight.to(hidden_states.dtype), topk_idx
 
 
-# ---------------------------------------------------------------------------
-# Sparse MoE FFN
-# ---------------------------------------------------------------------------
 @use_experts_implementation
 class Dots3NoteTextExperts(nn.Module):
-    """Routed expert weights stored in the packed Transformers MoE layout."""
+    """Collection of expert weights stored as 3D tensors."""
 
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.n_routed_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states, top_k_index, top_k_weights):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
+    ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero(as_tuple=False).view(-1)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
         for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate = F.linear(current_state, self.gate_up_proj[expert_idx, : self.intermediate_dim])
-            up = F.linear(current_state, self.gate_up_proj[expert_idx, self.intermediate_dim :])
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
             current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = F.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
@@ -446,13 +479,17 @@ class Dots3NoteTextExperts(nn.Module):
 
 
 class Dots3NoteTextMoE(nn.Module):
+    """
+    A mixed expert module containing shared experts.
+    """
+
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.num_experts = config.n_routed_experts
         self.top_k = config.num_experts_per_tok
         self.experts = Dots3NoteTextExperts(config)
-        self.gate = MoEGate(config)
+        self.gate = Dots3NoteTextTopkRouter(config)
         # CODEPATH: released Dots 3 Note Preview checkpoints use one shared expert; custom tiny configs may disable it.
         if config.n_shared_experts is not None and config.n_shared_experts > 0:
             shared_inter = config.shared_experts_intermediate_size * config.n_shared_experts
@@ -460,10 +497,10 @@ class Dots3NoteTextMoE(nn.Module):
         else:
             self.shared_experts = None
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states) -> torch.Tensor:
         orig_shape = hidden_states.shape
         hidden_states = hidden_states.view(-1, orig_shape[-1])
-        topk_idx, topk_weight = self.gate(hidden_states)
+        _, topk_weight, topk_idx = self.gate(hidden_states)
 
         final = self.experts(hidden_states, topk_idx, topk_weight)
 
@@ -578,6 +615,11 @@ def dsa_sparse_attention_forward(
 
 
 class Dots3NoteTextAttention(nn.Module):
+    """
+    DeepSeek-V3 MLA, with a DSA indexer whose top-k sparse mask is folded into the attention mask.
+    Qlora rank formulation is dropped as it is never used in released models.
+    """
+
     def __init__(self, config: Dots3NoteConfig, layer_idx: int, is_sliding: bool = False):
         super().__init__()
         self.config = config
@@ -665,26 +707,50 @@ class Dots3NoteTextAttention(nn.Module):
                 raise ValueError("DSA requires q_lora_rank to construct the indexer query")
             self.indexer = Dots3NoteTextIndexer(config, layer_idx)
 
-    def expand_kv(self, hidden_states):
-        batch_size, sequence_length, _ = hidden_states.shape
-        hidden_states = self.kv_b_proj(hidden_states)
-        hidden_states = hidden_states.view(
-            batch_size, sequence_length, self.num_heads, self.qk_nope_head_dim + self.v_head_dim
-        ).transpose(1, 2)
-        return torch.split(hidden_states, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+    def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Expands the compressed latents into key and value states. Args:
+            - kv_nope: key + value without positional encoding, shape [batch_size, 1, seqlen, self.kv_lora_rank]
+            - k_rot: shared key with positional encoding, shape [batch_size, 1, seqlen, self.qk_rope_head_dim]
+        Returns the key and value states, two tensors of shape [batch, num_heads, seq, (k or v)_head_dim].
+        """
+        batch_size, _, seq_length, _ = kv_nope.shape
+        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
+
+        kv_nope = self.kv_b_proj(kv_nope).view(key_shape).transpose(1, 2)
+        k_nope, value_states = torch.split(kv_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        k_rot = k_rot.expand(-1, k_nope.shape[1], -1, -1)  # does not affect the underlying storage
+
+        # Concatenate k_nope and k_rot in a new tensor
+        key_states = kv_nope.new_empty(*kv_nope.shape[:-1], self.qk_nope_head_dim + self.qk_rope_head_dim)
+        key_states[..., : self.qk_nope_head_dim].copy_(k_nope)
+        key_states[..., self.qk_nope_head_dim :].copy_(k_rot)
+        return key_states, value_states
 
     def forward(
         self,
         hidden_states,
-        cos,
-        sin,
+        cos=None,
+        sin=None,
         attention_mask=None,
         padding_mask=None,
         past_key_value=None,
+        past_key_values=None,
         cache_position=None,
         output_attentions=False,
-        **kwargs,
-    ):
+        position_embeddings=None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        if position_embeddings is not None:
+            if cos is not None or sin is not None:
+                raise ValueError("Pass either `position_embeddings` or `cos`/`sin`, not both")
+            cos, sin = position_embeddings
+        if cos is None or sin is None:
+            raise ValueError("Dots3NoteTextAttention requires rotary position embeddings")
+        if past_key_values is not None:
+            if past_key_value is not None:
+                raise ValueError("Pass either `past_key_values` or `past_key_value`, not both")
+            past_key_value = past_key_values
+        output_attentions = output_attentions or self.config.output_attentions
         bsz, q_len, _ = hidden_states.size()
 
         # ---- query ----
@@ -706,7 +772,6 @@ class Dots3NoteTextAttention(nn.Module):
         kv_a = self.kv_a_layernorm(kv_a.contiguous())
         if self.apply_lora_scale:
             kv_a = kv_a * (self.hidden_size / self.kv_lora_rank) ** 0.5
-        k_nope, value_states = self.expand_kv(kv_a)
 
         # decoupled rope key: single (mqa) head, shared across heads
         k_pe = k_pe.view(bsz, q_len, 1, self.qk_rope_head_dim).transpose(1, 2)  # [B,1,S,rope]
@@ -717,8 +782,7 @@ class Dots3NoteTextAttention(nn.Module):
         k_pe = apply_rotary_interleaved(k_pe, cos, sin)
 
         query_states = torch.cat([q_nope, q_pe], dim=-1)  # [B,H,S,qk_head_dim]
-        k_pe = k_pe.expand(bsz, self.num_heads, q_len, self.qk_rope_head_dim)
-        key_states = torch.cat([k_nope, k_pe], dim=-1)  # [B,H,S,qk_head_dim]
+        key_states, value_states = self.expand_kv(kv_a.unsqueeze(1), k_pe)
 
         if past_key_value is not None:
             cache_kwargs = {"cache_position": cache_position}
@@ -864,57 +928,57 @@ class Dots3NoteTextDecoderLayer(GradientCheckpointingLayer):
 
     def forward(
         self,
-        hidden_states,
-        cos,
-        sin,
-        attention_mask=None,
-        padding_mask=None,
-        past_key_value=None,
-        cache_position=None,
-        output_attentions=False,
-        **kwargs,
-    ):
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-        hidden_states, self_attn_weights = self.self_attn(
-            hidden_states,
-            cos,
-            sin,
+        # Self Attention
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
             attention_mask=attention_mask,
-            padding_mask=padding_mask,
-            past_key_value=past_key_value,
-            cache_position=cache_position,
-            output_attentions=output_attentions,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = residual + hidden_states
 
+        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-        outputs = (hidden_states,)
-        if output_attentions:
-            outputs += (self_attn_weights,)
-        return outputs
+        return hidden_states
 
 
-# ---------------------------------------------------------------------------
-# Pretrained base
-# ---------------------------------------------------------------------------
 @auto_docstring
 class Dots3NotePreTrainedModel(PreTrainedModel):
-    config_class = Dots3NoteConfig
+    config: Dots3NoteConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dots3NoteTextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_cache_class = True
-    _supports_sdpa = True
     _supports_flash_attn = False
+    _supports_sdpa = True
+    _supports_flex_attn = False
+    _can_compile_fullgraph = False
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": Dots3NoteTextDecoderLayer,
+        "attentions": Dots3NoteTextAttention,
+    }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"^model\.layers\.46\.", r"^model\.mtp\."]
+    _keep_in_fp32_modules = []
+    config_class = Dots3NoteConfig
+    _supports_cache_class = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -934,7 +998,7 @@ class Dots3NotePreTrainedModel(PreTrainedModel):
                 )
             )
             init.copy_(module.inv_freq, inv_freq)
-        elif isinstance(module, MoEGate):
+        elif isinstance(module, Dots3NoteTextTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.e_score_correction_bias is not None:
                 init.zeros_(module.e_score_correction_bias)
@@ -943,16 +1007,12 @@ class Dots3NotePreTrainedModel(PreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
-# ---------------------------------------------------------------------------
-# Base model
-# ---------------------------------------------------------------------------
 @auto_docstring
 class Dots3NoteTextModel(Dots3NotePreTrainedModel):
     def __init__(self, config: Dots3NoteConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.num_hidden_layers = config.num_hidden_layers
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
 
@@ -960,58 +1020,26 @@ class Dots3NoteTextModel(Dots3NotePreTrainedModel):
 
         self.norm = _get_norm(config.hidden_size, config.rms_norm_eps, config.final_norm)
         self.rotary_emb = Dots3NoteTextRotaryEmbedding(config.qk_rope_head_dim, base=config.rope_theta)
+        self.gradient_checkpointing = False
+        self.num_hidden_layers = config.num_hidden_layers
         self.swa_rotary_emb = Dots3NoteTextRotaryEmbedding(config.swa_qk_rope_head_dim, base=config.swa_rope_theta)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
-    def _make_masks(self, attention_mask, inputs_embeds, past_key_values, position_ids):
-        """Return backend-specific masks without eagerly constructing additive square tensors."""
-        if isinstance(attention_mask, dict):
-            full_mask = attention_mask.get("deepseek_sparse_attention", attention_mask.get("full_attention"))
-            if full_mask is None:
-                raise ValueError("The attention mask mapping must contain a full or DeepSeek sparse attention mask.")
-            return full_mask, attention_mask.get("sliding_attention", full_mask)
-
-        mask_kwargs = {
-            "config": self.config,
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-        }
-        full_mask = create_causal_mask(**mask_kwargs)
-        sliding_mask = (
-            # CODEPATH: released checkpoints alternate SWA and full-attention layers; custom tiny configs may use full only.
-            create_sliding_window_causal_mask(**mask_kwargs) if self.config.use_sliding_window else full_mask
-        )
-        return full_mask, sliding_mask
-
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | BaseModelOutputWithPast:
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
         cache_position = kwargs.pop("cache_position", None)
 
         if (input_ids is None) == (inputs_embeds is None):
@@ -1042,129 +1070,121 @@ class Dots3NoteTextModel(Dots3NotePreTrainedModel):
         full_mask, sliding_mask = self._make_masks(attention_mask, inputs_embeds, past_key_values, position_ids)
 
         hidden_states = inputs_embeds
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        for idx in range(self.num_hidden_layers):
-            layer = self.layers[idx]
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
+        for layer in self.layers[: self.num_hidden_layers]:
             layer_mask = sliding_mask if layer.is_sliding else full_mask
-            layer_cos, layer_sin = (swa_cos, swa_sin) if layer.is_sliding else (cos, sin)
-            layer_outputs = layer(
+            position_embeddings = (swa_cos, swa_sin) if layer.is_sliding else (cos, sin)
+            hidden_states = layer(
                 hidden_states,
-                layer_cos,
-                layer_sin,
                 attention_mask=layer_mask,
+                position_embeddings=position_embeddings,
+                position_ids=position_ids,
                 padding_mask=padding_mask,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 cache_position=cache_position,
-                output_attentions=output_attentions,
+                use_cache=use_cache,
                 **kwargs,
             )
-            hidden_states = layer_outputs[0]
-            if output_attentions:
-                all_self_attentions += (layer_outputs[1],)
 
         hidden_states = self.norm(hidden_states)
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                value
-                for value in (hidden_states, past_key_values, all_hidden_states, all_self_attentions)
-                if value is not None
-            )
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
         )
 
+    def get_input_embeddings(self):
+        return self.embed_tokens
 
-# ---------------------------------------------------------------------------
-# Causal LM head
-# ---------------------------------------------------------------------------
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
+
+    def _make_masks(self, attention_mask, inputs_embeds, past_key_values, position_ids):
+        """Return backend-specific masks without eagerly constructing additive square tensors."""
+        if isinstance(attention_mask, dict):
+            full_mask = attention_mask.get("deepseek_sparse_attention", attention_mask.get("full_attention"))
+            if full_mask is None:
+                raise ValueError("The attention mask mapping must contain a full or DeepSeek sparse attention mask.")
+            return full_mask, attention_mask.get("sliding_attention", full_mask)
+
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        full_mask = create_causal_mask(**mask_kwargs)
+        sliding_mask = (
+            # CODEPATH: released checkpoints alternate SWA and full-attention layers; custom tiny configs may use full only.
+            create_sliding_window_causal_mask(**mask_kwargs) if self.config.use_sliding_window else full_mask
+        )
+        return full_mask, sliding_mask
+
+
 @auto_docstring
 class Dots3NoteTextForCausalLM(Dots3NotePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config: Dots3NoteConfig):
         super().__init__(config)
         self.model = Dots3NoteTextModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def get_decoder(self):
-        return self.model
-
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **kwargs,
-    ) -> tuple | CausalLMOutputWithPast:
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        cache_position = kwargs.pop("cache_position", None)
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutputWithPast:
+        r"""
+        Example:
 
-        outputs = self.model(
+        ```python
+        >>> from transformers import AutoTokenizer, Dots3NoteTextForCausalLM
+
+        >>> model = Dots3NoteTextForCausalLM.from_pretrained("meta-dots3_note_text/Dots3NoteText-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-dots3_note_text/Dots3NoteText-2-7b-hf")
+
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```"""
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
-        hidden_states = outputs.last_hidden_state
 
-        slice_indices = (
-            slice(None)
-            if labels is not None
-            else (slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep)
-        )
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        if not return_dict:
-            output = tuple(
-                value
-                for value in (logits, outputs.past_key_values, outputs.hidden_states, outputs.attentions)
-                if value is not None
-            )
-            return (loss,) + output if loss is not None else output
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -1706,18 +1726,8 @@ class Dots3NoteAudioModel(Dots3NoteAudioPreTrainedModel):
 # -----------------------------------------------------------------------------
 # Vision encoder and adapter
 # -----------------------------------------------------------------------------
-class Dots3NoteVisionRMSNorm(nn.Module):
-    def __init__(self, hidden_size: int, eps: float = 1e-6):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.float()
-        variance = hidden_states.square().mean(dim=-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+class Dots3NoteVisionRMSNorm(Dots3NoteTextRMSNorm):
+    pass
 
 
 class Dots3NoteVisionRotaryEmbedding(nn.Module):
@@ -1829,22 +1839,25 @@ class Dots3NoteVisionMoE(nn.Module):
         return output.reshape(shape)
 
 
-def rotate_half(hidden_states: torch.Tensor) -> torch.Tensor:
-    first, second = hidden_states.chunk(2, dim=-1)
-    return torch.cat((-second, first), dim=-1)
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
 
 
 def apply_rotary_pos_emb_vision(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    cosine: torch.Tensor,
-    sine: torch.Tensor,
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    query_dtype, key_dtype = query.dtype, key.dtype
-    cosine, sine = cosine.unsqueeze(-2).float(), sine.unsqueeze(-2).float()
-    query = query.float() * cosine + rotate_half(query.float()) * sine
-    key = key.float() * cosine + rotate_half(key.float()) * sine
-    return query.to(query_dtype), key.to(key_dtype)
+    orig_q_dtype = q.dtype
+    orig_k_dtype = k.dtype
+    q, k = q.float(), k.float()
+    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    q_embed = q_embed.to(orig_q_dtype)
+    k_embed = k_embed.to(orig_k_dtype)
+    return q_embed, k_embed
 
 
 def dots3_note_vision_eager_attention_forward(
@@ -1975,18 +1988,19 @@ class Dots3NoteVisionBlock(GradientCheckpointingLayer):
 
 
 class Dots3NoteVisionAdapter(nn.Module):
-    def __init__(self, config: Dots3NoteVisionConfig):
+    def __init__(self, dim: int, context_dim: int, spatial_merge_size: int = 2) -> None:
         super().__init__()
-        merged_size = config.adapter_in_dim * config.adapter_merge_size**2
-        self.ln_q = nn.LayerNorm(config.adapter_in_dim, eps=1e-6)
+        self.hidden_size = context_dim * (spatial_merge_size**2)
+        self.ln_q = LayerNorm(context_dim, eps=1e-6)
         self.mlp = nn.Sequential(
-            nn.Linear(merged_size, merged_size),
+            nn.Linear(self.hidden_size, self.hidden_size),
             nn.GELU(),
-            nn.Linear(merged_size, config.adapter_out_dim),
+            nn.Linear(self.hidden_size, dim),
         )
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.mlp(self.ln_q(hidden_states).reshape(-1, self.mlp[0].in_features))
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.mlp(self.ln_q(x).view(-1, self.hidden_size))
+        return x
 
 
 @auto_docstring
@@ -2030,7 +2044,11 @@ class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel):
             # CODEPATH: released checkpoints use the post-trunk norm; custom vision configs may disable it.
             Dots3NoteVisionRMSNorm(config.embed_dim, eps=config.rms_norm_eps) if config.post_norm else None
         )
-        self.adapter = Dots3NoteVisionAdapter(config)
+        self.adapter = Dots3NoteVisionAdapter(
+            dim=config.adapter_out_dim,
+            context_dim=config.adapter_in_dim,
+            spatial_merge_size=config.adapter_merge_size,
+        )
         self.gradient_checkpointing = False
         self.post_init()
 
