@@ -43,7 +43,7 @@ from torch.autograd.graph import save_on_cpu
 from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
-from transformers.distributed.utils import is_dtensor
+from transformers.distributed.utils import is_dtensor, prefetch_checkpoint_shards
 
 from . import initialization as init
 from .configuration_utils import PreTrainedConfig
@@ -4344,6 +4344,8 @@ class PreTrainedModel(
 
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
         expected_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys
+
+        prefetch_checkpoint_shards(checkpoint_files)
 
         if logger.level >= logging.WARNING:
             verify_tp_plan(expected_keys, getattr(model, "_tp_plan", None))
