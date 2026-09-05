@@ -345,6 +345,7 @@ if TYPE_CHECKING:
     from .openai_privacy_filter import *
     from .opt import *
     from .ovis2 import *
+    from .ovis2_5 import *
     from .owlv2 import *
     from .owlvit import *
     from .paddleocr_vl import *
