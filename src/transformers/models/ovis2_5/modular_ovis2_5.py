@@ -46,7 +46,6 @@ from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
 from ..muse_glimmer.modeling_muse_glimmer import MuseGlimmerVisionModel, MuseGlimmerVisionRotaryEmbedding
 from ..ovis2.modeling_ovis2 import Ovis2Model
-from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionEmbeddings
 from ..video_llama_3.modeling_video_llama_3 import (
     VideoLlama3ModelOutputWithPast,
     VideoLlama3PreTrainedModel,
@@ -469,16 +468,30 @@ class Ovis2_5VisionRotaryEmbedding(MuseGlimmerVisionRotaryEmbedding):
     pass
 
 
-class Ovis2_5VisionEmbeddings(PaddleOCRVisionEmbeddings):
+class Ovis2_5VisionEmbeddings(nn.Module):
     def __init__(self, config: Ovis2_5VisionConfig):
-        super().__init__(config)
-        del self.position_ids
-        self.spatial_merge_size = config.spatial_merge_size
-        self.interpolation_mode = "bicubic"
-        self.interpolation_align_corners = False
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.image_size = config.image_size
+        self.patch_size = config.patch_size
 
-    def interpolate_pos_encoding(self):
-        raise AttributeError("Not needed for Ovis2.5")
+        self.patch_embedding = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=self.embed_dim,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
+            padding="valid",
+        )
+
+        self.num_patches = (self.image_size // self.patch_size) ** 2
+        self.num_positions = self.num_patches
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        # How the (square) learned position grid is resampled to each image's grid.
+        self.num_grid_per_side = int(self.num_positions**0.5)
+        self.interpolation_align_corners = False
+        self.interpolation_mode = "bicubic"
+        self.spatial_merge_size = config.spatial_merge_size
 
     def forward(
         self,
@@ -486,6 +499,13 @@ class Ovis2_5VisionEmbeddings(PaddleOCRVisionEmbeddings):
         grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
+        """
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
+                The tensors corresponding to the input images.
+            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+        """
         interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
             grid_thw,
             self.num_grid_per_side,
@@ -503,7 +523,25 @@ class Ovis2_5VisionEmbeddings(PaddleOCRVisionEmbeddings):
         )
         kwargs["interp_indices"] = interp_indices
         kwargs["interp_weights"] = interp_weights.to(self.position_embedding.weight.dtype)
-        return super().forward(pixel_values, grid_thw, **kwargs)
+        batch_size, sequence_len, channel, height, width = pixel_values.shape
+        target_dtype = self.patch_embedding.weight.dtype
+        pixel_values = pixel_values.reshape(batch_size * sequence_len, channel, height, width)
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+        embeddings = patch_embeds.flatten(-2).squeeze(-1)
+        embeddings = embeddings.reshape(batch_size * sequence_len, -1)
+
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw,
+            num_grid_per_side=self.num_grid_per_side,
+            mode=self.interpolation_mode,
+            align_corners=self.interpolation_align_corners,
+            spatial_merge_size=1,
+            kwargs=kwargs,
+        )
+        pos_embeds = (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1)
+        embeddings = embeddings + pos_embeds.to(embeddings.dtype)
+
+        return embeddings
 
 
 class Ovis2_5VisionMLP(VideoLlama3VisionMLP):

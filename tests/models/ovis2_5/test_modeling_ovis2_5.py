@@ -625,8 +625,8 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
                     config.layer_types,
                     ["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
                 )
-                self.assertFalse(hasattr(config, "fullatt_block_indexes"))
-                self.assertNotIn("fullatt_block_indexes", config.to_dict())
+                self.assertEqual(config.fullatt_block_indexes, indexes)
+                self.assertEqual(config.to_dict()["fullatt_block_indexes"], indexes)
 
         config = Ovis2_5VisionConfig(num_hidden_layers=2, fullatt_block_indexes=None)
         self.assertEqual(config.layer_types, ["full_attention", "full_attention"])
@@ -665,16 +665,16 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
             config.vision_config.layer_types,
             ["sliding_attention", "full_attention", "sliding_attention"],
         )
-        self.assertFalse(hasattr(config.vision_config, "fullatt_block_indexes"))
+        self.assertEqual(config.vision_config.fullatt_block_indexes, [1])
+        self.assertEqual(config.vision_config.hidden_stride, 2)
         self.assertFalse(hasattr(config.vision_config, "num_patches"))
         self.assertFalse(hasattr(config.vision_config, "preserve_original_pe"))
         self.assertFalse(hasattr(config.vision_config, "use_rope"))
-        self.assertFalse(hasattr(config.vision_config, "hidden_stride"))
         self.assertEqual(config.vision_config.spatial_merge_size, 2)
         serialized_config = config.to_dict()
-        self.assertNotIn("llm_config", serialized_config)
-        self.assertNotIn("vit_config", serialized_config)
-        self.assertNotIn("visual_vocab_size", serialized_config)
+        self.assertIn("llm_config", serialized_config)
+        self.assertIn("vit_config", serialized_config)
+        self.assertEqual(serialized_config["visual_vocab_size"], self.model_tester.visual_vocab_size)
 
     def test_visual_tokenizer_distribution(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
