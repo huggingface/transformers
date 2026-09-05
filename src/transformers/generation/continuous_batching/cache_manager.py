@@ -505,7 +505,6 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         blocks = np.asarray(block_table, dtype=np.int64)
         return (blocks[positions // self.block_size] * self.block_size + positions % self.block_size).tolist()
 
-
     def get_read_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
         """Returns the physical indices of where to read request_id's cache in the cache tensor.
         For a group of sliding window attention layers, we read from the cache tensor before writing on it, because the
