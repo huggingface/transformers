@@ -413,7 +413,6 @@ class BltPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["BltTransformerLayer", "BltCrossAttention"]
-    _can_compile_fullgraph = False  # static cache cannot have different shapes for each layer
     _supports_sdpa = True
     _supports_flash_attn = False
     _supports_flex_attn = False
@@ -422,6 +421,7 @@ class BltPreTrainedModel(PreTrainedModel):
         "hidden_states": OutputRecorder(BltTransformerLayer, index=0),
         "attentions": OutputRecorder(BltSelfAttention, index=1),
     }
+    _can_compile_fullgraph = False  # static cache cannot have different shapes for each layer
 
     @torch.no_grad()
     def _init_weights(self, module):
