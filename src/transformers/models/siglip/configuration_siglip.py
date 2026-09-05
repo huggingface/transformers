@@ -56,8 +56,8 @@ class SiglipTextConfig(PreTrainedConfig):
     # This differs from `CLIPTokenizer`'s default and from openai/siglip
     # See https://github.com/huggingface/transformers/pull/24773#issuecomment-1632287538
     pad_token_id: int | None = 1
-    bos_token_id: int | None = 49406
-    eos_token_id: int | list[int] | None = 49407
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = 1
     projection_size: int | None = None
 
     def __post_init__(self, **kwargs):
