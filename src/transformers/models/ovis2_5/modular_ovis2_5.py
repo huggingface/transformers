@@ -354,7 +354,6 @@ class Ovis2_5VisionConfig(Cosmos3EdgeVisionConfig):
     rope_parameters: dict | None = None
     num_patches = AttributeError()
 
-    # Ignore copy
     def __post_init__(self, **kwargs):
         # Released configs use `hidden_stride=2`, matching the inherited spatial merge default.
         kwargs.pop("hidden_stride", None)
@@ -403,7 +402,6 @@ class Ovis2_5Config(PreTrainedConfig):
     video_end_token_id: int = 151673
     tie_word_embeddings: bool = False
 
-    # Ignore copy
     def __post_init__(self, **kwargs):
         # Released Hub checkpoints still use the remote-code names. Pop them here until their configs can be updated.
         legacy_text_config = kwargs.pop("llm_config", None)
