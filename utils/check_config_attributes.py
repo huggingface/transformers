@@ -42,6 +42,9 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    "NemotronH_Omni_Reasoning_V3_Config": [
+        "sound_context_token",  # used by the processor for `<audio>` placeholder expansion
+    ],
     # For consistency we keep head dim but it's not used as NoPE is applied
     "Glm5NextTextConfig": ["head_dim"],
     # EP related refactor that also relies on correct naming for FP8/4 conventions
