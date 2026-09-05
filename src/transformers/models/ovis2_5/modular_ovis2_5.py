@@ -32,7 +32,6 @@ from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ...video_utils import VideoMetadata
 from ...vision_utils import (
     get_vision_attention_seqlens,
     get_vision_interpolation_indices_and_weights,
@@ -243,14 +242,8 @@ class Ovis2_5VideoProcessor(Glm4vVideoProcessor):
     fps = AttributeError()
     valid_kwargs = Ovis2_5VideoProcessorInitKwargs
 
-    def sample_frames(
-        self,
-        metadata: VideoMetadata,
-        num_frames: int | None = None,
-        fps: int | float | None = None,
-        **kwargs,
-    ):
-        raise AttributeError("Not needed for Ovis2.5")
+    def sample_frames(self, **super_kwargs):
+        raise AttributeError()
 
     def resize(
         self,

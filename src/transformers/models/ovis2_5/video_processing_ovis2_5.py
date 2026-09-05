@@ -29,7 +29,7 @@ from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILIma
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
-from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
+from ...video_utils import group_videos_by_shape, reorder_videos
 
 
 class Ovis2_5VideoProcessorInitKwargs(VideosKwargs, total=False):
@@ -110,25 +110,6 @@ class Ovis2_5VideoProcessor(BaseVideoProcessor):
 
     def __init__(self, **kwargs: Unpack[Ovis2_5VideoProcessorInitKwargs]):
         super().__init__(**kwargs)
-
-    def sample_frames(
-        self,
-        metadata: VideoMetadata,
-        num_frames: int | None = None,
-        fps: int | float | None = None,
-        **kwargs,
-    ):
-        """
-        Args:
-            metadata (`VideoMetadata`):
-                Metadata of the video containing information about total duration, fps and total number of frames.
-            fps (`int` or `float`, *optional*):
-                Target frames to sample per second. Defaults to `self.fps`.
-        Returns:
-            np.ndarray:
-                Indices to sample video frames.
-        """
-        raise AttributeError("Not needed for Ovis2.5")
 
     def resize(
         self,
