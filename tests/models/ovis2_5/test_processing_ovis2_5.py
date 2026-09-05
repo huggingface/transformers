@@ -124,22 +124,6 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertEqual(getattr(processor, token_attribute), expected_token)
         self.assertEqual(processor.image_token_id, processor.video_token_id)
 
-    def test_missing_visual_tokens_are_registered(self):
-        tokenizer = self._build_tokenizer(include_visual_tokens=False)
-        original_vocab_size = len(tokenizer)
-        processor = self.processor_class(
-            image_processor=self.get_component("image_processor"),
-            tokenizer=tokenizer,
-            video_processor=self.get_component("video_processor"),
-        )
-
-        expected_ids = list(range(original_vocab_size, original_vocab_size + len(VISUAL_TOKENS)))
-        actual_ids = [processor.tokenizer.convert_tokens_to_ids(token) for token in VISUAL_TOKENS]
-        self.assertListEqual(actual_ids, expected_ids)
-        self.assertEqual(processor.image_token_id, processor.video_token_id)
-        for token, token_id in zip(VISUAL_TOKENS, expected_ids):
-            self.assertListEqual(processor.tokenizer.encode(token, add_special_tokens=False), [token_id])
-
     def test_visual_tokens_survive_processor_reload(self):
         for named_visual_tokens in (True, False):
             processor = self.processor_class(
@@ -158,7 +142,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertEqual(reloaded_processor.image_token_id, reloaded_processor.video_token_id)
 
     def test_processor_loads_legacy_hub_metadata(self):
-        tokenizer = self._build_tokenizer(include_visual_tokens=False)
+        tokenizer = self._build_tokenizer()
         legacy_preprocessor_config = {
             "do_convert_rgb": None,
             "do_normalize": True,

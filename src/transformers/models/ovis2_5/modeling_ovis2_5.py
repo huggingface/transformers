@@ -423,6 +423,7 @@ class Ovis2_5VisualTokenProjector(nn.Module):
     def __init__(self, config: Ovis2_5VisionConfig):
         super().__init__()
         self.spatial_merge_unit = config.spatial_merge_size**2
+        self.num_visual_indicator_tokens = config.num_visual_indicator_tokens
         visual_token_vocab_size = config.vocab_size - config.num_visual_indicator_tokens
         self.head_linear = nn.Linear(
             config.hidden_size * self.spatial_merge_unit,
@@ -438,6 +439,28 @@ class Ovis2_5VisualTokenProjector(nn.Module):
         visual_tokens = torch.softmax(logits, dim=-1, dtype=torch.float32).to(logits.dtype)
         indicator_padding = self.indicator_padding.expand(visual_tokens.shape[0], -1)
         return torch.cat((visual_tokens, indicator_padding), dim=-1)
+
+
+class Ovis2_5MultiModalProjector(nn.Module):
+    def __init__(self, config: Ovis2_5VisionConfig, text_hidden_size: int):
+        super().__init__()
+        self.visual_tokenizer = Ovis2_5VisualTokenProjector(config)
+        self.visual_embeddings_table = nn.Embedding(config.vocab_size, text_hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        visual_tokens = self.visual_tokenizer(hidden_states)
+        return torch.matmul(visual_tokens, self.visual_embeddings_table.weight)
+
+    def get_visual_indicator_features(self, device: torch.device | None = None) -> torch.Tensor:
+        num_visual_indicator_tokens = self.visual_tokenizer.num_visual_indicator_tokens
+        indicator_start = self.visual_embeddings_table.num_embeddings - num_visual_indicator_tokens
+        indicator_token_ids = torch.arange(
+            indicator_start,
+            self.visual_embeddings_table.num_embeddings,
+            dtype=torch.long,
+            device=device or self.visual_embeddings_table.weight.device,
+        )
+        return self.visual_embeddings_table(indicator_token_ids)
 
 
 @auto_docstring
@@ -587,9 +610,8 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
     def __init__(self, config: Ovis2_5Config):
         super().__init__(config)
         self.vision_tower = Ovis2_5VisionModel(config.vision_config)
-        self.visual_tokenizer = Ovis2_5VisualTokenProjector(config.vision_config)
-        self.visual_embeddings_table = nn.Embedding(
-            config.vision_config.vocab_size,
+        self.multi_modal_projector = Ovis2_5MultiModalProjector(
+            config.vision_config,
             config.text_config.hidden_size,
         )
         self.language_model = AutoModel.from_config(config.text_config)
@@ -610,16 +632,8 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
             return_dict=True,
             **kwargs,
         )
-        visual_tokens = self.visual_tokenizer(vision_outputs.pooler_output)
-        visual_features = torch.matmul(visual_tokens, self.visual_embeddings_table.weight)
-        indicator_start = self.vision_tower.config.vocab_size - self.vision_tower.config.num_visual_indicator_tokens
-        indicator_token_ids = torch.arange(
-            indicator_start,
-            self.vision_tower.config.vocab_size,
-            dtype=torch.long,
-            device=visual_features.device,
-        )
-        visual_indicator_features = self.visual_embeddings_table(indicator_token_ids)
+        visual_features = self.multi_modal_projector(vision_outputs.pooler_output)
+        visual_indicator_features = self.multi_modal_projector.get_visual_indicator_features(visual_features.device)
         split_sizes = (image_grid_thw.prod(dim=1) // self.vision_tower.config.spatial_merge_size**2).tolist()
         return Ovis2_5VisualFeaturesOutput(
             last_hidden_state=vision_outputs.last_hidden_state,

@@ -685,7 +685,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
                 pixel_values=inputs["pixel_values"],
                 grid_thw=inputs["image_grid_thw"],
             )
-            visual_tokens = model.model.visual_tokenizer(vision_outputs.pooler_output)
+            visual_tokens = model.model.multi_modal_projector.visual_tokenizer(vision_outputs.pooler_output)
             image_outputs = model.model.get_image_features(
                 pixel_values=inputs["pixel_values"],
                 image_grid_thw=inputs["image_grid_thw"],
@@ -702,7 +702,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         )
         torch.testing.assert_close(
             torch.cat(image_outputs.pooler_output),
-            visual_tokens @ model.model.visual_embeddings_table.weight,
+            visual_tokens @ model.model.multi_modal_projector.visual_embeddings_table.weight,
         )
 
     def test_visual_feature_helpers_split_per_input(self):
@@ -950,28 +950,28 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         state_dict = model.state_dict()
 
         self.assertEqual(
-            model.model.visual_embeddings_table.weight.shape,
+            model.model.multi_modal_projector.visual_embeddings_table.weight.shape,
             (config.vision_config.vocab_size, config.text_config.hidden_size),
         )
         self.assertIn("model.vision_tower.embeddings.patch_embedding.weight", state_dict)
         self.assertIn("model.vision_tower.layers.0.self_attn.q_proj.weight", state_dict)
         self.assertIn("model.vision_tower.post_layernorm.weight", state_dict)
-        self.assertIn("model.visual_tokenizer.head_linear.weight", state_dict)
-        self.assertIn("model.visual_tokenizer.head_norm.weight", state_dict)
-        self.assertIn("model.visual_tokenizer.head_norm.bias", state_dict)
+        self.assertIn("model.multi_modal_projector.visual_tokenizer.head_linear.weight", state_dict)
+        self.assertIn("model.multi_modal_projector.visual_tokenizer.head_norm.weight", state_dict)
+        self.assertIn("model.multi_modal_projector.visual_tokenizer.head_norm.bias", state_dict)
         self.assertFalse(any("vision_tower.transformer" in key for key in state_dict))
         self.assertFalse(any("vision_tower.head_" in key for key in state_dict))
         self.assertFalse(any("visual_tokenizer.head." in key for key in state_dict))
-        self.assertNotIn("model.visual_tokenizer.indicator_padding", state_dict)
+        self.assertNotIn("model.multi_modal_projector.visual_tokenizer.indicator_padding", state_dict)
 
     def test_visual_token_projector_buffer_initialization(self):
         model = Ovis2_5Model(self.model_tester.get_config()).to(torch_device)
         with torch.no_grad():
-            model.visual_tokenizer.indicator_padding.fill_(1)
+            model.multi_modal_projector.visual_tokenizer.indicator_padding.fill_(1)
 
-        model._init_weights(model.visual_tokenizer)
+        model._init_weights(model.multi_modal_projector.visual_tokenizer)
 
         torch.testing.assert_close(
-            model.visual_tokenizer.indicator_padding,
-            torch.zeros_like(model.visual_tokenizer.indicator_padding),
+            model.multi_modal_projector.visual_tokenizer.indicator_padding,
+            torch.zeros_like(model.multi_modal_projector.visual_tokenizer.indicator_padding),
         )
