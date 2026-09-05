@@ -84,6 +84,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("chameleon", "ChameleonModel"),
         ("chinese_clip", "ChineseCLIPModel"),
         ("chinese_clip_vision_model", "ChineseCLIPVisionModel"),
+        ("chronos2", "Chronos2Model"),
         ("clap", "ClapModel"),
         ("clip", "CLIPModel"),
         ("clip_text_model", "CLIPTextModel"),
@@ -2015,6 +2016,7 @@ MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING_NAMES = OrderedDict(
     [
+        ("chronos2", "Chronos2Model"),
         ("timesfm", "TimesFmModelForPrediction"),
         ("timesfm2_5", "TimesFm2_5ModelForPrediction"),
     ]
