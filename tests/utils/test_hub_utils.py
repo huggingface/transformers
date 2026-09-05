@@ -19,9 +19,21 @@ import unittest.mock as mock
 from pathlib import Path
 
 from huggingface_hub import constants, hf_hub_download
-from huggingface_hub.errors import HfHubHTTPError, LocalEntryNotFoundError, OfflineModeIsEnabled
+from huggingface_hub.errors import (
+    HfHubHTTPError,
+    LocalEntryNotFoundError,
+    OfflineModeIsEnabled,
+    RevisionResolutionError,
+)
 
-from transformers.utils import CONFIG_NAME, WEIGHTS_NAME, cached_file, has_file, list_repo_templates
+from transformers.utils import (
+    CONFIG_NAME,
+    WEIGHTS_NAME,
+    cached_file,
+    has_file,
+    list_repo_templates,
+    resolve_revision,
+)
 
 
 RANDOM_BERT = "hf-internal-testing/tiny-random-bert"
@@ -195,6 +207,43 @@ class GetFromCacheTests(unittest.TestCase):
             with self.assertRaises(ModuleNotFoundError):
                 # The error should be re-raised by cached_files, not caught in the exception handling block
                 cached_file(RANDOM_BERT, "nonexistent.json")
+
+
+class ResolveRevisionTests(unittest.TestCase):
+    def test_resolve_revision(self):
+        revision = resolve_revision(RANDOM_BERT, "main")
+        self.assertEqual(revision, "main")  # keeps the value the user asked for
+        self.assertRegex(revision.resolved, r"^[0-9a-f]{40}$")  # and carries the commit it currently points to
+        self.assertEqual(resolve_revision(RANDOM_BERT).resolved, revision.resolved)
+
+    def test_resolve_revision_is_a_no_op_when_it_cannot_help(self):
+        with mock.patch("transformers.utils.hub.HfApi.resolve_revision") as mock_resolve_revision:
+            # Not on the Hub
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                self.assertEqual(resolve_revision(tmp_dir, "main"), "main")
+            # Cannot honor the caller's proxies
+            self.assertEqual(resolve_revision(RANDOM_BERT, "main", proxies={"https": "https://proxy"}), "main")
+        mock_resolve_revision.assert_not_called()
+
+    def test_resolve_revision_fails_open(self):
+        """Any Hub error must leave the requested revision untouched, and be reported by the regular loading path."""
+        for error in (HfHubHTTPError("failed", response=mock.Mock(status_code=429)), RevisionResolutionError()):
+            with mock.patch("transformers.utils.hub.HfApi.resolve_revision", side_effect=error):
+                self.assertEqual(resolve_revision(RANDOM_BERT, "main"), "main")
+                self.assertIsNone(resolve_revision(RANDOM_BERT))
+
+    def test_cached_file_with_resolved_revision_does_not_call_the_hub(self):
+        """A resolved revision is immutable, so what the cache knows about it is enough."""
+        revision = resolve_revision(RANDOM_BERT)
+        cached_file(RANDOM_BERT, CONFIG_NAME, revision=revision)
+        cached_file(RANDOM_BERT, "conf", revision=revision, _raise_exceptions_for_missing_entries=False)
+
+        with mock.patch("transformers.utils.hub.hf_hub_download", side_effect=AssertionError("called the Hub")):
+            self.assertIsNotNone(cached_file(RANDOM_BERT, CONFIG_NAME, revision=revision))
+            # Including for a file that is known to be missing at that commit
+            self.assertIsNone(
+                cached_file(RANDOM_BERT, "conf", revision=revision, _raise_exceptions_for_missing_entries=False)
+            )
 
 
 class OfflineModeTests(unittest.TestCase):
