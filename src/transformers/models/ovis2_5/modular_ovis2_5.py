@@ -32,7 +32,6 @@ from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata
 from ...vision_utils import (
     get_vision_attention_seqlens,
@@ -76,7 +75,15 @@ def smart_resize(
     min_pixels: int = 448 * 448,
     max_pixels: int = 1344 * 1792,
 ) -> tuple[int, int]:
-    """Resize an image according to the native Ovis2.5 preprocessing policy."""
+    """Rescales the image so that the following conditions are met:
+
+    1. Both dimensions (height and width) are divisible by 'factor'.
+
+    2. The total number of pixels is within the range ['min_pixels', 'max_pixels'].
+
+    3. The aspect ratio of the image is maintained as closely as possible.
+
+    """
     # Unlike Qwen, Ovis expands dimensions below the factor and clamps aspect ratios above 200.
     if height < factor or width < factor:
         if height < width:
@@ -91,17 +98,17 @@ def smart_resize(
         else:
             width = 200 * height
 
-    resized_height = round(height / factor) * factor
-    resized_width = round(width / factor) * factor
-    if resized_height * resized_width > max_pixels:
+    h_bar = round(height / factor) * factor
+    w_bar = round(width / factor) * factor
+    if h_bar * w_bar > max_pixels:
         beta = math.sqrt((height * width) / max_pixels)
-        resized_height = math.floor(height / beta / factor) * factor
-        resized_width = math.floor(width / beta / factor) * factor
-    elif resized_height * resized_width < min_pixels:
+        h_bar = math.floor(height / beta / factor) * factor
+        w_bar = math.floor(width / beta / factor) * factor
+    elif h_bar * w_bar < min_pixels:
         beta = math.sqrt(min_pixels / (height * width))
-        resized_height = math.ceil(height * beta / factor) * factor
-        resized_width = math.ceil(width * beta / factor) * factor
-    return resized_height, resized_width
+        h_bar = math.ceil(height * beta / factor) * factor
+        w_bar = math.ceil(width * beta / factor) * factor
+    return h_bar, w_bar
 
 
 class Ovis2_5ImageProcessor(Glm4vImageProcessor):
@@ -243,13 +250,7 @@ class Ovis2_5VideoProcessor(Glm4vVideoProcessor):
         fps: int | float | None = None,
         **kwargs,
     ):
-        return BaseVideoProcessor.sample_frames(
-            self,
-            metadata=metadata,
-            num_frames=num_frames,
-            fps=fps,
-            **kwargs,
-        )
+        raise AttributeError("Not needed for Ovis2.5")
 
     def resize(
         self,
@@ -286,7 +287,21 @@ class Ovis2_5VideoProcessor(Glm4vVideoProcessor):
         width: int,
         videos_kwargs: dict | None = None,
     ) -> int:
-        """Return the number of pre-merge vision patches for one video."""
+        """
+        A utility that returns the number of video patches for a given video size.
+
+        Args:
+            num_frames (`int`):
+                Number of frames in the input video.
+            height (`int`):
+                Height of the input video frames.
+            width (`int`):
+                Width of the input video frames.
+            videos_kwargs (`dict`, *optional*):
+                Any kwargs to override defaults of the video processor.
+        Returns:
+            `int`: Number of video patches per video.
+        """
         if num_frames <= 0:
             raise ValueError(f"`num_frames` must be positive, got {num_frames}.")
         videos_kwargs = videos_kwargs or {}
@@ -294,11 +309,12 @@ class Ovis2_5VideoProcessor(Glm4vVideoProcessor):
         temporal_patch_size = videos_kwargs.get("temporal_patch_size", self.temporal_patch_size)
         merge_size = videos_kwargs.get("merge_size", self.merge_size)
         do_resize = videos_kwargs.get("do_resize", self.do_resize)
+        resized_height, resized_width = height, width
         if do_resize:
             size = videos_kwargs.get("size", self.size)
             min_pixels = size["shortest_edge"] if isinstance(size, dict) else size.shortest_edge
             max_pixels = size["longest_edge"] if isinstance(size, dict) else size.longest_edge
-            height, width = smart_resize(
+            resized_height, resized_width = smart_resize(
                 height,
                 width,
                 factor=patch_size * merge_size,
@@ -307,14 +323,14 @@ class Ovis2_5VideoProcessor(Glm4vVideoProcessor):
             )
 
         factor = patch_size * merge_size
-        if height % factor != 0 or width % factor != 0:
+        if resized_height % factor != 0 or resized_width % factor != 0:
             raise ValueError(
-                "Ovis2.5 images must have height and width divisible by "
-                f"`patch_size * merge_size` ({factor}), got ({height}, {width})."
+                "Ovis2.5 videos must have height and width divisible by "
+                f"`patch_size * merge_size` ({factor}), got ({resized_height}, {resized_width})."
             )
 
-        grid_t = math.ceil(num_frames / temporal_patch_size)
-        return grid_t * (height // patch_size) * (width // patch_size)
+        num_temporal_patches = math.ceil(num_frames / temporal_patch_size)
+        return num_temporal_patches * (resized_height // patch_size) * (resized_width // patch_size)
 
 
 @auto_docstring(checkpoint="AIDC-AI/Ovis2.5-2B")
@@ -323,9 +339,6 @@ class Ovis2_5VisionConfig(Cosmos3EdgeVisionConfig):
     r"""
     window_size (`int`, *optional*, defaults to 112):
         Window size, in input pixels, used by windowed vision-attention layers.
-    layer_types (`list[str]`, *optional*):
-        Per-layer attention type. Values are `"full_attention"` or `"sliding_attention"`. When omitted, every layer
-        uses full attention.
     temporal_patch_size (`int`, *optional*, defaults to 1):
         Number of consecutive video frames represented by one temporal patch.
     vocab_size (`int`, *optional*, defaults to 65536):

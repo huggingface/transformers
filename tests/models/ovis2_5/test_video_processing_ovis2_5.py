@@ -230,6 +230,7 @@ class Ovis2_5VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         self._check_input_type(video_inputs, input_data_format="channels_last")
 
     def test_call_sample_frames(self):
+        """Ovis2.5 does not sample frames, even when sampling arguments are provided."""
         video_inputs = self.video_processor_tester.prepare_video_inputs(
             equal_resolution=False,
             return_tensors="torch",
@@ -239,12 +240,6 @@ class Ovis2_5VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
             output = video_processor(video_inputs, num_frames=2, return_tensors="pt")
             expected_shape, expected_grid = self.video_processor_tester.expected_output(video_inputs)
-            self.assertEqual(tuple(output[self.input_name].shape), expected_shape)
-            self.assertEqual(output.video_grid_thw.tolist(), expected_grid)
-
-            video_processor.do_sample_frames = True
-            output = video_processor(video_inputs, num_frames=2, return_tensors="pt")
-            expected_shape, expected_grid = self.video_processor_tester.expected_output(video_inputs, num_frames=2)
             self.assertEqual(tuple(output[self.input_name].shape), expected_shape)
             self.assertEqual(output.video_grid_thw.tolist(), expected_grid)
 

@@ -30,9 +30,6 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 112):
         Window size, in input pixels, used by windowed vision-attention layers.
-    layer_types (`list[str]`, *optional*):
-        Per-layer attention type. Values are `"full_attention"` or `"sliding_attention"`. When omitted, every layer
-        uses full attention.
     temporal_patch_size (`int`, *optional*, defaults to 1):
         Number of consecutive video frames represented by one temporal patch.
     vocab_size (`int`, *optional*, defaults to 65536):

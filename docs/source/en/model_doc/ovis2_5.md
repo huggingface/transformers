@@ -42,12 +42,12 @@ Use [`Ovis2_5Processor.apply_chat_template`] to load the image, format the conve
 For the 9B checkpoint, replace the model ID.
 
 ```python
-from transformers import Ovis2_5ForConditionalGeneration, Ovis2_5Processor
+from transformers import AutoModelForImageTextToText, Ovis2_5Processor
 
 
 model_id = "AIDC-AI/Ovis2.5-2B"
 processor = Ovis2_5Processor.from_pretrained(model_id)
-model = Ovis2_5ForConditionalGeneration.from_pretrained(
+model = AutoModelForImageTextToText.from_pretrained(
     model_id,
     device_map="auto",
 )

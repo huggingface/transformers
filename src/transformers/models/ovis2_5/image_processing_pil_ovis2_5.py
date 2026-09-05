@@ -52,7 +52,15 @@ def smart_resize(
     min_pixels: int = 448 * 448,
     max_pixels: int = 1344 * 1792,
 ) -> tuple[int, int]:
-    """Resize an image according to the native Ovis2.5 preprocessing policy."""
+    """Rescales the image so that the following conditions are met:
+
+    1. Both dimensions (height and width) are divisible by 'factor'.
+
+    2. The total number of pixels is within the range ['min_pixels', 'max_pixels'].
+
+    3. The aspect ratio of the image is maintained as closely as possible.
+
+    """
     # Unlike Qwen, Ovis expands dimensions below the factor and clamps aspect ratios above 200.
     if height < factor or width < factor:
         if height < width:
@@ -67,17 +75,17 @@ def smart_resize(
         else:
             width = 200 * height
 
-    resized_height = round(height / factor) * factor
-    resized_width = round(width / factor) * factor
-    if resized_height * resized_width > max_pixels:
+    h_bar = round(height / factor) * factor
+    w_bar = round(width / factor) * factor
+    if h_bar * w_bar > max_pixels:
         beta = math.sqrt((height * width) / max_pixels)
-        resized_height = math.floor(height / beta / factor) * factor
-        resized_width = math.floor(width / beta / factor) * factor
-    elif resized_height * resized_width < min_pixels:
+        h_bar = math.floor(height / beta / factor) * factor
+        w_bar = math.floor(width / beta / factor) * factor
+    elif h_bar * w_bar < min_pixels:
         beta = math.sqrt(min_pixels / (height * width))
-        resized_height = math.ceil(height * beta / factor) * factor
-        resized_width = math.ceil(width * beta / factor) * factor
-    return resized_height, resized_width
+        h_bar = math.ceil(height * beta / factor) * factor
+        w_bar = math.ceil(width * beta / factor) * factor
+    return h_bar, w_bar
 
 
 @auto_docstring
