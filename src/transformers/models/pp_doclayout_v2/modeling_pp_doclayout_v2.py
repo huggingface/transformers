@@ -76,7 +76,7 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
     inv_freq: torch.Tensor
 
     @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config, device=None):
+    def __init__(self, config: PPDocLayoutV2Config, device=None):
         super().__init__()
         self.config = config
         self.embed_dim = config.relation_bias_embed_dim

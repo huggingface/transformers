@@ -19,7 +19,6 @@ import unittest
 
 import numpy as np
 import pytest
-import requests
 
 from transformers import CLIPSegConfig, CLIPSegProcessor, CLIPSegTextConfig, CLIPSegVisionConfig
 from transformers.testing_utils import (
@@ -31,6 +30,7 @@ from transformers.testing_utils import (
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -529,8 +529,8 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    image = load_test_image(url)
     return image
 
 

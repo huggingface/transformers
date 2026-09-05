@@ -232,9 +232,6 @@ class Qwen3_5MoePreTrainedModel(Qwen3NextPreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, Qwen3_5MoeSparseMoeBlock):
             init.normal_(module.gate.weight, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Qwen3_5MoeVisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
 
 
 class Qwen3_5MoeVisionModel(Qwen3_5VisionModel):

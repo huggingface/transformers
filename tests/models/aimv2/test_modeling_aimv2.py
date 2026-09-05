@@ -415,10 +415,6 @@ class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip("Size mismatch on CUDA")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

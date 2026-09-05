@@ -39,7 +39,6 @@ from ...utils import (
     no_inherit_decorator,
     torch_int,
 )
-from ...utils.generic import maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_position_ids
 from ..deepseek_ocr2.modeling_deepseek_ocr2 import DeepseekOcr2ForConditionalGeneration, DeepseekOcr2Model
@@ -91,6 +90,7 @@ __all__ = [
 class Step3p7VisionConfig(SiglipVisionConfig):
     model_type = "step3p5_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
 
     # SiGLIP field overrides
     hidden_size: int = 1536
@@ -589,15 +589,12 @@ class Step3p7ImageProcessor(TorchvisionBackend):
 
 
 class Step3p7VisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
-    @torch.no_grad()
-    def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (position_ids[..., None].float() * self.inv_freq.to(x.device)).flatten(-2)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        cos = (emb.cos() * self.attention_scaling).to(dtype=x.dtype)
-        sin = (emb.sin() * self.attention_scaling).to(dtype=x.dtype)
-        return cos, sin
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq = freq.flatten(-2)
+        return torch.cat((freq, freq), dim=-1)
 
 
 class Step3p7VisionMLP(MiniMaxM3VLVisionMLP):

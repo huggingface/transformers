@@ -289,10 +289,10 @@ class PeAudioVideoModelIntegrationTest(unittest.TestCase):
     @unittest.skip(reason="TODO when released")
     def test(self):
         video_path = hf_hub_download(
-            repo_id="eustlb/dummy-video-dataset", filename="audiobox.mp4", repo_type="dataset"
+            repo_id="hf-internal-testing/fixtures_videos", filename="audiobox.mp4", repo_type="dataset"
         )
         audio_path = hf_hub_download(
-            repo_id="eustlb/dummy-video-dataset", filename="audiobox.mp4", repo_type="dataset"
+            repo_id="hf-internal-testing/fixtures_videos", filename="audiobox.mp4", repo_type="dataset"
         )
 
         inputs = self.processor(

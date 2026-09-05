@@ -137,7 +137,9 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
         processor = cls.processor_class(
-            image_processor=NeoMMEImageProcessor(patch_size=cls.patch_size),
+            image_processor=NeoMMEImageProcessor(
+                patch_size=cls.patch_size, size={"min_pixels": 10, "max_pixels": 200}
+            ),
             tokenizer=cls._setup_tokenizer(),
             chat_template=cls.chat_template,
         )
@@ -160,12 +162,26 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_chat_template_jinja_kwargs(self):
         pass
 
+    @unittest.skip("tiny model has too little tokens and collapses everything to UNK which is not defined")
+    def test_replacement_offsets(self):
+        pass
+
     def _set_retrieval_chat_template(self, processor):
         processor.chat_template = self.chat_template
 
     @staticmethod
     def prepare_processor_dict():
         return {}
+
+    def prepare_text_inputs(self, batch_size: int | None = None, modalities: str | list | None = None):
+        if isinstance(modalities, str):
+            modalities = [modalities]
+
+        batch_size = batch_size if batch_size is not None else 1
+        if modalities is not None and ("image" in modalities or "images" in modalities):
+            return ["<doc><img>"] * batch_size
+        else:
+            return ["<doc> lower newer"] * batch_size
 
     def _apply_text(self, processor, text, task="query", **processor_kwargs):
         text = [text] if isinstance(text, str) else text
@@ -392,140 +408,9 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         hello_id = processor.tokenizer.convert_tokens_to_ids("hello")
         self.assertEqual(inputs["input_ids"][0].tolist(), [self.marker_ids["<query>"], hello_id])
 
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        processor_components = self.prepare_components()
-        processor_components["tokenizer"] = self.get_component(
-            "tokenizer", max_length=self.image_text_kwargs_max_length, padding="max_length"
-        )
-        processor = self.processor_class(**processor_components)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        inputs = self._apply_text(processor, self.prepare_text_inputs(), return_tensors="pt")
-        self.assertEqual(inputs[self.text_input_name].shape[-1], self.image_text_kwargs_max_length)
-
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        processor_components = self.prepare_components()
-        processor_components["tokenizer"] = self.get_component("tokenizer", padding="longest")
-        processor = self.processor_class(**processor_components)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        inputs = self._apply_text(
-            processor,
-            self.prepare_text_inputs(),
-            return_tensors="pt",
-            max_length=self.image_text_kwargs_override_max_length,
-            padding="max_length",
-        )
-        self.assertEqual(inputs[self.text_input_name].shape[-1], self.image_text_kwargs_override_max_length)
-
-    def test_unstructured_kwargs(self):
-        processor = self.processor_class(**self.prepare_components())
-        self.skip_processor_without_typed_kwargs(processor)
-
-        inputs = self._apply_text(
-            processor,
-            self.prepare_text_inputs(),
-            return_tensors="pt",
-            padding="max_length",
-            max_length=self.image_unstructured_max_length,
-        )
-        self.assertEqual(inputs[self.text_input_name].shape[-1], self.image_unstructured_max_length)
-
-    def test_structured_kwargs_nested(self):
-        processor = self.processor_class(**self.prepare_components())
-        self.skip_processor_without_typed_kwargs(processor)
-
-        inputs = self._apply_text(
-            processor,
-            self.prepare_text_inputs(),
-            common_kwargs={"return_tensors": "pt"},
-            text_kwargs={"padding": "max_length", "max_length": self.image_unstructured_max_length},
-        )
-        self.assertEqual(inputs[self.text_input_name].shape[-1], self.image_unstructured_max_length)
-
-    def test_structured_kwargs_nested_from_dict(self):
-        processor = self.processor_class(**self.prepare_components())
-        self.skip_processor_without_typed_kwargs(processor)
-
-        all_kwargs = {
-            "common_kwargs": {"return_tensors": "pt"},
-            "text_kwargs": {"padding": "max_length", "max_length": self.image_unstructured_max_length},
-        }
-        inputs = self._apply_text(processor, self.prepare_text_inputs(), **all_kwargs)
-        self.assertEqual(inputs[self.text_input_name].shape[-1], self.image_unstructured_max_length)
-
-    def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
-        """A flat `return_tensors` still applies when `text_kwargs` omits it (regression #46192)."""
-        processor = self.get_processor()
-        self.skip_processor_without_typed_kwargs(processor)
-
-        inputs = self._apply_text(
-            processor,
-            self.prepare_text_inputs(),
-            text_kwargs={"padding": "longest"},
-            return_tensors="np",
-        )
-        self.assertIsInstance(inputs[self.text_input_name], np.ndarray)
-
-    def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        """A negative mean confirms that `rescale_factor=-1.0` was preserved."""
-        processor_components = self.prepare_components()
-        processor_components["image_processor"] = self.get_component(
-            "image_processor", do_rescale=True, rescale_factor=-1.0
-        )
-        processor = self.processor_class(**processor_components)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        inputs = self._apply_images(processor, self.prepare_image_inputs(), return_tensors="pt")
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
-
-    def test_kwargs_overrides_default_image_processor_kwargs(self):
-        processor_components = self.prepare_components()
-        processor_components["image_processor"] = self.get_component(
-            "image_processor", do_rescale=True, rescale_factor=1
-        )
-        processor = self.processor_class(**processor_components)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        inputs = self._apply_images(
-            processor,
-            self.prepare_image_inputs(),
-            do_rescale=True,
-            rescale_factor=-1.0,
-            return_tensors="pt",
-        )
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
-
-    def test_unstructured_kwargs_batched(self):
-        processor = self.processor_class(**self.prepare_components())
-        self.skip_processor_without_typed_kwargs(processor)
-
-        inputs = self._apply_images(
-            processor,
-            self.prepare_image_inputs(batch_size=2),
-            return_tensors="pt",
-            do_rescale=True,
-            rescale_factor=-1.0,
-        )
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
-
-    def test_doubly_passed_kwargs(self):
-        processor = self.processor_class(**self.prepare_components())
-        self.skip_processor_without_typed_kwargs(processor)
-
-        image_input = self.prepare_image_inputs()
-        with self.assertRaises(ValueError):
-            self._apply_images(
-                processor,
-                image_input,
-                images_kwargs={"do_rescale": True, "rescale_factor": -1.0},
-                do_rescale=True,
-                return_tensors="pt",
-            )
-
     def test_model_input_names(self):
         processor = self.get_processor()
-        image_inputs = self._apply_images(processor, self.prepare_image_inputs())
+        image_inputs = self._apply_images(processor, self.prepare_images_inputs())
         self.assertSetEqual(set(image_inputs.keys()), set(processor.model_input_names))
 
         # Text queries must not include vision inputs.

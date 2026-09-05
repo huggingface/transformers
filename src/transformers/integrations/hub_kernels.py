@@ -723,6 +723,9 @@ def load_and_register_attn_kernel(
 
         kernel_function = attention_wrapper if attention_wrapper is not None else msa_attention_forward
         mask_implementation = "sdpa"
+    elif hasattr(kernel, "flash_attn_forward") and hasattr(kernel, "supports_flash_attn"):
+        kernel_function = attention_wrapper if attention_wrapper is not None else kernel.flash_attn_forward
+        mask_implementation = "sdpa"
     elif kernel_name is not None:
         kernel_function = getattr(kernel, kernel_name)
 
@@ -838,13 +841,18 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
 
     # Allow internal path prefix if given to resolve non __init__ imports
     internal_path = _KERNELS_INTERNAL_PATH_MAPPINGS.get(func_name, internal_path)  # defaults
-    full_path = func_name if internal_path is None else f"{internal_path}.{func_name}"
+    full_func_path = func_name if internal_path is None else f"{internal_path}.{func_name}"
+    full_module_path = package if internal_path is None else f"{package}.{internal_path}"
 
     def decorator(torch_function: Callable) -> Callable:
         implementation = None
         try:
             module = importlib.import_module(package)
-            implementation = resolve_internal_import(module, full_path)
+            implementation = resolve_internal_import(module, full_func_path)
+            # Some packages, such as FLA, do not expose nested modules from their package root.
+            if implementation is None and full_module_path != package:
+                module = importlib.import_module(full_module_path)
+                implementation = getattr(module, func_name, None)
         except Exception:
             implementation = torch_function
         finally:
