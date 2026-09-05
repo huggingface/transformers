@@ -241,6 +241,61 @@ class ColwiseParallel(TensorParallelLayer):
         return output.to_local() if self.use_local_output else output
 
 
+def get_shard_replication_factor(num_units: int | None, tp_size: int) -> int:
+    """
+    Number of times each unit has to be replicated so that every TP rank owns a whole unit.
+
+    `num_units` is how many indivisible units the sharded dimension holds. Returns 1 when there are at least as
+    many units as ranks, i.e. when they can simply be sharded.
+    """
+    if not num_units or tp_size <= 1 or num_units >= tp_size:
+        return 1
+    if tp_size % num_units != 0:
+        raise ValueError(
+            f"Cannot use tensor parallelism with tp_size={tp_size} for a parameter that can only be split into "
+            f"{num_units} units: when there are fewer units than ranks, their number must divide `tp_size` so "
+            f"that they can be replicated."
+        )
+    return tp_size // num_units
+
+
+class ShardUnitsParallel(ColwiseParallel):
+    """
+    Colwise sharding for parameters that can only be split at the granularity of `module._tp_shard_units`
+    indivisible units, replicating them when there are fewer units than tensor parallel ranks.
+
+    The typical case is `k_proj`/`v_proj`, whose unit is one KV head: attention reshapes the projection output to
+    `head_dim`, so plain colwise sharding cuts a head in half as soon as `num_key_value_heads < tp_size`. Each
+    unit is instead duplicated, as vLLM does, so that every rank holds a whole one -- at the cost of a duplicated
+    KV cache.
+
+    In DTensor terms the parameter is described as a plain `Shard` of the *expanded* dimension, which is `n_rep`
+    times larger than the checkpoint one. Rank `r` therefore owns unit `r // n_rep`, and the loader detects the
+    size mismatch to read the right slice from the checkpoint.
+
+    This is inference-only: DTensor sees the copies as independent shards, so it would neither sum their
+    gradients nor keep them identical across an optimizer step.
+    """
+
+    def shard_param(self, module, param, mesh):
+        meta = module._parameters.get(param)
+        if meta is None:
+            return
+        num_units = getattr(module, "_tp_shard_units", None)
+        n_rep = get_shard_replication_factor(num_units, mesh.size())
+        if n_rep == 1:
+            return super().shard_param(module, param, mesh)
+
+        shard_dim = meta.ndim - 2
+        local_shape = list(meta.shape)
+        local_shape[shard_dim] //= num_units
+        local_meta = torch.empty(local_shape, dtype=meta.dtype, device=meta.device)
+        module._parameters[param] = torch.nn.Parameter(
+            DTensor.from_local(local_meta, mesh, [Shard(shard_dim)], run_check=False),
+            requires_grad=meta.requires_grad,
+        )
+
+
 class RowwiseParallel(TensorParallelLayer):
     """Row-wise: weight → Shard(1), bias → Replicate (Embedding: weight → Shard(0)).
 
@@ -761,6 +816,7 @@ class ParallelInterface(GeneralInterface):
             "colwise_gather_output": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "colwise_rep": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "colwise": ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
+            "colwise_units": ShardUnitsParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
             "rowwise": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()),
             "rowwise_split_input": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "rowwise_rep": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
@@ -794,23 +850,79 @@ def _validate_tp_plan_styles(tp_plan: dict[str, str] | None) -> None:
         )
 
 
+def _declare_attention_shard_units(model, tp_plan: dict[str, str], tp_size: int) -> dict[str, str]:
+    """
+    Declare one KV head as the sharding unit of `k_proj`/`v_proj` when the model has fewer KV heads than TP
+    ranks, so that GQA/MQA models can be sharded over more GPUs than they have KV heads.
+
+    This is the only attention-aware step: `head_dim` cannot be recovered from the weight shape, so it has to be
+    resolved here. Everything downstream is handled generically by `ShardUnitsParallel`.
+    """
+    if tp_size <= 1:
+        return tp_plan
+
+    replicated_modules = []
+    for module_name, module in model.named_modules():
+        if not all(hasattr(module, attribute) for attribute in ("q_proj", "k_proj", "v_proj", "head_dim")):
+            continue
+        head_dim = module.head_dim
+        num_key_value_heads = module.k_proj.out_features // head_dim
+        if get_shard_replication_factor(num_key_value_heads, tp_size) == 1:
+            continue
+        if any(
+            _get_parameter_tp_plan(f"{module_name}.{name}", tp_plan, is_weight=False) != "colwise"
+            for name in ("k_proj", "v_proj")
+        ):
+            continue
+
+        if (module.q_proj.out_features // head_dim) % tp_size:
+            raise ValueError(
+                f"Cannot replicate KV heads for `{module_name}`: its number of query heads must be divisible by "
+                f"tp_size={tp_size}."
+            )
+        module.k_proj._tp_shard_units = num_key_value_heads
+        module.v_proj._tp_shard_units = num_key_value_heads
+        # Each rank owns a complete KV head, while Q heads remain normally sharded.
+        module.num_key_value_groups = module.q_proj.out_features // head_dim // tp_size
+        replicated_modules.append(module_name)
+
+    if not replicated_modules:
+        return tp_plan
+
+    tp_plan = {
+        key: ("colwise_units" if style == "colwise" and key.endswith(("k_proj", "v_proj")) else style)
+        for key, style in tp_plan.items()
+    }
+    if not dist.is_initialized() or dist.get_rank() == 0:
+        logger.warning_once(
+            f"Replicating KV heads for {', '.join(replicated_modules)} because there are fewer KV heads than tensor "
+            f"parallel ranks ({tp_size}); this duplicates the KV cache and is only supported for inference."
+        )
+    return tp_plan
+
+
 def apply_tensor_parallelism(model, tp_mesh):
     """DTensor backend: shard params as placeholders and install TP forward hooks."""
 
-    _validate_tp_plan_styles(model.tp_plan)
+    # `model.tp_plan` returns the expert-parallel plan when `enable_expert_parallel=True`, but its setter always
+    # writes `_tp_plan`. Patch the dict the getter handed us in place so we update whichever plan is active.
+    tp_plan = model.tp_plan
+    _validate_tp_plan_styles(tp_plan)
+    if tp_plan:
+        tp_plan.update(_declare_attention_shard_units(model, tp_plan, tp_mesh.size()))
 
     for name, module in model.named_modules():
         # Create DTensor placeholders so the loader knows which shard belongs to this rank.
         for p_name, _ in list(module.named_parameters(recurse=False)):
             full = f"{name}.{p_name}" if name else p_name
-            style_name = _get_parameter_tp_plan(parameter_name=full, tp_plan=model.tp_plan, is_weight=True)
+            style_name = _get_parameter_tp_plan(parameter_name=full, tp_plan=tp_plan, is_weight=True)
             if style_name is not None and style_name in ALL_PARALLEL_STYLES:
                 style = ALL_PARALLEL_STYLES[style_name]
                 style.validate_param(module, p_name, tp_mesh, parameter_name=full)
                 style.shard_param(module, p_name, tp_mesh)
 
         # Install the input/output transforms required by this module's TP style.
-        style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=model.tp_plan, is_weight=False)
+        style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=tp_plan, is_weight=False)
         if style_name is not None and style_name in ALL_PARALLEL_STYLES:
             if style_name == "mla_kv_a_proj":
                 # MLA needs to know the qk_rope_head_dim to split the projection output into KV and RoPE parts.
@@ -824,19 +936,30 @@ def apply_tensor_parallelism(model, tp_mesh):
 
 def gather_state_dict_for_save(
     state_dict: dict[str, torch.Tensor],
-    _tp_plan: dict[str, str],
+    tp_plan: dict[str, str],
     _device_mesh,
-    _tp_size: int,
+    tp_size: int,
+    num_key_value_heads: int | None = None,
 ) -> dict[str, torch.Tensor]:
     """Gather TP-sharded ``DTensor`` parameters to full CPU tensors for checkpoint saving.
 
     Every rank must call this function so ``DTensor.full_tensor()`` collectives complete.
+
+    ``num_key_value_heads`` is needed to drop the duplicates of parameters sharded with ``colwise_units``, whose
+    gathered tensor holds every KV head ``tp_size // num_key_value_heads`` times.
     """
+    n_rep = get_shard_replication_factor(num_key_value_heads, tp_size)
     gathered = {}
     for key, tensor in state_dict.items():
         if isinstance(tensor, torch.Tensor):
             if isinstance(tensor, DTensor):
+                is_replicated = n_rep > 1 and _get_parameter_tp_plan(key, tp_plan or {}) == "colwise_units"
+                shard_dim = next((p.dim for p in tensor.placements if isinstance(p, Shard)), None)
                 tensor = tensor.full_tensor()
+                if is_replicated and shard_dim is not None:
+                    # Every group of `n_rep` consecutive ranks holds the same unit, only keep one of them
+                    chunks = tensor.tensor_split(tp_size, dim=shard_dim)
+                    tensor = torch.cat(chunks[::n_rep], dim=shard_dim)
             gathered[key] = tensor.detach().cpu().contiguous()
         else:
             gathered[key] = tensor

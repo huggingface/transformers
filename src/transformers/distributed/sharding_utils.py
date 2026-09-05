@@ -85,11 +85,26 @@ class DtensorShardOperation:
         self.device_mesh = param.device_mesh
         self.placements = tuple(param.placements)
         self.param_ndim = param.ndim
+        self.param_shape = tuple(param.shape)
         local_shape, offsets = compute_local_shape_and_global_offset(param.shape, self.device_mesh, self.placements)
         # Axis-0 range owned by this rank (used to filter per-expert pieces)
         # [_axis0_offset, _axis0_offset + _axis0_local_size)
         self._axis0_offset = offsets[0]
         self._axis0_local_size = local_shape[0]
+
+    def _replication_factor(self, source_shape, dim_idx: int, world_size: int) -> int:
+        """How many times the parameter declares `dim_idx` as a copy of the checkpoint dimension.
+
+        Only `colwise_units` does this. A checkpoint tensor can differ from the parameter for unrelated reasons
+        (per-expert or fused sources), so require the shapes to match everywhere else, and the factor to divide
+        the mesh, before reading it as replication.
+        """
+        if len(source_shape) != self.param_ndim or not source_shape[dim_idx]:
+            return 1
+        if any(i != dim_idx and size != self.param_shape[i] for i, size in enumerate(source_shape)):
+            return 1
+        n_rep = self.param_shape[dim_idx] // source_shape[dim_idx]
+        return n_rep if n_rep > 1 and world_size % n_rep == 0 else 1
 
     def shard_tensor(
         self, source: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
@@ -123,6 +138,19 @@ class DtensorShardOperation:
                 sub_mesh = self._get_sub_mesh(mesh_dim)
                 rank, world_size = sub_mesh.get_local_rank(), sub_mesh.size()
                 dim_idx = self._normalize_param_dim(placement.dim)
+                n_rep = self._replication_factor(source_shape, dim_idx, world_size) if placement.is_shard() else 1
+                if n_rep > 1:
+                    # The parameter declares this dimension `n_rep` times larger than the checkpoint one, so its
+                    # shards are replicas and `n_rep` consecutive ranks read the same slice. Used by
+                    # `colwise_units`, where 2 KV heads on 4 ranks are declared as `[h0, h0, h1, h1]`.
+                    if self.device_mesh.ndim > 1:
+                        # Which slice a rank reads is only well defined on a 1D mesh, which is what
+                        # `apply_tensor_parallelism` always gets. Guard rather than read the wrong slice.
+                        raise NotImplementedError(
+                            "Replicated shards are only supported on a 1D mesh, but got a "
+                            f"{self.device_mesh.ndim}D mesh {self.device_mesh.mesh_dim_names}."
+                        )
+                    rank, world_size = rank // n_rep, world_size // n_rep
                 planned_ops_by_dim[dim_idx].append((placement, rank, world_size))
 
             # prepare the slices to fetch on disk for each tensor dimension.
