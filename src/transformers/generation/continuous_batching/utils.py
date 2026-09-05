@@ -41,6 +41,13 @@ class CudaGraphBuffer:
     def set_graph(self, key: tuple[int, ...], graph: torch.cuda.CUDAGraph) -> None:
         self._storage[key] = graph
 
+    def clear(self) -> None:
+        """Drop every captured graph so the next batch captures again. Needed when the addresses a graph was captured
+        against are no longer valid, since a graph replays the pointers it was captured with."""
+        while self._storage:
+            _, graph = self._storage.popitem()
+            graph.reset()
+
 
 @dataclass
 class WorkloadHints:

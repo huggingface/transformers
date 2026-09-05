@@ -211,16 +211,15 @@ class Qwen3_5TextRotaryEmbedding(nn.Module):
         return torch.cat((freqs_thw, freqs_thw), dim=-1)
 
 
-# NOTE: the FLA package does not re-cast to `input_dtype` in its implementation, maybe we should do the same
 @use_kernel_forward_from_hub("RMSNormGated")
 class Qwen3_5RMSNormGated(nn.Module):
-    def __init__(self, hidden_size: int, eps: float = 1e-6, **kwargs) -> None:
+    def __init__(self, hidden_size, eps=1e-6, **kwargs):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
         self.activation = "silu"
 
-    def forward(self, hidden_states: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states, gate=None):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -287,8 +286,6 @@ def causal_conv1d_fn(
     return out.to(hidden_states.dtype)
 
 
-# NOTE: the FLA package computes `x / torch.sqrt((x * x).sum(dim=dim, keepdim=True) + eps)` instead, so if we align
-# with the GatedRMSNorm, maybe we can make that change as well.
 def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
     """This function is intended to align with the l2norm implementation in the FLA library."""
     inv_norm = torch.rsqrt((x * x).sum(dim=dim, keepdim=True) + eps)
@@ -434,65 +431,153 @@ def torch_chunk_gated_delta_rule(
 
 @use_kernel_func_from_hub_with_fallback("fused_recurrent_gated_delta_rule", "fla")
 def torch_recurrent_gated_delta_rule(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    g: torch.Tensor,
-    beta: torch.Tensor,
-    initial_state: torch.Tensor | None = None,
-    output_final_state: bool = False,
-    use_qk_l2norm_in_kernel: bool = False,
+    query,
+    key,
+    value,
+    g,
+    beta,
+    initial_state,
+    output_final_state,
+    use_qk_l2norm_in_kernel=False,
     **kwargs,
-) -> tuple[torch.Tensor, torch.Tensor | None]:
-    """Computes linear attention using the gated delta rule, by iterating over each token in the sequence dimension.
-    Same args and return value as torch_chunk_gated_delta_rule, except for `chunk_size` because the sequence dim is not
-    chunked."""
+):
     initial_dtype = query.dtype
-    batch_size, sequence_length, _, k_head_dim = key.shape
-    num_v_heads, v_head_dim = value.shape[-2:]
-    decay = g  # rename for clarity: argument name must stay "g" to match flash_linear_attention's API
-
-    # Make sure all tensors are fp32 and reshape them to [batch_size, num_*_heads, seqlen, ...]
-    query, key, value, beta, decay = [
-        x.transpose(1, 2).to(torch.float32, memory_format=torch.contiguous_format)
-        for x in (query, key, value, beta, decay)
-    ]
-    # If enabled, normalize query and key vectors (done once in fp32 for better accuracy)
     if use_qk_l2norm_in_kernel:
         query = l2norm(query, dim=-1, eps=1e-6)
         key = l2norm(key, dim=-1, eps=1e-6)
+    query, key, value, beta, g = [
+        x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value, beta, g)
+    ]
 
-    # And always normalize queries by the head dimension
-    query = query / (query.shape[-1] ** 0.5)
+    batch_size, num_heads, sequence_length, k_head_dim = key.shape
+    v_head_dim = value.shape[-1]
+    scale = 1 / (query.shape[-1] ** 0.5)
+    query = query * scale
 
-    # Create the storage for the last recurrent state, which will be updated in place. If a previous state is provided,
-    # it is the starting point, otherwise start with a zeroed buffer.
-    if initial_state is None:
-        recurrent_state_shape = (batch_size, num_v_heads, k_head_dim, v_head_dim)
-        last_recurrent_state = torch.zeros(recurrent_state_shape, dtype=value.dtype, device=value.device)
-    else:
-        last_recurrent_state = initial_state.to(value)
-    core_attn_out = torch.zeros_like(value)
+    core_attn_out = torch.zeros(
+        batch_size, num_heads, sequence_length, v_head_dim, dtype=value.dtype, device=value.device
+    )
+    last_recurrent_state = (
+        torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim, dtype=value.dtype, device=value.device)
+        if initial_state is None
+        else initial_state.to(value)
+    )
 
-    # Loop over each token and update the recurrent state
     for i in range(sequence_length):
-        q_t, k_t, v_t = query[:, :, i], key[:, :, i], value[:, :, i]
-        # Decay the recurrent state
-        decay_t = decay[:, :, i].exp()[..., None, None]
-        last_recurrent_state = last_recurrent_state * decay_t
-        # Update the recurrent state with the current token
+        q_t = query[:, :, i]
+        k_t = key[:, :, i]
+        v_t = value[:, :, i]
+        g_t = g[:, :, i].exp().unsqueeze(-1).unsqueeze(-1)
         beta_t = beta[:, :, i].unsqueeze(-1)
+
+        last_recurrent_state = last_recurrent_state * g_t
         kv_mem = (last_recurrent_state * k_t.unsqueeze(-1)).sum(dim=-2)
         delta = (v_t - kv_mem) * beta_t
         last_recurrent_state = last_recurrent_state + k_t.unsqueeze(-1) * delta.unsqueeze(-2)
-        # And use it to compute the attention output for the current token
         core_attn_out[:, :, i] = (last_recurrent_state * q_t.unsqueeze(-1)).sum(dim=-2)
 
-    # Discard the final state if not requested
-    last_recurrent_state = None if not output_final_state else last_recurrent_state
-    # Convert back to the original shape [batch_size, sequence_length, num_v_heads, v_head_dim] and dtype
+    if not output_final_state:
+        last_recurrent_state = None
     core_attn_out = core_attn_out.transpose(1, 2).contiguous().to(initial_dtype)
     return core_attn_out, last_recurrent_state
+
+
+def paged_gated_delta_forward(
+    module: nn.Module,
+    mixed_qkv: torch.Tensor,
+    b: torch.Tensor,
+    a: torch.Tensor,
+    cache,
+    cu_seq_lens_q: torch.Tensor,
+    linear_state_indices: torch.Tensor,
+) -> torch.Tensor:
+    """Gated delta rule over a continuous batching batch.
+
+    The batch packs the scheduled sequences in one row of `mixed_qkv` (shape `[1, conv_dim, total_tokens]`,
+    boundaries in `cu_seq_lens_q`), and each request's conv tail and recurrent state live in the cache's linear
+    attention state pools at the slot given by `linear_state_indices`. Single-token sequences (decode) are
+    processed as one batch through the recurrent kernel; longer ones (prefill chunks) one by one through the
+    chunked kernel, each carrying its state across chunks. Returns the core attention output of shape
+    `[1, total_tokens, num_v_heads, v_head_dim]`.
+    """
+    conv_pool = cache.conv_states[module.layer_idx]
+    recurrent_pool = cache.recurrent_states[module.layer_idx]
+    device = mixed_qkv.device
+    num_v_heads, _, head_v_dim = recurrent_pool.shape[1:]
+    total_tokens = mixed_qkv.shape[-1]
+    gqa_ratio = module.num_v_heads // module.num_k_heads
+    conv_weight = module.conv1d.weight.squeeze(1)
+
+    beta = b.sigmoid()
+    # If the model is loaded in fp16, without the .float() here, A might be -inf
+    g = -module.A_log.float().exp() * F.softplus(a.float() + module.dt_bias)
+
+    core_attn_out = mixed_qkv.new_empty(1, total_tokens, num_v_heads, head_v_dim)
+
+    # Sort the sequences: single-token ones batch together, the rest are processed one by one. Zero-length
+    # sequences are padding and are skipped.
+    boundaries = cu_seq_lens_q.tolist()
+    decode_positions, decode_slots, prefills = [], [], []
+    for i, slot in enumerate(linear_state_indices.tolist()):
+        start, end = boundaries[i], boundaries[i + 1]
+        if end - start == 1:
+            decode_positions.append(start)
+            decode_slots.append(slot)
+        elif end > start:
+            prefills.append((start, end, slot))
+
+    def split_heads(qkv: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        # qkv: [batch, seq_len, conv_dim] post-conv -> per-head query / key / value with GQA-expanded query and key
+        query, key, value = torch.split(qkv, [module.key_dim, module.key_dim, module.value_dim], dim=-1)
+        query = query.reshape(*query.shape[:2], -1, module.head_k_dim)
+        key = key.reshape(*key.shape[:2], -1, module.head_k_dim)
+        value = value.reshape(*value.shape[:2], -1, module.head_v_dim)
+        if gqa_ratio > 1:
+            query = query.repeat_interleave(gqa_ratio, dim=2)
+            key = key.repeat_interleave(gqa_ratio, dim=2)
+        return query, key, value
+
+    if decode_positions:
+        positions = torch.tensor(decode_positions, dtype=torch.int64, device=device)
+        slots = torch.tensor(decode_slots, dtype=torch.int64, device=device)
+        qkv = mixed_qkv[0].index_select(1, positions).permute(1, 0).unsqueeze(-1)  # [batch, conv_dim, 1]
+        conv_states = conv_pool.index_select(0, slots)
+        qkv = causal_conv1d_update(qkv, conv_states, conv_weight, module.conv1d.bias, module.activation)
+        conv_pool.index_copy_(0, slots, conv_states)
+        query, key, value = split_heads(qkv.transpose(1, 2))
+        out, final_state = torch_recurrent_gated_delta_rule(
+            query,
+            key,
+            value,
+            g=g[0].index_select(0, positions).unsqueeze(1),
+            beta=beta[0].index_select(0, positions).unsqueeze(1),
+            initial_state=recurrent_pool.index_select(0, slots),
+            output_final_state=True,
+            use_qk_l2norm_in_kernel=True,
+        )
+        recurrent_pool.index_copy_(0, slots, final_state.to(recurrent_pool.dtype))
+        core_attn_out[0, positions] = out[:, 0].to(core_attn_out.dtype)
+
+    for start, end, slot in prefills:
+        # The pool slices are views, so the conv update writes the new tail in place
+        qkv = causal_conv1d_update(
+            mixed_qkv[:, :, start:end], conv_pool[slot : slot + 1], conv_weight, module.conv1d.bias, module.activation
+        )
+        query, key, value = split_heads(qkv.transpose(1, 2))
+        out, final_state = torch_chunk_gated_delta_rule(
+            query,
+            key,
+            value,
+            g=g[:, start:end],
+            beta=beta[:, start:end],
+            initial_state=recurrent_pool[slot : slot + 1],
+            output_final_state=True,
+            use_qk_l2norm_in_kernel=True,
+        )
+        recurrent_pool[slot] = final_state[0].to(recurrent_pool.dtype)
+        core_attn_out[0, start:end] = out[0].to(core_attn_out.dtype)
+
+    return core_attn_out
 
 
 @use_kernel_forward_from_hub("Qwen3_5GatedDeltaNet")
@@ -544,6 +629,49 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         self.in_proj_b = nn.Linear(self.hidden_size, self.num_v_heads, bias=False)
         self.in_proj_a = nn.Linear(self.hidden_size, self.num_v_heads, bias=False)
 
+    def output_from_core_attn(self, core_attn_out, z):
+        z_shape_og = z.shape
+        core_attn_out = core_attn_out.reshape(-1, core_attn_out.shape[-1])
+        z = z.reshape(-1, z.shape[-1])
+        core_attn_out = self.norm(core_attn_out, z)
+        core_attn_out = core_attn_out.reshape(z_shape_og)
+        core_attn_out = core_attn_out.reshape(core_attn_out.shape[0], core_attn_out.shape[1], -1)
+        return self.out_proj(core_attn_out)
+
+    def gated_delta_rule_per_sequence(self, mixed_qkv, b, a, cu_seqlens):
+        """Convolve and scan each packed sequence on its own, so none of them sees the ones before it."""
+        beta = b.sigmoid()
+        # If the model is loaded in fp16, without the .float() here, A might be -inf
+        g = -self.A_log.float().exp() * F.softplus(a.float() + self.dt_bias)
+        gqa_ratio = self.num_v_heads // self.num_k_heads
+
+        outputs = []
+        for start, end in zip(cu_seqlens[:-1].tolist(), cu_seqlens[1:].tolist()):
+            sequence = causal_conv1d_fn(
+                mixed_qkv[:, :, start:end],
+                self.conv1d.weight.squeeze(1),
+                self.conv1d.bias,
+                activation=self.activation,
+            ).transpose(1, 2)
+            query, key, value = torch.split(sequence, [self.key_dim, self.key_dim, self.value_dim], dim=-1)
+            query = query.reshape(*query.shape[:2], -1, self.head_k_dim)
+            key = key.reshape(*key.shape[:2], -1, self.head_k_dim)
+            value = value.reshape(*value.shape[:2], -1, self.head_v_dim)
+            if gqa_ratio > 1:
+                query = query.repeat_interleave(gqa_ratio, dim=2)
+                key = key.repeat_interleave(gqa_ratio, dim=2)
+            outputs.append(
+                torch_chunk_gated_delta_rule(
+                    query,
+                    key,
+                    value,
+                    g=g[:, start:end],
+                    beta=beta[:, start:end],
+                    use_qk_l2norm_in_kernel=True,
+                )[0]
+            )
+        return torch.cat(outputs, dim=1)
+
     @force_accelerate_hooks("conv1d")
     def forward(
         self,
@@ -568,6 +696,27 @@ class Qwen3_5GatedDeltaNet(nn.Module):
 
         b = self.in_proj_b(hidden_states)
         a = self.in_proj_a(hidden_states)
+
+        # A packed row holds several sequences back to back, and neither the convolution nor the recurrent state
+        # may run across their boundaries. The kernels take a `cu_seqlens` for this, but only some of them honour
+        # it and their signatures are fixed by the kernel hub, so the sequences are taken one at a time here: the
+        # result is the same whichever kernel is bound.
+        cu_seqlens = kwargs.get("cu_seq_lens_q")
+        if cu_seqlens is not None and cache_params is None and kwargs.get("cache") is None:
+            core_attn_out = self.gated_delta_rule_per_sequence(mixed_qkv, b, a, cu_seqlens)
+            return self.output_from_core_attn(core_attn_out, z)
+
+        # Continuous batching packs the scheduled sequences in one row and keeps per-request conv and recurrent
+        # states in the paged cache, so it has its own conv and delta rule path
+        if kwargs.get("cache") is not None:
+            core_attn_out = paged_gated_delta_forward(
+                self, mixed_qkv, b, a, kwargs["cache"], kwargs["cu_seq_lens_q"], kwargs["linear_state_indices"]
+            )
+            core_attn_out = core_attn_out.reshape(-1, self.head_v_dim)
+            z = z.reshape(-1, self.head_v_dim)
+            core_attn_out = self.norm(core_attn_out, z)
+            core_attn_out = core_attn_out.reshape(batch_size, seq_len, -1)
+            return self.out_proj(core_attn_out)
 
         if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
             conv_state = cache_params.layers[self.layer_idx].conv_states[0]
@@ -630,7 +779,6 @@ class Qwen3_5GatedDeltaNet(nn.Module):
                 initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
-                cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
                 **kwargs,
             )
         else:
@@ -643,7 +791,6 @@ class Qwen3_5GatedDeltaNet(nn.Module):
                 initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
-                cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
                 **kwargs,
             )
 

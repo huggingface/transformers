@@ -50,6 +50,7 @@ from ..qwen3_next.modeling_qwen3_next import (
     apply_mask_to_padding_states,
     causal_conv1d_fn,
     causal_conv1d_update,
+    paged_gated_delta_forward,
     torch_chunk_gated_delta_rule,
     torch_recurrent_gated_delta_rule,
 )
@@ -245,6 +246,27 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         b = self.in_proj_b(hidden_states)
         a = self.in_proj_a(hidden_states)
 
+        # A packed row holds several sequences back to back, and neither the convolution nor the recurrent state
+        # may run across their boundaries. The kernels take a `cu_seqlens` for this, but only some of them honour
+        # it and their signatures are fixed by the kernel hub, so the sequences are taken one at a time here: the
+        # result is the same whichever kernel is bound.
+        cu_seqlens = kwargs.get("cu_seq_lens_q")
+        if cu_seqlens is not None and cache_params is None and kwargs.get("cache") is None:
+            core_attn_out = self.gated_delta_rule_per_sequence(mixed_qkv, b, a, cu_seqlens)
+            return self.output_from_core_attn(core_attn_out, z)
+
+        # Continuous batching packs the scheduled sequences in one row and keeps per-request conv and recurrent
+        # states in the paged cache, so it has its own conv and delta rule path
+        if kwargs.get("cache") is not None:
+            core_attn_out = paged_gated_delta_forward(
+                self, mixed_qkv, b, a, kwargs["cache"], kwargs["cu_seq_lens_q"], kwargs["linear_state_indices"]
+            )
+            core_attn_out = core_attn_out.reshape(-1, self.head_v_dim)
+            z = z.reshape(-1, self.head_v_dim)
+            core_attn_out = self.norm(core_attn_out, z)
+            core_attn_out = core_attn_out.reshape(batch_size, seq_len, -1)
+            return self.out_proj(core_attn_out)
+
         if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
             conv_state = cache_params.layers[self.layer_idx].conv_states[0]
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
@@ -306,7 +328,6 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
-                cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
                 **kwargs,
             )
         else:
@@ -319,7 +340,6 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
-                cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
                 **kwargs,
             )
 

@@ -19,6 +19,7 @@ from collections.abc import Iterator
 from math import ceil
 from typing import TypeVar
 
+import numpy as np
 import torch
 
 from .requests import logger
@@ -108,6 +109,22 @@ class BlockManager:
             self._hash_to_id.pop(block.hash)  # ty:ignore[invalid-argument-type]
             self._uninit_block_ids.append(id_to_uninitialize)
         return True
+
+    def forget_shared_contents(self) -> None:
+        """Forget what every free block is supposed to contain.
+
+        A free block that is "initialized" is offered to a new request by hash, on the promise that the KV cache tensor
+        still holds the data that hash describes. Whoever released the cache tensors broke that promise, so the hashes
+        have to go: the blocks become plain uninitialized ones, and the next request that needs them writes its own
+        data. Blocks in use are untouched, since their owners restore or re-prefill them.
+        """
+        for block_id in self._init_block_ids:
+            block = self._id_to_block.get(block_id)
+            if block is not None:
+                self._hash_to_id.pop(block.hash, None)
+                block.hash = None
+            self._uninit_block_ids.append(block_id)
+        self._init_block_ids.clear()
 
     def get_free_blocks(
         self, n_blocks: int, last_block_id: int | None, shareable: bool, group_id: int
@@ -446,11 +463,14 @@ class FullAttentionCacheAllocator(CacheAllocator):
         total_length = past_length + query_length
         # Use ceiling division to include the partial block at the end
         num_blocks_needed = (total_length + self.block_size - 1) // self.block_size
-        block_table[:num_blocks_needed] = torch.tensor(
-            request_blocks[:num_blocks_needed], device=block_table.device, dtype=block_table.dtype
-        )
-        # TODO: this creates a lot of H2D transfers when not using async batching, but we will update to always using
-        # an IO pair in the future or a CPU-side block table. This also entails a small memory allocation.
+        if block_table.device.type == "cpu":
+            # writing the python list straight into the host tensor is a few microseconds; building a tensor from it
+            # first is ten times that, and this runs once per request per batch
+            block_table.numpy()[:num_blocks_needed] = request_blocks[:num_blocks_needed]
+        else:
+            block_table[:num_blocks_needed] = torch.tensor(
+                request_blocks[:num_blocks_needed], device=block_table.device, dtype=block_table.dtype
+            )
 
 
 class SlidingAttentionCacheAllocator(CacheAllocator):
@@ -494,6 +514,17 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         self.block_table[request_id].extend(allocated_blocks)
         return actual_n_blocks
 
+    def _physical_indices(self, block_table: list[int], start_index: int, length: int) -> list[int]:
+        """Physical cache indices of `length` consecutive rolling-buffer positions from `start_index`. Up to
+        sliding_window of them per request per batch, so vectorized: the python loop it replaces cost ~0.7 ms per
+        request per decode step on gemma-3-1b."""
+        if length <= 0:
+            return []
+        positions = np.arange(start_index, start_index + length) % self.sliding_window
+        blocks = np.asarray(block_table, dtype=np.int64)
+        return (blocks[positions // self.block_size] * self.block_size + positions % self.block_size).tolist()
+
+
     def get_read_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
         """Returns the physical indices of where to read request_id's cache in the cache tensor.
         For a group of sliding window attention layers, we read from the cache tensor before writing on it, because the
@@ -509,13 +540,7 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         cache_length = min(past_length, self.sliding_window - 1)
         start_index = (past_length - cache_length) % self.sliding_window
         # Compute the physical indices
-        physical_indices = []
-        for i in range(start_index, start_index + cache_length):
-            i %= self.sliding_window
-            block_idx = i // self.block_size
-            block_offset = i % self.block_size
-            physical_index = block_table[block_idx] * self.block_size + block_offset
-            physical_indices.append(physical_index)
+        physical_indices = self._physical_indices(block_table, start_index, cache_length)
         return physical_indices + [self.sentinel_index] * query_length
 
     def get_write_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
@@ -532,13 +557,7 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         padding_length = query_length - cache_length
         start_index = (past_length + padding_length) % self.sliding_window
         # Compute the physical indices
-        physical_indices = []
-        for i in range(start_index, start_index + cache_length):
-            i %= self.sliding_window
-            block_idx = i // self.block_size
-            block_offset = i % self.block_size
-            physical_index = block_table[block_idx] * self.block_size + block_offset
-            physical_indices.append(physical_index)
+        physical_indices = self._physical_indices(block_table, start_index, cache_length)
         if padding_length > 0:
             physical_indices = [self.write_trash_index] * padding_length + physical_indices
         return physical_indices

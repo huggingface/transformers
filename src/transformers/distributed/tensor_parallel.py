@@ -14,7 +14,9 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import re
+import weakref
 
 from ..utils import logging
 from ..utils.generic import GeneralInterface
@@ -120,6 +122,52 @@ def _use_local_dtensor_params(module):
                 )
 
 
+
+# Symmetric-memory all-reduce for the inference path. A decode step under tensor parallelism does two all-reduces
+# per layer on a [batch, hidden] bf16 tensor of a few MB, and NCCL's ring is latency-bound there: 44 us per call at
+# tp8 for 1.5 MB inside a cuda graph, against 19 us for torch's two-shot symmetric-memory kernel (25 vs 19 at tp4).
+# Messages above 8 MB (a training-side forward over thousands of packed tokens, which also runs through this path
+# under no_grad) stay on NCCL, whose ring is bandwidth-optimal there. One buffer per (group, hidden, dtype) is
+# allocated and rendezvoused the first time a shape is seen, sized to the largest row count seen, and every call
+# reduces in a prefix view of it. A rendezvous cannot happen while a cuda
+# graph is being captured, so a larger row count seen during capture falls back to NCCL for that call; continuous
+# batching warms up at its largest batch before it captures anything, so that fallback is not taken there.
+_SYMM_BUFFERS: dict[tuple, "torch.Tensor"] = {}
+
+
+def _inference_all_reduce(output: "torch.Tensor", process_group) -> None:
+    if (
+        output.dim() < 2
+        or not output.is_cuda
+        or not output.is_contiguous()
+        or output.numel() * output.element_size() > 8 * 1024 * 1024  # bandwidth-bound: NCCL's ring wins there
+        or dist.get_world_size(process_group) > 8
+        or os.environ.get("HF_TP_NCCL_ALL_REDUCE") == "1"
+    ):
+        dist.all_reduce(output, group=process_group)
+        return
+    # the model runs on [batch, tokens, hidden]; the reduction only cares about rows of `hidden`
+    output = output.view(-1, output.shape[-1])
+    try:
+        import torch.distributed._symmetric_memory as symm_mem
+    except ImportError:
+        dist.all_reduce(output, group=process_group)
+        return
+    rows, hidden = output.shape
+    key = (process_group.group_name, hidden, output.dtype)
+    buf = _SYMM_BUFFERS.get(key)
+    if buf is None or buf.shape[0] < rows:
+        if torch.cuda.is_current_stream_capturing():
+            dist.all_reduce(output, group=process_group)
+            return
+        buf = symm_mem.empty(max(rows, 8192), hidden, dtype=output.dtype, device=output.device)
+        symm_mem.rendezvous(buf, process_group.group_name)
+        _SYMM_BUFFERS[key] = buf
+    view = buf[:rows]
+    view.copy_(output)
+    torch.ops.symm_mem.two_shot_all_reduce_(view, "sum", process_group.group_name)
+    output.copy_(view)
+
 class TensorParallelLayer:
     def should_use_local_tensors(self, module):
         """Whether this module's forward requires local inputs and parameters."""
@@ -218,7 +266,20 @@ class ColwiseParallel(TensorParallelLayer):
 
         # DTensor path: handle regular training and layout redistribution.
         if is_local_input:
-            x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
+            # Modules fed the same activation (q/k/v projections, gate/up projections) share one wrap: their
+            # partial input gradients then sum at a single `from_local` node, which turns one backward
+            # all-reduce per consumer into one per activation. The wrap is cached on the tensor through a
+            # weakref: the autograd graph keeps it alive between the consumers' forwards, and a strong
+            # reference here would make a cycle that keeps every activation waiting for the gc.
+            cached_mesh, wrap_ref = getattr(x, "_tp_shared_wrap", (None, None))
+            wrapped = wrap_ref() if cached_mesh is mesh else None
+            if wrapped is not None and isinstance(self.input_layouts, Replicate):
+                x = wrapped
+            else:
+                local_x = x
+                x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
+                if isinstance(self.input_layouts, Replicate):
+                    local_x._tp_shared_wrap = (mesh, weakref.ref(x))
         if x.placements != (Replicate(),):
             x = x.redistribute(placements=[Replicate()])
         if self.should_use_local_tensors(module):
@@ -317,7 +378,7 @@ class RowwiseParallel(TensorParallelLayer):
         )
         if use_local_inference_path:
             process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-            dist.all_reduce(output, group=process_group)
+            _inference_all_reduce(output, process_group)
             if (bias := module._parameters.get("bias")) is not None:
                 output = output + (bias.to_local() if isinstance(bias, DTensor) else bias)
         else:
@@ -350,7 +411,10 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
         def _all_reduce_grads(mod, grad_input, grad_output):
             for param in mod.parameters(recurse=False):
                 if param.grad is not None:
-                    dist.all_reduce(param.grad, group=mesh.get_group())
+                    # The parameter is replicated, so a caller is free to hold it as a replicated DTensor, whose
+                    # local tensor is the whole gradient: summing that in place is the same collective.
+                    grad = param.grad.to_local() if isinstance(param.grad, DTensor) else param.grad
+                    dist.all_reduce(grad, group=mesh.get_group())
 
         module.register_full_backward_hook(_all_reduce_grads)
         return module
@@ -822,22 +886,47 @@ def apply_tensor_parallelism(model, tp_mesh):
     return model
 
 
+def shard_state_dict_for_load(state_dict: dict[str, torch.Tensor], model) -> dict[str, torch.Tensor]:
+    """Split full checkpoint tensors back over the mesh the model's parameters live on.
+
+    The inverse of `gather_state_dict_for_save`: a checkpoint holds whole tensors, while a
+    tensor-parallel model holds a shard of each one, so loading the file as it stands fails on every
+    sharded parameter's shape. Every rank must call this, since `distribute_tensor` is collective.
+    """
+    sharded = {}
+    # `remove_duplicate=False`, or a tied output embedding is missing from the map and loads unsharded
+    parameters = dict(model.named_parameters(remove_duplicate=False))
+    parameters.update(model.named_buffers(remove_duplicate=False))
+    for key, tensor in state_dict.items():
+        target = parameters.get(key)
+        if isinstance(target, torch.Tensor) and isinstance(target.data, DTensor) and not isinstance(tensor, DTensor):
+            tensor = distribute_tensor(
+                tensor.to(target.data.device), target.data.device_mesh, target.data.placements
+            )
+        sharded[key] = tensor
+    return sharded
+
+
 def gather_state_dict_for_save(
     state_dict: dict[str, torch.Tensor],
     _tp_plan: dict[str, str],
     _device_mesh,
     _tp_size: int,
+    keep: bool = True,
 ) -> dict[str, torch.Tensor]:
     """Gather TP-sharded ``DTensor`` parameters to full CPU tensors for checkpoint saving.
 
-    Every rank must call this function so ``DTensor.full_tensor()`` collectives complete.
+    Every rank must call this function so ``DTensor.full_tensor()`` collectives complete. Only the rank
+    that writes the checkpoint keeps what comes back: a rank that is only here for the collective would
+    otherwise hold a whole copy of the model in host memory, once per rank of the mesh.
     """
     gathered = {}
     for key, tensor in state_dict.items():
         if isinstance(tensor, torch.Tensor):
             if isinstance(tensor, DTensor):
                 tensor = tensor.full_tensor()
-            gathered[key] = tensor.detach().cpu().contiguous()
-        else:
+            if keep:
+                gathered[key] = tensor.detach().cpu().contiguous()
+        elif keep:
             gathered[key] = tensor
     return gathered

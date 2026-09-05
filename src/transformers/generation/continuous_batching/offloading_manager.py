@@ -102,11 +102,7 @@ class OffloadingManager:
             self._cpu_key_cache.append(torch.empty(cpu_cache_shape, dtype=cache.dtype, pin_memory=True))
             self._cpu_value_cache.append(torch.empty(cpu_cache_shape, dtype=cache.dtype, pin_memory=True))
 
-        # Pre-view the GPU cache tensors as block-shaped so the hot copy paths avoid per-op .view() calls
-        block_shape = (-1, cache.block_size, cache.num_key_value_heads, cache.head_dim)
-        for k_cache, v_cache in zip(cache.key_cache, cache.value_cache):
-            self._gpu_key_views.append(k_cache.view(*block_shape))
-            self._gpu_value_views.append(v_cache.view(*block_shape))
+        self._build_gpu_views()
 
         # The free list is kept sorted so bulk offloads land in (mostly) contiguous pool slices
         self._free_cpu_blocks = list(range(self._num_cpu_blocks))
@@ -175,6 +171,25 @@ class OffloadingManager:
         """Returns a context manager that runs enclosed ops on the compute stream, or a no-op when none is set."""
         return torch.cuda.stream(self._compute_stream) if self._compute_stream is not None else nullcontext()
 
+    def _build_gpu_views(self) -> None:
+        """Pre-view the GPU cache tensors as block-shaped so the hot copy paths avoid per-op .view() calls."""
+        cache = self.cache
+        block_shape = (-1, cache.block_size, cache.num_key_value_heads, cache.head_dim)
+        for k_cache, v_cache in zip(cache.key_cache, cache.value_cache):
+            self._gpu_key_views.append(k_cache.view(*block_shape))
+            self._gpu_value_views.append(v_cache.view(*block_shape))
+
+    def drop_gpu_views(self) -> None:
+        """Release the views onto the GPU cache. A view keeps its base tensor alive, so the cache cannot be freed
+        while these exist. Call `rebuild_gpu_views` once the cache has been reallocated."""
+        self._gpu_key_views.clear()
+        self._gpu_value_views.clear()
+
+    def rebuild_gpu_views(self) -> None:
+        """Re-view the GPU cache after it has been reallocated."""
+        self.drop_gpu_views()
+        self._build_gpu_views()
+
     def offload_requests(self) -> int:
         """Evict enough active requests that, at the next batch, every remaining starved request can allocate the
         blocks it needs. Victims are taken from the starved requests reported by the scheduler, newest first, so the
@@ -203,7 +218,36 @@ class OffloadingManager:
 
         # Copy as many victims as fit in the CPU pool, in one batched copy. Must happen before the blocks are freed.
         cpu_offloaded = self._offload_to_cpu(victims)
-        # Requeue victims oldest-first so they will become active again in (roughly) their original order
+        self._requeue_offloaded(victims, cpu_offloaded)
+
+        scheduler.block_new_requests = True
+        if logger.isEnabledFor(logging.INFO):
+            free_blocks = self.cache.get_num_free_blocks()
+            logger.info(
+                f"Offloaded {len(victims)} requests ({len(cpu_offloaded)} to CPU, {len(victims) - len(cpu_offloaded)} "
+                f"soft reset): {len(starved)} starved requests remain for {free_blocks} free blocks."
+            )
+        return len(victims)
+
+    def discard_all_active(self) -> int:
+        """Drop every active request's cache instead of offloading it.
+
+        The requests are put back in the waiting queue and re-prefilled when they run again, so this costs compute
+        rather than host bandwidth, and needs no CPU pool at all. It is the right choice when the cache is about to
+        become worthless anyway, for instance when the weights change between two generation phases.
+        """
+        victims = list(self.scheduler.active_requests.values())
+        if not victims:
+            return 0
+        self._requeue_offloaded(victims, cpu_offloaded=set())  # nothing offloaded, so every victim is soft reset
+        logger.info(f"Discarded the cache of all {len(victims)} active requests")
+        return len(victims)
+
+    def _requeue_offloaded(self, victims: list[RequestState], cpu_offloaded: set[str]) -> None:
+        """Put offloaded victims back in the waiting queue, oldest first, so they become active again in (roughly)
+        their original order. Those that reached the CPU pool resume from their offloaded blocks; the others start
+        over."""
+        scheduler = self.scheduler
         for state in victims:
             request_id = state.request_id
             if request_id in cpu_offloaded:
@@ -229,15 +273,6 @@ class OffloadingManager:
                 state._status = RequestStatus.FINISHED
             scheduler.finish_request(request_id)
             scheduler.add_waiting_request(new_state)
-
-        scheduler.block_new_requests = True
-        if logger.isEnabledFor(logging.INFO):
-            free_blocks = self.cache.get_num_free_blocks()
-            logger.info(
-                f"Offloaded {len(victims)} requests ({len(cpu_offloaded)} to CPU, {len(victims) - len(cpu_offloaded)} "
-                f"soft reset): {len(starved)} starved requests remain for {free_blocks} free blocks."
-            )
-        return len(victims)
 
     def restore_scheduled_requests(self, requests_in_batch: list[FutureRequestState]) -> None:
         """Restore KV caches from CPU for any CPU-offloaded requests in the scheduled batch. Indices are accumulated

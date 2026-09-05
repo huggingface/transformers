@@ -157,10 +157,11 @@ class DistributedMixin:
         if distributed_config.tp_size > 1 or distributed_config.fsdp_size > 1:
             _ensure_torch_distributed()
             world_size = _get_torch_distributed_world_size()
-            if distributed_config.tp_size * distributed_config.fsdp_size != world_size:
+            parallel_size = distributed_config.tp_size * distributed_config.fsdp_size
+            if world_size % parallel_size != 0:
                 raise RuntimeError(
                     f"tp_size ({distributed_config.tp_size}) * fsdp_size ({distributed_config.fsdp_size}) "
-                    f"is not equal to world_size ({world_size})"
+                    f"must divide world_size ({world_size})"
                 )
 
         if distributed_config.tp_size > 1:
@@ -196,6 +197,9 @@ class DistributedMixin:
                 if isinstance(distributed_config.tp_plan, dict):
                     model.tp_plan = distributed_config.tp_plan
                 model = apply_tensor_parallelism(model, tp_mesh)
+                # `tp_size` is how the rest of the library asks whether this model is split, and the Trainer uses it
+                # to skip wrapping it in DDP. Without it a model loaded through `DistributedConfig` looks unsharded.
+                model._tp_size = distributed_config.tp_size
 
             elif distributed_config.fsdp_size > 1:
                 fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
@@ -265,12 +269,9 @@ class DistributedMixin:
             return state_dict
 
         if distributed_config.tp_size > 1:
-            state_dict = gather_state_dict_for_save(
-                state_dict, self._tp_plan, self._device_mesh, distributed_config.tp_size
+            return gather_state_dict_for_save(
+                state_dict, self._tp_plan, self._device_mesh, distributed_config.tp_size, keep=save_on_this_rank
             )
-            if not save_on_this_rank:
-                state_dict = {}
-            return state_dict
 
         if distributed_config.fsdp_size > 1:
             if not _is_torch_distributed_initialized():

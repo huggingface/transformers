@@ -149,6 +149,10 @@ class BackgroundThreadStatus:
         self._local_status = self.DONT_STOP
         self._tp_status = self.DONT_STOP
         self.fatal_error = None
+        # Handshake with a thread that shares the model, see `ContinuousBatchingManager.training_turn`
+        self.turn_requested = threading.Event()
+        self.turn_granted = threading.Event()
+        self.turn_released = threading.Event()
 
     def clear(self) -> None:
         """Clear the local and TP statuses. This method should ONLY be called by the main thread itself BEFORE starting
@@ -343,9 +347,20 @@ class ContinuousBatchProcessor:
 
         # Cheap 2 ints broadcast of payload size (from rank 0) and requested stop status (all to all)
         local_requested_status = self.background_thread_status.local_status
-        payload_size, tp_status = self.distributed_helper.tp_all_reduce_state(payload_size, local_requested_status)
+        payload_size, tp_status, wants_turn = self.distributed_helper.tp_all_reduce_state(
+            payload_size, local_requested_status, int(self.background_thread_status.turn_requested.is_set())
+        )
         # Update the local stop status with the new one
         self.background_thread_status.update_with_tp_status(tp_status)
+
+        # A thread outside this loop asked for a turn, and every rank now knows it at the same
+        # iteration. Under tensor parallelism the ranks must issue their collectives in one agreed
+        # order, so the loop stops launching until that thread is done rather than racing it.
+        if wants_turn:
+            self.background_thread_status.turn_granted.set()
+            self.background_thread_status.turn_released.wait()
+            self.background_thread_status.turn_released.clear()
+            self.background_thread_status.turn_granted.clear()
 
         # Exit early if the TP group is hard-stopping
         if self.background_thread_status.tp_status == BackgroundThreadStatus.HARD_STOP:
@@ -563,6 +578,53 @@ class ContinuousBatchProcessor:
         self.inputs_and_outputs.retrieve_device_outputs()
 
     @torch.no_grad()
+    def release_memory(self) -> int:
+        """Free the KV cache, returning the number of bytes released.
+
+        Generation has to be paused: nothing may step the engine until `restore_memory` is called. The memory goes back
+        to the caching allocator, so whatever else runs on this device meanwhile, a training step for instance, can use
+        it.
+
+        The live requests' cache is discarded and they re-prefill when they are scheduled again. That pays for the
+        prefill a second time, and the continuation is not bitwise what an uninterrupted run would have produced, since
+        recomputing a prefix in one forward does not give the same floating point result as having decoded it token by
+        token, which is enough to move a greedy pick. It is the right trade anyway where this is used, because the
+        weights change while generation is paused and the cache is about to be worth little.
+
+        Copying the live cache to the CPU pool instead, so that generation could resume token for token, is not
+        offered: it returns the blocks byte for byte and still produces garbage as soon as anything else uses the
+        memory in between, which is exactly the case this exists for. See `exp/repro_kv_offload.py` in the zero-sync
+        work for a one-GPU reproduction.
+        """
+        # Async batching keeps one batch in flight: after a loop iteration the pair that was just computed has been
+        # swapped out and its outputs are read back one iteration later. Consume that batch first, from its own
+        # pair, so every request holds the tokens it was actually sampled, then forget the IO bookkeeping (the
+        # request -> position maps would otherwise carry a stale token into the re-prefill). Cuda graphs themselves
+        # are fine: they are dropped and recaptured if the cache does not come back at the same addresses.
+        if isinstance(self.inputs_and_outputs, ContinuousBatchingAsyncIOs):
+            self.inputs_and_outputs.swap_io_pairs()
+            self.update_batch()
+            self.inputs_and_outputs.reset()
+        self.offloading_manager.discard_all_active()
+        # The offloading manager holds block-shaped views of the cache, and a view keeps its base alive, so they have
+        # to go before the tensors can actually be freed.
+        self.offloading_manager.drop_gpu_views()
+        return self.cache.release_gpu_memory()
+
+    def restore_memory(self) -> None:
+        """Reallocate the KV cache freed by `release_memory`, so generation can run again.
+
+        A cuda graph replays the pointers it was captured with, so if the pool does not come back at the addresses it
+        had, the captured graphs are dropped and the next batch captures again. That happens when something else still
+        holds the memory at this point, so restoring after the training step has released its activations is both
+        faster and cheaper.
+        """
+        same_addresses = self.cache.restore_gpu_memory()
+        self.offloading_manager.rebuild_gpu_views()
+        if not same_addresses:
+            self.inputs_and_outputs.clear_graphs()
+            logger.info("The KV cache moved while it was released, so the captured cuda graphs were dropped")
+
     def warmup(self, model: nn.Module) -> None:
         """Pre-capture CUDA graphs (or trigger compile warmup) for varlen and decode paths. In async mode, both IO
         pairs are warmed up since each has its own graph buffer and static tensors. The varlen path is warmed up at
@@ -639,6 +701,8 @@ class ContinuousBatchingManager:
         )
 
         # Fully resolve the continuous batching config now that we have the model, the config and the logit processor
+        # Note: composite configs (e.g. vision-language models) keep the decoder attributes (num_key_value_heads,
+        # num_hidden_layers, ...) on their text config, so always resolve against it (no-op for text-only configs)
         self.continuous_batching_config = resolve_continuous_batching_config(
             config=self.model.config.get_text_config(),
             cb_config=continuous_batching_config,
@@ -689,6 +753,28 @@ class ContinuousBatchingManager:
             self.batch_processor = self._create_batch_processor()
         self.batch_processor.warmup(self.model)
         self.warmed_up = True
+
+    def release_memory(self) -> int:
+        """Free the KV cache so something else on this device can use the memory, returning the bytes released.
+
+        Only for callers that drive the engine themselves, with `step`, and can guarantee nothing steps it until
+        `restore_memory`. Live requests keep their place in the queue and re-prefill when they are scheduled again, so
+        no generation is lost, but the prefill is paid for a second time.
+
+        ```python
+        freed = manager.release_memory()
+        ...  # a training step, which now has that memory available
+        manager.restore_memory()
+        ```
+        """
+        if self.batch_processor is None:
+            return 0
+        return self.batch_processor.release_memory()
+
+    def restore_memory(self) -> None:
+        """Reallocate the KV cache freed by `release_memory` so generation can run again."""
+        if self.batch_processor is not None:
+            self.batch_processor.restore_memory()
 
     # --------------------------------------------- CONTROL FLOW METHODS --------------------------------------------- #
 
@@ -971,7 +1057,57 @@ class ContinuousBatchingManager:
             self._has_new_requests.clear()
             return True
 
+    def step(self) -> bool:
+        """Run one iteration of the generation loop on the calling thread, and say whether it ran.
+
+        For a caller that also uses the model itself, typically a trainer, and cannot let the
+        background thread run: tensor parallel collectives are matched by position across ranks, so
+        two threads issuing them race, while a caller that steps the engine at fixed points in its
+        own work gives every rank the same order by construction.
+
+        Do not use this while the background thread is running; it is an alternative to `start`.
+        """
+        # `warmup` may already have built one, in which case the counter has not been set yet.
+        batch_processor = getattr(self, "batch_processor", None)
+        if batch_processor is None:
+            batch_processor = self.batch_processor = self._create_batch_processor()
+        # Checked before a batch is prepared: raising once the block tables are set leaves the engine wedged.
+        if not batch_processor.cache.key_cache:
+            raise RuntimeError(
+                "The KV cache has been released, so generation cannot run. Call restore_memory() before stepping the "
+                "engine again."
+            )
+        self.current_batch = getattr(self, "current_batch", 0)
+        if not batch_processor.prepare_next_batch():
+            return False
+        self._generation_step()
+        batch_processor.update_batch()
+        self.current_batch += 1
+        return True
+
     @torch.no_grad()
+    @contextmanager
+    def training_turn(self):
+        """Take a turn on the model while the generation loop holds off launching work.
+
+        Tensor parallelism requires every rank to issue its collectives in the same order, so a
+        trainer sharing the model cannot simply race the generation loop: the ranks would each
+        interleave the two streams their own way and deadlock. Inside this context the loop is
+        paused at an iteration all ranks agreed on, and it keeps its cache and its in-flight
+        requests, so nothing is drained and no rollout is lost.
+        """
+        self.background_thread_status.turn_requested.set()
+        self.background_thread_status.turn_granted.wait()
+        try:
+            yield
+        finally:
+            # Every rank's trainer leaves together, so no rank resumes decoding while another is
+            # still issuing training collectives.
+            if self.distributed_helper.cpu_comm_group is not None:
+                torch.distributed.barrier(group=self.distributed_helper.cpu_comm_group)
+            self.background_thread_status.turn_requested.clear()
+            self.background_thread_status.turn_released.set()
+
     def _run_generation_loop(self) -> None:
         """Main processing loop running in the background thread."""
         batch_processor = None
@@ -987,7 +1123,9 @@ class ContinuousBatchingManager:
             self.batch_processor = batch_processor  # register the batch processor for main thread access
             self.current_batch = 0
 
-            # If using the async API, we bootstrap the first batch w/out update
+            # If using the async API, we bootstrap the first batch w/out update. The manager may have been
+            # started before the first request was submitted: wait for one, with the same stop conditions as
+            # the main loop below.
             if batch_processor.use_async_batching:
                 while self._generation_loop_body(batch_processor, bootstrapping=True):
                     pass
@@ -1217,6 +1355,7 @@ class ContinuousMixin:
             workload_hints=workload_hints,
         )
         if warmup and not manager.warmed_up:
+            # Warmup is long (~30 sec): best to signal the user it's happening than let them think the manager is stuck
             # TODO: have a progress bar for the warmup as well, like other inference engine
             logger.info("Warming up for continuous batching...")
             start = perf_counter()
