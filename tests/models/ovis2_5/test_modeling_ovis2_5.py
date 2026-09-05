@@ -827,8 +827,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
             captured_seqlens.append(kwargs["cu_seqlens"].clone())
 
         hooks = [
-            layer.self_attn.register_forward_pre_hook(capture_cu_seqlens, with_kwargs=True)
-            for layer in model.encoder.layers
+            layer.self_attn.register_forward_pre_hook(capture_cu_seqlens, with_kwargs=True) for layer in model.layers
         ]
         try:
             with torch.no_grad():
@@ -955,7 +954,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
             (config.vision_config.vocab_size, config.text_config.hidden_size),
         )
         self.assertIn("model.vision_tower.embeddings.patch_embedding.weight", state_dict)
-        self.assertIn("model.vision_tower.encoder.layers.0.self_attn.q_proj.weight", state_dict)
+        self.assertIn("model.vision_tower.layers.0.self_attn.q_proj.weight", state_dict)
         self.assertIn("model.vision_tower.post_layernorm.weight", state_dict)
         self.assertIn("model.visual_tokenizer.head_linear.weight", state_dict)
         self.assertIn("model.visual_tokenizer.head_norm.weight", state_dict)
