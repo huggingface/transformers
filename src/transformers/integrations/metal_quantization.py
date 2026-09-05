@@ -119,7 +119,7 @@ class MetalLinear(nn.Linear):
         kernel = _get_metal_kernel()
 
         output = kernel.affine_qmm_t(
-            input,
+            input.reshape(-1, input.shape[-1]),
             self.weight,
             self.scales.to(input.dtype),
             self.qbiases.to(input.dtype),
@@ -129,7 +129,7 @@ class MetalLinear(nn.Linear):
 
         if self.bias is not None:
             output = output + self.bias
-        return output
+        return output.reshape(*input.shape[:-1], self.out_features)
 
 
 def replace_with_metal_linear(

@@ -15,12 +15,17 @@
 import gc
 import unittest
 from contextlib import ExitStack, contextmanager
+from itertools import product
 from unittest.mock import patch
+
+from parameterized import parameterized
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, MetalConfig, OPTForCausalLM
 from transformers.quantizers.quantizer_metal import MetalHfQuantizer
 from transformers.testing_utils import (
+    require_kernels,
     require_torch,
+    require_torch_mps,
     slow,
     torch_device,
 )
@@ -329,12 +334,66 @@ class MetalLinearTest(unittest.TestCase):
         elems_per_int = 32 // 8  # 4
         self.assertEqual(layer.weight.shape, (128, 256 // elems_per_int))
 
+    def test_forward_quantized_multidimensional_inputs(self):
+        from transformers.integrations.metal_quantization import MetalLinear
+
+        weight = torch.randn(64, 128)
+        inputs = [torch.randn(*shape, 128) for shape in [(), (4,), (4, 1), (4, 3), (2, 3, 4)]]
+        inputs.append(inputs[3].transpose(0, 1))
+
+        def affine_qmm_t(input, *args):
+            self.assertEqual(input.ndim, 2)
+            return nn.functional.linear(input, weight)
+
+        with patch("transformers.integrations.metal_quantization._get_metal_kernel") as get_kernel:
+            get_kernel.return_value.affine_qmm_t.side_effect = affine_qmm_t
+            for bias, input in product([False, True], inputs):
+                with self.subTest(bias=bias, shape=input.shape, stride=input.stride()):
+                    layer = MetalLinear(128, 64, bias=bias, group_size=64)
+                    if bias:
+                        layer.bias = nn.Parameter(torch.randn(64))
+                    expected = nn.functional.linear(input, weight, layer.bias)
+                    torch.testing.assert_close(layer(input), expected)
+
     def test_prequantized_shapes_2bit(self):
         from transformers.integrations.metal_quantization import MetalLinear
 
         layer = MetalLinear(in_features=256, out_features=128, bits=2, group_size=64)
         elems_per_int = 32 // 2  # 16
         self.assertEqual(layer.weight.shape, (128, 256 // elems_per_int))
+
+
+@require_torch_mps
+@require_kernels
+class MetalLinearMPSTest(unittest.TestCase):
+    @parameterized.expand(list(product([4, 8], [torch.float16, torch.bfloat16], [False, True])))
+    def test_forward_matches_individual_rows(self, bits, dtype, bias):
+        from transformers.integrations.metal_quantization import MetalLinear, _affine_quantize_tensor
+
+        torch.manual_seed(42)
+        in_features, out_features, group_size = 512, 256, 64
+        weight, scales, qbiases = _affine_quantize_tensor(torch.randn(out_features, in_features), group_size, bits)
+        layer = MetalLinear(in_features, out_features, bias=bias, bits=bits, group_size=group_size).to("mps")
+        with torch.no_grad():
+            layer.weight.copy_(weight)
+            layer.scales.copy_(scales)
+            layer.qbiases.copy_(qbiases)
+            if bias:
+                layer.bias.copy_(torch.randn(out_features))
+
+        inputs = [
+            torch.randn(*shape, in_features, device="mps", dtype=dtype)
+            for shape in [(), (4,), (4, 1), (4, 3), (2, 3, 4)]
+        ]
+        inputs.append(inputs[3].transpose(0, 1))
+        with torch.inference_mode():
+            for input in inputs:
+                with self.subTest(shape=input.shape, stride=input.stride()):
+                    expected = torch.cat([layer(row) for row in input.reshape(-1, in_features).split(1)])
+                    expected = expected.reshape(*input.shape[:-1], out_features)
+                    output = layer(input)
+                    self.assertTrue(torch.isfinite(output).all())
+                    torch.testing.assert_close(output, expected, rtol=0.02, atol=0.125)
 
 
 @require_torch
