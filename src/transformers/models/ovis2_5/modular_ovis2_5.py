@@ -129,6 +129,8 @@ class Ovis2_5ImageProcessor(Glm4vImageProcessor):
         temporal_factor: int,
         **kwargs,
     ) -> torch.Tensor:
+        """Resize dynamically based on input image aspect ratio."""
+        # Ovis2.5 uses its custom smart_resize policy instead of GLM4V's default resize.
         height, width = images.shape[-2:]
         resized_height, resized_width = smart_resize(
             height,
@@ -145,12 +147,26 @@ class Ovis2_5ImageProcessor(Glm4vImageProcessor):
         )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of image patches per image.
+        """
         images_kwargs = images_kwargs or {}
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         merge_size = images_kwargs.get("merge_size", self.merge_size)
         size = images_kwargs.get("size", self.size)
         min_pixels = size["shortest_edge"] if isinstance(size, dict) else size.shortest_edge
         max_pixels = size["longest_edge"] if isinstance(size, dict) else size.longest_edge
+        # Ovis2.5 uses the same custom smart_resize policy to compute the patch count.
         resized_height, resized_width = smart_resize(
             height,
             width,
@@ -180,6 +196,8 @@ class Ovis2_5ImageProcessorPil(Glm4vImageProcessorPil):
         temporal_factor: int,
         **kwargs,
     ) -> Any:
+        """Resize dynamically based on input image aspect ratio."""
+        # Ovis2.5 uses its custom smart_resize policy instead of GLM4V's default resize.
         height, width = image.shape[-2:]
         resized_height, resized_width = smart_resize(
             height,
@@ -196,12 +214,26 @@ class Ovis2_5ImageProcessorPil(Glm4vImageProcessorPil):
         )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of image patches per image.
+        """
         images_kwargs = images_kwargs or {}
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         merge_size = images_kwargs.get("merge_size", self.merge_size)
         size = images_kwargs.get("size", self.size)
         min_pixels = size["shortest_edge"] if isinstance(size, dict) else size.shortest_edge
         max_pixels = size["longest_edge"] if isinstance(size, dict) else size.longest_edge
+        # Ovis2.5 uses the same custom smart_resize policy to compute the patch count.
         resized_height, resized_width = smart_resize(
             height,
             width,

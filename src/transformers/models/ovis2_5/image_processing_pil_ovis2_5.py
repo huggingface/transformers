@@ -120,6 +120,7 @@ class Ovis2_5ImageProcessorPil(PilBackend):
         **kwargs,
     ) -> Any:
         """Resize dynamically based on input image aspect ratio."""
+        # Ovis2.5 uses its custom smart_resize policy instead of GLM4V's default resize.
         height, width = image.shape[-2:]
         resized_height, resized_width = smart_resize(
             height,
@@ -249,6 +250,7 @@ class Ovis2_5ImageProcessorPil(PilBackend):
         size = images_kwargs.get("size", self.size)
         min_pixels = size["shortest_edge"] if isinstance(size, dict) else size.shortest_edge
         max_pixels = size["longest_edge"] if isinstance(size, dict) else size.longest_edge
+        # Ovis2.5 uses the same custom smart_resize policy to compute the patch count.
         resized_height, resized_width = smart_resize(
             height,
             width,
