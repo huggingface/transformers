@@ -456,7 +456,9 @@ class MoshiTester:
         self.mimi_sliding_window = mimi_sliding_window
         self.sampling_rate = sampling_rate
 
-        self.num_hidden_states_types = 2
+        # `depth_hidden_states` is returned only if both `text_labels` and `audio_labels` are passed.
+        # `test_attention_outputs` does not pass these, so only the main decoder's `hidden_states` is returned.
+        self.num_hidden_states_types = 1
 
     def prepare_config_and_inputs(self, batch_size=None):
         batch_size = self.batch_size if batch_size is None else batch_size
@@ -526,6 +528,83 @@ class MoshiTester:
     def prepare_config_and_inputs_for_common(self, batch_size=None):
         config, inputs_dict = self.prepare_config_and_inputs(batch_size)
         return config, inputs_dict
+
+    def create_and_check_forward_output_fields(self, config, inputs_dict):
+        """
+        Test that the outputs of the depth decoder are returned.
+        See https://github.com/huggingface/transformers/pull/48311
+        """
+        model = MoshiForConditionalGeneration(config).to(torch_device).eval()
+
+        inputs_dict["text_labels"] = inputs_dict["input_ids"]
+        inputs_dict["audio_labels"] = inputs_dict["moshi_audio_codes"]
+        inputs_dict["attention_mask"] = None
+
+        outputs = model(
+            **inputs_dict,
+            use_cache=True,
+            output_attentions=True,
+            output_hidden_states=True,
+            depth_decoder_use_cache=True,
+            depth_decoder_output_attentions=True,
+            depth_decoder_output_hidden_states=True,
+        )
+
+        self.parent.assertIsNotNone(outputs.depth_past_key_values)
+        self.parent.assertIsNotNone(outputs.depth_hidden_states)
+        self.parent.assertIsNotNone(outputs.depth_attentions)
+
+        self.parent.assertIsNot(outputs.depth_past_key_values, outputs.past_key_values)
+        self.parent.assertIsNot(outputs.depth_hidden_states, outputs.hidden_states)
+        self.parent.assertIsNot(outputs.depth_attentions, outputs.attentions)
+
+        self.parent.assertIsNot(outputs.depth_past_key_values, outputs.depth_hidden_states)
+
+    def create_and_check_forward_audio_encoder_kwargs(self, config, inputs_dict):
+        """
+        Test for `kwargs_audio_encoder` prefix-stripping bug: `argument[len("audio_encoder_")]` indexes a single
+        character instead of slicing the rest of the string, e.g., `audio_encoder_return_dict=False` becomes
+        `{"r": False}`, and forwarding it raises TypeError: MimiModel.encode() got an unexpected keyword argument 'r'
+        See https://github.com/huggingface/transformers/pull/48311
+        """
+        model = MoshiForConditionalGeneration(config).to(torch_device).eval()
+
+        input_values_length = int(self.seq_length * config.sampling_rate / config.audio_encoder_config.frame_rate)
+
+        input_ids = inputs_dict.pop("input_ids").to(torch_device)
+
+        user_input_values = floats_tensor((input_ids.shape[0], 1, input_values_length))
+        moshi_input_values = floats_tensor((input_ids.shape[0], 1, input_values_length))
+
+        outputs = model(
+            input_ids=input_ids,
+            user_input_values=user_input_values,
+            moshi_input_values=moshi_input_values,
+            audio_encoder_return_dict=False,
+        )
+
+        self.parent.assertIsNotNone(outputs)
+
+    def create_and_check_prepare_inputs_embeds_for_generation_user_audio_codes_only(self, config, inputs_dict):
+        """
+        Test for `embed_tokens`-indexing in the `user_audio_codes`-only branch.
+        The `model.num_codebooks` offset should be applied to the `embed_tokens` index instead of the `audio_codes`.
+        See https://github.com/huggingface/transformers/pull/48311
+        """
+        model = MoshiForConditionalGeneration(config).to(torch_device).eval()
+
+        user_audio_codes = inputs_dict["user_audio_codes"]
+
+        inputs_embeds, *_ = model._prepare_inputs_embeds_for_generation(
+            user_audio_codes=user_audio_codes,
+        )
+
+        expected_inputs_embeds = sum(
+            model.embed_tokens[codebook + model.num_codebooks](user_audio_codes[:, codebook])
+            for codebook in range(user_audio_codes.shape[1])
+        )
+
+        torch.testing.assert_close(inputs_embeds, expected_inputs_embeds)
 
 
 @require_torch
@@ -782,6 +861,20 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             self.assertTrue(
                 torch.allclose(outputs_from_unconditional.audio_sequences, outputs_from_none.audio_sequences)
             )
+
+    def test_forward_output_fields(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_forward_output_fields(*config_and_inputs)
+
+    def test_forward_audio_encoder_kwargs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_forward_audio_encoder_kwargs(*config_and_inputs)
+
+    def test_prepare_inputs_embeds_for_generation_user_audio_codes_only(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_prepare_inputs_embeds_for_generation_user_audio_codes_only(
+            *config_and_inputs
+        )
 
     @unittest.skip(reason="Compile not yet supported because in Moshi models")
     def test_sdpa_can_dispatch_on_flash(self):
