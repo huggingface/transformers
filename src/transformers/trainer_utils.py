@@ -1193,6 +1193,7 @@ def align_special_tokens(model, processing_class):
     tokenizer_has_new_eos = tokenizer.eos_token_id != getattr(model.config, "eos_token_id", None)
     if model_has_generation_config:
         gen_eos = model.generation_config.eos_token_id
+        # Scalar EOS values compare directly; lists are checked for membership below.
         if gen_eos is None or isinstance(gen_eos, int):
             tokenizer_has_new_eos |= tokenizer.eos_token_id != gen_eos
         else:
