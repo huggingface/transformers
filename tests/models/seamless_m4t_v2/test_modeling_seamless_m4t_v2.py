@@ -1056,7 +1056,7 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
         set_seed(42)
         output = model.generate(**self.input_audio, num_beams=1, tgt_lang="rus", return_intermediate_token_ids=True)
 
-        self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
+        self.assertListEqual(expected_text_tokens, output.sequences.squeeze().flatten().tolist())
         self.assertListEqual(
             expected_unit_tokens, (output.unit_sequences - model.config.vocoder_offset).squeeze().tolist()
         )
