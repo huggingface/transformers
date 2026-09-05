@@ -987,6 +987,7 @@ class Llama4UnfoldConvolution(nn.Module):
         return hidden_states
 
 
+# note: this is same axial rope as in Pixtral
 class Llama4VisionRotaryEmbedding(nn.Module):
     def __init__(self, config: Llama4VisionConfig):
         super().__init__()

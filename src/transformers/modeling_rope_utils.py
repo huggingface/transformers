@@ -737,6 +737,7 @@ class RotaryEmbeddingConfigMixin:
     """
 
     default_theta = 10_000.0
+    default_rope_type = "default"  # override only for axial models
     ignore_keys_at_rope_validation = set()
 
     def convert_rope_params_to_dict(self, **kwargs):
@@ -781,11 +782,16 @@ class RotaryEmbeddingConfigMixin:
             logger.warning("`standardize_rope_params` was called but no RoPE parameters were found.")
             return
         # Case 1: RoPE param keys do not intersect with possible `layer_types` -> one global dict
-        elif layer_types is None or rope_parameters == {} or not set(rope_parameters.keys()).issubset(layer_types):
+        elif layer_types is None or rope_parameters == {} or set(rope_parameters.keys()).isdisjoint(layer_types):
             rope_parameters.setdefault("rope_type", rope_parameters.get("type", "default"))
             rope_parameters.setdefault("rope_theta", rope_theta)
             if partial_rotary_factor is not None:
                 rope_parameters["partial_rotary_factor"] = partial_rotary_factor
+
+            # Force set the default type to model's expected `default_rope`. For most models it's a no-op
+            # used only to keep BC with old ckpt that require axial rope type
+            if self.default_rope_type != "default" and rope_parameters["rope_type"] == "default":
+                rope_parameters["rope_type"] = self.default_rope_type
 
             # Move pretraining-time maximum length to rope parameter dict for RoPE types with scaling
             if rope_parameters["rope_type"] in ["llama3", "yarn", "longrope"]:
@@ -813,6 +819,11 @@ class RotaryEmbeddingConfigMixin:
                         "original_max_position_embeddings", self.max_position_embeddings
                     )
 
+                # Force set the default type to model's expected `default_rope`. For most models it's a no-op
+                # used only to keep BC with old ckpt that require axial rope type
+                if self.default_rope_type != "default" and rope_parameters[layer_type]["rope_type"] == "default":
+                    rope_parameters[layer_type]["rope_type"] = self.default_rope_type
+
         self.rope_parameters = rope_parameters
 
     def validate_rope(self: "PreTrainedConfig"):
@@ -825,7 +836,7 @@ class RotaryEmbeddingConfigMixin:
         if not rope_parameters_dict:
             return
 
-        if getattr(self, "layer_types", None) is not None and set(rope_parameters_dict.keys()).issubset(
+        if getattr(self, "layer_types", None) is not None and not set(rope_parameters_dict.keys()).isdisjoint(
             self.layer_types
         ):
             pass
@@ -846,6 +857,9 @@ class RotaryEmbeddingConfigMixin:
                 logger.warning(
                     f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"
                 )
+
+    def _validate_axial_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
+        self._validate_default_rope_parameters(rope_parameters, ignore_keys=ignore_keys)
 
     def _validate_default_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
         required_keys = {"rope_type"}

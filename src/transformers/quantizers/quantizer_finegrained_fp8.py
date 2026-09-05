@@ -120,12 +120,16 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
-        from ..integrations.finegrained_fp8 import replace_with_fp8_linear
+        from ..integrations.finegrained_fp8 import replace_with_fp8_embedding, replace_with_fp8_linear
 
         self._normalize_modules_to_not_convert(model)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
+
+        modules_to_convert = self.quantization_config.modules_to_convert
+        if self.pre_quantized and modules_to_convert:
+            replace_with_fp8_embedding(model, modules_to_convert, self.modules_to_not_convert)
 
         model = replace_with_fp8_linear(
             model,
@@ -265,6 +269,14 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         # loads scales as parameters, `dequantize=True` feeds them into `Fp8Dequantize`.
         scale_rename = WeightRenaming(source_patterns=r"^(.+)\.scale$", target_patterns=r"\1.weight_scale_inv")
         weight_conversions = [scale_rename] + list(weight_conversions)
+
+        # Some checkpoints shard weights (e.g. Qwen4-Exp's `ngram_embedding`). Since WeightConverter targets become source
+        # patterns when saving, anchor them to avoid matching the corresponding scale parameters.
+        for conv in weight_conversions:
+            if isinstance(conv, WeightConverter):
+                conv._original_target_patterns = [
+                    f"{p}$" if p.endswith(".weight") else p for p in conv._original_target_patterns
+                ]
 
         if not (self.pre_quantized and self.quantization_config.dequantize):
             return weight_conversions + self.get_weight_conversions()
