@@ -649,6 +649,15 @@ class AutoImageProcessor:
         if base_class_name is not None:
             image_processor_class = _load_backend_class(base_class_name, backend, is_legacy_fast)
 
+            if image_processor_class is None and image_processor_auto_map is None:
+                try:
+                    if not isinstance(config, PreTrainedConfig):
+                        config = AutoConfig.from_pretrained(
+                            pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                        )
+                except (OSError, ValueError):
+                    pass
+
         # Handle remote code
         has_remote_code = image_processor_auto_map is not None
         has_local_code = image_processor_class is not None or type(config) in IMAGE_PROCESSOR_MAPPING
