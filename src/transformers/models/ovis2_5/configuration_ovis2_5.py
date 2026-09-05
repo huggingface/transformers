@@ -62,9 +62,7 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
     rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
-        # Released configs use `hidden_stride=2`, matching the inherited spatial merge default.
-        kwargs.pop("hidden_stride", None)
-        full_attention_indexes = kwargs.pop("fullatt_block_indexes", None)
+        full_attention_indexes = kwargs.get("fullatt_block_indexes")
         if self.layer_types is None:
             if full_attention_indexes is None:
                 self.layer_types = ["full_attention"] * self.num_hidden_layers
@@ -110,10 +108,10 @@ class Ovis2_5Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        # Released Hub checkpoints still use the remote-code names. Pop them here until their configs can be updated.
-        legacy_text_config = kwargs.pop("llm_config", None)
-        legacy_vision_config = kwargs.pop("vit_config", None)
-        legacy_visual_vocab_size = kwargs.pop("visual_vocab_size", None)
+        # Released Hub checkpoints still use the remote-code names; map them to the native config fields.
+        legacy_text_config = kwargs.get("llm_config")
+        legacy_vision_config = kwargs.get("vit_config")
+        legacy_visual_vocab_size = kwargs.get("visual_vocab_size")
         if self.text_config is None and legacy_text_config is not None:
             self.text_config = legacy_text_config
         if self.vision_config is None and legacy_vision_config is not None:
