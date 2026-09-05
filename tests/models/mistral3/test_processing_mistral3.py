@@ -38,10 +38,12 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.url_0 = url_to_local_path(
-            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )
         cls.image_0 = np.random.randint(255, size=(3, 876, 1300), dtype=np.uint8)
-        cls.url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        cls.url_1 = (
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         cls.image_1 = np.random.randint(255, size=(3, 480, 640), dtype=np.uint8)
         cls.image_2 = np.random.randint(255, size=(3, 1024, 1024), dtype=np.uint8)
         cls.image_token = processor.image_token
@@ -283,7 +285,7 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class.from_pretrained(self.full_tmpdirname)
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
 
         _ = processor(
             text=input_str,
@@ -304,5 +306,5 @@ class Mistral3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             )
 
     @unittest.skip("Mistral3 overrides image patch size at run-time via processor (hardcoded!)")
-    def test_image_processor_defaults(self):
+    def test_subprocessor_defaults_1_images(self):
         pass

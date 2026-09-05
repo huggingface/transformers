@@ -16,7 +16,6 @@
 import unittest
 
 import pytest
-import requests
 from huggingface_hub import hf_hub_download
 
 from transformers import (
@@ -40,6 +39,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import check_torch_load_is_safe
 
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -51,7 +51,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class LlavaNextVisionText2TextModelTester(VLMModelTester):
@@ -131,7 +131,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
         url = "https://raw.githubusercontent.com/haotian-liu/LLaVA/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg"
-        self.image = Image.open(requests.get(url, stream=True).raw)
+        self.image = load_test_image(url)
 
         self.prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
 
@@ -188,8 +188,8 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = LlavaNextForConditionalGeneration.from_pretrained(
             "llava-hf/llava-v1.6-mistral-7b-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
         )
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        cats_image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        cats_image = load_test_image(url)
 
         inputs = self.processor(
             images=[self.image, cats_image],
@@ -241,10 +241,10 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
 
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
         lowres_url = "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
-        cats_image = Image.open(requests.get(url, stream=True).raw)
-        lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
+        cats_image = load_test_image(url)
+        lowres_img = load_test_image(lowres_url)
 
         inputs = self.processor(
             images=[lowres_img, cats_image], text=[self.prompt, self.prompt], return_tensors="pt", padding=True
@@ -288,10 +288,10 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
 
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
         lowres_url = "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
-        cats_image = Image.open(requests.get(url, stream=True).raw)
-        lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
+        cats_image = load_test_image(url)
+        lowres_img = load_test_image(lowres_url)
 
         inputs_batched = self.processor(
             images=[lowres_img, cats_image], text=[self.prompt, self.prompt], return_tensors="pt", padding=True
