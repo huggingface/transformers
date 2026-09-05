@@ -73,7 +73,6 @@ def string_to_dict(v):
     raise ArgumentTypeError(f"Invalid dict value: {v!r}. Expected a valid JSON object string or path to a JSON file.")
 
 
-
 def make_choice_type_function(choices: list) -> Callable[[str], Any]:
     """
     Creates a mapping function from each choices string representation to the actual value. Used to support multiple

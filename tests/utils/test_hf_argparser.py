@@ -114,7 +114,6 @@ class DictExample:
     opt_dict: dict | None = None
 
 
-
 @dataclass
 class RequiredExample:
     required_list: list[int] = field()
@@ -341,9 +340,7 @@ class HfArgumentParserTest(unittest.TestCase):
             ),
         )
 
-        (example,) = parser.parse_args_into_dataclasses(
-            ["--foo-dict", '{"k": "v"}', "--opt-dict", '{"flag": false}']
-        )
+        (example,) = parser.parse_args_into_dataclasses(["--foo-dict", '{"k": "v"}', "--opt-dict", '{"flag": false}'])
         self.assertEqual(example.foo_dict, {"k": "v"})
         self.assertEqual(example.opt_dict, {"flag": False})
         self.assertEqual(example.bar_dict, {"a": 1, "b": 2})
