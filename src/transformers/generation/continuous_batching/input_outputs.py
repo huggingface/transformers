@@ -199,6 +199,11 @@ class ContinuousBatchingIOs:
             device=self.device,
             pin_memory=pin_memory,
         )
+        # When the IOs live on the GPU (sync batching), the block table is assembled in this pinned host copy and
+        # sent in one copy per batch: filling the device tensor row by row costs one blocking H2D copy per request.
+        self._block_table_stage = (
+            torch.empty_like(self.block_table, device="cpu", pin_memory=True) if self.device.type == "cuda" else None
+        )
 
         # For other kwargs, we need a list of tensors with as many tensors as there are groups
         self.write_index_storage = torch.empty(
@@ -279,6 +284,8 @@ class ContinuousBatchingIOs:
         # If this is not a full reset, and we are going to use the block table, we only reset it
         elif self.use_block_table:
             self.block_table[:, :b_size].fill_(-1)
+            if self._block_table_stage is not None:
+                self._block_table_stage[:, :b_size].fill_(-1)
         # Otherwise, the read and write indices are the ones used, so we reset them
         else:
             self.write_index_storage[:, :q_len].fill_(self._write_trash_index)
@@ -389,7 +396,8 @@ class ContinuousBatchingIOs:
 
             # We extend the read and write indices for the cache, or fill the block table for decode-only batches
             if self.use_block_table:
-                self.cache.fill_block_table(state.request_id, past_length, query_length, self.block_table[:, i])
+                block_table = self.block_table if self._block_table_stage is None else self._block_table_stage
+                self.cache.fill_block_table(state.request_id, past_length, query_length, block_table[:, i])
             else:
                 self.cache.extend_read_and_write_indices(
                     state.request_id, past_length, query_length, read_index, write_index
@@ -433,6 +441,11 @@ class ContinuousBatchingIOs:
 
         # When looping over request is done, we can build the actual tensors. This is faster than modifying the static
         # tensors inside the loop.
+        if self.use_block_table and self._block_table_stage is not None:
+            n = self.num_request_in_batch
+            self.block_table[:, :n].copy_(self._block_table_stage[:, :n], non_blocking=True)
+            # the forward runs on the compute stream: make it wait for this copy, which is on the current stream
+            self.compute_stream.wait_stream(torch.cuda.current_stream())
         to_tensor = partial(torch.tensor, dtype=torch.int32, device=self.device)
 
         # Those kwargs always have the same type regardless of the model
