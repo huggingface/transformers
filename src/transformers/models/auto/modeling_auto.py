@@ -181,6 +181,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("fnet", "FNetModel"),
         ("focalnet", "FocalNetModel"),
         ("fsmt", "FSMTModel"),
+        ("fun_asr_nano", "FunAsrNanoModel"),
+        ("fun_asr_nano_encoder", "FunAsrNanoEncoder"),
         ("funnel", ("FunnelModel", "FunnelBaseModel")),
         ("fuyu", "FuyuModel"),
         ("gemma", "GemmaModel"),
@@ -621,6 +623,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("florence2", "Florence2ForConditionalGeneration"),
         ("fnet", "FNetForPreTraining"),
         ("fsmt", "FSMTForConditionalGeneration"),
+        ("fun_asr_nano", "FunAsrNanoForConditionalGeneration"),
         ("funnel", "FunnelForPreTraining"),
         ("gemma3", "Gemma3ForConditionalGeneration"),
         ("gemma4", "Gemma4ForConditionalGeneration"),
@@ -1178,6 +1181,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES = OrderedDict(
     [
         *list(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.items()),
+        ("fun_asr_nano", "FunAsrNanoForConditionalGeneration"),
         ("glmasr", "GlmAsrForConditionalGeneration"),
         ("granite_speech", "GraniteSpeechForConditionalGeneration"),
         ("granite_speech_plus", "GraniteSpeechPlusForConditionalGeneration"),
@@ -1363,6 +1367,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
         ("canary", "CanaryForConditionalGeneration"),
         ("cohere_asr", "CohereAsrForConditionalGeneration"),
         ("dia", "DiaForConditionalGeneration"),
+        ("fun_asr_nano", "FunAsrNanoForConditionalGeneration"),
         ("granite_speech", "GraniteSpeechForConditionalGeneration"),
         ("granite_speech_plus", "GraniteSpeechPlusForConditionalGeneration"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextForConditionalGeneration"),
