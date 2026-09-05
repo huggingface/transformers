@@ -333,6 +333,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("jina_embeddings_v3", "JinaEmbeddingsV3Config"),
         ("kimi_k25", "Kimi_K25Config"),
         ("kimi_k25_vision", "Kimi_K25VisionConfig"),
+        ("kimi_linear", "KimiLinearConfig"),
         ("kosmos-2", "Kosmos2Config"),
         ("kosmos-2.5", "Kosmos2_5Config"),
         ("kosmos_2_5_text_model", "Kosmos2_5TextConfig"),

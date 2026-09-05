@@ -1833,6 +1833,41 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(source_patterns=r"layers\.(\d+)\.transformer_block\.", target_patterns=r"layers.\1.mtp_block."),
     ]
 
+    mapping["kimi_linear"] = [
+        # Forget gate weights are attached to the forget gate module instead of the attention
+        WeightRenaming(source_patterns=r"self_attn\.f_a_proj\.", target_patterns=r"self_attn.forget_gate.f_a_proj."),
+        WeightRenaming(source_patterns=r"self_attn\.f_b_proj\.", target_patterns=r"self_attn.forget_gate.f_b_proj."),
+        WeightRenaming(source_patterns=r"self_attn\.dt_bias", target_patterns=r"self_attn.forget_gate.dt_bias"),
+        WeightRenaming(source_patterns=r"self_attn\.A_log", target_patterns=r"self_attn.forget_gate.A_log"),
+        # Conv weights are stacked before runtime
+        WeightConverter(
+            source_patterns=[
+                "self_attn.q_conv1d.weight",
+                "self_attn.k_conv1d.weight",
+                "self_attn.v_conv1d.weight",
+            ],
+            target_patterns="self_attn.conv1d.weight",
+            operations=[Concatenate(dim=0)],
+        ),
+        # Rename MoEs so they have the same prefix as the MLPs
+        WeightRenaming(source_patterns=r"\.block_sparse_moe\.", target_patterns=r"\.mlp\."),
+        # Concatenate w1 (gate) and w3 (up) weights into a single weight and merge across experts
+        WeightConverter(
+            source_patterns=[
+                r"\.experts.*.w1.weight",
+                r"\.experts.*.w3.weight",
+            ],
+            target_patterns=r"\.experts.gate_up_proj",
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+        ),
+        # Merge w2 (down) weights across experts
+        WeightConverter(
+            source_patterns=r"\.experts.*.w2.weight",
+            target_patterns=r"\.experts.down_proj",
+            operations=[MergeModulelist(dim=0)],
+        ),
+    ]
+
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
             continue
