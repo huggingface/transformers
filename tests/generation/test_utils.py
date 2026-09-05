@@ -21,6 +21,7 @@ import os
 import random
 import re
 import tempfile
+import types
 import unittest
 import warnings
 from pathlib import Path
@@ -4064,6 +4065,65 @@ class GenerationIntegrationTests(unittest.TestCase):
         # Both will live on `input_device` as the main model is there
         self.assertEqual(dflash_candidate_ids.device, input_device)
         self.assertEqual(dflash_candidate_logits.device, input_device)
+
+    def test_dflash_sampling_keeps_batch_dimension(self):
+        """Test that when sampling, dflash keeps the batch dimension on the drafted candidates and their logits"""
+        from transformers import PretrainedConfig
+
+        class MockAssistantConfig(PretrainedConfig):
+            def __init__(self):
+                self.target_layer_ids = [0]
+                self.block_size = 4
+                self.mask_token_id = 0
+                self.hidden_size = 8
+                self.num_hidden_layers = 2
+
+        class MockAssistantOutput:
+            def __init__(self, last_hidden_state):
+                self.last_hidden_state = last_hidden_state
+
+        class MockAssistantModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.config = MockAssistantConfig()
+
+            @property
+            def device(self):
+                return torch.device("cpu")
+
+            def forward(self, noise_embeds=None, **kwargs):
+                return MockAssistantOutput(torch.randn(noise_embeds.shape[0], noise_embeds.shape[1], 8))
+
+        assistant = MockAssistantModel()
+        dflash_generator = DFlashTokenCandidateGenerator(
+            assistant_model=assistant,
+            main_model_input_embeddings=torch.nn.Embedding(50, 8),
+            main_model_output_embeddings=torch.nn.Linear(8, 50),
+            generation_config=GenerationConfig(max_length=64, do_sample=True),
+        )
+
+        input_ids = torch.tensor([[5, 6, 7]])
+        model_kwargs = {
+            "attention_mask": torch.ones_like(input_ids),
+            "position_ids": torch.arange(input_ids.shape[1]).unsqueeze(0),
+        }
+        model_outputs = types.SimpleNamespace(hidden_states=[None, torch.randn(1, 2, 8), torch.randn(1, 2, 8)])
+
+        with torch.no_grad():
+            candidate_ids, candidate_logits = dflash_generator.get_candidates(
+                input_ids=input_ids,
+                model_kwargs=model_kwargs,
+                model_outputs=model_outputs,
+                is_first_iteration=False,
+                n_last_matches=0,
+            )
+        # Sampling must yield the same shapes as the greedy branch: `(1, input_len + block_size - 1)` for the ids and
+        # `(1, block_size - 1)` for the logits
+        self.assertEqual(candidate_ids.shape[0], 1)
+        self.assertEqual(candidate_ids.shape[1], input_ids.shape[1] + assistant.config.block_size - 1)
+        self.assertEqual(candidate_ids.dtype, input_ids.dtype)
+        self.assertEqual(candidate_logits.shape[0], 1)
+        self.assertEqual(candidate_logits.shape[1], assistant.config.block_size - 1)
 
     def test_model_kwarg_assisted_decoding_decoder_only(self):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
