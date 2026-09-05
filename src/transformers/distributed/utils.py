@@ -193,11 +193,17 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
         device_map = torch.device(device_type)
 
     fsdp_size = distributed_config.fsdp_size
+    tp_size = distributed_config.tp_size
 
+    # `fsdp` is the outer dimension so that the `tp` ranks of a group are contiguous, which is what
+    # the expert all-to-all and the TP collectives want.
     dims, names = [], []
     if fsdp_size > 1:
         dims.append(fsdp_size)
         names.append("fsdp")
+    if tp_size > 1:
+        dims.append(tp_size)
+        names.append("tp")
 
     # Build the N-dimensional device mesh
     mesh = torch.distributed.init_device_mesh(device_type, tuple(dims), mesh_dim_names=tuple(names))
