@@ -523,8 +523,15 @@ def _default_apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
 
 
 def _default_apply_post_expert(self, proj_out: torch.Tensor) -> torch.Tensor:
-    """Per-row transform applied to the experts' output before the routing weights: the identity unless the experts
-    class defines `_apply_post_expert` (e.g. a per-expert output norm)."""
+    """
+    Default post-expert transform: the identity. An experts class overrides `_apply_post_expert` when its output goes
+    through a per-row transform before the routing weights, such as a per-expert output norm.
+    Args:
+        proj_out (`torch.Tensor`):
+            The output tensor from the down projection of shape (S, hidden_dim).
+    Returns:
+        `torch.Tensor`: The transformed output tensor of shape (S, hidden_dim).
+    """
     return proj_out
 
 
