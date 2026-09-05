@@ -34,6 +34,10 @@ class DistributedConfig:
             Reserved for sequence parallelism. Not wired up yet.
         enable_expert_parallel (`bool`, *optional*, defaults to `False`):
             Route MoE models through the expert-parallel path (``base_model_ep_plan``).
+        expert_parallel_dispatch (`bool`, *optional*, defaults to `False`):
+            Send each token to the rank that owns its experts with an all-to-all. Each rank trains on its own part of
+            the batch, and the parameters that are not expert-parallel are sharded with FSDP2 across every rank.
+            Requires `enable_expert_parallel`.
         fsdp_size (`int`, *optional*):
             Number of devices for FSDP (data parallelism). If `None` and `tp_size` is set, defaults to 1.
         fsdp_cpu_offload (`bool`, *optional*, defaults to `False`):
@@ -48,6 +52,7 @@ class DistributedConfig:
     tp_plan: dict[str, str] | Literal["auto"] | None = None
     enable_sequence_parallel: bool = False
     enable_expert_parallel: bool = False
+    expert_parallel_dispatch: bool = False
     fsdp_size: int | None = None
     fsdp_cpu_offload: bool = False
     fsdp_mixed_precision: bool = False
@@ -72,6 +77,9 @@ class DistributedConfig:
             self.tp_size = world_size // other_parallel_size
         elif self.tp_size is None:
             self.tp_size = 1
+
+        if self.expert_parallel_dispatch and not self.enable_expert_parallel:
+            raise ValueError("`expert_parallel_dispatch=True` requires `enable_expert_parallel=True`.")
 
         if self.pp_size > 1 and (self.tp_size > 1 or self.fsdp_size > 1):
             raise ValueError(

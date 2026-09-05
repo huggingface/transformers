@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
 from .tensor_parallel import replace_layer_number_by_wildcard
-from .utils import _is_torch_distributed_initialized
+from .utils import _is_torch_distributed_initialized, is_dtensor
 
 
 if TYPE_CHECKING:
@@ -185,13 +185,19 @@ def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) 
 
 
 def apply_fully_sharded_data_parallelism(
-    model: nn.Module, fsdp_mesh: torch.distributed.device_mesh.DeviceMesh
+    model: nn.Module,
+    fsdp_mesh: torch.distributed.device_mesh.DeviceMesh,
+    expert_mesh: torch.distributed.device_mesh.DeviceMesh | None = None,
 ) -> nn.Module:
     """
     Apply FSDP2 (fully_shard) to a model.
 
     Torch availability, distributed initialization and the version requirement
     are asserted upstream by `initialize_fully_sharded_data_parallelism`.
+
+    With expert-parallel token dispatch `fsdp_mesh` spans the expert-parallel ranks, which the experts are already
+    sharded across: the experts are fully sharded across `expert_mesh` in their own group, and passed to FSDP2 as
+    `ignored_params` when `expert_mesh` is `None`.
     """
     fsdp_plan = dict(getattr(model, "_fsdp_plan", None) or {})
     if not fsdp_plan:
@@ -205,6 +211,19 @@ def apply_fully_sharded_data_parallelism(
 
     adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, model)
     reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
+
+    if distributed_config is not None and distributed_config.expert_parallel_dispatch:
+        if not is_torch_greater_or_equal("2.7"):
+            raise OSError("Expert-parallel token dispatch requires `torch>=2.7`.")
+        # The DTensor parameters are the expert-parallel experts (the expert parallel plan shards only them).
+        expert_modules = [
+            module for module in model.modules() if any(is_dtensor(p) for p in module.parameters(recurse=False))
+        ]
+        if expert_mesh is not None:
+            for module in expert_modules:
+                fully_shard(module, mesh=expert_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
+        else:
+            fsdp_policy_kwargs["ignored_params"] = {p for module in expert_modules for p in module.parameters()}
 
     for module_name, module in reshard_targets:
         fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)

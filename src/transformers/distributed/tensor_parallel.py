@@ -737,6 +737,28 @@ class RouterParallelMegaMoe(EpRouterParallel):
         return output
 
 
+class EpDispatchExpertsParallel(MoeExpertsParallel):
+    """Experts of expert-parallel token dispatch: every rank sends its own tokens to the experts' owners."""
+
+    def install_forward(self, module, mesh, *, is_expert_parallel=False):
+        from ..integrations.moe import dispatch_experts_forward
+
+        original_forward = module.forward
+        ep_group, ep_size = mesh.get_group(), mesh.size()
+
+        def tp_forward(hidden_states, top_k_index, top_k_weights):
+            if isinstance(hidden_states, DTensor):
+                hidden_states = hidden_states.to_local()
+            with self.context_around_forward(module, mesh):
+                # The sharding leaves the module with its local expert count.
+                return dispatch_experts_forward(
+                    original_forward, module.num_experts, hidden_states, top_k_index, top_k_weights, ep_group, ep_size
+                )
+
+        module.forward = tp_forward
+        return module
+
+
 class MoeTensorParalellMegaMoeExperts(MoeExpertsParallel):
     """TP layer for DeepGEMM Mega MoE experts.
 
@@ -774,6 +796,7 @@ class ParallelInterface(GeneralInterface):
             "sequence_parallel": SequenceParallel(use_local_output=True),
             "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
             "ep_router": EpRouterParallel(),
+            "ep_dispatch_experts": EpDispatchExpertsParallel(),
             "megamoe_router": RouterParallelMegaMoe(),
             "moe_tp_experts": MoeExpertsParallel(),
             "megamoe_experts": MoeTensorParalellMegaMoeExperts(),

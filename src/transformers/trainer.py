@@ -50,7 +50,7 @@ import torch.distributed as dist
 from huggingface_hub import CommitInfo, ModelCard
 from packaging import version
 from torch import nn
-from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
+from torch.utils.data import DataLoader, Dataset, DistributedSampler, IterableDataset, RandomSampler, SequentialSampler
 
 from . import __version__
 from .configuration_utils import PreTrainedConfig
@@ -617,6 +617,21 @@ class Trainer:
         self._created_lr_scheduler = False
         # Resolved lazily at the first gradient clip; see `_has_mixed_mesh_grads`.
         self._mixed_mesh_grads: bool | None = None
+        # With expert-parallel token dispatch every rank trains on its own part of the batch, while accelerate
+        # treats the `tp` ranks as one data-parallel rank: the batches and the token counts are handled here.
+        self._expert_parallel_dispatch = getattr(model, "_expert_parallel_dispatch", False)
+        if self._expert_parallel_dispatch and args.train_sampling_strategy != "random":
+            raise ValueError(
+                "`expert_parallel_dispatch=True` splits the batches across every rank with a `DistributedSampler`, "
+                f"which `train_sampling_strategy='{args.train_sampling_strategy}'` does not go through."
+            )
+        if self._expert_parallel_dispatch and (
+            self.accelerator.dispatch_batches or (train_dataset is not None and not has_length(train_dataset))
+        ):
+            raise ValueError(
+                "`expert_parallel_dispatch=True` splits the batches across every rank with a `DistributedSampler`, "
+                "which needs a sized training dataset and `dispatch_batches=False`."
+            )
         if (
             getattr(model, "_device_mesh", None) is not None
             and args.save_strategy != SaveStrategy.NO
@@ -1038,12 +1053,12 @@ class Trainer:
 
         dataloader = self.accelerator.prepare(DataLoader(dataset, **dataloader_params))
 
-        # `BatchRebalanceSampler` is already rank-aware, so the `BatchSamplerShard` wrapper
-        # added by `accelerator.prepare` would re-shard it and silently drop samples. Neutralise
-        # it by making the wrapper a passthrough (num_processes=1)
-        if isinstance(sampler, BatchRebalanceSampler):
+        # `BatchRebalanceSampler` and the `DistributedSampler` of expert-parallel token dispatch are already
+        # rank-aware, so the `BatchSamplerShard` wrapper added by `accelerator.prepare` would re-shard them and
+        # silently drop samples. Neutralise it by making the wrapper a passthrough (num_processes=1)
+        if isinstance(sampler, (BatchRebalanceSampler, DistributedSampler)):
             prepared_bs = getattr(dataloader, "batch_sampler", None)
-            if prepared_bs is not None and getattr(prepared_bs, "batch_sampler", None) is sampler:
+            if prepared_bs is not None and getattr(prepared_bs, "batch_sampler", None) is not None:
                 prepared_bs.num_processes = 1
                 prepared_bs.process_index = 0
 
@@ -1130,6 +1145,15 @@ class Trainer:
         elif self.args.train_sampling_strategy == "sequential":
             return SequentialSampler(train_dataset)
         else:
+            if self._expert_parallel_dispatch:
+                # accelerate hands every `tp` rank the same batch; under token dispatch each rank gets its own.
+                return DistributedSampler(
+                    train_dataset,
+                    num_replicas=self.args.world_size,
+                    rank=self.args.process_index,
+                    seed=self.args.data_seed if self.args.data_seed is not None else self.args.seed,
+                    drop_last=self.args.dataloader_drop_last,
+                )
             return RandomSampler(train_dataset)
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> torch.utils.data.Sampler | None:
@@ -2157,9 +2181,7 @@ class Trainer:
         ):
             # TP and EP-as-TP ranks see replicated batches; `num_processes` over-counts
             # them by `tp_size`. Mirror the divisor used in `_get_num_items_in_batch`.
-            loss_scale = self.accelerator.num_processes
-            if (pc := getattr(self.accelerator, "parallelism_config", None)) is not None:
-                loss_scale //= pc.tp_size
+            loss_scale = self.accelerator.num_processes // self.get_tp_size()
             loss *= loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
 
         return (loss, outputs) if return_outputs else loss
@@ -2308,8 +2330,9 @@ class Trainer:
                     # In the DataParallel case, convert the scalar tensor into a 2-dim tensor with the same value repeated
                     num_items_in_batch = num_items_in_batch.unsqueeze(0).expand(self.args.n_gpu, -1)
                 # Divide by number of devices with the same batch
-                if pc := getattr(self.accelerator, "parallelism_config", None):
-                    num_items_in_batch = num_items_in_batch // pc.non_data_parallel_size
+                num_items_in_batch = num_items_in_batch // (
+                    self.get_tp_size() * self.get_cp_size() * self.get_sp_size()
+                )
 
         return num_items_in_batch
 
@@ -2546,7 +2569,9 @@ class Trainer:
     def get_tp_size(self) -> int:
         """Get the tensor parallel size from either the model or DeepSpeed config."""
 
-        # 1. Check model.tp_size first
+        # 1. Check model.tp_size first; with expert-parallel token dispatch the `tp` ranks train on their own batches
+        if self._expert_parallel_dispatch:
+            return 1
         if (model_tp := getattr(self.model, "_tp_size", None)) is not None:
             return model_tp
 

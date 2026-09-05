@@ -374,6 +374,83 @@ def _grouped_linear(
     return out
 
 
+class _ScaleGrad(torch.autograd.Function):
+    """Identity whose backward scales the gradient."""
+
+    @staticmethod
+    def forward(ctx, tensor, scale):
+        ctx.scale = scale
+        return tensor
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return grad_output * ctx.scale, None
+
+
+def dispatch_experts_forward(
+    experts_forward: Callable,
+    num_local_experts: int,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+    ep_group,
+    ep_size: int,
+) -> torch.Tensor:
+    """
+    Expert-parallel forward by token dispatch. Every rank routes its own tokens, sends each selected (token, expert)
+    pair to the rank that owns the expert with an all-to-all, runs its local experts on what it receives with
+    `experts_forward` (the experts module's own forward, as a top-1 routing with unit weights), sends the results
+    back and combines them with the routing weights. Each rank trains on its own part of the batch, so the parameters
+    outside the experts are data-parallel across the group and averaged by FSDP2; the local experts run on every
+    rank's tokens, so their gradients already sum every rank's contribution and are scaled by `1 / ep_size` to match.
+    """
+    from torch.distributed.nn.functional import all_to_all_single
+
+    num_tokens, hidden_dim = hidden_states.shape
+    num_top_k = top_k_index.size(-1)
+
+    # Sorting the selected pairs by expert groups them by owner rank, since each rank owns a contiguous range of
+    # experts, and the per-expert counts tell every receiver which expert each token it gets is for. The split
+    # sizes are the one host sync of the layer.
+    expert_ids = top_k_index.reshape(-1)
+    order = torch.argsort(expert_ids)
+    send_tokens = hidden_states[order // num_top_k]
+    send_counts = torch.zeros(num_local_experts * ep_size, dtype=torch.long, device=hidden_states.device)
+    send_counts = send_counts.scatter_add_(0, expert_ids, torch.ones_like(expert_ids)).view(ep_size, num_local_experts)
+    recv_counts = torch.empty_like(send_counts)
+    torch.distributed.all_to_all_single(recv_counts, send_counts, group=ep_group)
+    send_sizes, recv_sizes = torch.stack([send_counts.sum(dim=1), recv_counts.sum(dim=1)]).tolist()
+    recv_tokens = all_to_all_single(
+        send_tokens.new_empty(sum(recv_sizes), hidden_dim),
+        send_tokens,
+        output_split_sizes=recv_sizes,
+        input_split_sizes=send_sizes,
+        group=ep_group,
+    )
+    recv_expert_ids = torch.arange(num_local_experts, device=hidden_states.device).repeat(ep_size)
+    recv_expert_ids = recv_expert_ids.repeat_interleave(recv_counts.reshape(-1), output_size=sum(recv_sizes))
+
+    # The local experts, as a top-1 routing with unit weights. Scaling the gradient of the output by `1 / ep_size`
+    # and of the input by `ep_size` leaves the token gradients untouched and scales the expert gradients.
+    recv_tokens = _ScaleGrad.apply(recv_tokens, ep_size)
+    unit_weights = torch.ones_like(recv_expert_ids, dtype=recv_tokens.dtype).unsqueeze(-1)
+    expert_out = experts_forward(recv_tokens, recv_expert_ids.unsqueeze(-1), unit_weights)
+    expert_out = _ScaleGrad.apply(expert_out, 1.0 / ep_size)
+
+    # Send the results back to the owners of the tokens and combine them with the routing weights.
+    recv_out = all_to_all_single(
+        expert_out.new_empty(send_tokens.size(0), hidden_dim),
+        expert_out,
+        output_split_sizes=send_sizes,
+        input_split_sizes=recv_sizes,
+        group=ep_group,
+    )
+    inverse_order = torch.empty_like(order)
+    inverse_order[order] = torch.arange(order.numel(), device=order.device)
+    combined = recv_out[inverse_order] * top_k_weights.reshape(-1, 1)
+    return combined.view(num_tokens, num_top_k, hidden_dim).sum(dim=1).to(hidden_states.dtype)
+
+
 def grouped_mm_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
