@@ -4742,6 +4742,16 @@ class PreTrainedModel(
                     pass  # may happen when handling pre-quantized weights
             self._is_hf_initialized = True
 
+        if getattr(self, "_device_mesh", None) is not None:
+            # Empty local shards have nothing to initialize; without the mark, running _init_weights on them issues collectives the other ranks never join (hang)
+            import itertools
+
+            from torch.distributed.tensor import DTensor
+
+            for param_or_buffer in itertools.chain(self.parameters(), self.buffers()):
+                if isinstance(param_or_buffer, DTensor) and param_or_buffer._local_tensor.numel() == 0:
+                    param_or_buffer._is_hf_initialized = True
+
         # This will only initialize submodules that are not marked as initialized by the line above.
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
