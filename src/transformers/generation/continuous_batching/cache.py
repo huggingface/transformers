@@ -17,7 +17,6 @@ from typing import Any
 
 import torch
 
-from ...utils import logging
 from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig
 from ...utils.generic import is_flash_attention_requested
@@ -92,9 +91,6 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]]
     # And note the layer types
     group_types = [layer_types[lg[0]] for lg in layer_groups]
     return layer_groups, group_types
-
-
-logger = logging.get_logger(__name__)
 
 
 class PagedAttentionCache:
