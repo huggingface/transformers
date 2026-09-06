@@ -844,7 +844,7 @@ default_enabled = true
 # Down from 35 findings over 13 models: the rule now exempts guards (an `if` with no `else` that only raises
 # or only logs) and a `DEFAULT_EXEMPT_ATTRIBUTES` list of framework plumbing, which cleared `openai`(11),
 # `timm_backbone`(2), `timm_wrapper`(2), `vitpose_backbone`(1) and `glm5_next` outright and trimmed the rest.
-allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "inkling", "kimi_k25", "kosmos2", "muse_glimmer", "tipsv2", "x_clip", "hy_v4"]
+allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "inkling", "kimi_k25", "kosmos2", "muse_glimmer", "pp_doclayout_v4", "tipsv2", "x_clip", "hy_v4"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF041.explanation]
