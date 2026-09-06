@@ -399,7 +399,6 @@ class TextGenerationPipeline(Pipeline):
         # User-defined `generation_config` passed to the pipeline call take precedence
         if "generation_config" not in generate_kwargs:
             generate_kwargs["generation_config"] = self.generation_config
-
         generate_kwargs.setdefault("tokenizer", self.tokenizer)
 
         output = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
