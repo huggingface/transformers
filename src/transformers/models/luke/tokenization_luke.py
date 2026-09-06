@@ -18,7 +18,7 @@ import json
 from collections.abc import Mapping
 
 import numpy as np
-from tokenizers import Tokenizer, decoders, pre_tokenizers
+from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
 from ...tokenization_python import PreTrainedTokenizer
@@ -389,6 +389,11 @@ class LukeTokenizer(TokenizersBackend):
             entity_vocab=entity_vocab if entity_vocab_file is None else None,  # Only store if it was passed as data
             model_specific_special_tokens=model_specific,
             **kwargs,
+        )
+
+        self._tokenizer.post_processor = processors.RobertaProcessing(
+            (str(self.sep_token), self.sep_token_id),
+            (str(self.cls_token), self.cls_token_id),
         )
 
     def build_inputs_with_special_tokens(

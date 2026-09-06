@@ -75,6 +75,20 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         encoding = tokenizer([sentence, sentence], entity_spans=[[], [span, span]], padding=True)
         self.assertEqual(encoding["entity_ids"], [[pad_id, pad_id], [mask_id, mask_id]])
 
+    def test_integration_no_task(self):
+        tokenizer = self.get_tokenizer()
+
+        encoding = tokenizer("Beyonce lives in Los Angeles.")
+        expected_tokens = ["<s>", "Bey", "once", "Ġlives", "Ġin", "ĠLos", "ĠAngeles", ".", "</s>"]
+        self.assertEqual(tokenizer.convert_ids_to_tokens(encoding["input_ids"]), expected_tokens)
+
+        encoding_pair = tokenizer("Beyonce lives in Los Angeles.", "Another sentence.")
+        expected_pair_tokens = [
+            "<s>", "Bey", "once", "Ġlives", "Ġin", "ĠLos", "ĠAngeles", ".", "</s>",
+            "</s>", "Another", "Ġsentence", ".", "</s>",
+        ]  # fmt: skip
+        self.assertEqual(tokenizer.convert_ids_to_tokens(encoding_pair["input_ids"]), expected_pair_tokens)
+
     def test_entity_classification_markers_ignore_extra_special_token_order(self):
         # Same regression as #48225 for LUKE (BPE tokenization differs from mLUKE).
         tokenizer = self.get_tokenizer(
