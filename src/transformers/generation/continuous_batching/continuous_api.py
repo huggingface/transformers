@@ -968,7 +968,13 @@ class ContinuousBatchingManager:
 
         If TP is on, all ranks must enter this context, otherwise other ranks will hang forever: the pause is
         MAX-reduced over the TP group, so every rank parks as soon as any rank asks, and each parked loop then waits
-        for its own threads.
+        for its own threads. No signal between ranks is needed for that: `add_request` returns an id on the driver
+        rank only, but every rank receives every result, so every rank sees the same completions and can enter this
+        context on the same count. Do not use the engine's own CPU group to synchronise the callers, the generation
+        thread uses it every step.
+
+        `stop()` called from another thread while a pause is held waits for the last holder to leave; called from
+        inside the pause it raises.
 
         Raises:
             RuntimeError: if the generation loop is not running, or if it stops or dies before it can pause. In the
@@ -979,6 +985,8 @@ class ContinuousBatchingManager:
         if not self.is_running():
             raise RuntimeError("Cannot pause generation while no generation loop is running.")
 
+        # An idle loop sleeps on this event between polls; wake it so it takes the pause now rather than at the next poll
+        self._has_new_requests.set()
         self.background_thread_status.acquire_pause()
         try:
             yield
