@@ -105,12 +105,6 @@ class PPDocLayoutV4Config(PreTrainedConfig):
     s2r_a_init (`float`, *optional*, defaults to 0.0):
         Initial value of the learnable gate that weights the closure term. Defaults to `0.0` so that an untrained
         fusion module is numerically identical to using the relative order logits alone.
-    s2r_b_init (`float`, *optional*, defaults to 1.0):
-        Value of the weight applied to the relative order logits. This is only a learnable parameter when
-        `s2r_learnable_b=True`, otherwise it stays a plain float and is therefore read from the configuration
-        rather than from the checkpoint.
-    s2r_learnable_b (`bool`, *optional*, defaults to `False`):
-        Whether the weight applied to the relative order logits is learnable.
 
     Examples:
 
@@ -181,8 +175,6 @@ class PPDocLayoutV4Config(PreTrainedConfig):
     s2r_steps: int = 3
     s2r_damping: float = 0.5
     s2r_a_init: float = 0.0
-    s2r_b_init: float = 1.0
-    s2r_learnable_b: bool = False
 
     def __post_init__(self, **kwargs):
         # The anchor generator, the deformable attention reference points and the corner decode are all written

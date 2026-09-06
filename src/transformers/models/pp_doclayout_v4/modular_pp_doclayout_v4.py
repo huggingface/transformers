@@ -40,6 +40,7 @@ from ..auto import AutoConfig
 from ..pp_doclayout_v3.image_processing_pp_doclayout_v3 import PPDocLayoutV3ImageProcessor
 from ..pp_doclayout_v3.modeling_pp_doclayout_v3 import (
     PPDocLayoutV3Decoder,
+    PPDocLayoutV3DecoderOutput,
     PPDocLayoutV3ForObjectDetection,
     PPDocLayoutV3MLPPredictionHead,
     PPDocLayoutV3Model,
@@ -131,12 +132,6 @@ class PPDocLayoutV4Config(PreTrainedConfig):
     s2r_a_init (`float`, *optional*, defaults to 0.0):
         Initial value of the learnable gate that weights the closure term. Defaults to `0.0` so that an untrained
         fusion module is numerically identical to using the relative order logits alone.
-    s2r_b_init (`float`, *optional*, defaults to 1.0):
-        Value of the weight applied to the relative order logits. This is only a learnable parameter when
-        `s2r_learnable_b=True`, otherwise it stays a plain float and is therefore read from the configuration
-        rather than from the checkpoint.
-    s2r_learnable_b (`bool`, *optional*, defaults to `False`):
-        Whether the weight applied to the relative order logits is learnable.
 
     Examples:
 
@@ -207,8 +202,6 @@ class PPDocLayoutV4Config(PreTrainedConfig):
     s2r_steps: int = 3
     s2r_damping: float = 0.5
     s2r_a_init: float = 0.0
-    s2r_b_init: float = 1.0
-    s2r_learnable_b: bool = False
 
     def __post_init__(self, **kwargs):
         # The anchor generator, the deformable attention reference points and the corner decode are all written
@@ -679,8 +672,8 @@ class PPDocLayoutV4S2RFusion(nn.Module):
     Gated fusion of the successor matrix's transitive closure into the relative order logits:
     `a * antisymmetrize(closure(successor)) + b * relative` (S2R = "Successor to Relation", from PaddlePaddle).
 
-    `s2r_a_init=0.0` starts the module out identical to the relative logits alone. `b` stays a plain float unless
-    `s2r_learnable_b=True`, so checkpoints only carry `a`.
+    `s2r_a_init=0.0` starts the module out identical to the relative logits alone. `b` is a plain float that is
+    never learned, so checkpoints only carry `a`.
     """
 
     def __init__(self, config: PPDocLayoutV4Config):
@@ -688,18 +681,12 @@ class PPDocLayoutV4S2RFusion(nn.Module):
         self.steps = config.s2r_steps
         self.damping = config.s2r_damping
         self.a = nn.Parameter(torch.full((1,), config.s2r_a_init))
-        self.learnable_b = config.s2r_learnable_b
-        if self.learnable_b:
-            self.b = nn.Parameter(torch.full((1,), config.s2r_b_init))
-        else:
-            self.b = float(config.s2r_b_init)
+        self.b = 1.0
+        self.register_buffer("one_minus_eye", 1.0 - torch.eye(config.num_queries), persistent=False)
 
     def forward(self, relative_logits: torch.Tensor, successor_logits: torch.Tensor) -> torch.Tensor:
-        num_queries = successor_logits.shape[-1]
-        eye = torch.eye(num_queries, device=successor_logits.device, dtype=successor_logits.dtype)
-
         # Soft directed adjacency, where adjacency[i, j] approximates P(i directly precedes j).
-        adjacency = successor_logits.sigmoid() * (1.0 - eye)
+        adjacency = successor_logits.sigmoid() * self.one_minus_eye.to(successor_logits.dtype)
         # Clamping the row sums from below at 1 damps dense rows without amplifying weak edges or terminal nodes.
         adjacency = adjacency / adjacency.sum(-1, keepdim=True).clamp(min=1.0)
 
@@ -754,8 +741,7 @@ class PPDocLayoutV4PreTrainedModel(PPDocLayoutV3PreTrainedModel):
 
         elif isinstance(module, PPDocLayoutV4S2RFusion):
             init.constant_(module.a, self.config.s2r_a_init)
-            if module.learnable_b:
-                init.constant_(module.b, self.config.s2r_b_init)
+            init.copy_(module.one_minus_eye, 1.0 - torch.eye(module.one_minus_eye.shape[0]))
 
         elif isinstance(module, PPDocLayoutV4GlobalPointer):
             init.copy_(module.eye, torch.eye(module.eye.shape[-1]))
@@ -783,7 +769,7 @@ class PPDocLayoutV4HybridEncoder(RTDetrHybridEncoder):
     """
 )
 @dataclass
-class PPDocLayoutV4DecoderOutput(ModelOutput):
+class PPDocLayoutV4DecoderOutput(PPDocLayoutV3DecoderOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder.
@@ -800,15 +786,17 @@ class PPDocLayoutV4DecoderOutput(ModelOutput):
         Pairwise direct successor (ROOR) logits of the last decoder layer.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    intermediate_hidden_states: torch.FloatTensor | None = None
-    intermediate_reference_points: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
     relative_order_logits: torch.FloatTensor | None = None
     successor_order_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    cross_attentions: tuple[torch.FloatTensor] | None = None
+
+    # PP-DocLayoutV4 does not produce these RT-DETR / PP-DocLayoutV3 decoder outputs: only the last layer is scored
+    # (no intermediate logits), there is no corner prediction, and there is no mask branch.
+    intermediate_logits = AttributeError()
+    intermediate_predicted_corners = AttributeError()
+    initial_reference_points = AttributeError()
+    decoder_out_order_logits = AttributeError()
+    decoder_out_masks = AttributeError()
 
 
 class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
