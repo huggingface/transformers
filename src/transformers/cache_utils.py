@@ -1503,44 +1503,29 @@ class Cache:
             # Init the layer
             layer.lazy_initialization(fake_kv_tensor, fake_kv_tensor)
 
-    def get_seq_length(self, layer_idx: int | None = None) -> int:
-        """Returns the sequence length of the cache for the given layer, or of a representative KV layer when
-        omitted."""
-        if layer_idx is None:
-            layer_idx = self.get_representative_kv_layer_idx(range(len(self.layers)))
-            if layer_idx is None:
-                # A cache made only of LinearAttention layers does not track sequence length
-                if self.layers and not any(isinstance(layer, CacheLayerMixin) for layer in self.layers):
-                    raise ValueError(
-                        "`get_seq_length` can only be called on Attention layers, and the current Cache seem to only "
-                        "contain LinearAttention layers."
-                    )
-                # No KV layer holds tokens yet, so the length is 0
-                return 0
-
+    def get_seq_length(self, layer_idx: int = 0) -> int:
+        """Returns the sequence length of the cache for the given layer."""
         if layer_idx >= len(self.layers):
             return 0
 
+        # For alternating attention/linear attention  caches, `get_seq_length` needs to use attention layer idx when called with default layer_idx
         if not isinstance(self.layers[layer_idx], CacheLayerMixin):
-            raise ValueError(
-                f"You called `get_seq_length` on layer index {layer_idx}, but this layer is a LinearAttention layer, which "
-                "does not track sequence length."
-            )
+            # If this is called with non-default arg, raise
+            if layer_idx != 0:
+                raise ValueError(
+                    f"You called `get_seq_length` on layer index {layer_idx}, but this layer is a LinearAttention layer, which "
+                    "does not track sequence length."
+                )
+            try:
+                # Use the first attention layer
+                layer_idx = next(idx for idx in range(len(self)) if isinstance(self.layers[idx], CacheLayerMixin))
+            except StopIteration:
+                raise ValueError(
+                    "`get_seq_length` can only be called on Attention layers, and the current Cache seem to only contain "
+                    "LinearAttention layers."
+                )
 
         return self.layers[layer_idx].get_seq_length()
-
-    def get_representative_kv_layer_idx(self, layer_indices: Iterable[int]) -> int | None:
-        """Return the first of the given layer indices that has already updated its KV cache, or `None` if none do."""
-        return next(
-            (
-                layer_idx
-                for layer_idx in layer_indices
-                if layer_idx < len(self.layers)
-                and isinstance(self.layers[layer_idx], CacheLayerMixin)
-                and self.layers[layer_idx].get_seq_length() > 0
-            ),
-            None,
-        )
 
     def get_max_length(self, layer_idx: int | None = None) -> int:
         """
@@ -1707,7 +1692,10 @@ class Cache:
         both linear and full attention states will return False by this function"""
         return [
             isinstance(layer, LinearAttentionCacheLayerMixin)
-            and not isinstance(layer, LinearAttentionAndFullAttentionLayer)
+            and not isinstance(
+                layer,
+                (LinearAttentionAndFullAttentionLayer, LinearAttentionAndStaticFullAttentionLayer),
+            )
             for layer in self.layers
         ]
 
@@ -1927,17 +1915,6 @@ class StaticCache(Cache):
         ]
         super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
 
-    def get_representative_kv_layer_idx(self, layer_indices: Iterable[int]) -> int | None:
-        """Return the first KV-cache layer among the given layer indices."""
-        return next(
-            (
-                layer_idx
-                for layer_idx in layer_indices
-                if layer_idx < len(self.layers) and isinstance(self.layers[layer_idx], CacheLayerMixin)
-            ),
-            None,
-        )
-
 
 class QuantizedCache(Cache):
     """
@@ -2083,13 +2060,9 @@ class EncoderDecoderCache(Cache):
         """
         return len(self.self_attention_cache)
 
-    def get_seq_length(self, layer_idx: int | None = None) -> int:
+    def get_seq_length(self, layer_idx: int = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         return self.self_attention_cache.get_seq_length(layer_idx)
-
-    def get_representative_kv_layer_idx(self, layer_indices: Iterable[int]) -> int | None:
-        """Return the self-attention layer representing KV-cache metadata for the given layer indices."""
-        return self.self_attention_cache.get_representative_kv_layer_idx(layer_indices)
 
     def get_max_length(self, layer_idx: int | None = None) -> int:
         """Returns the maximum sequence length (i.e. max capacity) of the cache object"""
