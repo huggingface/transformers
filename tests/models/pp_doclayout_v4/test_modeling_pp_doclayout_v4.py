@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PP-DocLayoutV4 model."""
 
-import inspect
 import math
 import unittest
 
@@ -27,6 +26,7 @@ from transformers import (
 )
 from transformers.image_utils import load_image
 from transformers.testing_utils import (
+    Expectations,
     require_torch,
     require_vision,
     slow,
@@ -114,6 +114,7 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     test_missing_keys = False
     test_torch_exportable = True
+    test_resize_embeddings = False
 
     def setUp(self):
         self.model_tester = PPDocLayoutV4ModelTester(self)
@@ -126,24 +127,8 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="PPDocLayoutV4 does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="PPDocLayoutV4 does not use test_inputs_embeds_matches_input_ids")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip(reason="PPDocLayoutV4 does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="PPDocLayoutV4 does not support input and output embeddings")
-    def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(reason="PPDocLayoutV4 does not use token embeddings")
-    def test_resize_tokens_embeddings(self):
         pass
 
     @unittest.skip(reason="Feed forward chunking is not implemented")
@@ -153,15 +138,6 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     @unittest.skip(reason="PPDocLayoutV4 does not support training")
     def test_retain_grad_hidden_states_attentions(self):
         pass
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            arg_names = [*signature.parameters.keys()]
-            self.assertListEqual(arg_names[:1], ["pixel_values"])
 
     # PP-DocLayoutV4 has no `num_hidden_layers`: the encoder depth follows `encoder_in_channels` and the encoder
     # hidden states are feature maps, not sequences, so the common shape checks do not apply.
@@ -247,25 +223,46 @@ class PPDocLayoutV4ModelIntegrationTest(unittest.TestCase):
             outputs = self.model(**inputs)
 
         expected_shape_logits = torch.Size((1, 300, self.model.config.num_labels))
-        expected_logits = torch.tensor(
-            [[-3.5623, -4.5347, -5.0415], [-3.7752, -3.6966, -4.4212], [-4.4829, -4.3740, -4.5478]]
-        ).to(torch_device)
+        logits_expectations = Expectations(
+            {
+                (None, None): [
+                    [-3.5623, -4.5347, -5.0415],
+                    [-3.7752, -3.6966, -4.4212],
+                    [-4.4829, -4.3740, -4.5478],
+                ]
+            }
+        )
+        expected_logits = torch.tensor(logits_expectations.get_expectation()).to(torch_device)
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=2e-4, atol=2e-2)
 
         expected_shape_boxes = torch.Size((1, 300, self.model.config.num_coords))
-        expected_boxes = torch.tensor(
-            [[0.3719, 0.1785, 0.3313], [0.7257, 0.4412, 0.3301], [0.7253, 0.2664, 0.3306]]
-        ).to(torch_device)
+        boxes_expectations = Expectations(
+            {
+                (None, None): [
+                    [0.3719, 0.1785, 0.3313],
+                    [0.7257, 0.4412, 0.3301],
+                    [0.7253, 0.2664, 0.3306],
+                ]
+            }
+        )
+        expected_boxes = torch.tensor(boxes_expectations.get_expectation()).to(torch_device)
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
         torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=2e-4, atol=2e-2)
 
         expected_shape_order_logits = torch.Size((1, 300, 300))
         self.assertEqual(outputs.relative_order_logits.shape, expected_shape_order_logits)
         self.assertEqual(outputs.successor_order_logits.shape, expected_shape_order_logits)
-        expected_relative_order_logits = torch.tensor(
-            [[0.0000, 42.6447, 46.4521], [-42.6447, 0.0000, -28.6615], [-46.4521, 28.6615, 0.0000]]
-        ).to(torch_device)
+        relative_order_expectations = Expectations(
+            {
+                (None, None): [
+                    [0.0000, 42.6447, 46.4521],
+                    [-42.6447, 0.0000, -28.6615],
+                    [-46.4521, 28.6615, 0.0000],
+                ]
+            }
+        )
+        expected_relative_order_logits = torch.tensor(relative_order_expectations.get_expectation()).to(torch_device)
         torch.testing.assert_close(
             outputs.relative_order_logits[0, :3, :3], expected_relative_order_logits, rtol=2e-2, atol=2e-2
         )
@@ -275,9 +272,26 @@ class PPDocLayoutV4ModelIntegrationTest(unittest.TestCase):
             outputs, threshold=0.5, target_sizes=[self.image.size[::-1]]
         )[0]
 
-        expected_scores = torch.tensor(
-            [0.9885, 0.9781, 0.9938, 0.9900, 0.9871, 0.9833, 0.9771, 0.9010, 0.9529, 0.6550, 0.7850, 0.9787, 0.9286]
-        ).to(torch_device)
+        scores_expectations = Expectations(
+            {
+                (None, None): [
+                    0.9885,
+                    0.9781,
+                    0.9938,
+                    0.9900,
+                    0.9871,
+                    0.9833,
+                    0.9771,
+                    0.9010,
+                    0.9529,
+                    0.6550,
+                    0.7850,
+                    0.9787,
+                    0.9286,
+                ]
+            }
+        )
+        expected_scores = torch.tensor(scores_expectations.get_expectation()).to(torch_device)
         torch.testing.assert_close(results["scores"], expected_scores, rtol=2e-2, atol=2e-2)
 
         expected_labels = [22, 17, 22, 22, 22, 22, 22, 22, 22, 22, 10, 16, 8]
@@ -286,19 +300,30 @@ class PPDocLayoutV4ModelIntegrationTest(unittest.TestCase):
         # Results come back sorted by reading order, which the model resolves into a single chain here.
         self.assertSequenceEqual(results["order_seq"].tolist(), list(range(13)))
 
-        expected_slice_boxes = torch.tensor(
-            [
-                [336.0739, 182.0364, 894.1705, 652.6191],
-                [336.4460, 681.8829, 868.7751, 796.9087],
-                [334.0145, 840.8432, 889.1123, 1452.2927],
-                [920.6475, 183.6178, 1476.7504, 462.7547],
-            ]
-        ).to(torch_device)
+        slice_boxes_expectations = Expectations(
+            {
+                (None, None): [
+                    [336.0739, 182.0364, 894.1705, 652.6191],
+                    [336.4460, 681.8829, 868.7751, 796.9087],
+                    [334.0145, 840.8432, 889.1123, 1452.2927],
+                    [920.6475, 183.6178, 1476.7504, 462.7547],
+                ]
+            }
+        )
+        expected_slice_boxes = torch.tensor(slice_boxes_expectations.get_expectation()).to(torch_device)
         torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, rtol=2e-2, atol=2e-2)
 
         # Unlike PP-DocLayoutV3 the polygon is always the four regressed corners, in TL, TR, BR, BL order.
-        expected_polygon_points = torch.tensor(
-            [[336.0739, 182.0364], [893.9496, 182.2223], [894.1705, 652.5367], [336.4081, 652.6191]]
-        ).to(torch_device)
+        polygon_points_expectations = Expectations(
+            {
+                (None, None): [
+                    [336.0739, 182.0364],
+                    [893.9496, 182.2223],
+                    [894.1705, 652.5367],
+                    [336.4081, 652.6191],
+                ]
+            }
+        )
+        expected_polygon_points = torch.tensor(polygon_points_expectations.get_expectation()).to(torch_device)
         self.assertEqual(results["polygon_points"].shape, torch.Size((13, 4, 2)))
         torch.testing.assert_close(results["polygon_points"][0], expected_polygon_points, rtol=2e-2, atol=2e-2)
