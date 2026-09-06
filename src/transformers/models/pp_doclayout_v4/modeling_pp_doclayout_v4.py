@@ -1205,9 +1205,6 @@ class PPDocLayoutV4ModelOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor | None = None
     intermediate_hidden_states: torch.FloatTensor | None = None
     intermediate_reference_points: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    relative_order_logits: torch.FloatTensor | None = None
-    successor_order_logits: torch.FloatTensor | None = None
     decoder_hidden_states: tuple[torch.FloatTensor] | None = None
     decoder_attentions: tuple[torch.FloatTensor] | None = None
     cross_attentions: tuple[torch.FloatTensor] | None = None
@@ -1220,6 +1217,10 @@ class PPDocLayoutV4ModelOutput(ModelOutput):
     enc_outputs_class: torch.FloatTensor | None = None
     enc_outputs_coord_logits: torch.FloatTensor | None = None
     denoising_meta_values: dict | None = None
+
+    logits: torch.FloatTensor | None = None
+    relative_order_logits: torch.FloatTensor | None = None
+    successor_order_logits: torch.FloatTensor | None = None
 
 
 class PPDocLayoutV4FrozenBatchNorm2d(nn.Module):
@@ -1408,9 +1409,11 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
 
         # PP-DocLayoutV4 does not reserve an extra "no object" row in the denoising embedding, so the `num_labels + 1`
         # embedding built by [`PPDocLayoutV3Model`] is overwritten here. The modular converter only deduplicates
-        # plain assignments, so both allocations survive into the generated file, the second one winning.
-        if config.num_denoising > 0:
-            self.denoising_class_embed = nn.Embedding(config.num_labels, config.d_model)
+        # top-level plain assignments, and the parent's allocation is nested in an `if` block, so both allocations
+        # survive into the generated file, the second one winning.
+        self.denoising_class_embed = (
+            nn.Embedding(config.num_labels, config.d_model) if config.num_denoising > 0 else None
+        )
         self.decoder_roor_order_head = nn.ModuleList(
             [nn.Linear(config.d_model, config.d_model) for _ in range(config.decoder_layers)]
         )
@@ -1507,6 +1510,7 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(proj_feats, **kwargs)
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput
         elif not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
@@ -1642,8 +1646,6 @@ class PPDocLayoutV4ForObjectDetectionOutput(ModelOutput):
 
     logits: torch.FloatTensor | None = None
     pred_boxes: torch.FloatTensor | None = None
-    relative_order_logits: torch.FloatTensor | None = None
-    successor_order_logits: torch.FloatTensor | None = None
     last_hidden_state: torch.FloatTensor | None = None
     intermediate_hidden_states: torch.FloatTensor | None = None
     intermediate_reference_points: torch.FloatTensor | None = None
@@ -1653,12 +1655,16 @@ class PPDocLayoutV4ForObjectDetectionOutput(ModelOutput):
     encoder_last_hidden_state: torch.FloatTensor | None = None
     encoder_hidden_states: tuple[torch.FloatTensor] | None = None
     encoder_attentions: tuple[torch.FloatTensor] | None = None
+    # PP-DocLayoutV3 annotates this as a tuple, but PP-DocLayoutV4 emits a single tensor.
     init_reference_points: torch.FloatTensor | None = None
     enc_topk_logits: torch.FloatTensor | None = None
     enc_topk_bboxes: torch.FloatTensor | None = None
     enc_outputs_class: torch.FloatTensor | None = None
     enc_outputs_coord_logits: torch.FloatTensor | None = None
     denoising_meta_values: dict | None = None
+
+    relative_order_logits: torch.FloatTensor | None = None
+    successor_order_logits: torch.FloatTensor | None = None
 
 
 @auto_docstring(
