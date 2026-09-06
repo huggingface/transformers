@@ -242,10 +242,6 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         finally:
             self.model_tester.get_config = original
 
-    @unittest.skip(reason="ESMFold doesn't support data parallel.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
 
 @require_torch
 class EsmModelIntegrationTest(TestCasePlus):
