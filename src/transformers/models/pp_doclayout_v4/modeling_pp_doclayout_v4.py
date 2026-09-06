@@ -267,8 +267,8 @@ class PPDocLayoutV4S2RFusion(nn.Module):
     Gated fusion of the successor matrix's transitive closure into the relative order logits:
     `a * antisymmetrize(closure(successor)) + b * relative` (S2R = "Successor to Relation", from PaddlePaddle).
 
-    `s2r_a_init=0.0` starts the module out identical to the relative logits alone. `b` stays a plain float unless
-    `s2r_learnable_b=True`, so checkpoints only carry `a`.
+    `s2r_a_init=0.0` starts the module out identical to the relative logits alone. `b` is a plain float that is
+    never learned, so checkpoints only carry `a`.
     """
 
     def __init__(self, config: PPDocLayoutV4Config):
@@ -276,18 +276,12 @@ class PPDocLayoutV4S2RFusion(nn.Module):
         self.steps = config.s2r_steps
         self.damping = config.s2r_damping
         self.a = nn.Parameter(torch.full((1,), config.s2r_a_init))
-        self.learnable_b = config.s2r_learnable_b
-        if self.learnable_b:
-            self.b = nn.Parameter(torch.full((1,), config.s2r_b_init))
-        else:
-            self.b = float(config.s2r_b_init)
+        self.b = 1.0
+        self.register_buffer("one_minus_eye", 1.0 - torch.eye(config.num_queries), persistent=False)
 
     def forward(self, relative_logits: torch.Tensor, successor_logits: torch.Tensor) -> torch.Tensor:
-        num_queries = successor_logits.shape[-1]
-        eye = torch.eye(num_queries, device=successor_logits.device, dtype=successor_logits.dtype)
-
         # Soft directed adjacency, where adjacency[i, j] approximates P(i directly precedes j).
-        adjacency = successor_logits.sigmoid() * (1.0 - eye)
+        adjacency = successor_logits.sigmoid() * self.one_minus_eye.to(successor_logits.dtype)
         # Clamping the row sums from below at 1 damps dense rows without amplifying weak edges or terminal nodes.
         adjacency = adjacency / adjacency.sum(-1, keepdim=True).clamp(min=1.0)
 
@@ -352,8 +346,7 @@ class PPDocLayoutV4PreTrainedModel(PreTrainedModel):
 
         elif isinstance(module, PPDocLayoutV4S2RFusion):
             init.constant_(module.a, self.config.s2r_a_init)
-            if module.learnable_b:
-                init.constant_(module.b, self.config.s2r_b_init)
+            init.copy_(module.one_minus_eye, 1.0 - torch.eye(module.one_minus_eye.shape[0]))
 
         elif isinstance(module, PPDocLayoutV4GlobalPointer):
             init.copy_(module.eye, torch.eye(module.eye.shape[-1]))
@@ -902,12 +895,13 @@ class PPDocLayoutV4DecoderOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor | None = None
     intermediate_hidden_states: torch.FloatTensor | None = None
     intermediate_reference_points: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    relative_order_logits: torch.FloatTensor | None = None
-    successor_order_logits: torch.FloatTensor | None = None
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
     cross_attentions: tuple[torch.FloatTensor] | None = None
+
+    logits: torch.FloatTensor | None = None
+    relative_order_logits: torch.FloatTensor | None = None
+    successor_order_logits: torch.FloatTensor | None = None
 
 
 class PPDocLayoutV4DecoderLayer(nn.Module):
