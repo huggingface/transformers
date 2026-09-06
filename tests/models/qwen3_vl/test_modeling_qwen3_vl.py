@@ -205,6 +205,24 @@ class Qwen3VLModelTest(VLMModelTest, unittest.TestCase):
         self.assertListEqual(list(position_ids.shape), [3, 1, 27])
         self.assertListEqual(position_ids.tolist(), expected_positions.tolist())
 
+    def test_shift_labels_are_used(self):
+        # Caller-supplied `shift_labels` must reach the loss function instead of being
+        # silently dropped, so masking every target yields a nan loss.
+        # See https://github.com/huggingface/transformers/issues/48491
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Qwen3VLForConditionalGeneration(config).to(torch_device)
+        model.eval()
+        input_ids = input_dict["input_ids"]
+        ignore_all = torch.full_like(input_ids, -100)
+        with torch.no_grad():
+            loss = model(input_ids=input_ids, labels=input_ids, shift_labels=ignore_all).loss
+        self.assertTrue(torch.isnan(loss).all())
+
+        # With no caller-supplied shift labels the derived loss is finite
+        with torch.no_grad():
+            loss = model(input_ids=input_ids, labels=input_ids).loss
+        self.assertTrue(torch.isfinite(loss).all())
+
     def test_mismatching_num_image_tokens(self):
         # Override the base test because we need to slice image_grid_thw too
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()

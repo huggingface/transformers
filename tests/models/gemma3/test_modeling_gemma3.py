@@ -224,6 +224,25 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
 
+    def test_shift_labels_are_used(self):
+        # Caller-supplied `shift_labels` must reach the loss function instead of being
+        # silently dropped, so masking every target yields a nan loss.
+        # See https://github.com/huggingface/transformers/issues/48491
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Gemma3ForConditionalGeneration(config).to(torch_device)
+        model.eval()
+        inputs = self._prepare_for_class(inputs_dict, Gemma3ForConditionalGeneration, return_labels=True)
+        input_ids = inputs["input_ids"]
+        ignore_all = torch.full_like(input_ids, -100)
+        with torch.no_grad():
+            loss = model(**inputs, shift_labels=ignore_all).loss
+        self.assertTrue(torch.isnan(loss).all())
+
+        # With no caller-supplied shift labels the derived loss is finite
+        with torch.no_grad():
+            loss = model(**inputs).loss
+        self.assertTrue(torch.isfinite(loss).all())
+
     def test_training(self):
         # Overwrite to test training with text-only samples, should not raise errors
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
