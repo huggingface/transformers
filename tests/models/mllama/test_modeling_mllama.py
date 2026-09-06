@@ -16,7 +16,6 @@
 import unittest
 
 import pytest
-import requests
 
 from transformers import (
     AutoProcessor,
@@ -43,6 +42,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
@@ -50,7 +50,7 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class MllamaText2TextModelTester:
@@ -471,7 +471,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         prompt = "<|image|>If I had to write a haiku for this one"
         url = "https://llava-vl.github.io/static/images/view.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = load_test_image(url)
 
         inputs = processor(text=prompt, images=image, return_tensors="pt").to(torch_device)
 
@@ -567,7 +567,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         prompt = "<|image|>If I had to write a haiku for this one"
         url = "https://llava-vl.github.io/static/images/view.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = load_test_image(url)
 
         inputs = processor(text=prompt, images=image, return_tensors="pt").to(torch_device)
 
@@ -609,12 +609,9 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "<|image|>If I had to write a haiku for this one",
             "<|image|>This image shows",
         ]
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(
-            requests.get(
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
-                stream=True,
-            ).raw
+        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image2 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )
 
         inputs = processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
@@ -670,12 +667,9 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(self.instruct_model_checkpoint)
 
         # Prepare inputs
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(
-            requests.get(
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
-                stream=True,
-            ).raw
+        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image2 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )
 
         conversation = [

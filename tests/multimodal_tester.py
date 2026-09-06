@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from copy import deepcopy
 from inspect import signature
 
 from transformers.testing_utils import _TEXT_MODEL_TESTER_DEFAULTS
@@ -182,10 +183,14 @@ class MultiModalModelTester:
         model_name_to_common_name = {v: k for k, v in attribute_map.items()}
         kwargs = {}
         for k in sig_keys:
+            # Deepcopy each value to prevent common fields in each subconfig
+            # from pointing to the same object. For ex: both might share the "same"
+            # `rope_params` and overriding the value for text config causes an override
+            # for all other subconfig, messing up with test settings
             if hasattr(self, k) and k != "self":
-                kwargs[k] = getattr(self, k)
+                kwargs[k] = deepcopy(getattr(self, k))
             elif k in model_name_to_common_name and hasattr(self, model_name_to_common_name[k]):
-                kwargs[k] = getattr(self, model_name_to_common_name[k])
+                kwargs[k] = deepcopy(getattr(self, model_name_to_common_name[k]))
         return kwargs
 
     def get_config(self):
