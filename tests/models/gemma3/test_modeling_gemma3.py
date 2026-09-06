@@ -242,6 +242,25 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         loss = model(**inputs).loss
         loss.backward()
 
+    def test_shift_labels_respected(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        model = Gemma3ForConditionalGeneration(config).to(torch_device).eval()
+        inputs = self._prepare_for_class(inputs_dict, Gemma3ForConditionalGeneration, return_labels=True)
+
+        # Default forward with labels computes valid loss
+        out_normal = model(**inputs)
+        self.assertIsNotNone(out_normal.loss)
+        self.assertFalse(torch.isnan(out_normal.loss))
+
+        # Explicit shift_labels with all -100 must produce nan loss,
+        # confirming shift_labels is forwarded to loss_function.
+        shift_labels = torch.full_like(inputs["labels"], -100)
+        out_shifted = model(**inputs, shift_labels=shift_labels)
+        self.assertIsNotNone(out_shifted.loss)
+        self.assertTrue(torch.isnan(out_shifted.loss))
+
     @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass

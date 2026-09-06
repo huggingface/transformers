@@ -397,6 +397,25 @@ class Qwen3VLModelTest(VLMModelTest, unittest.TestCase):
             )
             self.assertIsNotNone(outputs)
 
+    def test_shift_labels_respected(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Qwen3VLForConditionalGeneration(config).to(torch_device).eval()
+
+        input_ids = input_dict["input_ids"]
+        labels = input_ids.clone()
+
+        # Default forward with labels computes valid loss
+        out_normal = model(**input_dict, labels=labels)
+        self.assertIsNotNone(out_normal.loss)
+        self.assertFalse(torch.isnan(out_normal.loss))
+
+        # Explicit shift_labels with all -100 must produce nan loss,
+        # confirming shift_labels is forwarded to loss_function.
+        shift_labels = torch.full_like(labels, -100)
+        out_shifted = model(**input_dict, labels=labels, shift_labels=shift_labels)
+        self.assertIsNotNone(out_shifted.loss)
+        self.assertTrue(torch.isnan(out_shifted.loss))
+
 
 @require_torch
 class Qwen3VLTextModelPositionIdsTest(unittest.TestCase):
