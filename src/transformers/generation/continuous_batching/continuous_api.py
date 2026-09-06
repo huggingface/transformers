@@ -843,14 +843,15 @@ class ContinuousBatchingManager:
     def release_memory(self) -> int:
         """Free the KV cache so something else on this device can use the memory, returning the bytes released.
 
-        Only for callers that drive the engine themselves, with `step`, and can guarantee nothing steps it until
-        `restore_memory`. Live requests keep their place in the queue and re-prefill when they are scheduled again, so
-        no generation is lost, but the prefill is paid for a second time.
+        Only while the loop is paused (`pause`), and `restore_memory` must be called before it resumes. Live requests
+        keep their place in the queue and re-prefill when they are scheduled again, so no generation is lost, but the
+        prefill is paid for a second time.
 
         ```python
-        freed = manager.release_memory()
-        ...  # a training step, which now has that memory available
-        manager.restore_memory()
+        with manager.pause():
+            freed = manager.release_memory()
+            ...  # a training step, which now has that memory available
+            manager.restore_memory()
         ```
         """
         if self.batch_processor is None:
