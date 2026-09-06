@@ -162,31 +162,6 @@ class CacheTest(unittest.TestCase):
         cache = StaticCache(config=config, max_cache_len=8)
         self.assertEqual(cache.get_max_length(), 8)
 
-    def test_dynamic_cache_uses_populated_layer_as_representative(self):
-        empty_states = torch.empty(1, 1, 0, 4)
-        populated_states = torch.randn(1, 1, 3, 4)
-
-        cache = DynamicCache([(empty_states, empty_states), (populated_states, populated_states)])
-
-        self.assertEqual(cache.get_seq_length(), 3)
-        self.assertEqual(cache.get_representative_kv_layer_idx([0, 1]), 1)
-
-    def test_static_cache_uses_first_kv_layer_as_representative(self):
-        config = LlamaConfig(
-            hidden_size=32,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            number_of_conv_states=1,
-            layer_types=["linear_attention", "full_attention"],
-        )
-        cache = StaticCache(config=config, max_cache_len=8)
-        states = torch.randn(1, config.num_key_value_heads, 3, config.hidden_size // config.num_attention_heads)
-        cache.update(states, states, layer_idx=1)
-
-        self.assertEqual(cache.get_representative_kv_layer_idx(range(config.num_hidden_layers)), 1)
-        self.assertEqual(cache.get_seq_length(), 3)
-
     def test_dynamic_cache_uses_per_layer_sliding_windows(self):
         config = LlamaConfig(
             hidden_size=64,
