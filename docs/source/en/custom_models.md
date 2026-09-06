@@ -97,7 +97,7 @@ You'll create two ResNet models, a barebones ResNet model that outputs the hidde
 Define a mapping between the block types and classes. Everything else is created by passing the configuration class to the ResNet model class.
 
 > [!TIP]
-> Add `config_class` to the model class to enable [AutoClass](#autoclass-support) support.
+> Add `config_class` to the model class to enable [AutoClass](#autoclass) support.
 
 ```py
 from transformers import PreTrainedModel
@@ -134,7 +134,7 @@ class ResnetModel(PreTrainedModel):
 The `forward` method needs to be rewritten to calculate the loss for each logit if labels are available. Otherwise, the ResNet model class is the same.
 
 > [!TIP]
-> Add `config_class` to the model class to enable [AutoClass](#autoclass-support) support.
+> Add `config_class` to the model class to enable [AutoClass](#autoclass) support.
 
 ```py
 import torch
