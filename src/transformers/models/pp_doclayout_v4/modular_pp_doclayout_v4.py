@@ -886,7 +886,8 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
             Fuses the successor logits into the relative order logits. When `None` the relative order logits are
             returned unchanged.
         """
-        hidden_states = inputs_embeds
+        if inputs_embeds is not None:
+            hidden_states = inputs_embeds
         reference_points = F.sigmoid(reference_points)
 
         intermediate = ()
@@ -1042,7 +1043,6 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
         del self.mask_enhanced
         del self.mask_query_head
 
-        self.post_init()
 
     @staticmethod
     @compile_compatible_method_lru_cache(maxsize=32)
