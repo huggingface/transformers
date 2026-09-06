@@ -229,7 +229,6 @@ class FunAsrNanoAttention(LlamaAttention):
         input_dim = input_dim or config.hidden_size
         super().__init__(config, layer_idx)
         self.num_key_value_groups = 1  # the model has no GQA
-        self.attention_dropout = config.hidden_dropout
         self.is_causal = False
         self.q_proj = nn.Linear(input_dim, config.hidden_size, bias=True)
         self.k_proj = nn.Linear(input_dim, config.hidden_size, bias=True)
@@ -249,6 +248,7 @@ class FunAsrNanoAttention(LlamaAttention):
 
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        # Keep the unsplit values for the FSMN convolution across neighboring frames.
         projected_values = self.v_proj(hidden_states)
         value_states = projected_values.view(hidden_shape).transpose(1, 2)
 
@@ -319,11 +319,10 @@ class FunAsrNanoMLP(CLIPMLP):
 
 
 class FunAsrNanoPositionEmbedding(nn.Module):
-    """Scale low frame rate (LFR) features and add the fixed sinusoidal positions before the first SAN-M layer."""
+    """Fixed, one-based sinusoidal positions for low frame rate (LFR) features."""
 
     def __init__(self, config: FunAsrNanoEncoderConfig):
         super().__init__()
-        self.scale = config.hidden_size**0.5
         self.length = config.max_position_embeddings
         self.channels = config.num_mel_bins * config.num_stacked_frames
         self.max_timescale = 10000
@@ -338,10 +337,9 @@ class FunAsrNanoPositionEmbedding(nn.Module):
         return torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = hidden_states * self.scale
         sequence_length = hidden_states.shape[1]
         positions = self.embedding[1 : sequence_length + 1].to(device=hidden_states.device, dtype=hidden_states.dtype)
-        return hidden_states + positions.unsqueeze(0)
+        return positions.unsqueeze(0)
 
 
 class FunAsrNanoEncoderLayer(LlamaDecoderLayer):
@@ -357,8 +355,8 @@ class FunAsrNanoEncoderLayer(LlamaDecoderLayer):
         super().__init__(config)
         self.hidden_dropout = config.hidden_dropout
         self.self_attn = FunAsrNanoAttention(config, input_dim=input_dim, use_fsmn=use_fsmn)
-        self.input_layernorm = nn.LayerNorm(input_dim)
-        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size)
+        self.input_layernorm = nn.LayerNorm(input_dim, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -400,6 +398,7 @@ class FunAsrNanoEncoder(Qwen3ASREncoder):
     def __init__(self, config: FunAsrNanoEncoderConfig):
         PreTrainedModel.__init__(self, config)
         self.position_embeddings = FunAsrNanoPositionEmbedding(config)
+        self.scale = config.hidden_size**0.5
 
         # Only first layer has different input size (for the low frame rate audio features)
         self.layers = nn.ModuleList(
@@ -414,7 +413,9 @@ class FunAsrNanoEncoder(Qwen3ASREncoder):
         layer_norm_indices = (num_transcription_layers - 1, config.num_hidden_layers - 1)
         self.layer_norms = nn.ModuleList(
             [
-                nn.LayerNorm(config.hidden_size) if layer_idx in layer_norm_indices else nn.Identity()
+                nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+                if layer_idx in layer_norm_indices
+                else nn.Identity()
                 for layer_idx in range(config.num_hidden_layers)
             ]
         )
@@ -451,7 +452,7 @@ class FunAsrNanoEncoder(Qwen3ASREncoder):
             attention_mask=input_features_mask,
         )
 
-        hidden_states = self.position_embeddings(hidden_states)
+        hidden_states = hidden_states * self.scale + self.position_embeddings(hidden_states)
         for layer, layer_norm in zip(self.layers, self.layer_norms):
             hidden_states = layer(hidden_states, attention_mask, input_features_mask, **kwargs)
             hidden_states = layer_norm(hidden_states)

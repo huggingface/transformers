@@ -25,6 +25,66 @@ if is_torch_available():
     import torch
 
     from transformers import AutoProcessor, FunAsrNanoForConditionalGeneration, FunAsrNanoModel
+    from transformers.models.fun_asr_nano.configuration_fun_asr_nano import FunAsrNanoAdaptorConfig
+    from transformers.models.fun_asr_nano.modeling_fun_asr_nano import (
+        FunAsrNanoAttention,
+        FunAsrNanoEncoder,
+        FunAsrNanoEncoderLayer,
+        FunAsrNanoPositionEmbedding,
+    )
+
+
+@require_torch
+class FunAsrNanoComponentTest(unittest.TestCase):
+    def test_position_embedding_returns_one_based_positions(self):
+        config = FunAsrNanoEncoderConfig(
+            hidden_size=8, num_mel_bins=8, num_stacked_frames=1, max_position_embeddings=16
+        )
+        positions = FunAsrNanoPositionEmbedding(config)
+        for dtype in (torch.float32, torch.bfloat16):
+            hidden_states = torch.randn(2, 5, config.input_size, dtype=dtype)
+            expected = positions.embedding[1:6].to(dtype=dtype).unsqueeze(0)
+            torch.testing.assert_close(positions(hidden_states), expected, rtol=0, atol=0)
+        self.assertEqual(positions.state_dict(), {})
+
+    def test_attention_dropout_is_independent_from_hidden_dropout(self):
+        for config_class in (FunAsrNanoEncoderConfig, FunAsrNanoAdaptorConfig):
+            with self.subTest(config_class=config_class):
+                config = config_class(
+                    hidden_size=8,
+                    num_attention_heads=2,
+                    hidden_dropout=0.0,
+                    attention_dropout=1.0,
+                )
+                config._attn_implementation = "eager"
+                attention = FunAsrNanoAttention(config).train()
+                _, weights = attention(torch.randn(1, 3, config.hidden_size))
+                torch.testing.assert_close(weights, torch.zeros_like(weights))
+                attention.eval()
+                _, weights = attention(torch.randn(1, 3, config.hidden_size))
+                torch.testing.assert_close(weights.sum(dim=-1), torch.ones_like(weights[..., 0]))
+
+    def test_layer_norm_eps_is_configurable(self):
+        config = FunAsrNanoEncoderConfig(
+            hidden_size=8,
+            num_attention_heads=2,
+            intermediate_size=16,
+            num_hidden_layers=2,
+            num_timestamp_prediction_layers=1,
+            num_mel_bins=8,
+            num_stacked_frames=1,
+            layer_norm_eps=1e-3,
+        )
+        encoder = FunAsrNanoEncoder(config)
+        adaptor_config = FunAsrNanoAdaptorConfig(
+            hidden_size=8, num_attention_heads=2, intermediate_size=16, layer_norm_eps=2e-3
+        )
+        adaptor = FunAsrNanoEncoderLayer(adaptor_config, use_fsmn=False)
+        for model, expected_eps in ((encoder, 1e-3), (adaptor, 2e-3)):
+            norms = [module for module in model.modules() if isinstance(module, torch.nn.LayerNorm)]
+            self.assertTrue(norms)
+            for norm in norms:
+                self.assertEqual(norm.eps, expected_eps)
 
 
 class FunAsrNanoModelTester(ALMModelTester):

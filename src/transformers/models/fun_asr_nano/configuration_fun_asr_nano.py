@@ -44,6 +44,8 @@ class FunAsrNanoEncoderConfig(PreTrainedConfig):
     intermediate_size: int = 2048
     num_hidden_layers: int = 70
     hidden_dropout: float = 0.1
+    attention_dropout: float = 0.1
+    layer_norm_eps: float = 1e-5
     hidden_act: str = "relu"
     max_position_embeddings: int = 2049
     num_stacked_frames: int = 7
@@ -63,6 +65,8 @@ class FunAsrNanoAdaptorConfig(PreTrainedConfig):
     intermediate_size: int = 256
     num_hidden_layers: int = 2
     hidden_dropout: float = 0.0
+    attention_dropout: float = 0.0
+    layer_norm_eps: float = 1e-5
     hidden_act: str = "relu"
 
 
