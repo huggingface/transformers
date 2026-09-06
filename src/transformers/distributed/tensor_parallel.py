@@ -128,8 +128,9 @@ def _use_local_dtensor_params(module):
 # Messages above 8 MB (a training-side forward over thousands of packed tokens, which also runs through this path
 # under no_grad) stay on NCCL, whose ring is bandwidth-optimal there. One buffer per (group, hidden, dtype) is
 # allocated and rendezvoused the first time a shape is seen, sized to the largest row count seen, and every call
-# reduces in a prefix view of it. Calls recorded into a CUDA graph go through NCCL: the two-shot kernel replayed from
-# a graph faulted, and a rendezvous cannot happen during a capture anyway.
+# reduces in a prefix view of it. Opt-in with HF_TP_SYMM_MEM_ALL_REDUCE=1: measured +5-10% decode at tp2-8 in eager
+# mode, but with CUDA graphs (default_compile_level >= 1) the zero-sync trainer faulted or hung in 6 of 6 runs with it
+# on, whether the two-shot kernel was in the graphs or only in the eager calls around them; NCCL is the default.
 _SYMM_BUFFERS: dict[tuple, torch.Tensor] = {}
 
 
@@ -140,10 +141,8 @@ def _inference_all_reduce(output: torch.Tensor, process_group) -> None:
         or not output.is_contiguous()
         or output.numel() * output.element_size() > 8 * 1024 * 1024  # bandwidth-bound: NCCL's ring wins there
         or dist.get_world_size(process_group) > 8
-        or os.environ.get("HF_TP_NCCL_ALL_REDUCE") == "1"
-        # recorded into a CUDA graph, the two-shot kernel faulted at replay (illegal memory access after 1 to 4
-        # training steps of the zero-sync trainer, Qwen3-4B and 8B at tp2); NCCL replays correctly
-        or torch.cuda.is_current_stream_capturing()
+        or os.environ.get("HF_TP_SYMM_MEM_ALL_REDUCE") != "1"
+        or torch.cuda.is_current_stream_capturing()  # a rendezvous cannot happen during a capture
     ):
         dist.all_reduce(output, group=process_group)
         return
