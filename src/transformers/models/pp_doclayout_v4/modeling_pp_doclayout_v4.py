@@ -30,7 +30,6 @@ from torch import Tensor, nn
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...backbone_utils import load_backbone
-from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -251,26 +250,25 @@ class PPDocLayoutV4GlobalPointer(nn.Module):
         self.q_proj = nn.Linear(config.d_model, self.head_dim)
         self.k_proj = nn.Linear(config.d_model, self.head_dim)
         self.dropout = nn.Dropout(config.gp_dropout_value)
+        self.register_buffer("eye", torch.eye(config.num_queries), persistent=False)
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        input_shape = inputs.shape[:-1]
         queries = self.dropout(self.q_proj(inputs))
         keys = self.dropout(self.k_proj(inputs))
 
         logits = (queries @ keys.transpose(-2, -1)) * self.scaling
         if self.antisymmetric:
             return logits - logits.transpose(-2, -1)
-        eye = torch.eye(input_shape[-1], device=logits.device, dtype=logits.dtype)
-        return logits - eye * SELF_LOOP_MASK_VALUE
+        return logits - self.eye * SELF_LOOP_MASK_VALUE
 
 
 class PPDocLayoutV4S2RFusion(nn.Module):
     """
-    Fuses the transitive closure of the successor matrix into the relative order logits.
+    Gated fusion of the successor matrix's transitive closure into the relative order logits:
+    `a * antisymmetrize(closure(successor)) + b * relative` (S2R = "Successor to Relation", from PaddlePaddle).
 
-    The fused logits are `a * antisymmetrize(closure(successor)) + b * relative`. With `s2r_a_init=0.0` the module
-    starts out numerically identical to using the relative order logits alone, and with `s2r_learnable_b=False` the
-    weight `b` stays a plain float, which is why a checkpoint only carries `a`.
+    `s2r_a_init=0.0` starts the module out identical to the relative logits alone. `b` stays a plain float unless
+    `s2r_learnable_b=True`, so checkpoints only carry `a`.
     """
 
     def __init__(self, config: PPDocLayoutV4Config):
@@ -356,6 +354,9 @@ class PPDocLayoutV4PreTrainedModel(PreTrainedModel):
             init.constant_(module.a, self.config.s2r_a_init)
             if module.learnable_b:
                 init.constant_(module.b, self.config.s2r_b_init)
+
+        elif isinstance(module, PPDocLayoutV4GlobalPointer):
+            init.copy_(module.eye, torch.eye(module.eye.shape[-1]))
 
         elif isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
@@ -1322,129 +1323,6 @@ class PPDocLayoutV4ConvEncoder(nn.Module):
         return out
 
 
-def get_contrastive_denoising_training_group(
-    targets,
-    num_classes,
-    num_queries,
-    class_embed,
-    num_denoising_queries=100,
-    label_noise_ratio=0.5,
-    box_noise_scale=1.0,
-):
-    """
-    Creates a contrastive denoising training group using ground-truth samples. It adds noise to labels and boxes.
-
-    Args:
-        targets (`list[dict]`):
-            The target objects, each containing 'class_labels' and 'boxes' for objects in an image.
-        num_classes (`int`):
-            Total number of classes in the dataset.
-        num_queries (`int`):
-            Number of query slots in the transformer.
-        class_embed (`callable`):
-            A function or a model layer to embed class labels.
-        num_denoising_queries (`int`, *optional*, defaults to 100):
-            Number of denoising queries.
-        label_noise_ratio (`float`, *optional*, defaults to 0.5):
-            Ratio of noise applied to labels.
-        box_noise_scale (`float`, *optional*, defaults to 1.0):
-            Scale of noise applied to bounding boxes.
-    Returns:
-        `tuple` comprising various elements:
-        - **input_query_class** (`torch.FloatTensor`) --
-          Class queries with applied label noise.
-        - **input_query_bbox** (`torch.FloatTensor`) --
-          Bounding box queries with applied box noise.
-        - **attn_mask** (`torch.FloatTensor`) --
-           Attention mask for separating denoising and reconstruction queries.
-        - **denoising_meta_values** (`dict`) --
-          Metadata including denoising positive indices, number of groups, and split sizes.
-    """
-
-    if num_denoising_queries <= 0:
-        return None, None, None, None
-
-    num_ground_truths = [len(t["class_labels"]) for t in targets]
-    device = targets[0]["class_labels"].device
-
-    max_gt_num = max(num_ground_truths)
-    if max_gt_num == 0:
-        return None, None, None, None
-
-    num_groups_denoising_queries = num_denoising_queries // max_gt_num
-    num_groups_denoising_queries = 1 if num_groups_denoising_queries == 0 else num_groups_denoising_queries
-    # pad gt to max_num of a batch
-    batch_size = len(num_ground_truths)
-
-    input_query_class = torch.full([batch_size, max_gt_num], num_classes, dtype=torch.int32, device=device)
-    input_query_bbox = torch.zeros([batch_size, max_gt_num, 4], device=device)
-    pad_gt_mask = torch.zeros([batch_size, max_gt_num], dtype=torch.bool, device=device)
-
-    for i in range(batch_size):
-        num_gt = num_ground_truths[i]
-        if num_gt > 0:
-            input_query_class[i, :num_gt] = targets[i]["class_labels"]
-            input_query_bbox[i, :num_gt] = targets[i]["boxes"]
-            pad_gt_mask[i, :num_gt] = 1
-    # each group has positive and negative queries.
-    input_query_class = input_query_class.tile([1, 2 * num_groups_denoising_queries])
-    input_query_bbox = input_query_bbox.tile([1, 2 * num_groups_denoising_queries, 1])
-    pad_gt_mask = pad_gt_mask.tile([1, 2 * num_groups_denoising_queries])
-    # positive and negative mask
-    negative_gt_mask = torch.zeros([batch_size, max_gt_num * 2, 1], device=device)
-    negative_gt_mask[:, max_gt_num:] = 1
-    negative_gt_mask = negative_gt_mask.tile([1, num_groups_denoising_queries, 1])
-    positive_gt_mask = 1 - negative_gt_mask
-    # contrastive denoising training positive index
-    positive_gt_mask = positive_gt_mask.squeeze(-1) * pad_gt_mask
-    denoise_positive_idx = torch.nonzero(positive_gt_mask)[:, 1]
-    denoise_positive_idx = torch.split(
-        denoise_positive_idx, [n * num_groups_denoising_queries for n in num_ground_truths]
-    )
-    # total denoising queries
-    num_denoising_queries = torch_int(max_gt_num * 2 * num_groups_denoising_queries)
-
-    if label_noise_ratio > 0:
-        mask = torch.rand_like(input_query_class, dtype=torch.float) < (label_noise_ratio * 0.5)
-        # randomly put a new one here
-        new_label = torch.randint_like(mask, 0, num_classes, dtype=input_query_class.dtype)
-        input_query_class = torch.where(mask & pad_gt_mask, new_label, input_query_class)
-
-    if box_noise_scale > 0:
-        known_bbox = center_to_corners_format(input_query_bbox)
-        diff = torch.tile(input_query_bbox[..., 2:] * 0.5, [1, 1, 2]) * box_noise_scale
-        rand_sign = torch.randint_like(input_query_bbox, 0, 2) * 2.0 - 1.0
-        rand_part = torch.rand_like(input_query_bbox)
-        rand_part = (rand_part + 1.0) * negative_gt_mask + rand_part * (1 - negative_gt_mask)
-        rand_part *= rand_sign
-        known_bbox += rand_part * diff
-        known_bbox.clip_(min=0.0, max=1.0)
-        input_query_bbox = corners_to_center_format(known_bbox)
-        input_query_bbox = inverse_sigmoid(input_query_bbox)
-
-    input_query_class = class_embed(input_query_class)
-
-    target_size = num_denoising_queries + num_queries
-    attn_mask = torch.full([target_size, target_size], 0, dtype=torch.float, device=device)
-    # match query cannot see the reconstruction
-    attn_mask[num_denoising_queries:, :num_denoising_queries] = -torch.inf
-
-    # reconstructions cannot see each other
-    for i in range(num_groups_denoising_queries):
-        idx_block_start = max_gt_num * 2 * i
-        idx_block_end = max_gt_num * 2 * (i + 1)
-        attn_mask[idx_block_start:idx_block_end, :idx_block_start] = -torch.inf
-        attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising_queries] = -torch.inf
-
-    denoising_meta_values = {
-        "dn_positive_idx": denoise_positive_idx,
-        "dn_num_group": num_groups_denoising_queries,
-        "dn_num_split": [num_denoising_queries, num_queries],
-    }
-
-    return input_query_class, input_query_bbox, attn_mask, denoising_meta_values
-
-
 @auto_docstring(
     custom_intro="""
     PP-DocLayoutV4 Model (consisting of a backbone and encoder-decoder) outputting raw hidden states without any head on top.
@@ -1529,7 +1407,6 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
         self.decoder_input_proj = nn.ModuleList(decoder_input_proj_list)
 
         self.decoder = PPDocLayoutV4Decoder(config)
-
         self.decoder_order_head = nn.ModuleList(
             [nn.Linear(config.d_model, config.d_model) for _ in range(config.decoder_layers)]
         )
@@ -1660,30 +1537,6 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
         source_flatten = torch.cat(source_flatten, 1)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
 
-        # prepare denoising training
-        # CODEPATH: unreachable, `labels` is rejected above. Kept as the scaffolding a future training
-        # implementation would build on. Two things have to change before it can run: the helper emits 4-coordinate
-        # `(cx, cy, w, h)` boxes, which do not concatenate with V4's `num_coords`-wide reference points, and it fills
-        # unused slots with the class index `num_classes`, which is out of range for the `num_labels`-wide denoising
-        # embedding below.
-        if self.training and self.config.num_denoising > 0 and labels is not None:
-            (
-                denoising_class,
-                denoising_bbox_unact,
-                attention_mask,
-                denoising_meta_values,
-            ) = get_contrastive_denoising_training_group(
-                targets=labels,
-                num_classes=self.config.num_labels,
-                num_queries=self.config.num_queries,
-                class_embed=self.denoising_class_embed,
-                num_denoising_queries=self.config.num_denoising,
-                label_noise_ratio=self.config.label_noise_ratio,
-                box_noise_scale=self.config.box_noise_scale,
-            )
-        else:
-            denoising_class, denoising_bbox_unact, attention_mask, denoising_meta_values = None, None, None, None
-
         dtype = source_flatten.dtype
         # CODEPATH: PP-DocLayoutV4_safetensors leaves `anchor_image_size` unset and recomputes the anchors from
         # the input, the cached branch is for configs that pin a single evaluation resolution.
@@ -1711,25 +1564,14 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
         )
 
         # extract region features
-        # CODEPATH: PP-DocLayoutV4_safetensors sets `learn_initial_query=False` and takes the top-k encoder features
-        # as queries. The learned embedding branch is inherited from RT-DETR and unused by released checkpoints.
-        if self.config.learn_initial_query:
-            target = self.weight_embedding.tile([batch_size, 1, 1])
-        else:
-            target = output_memory.gather(dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]))
-            target = target.detach()
-
-        if denoising_class is not None:
-            target = torch.concat([denoising_class, target], 1)
-        if denoising_bbox_unact is not None:
-            reference_points_unact = torch.concat([denoising_bbox_unact, reference_points_unact], 1)
+        target = output_memory.gather(dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]))
+        target = target.detach()
 
         init_reference_points = reference_points_unact.detach()
 
         decoder_outputs = self.decoder(
             inputs_embeds=target,
             encoder_hidden_states=source_flatten,
-            encoder_attention_mask=attention_mask,
             reference_points=init_reference_points,
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
@@ -1760,7 +1602,6 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
             enc_topk_bboxes=enc_topk_bboxes,
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
-            denoising_meta_values=denoising_meta_values,
         )
 
 

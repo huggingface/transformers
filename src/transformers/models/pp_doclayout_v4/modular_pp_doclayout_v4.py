@@ -15,6 +15,7 @@
 import math
 from collections import defaultdict
 from dataclasses import dataclass
+from typing import ClassVar
 
 import numpy as np
 import torch
@@ -47,7 +48,6 @@ from ..pp_doclayout_v3.modeling_pp_doclayout_v3 import (
 )
 from ..rt_detr.modeling_rt_detr import (
     RTDetrHybridEncoder,
-    get_contrastive_denoising_training_group,
     inverse_sigmoid,
 )
 
@@ -109,8 +109,6 @@ class PPDocLayoutV4Config(PreTrainedConfig):
         `"relu"`, `"silu"` and `"gelu_new"` are supported.
     num_denoising (`int`, *optional*, defaults to 100):
         The total number of denoising tasks or queries to be used for contrastive denoising.
-    learn_initial_query (`bool`, *optional*, defaults to `False`):
-        Indicates whether the initial query embeddings for the decoder should be learned during training
     anchor_image_size (`tuple[int, int]`, *optional*):
         Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
     disable_custom_kernels (`bool`, *optional*, defaults to `True`):
@@ -199,7 +197,6 @@ class PPDocLayoutV4Config(PreTrainedConfig):
     decoder_activation_function: str = "relu"
     attention_dropout: float | int = 0.0
     num_denoising: int = 100
-    learn_initial_query: bool = False
     anchor_image_size: list[int] | tuple[int, int] | None = None
     disable_custom_kernels: bool = True
     is_encoder_decoder: bool = True
@@ -243,6 +240,10 @@ class PPDocLayoutV4Config(PreTrainedConfig):
         self.decoder_in_channels = list(self.decoder_in_channels)
         self.anchor_image_size = list(self.anchor_image_size) if self.anchor_image_size is not None else None
         super().__post_init__(**kwargs)
+
+    # Not a config field: kept as a class attribute so the `__init__` code inherited from
+    # RT-DETR stays inert. Every released checkpoint takes the top-k encoder features as queries.
+    learn_initial_query: ClassVar[bool] = False
 
 
 class PPDocLayoutV4ImageProcessor(PPDocLayoutV3ImageProcessor):
@@ -661,26 +662,25 @@ class PPDocLayoutV4GlobalPointer(nn.Module):
         self.q_proj = nn.Linear(config.d_model, self.head_dim)
         self.k_proj = nn.Linear(config.d_model, self.head_dim)
         self.dropout = nn.Dropout(config.gp_dropout_value)
+        self.register_buffer("eye", torch.eye(config.num_queries), persistent=False)
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        input_shape = inputs.shape[:-1]
         queries = self.dropout(self.q_proj(inputs))
         keys = self.dropout(self.k_proj(inputs))
 
         logits = (queries @ keys.transpose(-2, -1)) * self.scaling
         if self.antisymmetric:
             return logits - logits.transpose(-2, -1)
-        eye = torch.eye(input_shape[-1], device=logits.device, dtype=logits.dtype)
-        return logits - eye * SELF_LOOP_MASK_VALUE
+        return logits - self.eye * SELF_LOOP_MASK_VALUE
 
 
 class PPDocLayoutV4S2RFusion(nn.Module):
     """
-    Fuses the transitive closure of the successor matrix into the relative order logits.
+    Gated fusion of the successor matrix's transitive closure into the relative order logits:
+    `a * antisymmetrize(closure(successor)) + b * relative` (S2R = "Successor to Relation", from PaddlePaddle).
 
-    The fused logits are `a * antisymmetrize(closure(successor)) + b * relative`. With `s2r_a_init=0.0` the module
-    starts out numerically identical to using the relative order logits alone, and with `s2r_learnable_b=False` the
-    weight `b` stays a plain float, which is why a checkpoint only carries `a`.
+    `s2r_a_init=0.0` starts the module out identical to the relative logits alone. `b` stays a plain float unless
+    `s2r_learnable_b=True`, so checkpoints only carry `a`.
     """
 
     def __init__(self, config: PPDocLayoutV4Config):
@@ -756,6 +756,9 @@ class PPDocLayoutV4PreTrainedModel(PPDocLayoutV3PreTrainedModel):
             init.constant_(module.a, self.config.s2r_a_init)
             if module.learnable_b:
                 init.constant_(module.b, self.config.s2r_b_init)
+
+        elif isinstance(module, PPDocLayoutV4GlobalPointer):
+            init.copy_(module.eye, torch.eye(module.eye.shape[-1]))
 
         elif isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
@@ -1018,7 +1021,6 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
         self.decoder = PPDocLayoutV4Decoder(config)
         del self.decoder.class_embed
         del self.decoder.bbox_embed
-
         self.decoder_order_head = nn.ModuleList(
             [nn.Linear(config.d_model, config.d_model) for _ in range(config.decoder_layers)]
         )
@@ -1127,30 +1129,6 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
         source_flatten = torch.cat(source_flatten, 1)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
 
-        # prepare denoising training
-        # CODEPATH: unreachable, `labels` is rejected above. Kept as the scaffolding a future training
-        # implementation would build on. Two things have to change before it can run: the helper emits 4-coordinate
-        # `(cx, cy, w, h)` boxes, which do not concatenate with V4's `num_coords`-wide reference points, and it fills
-        # unused slots with the class index `num_classes`, which is out of range for the `num_labels`-wide denoising
-        # embedding below.
-        if self.training and self.config.num_denoising > 0 and labels is not None:
-            (
-                denoising_class,
-                denoising_bbox_unact,
-                attention_mask,
-                denoising_meta_values,
-            ) = get_contrastive_denoising_training_group(
-                targets=labels,
-                num_classes=self.config.num_labels,
-                num_queries=self.config.num_queries,
-                class_embed=self.denoising_class_embed,
-                num_denoising_queries=self.config.num_denoising,
-                label_noise_ratio=self.config.label_noise_ratio,
-                box_noise_scale=self.config.box_noise_scale,
-            )
-        else:
-            denoising_class, denoising_bbox_unact, attention_mask, denoising_meta_values = None, None, None, None
-
         dtype = source_flatten.dtype
         # CODEPATH: PP-DocLayoutV4_safetensors leaves `anchor_image_size` unset and recomputes the anchors from
         # the input, the cached branch is for configs that pin a single evaluation resolution.
@@ -1178,25 +1156,14 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
         )
 
         # extract region features
-        # CODEPATH: PP-DocLayoutV4_safetensors sets `learn_initial_query=False` and takes the top-k encoder features
-        # as queries. The learned embedding branch is inherited from RT-DETR and unused by released checkpoints.
-        if self.config.learn_initial_query:
-            target = self.weight_embedding.tile([batch_size, 1, 1])
-        else:
-            target = output_memory.gather(dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]))
-            target = target.detach()
-
-        if denoising_class is not None:
-            target = torch.concat([denoising_class, target], 1)
-        if denoising_bbox_unact is not None:
-            reference_points_unact = torch.concat([denoising_bbox_unact, reference_points_unact], 1)
+        target = output_memory.gather(dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]))
+        target = target.detach()
 
         init_reference_points = reference_points_unact.detach()
 
         decoder_outputs = self.decoder(
             inputs_embeds=target,
             encoder_hidden_states=source_flatten,
-            encoder_attention_mask=attention_mask,
             reference_points=init_reference_points,
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
@@ -1227,7 +1194,6 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
             enc_topk_bboxes=enc_topk_bboxes,
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
-            denoising_meta_values=denoising_meta_values,
         )
 
 

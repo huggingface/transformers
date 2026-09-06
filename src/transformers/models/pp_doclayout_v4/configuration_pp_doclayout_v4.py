@@ -18,6 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import ClassVar
+
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
@@ -81,8 +83,6 @@ class PPDocLayoutV4Config(PreTrainedConfig):
         `"relu"`, `"silu"` and `"gelu_new"` are supported.
     num_denoising (`int`, *optional*, defaults to 100):
         The total number of denoising tasks or queries to be used for contrastive denoising.
-    learn_initial_query (`bool`, *optional*, defaults to `False`):
-        Indicates whether the initial query embeddings for the decoder should be learned during training
     anchor_image_size (`tuple[int, int]`, *optional*):
         Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
     disable_custom_kernels (`bool`, *optional*, defaults to `True`):
@@ -171,7 +171,6 @@ class PPDocLayoutV4Config(PreTrainedConfig):
     decoder_activation_function: str = "relu"
     attention_dropout: float | int = 0.0
     num_denoising: int = 100
-    learn_initial_query: bool = False
     anchor_image_size: list[int] | tuple[int, int] | None = None
     disable_custom_kernels: bool = True
     is_encoder_decoder: bool = True
@@ -215,6 +214,10 @@ class PPDocLayoutV4Config(PreTrainedConfig):
         self.decoder_in_channels = list(self.decoder_in_channels)
         self.anchor_image_size = list(self.anchor_image_size) if self.anchor_image_size is not None else None
         super().__post_init__(**kwargs)
+
+    # Not a config field: kept as a class attribute so the `__init__` code inherited from
+    # RT-DETR stays inert. Every released checkpoint takes the top-k encoder features as queries.
+    learn_initial_query: ClassVar[bool] = False
 
 
 __all__ = ["PPDocLayoutV4Config"]
