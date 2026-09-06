@@ -40,7 +40,7 @@ This model was contributed by [Eric Bezzam](https://huggingface.co/bezzam).
 </div>
 
 The VibeVoice framework integrates three key components:
-1. **Continuous Speech Tokenizers:** Specialized [acoustic](./vibevoice_acoustic_tokenizer) and [semantic](./vibevoice_semantic_tokenizer) tokenizers, where the acoustic tokenizer uses a $\sigma$-VAE to achieve ultra-low compression (7.5 tokens/sec, 3200x) for scalability and fidelity, and the semantic tokenizer uses an ASR proxy task for content-centric feature extraction.
+1. **Continuous Speech Tokenizers:** Specialized [acoustic](./vibevoice_acoustic_tokenizer) and semantic tokenizers, where the acoustic tokenizer uses a $\sigma$-VAE to achieve ultra-low compression (7.5 tokens/sec, 3200x) for scalability and fidelity, and the semantic tokenizer uses an ASR proxy task for content-centric feature extraction.
 2. **Large Language Model (LLM):** Uses Qwen2.5 (in 1.5B and 7B versions) as its core sequence model.
 3. **Token-Level Diffusion Head:** conditioned on the LLM's hidden state and responsible for predicting the continuous VAE features in a streaming fashion.
 
