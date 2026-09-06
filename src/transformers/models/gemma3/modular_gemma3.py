@@ -859,7 +859,9 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         if labels is not None:
             # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
             # Fix: https://github.com/huggingface/transformers/issues/40564
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **lm_kwargs)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **lm_kwargs
+            )
 
         return Gemma3CausalLMOutputWithPast(
             loss=loss,
