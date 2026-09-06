@@ -33,7 +33,7 @@ from ...image_utils import PILImageResampling, SizeDict
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, requires_backends
+from ...utils import TransformersKwargs, auto_docstring, logging, requires_backends
 from ...utils.generic import TensorType, can_return_tuple
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
@@ -42,8 +42,10 @@ from ..pp_doclayout_v3.modeling_pp_doclayout_v3 import (
     PPDocLayoutV3Decoder,
     PPDocLayoutV3DecoderOutput,
     PPDocLayoutV3ForObjectDetection,
+    PPDocLayoutV3ForObjectDetectionOutput,
     PPDocLayoutV3MLPPredictionHead,
     PPDocLayoutV3Model,
+    PPDocLayoutV3ModelOutput,
     PPDocLayoutV3MultiscaleDeformableAttention,
     PPDocLayoutV3PreTrainedModel,
 )
@@ -931,7 +933,7 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
     """
 )
 @dataclass
-class PPDocLayoutV4ModelOutput(ModelOutput):
+class PPDocLayoutV4ModelOutput(PPDocLayoutV3ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
@@ -959,24 +961,17 @@ class PPDocLayoutV4ModelOutput(ModelOutput):
         Extra dictionary for the denoising related values.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    intermediate_hidden_states: torch.FloatTensor | None = None
-    intermediate_reference_points: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
     relative_order_logits: torch.FloatTensor | None = None
     successor_order_logits: torch.FloatTensor | None = None
-    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    decoder_attentions: tuple[torch.FloatTensor] | None = None
-    cross_attentions: tuple[torch.FloatTensor] | None = None
-    encoder_last_hidden_state: torch.FloatTensor | None = None
-    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    encoder_attentions: tuple[torch.FloatTensor] | None = None
-    init_reference_points: torch.FloatTensor | None = None
-    enc_topk_logits: torch.FloatTensor | None = None
-    enc_topk_bboxes: torch.FloatTensor | None = None
-    enc_outputs_class: torch.FloatTensor | None = None
-    enc_outputs_coord_logits: torch.FloatTensor | None = None
-    denoising_meta_values: dict | None = None
+
+    # PP-DocLayoutV4 does not produce these RT-DETR / PP-DocLayoutV3 outputs: only the last layer is scored (no
+    # intermediate logits), there is no corner prediction, and there is no mask branch.
+    intermediate_logits = AttributeError()
+    intermediate_predicted_corners = AttributeError()
+    initial_reference_points = AttributeError()
+    out_order_logits = AttributeError()
+    out_masks = AttributeError()
 
 
 @auto_docstring(
@@ -1002,9 +997,11 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
 
         # PP-DocLayoutV4 does not reserve an extra "no object" row in the denoising embedding, so the `num_labels + 1`
         # embedding built by [`PPDocLayoutV3Model`] is overwritten here. The modular converter only deduplicates
-        # plain assignments, so both allocations survive into the generated file, the second one winning.
-        if config.num_denoising > 0:
-            self.denoising_class_embed = nn.Embedding(config.num_labels, config.d_model)
+        # top-level plain assignments, and the parent's allocation is nested in an `if` block, so both allocations
+        # survive into the generated file, the second one winning.
+        self.denoising_class_embed = (
+            nn.Embedding(config.num_labels, config.d_model) if config.num_denoising > 0 else None
+        )
 
         self.decoder = PPDocLayoutV4Decoder(config)
         del self.decoder.class_embed
@@ -1093,6 +1090,7 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(proj_feats, **kwargs)
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput
         elif not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
@@ -1191,7 +1189,7 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
     """
 )
 @dataclass
-class PPDocLayoutV4ForObjectDetectionOutput(ModelOutput):
+class PPDocLayoutV4ForObjectDetectionOutput(PPDocLayoutV3ForObjectDetectionOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_labels)`):
         Classification logits (without no-object) for all queries.
@@ -1226,25 +1224,18 @@ class PPDocLayoutV4ForObjectDetectionOutput(ModelOutput):
         Extra dictionary for the denoising related values.
     """
 
-    logits: torch.FloatTensor | None = None
-    pred_boxes: torch.FloatTensor | None = None
     relative_order_logits: torch.FloatTensor | None = None
     successor_order_logits: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    intermediate_hidden_states: torch.FloatTensor | None = None
-    intermediate_reference_points: torch.FloatTensor | None = None
-    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    decoder_attentions: tuple[torch.FloatTensor] | None = None
-    cross_attentions: tuple[torch.FloatTensor] | None = None
-    encoder_last_hidden_state: torch.FloatTensor | None = None
-    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    encoder_attentions: tuple[torch.FloatTensor] | None = None
+    # PP-DocLayoutV3 annotates this as a tuple, but PP-DocLayoutV4 emits a single tensor.
     init_reference_points: torch.FloatTensor | None = None
-    enc_topk_logits: torch.FloatTensor | None = None
-    enc_topk_bboxes: torch.FloatTensor | None = None
-    enc_outputs_class: torch.FloatTensor | None = None
-    enc_outputs_coord_logits: torch.FloatTensor | None = None
-    denoising_meta_values: dict | None = None
+
+    # PP-DocLayoutV4 does not produce these RT-DETR / PP-DocLayoutV3 outputs: only the last layer is scored (no
+    # intermediate logits), there is no corner prediction, and there is no mask branch.
+    order_logits = AttributeError()
+    out_masks = AttributeError()
+    intermediate_logits = AttributeError()
+    intermediate_predicted_corners = AttributeError()
+    initial_reference_points = AttributeError()
 
 
 @auto_docstring(
