@@ -32,6 +32,7 @@ from transformers.integrations.deepspeed import (
     is_deepspeed_zero3_enabled,
 )
 from transformers.testing_utils import (
+    cleanup,
     is_flaky,
     is_torch_available,
     require_torch,
@@ -836,6 +837,9 @@ class MoshiIntegrationTests(unittest.TestCase):
     @cached_property
     def tokenizer(self):
         return AutoTokenizer.from_pretrained("kmhf/hf-moshiko")
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
 
     def _load_datasample(self):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
