@@ -1045,6 +1045,9 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
             grid_xy[..., 0] /= width
             grid_xy[..., 1] /= height
 
+            # Key change from RT-DETR: instead of 4-dim (cx, cy, w, h) anchors, each cell gets a 10-dim
+            # quad anchor — the center plus the offsets of the four corners (TL, TR, BR, BL) of a square
+            # with side grid_size * 2**level centered at 0.5.
             half = grid_size * (2.0**level) / 2.0
             corners = torch.tensor(
                 [0.5 - half, 0.5 - half, 0.5 + half, 0.5 - half, 0.5 + half, 0.5 + half, 0.5 - half, 0.5 + half],
