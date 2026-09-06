@@ -40,8 +40,8 @@ deformable decoder — and changes three things:
 The reading order is not decoded inside the model. `PPDocLayoutV4ForObjectDetection` returns the raw
 `relative_order_logits` and `successor_order_logits`, and
 [`~PPDocLayoutV4ImageProcessor.post_process_object_detection`] turns them into ranks by thresholding the successor
-matrix into a DAG, breaking cycles, sorting each connected component topologically, and ordering the components by
-their relative order votes.
+matrix into a directed acyclic graph (DAG), breaking cycles, sorting each connected component topologically, and
+ordering the components by their relative order votes.
 
 ## Usage
 

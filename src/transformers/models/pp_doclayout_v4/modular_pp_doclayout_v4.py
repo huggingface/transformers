@@ -32,9 +32,8 @@ from ...image_utils import PILImageResampling, SizeDict
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, requires_backends
-from ...utils.generic import TensorType, can_return_tuple, merge_with_config_defaults
+from ...utils.generic import TensorType, can_return_tuple
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
 from ..pp_doclayout_v3.image_processing_pp_doclayout_v3 import PPDocLayoutV3ImageProcessor
@@ -835,7 +834,6 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
             [nn.Linear(config.d_model, config.num_labels) for _ in range(config.decoder_layers)]
         )
 
-    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(
@@ -888,14 +886,14 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
         """
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
-        reference_points = F.sigmoid(reference_points)
 
         intermediate = ()
         intermediate_reference_points = ()
         logits = None
         relative_order_logits = None
         successor_order_logits = None
-        last_index = len(self.layers) - 1
+
+        reference_points = F.sigmoid(reference_points)
 
         for idx, decoder_layer in enumerate(self.layers):
             # Deformable attention samples on the enclosing rect of the quad.
@@ -918,17 +916,13 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
             intermediate += (hidden_states,)
             intermediate_reference_points += (reference_points,)
 
-            # Only the last layer's class and order predictions are used, matching the reference implementation.
-            if idx != last_index:
-                continue
-
-            logits = self.class_embed[idx](hidden_states)
-            if order_head is not None and global_pointer is not None:
-                valid_query = hidden_states[:, -self.num_queries :] if self.num_queries is not None else hidden_states
-                successor_order_logits = successor_global_pointer(successor_order_head[idx](valid_query))
-                relative_order_logits = global_pointer(order_head[idx](valid_query))
-                if s2r_fusion is not None:
-                    relative_order_logits = s2r_fusion(relative_order_logits, successor_order_logits)
+        logits = self.class_embed[-1](hidden_states)
+        if order_head is not None and global_pointer is not None:
+            valid_query = hidden_states[:, -self.num_queries :] if self.num_queries is not None else hidden_states
+            successor_order_logits = successor_global_pointer(successor_order_head[-1](valid_query))
+            relative_order_logits = global_pointer(order_head[-1](valid_query))
+            if s2r_fusion is not None:
+                relative_order_logits = s2r_fusion(relative_order_logits, successor_order_logits)
 
         return PPDocLayoutV4DecoderOutput(
             last_hidden_state=hidden_states,
@@ -1018,8 +1012,6 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
         # PP-DocLayoutV4 does not reserve an extra "no object" row in the denoising embedding, so the `num_labels + 1`
         # embedding built by [`PPDocLayoutV3Model`] is overwritten here. The modular converter only deduplicates
         # plain assignments, so both allocations survive into the generated file, the second one winning.
-        # CODEPATH: PP-DocLayoutV4_safetensors trains with `num_denoising=100`, so it carries the embedding even
-        # though contrastive denoising is training only. Set it to 0 to build an inference-only model.
         if config.num_denoising > 0:
             self.denoising_class_embed = nn.Embedding(config.num_labels, config.d_model)
 
@@ -1035,17 +1027,12 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
             [nn.Linear(config.d_model, config.d_model) for _ in range(config.decoder_layers)]
         )
         self.decoder_roor_global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=False)
-        # CODEPATH: PP-DocLayoutV4_safetensors sets `use_s2r=True`. `False` reproduces the pre-S2R baseline,
-        # where the relative order logits are used without the successor closure term.
         self.s2r_fusion = PPDocLayoutV4S2RFusion(config) if config.use_s2r else None
 
         del self.decoder_norm
         del self.mask_enhanced
         del self.mask_query_head
 
-
-    @staticmethod
-    @compile_compatible_method_lru_cache(maxsize=32)
     def _cached_generate_anchors(
         spatial_shapes: tuple[tuple[int, int], ...],
         grid_size: float,

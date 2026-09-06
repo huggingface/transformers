@@ -772,7 +772,7 @@ default_enabled = true
 # vitpose_backbone(1), x_clip(1). Every one needs its `# CODEPATH:` note to name the checkpoints that take
 # each path, which only the model owner knows -- guessing would be worse than the missing note -- so they
 # go out as per-model follow-ups. `mimo_v2_flash` no longer fires and was dropped.
-allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "inkling", "kimi_k25", "kosmos2", "muse_glimmer", "openai", "timm_backbone", "timm_wrapper", "tipsv2", "vitpose_backbone", "x_clip", "glm5_next"]
+allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "inkling", "kimi_k25", "kosmos2", "muse_glimmer", "openai", "pp_doclayout_v4", "timm_backbone", "timm_wrapper", "tipsv2", "vitpose_backbone", "x_clip", "glm5_next"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF041.explanation]
