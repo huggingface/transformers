@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-08-30.*
+*This model was contributed to Hugging Face Transformers on 2026-09-06.*
 
 # PP-DocLayoutV4
 
@@ -124,33 +124,6 @@ for result in results:
         box = [round(i, 2) for i in box.tolist()]
         print(f"Order {idx + 1}: {model.config.id2label[label_id.item()]}, score: {score.item():.2f}, box: {box}")
 ```
-
-## Notes
-
-- PP-DocLayoutV4 is inference only in Transformers. Passing `labels` raises a `ValueError`.
-- `config.eval_size` must stay `None`. A non-`None` value makes the AIFI layer skip the dynamically computed position
-  embeddings, which does not match the reference implementation.
-- `PPDocLayoutV4S2RFusion` only stores its gate `a` in the checkpoint. The weight applied to the relative order
-  logits comes from `config.s2r_b_init` unless `config.s2r_learnable_b` is set.
-- Preprocessing rescales to `[0, 1]` *before* resizing and clips the bicubic overshoot, which keeps every pixel
-  within one 8-bit step of the reference `cv2.resize`. Resizing in `uint8` rounds twice with slightly different
-  kernel weights and drifts far enough to permute the predicted reading order.
-
-### Differences from the PaddleX pipeline
-
-`post_process_object_detection` covers the model's own post-processing: score thresholding, top-k selection, quad
-decoding and the reading order decode. The PaddleX layout analysis pipeline layers several application level
-policies on top, which Transformers deliberately leaves to the caller:
-
-| PaddleX option | Effect | Transformers |
-|---|---|---|
-| `filter_overlap_boxes` (default on) | Drops boxes that sit inside another box | not applied, both boxes are returned |
-| `layout_nms` | Quad IoU NMS | not applied, PP-DocLayoutV4 is NMS free by design |
-| `skip_order_labels` (default: 11 labels) | Blanks the reading order of figures, tables, headers, footers, ... | not applied, every kept box gets a rank |
-| `layout_unclip_ratio`, `layout_merge_bboxes_mode` | Expands or merges boxes | not applied |
-
-With those policies disabled, PP-DocLayoutV4 in Transformers and the PaddleX layout analysis pipeline keep the same
-boxes and agree on labels and reading order.
 
 ## PPDocLayoutV4ForObjectDetection
 

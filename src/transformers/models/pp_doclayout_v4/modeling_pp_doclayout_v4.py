@@ -1124,7 +1124,8 @@ class PPDocLayoutV4Decoder(PPDocLayoutV4PreTrainedModel):
             Fuses the successor logits into the relative order logits. When `None` the relative order logits are
             returned unchanged.
         """
-        hidden_states = inputs_embeds
+        if inputs_embeds is not None:
+            hidden_states = inputs_embeds
         reference_points = F.sigmoid(reference_points)
 
         intermediate = ()
