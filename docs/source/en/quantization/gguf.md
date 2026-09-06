@@ -25,6 +25,14 @@ rendered properly in your Markdown viewer.
 
 ## Load GGUF models
 
+Install [kernels](https://huggingface.co/docs/kernels/index), otherwise the packed path falls back to full [dequantization](#dequantize) at load.
+
+```bash
+pip install kernels
+```
+
+Weights stay packed when the Hub kernel [transformers-community/ggml-quantization](https://huggingface.co/transformers-community/ggml-quantization) is available. The loader defaults to MPS when that kernel is present and runs matmuls directly on the packed blocks. If the kernel isn't available, the model is dequantized at load.
+
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -35,14 +43,11 @@ model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=filename)
 tokenizer = AutoTokenizer.from_pretrained(model_id, gguf_file=filename)
 ```
 
-The weights only stay in their GGUF blocks on Metal (MPS) devices, where the [llama.cpp](https://github.com/ggerganov/llama.cpp) kernels, fetched from the Hub, run the matmuls directly on the packed blocks to keep inference fast.
-
-Right now, the only architecture supported is Qwen3.5. Everything else falls back. On another device or quantization type, the model is [dequantized](#dequantize) at load time, and an architecture that isn't supported yet goes through the legacy loader.
+Currently the only architecture supported for the packed path is Qwen3.5. Everything else falls back.
 
 ## Attention
 
-On Metal, attention has a ggml kernel too: [ggml-attn](https://huggingface.co/transformers-community/ggml-attn), the same
-flash attention llama.cpp runs, for both decode and prefill.
+On Metal, with kernels installed, attention can use [ggml-attn](https://huggingface.co/transformers-community/ggml-attn), the same flash-attention kernel llama.cpp uses for decode and prefill.
 
 ```py
 model = AutoModelForCausalLM.from_pretrained(
@@ -65,9 +70,9 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-The model that comes out is a regular dense model, so this is also how you take a GGUF checkpoint into the dtype you passed. 
+You get a regular dense model in the `dtype` you passed.
 
-Architectures other than Qwen3.5 are read by the legacy loader which dequantize the model also.
+Architectures other than Qwen3.5 go through the legacy loader, which always dequantizes.
 
 > [!TIP]
 > The legacy loader supports Llama, Mistral, Qwen2, Qwen2Moe, Phi3, Bloom, Falcon, StableLM, GPT2, Starcoder2, and [more](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/ggml.py).
