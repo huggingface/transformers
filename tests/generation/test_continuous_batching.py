@@ -810,6 +810,7 @@ class ContinuousBatchingPauseTest(unittest.TestCase):
         manager.distributed_helper = SimpleNamespace(cpu_comm_group=None, global_rank=0)
         manager.batch_processor = None
         manager._original_attn_impl = None
+        manager._has_new_requests = threading.Event()
         return manager
 
     def test_pause_on_a_peer_initiated_pause(self) -> None:
