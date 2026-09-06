@@ -30,7 +30,7 @@ from ..superpoint import SuperPointConfig
 
 
 @auto_docstring
-@strict(accept_kwargs=True)
+@strict
 class LoMaVgg19EncoderConfig(PreTrainedConfig):
     r"""
     in_channels (`int`, *optional*, defaults to 3):
@@ -63,7 +63,7 @@ class LoMaVgg19EncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring
-@strict(accept_kwargs=True)
+@strict
 class LoMaDescriptorDecoderConfig(PreTrainedConfig):
     r"""
     scales (`list[str]`, *optional*, defaults to `["14", "8", "4", "2", "1"]`):
@@ -85,7 +85,7 @@ class LoMaDescriptorDecoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="ETH-CVG/loma_superpoint")
-@strict(accept_kwargs=True)
+@strict
 class LoMaConfig(PreTrainedConfig):
     r"""
     keypoint_detector_config (`Union[AutoConfig, dict]`, *optional*, defaults to `SuperPointConfig`):

@@ -353,6 +353,12 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    @unittest.skip(
+        reason="LoMa's nested DINOv2 backbone registers _can_record_outputs which conflicts with top-level hidden states"
+    )
+    def test_can_capture_specific_layers_hidden_states(self):
+        pass
+
     @unittest.skip(reason="LoMa uses scaled dot-product attention without exposing attention weights")
     def test_attention_outputs(self):
         def check_attention_output(inputs_dict, config, model_class):

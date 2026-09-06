@@ -38,7 +38,7 @@ from ..lightglue.modeling_lightglue import (
 
 
 @auto_docstring
-@strict(accept_kwargs=True)
+@strict
 class LoMaVgg19EncoderConfig(PreTrainedConfig):
     r"""
     in_channels (`int`, *optional*, defaults to 3):
@@ -71,7 +71,7 @@ class LoMaVgg19EncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring
-@strict(accept_kwargs=True)
+@strict
 class LoMaDescriptorDecoderConfig(PreTrainedConfig):
     r"""
     scales (`list[str]`, *optional*, defaults to `["14", "8", "4", "2", "1"]`):
@@ -93,7 +93,7 @@ class LoMaDescriptorDecoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="ETH-CVG/loma_superpoint")
-@strict(accept_kwargs=True)
+@strict
 class LoMaConfig(LightGlueConfig):
     r"""
     keypoint_detector_config (`Union[AutoConfig, dict]`, *optional*, defaults to `SuperPointConfig`):
@@ -475,11 +475,12 @@ class LoMaForKeypointMatching(LoMaPreTrainedModel):
         self.keypoint_detector = AutoModelForKeypointDetection.from_config(config.keypoint_detector_config)
         self.descriptor_network = LoMaDescriptorNetwork(config)
         # CODEPATH: input_descriptor_dim != descriptor_dim → all released LoMa checkpoints use 256 for both
-        self.input_projection = (
-            nn.Identity()
-            if config.input_descriptor_dim == config.descriptor_dim
-            else nn.Linear(config.input_descriptor_dim, config.descriptor_dim, bias=config.attention_bias)
-        )
+        if config.input_descriptor_dim == config.descriptor_dim:
+            self.input_projection = nn.Identity()
+        else:
+            self.input_projection = nn.Linear(
+                config.input_descriptor_dim, config.descriptor_dim, bias=config.attention_bias
+            )
         self.positional_encoder = LoMaPositionalEncoder(config)
         self.layers = nn.ModuleList(
             [LoMaTransformerLayer(config, layer_idx=layer_idx) for layer_idx in range(config.num_hidden_layers)]
