@@ -836,9 +836,7 @@ def shard_state_dict_for_load(state_dict: dict[str, torch.Tensor], model) -> dic
     for key, tensor in state_dict.items():
         target = parameters.get(key)
         if isinstance(target, torch.Tensor) and isinstance(target.data, DTensor) and not isinstance(tensor, DTensor):
-            tensor = distribute_tensor(
-                tensor.to(target.data.device), target.data.device_mesh, target.data.placements
-            )
+            tensor = distribute_tensor(tensor.to(target.data.device), target.data.device_mesh, target.data.placements)
         sharded[key] = tensor
     return sharded
 
