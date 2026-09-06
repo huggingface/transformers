@@ -436,6 +436,12 @@ class ContinuousBatchProcessor:
         # Pause window: if any thread of the TP group asked for a pause, all ranks wait here until their own threads
         # are done pausing. Thanks to the barrier (one per rank), all ranks leave the pause at the same time.
         if pause_requested:
+            # The step launched before this one may still be running on the GPU: wait for it before telling the
+            # callers the loop is paused, so their kernels and collectives never share the device with the engine's.
+            # Two communicators with kernels resident at once (a tensor parallel decode tail and a caller's gradient
+            # all-reduce across replicas) deadlock; a caller that pauses to train on the model relies on this wait.
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
             self.background_thread_status.pause_and_wait()
             if self.distributed_helper.cpu_comm_group is not None:
                 timeout = self.cb_config.cpu_group_timeout
