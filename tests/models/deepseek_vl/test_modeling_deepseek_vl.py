@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     slow,
-    torch_device,
 )
 
 from ...test_processing_common import url_to_local_path
