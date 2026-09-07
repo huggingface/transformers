@@ -80,6 +80,7 @@ class KimiLinearModelTester(CausalLMModelTester):
 class KimiLinearModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = KimiLinearModelTester
     model_tester: KimiLinearModelTester
+    model_split_percents = [0.5, 0.97]
 
     def _get_conv_state_shape(self, batch_size: int, config):
         # KDA packs the q/k/v short convolutions into a single depthwise conv1d
