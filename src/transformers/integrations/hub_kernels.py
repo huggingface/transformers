@@ -665,7 +665,7 @@ def load_and_register_attn_kernel(
 
     Args:
         attn_implementation: A string, usually a kernel repo like "kernels-community/flash-mla".
-        attn_wrapper: a callable for the wrapper around the attention implementation. In `transformers` we
+        attention_wrapper: a callable for the wrapper around the attention implementation. In `transformers` we
             have a wrapper around the `flash_attn_var_len` call, and the same goes for `sdpa` and `eager`.
             They just prepare the arguments properly. This is mostly used for continuous batching, where we
             want the `paged` wrapper, which calls the paged cache.
