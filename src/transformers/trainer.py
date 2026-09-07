@@ -46,10 +46,10 @@ import numpy as np
 import safetensors.torch
 import torch
 import torch.distributed as dist
-from torch.distributed.tensor import DTensor
 from huggingface_hub import CommitInfo, ModelCard
 from packaging import version
 from torch import nn
+from torch.distributed.tensor import DTensor
 from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
 
 from . import __version__

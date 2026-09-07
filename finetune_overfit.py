@@ -121,7 +121,10 @@ def main(script_args, training_args, model_args):
             **kwargs,
         )
 
-        model = PeftModel.from_pretrained(model, original_model_path, is_trainable=True)
+        torch_device = f"cuda:{os.environ.get('LOCAL_RANK')}" if torch.cuda.is_available() else None
+        model = PeftModel.from_pretrained(
+            model, original_model_path, is_trainable=True, torch_device=torch_device
+        )
         if int(os.environ.get("RANK", "0")) == 0:
             model.print_trainable_parameters()
     else:

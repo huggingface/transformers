@@ -62,9 +62,6 @@ NUM_TRAIN_EXAMPLES=16
 MAX_STEPS=50
 MAX_SEQ_LENGTH=1024
 BATCH_SIZE=4
-# Grad clipping disabled: Accelerate's clip_grad_norm_ can't batch mixed DTensor (TP-sharded)
-# and plain Tensor (unsharded, e.g. norms/embeddings) grads together under native TP/FSDP loading.
-MAX_GRAD_NORM=0
 
 echo "=========================================="
 echo "Plain Trainer parallelism overfitting test"
@@ -100,7 +97,6 @@ $LAUNCHER \
     --bf16 true \
     --per_device_train_batch_size $BATCH_SIZE \
     --max_steps $MAX_STEPS \
-    --max_grad_norm $MAX_GRAD_NORM \
     --eval_strategy no \
     --logging_steps 10 \
     --save_strategy no \
