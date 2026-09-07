@@ -142,7 +142,6 @@ def _inference_all_reduce(output: torch.Tensor, process_group) -> None:
         or output.numel() * output.element_size() > 8 * 1024 * 1024  # bandwidth-bound: NCCL's ring wins there
         or dist.get_world_size(process_group) > 8
         or os.environ.get("HF_TP_SYMM_MEM_ALL_REDUCE") != "1"
-        or torch.cuda.is_current_stream_capturing()  # a rendezvous cannot happen during a capture
     ):
         dist.all_reduce(output, group=process_group)
         return
@@ -157,6 +156,11 @@ def _inference_all_reduce(output: torch.Tensor, process_group) -> None:
     key = (process_group.group_name, hidden, output.dtype)
     buf = _SYMM_BUFFERS.get(key)
     if buf is None or buf.shape[0] < rows:
+        # a rendezvous is a collective and cannot run inside a graph capture: this call takes NCCL, and the buffer it
+        # allocates on the next eager call is what the following captures record
+        if torch.cuda.is_current_stream_capturing():
+            dist.all_reduce(output, group=process_group)
+            return
         buf = symm_mem.empty(max(rows, 8192), hidden, dtype=output.dtype, device=output.device)
         symm_mem.rendezvous(buf, process_group.group_name)
         _SYMM_BUFFERS[key] = buf
