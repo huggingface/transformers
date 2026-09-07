@@ -22,6 +22,12 @@ from ..utils import is_torch_available, is_torch_distributed_available, is_torch
 
 logger = logging.get_logger(__name__)
 
+# What one seek costs, expressed as the number of bytes a sequential read gets through in the same
+# time. Skipping the other ranks' shards trades bytes for seeks, so this is what decides whether the
+# trade pays. Measured at 12 MiB on a cross-region Lustre mount (50 ms per seek, 0.24 GiB/s per
+# stream); a local NVMe is far below that, where the effect is only to fall back more readily.
+_SEEK_COST_BYTES = 12 * 2**20
+
 
 if TYPE_CHECKING:
     from torch.distributed.tensor import DTensor
@@ -59,14 +65,78 @@ def _get_torch_distributed_world_size() -> int:
     return torch.distributed.get_world_size()
 
 
-def prefetch_checkpoint_shards(checkpoint_files: list[str]) -> None:
+def _merge(spans: list[tuple[int, int]], path: str) -> list[tuple[str, int, int]]:
+    """Sort byte ranges of one file and join the ones that touch or overlap."""
+    merged = []
+    for start, end in sorted(spans):
+        if merged and start <= merged[-1][2]:
+            merged[-1] = (path, merged[-1][1], max(merged[-1][2], end))
+        else:
+            merged.append((path, start, end))
+    return merged
+
+
+def _rank_byte_spans(checkpoint_files: list[str], meta_state_dict: dict) -> tuple[list, list]:
+    """Byte spans of the checkpoint this rank will read, merged per file.
+
+    A rank slices every sharded parameter down to its own shard, so it reads `1 / world` of those
+    bytes and all of the rest. Returns `(own, common)`, both lists of `(path, start, end)`: the common
+    spans come out identical on every rank, so local ranks can share them out between them.
+    """
+    import json
+    import struct
+
+    from .sharding_utils import DtensorShardOperation
+
+    own, common = [], []
+    for path in checkpoint_files:
+        with open(path, "rb") as f:
+            header_length = struct.unpack("<Q", f.read(8))[0]
+            header = json.loads(f.read(header_length))
+        base = 8 + header_length
+        mine, whole = [], []
+        for name, meta in header.items():
+            if name == "__metadata__":
+                continue
+            start, end = (base + offset for offset in meta["data_offsets"])
+            param = meta_state_dict.get(name)
+            # Sharding on dim 0 is the only kind that keeps a rank's share contiguous on disk, and only
+            # when the checkpoint stores the parameter whole rather than one piece per expert. Slice
+            # those; read everything else in full, which covers what the rank needs and then some.
+            rows = meta["shape"][0] if meta["shape"] else 0
+            if is_dtensor(param) and rows == param.shape[0] and _shards_dim_0_contiguously(param):
+                operation = DtensorShardOperation(param)
+                row_bytes = (end - start) // rows
+                start, end = (
+                    start + operation._axis0_offset * row_bytes,
+                    start + (operation._axis0_offset + operation._axis0_local_size) * row_bytes,
+                )
+                mine.append((start, end))
+            else:
+                whole.append((start, end))
+        own += _merge(mine, path)
+        common += _merge(whole, path)
+    return own, common
+
+
+def _shards_dim_0_contiguously(param: DTensor) -> bool:
+    """Whether every mesh dim that splits `param` splits dim 0 into one contiguous run per rank."""
+    shards = [placement for placement in param.placements if placement.is_shard()]
+    return bool(shards) and all(
+        placement.dim in (0, -param.ndim) and not getattr(placement, "split_factor", 0) for placement in shards
+    )
+
+
+def prefetch_checkpoint_shards(checkpoint_files: list[str], meta_state_dict: dict | None = None) -> None:
     """Warm the page cache for the checkpoint shards before the per-tensor loading pass, opt-in via
     `HF_SHARD_PREFETCH=<read threads per rank>`.
 
     The per-tensor read pattern of sharded loading reads a network filesystem at well under 1 GiB/s
     while large sequential reads sustain many times that; warming the page cache first makes the
-    actual load run at memory speed. Local ranks split the shard list between them (every node needs
-    the full checkpoint cached, since every rank slices tensors from all shards).
+    actual load run at memory speed. Given `meta_state_dict`, a rank warms the byte spans of its own
+    shard and shares the rest out with the other ranks on the node, which on a model sharded across
+    several nodes leaves each node warming a fraction of the checkpoint. Otherwise local ranks split
+    the shard list between them and warm it whole.
     """
     prefetch_threads = int(os.environ.get("HF_SHARD_PREFETCH", "0"))
     if not checkpoint_files or not prefetch_threads:
@@ -77,17 +147,34 @@ def prefetch_checkpoint_shards(checkpoint_files: list[str]) -> None:
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     local_world = int(os.environ.get("LOCAL_WORLD_SIZE", "1"))
 
-    def _warm(path, bufsize=16 * 2**20):
+    def _warm(job, bufsize=16 * 2**20):
+        path, start, end = job
         with open(path, "rb", buffering=0) as f:
-            while f.read(bufsize):
-                pass
+            f.seek(start)
+            left = end - start
+            while left:
+                chunk = f.read(min(bufsize, left))
+                if not chunk:
+                    return
+                left -= len(chunk)
+
+    whole = [(path, 0, os.path.getsize(path)) for path in checkpoint_files][local_rank::local_world]
+    own, common = ([], []) if meta_state_dict is None else _rank_byte_spans(checkpoint_files, meta_state_dict)
+    jobs = own + common[local_rank::local_world]
+    # Reading only this rank's shard saves bytes and costs seeks, and a checkpoint that stores experts
+    # one tensor at a time leaves so many small spans that the seeks win. Price the seeks in bytes and
+    # keep whichever plan reads less.
+    cost = sum(end - start for _, start, end in jobs) + len(jobs) * _SEEK_COST_BYTES
+    if not jobs or cost >= sum(end - start for _, start, end in whole):
+        jobs = whole
+    described = f"{sum(end - start for _, start, end in jobs) / 2**30:.1f} GiB in {len(jobs)} spans"
 
     prefetch_start = time.time()
     with ThreadPoolExecutor(max_workers=prefetch_threads) as pool:
-        list(pool.map(_warm, checkpoint_files[local_rank::local_world]))
+        list(pool.map(_warm, jobs))
     if _is_torch_distributed_initialized():
         torch.distributed.barrier()
-    logger.warning_once(f"Prefetched {len(checkpoint_files)} checkpoint shards in {time.time() - prefetch_start:.0f}s")
+    logger.warning_once(f"Prefetched {described} in {time.time() - prefetch_start:.0f}s")
 
 
 def is_local_dist_rank_0() -> bool:
