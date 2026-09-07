@@ -839,7 +839,11 @@ class MoshiIntegrationTests(unittest.TestCase):
         return AutoTokenizer.from_pretrained("kmhf/hf-moshiko")
 
     def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
+        if torch.cuda.is_available():
+            for i in range(torch.cuda.device_count()):
+                cleanup(f"cuda:{i}", gc_collect=True)
+        else:
+            cleanup(torch_device, gc_collect=True)
 
     def _load_datasample(self):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
