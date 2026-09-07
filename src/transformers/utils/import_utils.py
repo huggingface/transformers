@@ -119,7 +119,6 @@ def resolve_internal_import(module: ModuleType | None, chained_path: str) -> Cal
         final_module = getattr(final_module, path, None)
         if not final_module:
             return None
-
     return final_module
 
 

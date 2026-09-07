@@ -139,7 +139,7 @@ Create a data collator that processes audio-text pairs into the format expected 
 ...                     "role": "user",
 ...                     "content": [
 ...                         {"type": "text", "text": "Describe the audio."},
-...                         {"type": "audio", "audio": feature["audio"].get_all_samples().data},
+...                         {"type": "audio", "audio": feature["audio"].get_all_samples().data[0].numpy()},
 ...                     ],
 ...                 },
 ...                 {
@@ -214,7 +214,7 @@ trainable params: 44,302,336 || all params: 8,311,517,696 || trainable%: 0.5330
 ```
 
 > [!TIP]
-> [LoRA](https://huggingface.co/docs/peft/main/conceptual_guides/lora) significantly reduces memory usage and training time by only updating a small number of adapter parameters instead of the full model. This configuration targets the language model's attention and feed-forward layers while keeping the audio encoder frozen, making it possible to fine-tune on a single GPU.
+> LoRA significantly reduces memory usage and training time by only updating a small number of adapter parameters instead of the full model. This configuration targets the language model's attention and feed-forward layers while keeping the audio encoder frozen, making it possible to fine-tune on a single GPU.
 
 
 ### Setup training
@@ -300,7 +300,7 @@ Load an audio sample for inference:
 >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))
 >>> sample = next(iter(dataset))
 >>> audio = sample["audio"]
->>> audio_array = audio.get_all_samples().data if hasattr(audio, "get_all_samples") else audio["array"]
+>>> audio_array = audio.get_all_samples().data[0].numpy() if hasattr(audio, "get_all_samples") else audio["array"]
 ```
 
 Prepare the input with a conversation format:
@@ -337,25 +337,29 @@ Generate a response:
 
 ## Pipeline
 
-You can also use the [`Pipeline`] API for quick inference. Pass the fine-tuned PEFT model directly to the pipeline:
+For quick inference, use the [`Pipeline`] API with an `any-to-any` model. The example below uses [Voxtral](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507), which accepts audio and text inputs and generates text. See the [any-to-any task guide](./any_to_any) for more examples.
 
-```py
->>> from transformers import pipeline
->>> pipe = pipeline(
-...     "audio-text-to-text",
-...     model=model,
-...     processor=processor,
-... )
->>> result = pipe(
-...     audio_array,
-...     generate_kwargs={"max_new_tokens": 100},
-... )
->>> print(result[0]["generated_text"])
+```python
+from transformers import pipeline
+
+pipe = pipeline("any-to-any", model="mistralai/Voxtral-Mini-3B-2507")
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "audio",
+                "url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3",
+            },
+            {"type": "text", "text": "What do you hear in this audio?"},
+        ],
+    },
+]
+
+outputs = pipe(text=messages, max_new_tokens=100, return_full_text=False)
+print(outputs[0]["generated_text"])
 ```
-
-> [!TIP]
-> For more advanced use cases like multi-turn conversations with audio, you can structure your messages with alternating user and assistant roles, similar to [image-text-to-text](./image_text_to_text) models.
-
 
 ## Further Reading
 

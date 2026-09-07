@@ -391,10 +391,6 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
-    @unittest.skip("Mamba models do not support DDP.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(
         "FalconMamba shares Mamba1's conv path, which has no chunked-continuation support: on a cached "
         "multi-token forward it rebuilds conv_state from the zero-padded current chunk instead of bridging "

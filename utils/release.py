@@ -188,9 +188,11 @@ def pre_release_work(patch: bool = False):
 
     print(f"Updating version to {version}.")
     global_version_update(version, patch=patch)
-    print("Deleting conversion and internal utils scripts.")
-    remove_conversion_scripts()
-    remove_internal_utils()
+    # If releasing a patch, all those files were already deleted on the branch when releasing the main version
+    if not patch:
+        print("Deleting conversion and internal utils scripts.")
+        remove_conversion_scripts()
+        remove_internal_utils()
 
 
 def post_release_work():
