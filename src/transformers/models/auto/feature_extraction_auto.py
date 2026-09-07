@@ -34,9 +34,6 @@ from .configuration_auto import (
 
 logger = logging.get_logger(__name__)
 
-# Feature extractors the generator in `utils/check_auto.py` cannot find on its own: one model reusing
-# another's extractor, or an extractor that is not a `SequenceFeatureExtractor` because what it
-# extracts is not a sequence (`weathernext2` takes gridded weather fields).
 MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
         ("audioflamingo3", "WhisperFeatureExtractor"),
