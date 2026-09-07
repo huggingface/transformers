@@ -784,7 +784,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @require_accelerate
     def test_inference_vicuna_7b(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
+        # TODO(synthetic-assets): re-record after the lavis_confusing_pictures.jpg regeneration (2026-09-07).
         processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
         model = InstructBlipForConditionalGeneration.from_pretrained(
             "Salesforce/instructblip-vicuna-7b",
@@ -803,18 +803,14 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                ("xpu", 3): [32001] * 32 + [2, 1724, 338, 22910, 1048, 445, 1967, 29973, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 19500, 1623, 263, 19587, 4272, 11952, 29889],
-                ("xpu", 5): [32001] * 32 + [2, 1724, 338, 22910, 1048, 445, 1967, 29973, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 372, 338, 19500, 1623, 263, 19587, 4272],
-                ("cuda", None): [32001] * 32 + [2, 1724, 338, 22910, 1048, 445, 1967, 29973, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 19500, 373, 263, 19587, 4272, 11952, 29889],
+                (None, None): [32001] * 32 + [2, 1724, 338, 22910, 1048, 445, 1967, 29973, 450, 1967, 338, 22910, 1363, 372, 5680, 263, 2560, 29892, 13114, 391, 2874, 411, 263, 2654, 4891, 322, 263, 7254, 6862, 29892, 607, 10017, 263, 29191, 12814, 1546, 278, 1023],
             }
         )  # fmt: off
         expected_output = expected_outputs.get_expectation()
 
         expected_texts = Expectations(
             {
-                ("xpu", 3): "What is unusual about this image? The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while driving down a busy city street.",
-                ("xpu", 5): "What is unusual about this image? The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while it is driving down a busy city",
-                ("cuda", None): "What is unusual about this image? The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while driving on a busy city street.",
+                (None, None): "What is unusual about this image? The image is unusual because it features a simple, minimalist design with a red cross and a blue square, which creates a striking contrast between the two",
             }
         )  # fmt: off
         expected_text = expected_texts.get_expectation()
@@ -823,7 +819,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         self.assertEqual(generated_text, expected_text)
 
     def test_inference_flant5_xl(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
+        # TODO(synthetic-assets): re-record after the lavis_confusing_pictures.jpg regeneration (2026-09-07).
         processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-flan-t5-xl")
         model = InstructBlipForConditionalGeneration.from_pretrained(
             "Salesforce/instructblip-flan-t5-xl",
@@ -854,16 +850,14 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                (None, None): [0, 37, 1023, 9850, 7, 3, 9, 388, 3575, 53, 4954, 30, 8, 223, 13, 3, 9, 4459, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 37, 388, 19, 5119, 3, 9, 4459, 8677, 28, 3, 9, 4459, 6177, 6, 11, 3, 88, 19, 3609, 46, 3575, 53, 1476, 16, 80, 609, 11, 3, 9, 10428, 8235, 16, 8, 119, 5, 37, 1023, 19, 7225, 16, 24, 34, 1267, 3, 9, 388, 3575, 53, 4954, 30, 8, 223, 13, 3, 9, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 1],
-                ("xpu", 5): [0, 37, 1023, 9850, 7, 3, 9, 388, 3575, 53, 4954, 30, 8, 223, 13, 3, 9, 4459, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 5, 37, 388, 19, 5119, 3, 9, 4459, 8677, 28, 46, 3575, 53, 1476, 5223, 12, 8, 223, 13, 8, 4049, 6, 15495, 24, 3, 88, 19, 692, 112, 293, 10428, 44, 234, 5, 37, 1023, 19, 7225, 16, 24, 34, 1267, 3, 9, 388, 3575, 53, 4954, 30, 8, 223, 13, 3, 9, 4049, 16, 8, 2214, 13, 3, 9, 3164, 690, 2815, 6, 84, 164, 3130, 24, 3, 88, 19, 692, 112, 293, 10428, 44, 234, 5, 1],
+                (None, None): [0, 37, 1023, 19, 7225, 16, 24, 34, 753, 3, 9, 4459, 6, 1692, 6, 11, 1131, 2812, 28, 3, 9, 14602, 18, 670, 689, 16, 8, 2214, 13, 34, 5, 37, 2812, 19, 2681, 30, 3, 9, 872, 2458, 6, 84, 656, 34, 2385, 38, 3, 99, 34, 19, 3823, 30, 420, 13, 3, 9, 9954, 2458, 5, 37, 2812, 19, 2681, 16, 8, 2214, 13, 8, 1023, 6, 84, 656, 34, 2385, 38, 3, 99, 34, 19, 3823, 30, 420, 13, 3, 9, 7592, 2458, 5, 37, 2812, 19, 2681, 16, 8, 2214, 13, 8, 1023, 6, 84, 656, 34, 2385, 38, 3, 99, 34, 19, 3823, 30, 420, 13, 3, 9, 7592, 2458, 5, 37, 2812, 19, 2681, 16, 8, 2214, 13, 8, 1023, 6, 84, 656, 34, 2385, 38, 3, 99, 34, 19, 3823, 30, 420, 13, 3, 9, 7592, 2458, 5, 37, 2812, 19, 2681, 16, 8, 2214, 13, 8, 1023, 6, 84, 656, 34, 2385, 38, 3, 99, 34, 19, 3823, 30, 420, 13, 3, 9, 7592, 2458, 5, 37, 2812, 19, 2681, 16, 8, 2214, 13, 8, 1023, 6, 84, 656, 34, 2385, 38, 3, 99, 34, 19, 3823, 30, 420, 13, 3, 9, 7592, 2458, 5, 37, 2812, 19, 2681, 16, 8, 2214, 13, 8, 1023, 6, 84, 656, 34, 2385, 38, 3, 99, 34, 19, 3823, 30, 420, 13, 3, 9, 7592, 2458, 5, 37, 2812, 19, 2681, 16, 8, 2214, 13, 8, 1023, 6, 84, 656, 34, 2385, 38, 3, 99, 34, 19, 3823, 30, 420],
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(outputs[0].tolist(), expected_outputs)
 
         expected_text = Expectations(
             {
-                (None, None): "The image depicts a man ironing clothes on the back of a yellow van in the middle of a busy city street. The man is wearing a yellow shirt with a yellow tie, and he is holding an ironing board in one hand and a laundry basket in the other. The image is unusual in that it shows a man ironing clothes on the back of a van in the middle of a busy city street.",
-                ("xpu", 5): "The image depicts a man ironing clothes on the back of a yellow van in the middle of a busy city street. The man is wearing a yellow shirt with an ironing board attached to the back of the van, suggesting that he is doing his own laundry at home. The image is unusual in that it shows a man ironing clothes on the back of a van in the middle of a busy city street, which may suggest that he is doing his own laundry at home.",
+                (None, None): 'The image is unusual in that it features a yellow, blue, and red square with a crossed-out line in the middle of it. The square is placed on a white background, which makes it appear as if it is sitting on top of a gray background. The square is placed in the middle of the image, which makes it appear as if it is sitting on top of a grey background. The square is placed in the middle of the image, which makes it appear as if it is sitting on top of a grey background. The square is placed in the middle of the image, which makes it appear as if it is sitting on top of a grey background. The square is placed in the middle of the image, which makes it appear as if it is sitting on top of a grey background. The square is placed in the middle of the image, which makes it appear as if it is sitting on top',
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(generated_text, expected_text)

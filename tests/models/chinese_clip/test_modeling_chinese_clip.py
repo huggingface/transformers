@@ -576,7 +576,6 @@ def prepare_img():
 class ChineseCLIPModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model_name = "OFA-Sys/chinese-clip-vit-base-patch16"
         model = ChineseCLIPModel.from_pretrained(model_name).to(torch_device)
         processor = ChineseCLIPProcessor.from_pretrained(model_name)
@@ -601,7 +600,7 @@ class ChineseCLIPModelIntegrationTest(unittest.TestCase):
         )
 
         probs = outputs.logits_per_image.softmax(dim=1)
-        expected_probs = torch.tensor([[1.2686e-03, 5.4499e-02, 6.7968e-04, 9.4355e-01]], device=torch_device)
+        expected_probs = torch.tensor([[9.7735e-04, 1.1008e-02, 4.4070e-04, 9.8757e-01]], device=torch_device)
 
         torch.testing.assert_close(probs, expected_probs, rtol=5e-3, atol=5e-3)
 

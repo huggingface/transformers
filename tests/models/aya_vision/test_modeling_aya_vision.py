@@ -368,7 +368,6 @@ class AyaVisionIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     def test_small_model_integration_batched_generate(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = self.get_model()
         # Prepare inputs
@@ -412,9 +411,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Wooden bridge stretches\nInto still waters, mountains gleam\nPeaceful forest scene",
-                # 4-bit
-                ("cuda", 8): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
+                (None, None): "Pine trees stand tall,\nMountain peaks touch the sky blue,\nPeaceful lake reflects.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -501,8 +498,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.",
-                ("cuda", 8): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
+                (None, None): "Pine trees stand tall,\nMountain peaks touch the sky blue,\nPeaceful lake reflects.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

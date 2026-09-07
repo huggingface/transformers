@@ -189,7 +189,7 @@ class CHMv2IntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        expected_shape = torch.Size([1, 448, 448])
+        expected_shape = torch.Size([1, 736, 736])
         self.assertEqual(outputs.predicted_depth.shape, expected_shape)
 
         expected_slice = torch.tensor(
@@ -201,7 +201,7 @@ class CHMv2IntegrationTest(unittest.TestCase):
 
         # post-processing: without target_sizes keeps the model's native output resolution
         depth = processor.post_process_depth_estimation(outputs)[0]["predicted_depth"]
-        self.assertEqual(depth.shape, torch.Size([448, 448]))
+        self.assertEqual(depth.shape, torch.Size([736, 736]))
 
         # post-processing: with target_sizes resizes to the original image dimensions
         depth_resized = processor.post_process_depth_estimation(

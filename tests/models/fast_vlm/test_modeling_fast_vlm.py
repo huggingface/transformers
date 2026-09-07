@@ -245,7 +245,6 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @require_vision
     def test_small_model_integration_test(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = FastVlmForConditionalGeneration.from_pretrained(
             "KamilaMila/FastVLM-0.5B", device_map=torch_device, dtype=torch.bfloat16
         )
@@ -256,7 +255,7 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, dtype=model.dtype)
 
         output = model.generate(**inputs, max_new_tokens=20)
-        expected_decoded_texts = "user\n\nWhat are the things I should be cautious about when I visit this place?\nassistant\n\nWhen visiting this place, there are a few things you should be cautious about:\n\n1. **"  # fmt: skip
+        expected_decoded_texts = "user\n\nWhat are the things I should be cautious about when I visit this place?\nassistant\n\nWhen visiting this place, you should be cautious of the following:\n\n1. **Weather Conditions**:"  # fmt: skip
 
         EXPECTED_DECODED_TEXT = expected_decoded_texts
 
@@ -268,7 +267,6 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_vision
     @require_deterministic_for_xpu
     def test_small_model_integration_test_batch(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = FastVlmForConditionalGeneration.from_pretrained(
             "KamilaMila/FastVLM-0.5B", device_map=torch_device, dtype=torch.bfloat16
         )
@@ -293,11 +291,11 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 (None, None): [
-                    "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene place, it's essential to be mindful of the following:\n\n1. **",
+                    "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene lake and mountain area, it's essential to be mindful of the following:\n\n",
                     "user\n\nWhat is this?\nassistant\n\nThe image depicts two cats, one of which is a tabby, lying on a pink surface",
                 ],
                 ("xpu", None): [
-                    "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene place, it's essential to be mindful of the following:\n\n1. **",
+                    "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene lake and mountain area, it's essential to be mindful of the following:\n\n",
                     "user\n\nWhat is this?\nassistant\n\nThe image depicts two cats, one of which is a kitten, resting on a pink surface.",
                 ],
             }

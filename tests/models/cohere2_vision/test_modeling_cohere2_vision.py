@@ -319,7 +319,6 @@ class Cohere2IntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     def test_model_integration_batched_generate(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = self.get_model(dummy=False)
         # Prepare inputs
@@ -363,8 +362,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): 'Dock stretches to calm',
-                ("cuda", 8): 'Dock stretches to calm',
+                (None, None): 'Dock meets silent lake',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

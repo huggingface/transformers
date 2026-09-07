@@ -548,7 +548,6 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_multi_accelerator
     def test_integration_test(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = Idefics2ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/idefics2-8b-base",
             dtype=torch.bfloat16,
@@ -565,14 +564,13 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         # Batch affects generated text. Single batch output: ['In this image, we see the Statue of Liberty in the foreground and']
-        expected_generated_text = "In this image, we see the Statue of Liberty, the New York City"
+        expected_generated_text = "In this image, we see the Statue of Liberty, which is a col"
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     @slow
     @require_bitsandbytes
     def test_integration_test_4bit(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = Idefics2ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/idefics2-8b-base", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
         )
@@ -587,9 +585,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_generated_texts = Expectations(
             {
-                ("xpu", 3): "In this image, we see the Statue of Liberty, the Hudson River,",
-                ("cuda", None): "In this image, we see the Statue of Liberty, the Hudson River,",
-                ("rocm", (9, 5)): "In this image, we see the Statue of Liberty, the New York City",
+                (None, None): "In this image, we see the Statue of Liberty, which is a col",
             }
         )
         EXPECTED_GENERATED_TEXT = expected_generated_texts.get_expectation()
