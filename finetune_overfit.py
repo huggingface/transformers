@@ -76,8 +76,8 @@ def main(script_args, training_args, model_args):
     from peft import LoraConfig, get_peft_model, PeftModel
 
     lora_config = LoraConfig(
-        r=16,
-        lora_alpha=32,
+        r=64,
+        lora_alpha=128,
         target_modules=[
             "q_proj",
             "k_proj",

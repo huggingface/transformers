@@ -1869,8 +1869,7 @@ class Trainer:
                     grad_norm = None
                     if self.args.max_grad_norm > 0:
                         grad_norm = self._clip_grad_norm(model)
-                    # grad_norm = self._get_grad_norm(model, grad_norm=grad_norm)
-                    grad_norm = 0.0
+                    grad_norm = self._get_grad_norm(model, grad_norm=grad_norm)
 
                     self.control = self.callback_handler.on_pre_optimizer_step(self.args, self.state, self.control)
                     self.optimizer.step()

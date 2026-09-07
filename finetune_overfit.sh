@@ -14,7 +14,7 @@ set -euo pipefail
 #   PARALLEL_MODE=fsdp NUM_PROC=4 -> FSDP_SIZE=4
 # ---------------------------------------------------------------------------
 PARALLEL_MODE=${PARALLEL_MODE:-tp}
-NUM_PROC=${NUM_PROC:-4}
+NUM_PROC=${NUM_PROC:-2}
 USE_LORA=${USE_LORA:-true}
 
 case "$PARALLEL_MODE" in
@@ -51,17 +51,18 @@ fi
 # ---------------------------------------------------------------------------
 MODEL_NAME=Qwen/Qwen3-1.7B
 DATASET_NAME=trl-lib/Capybara
+LEARNING_RATE=5.0e-4
+NUM_TRAIN_EXAMPLES=16
+MAX_STEPS=50
+MAX_SEQ_LENGTH=1024
+BATCH_SIZE=4
+
 LORA_SUFFIX=""
 if [ "$USE_LORA" = "true" ]; then
     LORA_SUFFIX="-lora"
 fi
 OUTPUT_DIR=Qwen3-1.7B-${PARALLEL_MODE}-Overfit${LORA_SUFFIX}
 
-LEARNING_RATE=5.0e-4
-NUM_TRAIN_EXAMPLES=16
-MAX_STEPS=50
-MAX_SEQ_LENGTH=1024
-BATCH_SIZE=4
 
 echo "=========================================="
 echo "Plain Trainer parallelism overfitting test"
