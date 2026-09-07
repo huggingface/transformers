@@ -215,7 +215,8 @@ def apply_fully_sharded_data_parallelism(
     if distributed_config is not None and distributed_config.expert_parallel_dispatch:
         if not is_torch_greater_or_equal("2.7"):
             raise OSError("Expert-parallel token dispatch requires `torch>=2.7`.")
-        # The DTensor parameters are the expert-parallel experts (the expert parallel plan shards only them).
+        # The DTensor parameters are the expert-parallel experts: `maybe_distribute_model` rewrote the expert
+        # parallel plan to shard only them.
         expert_modules = [
             module for module in model.modules() if any(is_dtensor(p) for p in module.parameters(recurse=False))
         ]

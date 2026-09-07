@@ -212,18 +212,23 @@ class DistributedMixin:
                     model.tp_plan = distributed_config.tp_plan
                 if distributed_config.expert_parallel_dispatch:
                     # Every rank trains on its own part of the batch, so only the experts can be sharded across the
-                    # group: the experts get the dispatch style, and the router keeps its global ids and scores.
-                    other_styles = set(model.tp_plan.values()) - {"ep_router", "grouped_gemm", "moe_tp_experts"}
-                    if other_styles:
-                        raise ValueError(
-                            "`expert_parallel_dispatch=True` needs an expert parallel plan that only shards the "
-                            f"experts, but this model's plan also uses {sorted(other_styles)}."
+                    # group: the experts get the dispatch style, the router keeps its global ids and scores, and
+                    # whatever else the plan shards stays replicated, data-parallel like the rest of the trunk.
+                    replicated = sorted(
+                        name
+                        for name, style in model.tp_plan.items()
+                        if style not in ("ep_router", "grouped_gemm", "moe_tp_experts")
+                    )
+                    if replicated:
+                        logger.warning(
+                            "`expert_parallel_dispatch=True` shards only the experts, so these expert parallel plan "
+                            f"entries are ignored and their modules stay replicated: {replicated}."
                         )
                     # `tp_plan` reads `_ep_plan` under expert parallelism, so that is the plan to rewrite.
                     model._ep_plan = {
                         name: "ep_dispatch_experts" if style == "moe_tp_experts" else style
                         for name, style in model.tp_plan.items()
-                        if style != "ep_router"
+                        if style in ("grouped_gemm", "moe_tp_experts")
                     }
                 model = apply_tensor_parallelism(model, tp_mesh)
 
