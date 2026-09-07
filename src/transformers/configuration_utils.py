@@ -162,10 +162,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
     - **model_type** (`str`) -- An identifier for the model type, serialized into the JSON file, and used to recreate
       the correct object in [`~transformers.AutoConfig`].
-    - **has_no_defaults_at_init** (`bool`) -- Whether the config class can be initialized without providing input arguments.
-      Some configurations requires inputs to be defined at init and have no default values, usually these are composite configs,
-      (but not necessarily) such as [`~transformers.EncoderDecoderConfig`] or [`~RagConfig`]. They have to be initialized from
-      two or more configs of type [`~transformers.PreTrainedConfig`].
     - **keys_to_ignore_at_inference** (`list[str]`) -- A list of keys to ignore by default when looking at dictionary
       outputs of the model during inference.
     - **attribute_map** (`dict[str, str]`) -- A dict that maps model specific attribute names to the standardized
@@ -244,7 +240,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
     # creating a model class
     base_config_key: ClassVar[str] = ""
     sub_configs: ClassVar[dict[str, type["PreTrainedConfig"]]] = {}
-    has_no_defaults_at_init: ClassVar[bool] = False
     keys_to_ignore_at_inference: ClassVar[list[str]] = []
     attribute_map: ClassVar[dict[str, str]] = {}
     base_model_tp_plan: ClassVar[dict[str, Any] | None] = None

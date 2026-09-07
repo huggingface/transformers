@@ -17,7 +17,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
-from ..auto.configuration_auto import AutoConfig
+from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -139,11 +139,10 @@ class MusicgenMelodyConfig(PreTrainedConfig):
         "audio_encoder": AutoConfig,
         "decoder": MusicgenMelodyDecoderConfig,
     }
-    has_no_defaults_at_init = True
 
-    text_encoder: dict | PreTrainedConfig = None
-    audio_encoder: dict | PreTrainedConfig = None
-    decoder: dict | PreTrainedConfig = None
+    text_encoder: dict | PreTrainedConfig | None = None
+    audio_encoder: dict | PreTrainedConfig | None = None
+    decoder: dict | PreTrainedConfig | None = None
     num_chroma: int = 12
     chroma_length: int = 235
     initializer_factor: float = 0.02
@@ -153,17 +152,13 @@ class MusicgenMelodyConfig(PreTrainedConfig):
             text_encoder_model_type = self.text_encoder.pop("model_type")
             self.text_encoder = AutoConfig.for_model(text_encoder_model_type, **self.text_encoder)
         elif self.text_encoder is None:
-            raise ValueError(
-                f"A configuration of type {self.model_type} cannot be instantiated because text_encoder is not passed"
-            )
+            self.text_encoder = CONFIG_MAPPING["t5"]()
 
         if isinstance(self.audio_encoder, dict):
             audio_encoder_model_type = self.audio_encoder.pop("model_type")
             self.audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **self.audio_encoder)
         elif self.audio_encoder is None:
-            raise ValueError(
-                f"A configuration of type {self.model_type} cannot be instantiated because audio_encoder is not passed"
-            )
+            self.audio_encoder = CONFIG_MAPPING["encodec"]()
 
         if isinstance(self.decoder, dict):
             self.decoder = MusicgenMelodyDecoderConfig(**self.decoder)
