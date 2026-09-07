@@ -23,7 +23,7 @@ from transformers import PI0Config, PI0Processor, Trainer, TrainingArguments, is
 from transformers.image_utils import load_image
 from transformers.testing_utils import (
     require_torch,
-    require_torch_large_gpu,
+    require_torch_large_accelerator,
     require_torch_non_multi_accelerator,
     slow,
     torch_device,
@@ -414,7 +414,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
             sampled[0, -1, :4], torch.tensor([-0.2541, -0.1213, -0.2637, 0.2935]), atol=1e-3, rtol=1e-3
         )
 
-    @require_torch_large_gpu
+    @require_torch_large_accelerator
     @require_torch_non_multi_accelerator
     def test_train_pi0_base_libero(self):
         model = PI0ForConditionalGeneration.from_pretrained("lerobot/pi0_base", torch_dtype=torch.bfloat16).eval()
