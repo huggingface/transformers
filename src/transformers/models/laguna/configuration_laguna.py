@@ -146,7 +146,11 @@ class LagunaConfig(PreTrainedConfig):
         super().__post_init__(**kwargs, ignore_keys_at_rope_validation={"sliding_attention", "full_attention"})
 
     def convert_rope_params_to_dict(self, **kwargs):
-        # No need to handle BC for new models, because they have no old-format `rope_scaling`
+        # config on the hub has nested rope dict AND also a `rope_type` key
+        # This will raise an error in further validation, and should be fixed on the hub
+        # Workaround until PR merged (poolside/Laguna-tiny-per-element/discussions/1)
+        if self.rope_parameters.get("rope_type") is not None:
+            del self.rope_parameters["rope_type"]
         return kwargs
 
     def validate_architecture(self):
