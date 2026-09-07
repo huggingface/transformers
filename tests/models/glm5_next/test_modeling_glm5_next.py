@@ -613,9 +613,8 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
         output.square().mean().backward()
         self.assertTrue(torch.isfinite(hidden_states.grad).all(), "non-finite gradient on the inputs")
         for name, parameter in layer.named_parameters():
-            with self.subTest(parameter=name):
-                self.assertIsNotNone(parameter.grad, f"missing gradient for `{name}`")
-                self.assertTrue(torch.isfinite(parameter.grad).all(), f"non-finite gradient for `{name}`")
+            self.assertIsNotNone(parameter.grad, f"missing gradient for `{name}`")
+            self.assertTrue(torch.isfinite(parameter.grad).all(), f"non-finite gradient for `{name}`")
 
     @unittest.skip("Fundamentally incompatible with indexer - indexer has no boundary offset telling sequences apart")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
