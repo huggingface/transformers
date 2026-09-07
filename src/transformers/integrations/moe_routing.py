@@ -13,15 +13,18 @@
 # limitations under the License.
 """Grouping the MoE routing ids by expert with a counting sort.
 
-The grouped experts path needs three things from the top-k expert ids: the permutation that groups tokens by
-expert, the ids in that order, and the per-expert offsets the grouped GEMM indexes with. `torch.sort` plus
-`torch.histc` plus `cumsum` produce them in 40 us per layer at decode shapes, almost independently of size,
-because a general radix sort pays a fixed cost. The ids are small integers in a known range, so counting them
-and placing each one at its rank is enough: 17 us for the same three tensors, measured inside a cuda graph at
-1024 token-expert pairs, which is ~6% of a Qwen3-30B-A3B decode step at tp4.
+The grouped experts path indexes five tensors off the top-k expert ids: the permutation that groups the
+token-expert pairs by expert, the ids in that order, the per-expert offsets the grouped GEMM reads, the token
+each grouped row came from, and the inverse permutation that puts the expert outputs back in token order.
+`torch.sort` plus `torch.histc` plus `cumsum` produce the first three in 40 us per layer at decode shapes,
+almost independently of size, because a general radix sort pays a fixed cost, and the caller builds the other
+two with a division, an `arange` and a scatter. The ids are small integers in a known range, so counting them
+and placing each one at its rank gives all five: 17 us inside a cuda graph at 1024 token-expert pairs, which is
+~6% of a Qwen3-30B-A3B decode step at tp4.
 
-Ids at or above `num_experts` are expert-parallel sentinels. They are left out of the counts and their slots
-stay at the tail, which is what the sort-based path achieves by leaving them unclamped.
+Ids at or above `num_experts` are expert-parallel sentinels. They share one bucket past the last expert, so
+they land at the tail in the order the sort-based path leaves them, `offsets` never reaches them and the grouped
+GEMM skips their rows. Keeping them in the permutation is what makes it a permutation, so the inverse is total.
 """
 
 import torch
@@ -36,80 +39,61 @@ if is_triton_available():
 
 @triton.jit
 def _count(ids_ptr, counts_ptr, S, E, BLOCK: tl.constexpr):
-    """One atomic per element: counts[id] += 1. Ids at or above E are sentinels and are not counted."""
+    """One atomic per pair: `counts[id] += 1`, with every sentinel id counted in bucket `E`."""
     off = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
     live = off < S
     ids = tl.load(ids_ptr + off, mask=live, other=E)
-    tl.atomic_add(counts_ptr + ids, 1, mask=live & (ids < E))
+    tl.atomic_add(counts_ptr + tl.minimum(ids, E), 1, mask=live)
 
 
 @triton.jit
-def _scan(counts_ptr, starts_ptr, offs_ptr, E: tl.constexpr):
-    """Exclusive scan of the counts into the start of each expert's run, and the inclusive scan the GEMM wants."""
-    e = tl.arange(0, E)
-    c = tl.load(counts_ptr + e)
-    incl = tl.cumsum(c, axis=0)
-    tl.store(starts_ptr + e, incl - c)
-    tl.store(offs_ptr + e, incl)
+def _scan(counts_ptr, starts_ptr, offs_ptr, E, BLOCK_E: tl.constexpr):
+    """Exclusive scan of the counts into each bucket's start, and the inclusive scan the grouped GEMM reads.
 
-
-@triton.jit
-def _place(ids_ptr, starts_ptr, cursor_ptr, perm_ptr, sorted_ptr, S, E, BLOCK: tl.constexpr):
-    """One atomic per element for its rank inside its expert's run, then write the permutation."""
-    off = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
-    live = off < S
-    ids = tl.load(ids_ptr + off, mask=live, other=E)
-    real = live & (ids < E)
-    rank = tl.atomic_add(cursor_ptr + ids, 1, mask=real)
-    start = tl.load(starts_ptr + ids, mask=real, other=0)
-    pos = start + rank
-    tl.store(perm_ptr + pos, off, mask=real)
-    tl.store(sorted_ptr + pos, ids, mask=real)
-
-
-def counting_sort(ids: torch.Tensor, num_experts: int):
-    """`(sorted_ids, perm, offsets)`, the three tensors the grouped-MoE path builds with sort + histc + cumsum.
-
-    Sentinel ids (>= num_experts) are dropped from the counts and left at the tail of `perm`, which is what the
-    torch path achieves by leaving them unclamped so the sort pushes them to the end.
+    The scan spans the sentinel bucket so its rows start after the last expert's, but `offs` stops at the
+    experts, which is how the GEMM comes to skip the sentinel tail.
     """
-    S = ids.numel()
-    dev = ids.device
-    counts = torch.zeros(num_experts, dtype=torch.int32, device=dev)
-    starts = torch.empty(num_experts, dtype=torch.int32, device=dev)
-    offs = torch.empty(num_experts, dtype=torch.int32, device=dev)
-    perm = torch.full((S,), S - 1, dtype=torch.int32, device=dev)
-    srt = torch.full((S,), num_experts, dtype=torch.int32, device=dev)
-    BLOCK = 256
-    grid = (triton.cdiv(S, BLOCK),)
-    _count[grid](ids, counts, S, num_experts, BLOCK=BLOCK)
-    _scan[(1,)](counts, starts, offs, E=num_experts)
-    _place[grid](ids, starts, counts.zero_(), perm, srt, S, num_experts, BLOCK=BLOCK)
-    return srt, perm, offs
+    e = tl.arange(0, BLOCK_E)
+    c = tl.load(counts_ptr + e, mask=e <= E, other=0)
+    incl = tl.cumsum(c, axis=0)
+    tl.store(starts_ptr + e, incl - c, mask=e <= E)
+    tl.store(offs_ptr + e, incl, mask=e < E)
 
 
-def reference(ids, num_experts):
-    srt, perm = torch.sort(ids)
-    counts = torch.histc(srt.float(), bins=num_experts, min=0, max=num_experts - 1)
-    return srt, perm, torch.cumsum(counts, 0).int()
+@triton.jit
+def _place(ids_ptr, starts_ptr, cursor_ptr, perm_ptr, ids_g_ptr, inv_ptr, rows_ptr, S, E, K, BLOCK: tl.constexpr):
+    """One atomic per pair for its rank inside its bucket, then the five tensors that rank determines."""
+    off = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+    live = off < S
+    ids = tl.minimum(tl.load(ids_ptr + off, mask=live, other=E), E)
+    rank = tl.atomic_add(cursor_ptr + ids, 1, mask=live)
+    pos = tl.load(starts_ptr + ids, mask=live, other=0) + rank
+    tl.store(perm_ptr + pos, off, mask=live)
+    tl.store(ids_g_ptr + pos, ids, mask=live)
+    tl.store(rows_ptr + pos, off // K, mask=live)
+    tl.store(inv_ptr + off, pos, mask=live)
 
 
-def counting_sort_route(expert_ids: torch.Tensor, num_experts: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """`(ids_grouped, perm, offsets)` for `expert_ids`, grouped by expert. CUDA only."""
+def counting_sort_route(expert_ids: torch.Tensor, num_experts: int, num_top_k: int):
+    """`(ids_grouped, perm, offsets, rows, inv_perm)` for `expert_ids`, grouped by expert. CUDA only.
+
+    `rows` is the token index of each grouped row, i.e. `perm // num_top_k`, and `inv_perm` inverts `perm`.
+    Every output is written in full, so they are allocated uninitialized.
+    """
     num_pairs = expert_ids.numel()
     device = expert_ids.device
     ids = expert_ids if expert_ids.dtype == torch.int32 else expert_ids.to(torch.int32)
-    counts = torch.zeros(num_experts, dtype=torch.int32, device=device)
-    starts = torch.empty(num_experts, dtype=torch.int32, device=device)
-    offsets = torch.empty(num_experts, dtype=torch.int32, device=device)
-    # sentinel slots keep an in-range row index whose output the caller masks out, and an id the caller reads as
-    # a sentinel, so the tail matches what the sort-based path leaves there
-    perm = torch.full((num_pairs,), num_pairs - 1, dtype=torch.int32, device=device)
-    ids_grouped = torch.full((num_pairs,), num_experts, dtype=torch.int32, device=device)
+    i32 = {"dtype": torch.int32, "device": device}
+    # one bucket past the experts holds the sentinels, and doubles as the per-expert cursor in `_place`
+    counts = torch.zeros(num_experts + 1, **i32)
+    starts = torch.empty(num_experts + 1, **i32)
+    offsets = torch.empty(num_experts, **i32)
+    perm, ids_grouped, rows, inv_perm = (torch.empty(num_pairs, **i32) for _ in range(4))
     block = 256
     grid = (triton.cdiv(num_pairs, block),)
     _count[grid](ids, counts, num_pairs, num_experts, BLOCK=block)
-    _scan[(1,)](counts, starts, offsets, E=num_experts)
-    counts.zero_()  # reused as the per-expert cursor
-    _place[grid](ids, starts, counts, perm, ids_grouped, num_pairs, num_experts, BLOCK=block)
-    return ids_grouped, perm, offsets
+    _scan[(1,)](counts, starts, offsets, num_experts, BLOCK_E=triton.next_power_of_2(num_experts + 1))
+    counts.zero_()
+    _place[grid](ids, starts, counts, perm, ids_grouped, inv_perm, rows, num_pairs, num_experts, num_top_k,
+                 BLOCK=block)
+    return ids_grouped, perm, offsets, rows, inv_perm

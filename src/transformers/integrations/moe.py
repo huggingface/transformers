@@ -395,17 +395,18 @@ def grouped_mm_experts_forward(
 
     # Sort by expert for grouped processing
     # HF_MOE_COUNTING_SORT=1 groups the pairs by expert with a counting sort instead of torch.sort + histc +
-    # cumsum: 17 us against 40 us per layer inside a cuda graph, +5% on a Qwen3-30B-A3B decode step at tp4.
+    # cumsum: 17 us against 40 us per layer inside a cuda graph, +5% on a Qwen3-30B-A3B decode step at tp4. It
+    # also returns the row index and the inverse permutation the sort-based path builds below.
     # Opt-in because it places tied rows in a different order, so weight gradients differ in the last bits.
     fast_route = os.environ.get("HF_MOE_COUNTING_SORT") == "1" and device.type == "cuda" and is_triton_available()
     if fast_route:
         from .moe_routing import counting_sort_route
 
-        expert_ids_g, perm, offsets = counting_sort_route(expert_ids, self.num_experts)
-        perm = perm.long()
+        expert_ids_g, perm, offsets, rows_g, inv_perm = counting_sort_route(expert_ids, self.num_experts, num_top_k)
     else:
         expert_ids_g, perm = torch.sort(expert_ids)
-    selected_hidden_states_g = hidden_states[perm // num_top_k]
+        rows_g, inv_perm = perm // num_top_k, None
+    selected_hidden_states_g = hidden_states[rows_g]
     sample_weights_g = sample_weights[perm]
 
     # Compute offsets for grouped_mm
@@ -480,8 +481,9 @@ def grouped_mm_experts_forward(
     weighted_out.masked_fill_(sentinel_mask, 0.0)
 
     # Restore original order
-    inv_perm = torch.empty_like(perm)
-    inv_perm[perm] = torch.arange(perm.size(0), device=device)
+    if inv_perm is None:  # the counting sort already produced the inverse
+        inv_perm = torch.empty_like(perm)
+        inv_perm[perm] = torch.arange(perm.size(0), device=device)
     weighted_out = weighted_out[inv_perm]  # (S, hidden_dim)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
