@@ -323,7 +323,7 @@ class Chat:
                 help=(
                     "Flags to pass to `generate`, using a space as a separator between flags. Accepts booleans, numbers, "
                     "and lists of integers, more advanced parameterization should be set through --generation-config. "
-                    "Example: `transformers chat <base_url> <model_id> max_new_tokens=100 do_sample=False eos_token_id=[1,2]`. "
+                    "Example: `transformers chat <model_id> <base_url> max_new_tokens=100 do_sample=False eos_token_id=[1,2]`. "
                     "If you're a new user, check this basic flag guide: "
                     "https://huggingface.co/docs/transformers/llm_tutorial#common-options"
                 )
@@ -608,10 +608,17 @@ def parse_generate_flags(generate_flags: list[str] | None) -> dict:
     if generate_flags is None or len(generate_flags) == 0:
         return {}
 
+    for flag in generate_flags:
+        if "=" not in flag:
+            raise typer.BadParameter(
+                f"Invalid flag format, missing `=` after `{flag}`. Please use the format "
+                "`arg_1=value_1 arg_2=value_2 ...`."
+            )
+
     # Assumption: `generate_flags` is a list of strings, each string being a `flag=value` pair, that can be parsed
     # into a json string if we:
     # 1. Add quotes around each flag name
-    generate_flags_as_dict = {'"' + flag.split("=")[0] + '"': flag.split("=")[1] for flag in generate_flags}
+    generate_flags_as_dict = {'"' + flag.split("=", 1)[0] + '"': flag.split("=", 1)[1] for flag in generate_flags}
 
     # 2. Handle types:
     # 2. a. booleans should be lowercase, None should be null
@@ -643,16 +650,13 @@ def parse_generate_flags(generate_flags: list[str] | None) -> dict:
     generate_flags_string = generate_flags_string.replace('"[', "[")
     generate_flags_string = generate_flags_string.replace(']"', "]")
 
-    # 6. Replace the `=` with `:`
-    generate_flags_string = generate_flags_string.replace("=", ":")
-
     try:
         processed_generate_flags = json.loads(generate_flags_string)
     except json.JSONDecodeError:
         raise ValueError(
             "Failed to convert `generate_flags` into a valid JSON object."
-            "\n`generate_flags` = {generate_flags}"
-            "\nConverted JSON string = {generate_flags_string}"
+            f"\n`generate_flags` = {generate_flags}"
+            f"\nConverted JSON string = {generate_flags_string}"
         )
     return processed_generate_flags
 
