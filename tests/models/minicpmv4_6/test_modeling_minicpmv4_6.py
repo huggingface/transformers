@@ -414,10 +414,15 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        self.assertEqual(
-            "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
-            decoded_text,
-        )
+        # fmt: off
+        EXPECTED_TEXT = Expectations(
+            {
+                ("cuda", (8, 6)): "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
+                ("cuda", (10, 0)): "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
+            }
+        ).get_expectation()
+        # fmt: on
+        self.assertEqual(EXPECTED_TEXT, decoded_text)
 
     @slow
     def test_small_model_video_generation(self):
@@ -493,10 +498,10 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", None): [
+                ("cuda", (8, 6)): [
                     "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
                 ] * 2,
-                ("cuda", 10): [
+                ("cuda", (10, 0)): [
                     "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
                 ] * 2,
             }
@@ -542,11 +547,11 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", None): [
-                    "The animal in the image is a Pystylus, also known as the Eurasian pystylus or snow leopard cat. It's a",
+                ("cuda", (8, 6)): [
+                    "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
                     "I'm a model from the MiniCPM series, developed by Modelbest and OpenBMB. For more details, you can visit https://github",
                 ],
-                ("cuda", 10): [
+                ("cuda", (10, 0)): [
                     "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
                     "I'm a model from the MiniCPM series, developed by Modelbest and OpenBMB. For more details, you can visit https://github",
                 ],
