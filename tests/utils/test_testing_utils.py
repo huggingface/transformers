@@ -16,7 +16,7 @@ import unittest
 from unittest.mock import patch
 
 from transformers import testing_utils
-from transformers.testing_utils import get_ci_cpu_memory_budget_gib, get_cpu_ram_total_gib
+from transformers.testing_utils import cap_psutil_cpu_memory, get_ci_cpu_memory_budget_gib, get_cpu_ram_total_gib
 
 
 GIB = 1024**3
@@ -114,3 +114,52 @@ class GetPhysicalCpuRamTest(unittest.TestCase):
     def test_returns_none_without_psutil(self):
         with patch.object(testing_utils, "is_psutil_available", return_value=False):
             self.assertIsNone(testing_utils.get_physical_cpu_ram_gib())
+
+
+class CapPsutilCpuMemoryTest(unittest.TestCase):
+    def setUp(self):
+        import psutil
+
+        self._original_virtual_memory = psutil.virtual_memory
+        self._original_unpatched = testing_utils._UNPATCHED_VIRTUAL_MEMORY
+        testing_utils._UNPATCHED_VIRTUAL_MEMORY = None
+
+    def tearDown(self):
+        import psutil
+
+        psutil.virtual_memory = self._original_virtual_memory
+        testing_utils._UNPATCHED_VIRTUAL_MEMORY = self._original_unpatched
+
+    def test_caps_and_restores_on_exit(self):
+        import psutil
+
+        # `before` may already be conftest's session-wide cap, not the true original — that's fine,
+        # we only assert the context manager restores whatever it found on entry.
+        before = psutil.virtual_memory
+        with cap_psutil_cpu_memory(int(0.5 * GIB)):
+            self.assertEqual(psutil.virtual_memory().total, int(0.5 * GIB))
+        self.assertIs(psutil.virtual_memory, before)
+
+    def test_restores_on_exception(self):
+        import psutil
+
+        before = psutil.virtual_memory
+        try:
+            with cap_psutil_cpu_memory(int(0.5 * GIB)):
+                raise RuntimeError("deliberate test error")
+        except RuntimeError:
+            pass
+        self.assertIs(psutil.virtual_memory, before)
+
+    def test_nested_unwinds_in_order(self):
+        import psutil
+
+        original = psutil.virtual_memory
+        with cap_psutil_cpu_memory(int(0.5 * GIB)):
+            self.assertEqual(psutil.virtual_memory().total, int(0.5 * GIB))
+            with cap_psutil_cpu_memory(int(0.2 * GIB)):
+                self.assertEqual(psutil.virtual_memory().total, int(0.2 * GIB))
+            # Inner block exited: should be back to the outer cap
+            self.assertEqual(psutil.virtual_memory().total, int(0.5 * GIB))
+        # Outer block exited: should be back to the original callable
+        self.assertIs(psutil.virtual_memory, original)

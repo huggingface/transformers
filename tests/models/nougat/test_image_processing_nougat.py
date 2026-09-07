@@ -22,7 +22,7 @@ from transformers.image_utils import SizeDict, load_image
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 from ...test_processing_common import url_to_local_path
 
 
@@ -33,7 +33,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class NougatImageProcessingTester:
+class NougatImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -84,9 +84,6 @@ class NougatImageProcessingTester:
             "image_std": self.image_std,
         }
 
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
     def prepare_dummy_image(self):
         revision = "ec57bf8c8b1653a209c13f6e9ee66b12df0fc2db"
         filepath = hf_hub_download(
@@ -97,17 +94,6 @@ class NougatImageProcessingTester:
         )
         image = Image.open(filepath).convert("RGB")
         return image
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
 
 @require_torch
@@ -282,7 +268,11 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
+        dummy_image = load_image(
+            url_to_local_path(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+            )
+        )
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():

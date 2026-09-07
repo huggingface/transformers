@@ -526,6 +526,20 @@ class TestDataCollatorForTokenClassification(DataCollatorTestMixin, unittest.Tes
         self.assertEqual(batch["input_ids"].shape, (2, 6))
         self.assertEqual(batch["labels"][0].tolist(), [0, 1, 2, -100, -100, -100])
 
+    def test_numpy_output_with_singular_label_key(self):
+        """Test with NumPy output when feature key is 'label' rather than 'labels'."""
+        tokenizer = BertTokenizer(self.vocab_file)
+        collator = DataCollatorForTokenClassification(tokenizer, return_tensors="np")
+        features = [
+            {"input_ids": [0, 1, 2], "label": [0, 1, 2]},
+            {"input_ids": [0, 1, 2, 3, 4, 5], "label": [0, 1, 2, 3, 4, 5]},
+        ]
+        batch = collator(features)
+
+        self.assertEqual(batch["input_ids"].shape, (2, 6))
+        self.assertIn("label", batch)
+        self.assertEqual(batch["label"][0].tolist(), [0, 1, 2, -100, -100, -100])
+
     def test_immutability(self):
         """Test that collation does not mutate input data."""
         tokenizer = BertTokenizer(self.vocab_file)

@@ -28,9 +28,9 @@ backbone of [ESMFold2](./esmfold2), where it generates representations that are 
 
 Pre-trained checkpoints are available on the Hugging Face Hub:
 
-- [`biohub/ESMC-300M`](https://huggingface.co/biohub/ESMC-300M)
-- [`biohub/ESMC-600M`](https://huggingface.co/biohub/ESMC-600M)
-- [`biohub/ESMC-6B`](https://huggingface.co/biohub/ESMC-6B)
+- [`biohub/ESMC-300M-hf`](https://huggingface.co/biohub/ESMC-300M-hf)
+- [`biohub/ESMC-600M-hf`](https://huggingface.co/biohub/ESMC-600M-hf)
+- [`biohub/ESMC-6B-hf`](https://huggingface.co/biohub/ESMC-6B-hf)
 
 ## Usage example
 
@@ -46,7 +46,7 @@ from transformers import pipeline
 
 extractor = pipeline(
     task="feature-extraction",
-    model="biohub/ESMC-300M",
+    model="biohub/ESMC-300M-hf",
 )
 # Per-residue representations of shape (batch, sequence_length, hidden_size).
 representations = extractor("MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ", return_tensors="pt")
@@ -59,8 +59,8 @@ representations = extractor("MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ", return_tensors=
 import torch
 from transformers import AutoModel, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M")
-model = AutoModel.from_pretrained("biohub/ESMC-300M")
+tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M-hf")
+model = AutoModel.from_pretrained("biohub/ESMC-300M-hf")
 
 inputs = tokenizer("MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ", return_tensors="pt")
 with torch.no_grad():

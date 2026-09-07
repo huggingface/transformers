@@ -17,10 +17,10 @@ import unittest
 
 from transformers.testing_utils import require_pytesseract, require_torch
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
-class LayoutLMv3ImageProcessingTester:
+class LayoutLMv3ImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -46,20 +46,6 @@ class LayoutLMv3ImageProcessingTester:
 
     def prepare_image_processor_dict(self):
         return {"do_resize": self.do_resize, "size": self.size, "apply_ocr": self.apply_ocr}
-
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
 
 @require_torch

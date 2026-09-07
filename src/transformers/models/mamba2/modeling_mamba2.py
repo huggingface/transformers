@@ -626,7 +626,7 @@ class Mamba2Block(GradientCheckpointingLayer):
         if self.residual_in_fp32:
             residual = residual.to(torch.float32)
 
-        hidden_states = self.mixer(hidden_states, cache_params=cache_params, attention_mask=attention_mask)
+        hidden_states = self.mixer(hidden_states, cache_params=cache_params, attention_mask=attention_mask, **kwargs)
         hidden_states = residual + hidden_states
         return hidden_states
 
@@ -793,6 +793,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
                 hidden_states,
                 cache_params=cache_params,
                 attention_mask=attention_mask,
+                **kwargs,
             )
 
             if output_hidden_states:
