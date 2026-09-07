@@ -15,7 +15,7 @@
 import unittest
 
 from transformers import FunAsrNanoConfig, FunAsrNanoEncoderConfig, Qwen3Config
-from transformers.testing_utils import require_torch, require_torch_gpu, slow
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow
 
 from ...alm_tester import ALMModelTest, ALMModelTester
 from ...test_modeling_common import is_torch_available, torch_device
@@ -104,7 +104,7 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 class FunAsrNanoIntegrationTest(unittest.TestCase):
     """Integration tests with real checkpoint (run with RUN_SLOW=1).
 
