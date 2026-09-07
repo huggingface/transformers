@@ -34,8 +34,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, requires_backends
-from ...utils.generic import TensorType, can_return_tuple
-from ...utils.output_capturing import capture_outputs
+from ...utils.generic import TensorType
 from ..auto import AutoConfig
 from ..pp_doclayout_v3.image_processing_pp_doclayout_v3 import PPDocLayoutV3ImageProcessor
 from ..pp_doclayout_v3.modeling_pp_doclayout_v3 import (
@@ -827,8 +826,6 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
             [nn.Linear(config.d_model, config.num_labels) for _ in range(config.decoder_layers)]
         )
 
-    @capture_outputs
-    @auto_docstring
     def forward(
         self,
         inputs_embeds=None,
@@ -1065,8 +1062,6 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
 
         return anchors, valid_mask
 
-    @auto_docstring
-    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1260,8 +1255,6 @@ class PPDocLayoutV4ForObjectDetection(PPDocLayoutV3ForObjectDetection, PPDocLayo
         del self.model.denoising_class_embed
         self.post_init()
 
-    @auto_docstring
-    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor,
