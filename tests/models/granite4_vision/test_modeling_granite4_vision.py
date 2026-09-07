@@ -145,7 +145,7 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
 
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained(self.model_id)
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
         self.image = load_image(url_to_local_path(url))
 
     def make_prompt(self, question):
@@ -182,7 +182,9 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
             torch_device
         )
 
-        url2 = "http://images.cocodataset.org/val2017/000000001000.jpg"
+        url2 = (
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000001000.jpg"
+        )
         image2 = load_image(url_to_local_path(url2))
 
         prompt = self.make_prompt("What do you see in this image?")
@@ -230,7 +232,9 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
         )
 
         # Batch inference (same image as first in batch)
-        url2 = "http://images.cocodataset.org/val2017/000000001000.jpg"
+        url2 = (
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000001000.jpg"
+        )
         image2 = load_image(url_to_local_path(url2))
         inputs_batch = self.processor(
             text=[prompt, prompt],

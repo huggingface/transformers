@@ -68,22 +68,22 @@ from .configuration_cohere_compass import CohereCompassConfig, CohereCompassText
 
 
 class CohereCompassRotaryEmbedding(nn.Module):
-    """Gemma3 rotary embedding adapted to Compass's multi-axis position IDs."""
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: CohereCompassTextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
         self.config = config
-        self.layer_types = sorted(set(config.layer_types))
+        self.layer_types = list(set(config.layer_types))
         self.rope_type = {}
+        self.mrope_section = {}
         for layer_type in self.layer_types:
             rope_params = self.config.rope_parameters[layer_type]
             if rope_params is None:
                 continue
 
             self.rope_type[layer_type] = rope_params["rope_type"]
+            self.mrope_section[layer_type] = rope_params.get("mrope_section", [22, 22, 20])
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
@@ -110,54 +110,60 @@ class CohereCompassRotaryEmbedding(nn.Module):
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
         base = config.rope_parameters[layer_type]["rope_theta"]
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
+
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+
+        # Special to cohere-compass, we prerotate on the hw dim
+        mrope_section = config.rope_parameters[layer_type].get("mrope_section", [22, 22, 20])
+        hw_dim = mrope_section[0] + mrope_section[1]
+        t_dim = mrope_section[2]
+
+        inv_freq_3d = torch.empty_like(inv_freq)
+        # (Pre-)Rotate to avoid another rotation during the forward
+        inv_freq_3d[:hw_dim] = torch.cat([inv_freq[:-t_dim][0::2], inv_freq[:-t_dim][1::2]])
+        inv_freq_3d[-t_dim:] = inv_freq[-t_dim:]
+
+        return inv_freq_3d.to(device), attention_factor
 
     @torch.no_grad()
-    @dynamic_rope_update
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type=None):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
-        # In contrast to other models, Cohere has different position ids for the grids
-        # So we expand the inv_freq to shape (3, ...)
-        inv_freq_expanded = inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1).to(x.device)
+        inv_freq_expanded = (
+            inv_freq[None, None, :, None]
+            .expand(3, position_ids.shape[1], -1, 1)
+            .to(dtype=torch.float, device=x.device)
+        )
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
-            mrope_section = self.config.rope_parameters[layer_type].get("mrope_section", [24, 20, 20])
-            freqs = self.apply_interleaved_mrope(freqs, mrope_section)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * attention_scaling
-            sin = emb.sin() * attention_scaling
+            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(2, 3)
+            cos = freqs.cos() * attention_scaling
+            sin = freqs.sin() * attention_scaling
+
+        sin = self.recomposition_frequencies(sin, layer_type)
+        cos = self.recomposition_frequencies(cos, layer_type)
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
-    # Copied from: Qwen3VLTextRotaryEmbedding.apply_interleaved_mrope
-    def apply_interleaved_mrope(self, freqs, mrope_section):
-        """Apply interleaved MRoPE to 3D rotary embeddings.
-        Reorganizes frequency layout from chunked [TTT...HHH...WWW] to
-        interleaved [THWTHWTHW...TT], preserving frequency continuity.
-        args:
-            x: (3, bs, seq_len, head_dim // 2)
-            mrope_section: (3,)
-        returns:
-            x_t: (bs, seq_len, head_dim // 2)
+    def recomposition_frequencies(self, freq, layer_type):
         """
-        freqs_t = freqs[0]  # just overwrite the first dimension T
-        for dim, offset in enumerate((1, 2), start=1):  # H, W
-            length = mrope_section[dim] * 3
-            idx = slice(offset, length, 3)
-            freqs_t[..., idx] = freqs[dim, ..., idx]
-        return freqs_t
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq_h, freq_w, freq_t = (
+            m[(i + 1) % 3] for i, m in enumerate(freq.split([*self.mrope_section[layer_type]], dim=-1))
+        )
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
+        freq_hwt = torch.cat([freq_hw, freq_t], dim=-1)
+        return torch.cat([freq_hwt, freq_hwt], dim=-1)
 
 
 class CohereCompassMLP(nn.Module):
@@ -383,18 +389,6 @@ class CohereCompassDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class CohereCompassVisionRotaryEmbedding(nn.Module):
-    def __init__(self, dim: int, theta: float = 10000.0) -> None:
-        super().__init__()
-        self.dim = dim
-        self.theta = theta
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
-
-    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
-        return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
-
-
 @auto_docstring
 class CohereCompassPreTrainedModel(PreTrainedModel):
     config: CohereCompassConfig
@@ -403,6 +397,7 @@ class CohereCompassPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "CohereCompassDecoderLayer",
+        "CohereCompassVisionBlock",
     ]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -418,9 +413,6 @@ class CohereCompassPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, CohereCompassVisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
         if isinstance(module, CohereCompassRotaryEmbedding):
             for layer_type in module.rope_type:
                 rope_init_fn = module.compute_default_rope_parameters
@@ -674,6 +666,72 @@ class CohereCompassVisionPatchEmbed(nn.Module):
         return hidden_states
 
 
+class CohereCompassVisionRotaryEmbedding(nn.Module):
+    """
+    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
+    pre-computed using `head-dim//4` which is later used to concat H and W positions.
+    The final angles rotate over the whole head dim, no partial rotation involved.
+    """
+
+    @deprecate_kwarg("device", version="5.18")
+    def __init__(self, config: CohereCompassVisionConfig, device=None):
+        super().__init__()
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    @deprecate_kwarg("device", version="5.18")
+    def compute_axial_rope_parameters(
+        config: CohereCompassVisionConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        spatial_dim = dim // 2
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        return inv_freq.to(device), attention_factor
+
+    @torch.no_grad()
+    def forward(self, x, position_ids):
+        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        position_ids_expanded = position_ids[..., None].float()
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = position_ids_expanded * self.inv_freq.float()
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
+
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
+        return cos, sin
+
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq_h, freq_w = freq[:, 0], freq[:, 1]
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
+        return torch.cat([freq_hw, freq_hw], dim=-1)
+
+
 class CohereCompassVisionPatchMerger(nn.Module):
     def __init__(self, config: CohereCompassVisionConfig, use_postshuffle_norm=False) -> None:
         super().__init__()
@@ -842,8 +900,7 @@ class CohereCompassVisionModel(CohereCompassPreTrainedModel):
         self.interpolation_align_corners = True
         self.interpolation_mode = "bilinear"
 
-        head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = CohereCompassVisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = CohereCompassVisionRotaryEmbedding(config)
 
         self.blocks = nn.ModuleList([CohereCompassVisionBlock(config) for _ in range(config.depth)])
         self.merger = CohereCompassVisionPatchMerger(
@@ -895,13 +952,10 @@ class CohereCompassVisionModel(CohereCompassPreTrainedModel):
         hidden_states = self.patch_embed(hidden_states)
         pos_embeds = (self.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)
         hidden_states = hidden_states + pos_embeds.to(hidden_states.dtype)
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
+        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
 
         seq_len, _ = hidden_states.size()
         hidden_states = hidden_states.reshape(seq_len, -1)
-        rotary_pos_emb = rotary_pos_emb.reshape(seq_len, -1)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
 
         deepstack_feature_lists = []
         for layer_num, blk in enumerate(self.blocks):

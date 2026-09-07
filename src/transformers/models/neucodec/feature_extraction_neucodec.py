@@ -167,12 +167,11 @@ class NeuCodecFeatureExtractor(SequenceFeatureExtractor):
         padding_mask = padded_inputs.pop("attention_mask")
         padded_audio = padded_inputs["audio"][:, None, :]
 
-        # 2) Semantic encoder feature extraction (mel spectrogram). Unlike Xcodec2FeatureExtractor, NeuCodec's
-        # reference implementation feeds the acoustic-padded waveform directly into the mel computation, with no extra
-        # "valid_len" trimming or symmetric hop-sized padding: https://github.com/neuphonic/neucodec/blob/ed3e6cd1bdc374ce14a21355e5eee66a777149ce/neucodec/model.py#L128
-        # Padded per-sample (not via the batch-collated `padded_audio`): the CMVN normalization below is computed
-        # over the whole padded signal, so batch-padding a short sample to the batch's longest would skew it.
-        # TODO (ebezzam): can batch processing be done without regression from expected outputs?
+        # 2) Semantic encoder features (mel spectrogram). Unlike Xcodec2FeatureExtractor, the NeuCodec
+        # reference feeds the acoustic-padded waveform straight into the mel computation, with no
+        # valid_len trimming or hop-sized padding: https://github.com/neuphonic/neucodec/blob/ed3e6cd1bdc374ce14a21355e5eee66a777149ce/neucodec/model.py#L128
+        # Padded per-sample, not via the batch-collated `padded_audio`: CMVN below runs over the
+        # whole padded signal, so padding to the batch's longest would skew a short one.
         mel_features = []
         for i in range(batch_size):
             single_padded_audio = self.acoustic_encoder_padder.pad(
