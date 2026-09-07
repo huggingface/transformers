@@ -129,10 +129,10 @@ def _use_local_dtensor_params(module):
 # under no_grad) stay on NCCL, whose ring is bandwidth-optimal there. One buffer per (group, hidden, dtype) is
 # allocated and rendezvoused the first time a shape is seen, sized to the largest row count seen, and every call
 # reduces in a prefix view of it. Opt-in with HF_TP_SYMM_MEM_ALL_REDUCE=1: a 2 MiB all-reduce at tp2 inside a cuda
-# graph takes 22.3 us here against 38.6 us on NCCL, worth +7% decode on Qwen3-8B tp2. It is opt-in because the
-# rendezvous is a collective: with a trainer sharing the device, it is issued from the generation thread while the
-# training thread issues its own, the two communicators have no agreed order, and graph capture faults. Serving is
-# single-threaded and safe; do not turn it on next to a trainer unless the buffers are rendezvoused up front.
+# graph takes 22.3 us here against 38.6 us on NCCL, worth +7% decode on Qwen3-8B tp2 and +4% on the zero-sync
+# trainer. The rendezvous is a collective, so it is done from the caller's thread when the engine starts
+# (`prime_inference_all_reduce`) rather than from whichever thread reaches the first decode step. It stays opt-in
+# because a 122,880-token prompt still faults the two-shot kernel with a misaligned address.
 _SYMM_BUFFERS: dict[tuple, torch.Tensor] = {}
 
 
