@@ -40,17 +40,13 @@ if is_triton_available():
     import triton.language as tl
 
     @triton.jit
-    def _grouped_gemm_kernel(a_ptr, b_ptr, c_ptr, offs_ptr, scatter_ptr, K, N, se, sk, sn,
-                             HAS_SCATTER: tl.constexpr,
+    def _grouped_gemm_kernel(a_ptr, b_ptr, c_ptr, offs_ptr, K, N, se, sk, sn,
                              BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr):
         """`c[m] = a[m] @ b[e]` for every row `m` the offsets give to expert `e`, one program per (e, N tile).
 
-        With `scatter_ptr`, row `m` is stored at `scatter_rows[m]` instead of at `m`, which is how the caller
-        gets the expert outputs back in token order without a second pass over them.
-
         Rows past the last offset belong to expert-parallel sentinels. No program covers them, so they keep
-        whatever the output was allocated with: what the native op leaves there when the caller masks it, and
-        zero when the caller scatters.
+        whatever the output was allocated with, which is what the native op leaves there and what the caller's
+        masks already account for.
         """
         e = tl.program_id(0)
         start = tl.where(e == 0, 0, tl.load(offs_ptr + e - 1))
@@ -69,8 +65,7 @@ if is_triton_available():
                 a = tl.load(a_row + off_k[None, :], mask=live_m[:, None] & live_k[None, :], other=0.0)
                 b = tl.load(b_base + off_k[:, None] * sk, mask=live_k[:, None] & live_n[None, :], other=0.0)
                 acc = tl.dot(a, b, acc)
-            row = tl.load(scatter_ptr + off_m, mask=live_m, other=0) if HAS_SCATTER else off_m
-            tl.store(c_ptr + row[:, None] * N + off_n[None, :], acc.to(c_ptr.dtype.element_ty),
+            tl.store(c_ptr + off_m[:, None] * N + off_n[None, :], acc.to(c_ptr.dtype.element_ty),
                      mask=live_m[:, None] & live_n[None, :])
 
 
@@ -128,15 +123,12 @@ def _native_grouped_mm(a: torch.Tensor, b: torch.Tensor, offs: torch.Tensor) -> 
     return torch._grouped_mm(a, b, offs=offs)
 
 
-def _launch(a: torch.Tensor, b: torch.Tensor, offs: torch.Tensor, scatter_rows: torch.Tensor | None):
+def _launch(a: torch.Tensor, b: torch.Tensor, offs: torch.Tensor) -> torch.Tensor:
     num_experts, k_in, n_out = b.shape
-    # scattering leaves the sentinel rows unwritten, and the caller reads them, so they start at zero
-    new = torch.zeros if scatter_rows is not None else torch.empty
-    out = new(a.shape[0], n_out, device=a.device, dtype=a.dtype)
+    out = torch.empty(a.shape[0], n_out, device=a.device, dtype=a.dtype)
     block_n = min(_BLOCK_N, triton.next_power_of_2(n_out))
     _grouped_gemm_kernel[(num_experts, triton.cdiv(n_out, block_n))](
-        a, b, out, offs, scatter_rows, k_in, n_out, b.stride(0), b.stride(1), b.stride(2),
-        HAS_SCATTER=scatter_rows is not None,
+        a, b, out, offs, k_in, n_out, b.stride(0), b.stride(1), b.stride(2),
         BLOCK_M=_BLOCK_M, BLOCK_N=block_n, BLOCK_K=_BLOCK_K, num_stages=_STAGES, num_warps=_WARPS,
     )
     return out
@@ -146,15 +138,13 @@ class _TritonGroupedMM(torch.autograd.Function):
     """The Triton kernel forward, the native grouped matmul backward."""
 
     @staticmethod
-    def forward(ctx, a, b, offs, scatter_rows):
-        ctx.save_for_backward(a, b, offs, scatter_rows)
-        return _launch(a, b, offs, scatter_rows)
+    def forward(ctx, a, b, offs):
+        ctx.save_for_backward(a, b, offs)
+        return _launch(a, b, offs)
 
     @staticmethod
     def backward(ctx, grad_out):
-        a, b, offs, scatter_rows = ctx.saved_tensors
-        if scatter_rows is not None:  # undo the scatter: row m took its gradient from where it was stored
-            grad_out = grad_out[scatter_rows.long()]
+        a, b, offs = ctx.saved_tensors
         grad_out = grad_out.contiguous()
         grad_a = grad_b = None
         if ctx.needs_input_grad[0]:
@@ -162,7 +152,7 @@ class _TritonGroupedMM(torch.autograd.Function):
             grad_a = _native_grouped_mm(grad_out, b.transpose(-2, -1), offs=offs)
         if ctx.needs_input_grad[1]:
             grad_b = _launch_dw(a.contiguous(), grad_out, offs, b.shape[0])
-        return grad_a, grad_b, None, None
+        return grad_a, grad_b, None
 
 
 def triton_grouped_mm_available(a: torch.Tensor, b: torch.Tensor) -> bool:
@@ -185,12 +175,6 @@ def triton_grouped_mm_available(a: torch.Tensor, b: torch.Tensor) -> bool:
     )
 
 
-def triton_grouped_mm(
-    a: torch.Tensor, b: torch.Tensor, offs: torch.Tensor, scatter_rows: torch.Tensor | None = None
-) -> torch.Tensor:
-    """What `torch._grouped_mm(a, b, offs=offs)` returns, on the Triton kernel.
-
-    With `scatter_rows`, row `m` of the result lands at row `scatter_rows[m]` and every row no expert owns
-    stays zero, so a caller that would otherwise permute the result afterwards does not have to.
-    """
-    return _TritonGroupedMM.apply(a, b, offs, scatter_rows)
+def triton_grouped_mm(a: torch.Tensor, b: torch.Tensor, offs: torch.Tensor) -> torch.Tensor:
+    """What `torch._grouped_mm(a, b, offs=offs)` returns, on the Triton kernel."""
+    return _TritonGroupedMM.apply(a, b, offs)
