@@ -335,10 +335,6 @@ class Deimv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deimv2_object_detection_head_model(*config_and_inputs)
 
-    @unittest.skip(reason="Multi-scale deformable attention is incompatible with nn.DataParallel")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(
         reason="Deimv2 is a vision model but inputs_embeds is in the forward signature (inherited from D-FINE)"
     )
@@ -923,10 +919,6 @@ class Deimv2LiteEncoderModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deimv2_object_detection_head_model(*config_and_inputs)
 
-    @unittest.skip(reason="Multi-scale deformable attention is incompatible with nn.DataParallel")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(
         reason="Deimv2 is a vision model but inputs_embeds is in the forward signature (inherited from D-FINE)"
     )
@@ -1270,10 +1262,6 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deimv2_object_detection_head_model(*config_and_inputs)
 
-    @unittest.skip(reason="Multi-scale deformable attention is incompatible with nn.DataParallel")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(
         reason="Deimv2 is a vision model but inputs_embeds is in the forward signature (inherited from D-FINE)"
     )
@@ -1608,7 +1596,9 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 def prepare_img():
     from transformers.image_utils import load_image
 
-    url = url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg")
+    url = url_to_local_path(
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    )
     return load_image(url)
 
 
