@@ -19,7 +19,6 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
-from ..internvl.configuration_internvl import InternVLVisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -28,11 +27,13 @@ logger = logging.get_logger(__name__)
 # Language backbone architecture -> native text `model_type`. The original checkpoints ship the
 # backbone under a bespoke `llm_config`, so the native type has to be derived from `architectures`.
 # `InternLM2ForCausalLM` maps to `llama` for the same reason the offline converter does: the
-# InternLM2 decoder is llama-shaped once the fused `wqkv` is split.
+# InternLM2 decoder is llama-shaped once the fused `wqkv` is split. Phi3 (InternVL2-4B) is
+# deliberately absent: its `llm_config` stores `original_max_position_embeddings` beside
+# `rope_scaling` rather than inside it, which current `Phi3Config` rejects. Listing it here would
+# trade a clear "unsupported backbone" error for a confusing rope `KeyError`.
 _BACKBONE_TO_TEXT_MODEL_TYPE = {
     "Qwen2ForCausalLM": "qwen2",
     "InternLM2ForCausalLM": "llama",
-    "Phi3ForCausalLM": "phi3",
     "LlamaForCausalLM": "llama",
 }
 
@@ -42,7 +43,6 @@ _BACKBONE_TO_TEXT_MODEL_TYPE = {
 _BACKBONE_TO_IMAGE_TOKEN_ID = {
     "Qwen2ForCausalLM": 151648,  # InternVL2-1B
     "InternLM2ForCausalLM": 92546,  # InternVL2-2B, -8B, -26B
-    "Phi3ForCausalLM": 32013,  # InternVL2-4B
     "LlamaForCausalLM": 64000,  # InternVL2-40B
 }
 
@@ -76,7 +76,7 @@ def _convert_internvl_chat_config_dict(config_dict: dict) -> dict:
 
     # Drop the InternViT-only keys (`model_type`, `architectures`, flash-attn flags, ...) but keep
     # the aliases that `InternVLVisionConfig.__post_init__` renames onto native field names.
-    allowed = set(InternVLVisionConfig.__annotations__) | _INTERN_VIT_ALIASES
+    allowed = set(CONFIG_MAPPING["internvl_vision"].__annotations__) | _INTERN_VIT_ALIASES
     vision_config = {k: v for k, v in vision_config.items() if k in allowed}
     vision_config["use_absolute_position_embeddings"] = True
 
@@ -126,7 +126,7 @@ class InternVL2Config(PreTrainedConfig):
     ```"""
 
     model_type = "internvl_chat"
-    sub_configs = {"text_config": AutoConfig, "vision_config": InternVLVisionConfig}
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -146,10 +146,13 @@ class InternVL2Config(PreTrainedConfig):
         return super().from_dict(config_dict, **kwargs)
 
     def __post_init__(self, **kwargs):
+        # Resolved through the auto mapping rather than imported: this folder holds only a config,
+        # and `utils/check_modeling_structure.py` (TRF009) forbids importing another model's code.
+        vision_config_class = CONFIG_MAPPING["internvl_vision"]
         if isinstance(self.vision_config, dict):
-            self.vision_config = InternVLVisionConfig(**self.vision_config)
+            self.vision_config = vision_config_class(**self.vision_config)
         elif self.vision_config is None:
-            self.vision_config = InternVLVisionConfig()
+            self.vision_config = vision_config_class()
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")
