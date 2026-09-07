@@ -25,6 +25,7 @@ from huggingface_hub.errors import StrictDataclassClassValidationError
 
 from transformers import EsmFold2Config, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     TestCasePlus,
     require_torch,
     require_torch_accelerator,
@@ -545,7 +546,14 @@ class EsmFold2IntegrationTest(TestCasePlus):
             with torch.no_grad():
                 output = model.infer_protein(seq, num_loops=4, num_diffusion_samples=2, num_sampling_steps=32)
 
-            expected_distogram = torch.tensor([6.1462, 7.4562, 9.1028, 9.0691, 15.9278, 18.4071, 19.3449, 22.4337])
+            # fmt: off
+            expected_distogram = Expectations(
+                {
+                    ("cuda", 8): torch.tensor([6.3493, 7.7382, 9.4400, 9.4147, 16.2251, 18.6971, 19.6784, 22.7508]),
+                    ("xpu", 5): torch.tensor([6.1462, 7.4562, 9.1028, 9.0691, 15.9278, 18.4071, 19.3449, 22.4337]),
+                }
+            ).get_expectation()
+            # fmt: on
             torch.testing.assert_close(
                 output["distogram_logits"][0, 0, 1, :8].float().cpu(), expected_distogram, rtol=0, atol=0.2
             )
