@@ -16,9 +16,9 @@ rendered properly in your Markdown viewer.
 
 # LiteRT
 
-[LiteRT](https://ai.google.dev/edge/litert) (formerly TensorFlow Lite) is Google's runtime for on-device inference. The model format is still `.tflite`, and language models ship as one `.litertlm` file for the [LiteRT-LM](https://ai.google.dev/edge/litert-lm) runtime.
+[LiteRT](https://ai.google.dev/edge/litert) (formerly TensorFlow Lite) is Google's runtime for on-device inference. The model format is `.tflite` and language models ship as one `.litertlm` file for the [LiteRT-LM](https://ai.google.dev/edge/litert-lm) runtime.
 
-Export a Transformers model with [litert-torch](https://github.com/google-ai-edge/litert-torch) (formerly `ai-edge-torch`). It lowers the [torch.export](https://docs.pytorch.org/docs/stable/export.html) graph to LiteRT directly, without ONNX or TensorFlow.
+Export a Transformers model with [litert-torch](https://github.com/google-ai-edge/litert-torch). It lowers the [torch.export](https://docs.pytorch.org/docs/stable/export.html) graph to LiteRT directly, and not through ONNX or a TensorFlow `SavedModel`.
 
 ```bash
 pip install litert-torch
@@ -27,7 +27,7 @@ pip install litert-torch
 <hfoptions id="export">
 <hfoption id="CLI (LLM)">
 
-`export_hf` loads a text-generation model from the Hub, quantizes the weights to int8 by default, and writes `model.litertlm`.
+`export_hf` loads a language model from the Hub, quantizes the weights to int8 by default, and writes `model.litertlm`.
 
 ```bash
 litert-torch export_hf \
@@ -65,7 +65,7 @@ print(tokenizer.decode(outputs["logits"][0, mask_index].argmax()))  # capital
 1. [`~PreTrainedModel.from_pretrained`] loads the model weights in safetensors format.
 2. litert-torch runs [torch.export](https://docs.pytorch.org/docs/stable/export.html) and lowers the graph to LiteRT operators. `export_hf` adds the KV cache, prefill and decode signatures, and int8 quantization.
 3. [`AutoTokenizer`] loads the tokenizer. `export_hf` packs it and the chat template into the `.litertlm` file.
-4. At runtime, `.tflite` runs on LiteRT and `.litertlm` on LiteRT-LM, from Kotlin, Swift, C++, or Python (`ai-edge-litert` and `litert-lm-api`; the older `tflite-runtime` wheels stop at Python 3.11).
+4. At runtime, `.tflite` runs on LiteRT and `.litertlm` on LiteRT-LM, from Kotlin, Swift, C++, or Python (`ai-edge-litert` and `litert-lm-api`). The older `tflite-runtime` wheels stop at Python 3.11.
 
 > [!NOTE]
 > Transformers v4 documented `optimum-cli export tflite`, which converted through TensorFlow. It was removed with TensorFlow support in v5 ([#40760](https://github.com/huggingface/transformers/pull/40760)) and is not part of Optimum 2.x.
