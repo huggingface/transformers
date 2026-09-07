@@ -325,6 +325,11 @@ def _grouped_mm(
         `torch.Tensor`: Output tensor of shape (S, output_dim).
     """
 
+    from .moe_grouped_mm import triton_grouped_mm, triton_grouped_mm_available
+
+    if triton_grouped_mm_available(input, weight):
+        return triton_grouped_mm(input.to(weight.dtype), weight, offs)
+
     if _can_use_grouped_mm(input, weight, offs):
         # torch.nn.functional.grouped_mm and torch._grouped_mm are not autocast-enabled,
         # when autocast is enabled we can end up with intermediate tensors in fp32 (e.g. LayerNorm output) and weight tensors in bf16
