@@ -20,7 +20,6 @@ from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
     require_torch_fp16,
-    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -571,16 +570,6 @@ class ReformerTesterMixin:
     def test_reformer_model_fp16_generate(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_model_fp16_generate(*config_and_inputs)
-
-    @require_torch_multi_gpu
-    @unittest.skip(
-        reason=(
-            "Reformer does not work with data parallel (DP) because of a bug in PyTorch:"
-            " https://github.com/pytorch/pytorch/issues/36035"
-        )
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

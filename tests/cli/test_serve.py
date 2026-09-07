@@ -304,7 +304,7 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         """video_url content should be converted to HF video format for both VLM and MULTIMODAL."""
         get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
-        video_src = "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"
+        video_src = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/concert.mp4"
         messages = [
             {
                 "role": "user",
@@ -1607,7 +1607,7 @@ class TestVLM(unittest.TestCase):
 _AUDIO_URL = (
     "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"
 )
-_VIDEO_URL = "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"
+_VIDEO_URL = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/concert.mp4"
 
 
 @slow
