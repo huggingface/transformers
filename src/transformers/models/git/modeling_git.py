@@ -1081,7 +1081,7 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         # A caller doing sequence/context parallel training pre-shifts the targets on the full sequence and passes
         # them as `shift_labels`; they are already aligned with the text logits, so no shift is applied here.
         shift_labels = kwargs.pop("shift_labels", None)
-        if labels is not None or shift_labels is not None:
+        if labels is not None:
             num_image_tokens = self.git.encoder.layer[0].attention.self.image_patch_tokens
             if shift_labels is None:
                 # we are doing next-token prediction; shift prediction scores and input ids by one

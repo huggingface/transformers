@@ -650,7 +650,7 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
         # `shift_labels` holds targets that the caller has already aligned with the logits (sequence/context
         # parallel training shifts before sharding), so pop it here rather than letting it reach the encoder.
         shift_labels = kwargs.pop("shift_labels", None)
-        if labels is not None or shift_labels is not None:
+        if labels is not None:
             use_cache = False
 
         outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.bert(
@@ -675,7 +675,7 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
             return prediction_scores[:, :-1, :].contiguous()
 
         lm_loss = None
-        if labels is not None or shift_labels is not None:
+        if labels is not None:
             if shift_labels is None:
                 # we are doing next-token prediction; shift prediction scores and input ids by one
                 shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
