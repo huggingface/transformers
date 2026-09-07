@@ -1374,3 +1374,125 @@ class TrainerIntegrationTest(TestCasePlus):
         trainer.train()
         model_wrapped_after = trainer.model_wrapped
         self.assertIs(model_wrapped_before, model_wrapped_after, "should be not wrapped twice")
+
+
+class TrainerSpecialTokensAlignmentTest(TestCasePlus):
+    def test_align_special_tokens_preserves_config_tokens_when_tokenizer_has_none(self):
+        from transformers import GenerationConfig, PretrainedConfig
+        from transformers.trainer_utils import align_special_tokens
+
+        class DummyConfig(PretrainedConfig):
+            model_type = "dummy"
+
+            def __init__(self, **kwargs):
+                kwargs.setdefault("bos_token_id", 151643)
+                kwargs.setdefault("eos_token_id", 151645)
+                kwargs.setdefault("pad_token_id", None)
+                super().__init__(**kwargs)
+
+        class DummyModel:
+            def __init__(self):
+                self.config = DummyConfig()
+                self.generation_config = GenerationConfig(
+                    bos_token_id=self.config.bos_token_id,
+                    eos_token_id=[self.config.eos_token_id],
+                    pad_token_id=self.config.pad_token_id,
+                )
+
+        class DummyTokenizer:
+            def __init__(self):
+                self.bos_token_id = None
+                self.eos_token_id = 151645
+                self.pad_token_id = 151643
+
+        model = DummyModel()
+        tokenizer = DummyTokenizer()
+
+        align_special_tokens(model, tokenizer)
+
+        # bos_token_id declared in model config should not be erased when tokenizer carries None
+        self.assertEqual(model.config.bos_token_id, 151643)
+        self.assertEqual(model.generation_config.bos_token_id, 151643)
+        # pad_token_id from tokenizer should be propagated
+        self.assertEqual(model.config.pad_token_id, 151643)
+        self.assertEqual(model.generation_config.pad_token_id, 151643)
+
+    def test_align_special_tokens_updates_when_tokenizer_defines_new_tokens(self):
+        from transformers import GenerationConfig, PretrainedConfig
+        from transformers.trainer_utils import align_special_tokens
+
+        class DummyConfig(PretrainedConfig):
+            model_type = "dummy"
+
+            def __init__(self, **kwargs):
+                kwargs.setdefault("bos_token_id", 1)
+                kwargs.setdefault("eos_token_id", 2)
+                kwargs.setdefault("pad_token_id", 0)
+                super().__init__(**kwargs)
+
+        class DummyModel:
+            def __init__(self):
+                self.config = DummyConfig()
+                self.generation_config = GenerationConfig(
+                    bos_token_id=self.config.bos_token_id,
+                    eos_token_id=[self.config.eos_token_id],
+                    pad_token_id=self.config.pad_token_id,
+                )
+
+        class DummyTokenizer:
+            def __init__(self):
+                self.bos_token_id = 100
+                self.eos_token_id = 101
+                self.pad_token_id = 102
+
+        model = DummyModel()
+        tokenizer = DummyTokenizer()
+
+        align_special_tokens(model, tokenizer)
+
+        self.assertEqual(model.config.bos_token_id, 100)
+        self.assertEqual(model.generation_config.bos_token_id, 100)
+        self.assertEqual(model.config.eos_token_id, 101)
+        self.assertEqual(model.generation_config.eos_token_id, [101, 2])
+        self.assertEqual(model.config.pad_token_id, 102)
+        self.assertEqual(model.generation_config.pad_token_id, 102)
+
+    def test_align_special_tokens_preserves_eos_and_pad_when_tokenizer_has_none(self):
+        from transformers import GenerationConfig, PretrainedConfig
+        from transformers.trainer_utils import align_special_tokens
+
+        class DummyConfig(PretrainedConfig):
+            model_type = "dummy"
+
+            def __init__(self, **kwargs):
+                kwargs.setdefault("bos_token_id", 1)
+                kwargs.setdefault("eos_token_id", 2)
+                kwargs.setdefault("pad_token_id", 0)
+                super().__init__(**kwargs)
+
+        class DummyModel:
+            def __init__(self):
+                self.config = DummyConfig()
+                self.generation_config = GenerationConfig(
+                    bos_token_id=self.config.bos_token_id,
+                    eos_token_id=[self.config.eos_token_id],
+                    pad_token_id=self.config.pad_token_id,
+                )
+
+        class DummyTokenizer:
+            def __init__(self):
+                self.bos_token_id = None
+                self.eos_token_id = None
+                self.pad_token_id = None
+
+        model = DummyModel()
+        tokenizer = DummyTokenizer()
+
+        align_special_tokens(model, tokenizer)
+
+        self.assertEqual(model.config.bos_token_id, 1)
+        self.assertEqual(model.generation_config.bos_token_id, 1)
+        self.assertEqual(model.config.eos_token_id, 2)
+        self.assertEqual(model.generation_config.eos_token_id, [2])
+        self.assertEqual(model.config.pad_token_id, 0)
+        self.assertEqual(model.generation_config.pad_token_id, 0)
