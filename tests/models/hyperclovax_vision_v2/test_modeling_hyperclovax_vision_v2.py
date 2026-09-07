@@ -331,6 +331,9 @@ class HyperCLOVAXVisionV2IntegrationTest(unittest.TestCase):
                 ("cuda", (8, 6)): [
                     'user\n{"id": "video_00", "type": "video/mp4", "filename": "a.mp4"}\n<|video_aux_start|>다음 중 video_duration은 비디오 길이 정보입니다. 참고하여 답변하세요. {"video_duration": <|video_duration|>}<|video_aux_end|>\n\nWhat is shown in this video?\nassistant\n<think>\nOkay, so I need to figure out what\'s shown in the video based on the image provided. Let me start by breaking down the details given.\n\n'
                 ],
+                ("cuda", (10, 0)): [
+                    'user\n{"id": "video_00", "type": "video/mp4", "filename": "a.mp4"}\n<|video_aux_start|>다음 중 video_duration은 비디오 길이 정보입니다. 참고하여 답변하세요. {"video_duration": <|video_duration|>}<|video_aux_end|>\n\nWhat is shown in this video?\nassistant\n<think>\nOkay, so I need to figure out what\'s shown in this video based on the image provided. Let me start by breaking down the details given.\n\n'
+                ],
             }
         )
         expected = EXPECTED_TEXTS.get_expectation()
