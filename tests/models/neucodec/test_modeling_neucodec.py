@@ -237,6 +237,17 @@ class NeuCodecIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/neucodec"
 
+    def _load_model_and_feature_extractor(self, model_id):
+        try:
+            model = NeuCodecModel.from_pretrained(model_id, attn_implementation="eager").to(torch_device).eval()
+            feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+        except OSError as e:
+            if "gated repo" in str(e).lower():
+                self.skipTest(f"{model_id} is gated and requires authentication")
+            raise
+
+        return model, feature_extractor
+
     @slow
     def test_integration(self):
         results_path = self.fixtures_path / "expected_results.json"
@@ -247,8 +258,7 @@ class NeuCodecIntegrationTest(unittest.TestCase):
         exp_codec_error = float(raw_data["codec_errors"][0])
 
         model_id = "neuphonic/neucodec"
-        model = NeuCodecModel.from_pretrained(model_id, attn_implementation="eager").to(torch_device).eval()
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+        model, feature_extractor = self._load_model_and_feature_extractor(model_id)
 
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         dataset = dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
@@ -287,8 +297,7 @@ class NeuCodecIntegrationTest(unittest.TestCase):
         exp_codec_errors = raw_data["codec_errors"]
 
         model_id = "neuphonic/neucodec"
-        model = NeuCodecModel.from_pretrained(model_id, attn_implementation="eager").to(torch_device).eval()
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+        model, feature_extractor = self._load_model_and_feature_extractor(model_id)
 
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         dataset = dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
