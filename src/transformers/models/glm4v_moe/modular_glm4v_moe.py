@@ -45,6 +45,7 @@ from ..glm4v.modeling_glm4v import (
     Glm4vVisionRotaryEmbedding,
 )
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLRotaryEmbedding
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
     Qwen3VLMoeCausalLMOutputWithPast,
     Qwen3VLMoeModelOutputWithPast,
@@ -139,6 +140,10 @@ class Glm4vMoeConfig(Glm4vConfig):
 
     image_token_id: int = 151363
     video_token_id: int = 151364
+
+
+class Glm4vMoeTextRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
+    pass
 
 
 class Glm4vMoeTextAttention(Glm4Attention):

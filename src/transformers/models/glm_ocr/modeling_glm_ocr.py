@@ -152,10 +152,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
 
-    # Interleave them instead of usual shape
-    cos = cos[..., : cos.shape[-1] // 2].repeat_interleave(2, dim=-1)
-    sin = sin[..., : sin.shape[-1] // 2].repeat_interleave(2, dim=-1)
-
     # Keep half or full tensor for later concatenation
     rotary_dim = cos.shape[-1]
     q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
@@ -719,7 +715,7 @@ class GlmOcrTextRotaryEmbedding(nn.Module):
         Recompose the frequencies into the final spatial layout used per each grid.
         """
         freq = torch.cat([m[i % 3] for i, m in enumerate(freq.split(self.mrope_section, dim=-1))], dim=-1)
-        return torch.cat((freq, freq), dim=-1)
+        return freq.repeat_interleave(2, dim=-1)
 
 
 @auto_docstring

@@ -65,7 +65,7 @@ class Glm4vMoeVisionText2TextModelTester:
         is_training=True,
         text_config={
             "vocab_size": 99,
-            "hidden_size": 16,
+            "hidden_size": 32,
             "intermediate_size": 22,
             "num_hidden_layers": 2,
             "num_attention_heads": 2,
@@ -73,7 +73,7 @@ class Glm4vMoeVisionText2TextModelTester:
             "output_channels": 64,
             "hidden_act": "silu",
             "max_position_embeddings": 512,
-            "rope_parameters": {"type": "default", "mrope_section": [2, 2], "partial_rotary_factor": 1.0},
+            "rope_parameters": {"type": "default", "mrope_section": [2, 3, 3], "partial_rotary_factor": 1.0},
             "rope_theta": 10000,
             "tie_word_embeddings": True,
             "bos_token_id": 0,
