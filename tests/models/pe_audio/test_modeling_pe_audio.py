@@ -326,9 +326,6 @@ class PeAudioModelTest(ModelTesterMixin, unittest.TestCase):
     def test_can_init_all_missing_weights(self):
         pass
 
-    def test_all_tensors_are_parameter_or_buffer(self):
-        super().test_all_tensors_are_parameter_or_buffer()
-
 
 @require_torch
 class PeAudioIntegrationTest(unittest.TestCase):
