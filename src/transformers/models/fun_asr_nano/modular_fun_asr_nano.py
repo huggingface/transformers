@@ -294,15 +294,13 @@ class FunAsrNanoFSMN(nn.Module):
         self.dropout = config.hidden_dropout
 
     def forward(self, hidden_states: torch.Tensor, input_features_mask: torch.Tensor) -> torch.Tensor:
-        # The depthwise convolution mixes neighbouring frames, so padding has to be zeroed out on both sides of it.
         expanded_mask = input_features_mask.unsqueeze(-1).to(dtype=hidden_states.dtype)
         hidden_states = hidden_states * expanded_mask
 
         residual = hidden_states
         hidden_states = self.conv(self.pad(hidden_states.transpose(1, 2))).transpose(1, 2)
         hidden_states = hidden_states + residual
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        return hidden_states * expanded_mask
+        return nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
 
 class FunAsrNanoMLP(CLIPMLP):
