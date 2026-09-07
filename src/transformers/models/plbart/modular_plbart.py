@@ -65,11 +65,13 @@ class PLBartPreTrainedModel(PreTrainedModel):
 
 
 class PLBartEncoder(BartEncoder):
-    pass
+    def forward(self, *args, **kwargs):
+        return super().forward(*args, **kwargs)
 
 
 class PLBartDecoder(BartDecoder):
-    pass
+    def forward(self, *args, **kwargs):
+        return super().forward(*args, **kwargs)
 
 
 @auto_docstring
