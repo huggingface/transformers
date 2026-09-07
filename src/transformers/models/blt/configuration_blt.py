@@ -230,6 +230,7 @@ class BltConfig(PreTrainedConfig):
     decoder_config: dict | PreTrainedConfig | None = None
     global_config: dict | PreTrainedConfig | None = None
     tie_word_embeddings: bool = False
+    num_hidden_layers: int | None = None
     use_cache: bool = True
     pad_token_id: int | None = None
     bos_token_id: int | None = None
@@ -268,6 +269,9 @@ class BltConfig(PreTrainedConfig):
         elif isinstance(self.global_config, dict):
             self.global_config.setdefault("initializer_range", self.initializer_range)
             self.global_config = BltGlobalTransformerConfig(**self.global_config)
+
+        if self.num_hidden_layers is None:
+            self.num_hidden_layers = self.decoder_config.num_hidden_layers
 
         # Determine if token embedding projection is needed based on dimension mismatch (7b)
         encoder_cross_output_size = self.encoder_config.hidden_size * self.cross_attn_k
