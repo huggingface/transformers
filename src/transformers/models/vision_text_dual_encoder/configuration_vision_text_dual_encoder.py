@@ -50,6 +50,8 @@ class VisionTextDualEncoderConfig(PreTrainedConfig):
     model_type = "vision-text-dual-encoder"
     sub_configs = {"vision_config": AutoConfig, "text_config": AutoConfig}
 
+    text_config: PreTrainedConfig | dict | None = None
+    vision_config: PreTrainedConfig | dict | None = None
     projection_dim: int = 512
     logit_scale_init_value: int | float = 2.6592
 

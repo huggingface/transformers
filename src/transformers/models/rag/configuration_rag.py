@@ -24,6 +24,10 @@ from ..auto.configuration_auto import CONFIG_MAPPING
 @strict
 class RagConfig(PreTrainedConfig):
     r"""
+    question_encoder (`PreTrainedConfig | dict`, *optional*):
+        The config object or dictionary of the question encoder backbone
+    generator (`PreTrainedConfig | dict`, *optional*):
+        The config object or dictionary of the answer generator backbone
     prefix (`str`, *optional*):
         A string prefix prepended to every input before passing to the generator model.
     title_sep (`str`, *optional*, defaults to  `" / "`):
