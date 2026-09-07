@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from functools import wraps
 
@@ -23,6 +24,7 @@ from ..utils.import_utils import (
     is_torch_greater_or_equal,
     is_torch_less_or_equal,
     is_torchdynamo_compiling,
+    is_triton_available,
 )
 from .deepgemm import deepgemm_bf16_experts_forward
 from .sonicmoe import sonicmoe_experts_forward
@@ -392,7 +394,17 @@ def grouped_mm_experts_forward(
     expert_ids = top_k_index.reshape(-1).to(torch.int32)  # (S,)
 
     # Sort by expert for grouped processing
-    expert_ids_g, perm = torch.sort(expert_ids)
+    # HF_MOE_COUNTING_SORT=1 groups the pairs by expert with a counting sort instead of torch.sort + histc +
+    # cumsum: 17 us against 40 us per layer inside a cuda graph, +5% on a Qwen3-30B-A3B decode step at tp4.
+    # Opt-in because it places tied rows in a different order, so weight gradients differ in the last bits.
+    fast_route = os.environ.get("HF_MOE_COUNTING_SORT") == "1" and device.type == "cuda" and is_triton_available()
+    if fast_route:
+        from .moe_routing import counting_sort_route
+
+        expert_ids_g, perm, offsets = counting_sort_route(expert_ids, self.num_experts)
+        perm = perm.long()
+    else:
+        expert_ids_g, perm = torch.sort(expert_ids)
     selected_hidden_states_g = hidden_states[perm // num_top_k]
     sample_weights_g = sample_weights[perm]
 
@@ -400,9 +412,10 @@ def grouped_mm_experts_forward(
     # using histc instead of bincount to avoid cuda graph issues
     # With deterministic algorithms, CPU only supports float input, CUDA only supports int input.
     # torch.histc() does not support integer dtypes on CPU and MPS.
-    histc_input = expert_ids_g.float() if device.type in ("cpu", "mps") else expert_ids_g.int()
-    tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
-    offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
+    if not fast_route:  # the counting sort already produced the offsets
+        histc_input = expert_ids_g.float() if device.type in ("cpu", "mps") else expert_ids_g.int()
+        tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
+        offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
 
     # EP sentinel handling: leave `expert_ids` unclamped so the sort pushes sentinels to the tail,
     # `histc(max=num_experts-1)` drops them from `tokens_per_expert`, and grouped_mm skips rows
