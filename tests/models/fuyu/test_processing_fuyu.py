@@ -24,7 +24,7 @@ from transformers import (
 from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
 
-from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
+from ...test_processing_common import MODALITY_TEST_SPECS, ProcessorTesterMixin, url_to_local_path
 
 
 if is_torch_available():
@@ -39,6 +39,11 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     # Fuyu uses a tokenizer with a very large vocabulary (~262K tokens), making tests slow and
     # memory-intensive. tiny_model_id points to a trimmed tokenizer repo to keep tests lightweight.
     tiny_model_id = "hf-internal-testing/tiny-processor-fuyu"
+    images_input_name = "image_patches"
+
+    images_text_kwargs_max_length = 22
+    images_text_kwargs_override_max_length = 22
+    images_unstructured_max_length = 22
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -47,10 +52,6 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
         )
         cls.bus_image_pil = load_image(bus_image_url)
-
-    @unittest.skip("FuyuProcessor doesn't return typical pixel values for images")
-    def test_image_processor_defaults(self):
-        pass
 
     @unittest.skip("FuyuProcessor doesn't return typical pixel values for images")
     def test_processor_with_multiple_inputs(self):
@@ -135,159 +136,38 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue((processor_outputs["input_ids"] == expected_padded_unpacked_token_inputs).all())
 
     # Rewrite as Fuyu supports tokenizer kwargs only when image is None.
-    @require_vision
-    @require_torch
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", max_length=117)
+    def _test_unstructured_kwargs_batched(self, modality):
+        attributes = self.processor_class.get_attributes()
+        processor = self.get_processor()
+        self.maybe_skip_typed_test_for_modality(modality, attributes)
 
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = self.prepare_text_inputs()
-        # Fuyu uses tokenizer kwargs only when image is None.
-        image_input = None
+        input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
+        modal_input = self._prepare_modality_input(modality, batch_size=2)
+        max_length = 76  # just hardcode
+        init_time_kwargs = MODALITY_TEST_SPECS[modality]["init_time_kwargs"]
+        call_kwargs = MODALITY_TEST_SPECS[modality]["call_time_kwargs"]
 
-        inputs = processor(
-            text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
-        )
-        self.assertEqual(len(inputs["input_ids"][0]), 112)
-
-    @unittest.skip("Fuyu processor does not support image_processor kwargs")
-    def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        pass
-
-    @unittest.skip("Fuyu processor does not support image_processor kwargs")
-    def test_kwargs_overrides_default_image_processor_kwargs(self):
-        pass
-
-    # Rewrite as Fuyu supports tokenizer kwargs only when image is None.
-    @require_vision
-    @require_torch
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = self.prepare_text_inputs()
-        # Fuyu uses tokenizer kwargs only when image is None.
-        image_input = None
-
-        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
-        self.assertEqual(len(inputs["input_ids"][0]), 117)
-
-    # Rewrite as Fuyu image processor does not return pixel values
-    @require_torch
-    @require_vision
-    def test_structured_kwargs_nested(self):
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs()
-        # Fuyu uses tokenizer kwargs only when image is None.
-        image_input = None
-
-        # Define the kwargs for each modality
-        all_kwargs = {
-            "common_kwargs": {"return_tensors": "pt"},
-            "text_kwargs": {"padding": "max_length", "max_length": 76},
-        }
-
-        inputs = processor(text=input_str, images=image_input, **all_kwargs)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
-
-    # Rewrite as Fuyu image processor does not return pixel values
-    @require_torch
-    @require_vision
-    def test_structured_kwargs_nested_from_dict(self):
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = self.prepare_text_inputs()
-        # Fuyu uses tokenizer kwargs only when image is None.
-        image_input = None
-
-        # Define the kwargs for each modality
-        all_kwargs = {
-            "common_kwargs": {"return_tensors": "pt"},
-            "text_kwargs": {"padding": "max_length", "max_length": 76},
-        }
-
-        inputs = processor(text=input_str, images=image_input, **all_kwargs)
-
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
-
-    # Rewrite as Fuyu supports tokenizer kwargs only when image is None.
-    @require_torch
-    @require_vision
-    def test_unstructured_kwargs(self):
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer")
-
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs()
-        # Fuyu uses tokenizer kwargs only when image is None.
-        image_input = None
         inputs = processor(
             text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            padding="max_length",
-            max_length=76,
-        )
-
-        self.assertEqual(len(inputs["input_ids"][0]), 76)
-
-    # Rewrite as Fuyu supports tokenizer kwargs only when image is None.
-    @require_torch
-    @require_vision
-    def test_unstructured_kwargs_batched(self):
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor", use_tiny_ckpt=False)
-        tokenizer = self.get_component("tokenizer", use_tiny_ckpt=False)
-        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = self.prepare_text_inputs(batch_size=2)
-        # Fuyu uses tokenizer kwargs only when image is None.
-        image_input = None
-        inputs = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
+            max_length=max_length,
             padding="longest",
-            max_length=76,
+            images=modal_input,
+            **call_kwargs,
+            **init_time_kwargs,
         )
 
-        self.assertEqual(len(inputs["input_ids"][0]), 7)
+        self._check_modality_outputs(inputs, modality)
+        self.assertTrue(
+            len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
+            and len(inputs[self.text_input_name][1]) < max_length
+        )
 
     def test_processor_text_has_no_visual(self):
         # Overwritten: Fuyu has a complicated processing so we don't check id values
         processor = self.get_processor()
 
         text = self.prepare_text_inputs(batch_size=3, modalities="image")
-        image_inputs = self.prepare_image_inputs(batch_size=3)
+        image_inputs = self.prepare_images_inputs(batch_size=3)
         processing_kwargs = {"return_tensors": "pt", "padding": True, "multi_page": True}
 
         # Call with nested list of vision inputs

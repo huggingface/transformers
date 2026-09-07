@@ -64,6 +64,7 @@ if TYPE_CHECKING:
     from .bros import *
     from .byt5 import *
     from .camembert import *
+    from .canary import *
     from .canine import *
     from .chameleon import *
     from .chinese_clip import *
@@ -222,6 +223,7 @@ if TYPE_CHECKING:
     from .hunyuan_v1_moe import *
     from .hunyuan_vl import *
     from .hy_v3 import *
+    from .hy_v4 import *
     from .hyperclovax import *
     from .ibert import *
     from .idefics import *
@@ -240,6 +242,7 @@ if TYPE_CHECKING:
     from .jetmoe import *
     from .jina_embeddings_v3 import *
     from .kimi_k25 import *
+    from .kimi_linear import *
     from .kosmos2 import *
     from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
@@ -327,6 +330,7 @@ if TYPE_CHECKING:
     from .nemotron_asr_streaming import *
     from .nemotron_h import *
     from .neomme import *
+    from .neucodec import *
     from .nllb import *
     from .nllb_moe import *
     from .nomic_bert import *
