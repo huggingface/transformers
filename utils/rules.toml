@@ -729,7 +729,7 @@ default_enabled = true
 # `repeat_kv`, a converter-steering import, a quoted forward reference to another model's cache class, and a
 # `del` of a name that only exists in the inherited parent body. That was flagged upstream as converter
 # mechanics rather than model bugs, and the fix landed there, so no model needs an exemption any more.
-allowlist_models = []
+allowlist_models = ["hy_v4"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF035.explanation]
@@ -844,7 +844,7 @@ default_enabled = true
 # Down from 35 findings over 13 models: the rule now exempts guards (an `if` with no `else` that only raises
 # or only logs) and a `DEFAULT_EXEMPT_ATTRIBUTES` list of framework plumbing, which cleared `openai`(11),
 # `timm_backbone`(2), `timm_wrapper`(2), `vitpose_backbone`(1) and `glm5_next` outright and trimmed the rest.
-allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "inkling", "kimi_k25", "kosmos2", "muse_glimmer", "tipsv2", "x_clip"]
+allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "inkling", "kimi_k25", "kosmos2", "muse_glimmer", "tipsv2", "x_clip", "hy_v4"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF041.explanation]
@@ -885,7 +885,7 @@ default_enabled = true
 # (axk2, deepseek_v32, deepseek_v4, gemma4, glm_moe_dsa, ministral3, mistral4). Dropping `position_ids`
 # from a public `forward` signature is a breaking change per model, so each is its own follow-up. Upstream:
 # a `cutoff_date` would express the legacy half better than a list this long.
-allowlist_models = ["axk2", "chameleon", "clvp", "codegen", "deepseek_v32", "deepseek_v4", "falcon", "gemma4", "glm_moe_dsa", "gpt_neox_japanese", "gptj", "idefics", "idefics2", "ministral3", "mistral4", "moshi", "persimmon", "prophetnet", "qwen2_vl", "recurrent_gemma", "stablelm"]
+allowlist_models = ["axk2", "chameleon", "clvp", "codegen", "deepseek_v32", "deepseek_v4", "falcon", "gemma4", "glm_moe_dsa", "gpt_neox_japanese", "gptj", "idefics", "idefics2", "ministral3", "mistral4", "moshi", "persimmon", "prophetnet", "qwen2_vl", "recurrent_gemma", "stablelm", "hy_v4"]
 
 [rules.TRF043.explanation]
 what_it_does = "Flags a declared position_ids parameter in the forward signature of classes whose name ends in Attention."
@@ -1048,7 +1048,7 @@ default_enabled = true
 # attention-interface owner. Legacy dispatch in plain `modeling_*.py`: decision_transformer, falcon, gpt2.
 # Backend-conditional tensor handling in modular MLA/DSA-style models the interface cannot express yet:
 # axk2, deepseek_v32, diffusion_gemma, glm_moe_dsa, minimax_m3_vl, qwen2_5_omni. Follow-ups either way.
-allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "falcon", "glm_moe_dsa", "gpt2", "minimax_m3_vl", "qwen2_5_omni", "glm5_next"]
+allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "falcon", "glm_moe_dsa", "gpt2", "minimax_m3_vl", "qwen2_5_omni", "glm5_next", "hy_v4"]
 
 [rules.TRF051.explanation]
 what_it_does = "Flags comparisons against a _attn_implementation attribute in modeling_*.py and modular_*.py."

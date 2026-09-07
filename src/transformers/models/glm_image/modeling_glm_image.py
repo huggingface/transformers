@@ -572,11 +572,11 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         self.embeddings = GlmImageVisionEmbeddings(config)
         self.patch_embed = GlmImageVisionPatchEmbed(config)
 
-        head_dim = config.hidden_size // config.num_heads
-
         self.blocks = nn.ModuleList([GlmImageVisionBlock(config) for _ in range(config.depth)])
 
         self.gradient_checkpointing = False
+
+        head_dim = config.hidden_size // config.num_heads
         self.head_dim = head_dim
         self.post_init()
 

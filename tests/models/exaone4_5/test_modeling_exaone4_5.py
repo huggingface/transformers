@@ -225,9 +225,7 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
 
     @require_deterministic_for_xpu
     def test_model_generation_image_text(self):
-        IMAGE_URL = (
-            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-        )
+        IMAGE_URL = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
         EXPECTED_TEXT = Expectations(
             {
                 ("cuda", 8): (
@@ -244,7 +242,7 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "image": "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg",
                     },
                     {"type": "text", "text": "Describe the image."},
                 ],
