@@ -4550,6 +4550,9 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
             # width condition combined with specific mode conditions
             if use_one_line_repr(obj):
                 output = f"{' ' * 4 * indent}{one_line_form}"
+    else:
+        # anything else (e.g. `torch.Size`, `numpy` scalars): fall back to `repr`, which stays copy-pastable
+        output = repr(obj)
 
     cache[(id(obj), indent, mode, prefix)] = output
 
