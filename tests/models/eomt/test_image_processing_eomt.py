@@ -283,7 +283,11 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
             processor = image_processing_class(**self.image_processor_dict)
             # Set longest_edge to None to test for semantic segmentatiom.
             processor.size = {"shortest_edge": self.image_processor_tester.height, "longest_edge": None}
-            image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
+            image = load_image(
+                url_to_local_path(
+                    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                )
+            )
 
             inputs = processor(images=image, do_split_image=True, return_tensors="pt")
             patch_offsets = inputs["patch_offsets"]
@@ -301,7 +305,11 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
     def test_post_process_panoptic_segmentation(self):
         for image_processing_class in self.image_processing_classes.values():
             processor = image_processing_class(**self.image_processor_dict)
-            image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
+            image = load_image(
+                url_to_local_path(
+                    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                )
+            )
 
             original_sizes = [image.size[::-1], image.size[::-1]]
 
@@ -319,7 +327,11 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
     def test_post_process_instance_segmentation(self):
         for image_processing_class in self.image_processing_classes.values():
             processor = image_processing_class(**self.image_processor_dict)
-            image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
+            image = load_image(
+                url_to_local_path(
+                    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                )
+            )
 
             original_sizes = [image.size[::-1], image.size[::-1]]
 

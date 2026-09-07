@@ -26,7 +26,6 @@ from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import logging
-from ..utils.deprecation import deprecate_kwarg
 from ..utils.import_utils import is_kernels_available
 from .deepgemm import (
     deepgemm_fp8_fp4_experts_forward,
@@ -177,7 +176,6 @@ def _alloc_expert_proj(
     return weight, sf
 
 
-@deprecate_kwarg("output_dtype", version="v5.16")
 def finegrained_fp8_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
@@ -185,7 +183,6 @@ def finegrained_fp8_linear(
     block_size: list[int] | None = None,
     bias: torch.Tensor | None = None,
     activation_scale: torch.Tensor | None = None,
-    output_dtype: torch.dtype | None = None,
 ) -> torch.Tensor:
     """Triton FP8/FP4 linear: fused act-quant + matmul, then optional bias add.
 
@@ -208,7 +205,6 @@ def finegrained_fp8_linear(
     return output
 
 
-@deprecate_kwarg("output_dtype", version="v5.16")
 def fp8_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
@@ -216,7 +212,6 @@ def fp8_linear(
     block_size: list[int] | None = None,
     bias: torch.Tensor | None = None,
     activation_scale: torch.Tensor | None = None,
-    output_dtype: torch.dtype | None = None,
     allow_deepgemm: bool = True,
 ) -> torch.Tensor:
     """End-to-end FP8/FP4 linear used by `FP8Linear` and the eager `FP8Experts` loop.

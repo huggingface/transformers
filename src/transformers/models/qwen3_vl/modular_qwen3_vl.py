@@ -22,7 +22,6 @@ import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
@@ -30,13 +29,11 @@ from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILIma
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_rope_utils import RopeParameters
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...utils import auto_docstring, can_return_tuple, is_torchvision_available, logging
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
-    maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
@@ -49,11 +46,12 @@ from ...vision_utils import (
 )
 from ..auto.modeling_auto import AutoModel
 from ..glm4v.video_processing_glm4v import smart_resize
-from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLCausalLMOutputWithPast,
     Qwen2_5_VLForConditionalGeneration,
+    Qwen2_5_VLRotaryEmbedding,
     Qwen2_5_VLVisionBlock,
+    Qwen2_5_VLVisionRotaryEmbedding,
 )
 from ..qwen2_vl.modeling_qwen2_vl import (
     PatchEmbed,
@@ -62,7 +60,6 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLPreTrainedModel,
     TransformersKwargs,
     VisionAttention,
-    VisionRotaryEmbedding,
 )
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from ..qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
@@ -107,6 +104,8 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
 
     model_type = "qwen3_vl_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -121,6 +120,7 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
     num_position_embeddings: int = 2304
     deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
@@ -244,7 +244,7 @@ class Qwen3VLVisionPatchEmbed(PatchEmbed):
         self.proj = nn.Conv3d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=True)
 
 
-class Qwen3VLVisionRotaryEmbedding(VisionRotaryEmbedding):
+class Qwen3VLVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 
@@ -279,50 +279,26 @@ class Qwen3VLVisionBlock(Qwen2_5_VLVisionBlock):
         self.mlp = Qwen3VLVisionMLP(config=config)
 
 
-class Qwen3VLTextRotaryEmbedding(LlamaRotaryEmbedding):
-    @deprecate_kwarg("device", version="5.18")
+class Qwen3VLTextRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
     def __init__(self, config: Qwen3VLTextConfig, device=None):
-        super().__init__(config)
+        super().__init__()
         self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
 
-    def apply_interleaved_mrope(self, freqs, mrope_section):
-        """Apply interleaved MRoPE to 3D rotary embeddings.
-        Reorganizes frequency layout from chunked [TTT...HHH...WWW] to
-        interleaved [THWTHWTHW...TT], preserving frequency continuity.
-        args:
-            x: (3, bs, seq_len, head_dim // 2)
-            mrope_section: (3,)
-        returns:
-            x_t: (bs, seq_len, head_dim // 2)
+    def compute_default_rope_parameters(
+        config: Qwen3VLTextConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        return super().compute_default_rope_parameters(config, device, **kwargs)
+
+    def recomposition_frequencies(self, freq):
         """
-        freqs_t = freqs[0]  # just overwrite the first dimension T
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freqs_thw = freq[0]  # just overwrite the first dimension T
         for dim, offset in enumerate((1, 2), start=1):  # H, W
-            length = mrope_section[dim] * 3
+            length = self.mrope_section[dim] * 3
             idx = slice(offset, length, 3)
-            freqs_t[..., idx] = freqs[dim, ..., idx]
-        return freqs_t
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        # In contrast to other models, Qwen3VL has different position ids for the grids
-        # So we expand the inv_freq to shape (3, ...)
-        if position_ids.ndim == 2:
-            position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
-        inv_freq_expanded = (
-            self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1).to(x.device)
-        )
-        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
-            freqs = self.apply_interleaved_mrope(freqs, self.mrope_section)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+            freqs_thw[..., idx] = freq[dim, ..., idx]
+        return torch.cat((freqs_thw, freqs_thw), dim=-1)
 
 
 class Qwen3VLTextAttention(Qwen3Attention):
@@ -409,12 +385,6 @@ class Qwen3VLPreTrainedModel(Qwen2VLPreTrainedModel):
         "attentions": Qwen3VLTextAttention,
     }
 
-    def _init_weights(self, module):
-        PreTrainedModel._init_weights(self, module)
-        if isinstance(module, Qwen3VLVisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
-
 
 class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
     config: Qwen3VLVisionConfig
@@ -440,8 +410,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         self.interpolation_align_corners = True
         self.interpolation_mode = "bilinear"
 
-        head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = Qwen3VLVisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = Qwen3VLVisionRotaryEmbedding(config)
 
         self.blocks = nn.ModuleList([Qwen3VLVisionBlock(config) for _ in range(config.depth)])
         self.merger = Qwen3VLVisionPatchMerger(
@@ -493,13 +462,10 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         hidden_states = self.patch_embed(hidden_states)
         pos_embeds = (self.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)
         hidden_states = hidden_states + pos_embeds.to(hidden_states.dtype)
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
+        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
 
         seq_len, _ = hidden_states.size()
         hidden_states = hidden_states.reshape(seq_len, -1)
-        rotary_pos_emb = rotary_pos_emb.reshape(seq_len, -1)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
 
         deepstack_feature_lists = []
         for layer_num, blk in enumerate(self.blocks):
