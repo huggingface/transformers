@@ -85,7 +85,6 @@ class Idefics3Config(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     scale_factor: int = 2
-    pad_token_id: int | None = 128_002  # deprecate!
 
     def __post_init__(self, **kwargs):
         if self.vision_config is None:
@@ -101,7 +100,26 @@ class Idefics3Config(PreTrainedConfig):
             logger.info("text_config is None, using default Llama text config")
             self.text_config = CONFIG_MAPPING["llama"](rms_norm_eps=1e-5)
 
+        self._pad_token_id = kwargs.pop("pad_token_id", 128_002)
         super().__post_init__(**kwargs)
+
+    @property
+    def pad_token_id(self):
+        logger.warning_once(
+            "`self.pad_token_id` is deprecated and might not reflect the actual PAD used by model. "
+            "Access with `self.text_config.pad_token_id` to get the correct token ID, `self.pad_token_id` "
+            "will be removed in v5.22."
+        )
+        return self._pad_token_id
+
+    @pad_token_id.setter
+    def pad_token_id(self, value):
+        logger.warning_once(
+            "`self.pad_token_id` is deprecated and might not reflect the actual PAD used by model. "
+            "Access with `self.text_config.pad_token_id` to get the correct token ID, `self.pad_token_id` "
+            "will be removed in v5.22."
+        )
+        self._pad_token_id = value
 
 
 __all__ = ["Idefics3Config", "Idefics3VisionConfig"]
