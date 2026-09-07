@@ -205,8 +205,10 @@ class RequestState:
 
     @status.setter
     def status(self, value: RequestStatus):
-        # Leaving the pending state means the request started: we stamp the start of its lifespan
-        if self._status == RequestStatus.PENDING:
+        # Leaving the pending state means the request started: we stamp the start of its lifespan, once. A request
+        # that was offloaded goes back to pending and leaves it again on restore, and re-stamping there would report
+        # the time since the last restore as the whole life of the request.
+        if self._status == RequestStatus.PENDING and self.lifespan[0] < 0:
             self.lifespan = (time.perf_counter(), -1)
         # Reaching a terminal state means the request is over: we stamp the end of its lifespan
         if value >= RequestStatus.FINISHED:
@@ -349,6 +351,11 @@ class RequestState:
         # Otherwise, we set the true initial tokens to the number of initial tokens
         else:
             new_state._true_initial_tokens = len(self.initial_tokens)
+        # A soft reset continues the same request under the same id, so it keeps the same clock: the request started
+        # when it first left the pending queue, not when its cache was dropped. Reallocating these would report every
+        # soft-reset request as having begun at the reset.
+        new_state.created_time = self.created_time
+        new_state.lifespan = self.lifespan
         return new_state
 
 

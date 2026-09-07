@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import queue
+import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
 from math import ceil, log2
@@ -40,6 +41,13 @@ class CudaGraphBuffer:
 
     def set_graph(self, key: tuple[int, ...], graph: torch.cuda.CUDAGraph) -> None:
         self._storage[key] = graph
+
+    def clear(self) -> None:
+        """Drop every captured graph so the next batch captures again. Needed when the addresses a graph was captured
+        against are no longer valid, since a graph replays the pointers it was captured with."""
+        while self._storage:
+            _, graph = self._storage.popitem()
+            graph.reset()
 
 
 @dataclass
@@ -217,3 +225,8 @@ def mem_pool_ctx(mem_pool):
     """A context manager to use a CUDA mem pool."""
     with torch.cuda.use_mem_pool(mem_pool):
         yield
+
+
+class ThreadLocalCounter(threading.local):
+    def __init__(self) -> None:
+        self.value = 0

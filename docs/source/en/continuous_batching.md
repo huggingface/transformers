@@ -124,6 +124,26 @@ manager.destroy()
 
 [`~ContinuousMixin.continuous_batching_context_manager`] handles this process. It calls `stop` on exit and `destroy` unless you pass `persistent_manager=True` to cache the manager on the model for the next session.
 
+### Releasing the KV cache between batches
+
+A caller that drives the manager itself with [`~ContinuousBatchingManager.step`] can give the KV cache memory to something else between two batches and take it back afterwards. Generation resumes where it left off.
+
+```py
+freed = manager.release_memory()  # bytes returned to the allocator
+...                               # something else uses the memory, a training step for instance
+manager.restore_memory()
+```
+
+This only makes sense while nothing is stepping the engine: stepping with the cache released raises. The live requests are copied to the pinned CPU pool sized by `cpu_offload_space` and copied back when they are scheduled again, so the continuation is exactly what an uninterrupted run would have produced.
+
+Pass `offload=False` to discard the live requests' cache instead of copying it. They re-prefill when they run again, which needs no CPU pool and no host bandwidth, but pays for the prefill; the continuation is then no longer bitwise identical, since recomputing a prefix in one forward does not give the same floating point result as having decoded it token by token. Discarding is the better trade when the cache is about to be worthless anyway, for instance when the weights change while generation is paused.
+
+```py
+manager.release_memory(offload=False)
+```
+
+Cuda graphs are recaptured if the cache does not come back at the same addresses, which a graph replays. This is not supported together with async batching, which keeps a batch in flight whose cache cannot be taken from under it.
+
 ### Adding requests
 
 [`~ContinuousBatchingManager.add_request`] submits a single request. Provide a `request_id` or let the manager generate one automatically.

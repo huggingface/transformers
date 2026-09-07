@@ -73,6 +73,12 @@ def resolve_continuous_batching_config(
         cb_config=cb_config, is_attn_mask_needed=is_attn_mask_needed, cuda_graph_requested=cuda_graph_requested
     )
 
+    # Linear attention layers process each prefill sequence separately, which is not graph-capturable
+    if "linear_attention" in (getattr(config.get_text_config(), "layer_types", None) or []):
+        if any(cb_config.cuda_graph_booleans):
+            logger.warning("Model has linear attention layers: turning off cuda graphs")
+        cb_config.use_cuda_graph = (False, False)
+
     # Decide if asynchronous batching should be used. Should happen after CUDA graphs are decided.
     decide_use_async_batching(cb_config=cb_config, is_attn_mask_needed=is_attn_mask_needed)
 
