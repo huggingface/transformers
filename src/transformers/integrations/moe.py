@@ -416,6 +416,7 @@ def grouped_mm_experts_forward(
         expert_ids_g, perm = torch.sort(expert_ids)
         rows_g, inv_perm = perm // num_top_k, None
     selected_hidden_states_g = hidden_states[rows_g]
+    sample_weights_g = sample_weights[perm]
 
     # Compute offsets for grouped_mm
     # using histc instead of bincount to avoid cuda graph issues
@@ -483,22 +484,8 @@ def grouped_mm_experts_forward(
     # Select down projection weights and biases
     selected_weights = self.down_proj
     selected_biases = self.down_proj_bias[expert_ids_g] if self.has_bias else None
-    down_weights = selected_weights if self.is_transposed else selected_weights.transpose(-2, -1)
 
     # --- Down projection per expert (grouped) ---
-    # The Triton grouped matmul can store each row at its token position on the way out, so the routing weight
-    # and the per-token sum read contiguous rows rather than gathering them through the inverse permutation:
-    # one 13.9 us kernel per layer becomes one ~4 us kernel, and the sentinel rows it leaves at zero are what
-    # the post-mask below writes there anyway.
-    from .moe_grouped_mm import triton_grouped_mm, triton_grouped_mm_available
-
-    if selected_biases is None and triton_grouped_mm_available(proj_out, down_weights):
-        proj_out = triton_grouped_mm(proj_out.to(down_weights.dtype), down_weights, offsets, perm)
-        weighted_out = proj_out.view(num_tokens, num_top_k, hidden_dim) * sample_weights.view(
-            num_tokens, num_top_k, 1
-        )
-        return weighted_out.sum(dim=1).to(hidden_states.dtype)
-
     proj_out = _grouped_linear(
         proj_out, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
@@ -508,7 +495,7 @@ def grouped_mm_experts_forward(
         proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
 
     # Apply routing weights
-    weighted_out = proj_out * sample_weights[perm].unsqueeze(-1)  # (S, hidden_dim)
+    weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
 
     # Restore original order
     if inv_perm is None:  # the counting sort already produced the inverse
