@@ -101,9 +101,13 @@ if is_triton_available():
 # is arithmetic to do, and one program per (expert, N tile) then serialises too much of the work
 _MAX_ROWS_PER_EXPERT = 32
 
-# rows per expert stay in the tens while decoding, and the N tile is what fills the machine: 128 wide, 8 warps
-# and 4 pipeline stages are within 4% of the best of a six-config sweep on both projections at 1k and 2k rows
-_BLOCK_M, _BLOCK_N, _BLOCK_K, _STAGES, _WARPS = 32, 128, 64, 4, 8
+# Rows per expert stay in the tens while decoding, and the N tile is what fills the machine: 32 rows, 128 wide
+# and 8 warps was the best of a fourteen-config sweep at 8 and 16 rows per expert once the K tile is settled.
+# The K tile has to follow the reduction. A 128-deep tile is faster where it divides the reduction evenly, and
+# slower where it does not, because half of every tile is then masked: on gate/up, 2048 deep, 89.1 us -> 86.1,
+# and on down, 192 deep, 50.1 -> 64.1. Deeper tiles take one less pipeline stage, each stage costing twice the
+# shared memory.
+_BLOCK_M, _BLOCK_N, _WARPS = 32, 128, 8
 
 
 def _launch_dw(a: torch.Tensor, grad_out: torch.Tensor, offs: torch.Tensor, num_experts: int) -> torch.Tensor:
@@ -127,9 +131,11 @@ def _launch(a: torch.Tensor, b: torch.Tensor, offs: torch.Tensor) -> torch.Tenso
     num_experts, k_in, n_out = b.shape
     out = torch.empty(a.shape[0], n_out, device=a.device, dtype=a.dtype)
     block_n = min(_BLOCK_N, triton.next_power_of_2(n_out))
+    deep_k = k_in % 128 == 0
     _grouped_gemm_kernel[(num_experts, triton.cdiv(n_out, block_n))](
         a, b, out, offs, k_in, n_out, b.stride(0), b.stride(1), b.stride(2),
-        BLOCK_M=_BLOCK_M, BLOCK_N=block_n, BLOCK_K=_BLOCK_K, num_stages=_STAGES, num_warps=_WARPS,
+        BLOCK_M=_BLOCK_M, BLOCK_N=block_n, BLOCK_K=128 if deep_k else 64,
+        num_stages=3 if deep_k else 4, num_warps=_WARPS,
     )
     return out
 
