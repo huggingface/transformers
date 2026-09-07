@@ -57,6 +57,7 @@ from transformers.generation.continuous_batching.utils import (
 from transformers.integrations.eager_paged import eager_paged_attention_forward
 from transformers.integrations.sdpa_paged import sdpa_attention_paged_forward
 from transformers.testing_utils import (
+    backend_device_count,
     backend_empty_cache,
     backend_memory_allocated,
     require_deterministic_for_xpu,
@@ -84,6 +85,13 @@ _DEFAULT_USER_MESSAGES = [
     "Josh decides to try flipping a house. He buys a house for $80,000 and then puts in $50,000 in repairs. This increased the value of the house by 150%. How much profit did he make?",
     "A basket contains 25 oranges among which 1 is bad, 20% are unripe, 2 are sour and the rest are good. How many oranges are good?",
 ]  # fmt: skip
+
+
+def _get_distributed_backend() -> str:
+    backend_map = {"cuda": "nccl", "xpu": "xccl"}
+    if torch_device not in backend_map:
+        raise unittest.SkipTest("continuous batching tensor parallel tests currently support only CUDA and XPU")
+    return backend_map[torch_device]
 
 
 # Helper functions
@@ -1927,6 +1935,7 @@ def _tp_continuous_batching_worker(
     seed: int,
     use_cuda_graph: bool,
     use_async_batching: bool,
+    max_memory_percent: float | None = None,
 ) -> None:
     """Loads `model_id` with `DistributedConfig(tp_size=...)`, checks three TP-specific paths in the same process: (a) direct
     broadcasts via `DistributedHelper`, (b) per-rank parity of CB-generated tokens via `dist.all_gather_object`, and
@@ -1967,7 +1976,12 @@ def _tp_continuous_batching_worker(
     tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
     input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
 
-    cb_config_kwargs = {"use_cuda_graph": use_cuda_graph, "use_async_batching": use_async_batching, "seed": seed}
+    cb_config_kwargs = {
+        "use_cuda_graph": use_cuda_graph,
+        "use_async_batching": use_async_batching,
+        "seed": seed,
+        "max_memory_percent": max_memory_percent,
+    }
     gen_config = GenerationConfig(do_sample=do_sample, max_new_tokens=max_new_tokens)
     first_outputs = model.generate_batch(
         inputs=input_ids,
@@ -2015,6 +2029,7 @@ def _tp_cancellation_worker(
     attn_implementation: str,
     use_cuda_graph: bool = False,
     use_async_batching: bool = False,
+    max_memory_percent: float | None = None,
 ) -> None:
     """Loads `model_id` with `DistributedConfig(tp_size=...)`, submits a long-running streaming request, and cancels it mid-flight.
     The cancellation goes through the cancel-queue + `tp_broadcast_object` path: if the broadcast were broken, the
@@ -2026,7 +2041,11 @@ def _tp_cancellation_worker(
 
     from transformers.distributed import DistributedConfig
 
-    cb_config = ContinuousBatchingConfig(use_cuda_graph=use_cuda_graph, use_async_batching=use_async_batching)
+    cb_config = ContinuousBatchingConfig(
+        use_cuda_graph=use_cuda_graph,
+        use_async_batching=use_async_batching,
+        max_memory_percent=max_memory_percent,
+    )
 
     tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
     if not hasattr(tokenizer, "pad_token") and hasattr(tokenizer, "eos_token"):
@@ -2078,14 +2097,18 @@ def _tp_cancellation_worker(
 @require_torch_multi_accelerator
 class ContinuousBatchingTensorParallelTest(unittest.TestCase):
     """Integration tests for continuous batching with tensor parallelism. Each test spawns a TP-sized process group
-    via `_init_distributed` (see `tests/test_tensor_parallel_mixin.py`) with the NCCL backend."""
+    via `_init_distributed` (see `tests/test_tensor_parallel_mixin.py`) with the current accelerator backend."""
 
     @property
     def tp_size(self) -> int:
-        return min(torch.cuda.device_count(), 2)
+        return min(backend_device_count(torch_device), 2)
+
+    @property
+    def distributed_backend(self) -> str:
+        return _get_distributed_backend()
 
     def _run_cb_worker(self, max_new_tokens: int = 20, **worker_kwargs) -> None:
-        """Spawn `_tp_continuous_batching_worker` on `tp_size` NCCL processes with sensible defaults."""
+        """Spawn `_tp_continuous_batching_worker` on `tp_size` processes with sensible defaults."""
         defaults = {
             "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
             "attn_implementation": "paged|sdpa",
@@ -2096,7 +2119,9 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
             "use_async_batching": False,
         }
         defaults.update(worker_kwargs)
-        _init_distributed(tp=self.tp_size, backend="nccl")(_tp_continuous_batching_worker)(**defaults)
+        _init_distributed(tp=self.tp_size, backend=self.distributed_backend)(_tp_continuous_batching_worker)(
+            **defaults
+        )
 
     def test_continuous_batching_tp_fast(self) -> None:
         """Test that continuous batching with `DistributedConfig(tp_size=...)` produces non-empty, reproducible greedy outputs and
@@ -2126,13 +2151,13 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
         """Test that continuous batching with TP, CUDA graphs, and async batching is reproducible across runs and
         that all TP ranks agree on the generated tokens — the toughest combination, exercising both captured-graph
         collectives and the async producer/consumer split."""
-        self._run_cb_worker(use_cuda_graph=True, use_async_batching=True)
+        self._run_cb_worker(use_cuda_graph=True, use_async_batching=True, max_memory_percent=0.5)
 
     @slow
     def test_continuous_batching_tp_cancellation(self) -> None:
         """Test that `cancel_request` propagates across the TP group: the driver enqueues the cancellation, broadcasts
         it to non-driver ranks via `tp_broadcast_object`, and generation stops well before `max_new_tokens`."""
-        _init_distributed(tp=self.tp_size, backend="nccl")(_tp_cancellation_worker)(
+        _init_distributed(tp=self.tp_size, backend=self.distributed_backend)(_tp_cancellation_worker)(
             model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
             attn_implementation="paged|sdpa",
         )
@@ -2141,9 +2166,10 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
     def test_continuous_batching_tp_cancellation_realistic(self) -> None:
         """Test that `cancel_request` propagates across the TP group: the driver enqueues the cancellation, broadcasts
         it to non-driver ranks via `tp_broadcast_object`, and generation stops well before `max_new_tokens`."""
-        _init_distributed(tp=self.tp_size, backend="nccl")(_tp_cancellation_worker)(
+        _init_distributed(tp=self.tp_size, backend=self.distributed_backend)(_tp_cancellation_worker)(
             model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
             attn_implementation="paged|sdpa",
             use_async_batching=True,
             use_cuda_graph=True,
+            max_memory_percent=0.5,
         )
