@@ -119,17 +119,9 @@ print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
 
 [[autodoc]] MBartTokenizer
 
-## MBartTokenizerFast
-
-[[autodoc]] MBartTokenizerFast
-
 ## MBart50Tokenizer
 
 [[autodoc]] MBart50Tokenizer
-
-## MBart50TokenizerFast
-
-[[autodoc]] MBart50TokenizerFast
 
 ## MBartModel
 

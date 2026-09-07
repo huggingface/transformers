@@ -45,12 +45,13 @@ if is_torch_available():
 # =============================================================================
 
 # Set to None to run distributed TP tests for every model with a plan.
-# Top 8 MoE + top 2 dense model types by Hugging Face text-generation download volume.
+# Representative MoE and dense model types covered by distributed TP tests.
 TP_DISTRIBUTED_TEST_MODEL_TYPES = {
     # Dense
     "qwen3",
     "qwen2",
     # MoE
+    "qwen4_exp_text",
     "qwen3_moe",
     "glm_moe_dsa",
     "deepseek_v4",

@@ -128,10 +128,6 @@ model.set_lightweight_tuning()
 
 [[autodoc]] MvpTokenizer
 
-## MvpTokenizerFast
-
-[[autodoc]] MvpTokenizerFast
-
 ## MvpModel
 
 [[autodoc]] MvpModel

@@ -69,10 +69,6 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
     - get_special_tokens_mask
     - save_vocabulary
 
-## XLNetTokenizerFast
-
-[[autodoc]] XLNetTokenizerFast
-
 ## XLNet specific outputs
 
 [[autodoc]] models.xlnet.modeling_xlnet.XLNetModelOutput

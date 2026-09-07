@@ -65,6 +65,7 @@ else:
             ("qwen3_5_moe", "Qwen3VLVideoProcessor"),
             ("qwen3_omni_moe", "Qwen2VLVideoProcessor"),
             ("qwen3_vl_moe", "Qwen3VLVideoProcessor"),
+            ("qwen4_exp", "Qwen3VLVideoProcessor"),
             ("videoprism", "LlavaOnevisionVideoProcessor"),
         ]
     )
@@ -358,10 +359,14 @@ class AutoVideoProcessor:
 
         has_remote_code = video_processor_auto_map is not None
         has_local_code = video_processor_class is not None or type(config) in VIDEO_PROCESSOR_MAPPING
-        explicit_local_code = has_local_code and not (
-            video_processor_class or VIDEO_PROCESSOR_MAPPING[type(config)]
-        ).__module__.startswith("transformers.")
+        explicit_local_code = False
         if has_remote_code:
+            if has_local_code:
+                local_video_processor_class = video_processor_class or VIDEO_PROCESSOR_MAPPING[type(config)]
+                explicit_local_code = (
+                    local_video_processor_class is not None
+                    and not local_video_processor_class.__module__.startswith("transformers.")
+                )
             if "--" in video_processor_auto_map:
                 upstream_repo = video_processor_auto_map.split("--")[0]
             else:
