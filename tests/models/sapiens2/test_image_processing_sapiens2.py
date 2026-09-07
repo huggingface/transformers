@@ -13,6 +13,9 @@
 # limitations under the License.
 
 import unittest
+from itertools import product
+
+import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available
@@ -28,6 +31,11 @@ if is_torch_available():
     import torch
 
     from transformers import Sapiens2ImageProcessor
+    from transformers.models.sapiens2.image_processing_sapiens2 import (
+        box_xywh_to_cxcywh,
+        boxes_to_crop_params,
+        generate_udp_gaussian_heatmaps,
+    )
     from transformers.models.sapiens2.modeling_sapiens2 import (
         Sapiens2ImageMattingOutput,
         Sapiens2NormalEstimatorOutput,
@@ -266,17 +274,6 @@ class Sapiens2ImageProcessingTest(
                 image_processor(images=image, keypoints=keypoints, return_tensors="pt")
 
     def test_generate_udp_gaussian_heatmaps_parity(self):
-        from itertools import product
-
-        import numpy as np
-        import torch
-
-        from transformers.models.sapiens2.image_processing_sapiens2 import (
-            box_xywh_to_cxcywh,
-            boxes_to_crop_params,
-            generate_udp_gaussian_heatmaps,
-        )
-
         # 1. Original Meta Implementation for exact parity testing
         def original_generate_udp_gaussian_heatmaps(heatmap_size, keypoints, keypoints_visible, sigma):
             N, K, _ = keypoints.shape

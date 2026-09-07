@@ -513,6 +513,10 @@ def generate_udp_gaussian_heatmaps(
 
 class Sapiens2ImageProcessorKwargs(BeitImageProcessorKwargs, total=False):
     """
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
     keypoint_heatmap_downscale_factor (`int`, *optional*, defaults to 4):
         The downscale factor for the target heatmap size relative to the model input size.
     keypoint_heatmap_sigma (`float`, *optional*, defaults to 6.0):
@@ -560,29 +564,34 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
             Format is `[images -> persons -> keypoints -> [x, y, visibility]]`. Used to generate
             ground-truth heatmaps and visibility weights for pose estimation fine-tuning.
         """
-        if segmentation_maps is not None and keypoints is not None:
-            raise ValueError(
-                "Cannot process both `segmentation_maps` and `keypoints` in the same forward pass. "
-                "Please provide only one depending on the task you want to perform."
-            )
-
-        return TorchvisionBackend.preprocess(self, images, segmentation_maps, boxes, keypoints, **kwargs)
+        return TorchvisionBackend.preprocess(
+            self,
+            images,
+            image_like_kwargs={"segmentation_maps": segmentation_maps, "boxes": boxes, "keypoints": keypoints},
+            **kwargs,
+        )
 
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
         segmentation_maps: ImageInput | None,
         boxes: list[list[list[float]]] | None,
-        keypoints: list[list[list[list[float]]]] | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         return_tensors: str | TensorType | None,
         device: Union[str, "torch.device"] | None,
+        keypoints: list[list[list[list[float]]]] | None,
         keypoint_heatmap_downscale_factor: int | None = None,
         keypoint_heatmap_sigma: float | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Handle extra inputs beyond images."""
+        if segmentation_maps is not None and keypoints is not None:
+            raise ValueError(
+                "Cannot process both `segmentation_maps` and `keypoints` in the same forward pass. "
+                "Please provide only one depending on the task you want to perform."
+            )
+
         images = self._prepare_image_like_inputs(
             images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )
@@ -618,10 +627,13 @@ class Sapiens2ImageProcessor(BeitImageProcessor):
         if keypoints is not None:
             if boxes is None:
                 raise ValueError("Bounding `boxes` must be provided when passing `keypoints` for pose estimation.")
-
-            if keypoint_heatmap_downscale_factor is None or keypoint_heatmap_sigma is None:
+            if keypoint_heatmap_downscale_factor is None:
                 raise ValueError(
-                    "`keypoint_heatmap_downscale_factor` and `keypoint_heatmap_sigma` must be provided when passing `keypoints`."
+                    "`keypoint_heatmap_downscale_factor` must be provided when passing `keypoints` for pose estimation."
+                )
+            if keypoint_heatmap_sigma is None:
+                raise ValueError(
+                    "`keypoint_heatmap_sigma` must be provided when passing `keypoints` for pose estimation."
                 )
 
             # Extract dynamic size override if it exists, otherwise fall back to default
