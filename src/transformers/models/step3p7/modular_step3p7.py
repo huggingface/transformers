@@ -44,7 +44,7 @@ from ...vision_utils import get_vision_position_ids
 from ..deepseek_ocr2.modeling_deepseek_ocr2 import DeepseekOcr2ForConditionalGeneration, DeepseekOcr2Model
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4MLP
 from ..gemma3.modeling_gemma3 import Gemma3TextModel
-from ..gemma4.modeling_gemma4 import Gemma4VisionRotaryEmbedding
+from ..kimi_k25.modeling_kimi_k25 import Kimi_K25VisionRotaryEmbedding
 from ..laguna.modeling_laguna import (
     LagunaAttention,
     LagunaDecoderLayer,
@@ -103,7 +103,6 @@ class Step3p7VisionConfig(SiglipVisionConfig):
     # New fields
     mlp_ratio: float = 8960 / 1536
     layer_scale_init_value: float = 0.1
-    # RoPE config (compatible with Gemma4VisionRotaryEmbedding)
     rope_parameters: dict | None = None
     max_position_embeddings: int = 2704  # (image_size // patch_size)^2 = (728//14)^2
 
@@ -588,13 +587,13 @@ class Step3p7ImageProcessor(TorchvisionBackend):
 #  Vision encoder
 
 
-class Step3p7VisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
+class Step3p7VisionRotaryEmbedding(Kimi_K25VisionRotaryEmbedding):
     def recomposition_frequencies(self, freq):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        freq = freq.flatten(-2)
-        return torch.cat((freq, freq), dim=-1)
+        freq_hw = freq.permute(1, 0, 2).flatten(1)
+        return torch.cat((freq_hw, freq_hw), dim=-1)
 
 
 class Step3p7VisionMLP(MiniMaxM3VLVisionMLP):
