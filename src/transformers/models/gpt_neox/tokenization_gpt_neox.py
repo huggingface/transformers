@@ -93,6 +93,14 @@ class GPTNeoXTokenizer(TokenizersBackend):
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
     model = BPE
+    # See https://github.com/huggingface/transformers/pull/47988 and #48533 for more details. Some GPTNeoX
+    # checkpoints ship a `tokenizer.json` whose post-processor contradicts the `add_bos_token`/`add_eos_token`
+    # flags saved in `tokenizer_config.json` (`allenai/OLMo-7B-hf` appends an EOS token to every input even
+    # though it sets `add_eos_token=False`, which produces garbage generations). For this family the saved flags
+    # win, as they did before the tokenizer refactor in #42563: they are kept in the init kwargs, which makes
+    # `TokenizersBackend.__init__` rebuild the post-processor from them. Checkpoints that do not save the flags
+    # keep the post-processor coming from `tokenizer.json`.
+    _bos_eos_flags_override_post_processor = True
 
     def __init__(
         self,
@@ -139,16 +147,6 @@ class GPTNeoXTokenizer(TokenizersBackend):
             trim_offsets=trim_offsets,
             **kwargs,
         )
-        # See https://github.com/huggingface/transformers/pull/47988 for more details.
-        # `_from_pretrained` strips `add_bos_token`/`add_eos_token` from init_kwargs when a
-        # tokenizer.json is present (assuming the post_processor is authoritative). But GPTNeoX
-        # rebuilds its backend tokenizer from scratch, so the post_processor baked into
-        # tokenizer.json may not match the desired add_bos/eos settings. Call
-        # update_post_processor() here to ensure they stay in sync, but only when the backend
-        # was rebuilt from scratch (no post-processor) or when add_bos/eos was explicitly set,
-        # so that a post-processor loaded from tokenizer.json is not silently overridden.
-        if self._tokenizer.post_processor is None or "add_bos_token" in kwargs or "add_eos_token" in kwargs:
-            self.update_post_processor()
 
 
 __all__ = ["GPTNeoXTokenizer"]

@@ -974,6 +974,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
     padding_side: str = "right"
     truncation_side: str = "right"
     slow_tokenizer_class = None
+    # Whether the `add_bos_token`/`add_eos_token` flags saved in `tokenizer_config.json` take precedence over the
+    # post-processor stored in `tokenizer.json`. `False` (the default) means `tokenizer.json` is authoritative and
+    # the saved flags are ignored at load time. See `GPTNeoXTokenizer` for the one case where they are not.
+    _bos_eos_flags_override_post_processor: bool = False
 
     # Special tokens support (moved from SpecialTokensMixin)
     # V5: Clean separation of named special tokens from extra special tokens
@@ -1776,7 +1780,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         else:
             init_kwargs = init_configuration
 
-        if resolved_vocab_files.get("tokenizer_file", None) is not None:
+        if (
+            resolved_vocab_files.get("tokenizer_file", None) is not None
+            and not cls._bos_eos_flags_override_post_processor
+        ):
+            # The post-processor in `tokenizer.json` already encodes whether bos/eos are added, so the saved flags
+            # are dropped: keeping them would make `TokenizersBackend.__init__` rebuild (and thereby override) it.
             init_kwargs.pop("add_bos_token", None)
             init_kwargs.pop("add_eos_token", None)
 
