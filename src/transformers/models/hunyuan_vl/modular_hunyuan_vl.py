@@ -49,9 +49,9 @@ from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import (
     HunYuanDenseV1Model,
     HunYuanDenseV1PreTrainedModel,
     HunYuanDenseV1RotaryEmbedding,
+    apply_rotary_pos_emb,
     eager_attention_forward,
     repeat_kv,  # noqa: F401  - re-exported for downstream tooling
-    rotate_half,
 )
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..mllama.modeling_mllama import MllamaVisionAttention
@@ -561,34 +561,6 @@ class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
         return resized_height // patch_size, resized_width // patch_size
 
 
-def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1):
-    """
-    Apply HunYuan's multimodal rotary embedding to ``q`` and ``k``.
-
-    `mrope_section` partitions half of the attention head dimension across the multimodal axes produced by
-    `HunYuanVLModel.get_rope_index`. The section order matches the position-id channel order: `(width, height,
-    image_index)` for 3-axis multimodal RoPE and `(position, width, height, image_index)` for 4-axis multimodal RoPE.
-    """
-    x_dim = len(mrope_section)
-    mrope_section = [int(section) * 2 for section in mrope_section]
-    if sum(mrope_section) != cos.shape[-1]:
-        raise ValueError(
-            f"Illegal partition for multimodal RoPE: expected {cos.shape[-1]} rotary dims, got {sum(mrope_section)}"
-        )
-
-    cos = torch.cat([m[i % x_dim] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1)
-    sin = torch.cat([m[i % x_dim] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1)
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-
-    origin_dtype = q.dtype
-    q, k = q.float(), k.float()
-    cos, sin = cos.float(), sin.float()
-    q_out = (q * cos) + (rotate_half(q) * sin)
-    k_out = (k * cos) + (rotate_half(k) * sin)
-    return q_out.to(origin_dtype), k_out.to(origin_dtype)
-
-
 class HunYuanVLRMSNorm(LlamaRMSNorm):
     pass
 
@@ -596,25 +568,32 @@ class HunYuanVLRMSNorm(LlamaRMSNorm):
 class HunYuanVLRotaryEmbedding(HunYuanDenseV1RotaryEmbedding):
     def __init__(self, config: HunYuanVLTextConfig, device=None):
         super().__init__(config)
-        rope_parameters = getattr(config, "rope_parameters", None) or {}
-        self.mrope_section = rope_parameters.get("mrope_section")
+        self.mrope_section = config.rope_parameters.get("mrope_section")
 
     def forward(self, x, position_ids):
-        # In contrast to other models, model has different position ids for the grids
-        # So we expand the inv_freq to shape (3, ...)
         inv_freq_expanded = (
             self.inv_freq[None, None, :, None].float().expand(len(self.mrope_section), position_ids.shape[1], -1, 1)
         )
-        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (mrope_section, bs, 1, positions)
+        position_ids_expanded = position_ids[:, :, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(2, 3)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
 
+        sin = self.recomposition_frequencies(sin)
+        cos = self.recomposition_frequencies(cos)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq = torch.cat(
+            [m[i % len(self.mrope_section)] for i, m in enumerate(freq.split(self.mrope_section, dim=-1))], dim=-1
+        )
+        return torch.cat((freq, freq), dim=-1)
 
 
 class HunYuanVLVisionMLP(SiglipMLP):
@@ -847,9 +826,7 @@ class HunYuanVLDenseV1Attention(HunYuanDenseV1Attention):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_multimodal_rotary_pos_emb(
-            query_states, key_states, cos, sin, self.mrope_section
-        )
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         query_states = self.query_layernorm(query_states)
         key_states = self.key_layernorm(key_states)

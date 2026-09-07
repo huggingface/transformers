@@ -110,8 +110,7 @@ class HunYuanVLRotaryEmbedding(nn.Module):
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
-        rope_parameters = getattr(config, "rope_parameters", None) or {}
-        self.mrope_section = rope_parameters.get("mrope_section")
+        self.mrope_section = config.rope_parameters.get("mrope_section")
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -136,21 +135,29 @@ class HunYuanVLRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        # In contrast to other models, model has different position ids for the grids
-        # So we expand the inv_freq to shape (3, ...)
         inv_freq_expanded = (
             self.inv_freq[None, None, :, None].float().expand(len(self.mrope_section), position_ids.shape[1], -1, 1)
         )
-        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (mrope_section, bs, 1, positions)
+        position_ids_expanded = position_ids[:, :, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(2, 3)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
 
+        sin = self.recomposition_frequencies(sin)
+        cos = self.recomposition_frequencies(cos)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq = torch.cat(
+            [m[i % len(self.mrope_section)] for i, m in enumerate(freq.split(self.mrope_section, dim=-1))], dim=-1
+        )
+        return torch.cat((freq, freq), dim=-1)
 
 
 class HunYuanVLVisionMLP(nn.Module):
@@ -468,34 +475,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1):
-    """
-    Apply HunYuan's multimodal rotary embedding to ``q`` and ``k``.
-
-    `mrope_section` partitions half of the attention head dimension across the multimodal axes produced by
-    `HunYuanVLModel.get_rope_index`. The section order matches the position-id channel order: `(width, height,
-    image_index)` for 3-axis multimodal RoPE and `(position, width, height, image_index)` for 4-axis multimodal RoPE.
-    """
-    x_dim = len(mrope_section)
-    mrope_section = [int(section) * 2 for section in mrope_section]
-    if sum(mrope_section) != cos.shape[-1]:
-        raise ValueError(
-            f"Illegal partition for multimodal RoPE: expected {cos.shape[-1]} rotary dims, got {sum(mrope_section)}"
-        )
-
-    cos = torch.cat([m[i % x_dim] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1)
-    sin = torch.cat([m[i % x_dim] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1)
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-
-    origin_dtype = q.dtype
-    q, k = q.float(), k.float()
-    cos, sin = cos.float(), sin.float()
-    q_out = (q * cos) + (rotate_half(q) * sin)
-    k_out = (k * cos) + (rotate_half(k) * sin)
-    return q_out.to(origin_dtype), k_out.to(origin_dtype)
-
-
 @use_kernelized_func(apply_rotary_pos_emb)
 class HunYuanVLDenseV1Attention(nn.Module):
     """
@@ -548,9 +527,7 @@ class HunYuanVLDenseV1Attention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_multimodal_rotary_pos_emb(
-            query_states, key_states, cos, sin, self.mrope_section
-        )
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         query_states = self.query_layernorm(query_states)
         key_states = self.key_layernorm(key_states)
