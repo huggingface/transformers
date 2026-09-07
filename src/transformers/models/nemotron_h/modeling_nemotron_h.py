@@ -713,7 +713,7 @@ class NemotronHMoE(nn.Module):
 
 
 class NemotronHTopkRouter(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: NemotronHConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
