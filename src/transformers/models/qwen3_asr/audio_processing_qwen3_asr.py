@@ -15,6 +15,7 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_utils import BaseAudioProcessor
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 from ...processing_utils import AudioKwargs
 
@@ -33,7 +34,6 @@ class Qwen3ASRAudioProcessorKwargs(AudioKwargs, total=False):
 
 
 class Qwen3ASRAudioProcessorMixin:
-    force_mono = True
     max_length = 480000
     padding = "max_length"
     sampling_rate = 16000
@@ -60,6 +60,8 @@ class Qwen3ASRAudioProcessorMixin:
     min_length = 8000
     n_window = 50
     valid_kwargs = Qwen3ASRAudioProcessorKwargs
+    # `_postprocess_output` reads the merged `n_window`, so it is a genuine per-call knob.
+    per_call_kwargs = BaseAudioProcessor.per_call_kwargs | {"n_window"}
 
     def _extract_spectrogram(self, audio, *, spectrogram_config, **kwargs):
         features = super()._extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)

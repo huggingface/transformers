@@ -37,7 +37,6 @@ class ClapAudioProcessorKwargs(AudioKwargs, total=False):
 
 class ClapAudioProcessorMixin:
     sampling_rate = 48000
-    force_mono = True
     max_length = 480000
     return_padding_mask = False
     # released checkpoints use "repeatpad"; the legacy FE spelled this its `padding` argument.
@@ -61,6 +60,9 @@ class ClapAudioProcessorMixin:
     _fusion_mel_overrides = {"mel_scale": "htk", "norm": None}
     # only CLAP's legacy configs spell the mode there. `top_db` lines up with
     legacy_field_mapping = {
+        # Hub configs spell these `padding`/`truncation`; the modern names are the CLAP-specific
+        # `padding_mode`/`truncation_mode`, leaving `padding`/`truncation` their base meaning.
+        "padding": "padding_mode",
         "truncation": "truncation_mode",
         "top_db": "spectrogram_config.clip_max_offset",
         "chunk_length_s": None,

@@ -28,7 +28,6 @@ class Wav2Vec2AudioProcessorKwargs(AudioKwargs, total=False):
 
 
 class Wav2Vec2AudioProcessorMixin:
-    force_mono = True
     sampling_rate = 16000
 
     do_normalize = True

@@ -17,7 +17,6 @@ from ...audio_processing_backends import NumpyAudioBackend
 
 class DacAudioProcessorMixin:
     add_channel_dim = True
-    force_mono = True
     sampling_rate = 16000
 
 

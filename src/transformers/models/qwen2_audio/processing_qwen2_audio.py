@@ -89,7 +89,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
                 )
 
             # Some kwargs should not be changed so we can expand text with audio tokens below
-            output_kwargs["audio_kwargs"]["return_attention_mask"] = True
+            output_kwargs["audio_kwargs"]["return_padding_mask"] = True
             output_kwargs["audio_kwargs"]["padding"] = "max_length"
             audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
 

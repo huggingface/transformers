@@ -31,14 +31,13 @@ class Xcodec2AudioProcessorKwargs(AudioKwargs, total=False):
 
     hop_length: int
     stride: int
-    feature_padding_value: float
+    feature_padding_value: float | int
 
 
 class Xcodec2AudioProcessorMixin:
     add_channel_dim = True
     do_extract_spectrogram = False
     # Mel frames are padded with 1.0 (the legacy FE's `padding_value`), unlike the raw audio
-    force_mono = True
     # Legacy hub configs describe the fbank geometry with flat keys that are fixed
     # in the legacy config is the *mel* padding value; the raw audio is padded with 0.0.
     legacy_field_mapping = {

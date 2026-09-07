@@ -285,6 +285,13 @@ class PreprocessingMixin(PushToHubMixin):
     _file_type_label: str
 
     # --- Optional overrides ---
+    # Names within `valid_kwargs` that `__call__` accepts. `None` means "every valid kwarg", which is what
+    # image and video processors use. Audio processors narrow it: `valid_kwargs` is the *config* surface
+    # (materialised onto the instance, serialised by `to_dict`), and only an explicit subset of it is a
+    # per-call knob. Passing a config-only name to `__call__` raises instead of being silently dropped.
+    # See docs/adr/0007-per-call-kwargs-allowlist.md.
+    per_call_kwargs: set[str] | None = None
+
     _excluded_dict_keys: set[str] = set()
     # Drop None-valued attrs whose class default is None from to_dict(). On by default for the
     # modern processor classes; legacy FeatureExtractionMixin opts out to keep full serialization.
@@ -327,6 +334,13 @@ class PreprocessingMixin(PushToHubMixin):
                 setattr(self, key, deepcopy(getattr(self, key, None)))
         self._valid_kwargs_names = list(self.valid_kwargs.__annotations__.keys())
 
+    @property
+    def _call_kwargs_names(self) -> list[str]:
+        """Valid kwarg names `__call__` accepts, in `valid_kwargs` order."""
+        if self.per_call_kwargs is None:
+            return self._valid_kwargs_names
+        return [name for name in self._valid_kwargs_names if name in self.per_call_kwargs]
+
     def _set_attributes(self, **kwargs):
         """Standardize instance attributes for all valid kwargs (e.g. coerce dicts to their canonical form)."""
         attributes = {key: getattr(self, key) for key in self._valid_kwargs_names}
@@ -353,12 +367,28 @@ class PreprocessingMixin(PushToHubMixin):
         defaults from `self`, standardize and validate them, then dispatch to the modality-specific
         `_preprocess_*_like_inputs` implementation via `_preprocess_like_inputs`.
         """
-        # Perform type validation on received kwargs
-        validate_typed_dict(self.valid_kwargs, kwargs)
+        # Reject config-only kwargs: names that configure the processor but that no read site consults
+        # per call, so accepting them would silently drop the caller's value.
+        call_kwargs_names = self._call_kwargs_names
+        config_only = [
+            name for name in kwargs if name in self._valid_kwargs_names and name not in call_kwargs_names
+        ]
+        if config_only:
+            raise ValueError(
+                f"{', '.join(sorted(config_only))} configure{'s' if len(config_only) == 1 else ''} "
+                f"{self.__class__.__name__} and cannot be passed to `__call__`; set "
+                f"{'it' if len(config_only) == 1 else 'them'} at init or via `from_pretrained` instead. "
+                f"Kwargs accepted per call: {', '.join(call_kwargs_names)}."
+            )
 
         # Set default kwargs from self
-        for kwarg_name in self._valid_kwargs_names:
+        for kwarg_name in call_kwargs_names:
             kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
+
+        # Type- and value-validate the *merged* kwargs. Validating only what the caller passed would leave
+        # the rest filled with `validate_typed_dict`'s internal sentinel, which any real `Annotated`
+        # validator then rejects.
+        validate_typed_dict(self.valid_kwargs, {k: v for k, v in kwargs.items() if k in self._valid_kwargs_names})
 
         # Update kwargs that need further processing before being validated
         kwargs = self._standardize_kwargs(**kwargs)

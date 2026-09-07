@@ -32,7 +32,6 @@ class WhisperAudioProcessorKwargs(AudioKwargs, total=False):
 
 
 class WhisperAudioProcessorMixin:
-    force_mono = True
     max_length = 480000
     return_padding_mask = False
     sampling_rate = 16000

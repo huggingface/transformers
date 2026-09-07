@@ -29,7 +29,6 @@ class ClvpAudioProcessorKwargs(AudioKwargs, total=False):
 
 
 class ClvpAudioProcessorMixin:
-    force_mono = True
     max_length = 132300
     # and never masks it (the legacy FE defaulted to `return_attention_mask=False` too).
     return_padding_mask = False

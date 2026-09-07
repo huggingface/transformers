@@ -19,7 +19,6 @@ from .audio_processing_xcodec2 import Xcodec2AudioProcessorMixin
 
 
 class Xcodec2AudioProcessorNumpy(Xcodec2AudioProcessorMixin, NumpyAudioBackend):
-    padding_value = 0.0
 
     def _process_audio(self, audio_el):
         # The legacy FE appends one zero sample to every waveform before padding

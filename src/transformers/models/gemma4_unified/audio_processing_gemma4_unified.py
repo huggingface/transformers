@@ -36,12 +36,10 @@ class Gemma4UnifiedAudioProcessorMixin:
     do_batch_spectrogram = False
     # for non-spectrogram models) and padded at the token level, matching the legacy
     do_extract_spectrogram = True
-    force_mono = True
     legacy_field_mapping = {
         "feature_size": _gemma4_unified_feature_size_to_samples_per_token,
     }
     padding = "longest"
-    padding_value = 0.0
     sampling_rate = 16000
 
     audio_samples_per_token = 640

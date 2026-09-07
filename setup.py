@@ -138,6 +138,7 @@ _deps = [
     "scikit-learn",
     "scipy",
     "sentencepiece>=0.1.91,!=0.1.92",
+    "soxr",
     "starlette",
     "sudachipy>=0.6.6",
     "sudachidict_core>=20220729",
@@ -176,7 +177,7 @@ extras = {}
 
 extras["torch"] = deps_list("torch", "accelerate")
 extras["vision"] = deps_list("torchvision", "Pillow")
-extras["audio"] = deps_list("torchaudio", "librosa", "pyctcdecode", "phonemizer")
+extras["audio"] = deps_list("torchaudio", "soxr", "librosa", "pyctcdecode", "phonemizer")
 if PYTHON_MINOR_VERSION < 13:
     extras["audio"] += deps_list("kenlm")
 extras["video"] = deps_list("av")

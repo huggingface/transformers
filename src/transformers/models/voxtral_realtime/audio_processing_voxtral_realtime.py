@@ -30,7 +30,6 @@ class VoxtralRealtimeAudioProcessorKwargs(AudioKwargs, total=False):
 
 class VoxtralRealtimeAudioProcessorMixin:
     sampling_rate = 16000
-    force_mono = True
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(
             n_fft=400,

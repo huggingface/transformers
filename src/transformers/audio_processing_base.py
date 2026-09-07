@@ -112,7 +112,9 @@ class AudioProcessingMixin(PreprocessingMixin):
     _nested_config_keys = ["audio_processor", "feature_extractor"]
     _auto_class_default = "AutoAudioProcessor"
     _file_type_label = "audio processor"
-    _excluded_dict_keys = {"mel_filters", "window"}
+    # `_cached_stft_window` holds a `(window, frame_length)` array/tensor pair populated on the first call;
+    # without excluding it, `save_pretrained` after any call hands a tensor to the JSON writer.
+    _excluded_dict_keys = {"mel_filters", "window", "_cached_stft_window"}
     _extra_init_pops = ["feature_extractor_type"]
     _config_filename_kwarg = "audio_processor_filename"
     _subfolder_default = ""

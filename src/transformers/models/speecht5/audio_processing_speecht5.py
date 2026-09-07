@@ -16,7 +16,6 @@ from ...audio_processing_backends import TorchAudioBackend
 
 
 class SpeechT5AudioProcessorMixin:
-    force_mono = True
     sampling_rate = 16000
 
 

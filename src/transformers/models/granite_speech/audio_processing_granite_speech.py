@@ -35,7 +35,6 @@ class GraniteSpeechAudioProcessorKwargs(AudioKwargs, total=False):
 
 class GraniteSpeechAudioProcessorMixin:
     sampling_rate = 16000
-    force_mono = True
     # `_postprocess_output` builds its own mask over the projector output length,
     # which is why `return_padding_mask` is False below.
     extra_model_input_names = ["audio_features_mask", "audio_embed_sizes"]

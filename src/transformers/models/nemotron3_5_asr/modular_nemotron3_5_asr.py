@@ -277,12 +277,9 @@ class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
                 f"You've provided audio without specifying the sampling rate. It will be assumed to be "
                 f"{output_kwargs['audio_kwargs']['sampling_rate']}, which can result in silent errors."
             )
-        elif sampling_rate != output_kwargs["audio_kwargs"]["sampling_rate"]:
-            raise ValueError(
-                f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the "
-                f"processor ({output_kwargs['audio_kwargs']['sampling_rate']}). Please resample the audio to "
-                f"the expected sampling rate."
-            )
+        else:
+            # Forward the caller's assertion; the audio processor resamples if it differs from its own rate.
+            output_kwargs["audio_kwargs"]["sampling_rate"] = sampling_rate
 
         if audio is not None:
             # `center=True` for the first/offline chunk, `center=False` for subsequent streaming chunks.

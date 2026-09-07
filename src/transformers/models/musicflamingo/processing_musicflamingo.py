@@ -42,7 +42,7 @@ class MusicFlamingoProcessorKwargs(ProcessingKwargs, total=False):
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
-            "return_attention_mask": True,
+            "return_padding_mask": True,
             "padding": "max_length",
         },
         "common_kwargs": {

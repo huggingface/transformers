@@ -32,7 +32,6 @@ class KyutaiSpeechToTextAudioProcessorKwargs(AudioKwargs, total=False):
 
 class KyutaiSpeechToTextAudioProcessorMixin:
     add_channel_dim = True
-    force_mono = True
     sampling_rate = 24000
 
     audio_silence_prefix_seconds = 1.0

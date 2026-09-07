@@ -51,6 +51,14 @@ def truncation_validator(value: bool | str | TruncationStrategy | None = None):
         raise ValueError(f"If truncation is a string, value must be one of {possible_names}")
 
 
+def padding_side_validator(value: str | None = None):
+    possible_names = ["left", "right"]
+    if value is None:
+        pass
+    elif not isinstance(value, str) or value not in possible_names:
+        raise ValueError(f"Value for padding_side must be one of {possible_names} but got padding_side={value}")
+
+
 def image_size_validator(value: int | Sequence[int] | dict[str, int] | None = None):
     possible_keys = ["height", "width", "longest_edge", "shortest_edge", "max_height", "max_width"]
     if value is None:

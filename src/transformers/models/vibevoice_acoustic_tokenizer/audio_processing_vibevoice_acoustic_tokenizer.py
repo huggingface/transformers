@@ -30,7 +30,6 @@ class VibevoiceAcousticTokenizerAudioProcessorKwargs(AudioKwargs, total=False):
 
 class VibevoiceAcousticTokenizerAudioProcessorMixin:
     sampling_rate = 24000
-    force_mono = True
     add_channel_dim = True
 
     target_dB_FS = -25

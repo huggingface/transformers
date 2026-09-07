@@ -20,7 +20,6 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, _clamp
 
 class InklingAudioProcessorMixin:
     sampling_rate = 16000
-    force_mono = True
     model_input_names = ["input_features", "input_features_mask"]
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(

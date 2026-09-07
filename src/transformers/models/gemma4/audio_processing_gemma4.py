@@ -17,14 +17,12 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 class Gemma4AudioProcessorMixin:
-    force_mono = True
     legacy_field_mapping = {
         "mel_floor": "spectrogram_config.pre_log_offset",
     }
     max_length = 480_000
     pad_to_multiple_of = 128
     padding = "longest"
-    padding_value = 0.0
     sampling_rate = 16000
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(

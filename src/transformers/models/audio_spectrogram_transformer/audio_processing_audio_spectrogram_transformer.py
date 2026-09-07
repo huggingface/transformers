@@ -37,7 +37,6 @@ class AudioSpectrogramTransformerAudioProcessorKwargs(AudioKwargs, total=False):
 
 class AudioSpectrogramTransformerAudioProcessorMixin:
     do_batch_spectrogram = False
-    force_mono = True
     # The legacy FE saved `feature_size=1` (a raw-audio default) and kept the real mel count in
     legacy_field_mapping = {"feature_size": None}
     model_input_names = ["audio_values"]

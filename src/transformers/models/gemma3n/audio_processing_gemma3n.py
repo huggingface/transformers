@@ -17,7 +17,6 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 class Gemma3nAudioProcessorMixin:
-    force_mono = True
     max_length = 480000
     pad_to_multiple_of = 128
     sampling_rate = 16000

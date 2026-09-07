@@ -36,7 +36,6 @@ class Phi4MultimodalAudioProcessorKwargs(AudioKwargs, total=False):
 
 class Phi4MultimodalAudioProcessorMixin:
     sampling_rate = 16000
-    force_mono = True
     extra_model_input_names = ["audio_embed_sizes"]
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(

@@ -38,7 +38,6 @@ class MusicgenMelodyAudioProcessorKwargs(AudioKwargs, total=False):
 
 class MusicgenMelodyAudioProcessorMixin:
     sampling_rate = 32000
-    force_mono = True
     do_extract_spectrogram = True
     return_padding_mask = False
     # `chroma_filters` is an array and `power_spectrogram_config` is derived, so neither may

@@ -18,7 +18,6 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 class LasrAudioProcessorMixin:
     sampling_rate = 16000
-    force_mono = True
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(
             n_fft=512,

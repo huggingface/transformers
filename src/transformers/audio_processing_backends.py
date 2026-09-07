@@ -24,7 +24,7 @@ from .audio_utils import (
     mel_to_hertz,
 )
 from .processing_utils import AudioKwargs
-from .utils import is_speech_available, is_torch_available, logging
+from .utils import is_speech_available, is_torch_available, logging, requires_backends
 
 
 logger = logging.get_logger(__name__)
@@ -66,6 +66,12 @@ class NumpyAudioBackend(BaseAudioProcessor):
 
     def _squeeze_axis0(self, x):
         return np.squeeze(x, axis=0)
+
+    def _resample(self, audio, orig_sampling_rate: int, target_sampling_rate: int):
+        requires_backends(self._resample, ["soxr"])
+        import soxr
+
+        return soxr.resample(audio, orig_sampling_rate, target_sampling_rate, quality="HQ")
 
     def _pad_axis(self, x, left, right, axis, value=0.0):
         pad_width = [(0, 0)] * x.ndim
@@ -351,6 +357,12 @@ class TorchAudioBackend(BaseAudioProcessor):
 
     def _squeeze_axis0(self, x):
         return x.squeeze(0)
+
+    def _resample(self, audio, orig_sampling_rate: int, target_sampling_rate: int):
+        requires_backends(self._resample, ["torchaudio"])
+        import torchaudio
+
+        return torchaudio.functional.resample(audio, orig_freq=orig_sampling_rate, new_freq=target_sampling_rate)
 
     def _pad_axis(self, x, left, right, axis, value=0.0):
         axis = axis % x.ndim

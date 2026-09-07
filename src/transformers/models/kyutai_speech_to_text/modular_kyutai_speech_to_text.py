@@ -175,7 +175,7 @@ class KyutaiSpeechToTextFeatureExtractor(EncodecAudioProcessor):
                 max_length=max_length,
                 truncation=truncation,
                 padding=padding,
-                return_attention_mask=padding,
+                return_padding_mask=padding,
             )
 
             if padding:

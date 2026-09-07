@@ -19,7 +19,6 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 class ParakeetAudioProcessorMixin:
-    force_mono = True
     sampling_rate = 16000
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(

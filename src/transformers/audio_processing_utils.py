@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
 from dataclasses import fields, replace
 from typing import Any, Unpack
 
 import numpy as np
+from huggingface_hub.dataclasses import validate_typed_dict
 
-from .audio_processing_base import AudioProcessingMixin
-from .audio_processing_base import BatchFeature
+from .audio_processing_base import AudioProcessingMixin, BatchFeature
 from .audio_utils import (
     AudioInput,
     SpectrogramConfig,
@@ -38,8 +39,12 @@ logger = logging.get_logger(__name__)
 
 class BaseAudioProcessor(AudioProcessingMixin):
     valid_kwargs = AudioKwargs
+    # `valid_kwargs` is the config surface; this is the subset `__call__` accepts. Everything a model adds
+    # on top of `AudioKwargs` is config-only by default, because model hooks read `self.x` rather than the
+    # merged kwarg — a model wanting a genuine per-call knob allowlists it *and* adds a read site (see
+    # `Qwen3ASRAudioProcessor._postprocess_output`). See docs/adr/0007-per-call-kwargs-allowlist.md.
+    per_call_kwargs = set(AudioKwargs.__annotations__) - {"add_channel_dim"}
 
-    force_mono: bool = True
     add_channel_dim: bool = False
     padding = True
     padding_side = "right"
@@ -72,6 +77,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
     def _set_attributes(self, **kwargs):
         """Called from the backend subclasses' ``__init__`` (not the base, for remote-code BC)."""
         super()._set_attributes(**kwargs)
+        # Validate the *resolved* attribute set, not just what the caller passed: a bad value reaching us
+        # from a class default or a hub config should fail here, not crash somewhere inside `_preprocess`.
+        validate_typed_dict(self.valid_kwargs, {key: getattr(self, key) for key in self._valid_kwargs_names})
         if self.spectrogram_config is not None:
             if self.spectrogram_config.mel_scale_config is not None and not hasattr(self, "mel_filters"):
                 self.mel_filters = self._mel_filter_bank(self.spectrogram_config)
@@ -119,6 +127,17 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return value
 
     def __call__(self, audio: AudioInput, *args, **kwargs: Unpack[AudioKwargs]) -> BatchFeature:
+        # `return_attention_mask` was the legacy spelling of `return_padding_mask`. Alias it rather than
+        # letting it fall through to `**kwargs` unread — a silently ignored mask request is the exact
+        # failure this contract removes. Removal target: v5.15, alongside the other legacy aliases.
+        if "return_attention_mask" in kwargs:
+            warnings.warn(
+                "`return_attention_mask` is deprecated and will be removed in transformers v5.15. "
+                "Use `return_padding_mask` instead.",
+                FutureWarning,
+                stacklevel=2,
+            )
+            kwargs.setdefault("return_padding_mask", kwargs.pop("return_attention_mask"))
         return super().preprocess(audio, *args, **kwargs)
 
     def _preprocess_like_inputs(self, audio: AudioInput, *args, **kwargs) -> BatchFeature:
@@ -135,29 +154,45 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return self._preprocess(audio, *args, **kwargs)
 
     def _prepare_audio_like_inputs(self, audio: AudioInput, *args, sampling_rate: int | None = None, **kwargs) -> list:
-        audio = self._prepare_audio_structure(audio, sampling_rate=sampling_rate)
+        audio, sampling_rate = self._prepare_audio_structure(audio, sampling_rate=sampling_rate)
         audio = [self.process_audio(audio_el) for audio_el in audio]
+        # Resample after `process_audio`, so `_resample` always sees a mono waveform in the backend's
+        # own array type.
+        if sampling_rate != self.sampling_rate:
+            logger.warning_once(
+                f"Resampling audio from {sampling_rate} Hz to {self.__class__.__name__}'s native sampling rate "
+                f"of {self.sampling_rate} Hz. Pass audio already sampled at {self.sampling_rate} Hz to skip this."
+            )
+            audio = [self._resample(audio_el, sampling_rate, self.sampling_rate) for audio_el in audio]
         return audio
 
-    def _prepare_audio_structure(self, audio: AudioInput, sampling_rate: int | None = None) -> list:
+    def _prepare_audio_structure(self, audio: AudioInput, sampling_rate: int | None = None) -> tuple[list, int]:
+        """Resolve `audio` to a list of waveforms, plus the rate those waveforms are actually at.
+
+        `sampling_rate` describes *passed arrays* only: it is the caller's assertion about data we cannot
+        inspect. Audio referenced by URL or path is decoded at the native rate by construction, so a rate
+        given alongside such input has nothing to describe and is ignored.
+        """
         is_url_input = isinstance(audio, str) or (
             isinstance(audio, (list, tuple)) and all(isinstance(el, str) for el in audio)
         )
 
         if is_url_input:
-            audio = self.fetch_audio(audio)
-        else:
-            # `PreprocessingMixin.preprocess` setdefaults `sampling_rate` from `self.sampling_rate`,
-            # so an omitted rate no-ops here; only a genuine caller mismatch raises.
+            # `preprocess` setdefaults `sampling_rate` from `self.sampling_rate`, so only a caller who
+            # passed a *different* rate is telling us something we cannot honour.
             if sampling_rate is not None and sampling_rate != self.sampling_rate:
-                raise ValueError(
-                    f"The model corresponding to this audio processor: {self.__class__.__name__} was trained using a"
-                    f" sampling rate of {self.sampling_rate}. Please make sure that the provided `audio` input"
-                    f" was sampled with {self.sampling_rate} and not {sampling_rate}."
+                logger.warning_once(
+                    f"Ignoring `sampling_rate={sampling_rate}`: audio given as a URL or path is decoded at "
+                    f"{self.__class__.__name__}'s native sampling rate of {self.sampling_rate}. "
+                    "`sampling_rate` describes audio passed as an array."
                 )
+            return make_list_of_audio(self.fetch_audio(audio)), self.sampling_rate
 
-        audio = make_list_of_audio(audio)
-        return audio
+        return make_list_of_audio(audio), sampling_rate if sampling_rate is not None else self.sampling_rate
+
+    def _resample(self, audio, orig_sampling_rate: int, target_sampling_rate: int):
+        """Resample one mono waveform to ``target_sampling_rate``. Implemented per backend."""
+        raise NotImplementedError
 
     def process_audio(self, *args, **kwargs):
         return self._process_audio(*args, **kwargs)
@@ -279,6 +314,10 @@ class BaseAudioProcessor(AudioProcessingMixin):
         padding_strategy = self._get_padding_strategies(padding=padding, max_length=max_length)
 
         if truncation:
+            # `_validate_preprocess_kwargs` enforces this on the `preprocess` path, but `pad` is public
+            # and callable directly, where that hook never runs.
+            if max_length is None:
+                raise ValueError("When setting `truncation=True`, make sure that `max_length` is defined.")
             trunc_length = max_length
             if pad_to_multiple_of is not None and (trunc_length % pad_to_multiple_of != 0):
                 trunc_length = ((trunc_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
@@ -330,12 +369,8 @@ class BaseAudioProcessor(AudioProcessingMixin):
     def _process_audio(self, audio_el):
         audio_el = self._as_backend_array(audio_el)
         if audio_el.ndim > 1:
-            if self.force_mono and audio_el.shape[0] > 1:
-                audio_el = self._mean_axis0(audio_el)
-            elif audio_el.shape[0] == 1:
-                audio_el = self._squeeze_axis0(audio_el)
-            else:
-                raise ValueError("Audio has more than one channel but force_mono is False")
+            # Multi-channel input is always averaged down to mono.
+            audio_el = self._squeeze_axis0(audio_el) if audio_el.shape[0] == 1 else self._mean_axis0(audio_el)
         return audio_el
 
     def _to_batch(self, audio):

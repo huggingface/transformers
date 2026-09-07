@@ -38,7 +38,6 @@ class CohereAsrAudioProcessorKwargs(AudioKwargs, total=False):
 
 class CohereAsrAudioProcessorMixin:
     sampling_rate = 16000
-    force_mono = True
     padding = "longest"
     dither: float = 1e-5
 

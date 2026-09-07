@@ -17,7 +17,6 @@ from ...audio_processing_backends import TorchAudioBackend
 
 class DiaAudioProcessorMixin:
     add_channel_dim = True
-    force_mono = True
     pad_to_multiple_of = 512
     sampling_rate = 44100
 

@@ -31,7 +31,6 @@ class SeamlessM4tAudioProcessorKwargs(AudioKwargs, total=False):
 
 class SeamlessM4tAudioProcessorMixin:
     do_batch_spectrogram = False
-    force_mono = True
     pad_to_multiple_of = 2
     sampling_rate = 16000
     spectrogram_config = SpectrogramConfig(

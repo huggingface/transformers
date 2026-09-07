@@ -17,7 +17,6 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 class Pop2PianoAudioProcessorMixin:
-    force_mono = True
     sampling_rate = 22050
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(n_fft=4096, hop_length=1024, power=2.0),

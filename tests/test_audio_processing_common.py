@@ -173,6 +173,196 @@ class AudioProcessingTestMixin:
                 continue
             self._assert_outputs_bit_exact(reference_output, output, atol=self.parity_atol, rtol=self.parity_rtol)
 
+    # ── Padding / truncation ──────────────────────────────────────────────
+    # Fixture geometry for the padding/truncation matrix. Lengths are deliberately not round
+    # so that `pad_to_multiple_of` rounding is actually exercised -- the legacy fixture's round
+    # lengths made several of its own assertions vacuous. Mirrors the legacy tester's
+    # `min_seq_length` + i * `seq_length_diff`.
+    pad_test_min_length = 8003
+    pad_test_length_diff = 4001
+    pad_test_batch_size = 3
+    # Whether the region outside a padded input's `ranges` holds `padding_value`. False for
+    # processors that fill short audio some other way -- CLAP tiles it (`_pad_single` with
+    # `padding_mode="repeatpad"`) and only zero-pads whatever the tiling leaves over.
+    pad_fills_with_padding_value: bool = True
+
+    def _padding_fixture(self, backend: str):
+        """Ascending-length waveforms in the array type `backend`'s `pad` expects."""
+        lengths = [self.pad_test_min_length + i * self.pad_test_length_diff for i in range(self.pad_test_batch_size)]
+        rng = np.random.RandomState(0)
+        audio = [rng.uniform(-1.0, 1.0, size=length).astype(np.float32) for length in lengths]
+        if backend == "torch":
+            audio = [torch.from_numpy(audio_el) for audio_el in audio]
+        return audio, lengths
+
+    @staticmethod
+    def _lengths(audio) -> list[int]:
+        return [audio_el.shape[-1] for audio_el in audio]
+
+    @staticmethod
+    def _round_up(length: int, multiple: int) -> int:
+        return length if length % multiple == 0 else (length // multiple + 1) * multiple
+
+    def _assert_padding_region(self, processor, audio, ranges):
+        """Everything outside `ranges` must hold `padding_value` (side-agnostic, so this
+        covers `padding_side="left"` without a separate case)."""
+        if processor.padding_value is None or not self.pad_fills_with_padding_value:
+            return
+        for audio_el, (start, end) in zip(audio, ranges):
+            values = np.asarray(audio_el)
+            padded_region = np.concatenate([values[:start], values[end:]])
+            if padded_region.size:
+                self.assertTrue(
+                    np.allclose(padded_region, processor.padding_value, atol=1e-6),
+                    f"padded region is not filled with padding_value={processor.padding_value}",
+                )
+
+    @require_torch
+    def test_padding(self):
+        """Padding-strategy matrix.
+
+        Ported from `tests/test_sequence_feature_extraction_common.py` (main @ ccba41e1c3):
+        `SequenceFeatureExtractionTestMixin._check_padding`, L79-L200.
+
+        Adapted, because `pad` is a different method now -- it takes a raw list and returns
+        `(audio, ranges)` rather than consuming and returning a `BatchFeature`, so the legacy
+        `pad(BatchFeature({input_name: ...}))[input_name]` mechanics are gone, and there is no
+        `return_tensors=`. The legacy `feature_size` shape assertions are dropped (`feature_size`
+        exists on 4 of 60 audio processors), and its padding-value sum arithmetic is replaced by
+        a direct check that the region outside `ranges` holds `padding_value` -- which also pins
+        `ranges`, the new API's replacement for the returned attention mask. The legacy
+        from_list/from_array axis becomes the backend loop, since `pad` requires `.shape`.
+        """
+        init_dict = self.audio_processor_tester.prepare_audio_processor_dict()
+        for backend, cls in self.audio_processing_classes.items():
+            with self.subTest(backend=backend):
+                processor = cls(**init_dict)
+                audio, lengths = self._padding_fixture(backend)
+                longest = lengths[-1]
+
+                # `padding=False` leaves every length untouched.
+                out, _ = processor.pad(audio, padding=False)
+                self.assertEqual(self._lengths(out), lengths)
+
+                # `padding="longest"` equalizes to the longest input.
+                out_longest, ranges_longest = processor.pad(audio, padding="longest")
+                self.assertEqual(self._lengths(out_longest), [longest] * len(lengths))
+                self.assertEqual([end - start for start, end in ranges_longest], lengths)
+                self._assert_padding_region(processor, out_longest, ranges_longest)
+
+                # `padding="max_length"` at the same target is equivalent to `"longest"`.
+                out_max, _ = processor.pad(audio, padding="max_length", max_length=longest)
+                self.assertEqual(self._lengths(out_max), [longest] * len(lengths))
+                for from_longest, from_max in zip(out_longest, out_max):
+                    self.assertTrue(np.allclose(np.asarray(from_longest), np.asarray(from_max), atol=1e-3))
+
+                # `max_length` is required by `padding="max_length"`.
+                with self.assertRaises(ValueError):
+                    processor.pad(audio, padding="max_length")
+
+                # `pad_to_multiple_of` alone rounds the (implicit longest) target up.
+                out_multiple, _ = processor.pad(audio, pad_to_multiple_of=10)
+                out_multiple_longest, _ = processor.pad(audio, padding="longest", pad_to_multiple_of=10)
+                self.assertEqual(self._lengths(out_multiple), [self._round_up(longest, 10)] * len(lengths))
+                self.assertTrue(all(length % 10 == 0 for length in self._lengths(out_multiple)))
+                self.assertEqual(self._lengths(out_multiple), self._lengths(out_multiple_longest))
+
+                # `pad_to_multiple_of` rounds an explicit `max_length` up too.
+                pad_max_length = longest + self.pad_test_length_diff
+                out_rounded, ranges_rounded = processor.pad(
+                    audio, padding="max_length", max_length=pad_max_length, pad_to_multiple_of=12
+                )
+                expected = self._round_up(pad_max_length, 12)
+                self.assertEqual(self._lengths(out_rounded), [expected] * len(lengths))
+                self._assert_padding_region(processor, out_rounded, ranges_rounded)
+
+    @require_torch
+    def test_truncation(self):
+        """Truncation matrix, including truncation combined with padding and `pad_to_multiple_of`.
+
+        Ported from `tests/test_sequence_feature_extraction_common.py` (main @ ccba41e1c3):
+        `SequenceFeatureExtractionTestMixin._check_truncation`, L201-L330. Same adaptations as
+        `test_padding`.
+
+        Deliberate contract change: legacy raised `ValueError` when `truncation=True` was combined
+        with anything but `padding="max_length"` (L287-L297 there). The new `pad` truncates first
+        and pads afterwards, which makes `truncation=True, padding="longest"` meaningful, so that
+        combination is asserted to *work*. What remains required is `max_length` itself -- without
+        it there is nothing to truncate to.
+        """
+        init_dict = self.audio_processor_tester.prepare_audio_processor_dict()
+        for backend, cls in self.audio_processing_classes.items():
+            with self.subTest(backend=backend):
+                processor = cls(**init_dict)
+                audio, lengths = self._padding_fixture(backend)
+                shortest, middle = lengths[0], lengths[1]
+
+                # Truncating to the shortest input equalizes the batch...
+                out, _ = processor.pad(audio, padding="max_length", max_length=shortest, truncation=True)
+                self.assertEqual(self._lengths(out), [shortest] * len(lengths))
+
+                # ...whereas without truncation the longer inputs keep their own length.
+                out, _ = processor.pad(audio, padding="max_length", max_length=shortest)
+                self.assertEqual(self._lengths(out), lengths)
+
+                # Truncating to the middle input truncates the longest and pads the shortest.
+                out, ranges = processor.pad(audio, padding="max_length", max_length=middle, truncation=True)
+                self.assertEqual(self._lengths(out), [middle] * len(lengths))
+                self.assertEqual([end - start for start, end in ranges], [shortest, middle, middle])
+                self._assert_padding_region(processor, out, ranges)
+
+                # Truncation composes with `padding="longest"` (see docstring: legacy forbade this).
+                out, _ = processor.pad(audio, padding="longest", max_length=middle, truncation=True)
+                self.assertEqual(self._lengths(out), [middle] * len(lengths))
+
+                # `pad_to_multiple_of` rounds the truncation target up as well.
+                out, _ = processor.pad(
+                    audio, padding="max_length", max_length=shortest, pad_to_multiple_of=12, truncation=True
+                )
+                self.assertEqual(self._lengths(out), [self._round_up(shortest, 12)] * len(lengths))
+
+                # `truncation=True` requires `max_length`, whatever the padding strategy.
+                for padding in (False, "longest", "max_length"):
+                    with self.subTest(padding=padding), self.assertRaises(ValueError):
+                        processor.pad(audio, padding=padding, truncation=True)
+
+    @require_torch
+    def test_call_padding_equalizes_batch(self):
+        """`pad` is reached from `preprocess`, and the emitted mask tracks the real spans.
+
+        The `pad`-level matrix above cannot catch `preprocess` being wired to something else, and
+        `_pad_features` (`audio_processing_utils.py:349`) is a second, separate padding path used
+        for already-extracted features -- so this asserts the end-to-end shape and mask contract
+        without hardcoding any model's framing arithmetic.
+        """
+        init_dict = self.audio_processor_tester.prepare_audio_processor_dict()
+        for backend, cls in self.audio_processing_classes.items():
+            with self.subTest(backend=backend):
+                processor = cls(**init_dict)
+                _, lengths = self._padding_fixture(backend)
+                rng = np.random.RandomState(0)
+                waveforms = [rng.uniform(-1.0, 1.0, size=length).astype(np.float32) for length in lengths]
+
+                encoding = processor(waveforms, return_tensors="pt")
+                feature_key = processor.model_input_names[0]
+                features = encoding[feature_key]
+
+                # A padded batch is rectangular, one row per input.
+                self.assertEqual(features.shape[0], len(lengths))
+
+                if not processor.return_padding_mask or len(processor.model_input_names) < 2:
+                    continue
+                mask = encoding[processor.model_input_names[1]]
+                self.assertEqual(mask.shape[0], len(lengths))
+                # Longer input => at least as many valid frames. Framing makes the exact count
+                # model-specific, but the ordering is a contract.
+                valid_per_row = mask.reshape(mask.shape[0], -1).sum(-1).tolist()
+                self.assertEqual(
+                    valid_per_row,
+                    sorted(valid_per_row),
+                    f"mask valid-frame counts {valid_per_row} are not monotonic in input length {lengths}",
+                )
+
     # ── JSON round-trip ───────────────────────────────────────────────────
 
     def test_audio_processor_to_json_string(self):

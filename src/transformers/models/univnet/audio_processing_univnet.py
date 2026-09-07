@@ -50,7 +50,6 @@ class UnivNetAudioProcessorKwargs(AudioKwargs, total=False):
 
 class UnivNetAudioProcessorMixin:
     sampling_rate = 24000
-    force_mono = True
     # The legacy FE saved `feature_size=1` (a raw-audio default) and kept the real mel count in
     # `num_mel_bins`, so the base mapping of `feature_size` must not apply here.
     # The legacy FE's `mel_floor` is UnivNet's *magnitude* floor (added inside the magnitude
