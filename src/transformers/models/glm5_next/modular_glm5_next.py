@@ -1218,7 +1218,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = False
     _supports_attention_backend = True
 
-    _no_split_modules = ["Glm5NextTextDecoderLayer", "Glm5NextVisionBlock"]
+    _no_split_modules = ["Glm5NextTextDecoderLayer", "Glm5NextVisionBlock", "Glm5NextVisionPatchMerger"]
     _skip_keys_device_placement = ["past_key_values"]
     # TODO: this can be fixed but is limited by
     # 1. assuming the cache name
@@ -1275,9 +1275,6 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Glm5NextTextIndexer):
             init.zeros_(module.index_kpool_compress_ape)
             init.ones_(module.index_kpool_compress_gate)
-        elif isinstance(module, Glm5NextVisionRotaryEmbedding):  # noqa: F821
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
 
 
 # Do not inherit from DSv4 as it messes modular prefixes up for the PreTrainedModel
@@ -2190,7 +2187,7 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
         if len(uniq) & 1:
             uniq.append(uniq[-1])
 
-        return np.array(uniq)
+        return np.array(uniq, dtype=int)
 
     def _preprocess(
         self,

@@ -14,11 +14,49 @@ on:
   push:
     branches:
       - run_amd_scheduled_ci_caller*
+  workflow_dispatch:
+    inputs:
+      prev_workflow_run_id:
+        description: 'previous workflow run id to compare'
+        type: string
+        required: false
+        default: ""
+      other_workflow_run_id:
+        description: 'other workflow run id to compare'
+        type: string
+        required: false
+        default: ""
+
+
+# Used for `push` to easily modify the target workflow runs to compare against
+env:
+    prev_workflow_run_id: ""
+    other_workflow_run_id: ""
+
 
 permissions:
   contents: read
 
 jobs:
+  setup:
+    name: Setup
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Setup
+        env:
+          prev_workflow_run_id: ${{ inputs.prev_workflow_run_id || env.prev_workflow_run_id }}
+          other_workflow_run_id: ${{ inputs.other_workflow_run_id || env.other_workflow_run_id }}
+        run: |
+          mkdir "setup_values"
+          echo "$prev_workflow_run_id" > "setup_values/prev_workflow_run_id.txt"
+          echo "$other_workflow_run_id" > "setup_values/other_workflow_run_id.txt"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: setup_values
+          path: setup_values
+
   model-ci:
     name: Model CI
     uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
@@ -30,6 +68,7 @@ jobs:
       ci_event: Scheduled CI (AMD) - mi300
       report_repo_id: optimum-amd/transformers_daily_ci
       env_file: /etc/podinfo/gha-gpu-isolation-settings
+      commit_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
     secrets: inherit
 
   torch-pipeline:
@@ -43,6 +82,7 @@ jobs:
       ci_event: Scheduled CI (AMD) - mi300
       report_repo_id: optimum-amd/transformers_daily_ci
       env_file: /etc/podinfo/gha-gpu-isolation-settings
+      commit_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
     secrets: inherit
 
   example-ci:
@@ -56,6 +96,7 @@ jobs:
       ci_event: Scheduled CI (AMD) - mi300
       report_repo_id: optimum-amd/transformers_daily_ci
       env_file: /etc/podinfo/gha-gpu-isolation-settings
+      commit_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
     secrets: inherit
 
   deepspeed-ci:
@@ -69,4 +110,5 @@ jobs:
       ci_event: Scheduled CI (AMD) - mi300
       report_repo_id: optimum-amd/transformers_daily_ci
       env_file: /etc/podinfo/gha-gpu-isolation-settings
+      commit_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
     secrets: inherit
