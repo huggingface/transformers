@@ -1692,10 +1692,7 @@ class Cache:
         both linear and full attention states will return False by this function"""
         return [
             isinstance(layer, LinearAttentionCacheLayerMixin)
-            and not isinstance(
-                layer,
-                (LinearAttentionAndFullAttentionLayer, LinearAttentionAndStaticFullAttentionLayer),
-            )
+            and not isinstance(layer, LinearAttentionAndFullAttentionLayer)
             for layer in self.layers
         ]
 
@@ -2115,10 +2112,6 @@ class EncoderDecoderCache(Cache):
     @property
     def is_sliding(self):
         return self.self_attention_cache.is_sliding
-
-    @property
-    def is_linear(self):
-        return self.self_attention_cache.is_linear
 
     @property
     def is_compileable(self) -> bool:
