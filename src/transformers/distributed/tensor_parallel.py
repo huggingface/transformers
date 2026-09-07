@@ -155,7 +155,7 @@ def _inference_all_reduce(output: torch.Tensor, process_group) -> None:
     rows, hidden = output.shape
     key = (process_group.group_name, hidden, output.dtype)
     buf = _SYMM_BUFFERS.get(key)
-    if buf is None or buf.shape[0] < rows:
+    if buf is None:
         # a rendezvous is a collective and cannot run inside a graph capture: this call takes NCCL, and the buffer it
         # allocates on the next eager call is what the following captures record
         if torch.cuda.is_current_stream_capturing():
@@ -164,6 +164,11 @@ def _inference_all_reduce(output: torch.Tensor, process_group) -> None:
         buf = symm_mem.empty(max(rows, 8192), hidden, dtype=output.dtype, device=output.device)
         symm_mem.rendezvous(buf, process_group.group_name)
         _SYMM_BUFFERS[key] = buf
+    elif buf.shape[0] < rows:
+        # More rows than the buffer holds. Replacing it would free memory that already-captured graphs still point
+        # at, and they would fault on their next replay, so the wider call takes NCCL and the buffer stays put.
+        dist.all_reduce(output, group=process_group)
+        return
     view = buf[:rows]
     view.copy_(output)
     torch.ops.symm_mem.two_shot_all_reduce_(view, "sum", process_group.group_name)
