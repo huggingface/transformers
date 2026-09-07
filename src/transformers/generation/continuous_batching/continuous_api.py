@@ -875,6 +875,17 @@ class ContinuousBatchingManager:
             logger.warning("Manager thread is already running.")
             return None
         self.background_thread_status.clear()
+        # Collectives that have to be set up once are set up here, on the caller's thread: every rank reaches
+        # `start` together, which the generation thread cannot promise once a trainer shares the devices.
+        if self.distributed_helper.tp_group is not None:
+            from ...distributed.tensor_parallel import prime_inference_all_reduce
+
+            prime_inference_all_reduce(
+                self.model.config.get_text_config().hidden_size,
+                self.model.dtype,
+                self.model.device,
+                self.distributed_helper.tp_group,
+            )
         self._generation_thread = threading.Thread(target=self._run_generation_loop)
         self._generation_thread.start()
 

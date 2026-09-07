@@ -177,6 +177,19 @@ def _inference_all_reduce(output: torch.Tensor, process_group) -> None:
     output.copy_(view)
 
 
+def prime_inference_all_reduce(hidden_size: int, dtype: torch.dtype, device: torch.device, process_group) -> None:
+    """Allocate and rendezvous this shape's symmetric-memory buffer from the calling thread.
+
+    The rendezvous is a collective. Left to the first decode step it runs on whichever thread drives the model,
+    next to a trainer issuing its own collectives on the same devices, and the two have no agreed order. Every
+    rank calls this before that thread starts, so the collective is ordered. Sizing matches `_inference_all_reduce`,
+    which allocates for at least 8192 rows, so one probe row is enough to create the buffer every later call uses.
+    """
+    if process_group is None or os.environ.get("HF_TP_SYMM_MEM_ALL_REDUCE") != "1":
+        return
+    _inference_all_reduce(torch.zeros(1, hidden_size, dtype=dtype, device=device), process_group)
+
+
 class TensorParallelLayer:
     def should_use_local_tensors(self, module):
         """Whether this module's forward requires local inputs and parameters."""
