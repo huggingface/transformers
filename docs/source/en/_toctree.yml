@@ -342,6 +342,8 @@
       title: Candle
     - local: community_integrations/executorch
       title: ExecuTorch
+    - local: community_integrations/litert
+      title: LiteRT
     - local: community_integrations/llama_cpp
       title: llama.cpp
     - local: community_integrations/mlx
