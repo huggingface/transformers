@@ -278,11 +278,12 @@ class MarianTokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Uses source spm if _decode_use_source_tokenizer is True, and target spm otherwise"""
         sp_model = self.spm_source if self._decode_use_source_tokenizer else self.spm_target
+        all_special_tokens = set(self.all_special_tokens)
         current_sub_tokens = []
         out_string = ""
         for token in tokens:
             # make sure that special tokens are not decoded using sentencepiece model
-            if token in self.all_special_tokens:
+            if token in all_special_tokens:
                 out_string += sp_model.decode_pieces(current_sub_tokens) + token + " "
                 current_sub_tokens = []
             else:

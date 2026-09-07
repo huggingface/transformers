@@ -54,7 +54,7 @@ def prepare_video(num_frames, num_channels, width=10, height=10, return_tensors=
         video = [Image.fromarray(frame) for frame in video]
     elif return_tensors == "torch":
         # Torch images are typically in channels first format
-        video = torch.tensor(video).permute(0, 3, 1, 2)
+        video = torch.from_numpy(np.array(video)).permute(0, 3, 1, 2)
     elif return_tensors == "np":
         # Numpy images are typically in channels last format
         video = np.array(video)

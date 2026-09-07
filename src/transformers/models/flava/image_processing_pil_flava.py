@@ -91,10 +91,9 @@ class FlavaImageProcessorKwargs(ImagesKwargs, total=False):
     codebook_size (`dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
         Resize the input for codebook to the given size. Can be overridden by the `codebook_size` parameter in
         `preprocess`.
-    codebook_resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS` for PIL backend,
-        `PILImageResampling.BICUBIC` for torchvision backend):
-        Resampling filter to use if resizing the codebook image. LANCZOS is not supported for torch Tensors;
-        BICUBIC is used as the closest alternative for the torchvision backend. Can be overridden by the
+    codebook_resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
+        Resampling filter to use if resizing the codebook image. With torchvision < 0.27, LANCZOS is not
+        supported for torch Tensors and BICUBIC is used as the closest alternative. Can be overridden by the
         `codebook_resample` parameter in `preprocess`.
     codebook_do_center_crop (`bool`, *optional*, defaults to `True`):
         Whether to crop the input for codebook at the center. If the input size is smaller than

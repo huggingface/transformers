@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2022-12-05 and added to Hugging Face Transformers on 2024-03-04.*
+*This model was published in HF papers on 2022-12-05 and contributed to Hugging Face Transformers on 2024-03-04.*
 
 # UDOP
 
@@ -90,10 +90,6 @@ to fine-tune UDOP on a custom dataset as well as inference. 🌎
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences
     - save_vocabulary
-
-## UdopTokenizerFast
-
-[[autodoc]] UdopTokenizerFast
 
 ## UdopProcessor
 

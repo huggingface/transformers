@@ -116,7 +116,7 @@ class ImageSegmentationPipeline(Pipeline):
                 same format: all as HTTP(S) links, all as local paths, or all as PIL images.
             subtask (`str`, *optional*):
                 Segmentation task to be performed, choose [`semantic`, `instance` and `panoptic`] depending on model
-                capabilities. If not set, the pipeline will attempt tp resolve in the following order:
+                capabilities. If not set, the pipeline will attempt to resolve in the following order:
                   `panoptic`, `instance`, `semantic`.
             threshold (`float`, *optional*, defaults to 0.9):
                 Probability threshold to filter out predicted masks.

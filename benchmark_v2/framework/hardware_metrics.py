@@ -1,5 +1,4 @@
 import logging
-import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -74,33 +73,10 @@ def get_amd_gpu_stats(device_handle) -> tuple[int, float]:
 
 
 def get_intel_xpu_stats() -> tuple[int, float]:
-    """Returns the utilization and memory used of an Intel XPU"""
-    # xpu-smi outputs CSV format: Timestamp, DeviceId, GPU Memory Utilization (%), GPU Memory Used (MiB)
-    xpu_smi_output = subprocess.check_output(["xpu-smi", "dump", "-m", "5,18", "-n", "1"])
-    lines = xpu_smi_output.decode("utf-8").strip().split("\n")
-
-    # Parse all data lines (skip header) and collect stats from all cards
-    xpu_stats = []
-    for line in lines[1:]:
-        data_line = line.split(",")
-        if len(data_line) < 4:
-            continue
-        device_id = data_line[1].strip()
-        utilization_str = data_line[2].strip()
-        memory_used_str = data_line[3].strip()
-        if utilization_str != "N/A" and memory_used_str != "N/A":
-            utilization = int(float(utilization_str))
-            memory_used_mib = float(memory_used_str)
-            xpu_stats.append((device_id, utilization, memory_used_mib))
-
-    if not xpu_stats:
-        return 0, 0.0
-
-    # Sort by utilization (descending) and pick the highest
-    xpu_stats.sort(key=lambda x: x[1], reverse=True)
-    device_id, utilization, memory_used_mib = xpu_stats[0]
-    memory_used_gb = memory_used_mib / 1024
-    return utilization, memory_used_gb
+    """Get Intel XPU stats using torch's Level Zero Sysman bindings."""
+    utilization = torch.xpu.utilization(0)
+    memory_used = torch.xpu.device_memory_used(0)
+    return int(utilization), float(memory_used) / 1024**3  # Convert bytes to GB
 
 
 def get_nvidia_gpu_stats(device_handle) -> tuple[int, float]:

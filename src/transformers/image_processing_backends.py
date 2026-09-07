@@ -61,7 +61,7 @@ from .utils import (
     is_vision_available,
     logging,
 )
-from .utils.import_utils import is_rocm_platform, is_torchdynamo_compiling, requires
+from .utils.import_utils import is_rocm_platform, is_torchdynamo_compiling, is_torchvision_greater_or_equal, requires
 
 
 if is_vision_available():
@@ -89,19 +89,6 @@ class TorchvisionBackend(BaseImageProcessor):
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
         super().__init__(**kwargs)
         self._set_attributes(**kwargs)
-
-    @property
-    def is_fast(self) -> bool:
-        """
-        `bool`: Whether or not this image processor is using the fast (Torchvision) backend.
-        The `is_fast` property is deprecated and will be removed in v5.3 of Transformers.
-        Use the `backend` attribute instead (e.g., `processor.backend == "torchvision"`).
-        """
-        logger.warning_once(
-            "The `is_fast` property is deprecated and will be removed in v5.3 of Transformers. "
-            "Use the `backend` attribute instead (e.g., `processor.backend == 'torchvision'`)."
-        )
-        return True
 
     @property
     def backend(self) -> str:
@@ -232,11 +219,13 @@ class TorchvisionBackend(BaseImageProcessor):
                 interpolation = resample
         else:
             interpolation = tvF.InterpolationMode.BILINEAR
-        if interpolation == tvF.InterpolationMode.LANCZOS:
+        if interpolation == tvF.InterpolationMode.LANCZOS and (
+            not is_torchvision_greater_or_equal("0.27") or image.device.type != "cpu"
+        ):
             logger.warning_once(
-                "You have used a torchvision backend image processor with LANCZOS resample which not yet supported for torch.Tensor. "
-                "BICUBIC resample will be used as an alternative. Please fall back to a pil backend image processor if you "
-                "want full consistency with the original model."
+                "LANCZOS resample requires torchvision >= 0.27 and processing on CPU; it is not supported on CUDA or for "
+                "torchvision < 0.27. Falling back to BICUBIC which approximates LANCZOS. To match the original model exactly"
+                ", upgrade torchvision and move the tensors to CPU before resizing, or use a PIL backend image processor instead."
             )
             interpolation = tvF.InterpolationMode.BICUBIC
 
@@ -431,19 +420,6 @@ class PilBackend(BaseImageProcessor):
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
         super().__init__(**kwargs)
         self._set_attributes(**kwargs)
-
-    @property
-    def is_fast(self) -> bool:
-        """
-        `bool`: Whether or not this image processor is using the fast (Torchvision) backend.
-        The `is_fast` property is deprecated and will be removed in v5.3 of Transformers.
-        Use the `backend` attribute instead (e.g., `processor.backend == "torchvision"`).
-        """
-        logger.warning_once(
-            "The `is_fast` property is deprecated and will be removed in v5.3 of Transformers. "
-            "Use the `backend` attribute instead (e.g., `processor.backend == 'torchvision'`)."
-        )
-        return False
 
     @property
     def backend(self) -> str:

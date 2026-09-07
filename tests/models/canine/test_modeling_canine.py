@@ -235,7 +235,6 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_mismatched_shapes = False
     test_resize_embeddings = False
-    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = CanineModelTester(self)
@@ -248,6 +247,22 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_fp16_with_attention_mask(self):
+        config, input_ids, token_type_ids, input_mask, _, _, _ = self.model_tester.prepare_config_and_inputs()
+        # Force partial masking so the ndim==3 mask path in the shallow encoder is exercised.
+        input_mask[:, self.model_tester.seq_length // 2 :] = 0
+
+        model = CanineModel(config=config)
+        model.to(torch_device)
+        model.half()
+        model.eval()
+
+        with torch.no_grad():
+            output = model(input_ids, attention_mask=input_mask).last_hidden_state
+
+        self.assertEqual(output.dtype, torch.float16)
+        self.assertFalse(torch.isnan(output).any())
 
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

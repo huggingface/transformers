@@ -15,13 +15,13 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - name: Check out code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
       - name: Get changed files using `actions/github-script`
         id: get-changed-files
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             let files = [];
@@ -148,7 +148,7 @@ jobs:
 
   model-ci:
     name: Model CI
-    uses: ./.github/workflows/self-scheduled.yml
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
     needs: get_modified_models
     if: needs.get_modified_models.outputs.matrix != '' && needs.get_modified_models.outputs.matrix != '[]'
     with:

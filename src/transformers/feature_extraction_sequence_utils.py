@@ -169,7 +169,10 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         for key, value in processed_features.items():
             if isinstance(value[0], (int, float)):
                 processed_features[key] = to_numpy(value)
-            else:
+            elif not isinstance(value, np.ndarray):
+                # An already-batched numpy array can be used as-is; splitting it
+                # into a list of per-example arrays is pure overhead and is very
+                # slow for large inputs (e.g. long audio).
                 processed_features[key] = [to_numpy(v) for v in value]
 
         # Convert padding_strategy in PaddingStrategy

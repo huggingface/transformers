@@ -13,6 +13,8 @@
 # limitations under the License.
 import unittest
 
+from parameterized import parameterized
+
 from transformers import AutoModel, AutoTokenizer, is_torch_available
 from transformers.models.jina_embeddings_v3 import JinaEmbeddingsV3Config
 from transformers.testing_utils import (
@@ -57,7 +59,7 @@ class JinaEmbeddingsV3ModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=8,
+        max_position_embeddings=12,
         type_vocab_size=1,
         type_sequence_label_size=2,
         initializer_range=0.02,
@@ -189,6 +191,17 @@ class JinaEmbeddingsV3ModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
+    def create_and_check_forward_beyond_max_position_embeddings(self, config, input_ids, *args):
+        # This model is rope-only, so `max_position_embeddings` does not bound the input length.
+        # See https://github.com/huggingface/transformers/pull/48407
+        model = JinaEmbeddingsV3Model(config=config)
+        model.to(torch_device)
+        model.eval()
+        seq_length = config.max_position_embeddings + 8
+        long_input_ids = ids_tensor([1, seq_length], config.vocab_size).to(torch_device)
+        result = model(long_input_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (1, seq_length, self.hidden_size))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -259,6 +272,15 @@ class JinaEmbeddingsV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
+
+    def test_forward_beyond_max_position_embeddings(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_forward_beyond_max_position_embeddings(*config_and_inputs)
+
+    @unittest.skip("Model doesn't support scaling - due to non-RoPE related reasons")
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
 
 
 @require_torch

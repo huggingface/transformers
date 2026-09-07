@@ -188,6 +188,8 @@ def _post_process_boxes_for_image(
 @requires(backends=("vision", "torchvision"))
 @auto_docstring
 class OmDetTurboProcessor(ProcessorMixin):
+    valid_processor_kwargs = OmDetTurboProcessorKwargs
+
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 

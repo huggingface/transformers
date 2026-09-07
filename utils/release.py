@@ -128,7 +128,8 @@ def global_version_update(version: str, patch: bool = False):
     """
     for pattern, fname in REPLACE_FILES.items():
         update_version_in_file(fname, version, pattern)
-    update_version_in_examples(version, patch=patch)
+    # REMOVED AFTER v5! Uncomment to start updating the version of the examples again
+    # update_version_in_examples(version, patch=patch)
 
 
 def remove_conversion_scripts():
@@ -187,9 +188,11 @@ def pre_release_work(patch: bool = False):
 
     print(f"Updating version to {version}.")
     global_version_update(version, patch=patch)
-    print("Deleting conversion and internal utils scripts.")
-    remove_conversion_scripts()
-    remove_internal_utils()
+    # If releasing a patch, all those files were already deleted on the branch when releasing the main version
+    if not patch:
+        print("Deleting conversion and internal utils scripts.")
+        remove_conversion_scripts()
+        remove_internal_utils()
 
 
 def post_release_work():

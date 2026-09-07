@@ -324,8 +324,8 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             with torch.no_grad():
                 tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
                 output_ = model(**dict_inputs, return_dict=True, **additional_kwargs)
-                attributes_ = vars(output_)
-                dict_output = tuple(attributes_.values())
+                # ``ModelOutput.to_tuple()`` drops ``None`` entries; do the same on the dict side.
+                dict_output = output_.to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, (list, tuple)):

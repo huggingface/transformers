@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -49,9 +49,9 @@ inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.de
 model.generate(**inputs, do_sample=False, max_new_tokens=20, use_cache=False)
 ```
 
-Cache classes can also be initialized first before calling and passing it to the models [past_key_values](https://hf.co/docs/transformers/internal/generation_utils#transformers.generation.GenerateDecoderOnlyOutput.past_key_values) parameter. This can be useful for more fine-grained control, or more advanced usage such as context caching.
+Cache classes can also be initialized first before calling and passing it to the models [`~generation.GenerateDecoderOnlyOutput#past_key_values`] parameter. This can be useful for more fine-grained control, or more advanced usage such as context caching.
 
-In most cases, it's easier to define the cache strategy in the [cache_implementation](https://hf.co/docs/transformers/main_classes/text_generation#transformers.GenerationConfig.cache_implementation) parameter.
+In most cases, it's easier to define the cache strategy in the [`~GenerationConfig#cache_implementation`] parameter.
 
 ```py
 import torch
@@ -86,6 +86,28 @@ inputs = tokenizer("Hello, my name is", return_tensors="pt").to(model.device)
 out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="static")
 tokenizer.batch_decode(out, skip_special_tokens=True)[0]
 "Hello, my name is [Your Name], and I am a [Your Profession] with [Number of Years] of"
+```
+
+## Keep generation tensors on CPU
+
+Compiler backends like Neuron and TPU trace your model into a fixed computation graph. The generation loop maintains tensors (output sequence, `attention_mask`, `position_ids`) that grow by one token each step. The compiler retraces the graph whenever these tensors change shape on the accelerator, which slows generation.
+
+[`~GenerationMixin.generate`] moves only the tensors that `forward` consumes onto the model device, right before each `forward` call. The output is moved back to match the device of the input. Pass your inputs on CPU to keep the loop's growing tensor bookkeeping off the accelerator. The compiled graph stays stable, and because the output follows the input device, the generated output stays on CPU.
+
+```py
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", device_map="auto")
+
+# leave the inputs on CPU instead of calling .to(model.device).
+inputs = tokenizer("The French Bread Law states", return_tensors="pt")
+
+# generate runs forward on the model device but returns the output on the input_ids device.
+output = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+print(output.device)
+cpu
 ```
 
 ## Cache offloading
@@ -239,6 +261,45 @@ for prompt in user_prompts:
     completion = tokenizer.decode(outputs[0, input_length: ], skip_special_tokens=True)
     messages.append({"role": "assistant", "content": completion})
 ```
+
+## Crop a cache
+
+Use [`~Cache.crop`] to roll back tokens from a cache, such as when a candidate continuation is rejected during iterative generation. Pass the number of tokens to remove as a negative integer.
+
+```py
+# Remove the last three tokens from the cache.
+past_key_values.crop(-3)
+```
+
+Sliding-window and linear-attention layers discard past states as they go, so there's nothing to roll back to by default. Call [`~Cache.activate_past_recording`] before the forward pass to make them hold onto those states. Without it, `crop` raises a `RuntimeError` once a sliding-window layer fills its window, and immediately for linear-attention layers.
+
+```py
+# Enable this before the forward pass if you need to roll back tokens.
+past_key_values.activate_past_recording()
+```
+
+`crop(0)` does not clear the cache. It removes no tokens from the cached sequence and is a no-op for full-attention layers. For sliding-window and linear-attention layers, it can discard cached information that the next model call will not use. This reduces memory use without rolling back tokens.
+
+```
+                    cached positions
+                    ┌───┬───┬───┬───┬───┬───┐
+before crop(-3)     │ 0 │ 1 │ 2 │ 3 │ 4 │ 5 │
+                    └───┴───┴───┴───┴───┴───┘
+                                ╰─────┬─────╯
+                                 rolled back
+
+after crop(-3)
+                    ┌───┬───┬───┐
+full attention      │ 0 │ 1 │ 2 │    keeps the whole prefix
+                    └───┴───┴───┘
+                            ┌───┐
+sliding_window=2            │ 2 │    keeps sliding_window - 1
+                            └───┘
+```
+
+Both layers now report a sequence length of 3, and generation resumes from position 3.
+
+Passing `0` removes no tokens from the sequence. It's a no-op for full-attention layers, but for sliding-window and linear-attention layers it still discards recorded states the next forward pass won't read, which frees memory without rolling anything back.
 
 ## Prefill a cache (prefix caching)
 

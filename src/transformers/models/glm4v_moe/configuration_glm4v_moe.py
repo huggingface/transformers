@@ -56,23 +56,22 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
-
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }
@@ -105,7 +104,6 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
     eos_token_id: int | list[int] | None = None
     pad_token_id: int | None = None
     base_config_key = "text_config"
-
     ignore_keys_at_rope_validation = {"mrope_section"}
     router_aux_loss_coef: float = 0.0001
 
@@ -138,6 +136,8 @@ class Glm4vMoeVisionConfig(PreTrainedConfig):
 
     model_type = "glm4v_moe_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 24
     hidden_size: int = 1536
@@ -154,6 +154,7 @@ class Glm4vMoeVisionConfig(PreTrainedConfig):
     out_hidden_size: int = 4096
     intermediate_size: int = 13696
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5V")
@@ -207,6 +208,12 @@ class Glm4vMoeConfig(PreTrainedConfig):
             self.text_config = self.sub_configs["text_config"](**self.text_config)
         elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"](**kwargs)
+
+        # BC: pre-v5 saves placed `tie_word_embeddings` inside text_config. Forward it to the outer
+        # config (where v5's tying logic looks) when the root value is the default. Checked after
+        # text_config init so it also covers a text config passed as an already-initialized instance.
+        if not self.tie_word_embeddings and getattr(self.text_config, "tie_word_embeddings", False):
+            self.tie_word_embeddings = True
 
         super().__post_init__(**kwargs)
 

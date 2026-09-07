@@ -274,10 +274,6 @@ class PPFormulaNetModelTest(VLMModelTest, unittest.TestCase):
     def test_mismatching_num_image_tokens(self):
         pass
 
-    @unittest.skip(reason="PPFormulaNet does not support data parallel")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
     @unittest.skip(reason="PPFormulaNet does not support assisted decoding.")

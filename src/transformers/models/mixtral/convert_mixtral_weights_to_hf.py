@@ -106,7 +106,7 @@ def write_model(model_path, input_base_path, model_size):
 
     for layer_i in range(n_layers):
         # Sharded
-        # Note that attention.w{q,k,v,o}, feed_fordward.w[1,2,3], attention_norm.weight and ffn_norm.weight share
+        # Note that attention.w{q,k,v,o}, feed_forward.w[1,2,3], attention_norm.weight and ffn_norm.weight share
         # the same storage object, saving attention_norm and ffn_norm will save other weights too, which is
         # redundant as other weights will be stitched from multiple shards. To avoid that, they are cloned.
 

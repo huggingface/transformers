@@ -1023,7 +1023,7 @@ class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
     def __init__(self, config: MvpConfig):
         super().__init__(config)
         self.model = MvpModel(config)
-        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
+        self.final_logits_bias = nn.Buffer(torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
         # Initialize weights and apply final processing
@@ -1043,7 +1043,7 @@ class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
         else:
             extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
             new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
-        self.register_buffer("final_logits_bias", new_bias)
+        self.final_logits_bias = nn.Buffer(new_bias)
 
     def set_lightweight_tuning(self):
         self.model.set_lightweight_tuning()
@@ -1297,9 +1297,12 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
             torch.unique_consecutive(eos_mask.sum(1)).numel() == 1,
             "All examples must have the same number of <eos> tokens.",
         )
-        sentence_representation = hidden_states[eos_mask, :].view(hidden_states.size(0), -1, hidden_states.size(-1))[
-            :, -1, :
-        ]
+        selected = hidden_states[eos_mask, :]
+        torch_compilable_check(
+            selected.shape[0] // hidden_states.shape[0] >= 1,
+            "Each example must contain at least one <eos> token.",
+        )
+        sentence_representation = selected.view(hidden_states.size(0), -1, hidden_states.size(-1))[:, -1, :]
         logits = self.classification_head(sentence_representation)
 
         loss = None
@@ -1402,7 +1405,7 @@ class MvpForQuestionAnswering(MvpPreTrainedModel):
 
         Example:
 
-        Fine-tuning a model for extrative question answering, and our model also supports generative question answering
+        Fine-tuning a model for extractive question answering, and our model also supports generative question answering
         using `BartForConditionalGeneration`
         ```python
         >>> import torch

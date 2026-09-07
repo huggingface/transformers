@@ -1281,6 +1281,24 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         # Only generate beyond prefill, we don't care about the output as it only checks for crashes
         _ = model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=2, use_cache=True)
 
+    def test_generate_cross_attention_cache_is_not_sliding(self):
+        # Fast (CPU-friendly, no flash-attn) regression test for the same fix as
+        # `test_generate_beyond_sliding_window_with_flash_attn`: even when the decoder declares sliding-window
+        # layers, `_prepare_cache_for_generation` must build a full-attention cross-attention cache.
+        config, input_ids, _, attention_mask, _, _ = self.model_tester.prepare_config_and_inputs()
+        config.decoder.sliding_window = 2  # arbitrary but less than seq_len
+
+        model = self.model_tester.causal_lm_class(config=config).to(torch_device).eval()
+
+        out = model.generate(
+            input_ids,
+            attention_mask=attention_mask,
+            max_new_tokens=4,  # beyond the sliding window
+            use_cache=True,
+            return_dict_in_generate=True,
+        )
+        self.assertFalse(any(out.past_key_values.cross_attention_cache.is_sliding))
+
 
 class T5GemmaEncoderOnlyModelTester:
     config_class = T5GemmaConfig

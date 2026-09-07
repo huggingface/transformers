@@ -59,10 +59,9 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
         allocated_memory = torch.xpu.memory_allocated(device)
     elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
         device = torch.device("mps")
-        # MPS memory reporting (PyTorch 2.0+)
-        total_memory = torch.mps.driver_allocated_memory()
-        allocated_memory = total_memory - getattr(torch.mps, "recommended_max_memory")()
-        reserved_memory = 0  # MPS does not track reserved separately
+        total_memory = torch.mps.recommended_max_memory()
+        allocated_memory = torch.mps.current_allocated_memory()
+        reserved_memory = torch.mps.driver_allocated_memory()
     else:
         device = torch.device("cpu")
         if is_psutil_available():
@@ -117,7 +116,8 @@ class GenerationOutput:
     timestamps: list[float] | None = None  # Timestamps of the generated tokens
 
     def is_finished(self) -> bool:
-        return self.status == RequestStatus.FINISHED
+        """Whether the request reached a terminal state, either because it finished generating or because it failed."""
+        return self.status >= RequestStatus.FINISHED
 
 
 @dataclass
@@ -205,11 +205,14 @@ class RequestState:
 
     @status.setter
     def status(self, value: RequestStatus):
+        # Leaving the pending state means the request started: we stamp the start of its lifespan
         if self._status == RequestStatus.PENDING:
             self.lifespan = (time.perf_counter(), -1)
-        elif value == RequestStatus.FINISHED:
+        # Reaching a terminal state means the request is over: we stamp the end of its lifespan
+        if value >= RequestStatus.FINISHED:
             self.lifespan = (self.lifespan[0], time.perf_counter())
-            self.log_end_of_request()
+            if logger.isEnabledFor(logging.DEBUG):
+                self.log_end_of_request()
         self._status = value
 
     @property
@@ -221,7 +224,7 @@ class RequestState:
         decode_len = self.generated_len()
         start_time = self.lifespan[0] - self.created_time
         end_time = self.lifespan[1] - self.created_time
-        logger.info(
+        logger.debug(
             f"Request {self.request_id} finished: {prefill_len = } {decode_len = } {start_time = } {end_time = }"
         )
 
@@ -283,18 +286,21 @@ class RequestState:
     def to_generation_output(self):
         """Convert the request state to a GenerationOutput object."""
         if self._true_initial_tokens:
-            self.generated_tokens = self.initial_tokens[self._true_initial_tokens :] + self.generated_tokens
-            self.initial_tokens = self.initial_tokens[: self._true_initial_tokens]
+            generated_tokens = self.initial_tokens[self._true_initial_tokens :] + self.generated_tokens
+            prompt_ids = self.initial_tokens[: self._true_initial_tokens]
+        else:
+            generated_tokens = self.generated_tokens[:]
+            prompt_ids = self.initial_tokens
         return GenerationOutput(
             request_id=self.request_id,
-            prompt_ids=self.initial_tokens,
-            generated_tokens=self.generated_tokens,
-            logprobs=self.logprobs,
+            prompt_ids=prompt_ids,
+            generated_tokens=generated_tokens,
+            logprobs=self.logprobs[:],
             error=self.error,
             status=self.status,
             created_time=self.created_time,
             lifespan=self.lifespan,
-            timestamps=self.timestamps,
+            timestamps=self.timestamps[:] if self.timestamps is not None else None,
         )
 
     def fork(self, new_request_id: str) -> "RequestState":

@@ -9,11 +9,11 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-02-14 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was contributed to Hugging Face Transformers on 2020-11-16.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
@@ -32,6 +32,8 @@ You can find all the original GPT-2 checkpoints under the [OpenAI community](htt
 
 > [!TIP]
 > Click on the GPT-2 models in the right sidebar for more examples of how to apply GPT-2 to different language tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`], and from the command line.
 
@@ -101,8 +103,8 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ## Notes
 
 - Pad inputs on the right because GPT-2 uses absolute position embeddings.
-- GPT-2 can reuse previously computed key-value attention pairs. Access this feature with the [past_key_values](https://huggingface.co/docs/transformers//en/model_doc/gpt2#transformers.GPT2Model.forward.past_key_values) parameter in [`GPT2Model.forward`].
-- Enable the [scale_attn_by_inverse_layer_idx](https://huggingface.co/docs/transformers/en/model_doc/gpt2#transformers.GPT2Config.scale_attn_by_inverse_layer_idx) and [reorder_and_upcast_attn](https://huggingface.co/docs/transformers/en/model_doc/gpt2#transformers.GPT2Config.reorder_and_upcast_attn) parameters to apply the training stability improvements from [Mistral](./mistral).
+- GPT-2 can reuse previously computed key-value attention pairs. Access this feature with the [`~GPT2Model.forward#past_key_values`] parameter in [`GPT2Model.forward`].
+- Enable the [`~GPT2Config#scale_attn_by_inverse_layer_idx`] and [`~GPT2Config#reorder_and_upcast_attn`] parameters to apply the training stability improvements from [Mistral](./mistral).
 
 ## GPT2Config
 
@@ -112,10 +114,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 [[autodoc]] GPT2Tokenizer
     - save_vocabulary
-
-## GPT2TokenizerFast
-
-[[autodoc]] GPT2TokenizerFast
 
 ## GPT2 specific outputs
 

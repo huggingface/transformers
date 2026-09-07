@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
 from collections import OrderedDict
 from collections.abc import Callable, Iterator
@@ -40,7 +39,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
-from ...utils.generic import TransformersKwargs, is_flash_attention_requested
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import TransformersKwargs, is_flash_attention_requested, maybe_autocast
 from ...utils.output_capturing import OutputRecorder
 from ..auto import AutoModel
 from .configuration_edgetam_video import (
@@ -122,14 +122,6 @@ class EdgeTamVideoVisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-        one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`. Hidden-states of the
-        model at the output of each stage.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-        the self-attention heads.
     fpn_hidden_states (`tuple(torch.FloatTensor)`):
         Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
         `(batch_size, hidden_size, height, width)`. Feature maps from the Feature Pyramid Network neck.
@@ -144,44 +136,70 @@ class EdgeTamVideoVisionEncoderOutput(BaseModelOutputWithPooling):
 
 class EdgeTamVideoVisionRotaryEmbedding(nn.Module):
     """
-    Vision Rotary Position Embedding for SAM2, following transformers library standards.
-    Supports 2D (axial) rotary embeddings for spatial dimensions.
+    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
+    pre-computed using `head-dim//4` which is later used to concat H and W positions.
+    The final angles rotate over the whole head dim, no partial rotation involved.
     """
 
-    def __init__(self, config: EdgeTamVideoConfig, end_x: int | None = None, end_y: int | None = None):
+    @deprecate_kwarg("device", version="5.18")
+    def __init__(self, config: EdgeTamVideoConfig, device=None):
         super().__init__()
-        self.dim = config.memory_attention_hidden_size // (
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    @deprecate_kwarg("device", version="5.18")
+    def compute_axial_rope_parameters(config: EdgeTamVideoConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = config.memory_attention_hidden_size // (
             config.memory_attention_downsample_rate * config.memory_attention_num_attention_heads
         )
-        # Ensure even dimension for proper axial splitting
-        if self.dim % 4 != 0:
-            raise ValueError("Dimension must be divisible by 4 for axial RoPE")
-        self.end_x, self.end_y = config.memory_attention_rope_feat_sizes if end_x is None else (end_x, end_y)
-        self.memory_attention_rope_theta = config.memory_attention_rope_theta
+        spatial_dim = dim // 2
 
-        # directly register the cos and sin embeddings as we have a fixed feature shape
-        inv_freq = self.create_inv_freq()
-        self.register_buffer("rope_embeddings_cos", inv_freq.cos(), persistent=False)
-        self.register_buffer("rope_embeddings_sin", inv_freq.sin(), persistent=False)
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
-    def forward(self) -> tuple[torch.Tensor, torch.Tensor]:
-        # As the feature map size is fixed, we can just return the pre-computed embeddings.
-        return self.rope_embeddings_cos, self.rope_embeddings_sin
+    def forward(self, x, position_ids):
+        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        position_ids_expanded = position_ids[..., None].float()
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = position_ids_expanded * self.inv_freq.float()
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
 
-    def create_inv_freq(self):
-        freqs = 1.0 / (
-            self.memory_attention_rope_theta ** (torch.arange(0, self.dim, 4)[: (self.dim // 4)].float() / self.dim)
-        )
-        # Generate 2D position indices for axial rotary embedding
-        flattened_indices = torch.arange(self.end_x * self.end_y, dtype=torch.long)
-        x_positions = flattened_indices % self.end_x
-        y_positions = torch.div(flattened_indices, self.end_x, rounding_mode="floor")
-        freqs_x = torch.outer(x_positions, freqs).float()
-        freqs_y = torch.outer(y_positions, freqs).float()
-        inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
-        inv_freq = inv_freq.repeat_interleave(2, dim=-1)
-        return inv_freq
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
+        return cos, sin
+
+    # Ignore copy
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+
+        freq_h, freq_w = freq[:, 0], freq[:, 1]
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)[None, ...]
+        return freq_hw.repeat_interleave(2, dim=-1)
 
 
 def eager_attention_forward(
@@ -279,7 +297,7 @@ class EdgeTamVideoAttention(nn.Module):
 
 def rotate_pairwise(x):
     """
-    pairwise rotation of the hidden dims of the input. Differerent from Llama Half-Tensor Rotation.
+    pairwise rotation of the hidden dims of the input. Different from Llama Half-Tensor Rotation.
 
     This is an optimized version of the following more explicit implementation:
     ```python
@@ -546,7 +564,7 @@ class EdgeTamVideoTwoWayAttentionBlock(GradientCheckpointingLayer):
         Arguments:
             config (`EdgeTamVideoMaskDecoderConfig`):
                 The configuration file used to instantiate the block
-            attention_downsample_rate (*optionalk*, int, defaults to 2):
+            attention_downsample_rate (*optional*, int, defaults to 2):
                 The downsample ratio of the block used to reduce the inner dim of the attention.
             skip_first_layer_pe (*optional*, bool, defaults to `False`):
                 Whether or not to skip the addition of the query_point_embedding on the first layer.
@@ -646,10 +664,23 @@ class EdgeTamVideoPositionEmbeddingSine(nn.Module):
         temperature: int = 10000,
         mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        batch_size, _, height, width = shape
         if mask is None:
-            mask = torch.ones((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        y_embed = mask.cumsum(1, dtype=dtype)
-        x_embed = mask.cumsum(2, dtype=dtype)
+            # Without a mask this is just a cumsum over ones, written out as arange
+            # instead: inductor's cumsum(ones) rewrite drops the requested dtype
+            # (https://github.com/pytorch/pytorch/issues/189518), which breaks
+            # float16/bfloat16 under torch.compile — don't revert to cumsum here
+            # until that fix is widely released.
+            y_embed = torch.arange(1, height + 1, dtype=dtype, device=device)[None, :, None].expand(
+                batch_size, height, width
+            )
+            x_embed = torch.arange(1, width + 1, dtype=dtype, device=device)[None, None, :].expand(
+                batch_size, height, width
+            )
+        else:
+            embed_mask = mask.to(dtype)
+            y_embed = embed_mask.cumsum(1)
+            x_embed = embed_mask.cumsum(2)
         if normalize:
             eps = 1e-6
             y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
@@ -807,7 +838,7 @@ class EdgeTamVideoPositionalEmbedding(nn.Module):
         super().__init__()
         self.scale = config.scale
         positional_embedding = self.scale * torch.randn((2, config.hidden_size // 2))
-        self.register_buffer("positional_embedding", positional_embedding)
+        self.positional_embedding = nn.Buffer(positional_embedding)
 
     def forward(self, input_coords, input_shape=None):
         """Positionally encode points that are normalized to [0,1]."""
@@ -852,16 +883,14 @@ class EdgeTamVideoPreTrainedModel(PreTrainedModel):
         if isinstance(module, EdgeTamVideoMemoryFuserCXBlock):
             if module.scale is not None:
                 init.zeros_(module.scale)
-        elif isinstance(module, EdgeTamVideoVisionRotaryEmbedding):
-            inv_freq = module.create_inv_freq()
-            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
-            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
         elif isinstance(module, EdgeTamVideoPositionalEmbedding):
             init.normal_(module.positional_embedding, std=module.scale)
-        if isinstance(module, EdgeTamVideoVisionRotaryEmbedding):
-            inv_freq = module.create_inv_freq()
-            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
-            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
+        elif isinstance(module, EdgeTamVideoMemoryAttention):
+            position_ids = module.precompute_positions(module.config)
+            init.copy_(module.position_ids, position_ids)
+        if isinstance(module, EdgeTamVideoMemoryAttention):
+            position_ids_k = module.precompute_positions(module.config, is_key=True)
+            init.copy_(module.position_ids_k, position_ids_k)
 
 
 class EdgeTamVideoInferenceCache:
@@ -1225,14 +1254,35 @@ class EdgeTamVideoMemoryAttentionLayer(nn.Module):
 class EdgeTamVideoMemoryAttention(nn.Module):
     def __init__(self, config: EdgeTamVideoConfig):
         super().__init__()
+        self.config = config
         self.layers = nn.ModuleList(
             [EdgeTamVideoMemoryAttentionLayer(config) for _ in range(config.memory_attention_num_layers)]
         )
         self.layer_norm = nn.LayerNorm(config.memory_attention_hidden_size)
         self.rotary_emb = EdgeTamVideoVisionRotaryEmbedding(config=config)
-        self.rotary_emb_k = EdgeTamVideoVisionRotaryEmbedding(
-            config, end_x=config.memory_attention_rope_k_sizes[0], end_y=config.memory_attention_rope_k_sizes[1]
-        )
+
+        position_ids = self.precompute_positions(config)
+        self.position_ids = nn.Buffer(position_ids, persistent=False)
+        position_ids_k = self.precompute_positions(config, is_key=True)
+        self.position_ids_k = nn.Buffer(position_ids_k, persistent=False)
+
+    @staticmethod
+    def precompute_positions(config: EdgeTamVideoConfig, is_key: bool = False):
+        "Precompute position IDs for query or key since they are different."
+        if not is_key:
+            hpos_ids, wpos_ids = torch.meshgrid(
+                torch.arange(config.memory_attention_rope_feat_sizes[1]),
+                torch.arange(config.memory_attention_rope_feat_sizes[0]),
+                indexing="ij",
+            )
+        else:
+            hpos_ids, wpos_ids = torch.meshgrid(
+                torch.arange(config.memory_attention_rope_k_sizes[1]),
+                torch.arange(config.memory_attention_rope_k_sizes[0]),
+                indexing="ij",
+            )
+        position_ids = torch.stack([wpos_ids.flatten(), hpos_ids.flatten()], dim=-1)
+        return position_ids
 
     def forward(
         self,
@@ -1264,8 +1314,9 @@ class EdgeTamVideoMemoryAttention(nn.Module):
         output = output.transpose(0, 1)
         memory = memory.transpose(0, 1).unsqueeze(1)
         memory_posision_embeddings = memory_posision_embeddings.transpose(0, 1).unsqueeze(1)
-        rope_position_embeddings = self.rotary_emb()
-        rope_position_embeddings_k = self.rotary_emb_k()
+
+        rope_position_embeddings = self.rotary_emb(output, self.position_ids)
+        rope_position_embeddings_k = self.rotary_emb(output, self.position_ids_k)
         for layer in self.layers:
             output = layer(
                 queries=output.unsqueeze(1) if output.ndim == 3 else output,
@@ -1436,17 +1487,16 @@ def window_partition(hidden_state, window_size):
     """
     batch_size, height, width, num_channels = hidden_state.shape
 
-    pad_height = (window_size - height % window_size) % window_size
-    pad_width = (window_size - width % window_size) % window_size
-
-    # Noop in case pad_width == 0 and pad_height == 0.
+    # `(-height) % window_size` is the smallest non-negative pad that makes height divisible
+    # by window_size, in one modulo instead of two; same for width.
+    pad_height = (-height) % window_size
+    pad_width = (-width) % window_size
     hidden_state = nn.functional.pad(hidden_state, (0, 0, 0, pad_width, 0, pad_height))
-
     padded_height, padded_width = height + pad_height, width + pad_width
 
-    hidden_state = hidden_state.view(
-        batch_size, padded_height // window_size, window_size, padded_width // window_size, window_size, num_channels
-    )
+    n_h = padded_height // window_size
+    n_w = padded_width // window_size
+    hidden_state = hidden_state.view(batch_size, n_h, window_size, n_w, window_size, num_channels)
     windows = hidden_state.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, num_channels)
     return windows, (padded_height, padded_width)
 

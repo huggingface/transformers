@@ -274,6 +274,25 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             [tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], ["[EMPTY]"], ["[UNK]"]]
         )
 
+    def test_tokenize_table_with_pyarrow_string_dtype(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/45901. On pandas
+        # 3.x, string columns default to a pyarrow-backed StringDtype, which (a) rejects writes
+        # of Cell objects inside add_numeric_table_values, and (b) makes positional row[col_index]
+        # access raise KeyError in the downstream _get_column_values helpers. Simulate the 3.x
+        # default with future.infer_string and drive the full tokenizer end-to-end.
+        tokenizer = self.get_tokenizer()
+        data = {"Actors": ["Brad Pitt", "Leonardo Di Caprio"], "Number of movies": ["87", "53"]}
+        original = pd.get_option("future.infer_string")
+        pd.set_option("future.infer_string", True)
+        try:
+            table = pd.DataFrame.from_dict(data)
+            encoding = tokenizer(table, "how many movies does Leonardo Di Caprio have?")
+        finally:
+            pd.set_option("future.infer_string", original)
+
+        self.assertIn("input_ids", encoding)
+        self.assertGreater(len(encoding["input_ids"]), 0)
+
     @slow
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("google/tapas-base-finetuned-wtq")

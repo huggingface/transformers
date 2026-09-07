@@ -20,7 +20,6 @@
 # limitations under the License.
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-from ...video_utils import VideoInput
 
 
 class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
@@ -52,12 +51,12 @@ class Exaone4_5_Processor(ProcessorMixin):
         )
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         merge_length = self.image_processor.merge_size**2
         num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
         return self.image_token * num_image_tokens
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         merge_length = self.video_processor.merge_size**2
         num_video_tokens = video_inputs["video_grid_thw"][video_idx].prod() // merge_length
         return self.video_token * num_video_tokens
@@ -129,25 +128,7 @@ class Exaone4_5_Processor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        return super().model_input_names + ["second_per_grid_ts", "mm_token_type_ids"]
-
-    def _process_videos(self, videos: VideoInput, **kwargs):
-        processed_data, video_replacements = super()._process_videos(videos, **kwargs)
-        video_grid_thw = processed_data["video_grid_thw"]
-
-        video_metadata = processed_data["video_metadata"]
-        fps = [metadata.sampled_fps for metadata in video_metadata]
-
-        if isinstance(fps, (int, float)):
-            second_per_grid_ts = [self.video_processor.temporal_patch_size / fps] * len(video_grid_thw)
-        elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
-            second_per_grid_ts = [self.video_processor.temporal_patch_size / tmp for tmp in fps]
-        else:
-            raise ValueError(
-                f"The length of fps ({len(fps) if hasattr(fps, '__len__') else fps}) must be equal to the length of video_grid_thw ({len(video_grid_thw)}) or fps should be a single number."
-            )
-        processed_data["second_per_grid_ts"] = second_per_grid_ts
-        return processed_data, video_replacements
+        return super().model_input_names
 
 
 __all__ = ["Exaone4_5_Processor"]

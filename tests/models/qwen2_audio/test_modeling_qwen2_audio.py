@@ -24,6 +24,7 @@ from transformers import (
     Qwen2AudioConfig,
     Qwen2AudioEncoderConfig,
     Qwen2AudioForConditionalGeneration,
+    Qwen2AudioModel,
     Qwen2Config,
     is_torch_available,
 )
@@ -43,6 +44,7 @@ if is_torch_available():
 
 class Qwen2AudioModelTester(ALMModelTester):
     config_class = Qwen2AudioConfig
+    base_model_class = Qwen2AudioModel
     conditional_generation_class = Qwen2AudioForConditionalGeneration
     text_config_class = Qwen2Config
     audio_config_class = Qwen2AudioEncoderConfig
@@ -95,7 +97,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
             "Qwen/Qwen2-Audio-7B-Instruct", device_map=torch_device, dtype=torch.float16
         )
 
-        url = "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3"
+        url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3"
         messages = [
             {
                 "role": "user",
@@ -146,7 +148,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3",
+                        "audio_url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3",
                     },
                     {"type": "text", "text": "What's that sound?"},
                 ],
@@ -157,7 +159,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav",
+                        "audio_url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav",
                     },
                     {"type": "text", "text": "What can you hear?"},
                 ],
@@ -226,7 +228,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3",
+                        "audio_url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3",
                     },
                     {"type": "text", "text": "What's that sound?"},
                 ],
@@ -237,7 +239,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav",
+                        "audio_url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav",
                     },
                     {"type": "text", "text": "How about this one?"},
                 ],

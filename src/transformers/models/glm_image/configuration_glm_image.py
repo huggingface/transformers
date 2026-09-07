@@ -59,6 +59,8 @@ class GlmImageVisionConfig(PreTrainedConfig):
 
     model_type = "glm_image_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 40
     hidden_size: int = 1536
@@ -106,22 +108,15 @@ class GlmImageTextConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_allreduce",
-        "layers.*.mlp.gate_up_proj": "colwise_allgather",  # we need to replicate here due to the `chunk` operation
-        "layers.*.mlp.down_proj": "vocab_allreduce",  # input is replicated due to the `chunk` operation
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_up_proj": "colwise_gather_output",  # we need to replicate here due to the `chunk` operation
+        "layers.*.mlp.down_proj": "rowwise_split_input",  # input is replicated due to the `chunk` operation
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
-    }
-
     ignore_keys_at_rope_validation = {"mrope_section"}
 
     vocab_size: int = 168064

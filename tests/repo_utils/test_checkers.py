@@ -61,6 +61,19 @@ class CheckersCacheTest(unittest.TestCase):
         with (
             patch.object(sys, "argv", ["checkers.py", *args]),
             patch.object(sys, "stdout", new=stdout),
+            # checkers.main() is OTel-instrumented: with a live OTLP endpoint +
+            # TRACEPARENT in the env (as in CI, where configure-ci-otel wraps the
+            # pytest job), it would export real spans for the fake "demo" checker
+            # into production telemetry. Blank these out so the in-process run is
+            # a tracing no-op and the test never leaks spans.
+            patch.dict(
+                os.environ,
+                {
+                    "OTEL_EXPORTER_OTLP_ENDPOINT": "",
+                    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "",
+                    "TRACEPARENT": "",
+                },
+            ),
         ):
             exit_code = None
             try:
@@ -196,3 +209,38 @@ class CheckersCacheTest(unittest.TestCase):
             self.assertIn("line 0", stdout)
             self.assertIn("line 1", stdout)
             self.assertIn("summary line", stdout)
+
+
+class EnsureRequirementsTest(unittest.TestCase):
+    """`ensure_requirements` reaches for pip, so it has to be sure before it does."""
+
+    def _calls(self, names, needing, **env):
+        """Run `ensure_requirements(names)` and report whether it shelled out to pip."""
+        with (
+            patch.dict(os.environ, env, clear=False),
+            patch.object(checkers, "CHECKERS_NEEDING_REQUIREMENTS", set(needing)),
+            patch.object(checkers, "REQUIREMENTS_STAMP_PATH", Path(tempfile.mkdtemp()) / "stamp.json"),
+            patch.object(checkers, "subprocess") as subprocess_mock,
+        ):
+            subprocess_mock.run.return_value.returncode = 0
+            with patch("sys.stdout", new=io.StringIO()):
+                checkers.ensure_requirements(names)
+            return subprocess_mock.run.called
+
+    def test_no_install_when_no_selected_checker_needs_one(self):
+        # `make style` and `make fix-repo` land here. They run in serge's normalize sandbox --
+        # read-only, `--network none` -- where pip cannot succeed and merely trying costs time.
+        self.assertFalse(self._calls(["ruff_check", "ruff_format"], needing={"reviewers"}))
+
+    def test_installs_when_a_selected_checker_needs_one(self):
+        self.assertTrue(self._calls(["reviewers", "doc_toc"], needing={"reviewers"}))
+
+    def test_opt_out_env_var_wins(self):
+        self.assertFalse(self._calls(["reviewers"], needing={"reviewers"}, TRANSFORMERS_SKIP_CHECKER_REQUIREMENTS="1"))
+
+    def test_survives_a_patched_repo_root(self):
+        # The message used to be built with `relative_to(REPO_ROOT)`, which raises as soon as
+        # REPO_ROOT is not a parent of the requirements file -- as it is not in these tests.
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(checkers, "REPO_ROOT", Path(tmp)):
+                self.assertTrue(self._calls(["reviewers"], needing={"reviewers"}))

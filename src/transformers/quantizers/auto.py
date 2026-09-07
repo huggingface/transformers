@@ -28,11 +28,14 @@ from ..utils.quantization_config import (
     FineGrainedFP8Config,
     FourOverSixConfig,
     FPQuantConfig,
+    GemmaQuantizationConfig,
+    GgufConfig,
     GPTQConfig,
     HiggsConfig,
     HqqConfig,
     MetalConfig,
     Mxfp4Config,
+    NVFP4Config,
     QuantizationConfigMixin,
     QuantizationMethod,
     QuantoConfig,
@@ -55,11 +58,14 @@ from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
 from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from .quantizer_fouroversix import FourOverSixHfQuantizer
 from .quantizer_fp_quant import FPQuantHfQuantizer
+from .quantizer_gemma import GemmaQuantizer
+from .quantizer_gguf import GgufHfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_metal import MetalHfQuantizer
 from .quantizer_mxfp4 import Mxfp4HfQuantizer
+from .quantizer_nvfp4 import NVFP4HfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
 from .quantizer_quark import QuarkHfQuantizer
 from .quantizer_sinq import SinqHfQuantizer
@@ -88,13 +94,21 @@ AUTO_QUANTIZER_MAPPING = {
     "vptq": VptqHfQuantizer,
     "spqr": SpQRHfQuantizer,
     "fp8": FineGrainedFP8HfQuantizer,
+    "gguf": GgufHfQuantizer,
+    "nvfp4": NVFP4HfQuantizer,
+    # MXFP8 = FP8 (E4M3 weights) with per-block ``[1, 32]`` E8M0 (uint8) scales —
+    # reuses the FineGrainedFP8 dequant path, with the E8M0 byte→exponent
+    # unpacking handled inside ``Fp8Dequantize._dequantize_one``.
+    "mxfp8": FineGrainedFP8HfQuantizer,
     "auto-round": AutoRoundQuantizer,
     "mxfp4": Mxfp4HfQuantizer,
     "metal": MetalHfQuantizer,
     "sinq": SinqHfQuantizer,
+    "gemma": GemmaQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
+    "gguf": GgufConfig,
     "awq": AwqConfig,
     "bitsandbytes_4bit": BitsAndBytesConfig,
     "bitsandbytes_8bit": BitsAndBytesConfig,
@@ -114,10 +128,13 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "vptq": VptqConfig,
     "spqr": SpQRConfig,
     "fp8": FineGrainedFP8Config,
+    "nvfp4": NVFP4Config,
+    "mxfp8": FineGrainedFP8Config,
     "auto-round": AutoRoundConfig,
     "mxfp4": Mxfp4Config,
     "metal": MetalConfig,
     "sinq": SinqConfig,
+    "gemma": GemmaQuantizationConfig,
 }
 
 LOADING_ATTRIBUTES_CONFIG_TYPES = (
@@ -318,15 +335,29 @@ def register_quantizer(name: str):
     return register_quantizer_fn
 
 
-def get_hf_quantizer(config, quantization_config, device_map, weights_only, user_agent):
-    pre_quantized = hasattr(config, "quantization_config")
-    if pre_quantized and not AutoHfQuantizer.supports_quant_method(config.quantization_config):
+def get_hf_quantizer(config, quantization_config, device_map, weights_only, user_agent, gguf_file=None):
+    if gguf_file is not None:
+        if quantization_config is None:
+            quantization_config = GgufConfig(gguf_file=gguf_file)
+        elif isinstance(quantization_config, GgufConfig):
+            quantization_config.gguf_file = gguf_file
+    elif isinstance(quantization_config, GgufConfig):
+        raise ValueError(
+            "Loading a GGUF checkpoint needs the file named as `from_pretrained(..., gguf_file=...)`. "
+            "`GgufConfig` carries the loading options and does not have to repeat it."
+        )
+
+    quantization_params_from_config = getattr(config, "quantization_config", None) or getattr(
+        config.get_text_config(decoder=True), "quantization_config", None
+    )
+    pre_quantized = quantization_params_from_config is not None
+    if pre_quantized and not AutoHfQuantizer.supports_quant_method(quantization_params_from_config):
         pre_quantized = False
 
     if pre_quantized or quantization_config is not None:
         if pre_quantized:
             config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
-                config.quantization_config, quantization_config
+                quantization_params_from_config, quantization_config
             )
         else:
             config.quantization_config = quantization_config
@@ -339,6 +370,11 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
         hf_quantizer = None
 
     if hf_quantizer is not None:
+        if gguf_file is not None and hf_quantizer.quantization_config.quant_method != QuantizationMethod.GGUF:
+            raise ValueError(
+                "You cannot combine Quantization and loading a model from a GGUF file, try again by making sure "
+                "you did not passed a `quantization_config` or that you did not load a quantized model from the Hub."
+            )
         hf_quantizer.validate_environment(
             device_map=device_map,
             weights_only=weights_only,

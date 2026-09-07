@@ -571,7 +571,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         )
         layer_i += 1
 
-    # Embedd Model, LM Head, and Norm
+    # Embed Model, LM Head, and Norm
     embed_tokens = torch.cat(full_weights["embedding.word_embeddings.weight"], dim=0)
     complete_state_dict["model.language_model.embed_tokens.weight"] = embed_tokens.clone()
 

@@ -452,7 +452,8 @@ def default_compute_objective(metrics: dict[str, float]) -> float:
 def default_hp_space_optuna(trial) -> dict[str, float]:
     from .integrations import is_optuna_available
 
-    assert is_optuna_available(), "This function needs Optuna installed: `pip install optuna`"
+    if not is_optuna_available():
+        raise ImportError("This function needs Optuna installed: `pip install optuna`")
     return {
         "learning_rate": trial.suggest_float("learning_rate", 1e-6, 1e-4, log=True),
         "num_train_epochs": trial.suggest_int("num_train_epochs", 1, 5),
@@ -464,7 +465,8 @@ def default_hp_space_optuna(trial) -> dict[str, float]:
 def default_hp_space_ray(trial) -> dict[str, Any]:
     from .integrations import is_ray_tune_available
 
-    assert is_ray_tune_available(), "This function needs ray installed: `pip install ray[tune]`"
+    if not is_ray_tune_available():
+        raise ImportError("This function needs ray installed: `pip install ray[tune]`")
     from ray import tune
 
     return {

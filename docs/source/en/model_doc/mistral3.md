@@ -9,11 +9,11 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-01-30 and added to Hugging Face Transformers on 2025-03-18.*
+*This model was contributed to Hugging Face Transformers on 2025-03-18.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -30,6 +30,8 @@ You can find the original Mistral 3 checkpoints under the [Mistral AI](https://h
 > [!TIP]
 > This model was contributed by [cyrilvallez](https://huggingface.co/cyrilvallez) and [yonigozlan](https://huggingface.co/yonigozlan).
 > Click on the Mistral3 models in the right sidebar for more examples of how to apply Mistral3 to different tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to generate text for an image with [`Pipeline`] and the [`AutoModel`] class.
 

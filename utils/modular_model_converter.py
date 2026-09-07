@@ -75,7 +75,29 @@ def get_module_source_from_name(module_name: str) -> str:
     return get_module_source_and_tree_from_name(module_name)[0]
 
 
+# Some exceptions to never replace, usually some package names that may contain model names (they may be used outside
+# `from xxx import y`)
+NAMES_TO_NEVER_REPLACE = (
+    "mamba_ssm",
+    "mamba-ssm",
+    "use_mambapy",
+    "mamba_inner_fn",
+    "mamba_selective_state_update",
+    "mamba_selective_scan",
+    "is_mambapy_available",
+    "mamba2_split_conv1d_scan_combined",
+    "mamba2_selective_state_update",
+    "mamba2_chunk_scan",
+)
+
+
 def preserve_case_replace(text, patterns: dict, default_name: str):
+    if text in NAMES_TO_NEVER_REPLACE:
+        return text
+    # For strings, node.value is the actual string INCLUDING enclosing quote characters
+    if text.strip('"') in NAMES_TO_NEVER_REPLACE:
+        return text
+
     # Create a regex pattern to match all variations
     regex_pattern = "|".join(re.escape(key) for key in patterns)
     compiled_regex = re.compile(f"(?<![a-z0-9])({regex_pattern})(.|$)", re.IGNORECASE | re.DOTALL)
@@ -636,7 +658,7 @@ class ModuleMapper(CSTVisitor, ABC):
                 self.imports.append(node)
 
     def leave_SimpleStatementLine(self, node):
-        # No need to check for the parent here -> everytime we exit one, it should be None anyway independently of where the
+        # No need to check for the parent here -> every time we exit one, it should be None anyway independently of where the
         # SimpleStatement is located
         self.current_assignment = None
 
@@ -916,6 +938,36 @@ def common_partial_suffix(str1: str, str2: str) -> str:
     return common_suffix
 
 
+def get_decorators_to_keep(
+    mapper: ModelFileMapper,
+    modular_node: cst.ClassDef | cst.FunctionDef,
+    original_node: cst.ClassDef | cst.FunctionDef | None = None,
+) -> list[cst.Decorator]:
+    """Get decorators to keep when merging a modular class or function with its original definition.
+
+    There are 3 different possibilities for decorators, in order of priority:
+        1. Force no inherited decorators via special `no_inherit_decorator` (sole decorator).
+        2. Take the decorators attached in the modular file.
+        3. Inherit all existing decorators of the parent/original node, if any.
+    """
+    decorator_names = [mapper.python_module.code_for_node(dec.decorator) for dec in modular_node.decorators]
+    no_decorators_forced = "no_inherit_decorator" in decorator_names
+
+    if no_decorators_forced:
+        if len(modular_node.decorators) > 1:
+            raise ValueError(
+                "Detected `no_inherit_decorator` together with other decorators. "
+                f"Found decorators: {decorator_names}. Please make sure to use `no_inherit_decorator` "
+                "as the sole decorator."
+            )
+        return []
+
+    if modular_node.decorators:
+        return modular_node.decorators
+
+    return original_node.decorators if original_node is not None else []
+
+
 def replace_class_node(
     mapper: ModelFileMapper, modular_class_node: cst.ClassDef, renamed_super_class: str, original_super_class: str
 ) -> cst.ClassDef:
@@ -987,10 +1039,8 @@ def replace_class_node(
     if "nn.Module" in new_class_bases_names and "GradientCheckpointingLayer" in new_class_bases_names:
         new_class_bases = [k for k in new_class_bases if get_full_attribute_name(k.value) != "nn.Module"]
 
-    # Use class decorators redefined in modular file if any
-    new_class_decorators = (
-        modular_class_node.decorators if len(modular_class_node.decorators) > 0 else original_modeling_node.decorators
-    )
+    # Keep decorators according to the modular/original merge priority
+    new_class_decorators = get_decorators_to_keep(mapper, modular_class_node, original_modeling_node)
 
     # Compute new class docstring
     original_modeling_docstring = [
@@ -1089,8 +1139,8 @@ def replace_class_node(
                 new_param_list = list({**original_modeling_params, **modular_params}.values())
                 new_params = new_params.with_changes(params=new_param_list, star_kwarg=node.params.star_kwarg)
 
-            # Keep decorators in modular if any, else original decorators
-            new_decorators = modular_node.decorators if len(modular_node.decorators) > 0 else node.decorators
+            # Keep decorators according to the modular/original merge priority
+            new_decorators = get_decorators_to_keep(mapper, modular_node, node)
 
             # Keep return annotation in modular if any, else original return annotation
             new_return_annotation = modular_node.returns if modular_node.returns else node.returns
@@ -1279,12 +1329,12 @@ def _ensure_utils_availability_imports(imports: list[cst.CSTNode], needed: set[s
     return [new_import] + imports
 
 
-def protect_torch_imports_for_pil(imports: list[cst.CSTNode]) -> list[cst.CSTNode]:
+def protect_torch_imports(imports: list[cst.CSTNode]) -> list[cst.CSTNode]:
     """
-    For PIL image processor files, collect all torch/torchvision imports — whether bare or
-    already wrapped in a guard — into a single `if is_torch_available():` /
-    `if is_torchvision_available():` block each. Add the required availability checks to the
-    utils import.
+    For files where torch is only a soft dependency (PIL image processors, feature extractors),
+    collect all torch/torchvision imports — whether bare or already wrapped in a guard — into a
+    single `if is_torch_available():` / `if is_torchvision_available():` block each. Add the
+    required availability checks to the utils import.
 
     Pre-existing guarded blocks (no else clause) are absorbed so we never emit duplicate guards
     for the same library.
@@ -1355,7 +1405,8 @@ def replace_unprotected_image_processing_imports(files: dict, all_imports: list)
         if isinstance(import_node, cst.SimpleStatementLine) and isinstance(import_node.body[0], cst.ImportFrom):
             import_node = import_node.body[0]
             full_name = get_full_attribute_name(import_node.module)
-            if re.search(r"^image_processing_(?!(?:backends)|(?:utils))", full_name):
+            # modules from which to import directly without duplicating nodes
+            if re.search(r"^image_processing_(?!(?:backends)|(?:utils)|(?:outputs))", full_name):
                 import_from_image_processing = import_node
                 break
 
@@ -1933,8 +1984,8 @@ def create_modules(
         new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
         needed_imports = get_needed_imports(body, all_imports)
 
-        if file == "image_processing_pil":
-            needed_imports = protect_torch_imports_for_pil(needed_imports)
+        if file in ("image_processing_pil", "feature_extraction"):
+            needed_imports = protect_torch_imports(needed_imports)
 
         if package_name != "transformers":
             # Convert all transformers relative imports to absolute ones

@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -166,7 +166,8 @@ Train or save the new empty tokenizer.
 tokenizer = NewTokenizer()
 
 # train on new corpus
-tokenizer.train_new_from_iterator()
+corpus = ["The stock market rallied today.", "Bond yields fell sharply."]
+trained_tokenizer = tokenizer.train_new_from_iterator(corpus, vocab_size=32000)
 # save tokenizer
-tokenizer.save_pretrained("./new-tokenizer")
+trained_tokenizer.save_pretrained("./new-tokenizer")
 ```

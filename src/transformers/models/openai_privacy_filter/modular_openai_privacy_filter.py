@@ -72,13 +72,6 @@ OPENAI_PRIVACY_FILTER_NER_LABELS = ("O",) + tuple(
 @strict
 class OpenAIPrivacyFilterConfig(GptOssConfig):
     model_type = "openai_privacy_filter"
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
-    }
-
     vocab_size: int = 200064
     hidden_size: int = 640
     intermediate_size: int = 640
@@ -338,6 +331,13 @@ class OpenAIPrivacyFilterPreTrainedModel(GptOssPreTrainedModel):
     _skip_keys_device_placement = None  # No cache
     _keep_in_fp32_modules = []
     _keep_in_fp32_modules_strict = ["sinks"]
+    # metal-flash-sdpa carries the sliding-window + attention-sink path on MPS (Apple Silicon);
+    # the others remain the defaults on CUDA.
+    _compatible_flash_implementations = [
+        "kernels-community/vllm-flash-attn3",
+        "flash_attention_4",
+        "kernels-community/metal-flash-sdpa",
+    ]
 
     _can_record_outputs = {
         "router_logits": OutputRecorder(OpenAIPrivacyFilterTopKRouter, index=0),

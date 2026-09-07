@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-12-18 and added to Hugging Face Transformers on 2024-12-19.*
+*This model was published in HF papers on 2024-12-18 and contributed to Hugging Face Transformers on 2024-12-19.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
@@ -30,6 +30,8 @@ You can find all the original ModernBERT checkpoints under the [ModernBERT](http
 
 > [!TIP]
 > Click on the ModernBERT models in the right sidebar for more examples of how to apply ModernBERT to different language tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
@@ -120,7 +122,7 @@ inputs = prepare_text_for_padding_free(
     ["The capital of France is [MASK].", "ModernBERT is a [MASK] model."]
 )
 model = AutoModelForMaskedLM.from_pretrained(
-    model_id, attn_implementation="flash_attention_2", device_map="cuda"
+    model_id, attn_implementation="flash_attention_2", device_map="auto"
 )
 
 # Optional: use torch.compile for faster inference

@@ -23,7 +23,7 @@ Each recipe below demonstrates a specific [`Trainer`] feature: custom loss funct
 
 ## Custom loss function
 
-Pass [compute_loss_func](https://huggingface.co/docs/transformers/en/main_classes/trainer#transformers.Trainer.compute_loss_func) to [`Trainer`] to replace the default loss function. The function runs *after* the forward pass and only defines how loss is computed from the outputs. To modify the forward pass itself, [subclass](./trainer_customize#compute_loss) [`~Trainer.compute_loss`] instead.
+Pass [`~Trainer#compute_loss_func`] to [`Trainer`] to replace the default loss function. The function runs *after* the forward pass and only defines how loss is computed from the outputs. To modify the forward pass itself, [subclass](./trainer_customize#compute_loss) [`~Trainer.compute_loss`] instead.
 
 The custom loss function must have the following signature:
 
@@ -38,7 +38,7 @@ def my_loss_fn(outputs, labels, num_items_in_batch):
 
 - `outputs` is the raw model output (`outputs.logits` has shape `(batch, seq_len, vocab_size)`).
 - `labels` is the token ids popped from the input batch by [`Trainer`] before the forward pass.
-- `num_items_in_batch` is the total non-padding token count across the full accumulated batch. [`Trainer`] skips automatic loss normalization when a custom loss function is provided, so your function must handle normalization directly.
+- `num_items_in_batch` is the number of prediction targets across the full accumulated batch. For causal LM models it counts the shifted labels (`labels[..., 1:]`), since the label shift leaves position 0 of every sequence without a target. See [Loss scaling](./grad_accumulation#loss-scaling) for details. [`Trainer`] skips automatic loss normalization when a custom loss function is provided, so your function must handle normalization directly.
 
 ```py
 trainer = Trainer(
@@ -157,6 +157,57 @@ args = TrainingArguments(
 )
 ```
 
+## Group samples by length
+
+Use `train_sampling_strategy="group_by_length"` to batch examples with similar lengths and reduce padding. When you
+don't provide precomputed lengths, [`Trainer`] infers them from the first model input in each dataset item. This also
+works when processor-based multimodal datasets return [`BatchFeature`] objects, because they are mapping-like feature
+containers.
+
+```py
+from transformers import TrainingArguments
+
+training_args = TrainingArguments(
+    output_dir="qwen3-vl-finetuned",
+    train_sampling_strategy="group_by_length",
+)
+```
+
+If a [`~datasets.Dataset`] already has a precomputed length column, [`Trainer`] uses that column instead. The default
+column name is `length`. Set `length_column_name` when your dataset uses another name. This strategy requires a
+dataset with a known length and is ignored for [`~datasets.IterableDataset`].
+
+## Batch rebalance sampling
+
+On variable-length datasets, imbalance within a micro-batch and across devices causes devices to waste time on padding and to idle at gradient synchronization steps.
+
+Set `train_sampling_strategy="batch_rebalance"` in [`TrainingArguments`] to reduce both effects. For each optimizer step, the sampler:
+
+1. Sorts the batch's samples by length.
+2. Shards the sorted batch across devices so that the padded-token cost of each micro-batch is balanced. Micro-batches with long samples get fewer samples, and micro-batches with short samples get more.
+
+This reduces padding within each micro-batch, and each device finishes a micro-batch at roughly the same time, which reduces idle time at synchronization and keeps peak memory lower than `"group_by_length"`. This strategy is only supported for data-parallel training for now (tensor parallelism is not yet supported).
+
+```py
+from transformers import Trainer, TrainingArguments
+
+trainer = Trainer(
+    model=model,
+    args=TrainingArguments(
+        output_dir="out",
+        train_sampling_strategy="batch_rebalance",  # balance padding cost across devices
+        per_device_train_batch_size=8,              # average samples per micro-batch
+        length_column_name="length",                # optional: dataset column with precomputed lengths
+    ),
+    train_dataset=train_dataset,
+)
+trainer.train()
+```
+
+`per_device_train_batch_size` is an average here rather than an exact per-step count: some micro-batches have fewer samples and some have more, but the total number of samples trained per step stays the same as with a normal distributed sampling strategy.
+
+The sampler needs the length of every sample to sort and balance batches. By default, the [`Trainer`] scans the full dataset once at the start of training to compute these lengths. To skip this scan, precompute the lengths into a dataset column (during preprocessing, for example) and pass its name as `length_column_name` (`"length"` by default).
+
 ## NEFTune
 
 [NEFTune](https://hf.co/papers/2310.05914) adds random noise to token embeddings during the forward pass. The noise acts as regularization and can improve performance for instruction fine-tuning.
@@ -247,3 +298,57 @@ trainer.train(resume_from_checkpoint="out/checkpoint-1000")
 When resuming, [`Trainer`] restores the optimizer state, scheduler state, and RNG state.
 
 Checkpoint resuming requires optimizer and scheduler state files in the checkpoint directory. If those files are missing (for example, when `save_only_model=True`), the optimizer restarts from scratch.
+
+### JIT checkpointing
+
+With periodic checkpointing (save_strategy="steps" or "epoch"), you lose any training progress between the last saved checkpoint and an interruption. On shared clusters with preemptible workloads such as [Kueue](https://kueue.sigs.k8s.io/), jobs can be terminated at any time, so that gap can mean hours of wasted compute.
+
+JIT (Just-In-Time) checkpointing closes this gap. When the trainer receives a SIGTERM signal, it saves a checkpoint at the exact point training was interrupted, so you resume with minimal loss of progress. It works alongside periodic checkpointing. Periodic saves guard against crashes and hardware failures, while JIT saves guard against preemption and graceful shutdowns.
+
+Enable it by setting `enable_jit_checkpoint=True` in [`TrainingArguments`].
+
+```py
+from transformers import TrainingArguments
+
+training_args = TrainingArguments(
+    output_dir="your-model",
+    enable_jit_checkpoint=True,
+)
+```
+
+When SIGTERM is received, [`Trainer`] waits for the current training step to finish, saves a checkpoint, and stops training gracefully. A sentinel file (`checkpoint-is-incomplete.txt`) is written when the save begins and removed once the checkpoint is fully written. If a checkpoint directory still contains this file, the save was interrupted before completing. [`Trainer`] doesn't check for it automatically, so inspect for it yourself before resuming.
+
+Resume from the JIT checkpoint the same way as any other checkpoint.
+
+```py
+trainer.train(resume_from_checkpoint=True)
+```
+
+> [!WARNING]
+> You must configure your orchestrator to allow enough time for the checkpoint to complete. The default Kubernetes graceful shutdown period is only 30 seconds, which is typically not enough for larger models.
+
+<hfoptions id="orchestrator-grace-period">
+<hfoption id="Kubernetes">
+
+Set `terminationGracePeriodSeconds` in your Pod or Job spec. The exact field location varies by trainer (Kubeflow Training Operator, Ray, etc.).
+
+```yaml
+spec:
+  template:
+    spec:
+      terminationGracePeriodSeconds: 300
+```
+
+</hfoption>
+<hfoption id="Slurm">
+
+Use `--signal=TERM@<seconds>` in your sbatch script to send SIGTERM before the job time limit expires.
+
+```bash
+#SBATCH --signal=TERM@300
+```
+
+</hfoption>
+</hfoptions>
+
+Calculate the required grace period as the longest possible training step time plus the checkpoint saving time, plus the 3 second `kill_wait` delay before the checkpoint begins. For example, if a training step takes up to 2 minutes and saving a checkpoint takes 2 minutes, set at least 243 seconds of grace time.

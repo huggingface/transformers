@@ -15,19 +15,22 @@
 
 import unittest
 
-from datasets import load_dataset
-
+from transformers.modeling_outputs import SemanticSegmenterOutput
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTester,
+    ImageProcessingTestMixin,
+    PostProcessSemanticSegmentationTestMixin,
+)
 
 
 if is_torch_available():
     import torch
 
 
-class BeitImageProcessingTester:
+class BeitImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -44,6 +47,7 @@ class BeitImageProcessingTester:
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
         do_reduce_labels=False,
+        num_labels=5,
     ):
         size = size if size is not None else {"height": 20, "width": 20}
         crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
@@ -61,6 +65,7 @@ class BeitImageProcessingTester:
         self.image_mean = image_mean
         self.image_std = image_std
         self.do_reduce_labels = do_reduce_labels
+        self.num_labels = num_labels
 
     def prepare_image_processor_dict(self):
         return {
@@ -74,35 +79,28 @@ class BeitImageProcessingTester:
             "do_reduce_labels": self.do_reduce_labels,
         }
 
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.crop_size["height"], self.crop_size["width"]
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
-
-def prepare_semantic_single_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-    example = ds[0]
-    return example["image"], example["map"]
-
-
-def prepare_semantic_batch_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-    return list(ds["image"][:2]), list(ds["map"][:2])
+    def prepare_post_process_semantic_segmentation_inputs(self):
+        inputs = {
+            "outputs": SemanticSegmenterOutput(
+                logits=torch.randn(
+                    self.batch_size,
+                    self.num_labels,
+                    self.crop_size["height"],
+                    self.crop_size["width"],
+                )
+            )
+        }
+        expected_shape = {
+            "num_labels": self.num_labels,
+            "height": self.crop_size["height"],
+            "width": self.crop_size["width"],
+        }
+        return inputs, expected_shape
 
 
 @require_torch
 @require_vision
-class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class BeitImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.image_processor_tester = BeitImageProcessingTester(self)
@@ -195,7 +193,7 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test not batched input (PIL images)
-            image, segmentation_map = prepare_semantic_single_inputs()
+            image, segmentation_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
 
             encoding = image_processing(image, segmentation_map, return_tensors="pt")
             self.assertEqual(
@@ -220,7 +218,9 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test batched input (PIL images)
-            images, segmentation_maps = prepare_semantic_batch_inputs()
+            images, segmentation_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+                batched=True
+            )
 
             encoding = image_processing(images, segmentation_maps, return_tensors="pt")
             self.assertEqual(
@@ -250,7 +250,7 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processing = image_processing_class(**self.image_processor_dict)
 
             # ADE20k has 150 classes, and the background is included, so labels should be between 0 and 150
-            image, map = prepare_semantic_single_inputs()
+            image, map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
             encoding = image_processing(image, map, return_tensors="pt")
             self.assertTrue(encoding["labels"].min().item() >= 0)
             self.assertTrue(encoding["labels"].max().item() <= 150)
@@ -261,7 +261,7 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Ensure reduce label returns the same number of masks
-            image, map = prepare_semantic_batch_inputs()
+            image, map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(batched=True)
             encoding = image_processing(image, map, return_tensors="pt")
             self.assertTrue(len(encoding["labels"]) == len(map))
 
@@ -269,7 +269,7 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image, dummy_map = prepare_semantic_single_inputs()
+        dummy_image, dummy_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():
@@ -293,7 +293,9 @@ class BeitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
             )
 
-        dummy_images, dummy_maps = prepare_semantic_batch_inputs()
+        dummy_images, dummy_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+            batched=True
+        )
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():

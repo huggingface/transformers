@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-06-30 and added to Hugging Face Transformers on 2025-12-19.*
+*This model was contributed to Hugging Face Transformers on 2025-12-19.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -36,7 +36,7 @@ to specific modalities. This becomes especially apparent in the Mixture of Exper
 - Dedicated Vision Experts
 - Shared Experts
 
-This architecture has the advantage to enhance multimodal understanding without compromising, and even improving, performance on text-related tasks. An more detailed breakdown is given in the [Technical Report](https://ernie.baidu.com/blog/publication/ERNIE_Technical_Report.pdf).
+This architecture has the advantage to enhance multimodal understanding without compromising, and even improving, performance on text-related tasks. A more detailed breakdown is given in the [Technical Report](https://ernie.baidu.com/blog/publication/ERNIE_Technical_Report.pdf).
 
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/AntonV/doc-images/resolve/main/Ernie4_5_VL_Moe.png"/>

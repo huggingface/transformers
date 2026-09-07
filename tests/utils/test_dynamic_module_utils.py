@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import hashlib
 import os
 from pathlib import Path
 
@@ -181,6 +182,83 @@ def test_get_cached_module_file_local_cache_key_includes_relative_import_sources
     assert cached_module_a != cached_module_b
     assert cached_helper_a.read_text(encoding="utf-8") == 'MAGIC = "A"\n'
     assert cached_helper_b.read_text(encoding="utf-8") == 'MAGIC = "B"\n'
+
+
+def test_get_cached_module_file_local_copies_transitive_relative_imports(monkeypatch, tmp_path):
+    modules_cache = tmp_path / "hf_modules_cache"
+    monkeypatch.setattr(dynamic_module_utils, "HF_MODULES_CACHE", str(modules_cache))
+
+    model_dir = tmp_path / "pretrained" / "subdir"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    # A → B → C: only A is the entry point; C is a transitive dep that must still be copied
+    (model_dir / "custom_model.py").write_text("from .helper import VALUE\n", encoding="utf-8")
+    (model_dir / "helper.py").write_text("from .base import BASE\nVALUE = BASE\n", encoding="utf-8")
+    (model_dir / "base.py").write_text('BASE = "transitive"\n', encoding="utf-8")
+
+    cached_module = get_cached_module_file(str(model_dir), "custom_model.py")
+    cache_dir = modules_cache / Path(cached_module).parent
+
+    assert (cache_dir / "helper.py").exists(), "direct import must be copied"
+    assert (cache_dir / "base.py").exists(), "transitive import must be copied"
+
+
+def test_get_cached_module_file_local_cache_key_includes_transitive_import_sources(monkeypatch, tmp_path):
+    modules_cache = tmp_path / "hf_modules_cache"
+    monkeypatch.setattr(dynamic_module_utils, "HF_MODULES_CACHE", str(modules_cache))
+
+    for model_dir, base_val in [
+        (tmp_path / "pretrained_a" / "subdir", '"X"'),
+        (tmp_path / "pretrained_b" / "subdir", '"Y"'),
+    ]:
+        model_dir.mkdir(parents=True, exist_ok=True)
+        (model_dir / "custom_model.py").write_text("from .helper import VALUE\n", encoding="utf-8")
+        (model_dir / "helper.py").write_text("from .base import BASE\nVALUE = BASE\n", encoding="utf-8")
+        (model_dir / "base.py").write_text(f"BASE = {base_val}\n", encoding="utf-8")
+
+    cached_a = get_cached_module_file(str(tmp_path / "pretrained_a" / "subdir"), "custom_model.py")
+    cached_b = get_cached_module_file(str(tmp_path / "pretrained_b" / "subdir"), "custom_model.py")
+
+    # Different content in transitive dep → different hash → different cache dirs
+    assert cached_a != cached_b
+
+
+def _build_symlinked_hub_cache(repo_root: Path, files: dict[str, str], revision: str = "abc123") -> Path:
+    blobs = repo_root / "blobs"
+    snapshot = repo_root / "snapshots" / revision
+    blobs.mkdir(parents=True)
+    snapshot.mkdir(parents=True)
+    for name, content in files.items():
+        sha = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        (blobs / sha).write_text(content, encoding="utf-8")
+        (snapshot / name).symlink_to(Path("..") / ".." / "blobs" / sha)
+
+    return snapshot
+
+
+def test_get_cached_module_file_local_handles_symlinked_hub_cache(monkeypatch, tmp_path):
+    # In a real hub cache the snapshot files are symlinks into a content-addressed ``blobs/`` dir,
+    # so relative-import discovery must follow the named ``*.py`` symlinks in the snapshot dir rather
+    # than their opaque blob targets
+    modules_cache = tmp_path / "hf_modules_cache"
+    monkeypatch.setattr(dynamic_module_utils, "HF_MODULES_CACHE", str(modules_cache))
+
+    snapshot = _build_symlinked_hub_cache(
+        tmp_path / "models--org--repo",
+        {
+            # A → B → C: only A is the entry point; C is a transitive dep reached via B
+            "custom_model.py": "from .helper import VALUE\n",
+            "helper.py": "from .base import BASE\nVALUE = BASE\n",
+            "base.py": 'BASE = "transitive"\n',
+        },
+    )
+
+    cached_module = get_cached_module_file(str(snapshot), "custom_model.py")
+    cache_dir = modules_cache / Path(cached_module).parent
+
+    assert (cache_dir / "custom_model.py").read_text(encoding="utf-8") == "from .helper import VALUE\n"
+    assert (cache_dir / "helper.py").exists(), "direct import must be copied"
+    assert (cache_dir / "base.py").exists(), "transitive import must be copied"
+    assert (cache_dir / "base.py").read_text(encoding="utf-8") == 'BASE = "transitive"\n'
 
 
 def test_get_cached_module_file_local_cache_key_keeps_hash_stable_with_different_basenames(monkeypatch, tmp_path):

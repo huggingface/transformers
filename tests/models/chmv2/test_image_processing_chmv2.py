@@ -16,10 +16,14 @@ import unittest
 
 from transformers.testing_utils import require_torch, require_vision
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTester,
+    ImageProcessingTestMixin,
+    PostProcessSemanticSegmentationTestMixin,
+)
 
 
-class CHMv2ImageProcessingTester:
+class CHMv2ImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -33,6 +37,7 @@ class CHMv2ImageProcessingTester:
         do_normalize=True,
         image_mean=[0.485, 0.456, 0.406],
         image_std=[0.229, 0.224, 0.225],
+        num_labels=5,
     ):
         size = size if size is not None else {"height": 512, "width": 512}
         self.parent = parent
@@ -46,6 +51,7 @@ class CHMv2ImageProcessingTester:
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
+        self.num_labels = num_labels
 
     def prepare_image_processor_dict(self):
         return {
@@ -58,24 +64,10 @@ class CHMv2ImageProcessingTester:
             "do_pad": False,
         }
 
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
 
 @require_torch
 @require_vision
-class CHMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class CHMv2ImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.image_processor_tester = CHMv2ImageProcessingTester(self)

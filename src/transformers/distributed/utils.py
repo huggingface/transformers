@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
+# Copyright 2026 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,43 +14,68 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING
+from datetime import timedelta
+from typing import TYPE_CHECKING, TypeGuard
 
-from ..utils import is_torch_available, is_torch_greater_or_equal, logging
-from .fsdp import apply_fully_shard_data_parallel
-from .sharding_utils import (
-    _find_strided_shard_placement_from_fused_params,
-    _replicate_dtensor,
-    fuse_optimizer_state,
-    get_fusion_metadata,
-    unfuse_optimizer_state,
-)
-from .tensor_parallel import apply_tensor_parallel
+from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging
 
 
 logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
-    import torch.nn as nn
+    from torch.distributed.tensor import DTensor
 
     from .configuration_utils import DistributedConfig
 
+
 if is_torch_available():
     import torch
-    import torch.distributed.checkpoint as dcp
-    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
-    from torch.distributed.checkpoint.state_dict import (
-        get_model_state_dict,
-        get_optimizer_state_dict,
-        set_optimizer_state_dict,
-    )
+
+
+def _is_torch_distributed_initialized() -> bool:
+    if not is_torch_distributed_available():
+        return False
+    return torch.distributed.is_initialized()
+
+
+def is_dtensor(obj: object) -> TypeGuard[DTensor]:
+    if not is_torch_distributed_available():
+        return False
     from torch.distributed.tensor import DTensor
 
+    return isinstance(obj, DTensor)
 
-def _ensure_torch_distributed(device_type: str):
-    """Initialize torch.distributed if not already initialized."""
+
+def _get_torch_distributed_rank() -> int:
+    if not _is_torch_distributed_initialized():
+        return 0
+    return torch.distributed.get_rank()
+
+
+def _get_torch_distributed_world_size() -> int:
+    if not _is_torch_distributed_initialized():
+        return 1
+    return torch.distributed.get_world_size()
+
+
+def is_local_dist_rank_0() -> bool:
+    return _is_torch_distributed_initialized() and int(os.environ.get("LOCAL_RANK", "-1")) == 0
+
+
+def _ensure_torch_distributed(device_type: str | None = None):
+    """Initialize torch.distributed if not already initialized.
+
+    If `device_type` is not given, it is detected from the current accelerator.
+    """
     if not torch.distributed.is_initialized():
+        if device_type is None:
+            device_type = torch._C._get_accelerator().type
+        if device_type == "mps":
+            logger.warning_once(
+                "PyTorch's built-in DeviceMesh/DTensor stack does not support an MPS mesh. Falling back to CPU."
+            )
+            device_type = "cpu"
         try:
             rank = int(os.environ["RANK"])
             local_rank = int(os.environ["LOCAL_RANK"])
@@ -74,7 +99,12 @@ def _ensure_torch_distributed(device_type: str):
                 getattr(torch, device_type).set_device(local_rank)
                 device_id = torch.device(device_type, local_rank)
             torch.distributed.init_process_group(
-                backend=backend, rank=rank, world_size=world_size, device_id=device_id
+                backend=backend,
+                rank=rank,
+                world_size=world_size,
+                device_id=device_id,
+                # Sharded loading takes tens of minutes with high rank skew; the default 10-minute watchdog is too short
+                timeout=timedelta(hours=2),
             )
         except Exception as e:
             raise OSError(
@@ -90,7 +120,7 @@ def _distributed_barrier():
     `device_id`; with it, the call is a no-op compared to plain `barrier()`. Safe to call
     when torch.distributed has not been initialized — returns immediately.
     """
-    if not torch.distributed.is_initialized():
+    if not _is_torch_distributed_initialized():
         return
     device_type = torch._C._get_accelerator().type
     if device_type != "cpu":
@@ -99,31 +129,75 @@ def _distributed_barrier():
         torch.distributed.barrier()
 
 
-def init_device_mesh(distributed_config: DistributedConfig) -> torch.distributed.device_mesh.DeviceMesh:
-    if not is_torch_greater_or_equal("2.5"):
-        raise OSError("Distributed training with DistributedConfig requires `torch>=2.5`.")
+# TODO(3outeille): unify initialization across parallelism
+def initialize_tensor_parallelism(
+    tp_plan: str | dict[str, str] | None, tp_size: int | None = None, device_mesh=None, device_map=None
+):
+    r"""
+    Sets up the device mesh and initialized the backend for tensor parallelism.
+    This function is called when the model is loaded and the TP plan is set to 'auto'.
+    """
+    if tp_size is not None and tp_plan is None:
+        raise ValueError("tp_plan has to be set when tp_size is passed.")
+    if tp_plan is not None and device_map is not None:
+        raise ValueError("`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization.")
+    if device_mesh is None:
+        if not is_torch_greater_or_equal("2.5"):
+            raise OSError("Tensor parallel is only supported for `torch>=2.5`.")
+
+        # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
+        device_type = torch._C._get_accelerator().type
+        if device_type == "mps":
+            logger.warning_once(
+                "PyTorch's built-in DeviceMesh/DTensor stack does not support an MPS mesh. Falling back to CPU."
+            )
+            device_type = "cpu"
+        current_device = getattr(torch, device_type)
+
+        if device_type != "cpu":
+            current_device.set_device(int(os.environ["LOCAL_RANK"]))
+            index = current_device.current_device()
+            tp_device = torch.device(device_type, index)
+            device_map = tp_device
+        else:
+            tp_device = torch.device(device_type)
+            device_map = device_type or {}
+
+        device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
+    else:
+        if device_mesh.ndim > 1:
+            if "tp" not in device_mesh.mesh_dim_names:
+                raise ValueError(
+                    "When using `tp_plan` and n-d `device_mesh`, it must contain a 'tp' dimension. "
+                    "Please provide a valid `device_mesh`."
+                )
+            device_mesh = device_mesh["tp"]
+        device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
+
+    return device_map, device_mesh
+
+
+def initialize_fully_sharded_data_parallelism(distributed_config: DistributedConfig):
+    # `fully_shard` itself only needs torch>=2.6, but distributed checkpoint save/load
+    # (DCP + HuggingFaceStorageWriter) needs 2.7, so that is the effective requirement.
+    if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
+        raise OSError("FSDP2 requires `torch>=2.7` (distributed checkpoint save/load).")
 
     device_type = torch._C._get_accelerator().type
-    _ensure_torch_distributed(device_type)
 
-    world_size = torch.distributed.get_world_size()
     if device_type != "cpu":
-        getattr(torch, device_type).set_device(int(os.environ.get("LOCAL_RANK", 0)))
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        getattr(torch, device_type).set_device(local_rank)
+        device_map = torch.device(device_type, local_rank)
+    else:
+        device_map = torch.device(device_type)
 
-    tp_size = distributed_config.tp_size
     fsdp_size = distributed_config.fsdp_size
-
-    assert world_size == tp_size * fsdp_size, (
-        f"world_size ({world_size}) must be equal to tp_size ({tp_size}) * fsdp_size ({fsdp_size})"
-    )
 
     dims, names = [], []
     if fsdp_size > 1:
         dims.append(fsdp_size)
         names.append("fsdp")
-    if tp_size > 1:
-        dims.append(tp_size)
-        names.append("tp")
 
     # Build the N-dimensional device mesh
     mesh = torch.distributed.init_device_mesh(device_type, tuple(dims), mesh_dim_names=tuple(names))
@@ -131,64 +205,53 @@ def init_device_mesh(distributed_config: DistributedConfig) -> torch.distributed
     if len(dims) > 1:
         mesh._flatten("_".join(names))
 
-    return mesh
+    return device_map, mesh
 
 
-def distribute_model(model, distributed_config: DistributedConfig, device_mesh) -> nn.Module:
-    """Apply TP and/or FSDP2 to `model` based on the mesh dims in `device_mesh`."""
-    model.config.distributed_config = distributed_config
-    model.device_mesh = device_mesh
-    mesh_dim_names = device_mesh.mesh_dim_names or ()
-    if "tp" in mesh_dim_names:
-        tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
-        model = apply_tensor_parallel(model, tp_mesh, distributed_config.tp_plan)
-    if "fsdp" in mesh_dim_names:
-        fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
-        model = apply_fully_shard_data_parallel(model, fsdp_mesh, distributed_config.fsdp_plan)
-    return model
+def initialize_pipeline_parallelism(
+    distributed_config: DistributedConfig,
+):
+    if not is_torch_greater_or_equal("2.5"):
+        raise OSError("Pipeline parallelism with DistributedConfig requires `torch>=2.5`.")
 
+    device_type = torch._C._get_accelerator().type
+    _ensure_torch_distributed(device_type)
 
-@torch.no_grad()
-def clip_grad_norm(parameters, max_norm: float, norm_type: float = 2.0):
-    """Grad-norm clip that works when params live on different DTensor meshes.
+    world_size = torch.distributed.get_world_size()
+    pp_size = distributed_config.pp_size
+    if world_size != pp_size:
+        raise RuntimeError(f"world_size ({world_size}) must be equal to pp_size ({pp_size})")
 
-    ``torch.nn.utils.get_total_norm`` stacks per-grad norms; that fails when grads
-    live on different meshes (e.g. TP-wrapped params on the (fsdp, tp) mesh and
-    FSDP-only params on the (fsdp,) sub-mesh). We sidestep it by replicating each
-    DTensor grad to a plain local tensor, computing the norm over those, and
-    scaling the original DTensor grads in place — the placement of the original
-    grads doesn't matter for the per-element clip.
-    """
-    grads = [p.grad for p in parameters if p.grad is not None]
-    local_grads = [_replicate_dtensor(g).to_local() if isinstance(g, DTensor) else g for g in grads]
-    total_norm = torch.nn.utils.get_total_norm(local_grads, norm_type=norm_type)
-    torch.nn.utils.clip_grads_with_norm_(grads, max_norm=max_norm, total_norm=total_norm)
-    return total_norm
+    if device_type != "cpu":
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        getattr(torch, device_type).set_device(local_rank)
+        device_map = torch.device(device_type, local_rank)
+    else:
+        device_map = torch.device(device_type)
+
+    assert world_size == pp_size, f"world_size ({world_size}) must be equal to pp_size ({pp_size})"
+    mesh = torch.distributed.init_device_mesh(device_type, (pp_size,), mesh_dim_names=("pp",))
+
+    return device_map, mesh
 
 
 def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
-    """Gather all sharded params to full plain tensors for saving.
+    """Gather FSDP-sharded params to full plain CPU tensors.
 
-    Handles FSDP unshard and TP DTensor gather.
-    Streams one parameter at a time to avoid holding all full tensors on GPU.
     Only rank 0 accumulates the result; other ranks return ``{}``.
     """
-    is_rank0 = torch.distributed.get_rank() == 0
-    state_dict = get_model_state_dict(model)
+    if not is_torch_greater_or_equal("2.7"):
+        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
 
-    result = {}
-    for key, tensor in state_dict.items():
-        if not isinstance(tensor, DTensor):
-            if is_rank0:
-                result[key] = tensor.detach().to(device="cpu", copy=True).contiguous()
-            continue
+    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
+    # being emitted if the function is not used
+    from torch.distributed.checkpoint.state_dict import StateDictOptions, get_model_state_dict
 
-        with torch.no_grad():
-            full = _replicate_dtensor(tensor).to_local()
-            if is_rank0:
-                result[key] = full.detach().to(device="cpu", copy=True).contiguous()
-            del full
-    return result
+    options = StateDictOptions(full_state_dict=True, cpu_offload=True)
+    full_state_dict = get_model_state_dict(model, options=options)
+    if _get_torch_distributed_rank() == 0:
+        return full_state_dict
+    return {}
 
 
 def save_model_checkpoint_distributed(model, checkpoint_dir: str) -> None:
@@ -200,19 +263,17 @@ def save_model_checkpoint_distributed(model, checkpoint_dir: str) -> None:
     and emits HF-compatible `model-*-of-N.safetensors` (+ index) at
     `<checkpoint_dir>/`. The result is a directory `from_pretrained` reads
     through its normal path — no special flag needed at load time.
-
-    DTensors carrying an uncomposed `_StridedShard` placement (e.g. fused
-    gate||up MoE weights) are replicated to a full tensor on every rank
-    before the save, otherwise DCP cannot encode that placement.
     """
-    state_dict = get_model_state_dict(model)
-    for key, value in list(state_dict.items()):
-        if (
-            isinstance(value, DTensor)
-            and _find_strided_shard_placement_from_fused_params(value.placements) is not None
-        ):
-            state_dict[key] = _replicate_dtensor(value)
+    if not is_torch_greater_or_equal("2.7"):
+        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
 
+    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
+    # being emitted if the function is not used
+    import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
+    from torch.distributed.checkpoint.state_dict import get_model_state_dict
+
+    state_dict = get_model_state_dict(model)
     dcp.save(
         state_dict,
         storage_writer=HuggingFaceStorageWriter(
@@ -226,66 +287,30 @@ def save_model_checkpoint_distributed(model, checkpoint_dir: str) -> None:
     _distributed_barrier()
 
 
-def has_mixed_tensor_and_dtensor_params(params) -> bool:
-    has_dtensor = False
-    has_tensor = False
-    for param in params:
-        if isinstance(param, DTensor):
-            has_dtensor = True
-        elif isinstance(param, torch.Tensor):
-            has_tensor = True
-
-        if has_dtensor and has_tensor:
-            return True
-    return False
-
-
-def maybe_disable_foreach_and_fused_for_mixed_dtensor_groups(optimizer) -> None:
-    """
-    When get_optimizer_state_dict() or set_optimizer_state_dict() runs on an optimizer with no state yet,
-    PyTorch first materializes that state by doing a no-op step() with zero gradients. If an optimizer
-    group mixes regular tensors and DTensors, the batched foreach/fused optimizer kernels cannot process
-    that mixed group, so we turn those kernels off for such groups before distributed optimizer save/
-    load.
-    """
-    for i, param_group in enumerate(optimizer.param_groups):
-        if has_mixed_tensor_and_dtensor_params(param_group.get("params", ())):
-            logger.warning_once(
-                f"Param group {i} mixes regular tensors and DTensors; disabling foreach/fused "
-                "optimizer kernels for that group so distributed optimizer save/load can materialize state."
-            )
-            param_group["foreach"] = False
-            if "fused" in param_group:
-                param_group["fused"] = False
-
-
 def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
-    """Save optimizer state via DCP.
+    """Save optimizer state via DCP."""
+    if not is_torch_greater_or_equal("2.7"):
+        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
 
-    Params whose DTensors carry a lonely `_StridedShard` placement (e.g. Mixtral
-    `gate_up_proj`) are locally split into plain-`Shard` pieces at the boundary
-    so DCP only ever sees DTensors it can encode as one contiguous chunk per
-    rank.
-    """
-    maybe_disable_foreach_and_fused_for_mixed_dtensor_groups(optimizer)
+    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
+    # being emitted if the function is not used
+    import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict
+
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
-    fusion_metadata = get_fusion_metadata(optimizer_state_dict)
-    unfuse_optimizer_state(optimizer_state_dict, fusion_metadata)
     dcp.save({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
 
 
 def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
-    """Load optimizer state via DCP.
+    """Load optimizer state via DCP."""
+    if not is_torch_greater_or_equal("2.7"):
+        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
 
-    Symmetric to `save_optimizer_distributed`: build the unfused template, let DCP fill
-    it, then merge fused params back to their original `_StridedShard` form
-    before handing the state_dict back to the optimizer.
-    """
-    maybe_disable_foreach_and_fused_for_mixed_dtensor_groups(optimizer)
+    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
+    # being emitted if the function is not used
+    import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict, set_optimizer_state_dict
+
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
-    fusion_metadata = get_fusion_metadata(optimizer_state_dict)
-    unfuse_optimizer_state(optimizer_state_dict, fusion_metadata)
     dcp.load({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
-    fuse_optimizer_state(optimizer_state_dict, fusion_metadata)
     set_optimizer_state_dict(model, optimizer, optimizer_state_dict)
-    maybe_disable_foreach_and_fused_for_mixed_dtensor_groups(optimizer)

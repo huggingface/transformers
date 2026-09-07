@@ -56,7 +56,11 @@ class Cohere2MoeModelTester(CausalLMModelTester):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.layer_types = ["full_attention", "sliding_attention"]
-        self.first_k_dense_replace = 1  # first layer will be MLP, 2nd will be MoE
+        self.mlp_layer_types = ["dense", "sparse"]  # first layer will be MLP, 2nd will be MoE
+        self.logit_scale = 1.0  # needed for `test_training_overfit` - otherwise the loss does not go down fast enough
+        # Reduce number of experts so the sparse MoE layer is a smaller fraction of the overall model,
+        # allowing accelerate to split it across devices in offload/parallelism tests.
+        self.num_experts = 4
 
 
 @require_torch
@@ -64,6 +68,8 @@ class Cohere2MoeModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Cohere2MoeModelTester
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Cohere2MoeForCausalLM if is_torch_available() else None
+    # Raise the split thresholds so accelerate can place the model weight into multiple devices.
+    model_split_percents = [0.5, 0.8, 0.9]
 
 
 @slow

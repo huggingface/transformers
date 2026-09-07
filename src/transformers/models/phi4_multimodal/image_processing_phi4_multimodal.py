@@ -48,7 +48,6 @@ class Phi4MultimodalImageProcessor(TorchvisionBackend):
     dynamic_hd = 36
     image_mean = [0.5, 0.5, 0.5]
     image_std = [0.5, 0.5, 0.5]
-    do_resize = True
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True

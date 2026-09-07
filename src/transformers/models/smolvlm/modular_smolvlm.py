@@ -24,6 +24,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils.generic import merge_with_config_defaults
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
 from ..idefics3.image_processing_pil_idefics3 import Idefics3ImageProcessorPil
@@ -116,7 +117,7 @@ class SmolVLMModel(Idefics3Model):
 
         if input_ids is None:
             image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             image_mask = image_mask[..., 0]  # slice off the hidden dim
         else:
@@ -198,6 +199,7 @@ class SmolVLMModel(Idefics3Model):
 
         return image_outputs
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring(
         custom_intro="""
@@ -210,7 +212,6 @@ class SmolVLMModel(Idefics3Model):
         image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
         """
     )
-    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -224,12 +225,6 @@ class SmolVLMModel(Idefics3Model):
         use_cache: bool | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | SmolVLMBaseModelOutputWithPast:
-        if self.training and self.text_model.gradient_checkpointing and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-            )
-            use_cache = False
-
         if input_ids is not None:
             batch_size, seq_length = input_ids.shape
         elif inputs_embeds is not None:
@@ -244,7 +239,10 @@ class SmolVLMModel(Idefics3Model):
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(input_ids.device)
 
         if pixel_values is not None and image_hidden_states is not None:
-            raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
+            raise ValueError(
+                "You cannot specify both pixel_values and image_hidden_states at the same time. To reuse a "
+                "previous call's image_hidden_states, remove pixel_values from the inputs instead of passing both."
+            )
 
         if pixel_values is not None:
             image_hidden_states = self.get_image_features(
@@ -294,7 +292,10 @@ class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
             Mask to avoid performing attention on padding pixel indices.
         image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The hidden states of the image encoder after modality projection.
+            The hidden states of the image encoder after modality projection. Pass this instead of `pixel_values`
+            to reuse a previous call's vision-tower output and skip recomputing it (e.g. across turns in a
+            conversation). Do not pass both at once: clear `pixel_values` from the inputs first, or a `ValueError`
+            is raised.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or `model.image_token_id`. Tokens with indices set to `model.image_token_id` are

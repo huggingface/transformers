@@ -328,6 +328,85 @@ class Qwen3VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             if prev_max_resolution is not None:
                 self.video_processor_tester.max_resolution = prev_max_resolution
 
+    def _process_frames(self, video_processing_class, num_frames, size, frame_size=256, **processor_kwargs):
+        video_processor_dict = self.video_processor_dict.copy()
+        video_processor_dict["size"] = size
+        video_processor_dict["do_sample_frames"] = False
+        video_processor_dict.update(processor_kwargs)
+        video_processing = video_processing_class(**video_processor_dict)
+        video = [np.random.randint(0, 256, (frame_size, frame_size, 3), dtype=np.uint8) for _ in range(num_frames)]
+        return video_processing(video, return_tensors="pt")[self.input_name]
+
+    def _expected_capped_seq_len(self, num_frames, frame_size, size):
+        frame_cap = 768 * 32 * 32
+        pixels_per_frame = max(min(frame_cap, size["longest_edge"] // num_frames), int(size["shortest_edge"] * 1.05))
+        expected_height, expected_width = smart_resize(
+            num_frames,
+            frame_size,
+            frame_size,
+            factor=32,
+            min_pixels=size["shortest_edge"],
+            max_pixels=pixels_per_frame * num_frames,
+        )
+        return (num_frames // 2) * (expected_height // 16) * (expected_width // 16)
+
+    def test_cap_pixels_per_frame_caps_short_videos(self):
+        # A huge budget over few frames: uncapped keeps near-native frames, capped holds each
+        # frame at the qwen-vl-utils 768-patch ceiling.
+        size = {"longest_edge": 768 * 32 * 32 * 100, "shortest_edge": 32 * 32}
+        for video_processing_class in self.video_processor_list:
+            uncapped = self._process_frames(video_processing_class, 4, size, frame_size=1024)
+            capped = self._process_frames(video_processing_class, 4, size, frame_size=1024, cap_pixels_per_frame=True)
+            self.assertEqual(capped.shape[0], self._expected_capped_seq_len(4, 1024, size))
+            self.assertLess(capped.shape[0], uncapped.shape[0])
+
+    def test_cap_pixels_per_frame_keeps_tiny_clips_usable(self):
+        # A 2-frame clip (e.g. a memory-profiling probe) stays at the per-frame ceiling instead
+        # of collapsing toward min_pixels.
+        size = {"longest_edge": 768 * 32 * 32 * 100, "shortest_edge": 32 * 32}
+        for video_processing_class in self.video_processor_list:
+            capped = self._process_frames(video_processing_class, 2, size, frame_size=1024, cap_pixels_per_frame=True)
+            self.assertEqual(capped.shape[0], self._expected_capped_seq_len(2, 1024, size))
+
+    def test_cap_pixels_per_frame_noop_when_not_binding(self):
+        # When the budget's even share per frame is already below the ceiling, capped and
+        # uncapped agree.
+        size = {"longest_edge": 64 * 32 * 32, "shortest_edge": 32 * 32}
+        for video_processing_class in self.video_processor_list:
+            uncapped = self._process_frames(video_processing_class, 8, size)
+            capped = self._process_frames(video_processing_class, 8, size, cap_pixels_per_frame=True)
+            self.assertEqual(list(capped.shape), list(uncapped.shape))
+
+    def test_cap_pixels_per_frame_call_time_override(self):
+        size = {"longest_edge": 768 * 32 * 32 * 100, "shortest_edge": 32 * 32}
+        for video_processing_class in self.video_processor_list:
+            video_processor_dict = self.video_processor_dict.copy()
+            video_processor_dict["size"] = size
+            video_processor_dict["do_sample_frames"] = False
+            video_processing = video_processing_class(**video_processor_dict)
+            video = [np.random.randint(0, 256, (1024, 1024, 3), dtype=np.uint8) for _ in range(4)]
+
+            default_out = video_processing(video, return_tensors="pt")[self.input_name]
+            capped_out = video_processing(video, return_tensors="pt", cap_pixels_per_frame=True)[self.input_name]
+
+            self.assertEqual(capped_out.shape[0], self._expected_capped_seq_len(4, 1024, size))
+            self.assertLess(capped_out.shape[0], default_out.shape[0])
+
+    def test_cap_pixels_per_frame_unset_warns_and_false_is_silent(self):
+        from transformers.utils import logging as transformers_logging
+
+        logger = transformers_logging.get_logger("transformers.models.qwen3_vl.video_processing_qwen3_vl")
+        size = {"longest_edge": 64 * 32 * 32, "shortest_edge": 32 * 32}
+        for video_processing_class in self.video_processor_list:
+            logger.warning_once.cache_clear()
+            with self.assertLogs(logger.name, level="WARNING") as logs:
+                self._process_frames(video_processing_class, 2, size)
+            self.assertTrue(any("cap_pixels_per_frame" in line for line in logs.output))
+
+            logger.warning_once.cache_clear()
+            with self.assertNoLogs(logger.name, level="WARNING"):
+                self._process_frames(video_processing_class, 2, size, cap_pixels_per_frame=False)
+
     def test_num_frames_equal_temporal_patch_size_plus_two(self):
         for video_processing_class in self.video_processor_list:
             video_processor_dict = self.video_processor_dict.copy()

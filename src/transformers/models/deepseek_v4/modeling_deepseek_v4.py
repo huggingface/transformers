@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -37,6 +36,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_deepseek_v4 import DeepseekV4Config
@@ -88,9 +88,8 @@ class DeepseekV4RotaryEmbedding(nn.Module):
     when building the per-type inv_freq buffers.
     """
 
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: DeepseekV4Config):
+    @deprecate_kwarg("device", version="5.18")
+    def __init__(self, config: DeepseekV4Config, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -106,27 +105,21 @@ class DeepseekV4RotaryEmbedding(nn.Module):
             rope_init_fn = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            inv_freq, attention_scaling = rope_init_fn(config, layer_type=layer_type)
-            self.register_buffer(f"{layer_type}_inv_freq", inv_freq, persistent=False)
-            self.register_buffer(f"{layer_type}_original_inv_freq", inv_freq.clone(), persistent=False)
+            inv_freq, attention_scaling = rope_init_fn(config, device, layer_type=layer_type)
+            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(inv_freq, persistent=False))
+            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", attention_scaling)
 
     @staticmethod
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: DeepseekV4Config | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-        layer_type: str | None = None,
-    ) -> tuple["torch.Tensor", float]:
+        config: DeepseekV4Config, device=None, layer_type: str | None = None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
             layer_type (`str`, *optional*):
                 The current layer type if the model has different RoPE parameters per type.
                 Should not be used unless `config.layer_types is not None`
@@ -143,10 +136,8 @@ class DeepseekV4RotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
 
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -191,10 +182,10 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
         `position_ids` so prefill -> decode -> prefill stays consistent.
     """
 
-    layer_type = "heavily_compressed_attention"
+    _layer_type = "heavily_compressed_attention"
 
-    def __init__(self, config: "DeepseekV4Config"):
-        super().__init__(config)
+    def __init__(self, config: "DeepseekV4Config", **kwargs):
+        super().__init__(sliding_window=config.sliding_window)
         self.compress_rate = config.compress_rates["heavily_compressed_attention"]
         self.buffer_kv: dict[str, torch.Tensor | None] = {"compressor": None}
         self.buffer_gate: dict[str, torch.Tensor | None] = {"compressor": None}
@@ -271,9 +262,9 @@ class DeepseekV4CSACache(DeepseekV4HCACache):
     again. That's what `overlap_kv[name]` / `overlap_gate[name]` persist.
     """
 
-    layer_type = "compressed_sparse_attention"
+    _layer_type = "compressed_sparse_attention"
 
-    def __init__(self, config: "DeepseekV4Config"):
+    def __init__(self, config: "DeepseekV4Config", **kwargs):
         super().__init__(config)
         self.compress_rate = config.compress_rates["compressed_sparse_attention"]
         self.buffer_kv["indexer"] = None
@@ -412,9 +403,7 @@ class DeepseekV4HCACompressor(nn.Module):
         if chunk_kv.shape[1] > 0:  # there were at least self.compress_rate tokens
             n_windows = chunk_kv.shape[1] // self.compress_rate
             chunk_kv = chunk_kv.view(batch, n_windows, self.compress_rate, -1)
-            chunk_gate = chunk_gate.view(batch, n_windows, self.compress_rate, -1) + self.position_bias.to(
-                chunk_gate.dtype
-            )
+            chunk_gate = chunk_gate.view(batch, n_windows, self.compress_rate, -1) + self.position_bias
             compressed = self.kv_norm(
                 (chunk_kv * chunk_gate.softmax(dim=2, dtype=torch.float32).to(chunk_kv.dtype)).sum(dim=2)
             )
@@ -443,6 +432,22 @@ class DeepseekV4HCACompressor(nn.Module):
             float("-inf"),
         )
         return compressed_kv, block_bias
+
+
+class DeepseekV4IndexerScorer(nn.Module):
+    r"""Lightning-indexer scoring head: `∑_h w_{t,h} · ReLU(q_{t,h} · K^IComp_s)`."""
+
+    def __init__(self, config: DeepseekV4Config):
+        super().__init__()
+        self.softmax_scale = config.index_head_dim**-0.5
+        self.weights_scaling = config.index_n_heads**-0.5
+        self.weights_proj = nn.Linear(config.hidden_size, config.index_n_heads, bias=False)
+
+    def forward(self, q: torch.Tensor, compressed_kv: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
+        scores = torch.matmul(q.float(), compressed_kv.transpose(-1, -2).float().unsqueeze(1))  # [B, S, H, T]
+        scores = F.relu(scores) * self.softmax_scale
+        weights = self.weights_proj(hidden_states).float() * self.weights_scaling  # [B, S, H]
+        return (scores * weights.unsqueeze(-1)).sum(dim=2)  # [B, S, T]
 
 
 class DeepseekV4Indexer(nn.Module):
@@ -482,15 +487,13 @@ class DeepseekV4Indexer(nn.Module):
         self.num_heads = config.index_n_heads
         self.head_dim = config.index_head_dim
         self.index_topk = config.index_topk
-        self.softmax_scale = self.head_dim**-0.5
-        self.weights_scaling = self.num_heads**-0.5
         self.kv_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
         self.gate_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
         self.position_bias = nn.Parameter(torch.empty(self.compress_rate, 2 * self.head_dim))
         self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
-        self.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
+        self.scorer = DeepseekV4IndexerScorer(config)
 
     def forward(
         self,
@@ -501,7 +504,9 @@ class DeepseekV4Indexer(nn.Module):
         layer_idx: int,
     ) -> torch.LongTensor:
         batch, seq_len, _ = hidden_states.shape
-        cache_layer: DeepseekV4CSACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
+        cache_layer: DeepseekV4CSACache | None = (
+            past_key_values.layers[layer_idx] if past_key_values is not None else None
+        )
         kv = self.kv_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
 
@@ -515,7 +520,7 @@ class DeepseekV4Indexer(nn.Module):
             n_windows = chunk_kv.shape[1] // self.compress_rate
             ratio = self.compress_rate
             chunk_kv = chunk_kv.view(batch, n_windows, ratio, -1)
-            chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias.to(chunk_gate.dtype)
+            chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias
 
             # Same Ca / Cb overlap layout as the outer CSA compressor, at index_head_dim.
             new_kv = chunk_kv.new_zeros((batch, n_windows, 2 * ratio, self.head_dim))
@@ -550,11 +555,7 @@ class DeepseekV4Indexer(nn.Module):
         q = self.q_b_proj(q_residual).view(batch, seq_len, -1, self.head_dim).transpose(1, 2)
         q = apply_rotary_pos_emb(q, cos_q, sin_q).transpose(1, 2)
 
-        # ReLU(q·kᵀ) * weights, then top-k
-        scores = torch.matmul(q.float(), compressed_kv.transpose(-1, -2).float().unsqueeze(1))  # [B, S, H, T]
-        scores = F.relu(scores) * self.softmax_scale
-        weights = self.weights_proj(hidden_states).float() * self.weights_scaling  # [B, S, H]
-        index_scores = (scores * weights.unsqueeze(-1)).sum(dim=2)  # [B, S, T]
+        index_scores = self.scorer(q, compressed_kv, hidden_states)  # [B, S, T]
         compressed_len = compressed_kv.shape[1]
         top_k = min(self.index_topk, compressed_len)
 
@@ -563,7 +564,7 @@ class DeepseekV4Indexer(nn.Module):
         # to compressed key at position 4, because it compressed info for states at position
         # 12 to 16. Thus we need to make sure that top_k does not land in that range.
         # Picks that still point past `causal_threshold` (early queries with too few ready
-        # blocks) are replaced with a `-1` sentinel that the compresser treats as invalid.
+        # blocks) are replaced with a `-1` sentinel that the compressor treats as invalid.
         if compressed_len > 0:
             causal_threshold = (position_ids + 1) // self.compress_rate  # [B, S]
             entry_indices = torch.arange(compressed_len, device=index_scores.device)
@@ -617,9 +618,11 @@ class DeepseekV4CSACompressor(nn.Module):
         position_ids: torch.Tensor,
         past_key_values: Cache | None,
         layer_idx: int,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch, seq_len, _ = hidden_states.shape
-        cache_layer: DeepseekV4CSACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
+        cache_layer: DeepseekV4CSACache | None = (
+            past_key_values.layers[layer_idx] if past_key_values is not None else None
+        )
         kv = self.kv_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
 
@@ -633,7 +636,7 @@ class DeepseekV4CSACompressor(nn.Module):
             n_windows = chunk_kv.shape[1] // self.compress_rate
             ratio = self.compress_rate
             chunk_kv = chunk_kv.view(batch, n_windows, ratio, -1)
-            chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias.to(chunk_gate.dtype)
+            chunk_gate = chunk_gate.view(batch, n_windows, ratio, -1) + self.position_bias
 
             # Lay out the two series in [B, n_win, 2*ratio, head_dim]: Cb
             # (`[..., head_dim:]`) goes in the second half (current window),
@@ -885,10 +888,10 @@ class DeepseekV4HyperConnection(nn.Module):
                         [B, S, H]                 [B, S, H]                                 [B, S, H, H]
                         × scale[0]                × scale[1]                                × scale[2]
                         + base[:H]                + base[H:2H]                              + base[2H:]
-                        σ() + eps                 σ() + eps                                 σ() + eps
+                        σ() + eps                 2·σ()                                     softmax(-1) + eps
                         │                         │                                         │
-                        pre                        post                                     Sinkhorn(iters)
-                        (stream collapse weights)  (block-output placement)                 row/col normalise
+                        pre                       post                                      Sinkhorn(iters)
+                        (stream collapse weights) (block-output placement, range [0, 2])    row/col normalise
                                                                                             │
                                                                                             comb
                                                                                             (stream mixer)
@@ -960,7 +963,7 @@ class DeepseekV4HyperHead(nn.Module):
 
 
 class DeepseekV4MLP(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: DeepseekV4Config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -969,10 +972,12 @@ class DeepseekV4MLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
+        self.limit = config.swiglu_limit
 
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        gate = self.gate_proj(x).clamp(max=self.limit)
+        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
+        return self.down_proj(self.act_fn(gate) * up)
 
 
 @use_experts_implementation
@@ -1025,7 +1030,7 @@ class DeepseekV4TopKRouter(nn.Module):
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.score_fn = ACT2FN[config.scoring_func]
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts), persistent=True)
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
@@ -1054,7 +1059,7 @@ class DeepseekV4HashRouter(nn.Module):
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.score_fn = ACT2FN[config.scoring_func]
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.register_buffer("tid2eid", torch.zeros(config.vocab_size, self.top_k, dtype=torch.long), persistent=True)
+        self.tid2eid = nn.Buffer(torch.zeros(config.vocab_size, self.top_k, dtype=torch.long), persistent=True)
 
     def forward(
         self, hidden_states: torch.Tensor, input_ids: torch.Tensor
@@ -1183,12 +1188,26 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
     _keep_in_fp32_modules_strict = [
         "attn_hc",
         "ffn_hc",
+        "hc_head",
+        "sinks",
+        "position_bias",
         "e_score_correction_bias",
         "q_a_norm",
         "kv_norm",
         "input_layernorm",
         "post_attention_layernorm",
         "norm",
+    ]
+    # DeepSeek-V4-Flash checkpoints mix FP8 and BF16 in the attention compressor /
+    # indexer branch: these projections ship in BF16 with no companion `scale_inv`.
+    # Listed here (non-strict) so the FP8 quantizer's `get_modules_to_not_convert`
+    # auto-skips them; non-strict has no dtype effect at BF16, so they stay BF16.
+    _keep_in_fp32_modules = [
+        "self_attn.compressor.kv_proj",
+        "self_attn.compressor.gate_proj",
+        "self_attn.compressor.indexer.kv_proj",
+        "self_attn.compressor.indexer.gate_proj",
+        "self_attn.compressor.indexer.scorer.weights_proj",
     ]
     _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
     # ``_is_stateful`` opts out of generation modes that need to roll the cache
@@ -1267,13 +1286,12 @@ class DeepseekV4Model(DeepseekV4PreTrainedModel):
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-        return_cache = past_key_values if use_cache else None
-        if past_key_values is None:
+        if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
         if position_ids is None:
-            past_seen = past_key_values.get_seq_length()
+            past_seen = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen
             position_ids = position_ids.unsqueeze(0)
             # `generate()` may pass a per-layer-type mask dict already built by
@@ -1307,7 +1325,7 @@ class DeepseekV4Model(DeepseekV4PreTrainedModel):
             )
 
         hidden_states = self.norm(self.hc_head(hidden_states))
-        return MoeModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=return_cache)
+        return MoeModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 
 def load_balancing_loss_func(
@@ -1342,51 +1360,38 @@ def load_balancing_loss_func(
     if gate_logits is None or not isinstance(gate_logits, tuple):
         return 0
 
-    if isinstance(gate_logits, tuple):
-        compute_device = gate_logits[0].device
-        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+    # Accumulate assignment counts and probability sums layer by layer, normalizing at the end,
+    # so peak memory stays O(seq_len * num_experts) regardless of the number of layers.
+    compute_device = gate_logits[0].device
+    tokens_per_expert_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
+    router_prob_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
+    total_rows = 0.0
 
-    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+    if attention_mask is not None:
+        # The same flat mask applies to every layer's [batch_size * sequence_length] rows.
+        flat_mask = attention_mask.reshape(-1).to(device=compute_device, dtype=torch.float32)
 
-    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+    for layer_gate in gate_logits:
+        routing_weights = torch.nn.functional.softmax(layer_gate.to(compute_device), dim=-1)
+        _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+        if attention_mask is None:
+            # Count of top-k assignments per expert
+            tokens_per_expert_sum = (
+                tokens_per_expert_sum + torch.bincount(selected_experts.reshape(-1), minlength=num_experts).float()
+            )
+            # Sum of routing probabilities per expert
+            router_prob_sum = router_prob_sum + routing_weights.float().sum(dim=0)
+            total_rows = total_rows + routing_weights.shape[0]
+        else:
+            # Same reductions, weighted by the attention mask to exclude padding tokens
+            tokens_per_expert_sum = tokens_per_expert_sum + torch.zeros(
+                num_experts, dtype=torch.float32, device=compute_device
+            ).scatter_add_(0, selected_experts.reshape(-1), flat_mask.repeat_interleave(top_k))
+            router_prob_sum = router_prob_sum + (routing_weights.float() * flat_mask.unsqueeze(-1)).sum(dim=0)
+            total_rows = total_rows + flat_mask.sum()
 
-    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
-
-    if attention_mask is None:
-        # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
-
-        # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.mean(routing_weights, dim=0)
-    else:
-        batch_size, sequence_length = attention_mask.shape
-        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
-
-        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
-        expert_attention_mask = (
-            attention_mask[None, :, :, None, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
-            .reshape(-1, top_k, num_experts)
-            .to(compute_device)
-        )
-
-        # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
-            expert_attention_mask, dim=0
-        )
-
-        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
-        router_per_expert_attention_mask = (
-            attention_mask[None, :, :, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
-            .reshape(-1, num_experts)
-            .to(compute_device)
-        )
-
-        # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
-            router_per_expert_attention_mask, dim=0
-        )
+    tokens_per_expert = tokens_per_expert_sum / total_rows
+    router_prob_per_expert = router_prob_sum / total_rows
 
     overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
     return overall_loss * num_experts
@@ -1395,8 +1400,7 @@ def load_balancing_loss_func(
 @auto_docstring
 class DeepseekV4ForCausalLM(DeepseekV4PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_allgather"}
-    _sp_plan = {"lm_head": "colwise_loss_parallel"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 

@@ -695,7 +695,7 @@ def main(*args):
     if variant == _VARIANT_EMBEDDINGGEMMA:
         from sentence_transformers import SentenceTransformer, models
 
-        # TODO: Support Retrieval tasks where we use `"title: {title} | text: {passage}"` interally and construct this
+        # TODO: Support Retrieval tasks where we use `"title: {title} | text: {passage}"` internally and construct this
         # from split-records cached data, but externally these come through as a single string with components
         # separated by a newline. This should be used for `passage` for SentenceTransformers and the relevant MTEB
         # Retrieval tasks.

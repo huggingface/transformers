@@ -24,6 +24,7 @@ from transformers import (
 )
 from transformers.models.minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6VisionConfig
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_torch,
     require_torch_accelerator,
@@ -32,6 +33,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_modeling_common import floats_tensor
+from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -57,15 +59,15 @@ class MiniCPMV4_6VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("patch_size", 8)
         kwargs.setdefault("num_image_tokens", 1)
         kwargs.setdefault("vocab_size", 256)
-        kwargs.setdefault("hidden_size", 32)
+        kwargs.setdefault("hidden_size", 64)
         kwargs.setdefault("intermediate_size", 37)
         kwargs.setdefault("num_hidden_layers", 2)
         kwargs.setdefault("num_attention_heads", 4)
         kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 8)
+        kwargs.setdefault("head_dim", 32)
         kwargs.setdefault("hidden_act", "silu")
         kwargs.setdefault("max_position_embeddings", 512)
-        kwargs.setdefault("rope_parameters", {"rope_type": "default"})
+        kwargs.setdefault("rope_parameters", {"type": "default", "rope_theta": 10_000, "mrope_section": [2, 1, 1]})
         kwargs.setdefault("tie_word_embeddings", True)
         kwargs.setdefault("bos_token_id", 0)
         kwargs.setdefault("eos_token_id", 1)
@@ -96,7 +98,7 @@ class MiniCPMV4_6VisionText2TextModelTester(VLMModelTester):
     def _target_sizes(self, batch_size):
         h_patches = self.image_size // self.patch_size
         w_patches = self.image_size // self.patch_size
-        return torch.tensor([[h_patches, w_patches]] * batch_size, dtype=torch.int32)
+        return torch.tensor([[h_patches, w_patches]] * batch_size, dtype=torch.int32, device=torch_device)
 
     def create_pixel_values(self):
         return self._navit_pixel_values(self.batch_size)
@@ -116,7 +118,6 @@ class MiniCPMV4_6VisionText2TextModelTester(VLMModelTester):
             "num_key_value_heads": self.num_key_value_heads,
             "hidden_act": "silu",
             "max_position_embeddings": self.max_position_embeddings,
-            "rope_theta": 10000,
             "rope_parameters": self.rope_parameters,
             "tie_word_embeddings": self.tie_word_embeddings,
             "bos_token_id": self.bos_token_id,
@@ -197,10 +198,6 @@ class MiniCPMV4_6ModelTest(VLMModelTest, unittest.TestCase):
 
     @unittest.skip("FlashAttention only supports fp16 and bf16 data type")
     def test_flash_attn_2_fp32_ln(self):
-        pass
-
-    @unittest.skip("The Qwen3.5 hybrid cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     @unittest.skip(reason="MiniCPM-V 4.6 uses Qwen3.5 hybrid cache layers that are incompatible with QuantizedCache.")
@@ -363,7 +360,6 @@ class MiniCPMV4_6ModelTest(VLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-@unittest.skip(reason="waiting for release")
 class MiniCPMV4_6IntegrationTest(unittest.TestCase):
     model_id = "openbmb/MiniCPM-V-4_6"
 
@@ -404,7 +400,9 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
                     },
                     {"type": "text", "text": "What kind of animal is this?"},
                 ],
@@ -416,7 +414,52 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        self.assertIn("cat", decoded_text.lower())
+        # fmt: off
+        EXPECTED_TEXT = Expectations(
+            {
+                ("cuda", (8, 6)): "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
+                ("cuda", (10, 0)): "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
+            }
+        ).get_expectation()
+        # fmt: on
+        self.assertEqual(EXPECTED_TEXT, decoded_text)
+
+    @slow
+    def test_small_model_video_generation(self):
+        processor = AutoProcessor.from_pretrained(self.model_id)
+        model = MiniCPMV4_6ForConditionalGeneration.from_pretrained(
+            self.model_id, device_map="auto", dtype=torch.bfloat16
+        )
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+                        ),
+                    },
+                    {"type": "text", "text": "What is shown in this video?"},
+                ],
+            }
+        ]
+        inputs = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        ).to(model.device, dtype=torch.bfloat16)
+
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        decoded_text = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+
+        expected_texts = Expectations(
+            {
+                ("cuda", None): "The video shows two tennis players engaged in a match or practice session on an indoor tennis court. The player in the foreground is positioned at the net,",
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = expected_texts.get_expectation()
+
+        self.assertEqual(EXPECTED_TEXT, decoded_text)
 
     @slow
     def test_small_model_vision_generation_batch(self):
@@ -431,7 +474,9 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
                     },
                     {"type": "text", "text": "What kind of animal is this?"},
                 ],
@@ -451,9 +496,18 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded_texts = processor.batch_decode(output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
-        self.assertEqual(len(decoded_texts), 2)
-        for text in decoded_texts:
-            self.assertIn("cat", text.lower())
+        expected_texts = Expectations(
+            {
+                ("cuda", (8, 6)): [
+                    "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
+                ] * 2,
+                ("cuda", (10, 0)): [
+                    "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
+                ] * 2,
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = expected_texts.get_expectation()
+        self.assertListEqual(decoded_texts, EXPECTED_TEXT)
 
     @slow
     def test_small_model_vision_generation_batch_mixed(self):
@@ -468,7 +522,9 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
                     },
                     {"type": "text", "text": "What kind of animal is this?"},
                 ],
@@ -489,6 +545,17 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded_texts = processor.batch_decode(output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
-        self.assertEqual(len(decoded_texts), 2)
-        self.assertTrue(len(decoded_texts[0]) > 0)
-        self.assertTrue(len(decoded_texts[1]) > 0)
+        expected_texts = Expectations(
+            {
+                ("cuda", (8, 6)): [
+                    "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
+                    "I'm a model from the MiniCPM series, developed by Modelbest and OpenBMB. For more details, you can visit https://github",
+                ],
+                ("cuda", (10, 0)): [
+                    "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
+                    "I'm a model from the MiniCPM series, developed by Modelbest and OpenBMB. For more details, you can visit https://github",
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = expected_texts.get_expectation()
+        self.assertListEqual(decoded_texts, EXPECTED_TEXT)

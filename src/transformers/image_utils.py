@@ -15,7 +15,7 @@
 import base64
 import os
 from collections.abc import Iterable
-from dataclasses import dataclass, fields
+from dataclasses import astuple, dataclass, fields
 from io import BytesIO
 from typing import Any, Union
 
@@ -168,7 +168,7 @@ def make_list_of_images(images, expected_ndims: int = 3) -> list[ImageInput]:
 
     Args:
         images (`ImageInput`):
-            Image of images to turn into a list of images.
+            Image or batch of images to turn into a list of images.
         expected_ndims (`int`, *optional*, defaults to 3):
             Expected number of dimensions for a single input image. If the input image has a different number of
             dimensions, an error is raised.
@@ -346,12 +346,14 @@ def get_channel_dimension_axis(image: np.ndarray, input_data_format: ChannelDime
     raise ValueError(f"Unsupported data format: {input_data_format}")
 
 
-def get_image_size(image: np.ndarray, channel_dim: ChannelDimension | None = None) -> tuple[int, int]:
+def get_image_size(
+    image: Union[np.ndarray, "PIL.Image.Image"], channel_dim: ChannelDimension | None = None
+) -> tuple[int, int]:
     """
     Returns the (height, width) dimensions of the image.
 
     Args:
-        image (`np.ndarray`):
+        image (`np.ndarray | PIL.Image.Image`):
             The image to get the dimensions of.
         channel_dim (`ChannelDimension`, *optional*):
             Which dimension the channel dimension is in. If `None`, will infer the channel dimension from the image.
@@ -359,6 +361,9 @@ def get_image_size(image: np.ndarray, channel_dim: ChannelDimension | None = Non
     Returns:
         A tuple of the image's height and width.
     """
+    if isinstance(image, PIL.Image.Image):
+        return image.size
+
     if channel_dim is None:
         channel_dim = infer_channel_dimension_format(image)
 
@@ -1016,6 +1021,8 @@ class SizeDict:
     shortest_edge: int | None = None
     max_height: int | None = None
     max_width: int | None = None
+    min_pixels: int | None = None
+    max_pixels: int | None = None
 
     def __getitem__(self, key):
         if hasattr(self, key):
@@ -1035,7 +1042,7 @@ class SizeDict:
                 yield f.name, val
 
     def __hash__(self):
-        return hash((self.height, self.width, self.longest_edge, self.shortest_edge, self.max_height, self.max_width))
+        return hash(astuple(self))
 
     def __contains__(self, key):
         return hasattr(self, key) and getattr(self, key) is not None

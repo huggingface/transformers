@@ -451,7 +451,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         """
         return rescale(image, scale=scale, data_format=data_format, input_data_format=input_data_format, **kwargs)
 
-    # The next methods are kept for backwards compatibility with remote code, but are overriden by backends.
+    # The next methods are kept for backwards compatibility with remote code, but are overridden by backends.
     def normalize(
         self,
         image: np.ndarray,
@@ -535,6 +535,7 @@ VALID_SIZE_DICT_KEYS = (
     {"shortest_edge", "longest_edge"},
     {"longest_edge"},
     {"max_height", "max_width"},
+    {"min_pixels", "max_pixels"},
 )
 
 

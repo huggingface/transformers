@@ -34,6 +34,7 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_torch,
     require_torch_large_accelerator,
     require_torchcodec,
@@ -44,6 +45,7 @@ from transformers.utils import is_torchcodec_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
@@ -72,8 +74,9 @@ class Phi4MultimodalModelTester:
         vocab_size=49,
         hidden_size=32,
         intermediate_size=64,
-        num_attention_heads=8,
-        num_key_value_heads=4,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        max_position_embeddings=4096,
         bos_token_id=0,
         eos_token_id=0,
         pad_token_id=0,
@@ -113,6 +116,7 @@ class Phi4MultimodalModelTester:
         self.audio_token_id = audio_token_id
         self.audio_config = copy.deepcopy(audio_config)
         self.vision_config = copy.deepcopy(vision_config)
+        self.max_position_embeddings = max_position_embeddings
 
         self.is_training = is_training
         self.batch_size = batch_size
@@ -125,6 +129,7 @@ class Phi4MultimodalModelTester:
 
     def get_config(self):
         return Phi4MultimodalConfig(
+            max_position_embeddings=self.max_position_embeddings,
             num_hidden_layers=self.num_hidden_layers,
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
@@ -204,7 +209,7 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     all_model_classes = (Phi4MultimodalForCausalLM, Phi4MultimodalModel) if is_torch_available() else ()
 
     _is_composite = True
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent multimodal placeholder mask
 
     def setUp(self):
         self.model_tester = Phi4MultimodalModelTester(self)
@@ -221,10 +226,6 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         super().test_training_gradient_checkpointing_use_reentrant_true()
-
-    @unittest.skip(reason="Test tries to instantiate dynamic cache with an arg")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
 
     @unittest.skip(reason="Test is only for old attention format")
     def test_sdpa_can_dispatch_composite_models(self):
@@ -278,8 +279,8 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 class Phi4MultimodalIntegrationTest(unittest.TestCase):
     checkpoint_path = "microsoft/Phi-4-multimodal-instruct"
     revision = "refs/pr/70"
-    image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
-    audio_url = "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
+    image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+    audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav"
 
     def setUp(self):
         # Currently, the Phi-4 checkpoint on the hub is not working with the latest Phi-4 code, so the slow integration tests
@@ -318,6 +319,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
         self.assertEqual(response, EXPECTED_RESPONSE)
 
+    @require_deterministic_for_xpu
     def test_vision_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
             self.checkpoint_path, revision=self.revision, dtype=torch.float16, device_map=torch_device
@@ -337,6 +339,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
             {
                 ("cuda", 7): 'The image shows a vibrant scene at a traditional Chinese-style street entrance, known as a "gate"',
                 ("cuda", 8): 'The image shows a vibrant scene at a street intersection in a city with a Chinese-influenced architectural',
+                ("xpu", 5): 'The image shows a vibrant street scene in a bustling city, likely in a region with a rich cultural',
             }
         )  # fmt: skip
         EXPECTED_RESPONSE = EXPECTED_RESPONSES.get_expectation()
@@ -353,7 +356,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         placeholder = ""
         for i in range(1, 5):
             url = f"https://image.slidesharecdn.com/azureintroduction-191206101932/75/Introduction-to-Microsoft-Azure-Cloud-{i}-2048.jpg"
-            images.append(Image.open(requests.get(url, stream=True).raw))
+            images.append(load_test_image(url))
             placeholder += "<|image|>"
 
         prompt = f"{self.user_token}{placeholder}Summarize the deck of slides.{self.end_token}{self.assistant_token}"

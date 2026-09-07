@@ -206,19 +206,15 @@ OBJECTS_TO_IGNORE = {
     "DeformableDetrImageProcessor",
     "DeiTModel",
     "DepthEstimationPipeline",
-    "DetaImageProcessor",
     "DetrImageProcessor",
     "DinatModel",
     "DistilBertTokenizerFast",
     "DocumentQuestionAnsweringPipeline",
     "DonutSwinModel",
     "EarlyStoppingCallback",
-    "EfficientFormerImageProcessor",
     "ElectraTokenizerFast",
     "EncoderDecoderModel",
-    "ErnieMModel",
     "ErnieModel",
-    "ErnieMTokenizer",
     "EsmModel",
     "FNetModel",
     "FNetTokenizerFast",
@@ -242,7 +238,6 @@ OBJECTS_TO_IGNORE = {
     "ImageSegmentationPipeline",
     "ImageTextToTextPipeline",
     "AnyToAnyPipeline",
-    "JukeboxTokenizer",
     "LEDTokenizerFast",
     "LasrFeatureExtractor",
     "LasrTokenizer",
@@ -263,16 +258,13 @@ OBJECTS_TO_IGNORE = {
     "MarkupLMProcessor",
     "MaskGenerationPipeline",
     "MBart50TokenizerFast",
-    "MCTCTFeatureExtractor",
     "MPNetModel",
     "MPNetTokenizerFast",
-    "MT5TokenizerFast",
     "MarianTokenizer",
     "MarkupLMModel",
     "MarkupLMTokenizer",
     "MarkupLMTokenizerFast",
     "MaxTimeCriteria",
-    "MegaModel",
     "MegatronBertForPreTraining",
     "MegatronBertModel",
     "MobileBertModel",
@@ -287,10 +279,7 @@ OBJECTS_TO_IGNORE = {
     "MusicgenForConditionalGeneration",
     "MusicgenMelodyForConditionalGeneration",
     "MvpTokenizerFast",
-    "MT5Tokenizer",
-    "NatModel",
     "NerPipeline",
-    "NezhaModel",
     "NllbTokenizer",
     "NllbTokenizerFast",
     "ObjectDetectionPipeline",
@@ -306,7 +295,6 @@ OBJECTS_TO_IGNORE = {
     "PreTrainedTokenizerBase",
     "PreTrainedTokenizerFast",
     "PrefixConstrainedLogitsProcessor",
-    "QDQBertModel",
     "RagModel",
     "RagRetriever",
     "RagSequenceForGeneration",
@@ -315,7 +303,6 @@ OBJECTS_TO_IGNORE = {
     "RemBertModel",
     "RemBertTokenizer",
     "RemBertTokenizerFast",
-    "RetriBertTokenizerFast",
     "RoCBertModel",
     "RoCBertTokenizer",
     "RobertaModel",
@@ -326,7 +313,6 @@ OBJECTS_TO_IGNORE = {
     # use of unconventional markdown
     # use of unconventional markdown
     "Seq2SeqTrainingArguments",
-    "Speech2Text2Tokenizer",
     "Speech2TextTokenizer",
     "SpeechEncoderDecoderModel",
     "SpeechT5Model",
@@ -345,10 +331,7 @@ OBJECTS_TO_IGNORE = {
     "Phi4MultimodalProcessor",
     "TrainerState",
     "TrainingArguments",
-    "TvltImageProcessor",
     "UperNetForSemanticSegmentation",
-    "ViTHybridImageProcessor",
-    "ViTHybridModel",
     "ViTMSNModel",
     "ViTModel",
     "VideoClassificationPipeline",
@@ -831,6 +814,25 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
         f.write("\n".join(lines))
 
 
+def _is_redundant_with_source(arg_doc: dict, source_arg_doc: dict) -> bool:
+    """Return True when *arg_doc* is a redundant copy of *source_arg_doc*.
+
+    An entry is redundant when its description is identical to the source (after
+    normalising whitespace) and it carries no custom shape that differs from the
+    source.  If the description matches, the auto-docstring machinery will supply
+    the full canonical entry (including additional_info / shape), so the manual
+    copy adds no value and should be deleted so that ``auto`` takes priority.
+    """
+    if source_arg_doc["description"].strip("\n ") != arg_doc.get("description", "").strip("\n "):
+        return False
+    # Keep the entry when it carries a custom shape not present (or different) in source.
+    arg_shape = (arg_doc.get("shape") or "").strip()
+    source_shape = (source_arg_doc.get("shape") or "").strip()
+    if arg_shape and arg_shape != source_shape:
+        return False
+    return True
+
+
 def _find_docstring_end_line(lines, docstring_start_line):
     """Find the line number where a docstring ends. Only handles triple double quotes."""
     if docstring_start_line is None or docstring_start_line < 0 or docstring_start_line >= len(lines):
@@ -885,14 +887,19 @@ def find_matching_model_files(check_all: bool = False):
         if len(module_diff_files) == 0:
             return None
 
-    modeling_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/modeling_**")
-    potential_files = glob.glob(modeling_glob_pattern)
-    image_processing_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/image_processing_*_fast.py")
-    potential_files += glob.glob(image_processing_glob_pattern)
-    processing_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/processing_*.py")
-    potential_files += glob.glob(processing_glob_pattern)
-    configuration_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/configuration_*.py")
-    potential_files += glob.glob(configuration_glob_pattern)
+    autodoc_files_regex = [
+        "modeling_**",
+        "image_processing_*_fast.py",
+        "image_processing_pil_*.py",
+        "video_processing_*.py",
+        "processing_*.py",
+        "configuration_*.py",
+    ]
+    potential_files = []
+    for pattern in autodoc_files_regex:
+        glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**", pattern)
+        potential_files += glob.glob(glob_pattern)
+
     matching_files = []
     for file_path in potential_files:
         if os.path.isfile(file_path):
@@ -1216,21 +1223,9 @@ def generate_new_docstring_for_signature(
                 "description", ""
             )
 
-            # Remove if has placeholder (source will provide the real doc)
-            if has_placeholder:
+            # Remove if has placeholder or description is identical to source
+            if has_placeholder or _is_redundant_with_source(arg_doc, source_arg_doc):
                 docstring_args_ro_remove.append(arg)
-            # Or remove if description matches source exactly
-            elif source_arg_doc["description"].strip("\n ") == arg_doc["description"].strip("\n "):
-                if source_arg_doc.get("shape") is not None and arg_doc.get("shape") is not None:
-                    if source_arg_doc.get("shape").strip("\n ") == arg_doc.get("shape").strip("\n "):
-                        docstring_args_ro_remove.append(arg)
-                elif source_arg_doc.get("additional_info") is not None and arg_doc.get("additional_info") is not None:
-                    if source_arg_doc.get("additional_info").strip("\n ") == arg_doc.get("additional_info").strip(
-                        "\n "
-                    ):
-                        docstring_args_ro_remove.append(arg)
-                else:
-                    docstring_args_ro_remove.append(arg)
 
     # For regular methods/functions (not ModelOutput), also remove args not in signature
     if not is_model_output:

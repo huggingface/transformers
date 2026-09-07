@@ -16,8 +16,6 @@ import json
 import pathlib
 import unittest
 
-import numpy as np
-
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -28,7 +26,12 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    AnnotationFormatTestMixin,
+    ImageProcessingTester,
+    ImageProcessingTestMixin,
+    PostProcessSemanticSegmentationTestMixin,
+)
 
 
 if is_torch_available():
@@ -38,7 +41,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class DetrImageProcessingTester:
+class DetrImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -54,6 +57,7 @@ class DetrImageProcessingTester:
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
         do_pad=True,
+        num_labels=5,
     ):
         # by setting size["longest_edge"] > max_resolution we're effectively not testing this :p
         size = size if size is not None else {"shortest_edge": 18, "longest_edge": 1333}
@@ -70,6 +74,11 @@ class DetrImageProcessingTester:
         self.image_mean = image_mean
         self.image_std = image_std
         self.do_pad = do_pad
+        self.num_labels = 5
+        # for the post_process methods
+        self.num_queries = 3
+        self.height = 3
+        self.width = 4
 
     def prepare_image_processor_dict(self):
         return {
@@ -83,58 +92,28 @@ class DetrImageProcessingTester:
             "do_pad": self.do_pad,
         }
 
-    def get_expected_values(self, image_inputs, batched=False):
-        """
-        This function computes the expected height and width when providing images to DetrImageProcessor,
-        assuming do_resize is set to True with a scalar size.
-        """
-        if not batched:
-            image = image_inputs[0]
-            if isinstance(image, Image.Image):
-                w, h = image.size
-            elif isinstance(image, np.ndarray):
-                h, w = image.shape[0], image.shape[1]
-            else:
-                h, w = image.shape[1], image.shape[2]
-            if w < h:
-                expected_height = int(self.size["shortest_edge"] * h / w)
-                expected_width = self.size["shortest_edge"]
-            elif w > h:
-                expected_height = self.size["shortest_edge"]
-                expected_width = int(self.size["shortest_edge"] * w / h)
-            else:
-                expected_height = self.size["shortest_edge"]
-                expected_width = self.size["shortest_edge"]
+    def prepare_post_process_semantic_segmentation_inputs(self):
+        from transformers.models.detr.modeling_detr import DetrSegmentationOutput
 
-        else:
-            expected_values = []
-            for image in image_inputs:
-                expected_height, expected_width = self.get_expected_values([image])
-                expected_values.append((expected_height, expected_width))
-            expected_height = max(expected_values, key=lambda item: item[0])[0]
-            expected_width = max(expected_values, key=lambda item: item[1])[1]
-
-        return expected_height, expected_width
-
-    def expected_output_image_shape(self, images):
-        height, width = self.get_expected_values(images, batched=True)
-        return self.num_channels, height, width
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
+        inputs = {
+            "outputs": DetrSegmentationOutput(
+                logits=torch.randn(self.batch_size, self.num_queries, self.num_labels + 1),
+                pred_masks=torch.randn(self.batch_size, self.num_queries, self.height, self.width),
+            )
+        }
+        expected_shape = {
+            "num_labels": self.num_labels,
+            "height": self.height,
+            "width": self.width,
+        }
+        return inputs, expected_shape
 
 
 @require_torch
 @require_vision
-class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase):
+class DetrImageProcessingTest(
+    AnnotationFormatTestMixin, ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
+):
     def setUp(self):
         super().setUp()
         self.image_processor_tester = DetrImageProcessingTester(self)

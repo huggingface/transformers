@@ -16,19 +16,22 @@
 import unittest
 
 import numpy as np
-from datasets import load_dataset
 
 from transformers.file_utils import is_torch_available
 from transformers.testing_utils import require_torch, require_vision
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTester,
+    ImageProcessingTestMixin,
+    PostProcessSemanticSegmentationTestMixin,
+)
 
 
 if is_torch_available():
     import torch
 
 
-class DPTImageProcessingTester:
+class DPTImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -43,6 +46,7 @@ class DPTImageProcessingTester:
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
         do_reduce_labels=False,
+        num_labels=5,
     ):
         size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
@@ -57,6 +61,7 @@ class DPTImageProcessingTester:
         self.image_mean = image_mean
         self.image_std = image_std
         self.do_reduce_labels = do_reduce_labels
+        self.num_labels = num_labels
 
     def prepare_image_processor_dict(self):
         return {
@@ -68,37 +73,10 @@ class DPTImageProcessingTester:
             "do_reduce_labels": self.do_reduce_labels,
         }
 
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
-
-# Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_single_inputs
-def prepare_semantic_single_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-    example = ds[0]
-    return example["image"], example["map"]
-
-
-# Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_batch_inputs
-def prepare_semantic_batch_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-    return list(ds["image"][:2]), list(ds["map"][:2])
-
 
 @require_torch
 @require_vision
-class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class DPTImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.image_processor_tester = DPTImageProcessingTester(self)
@@ -224,7 +202,7 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test not batched input (PIL images)
-            image, segmentation_map = prepare_semantic_single_inputs()
+            image, segmentation_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
 
             encoding = image_processor(image, segmentation_map, return_tensors="pt")
             self.assertEqual(
@@ -249,7 +227,9 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test batched input (PIL images)
-            images, segmentation_maps = prepare_semantic_batch_inputs()
+            images, segmentation_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+                batched=True
+            )
 
             encoding = image_processor(images, segmentation_maps, return_tensors="pt")
             self.assertEqual(
@@ -278,7 +258,7 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processor = image_processing_class(**self.image_processor_dict)
 
             # ADE20k has 150 classes, and the background is included, so labels should be between 0 and 150
-            image, map = prepare_semantic_single_inputs()
+            image, map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
             encoding = image_processor(image, map, return_tensors="pt")
             labels_no_reduce = encoding["labels"].clone()
             self.assertTrue(labels_no_reduce.min().item() >= 0)
@@ -296,7 +276,7 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(encoding["labels"][first_non_zero_coords].item(), first_non_zero_value - 1)
 
             # Ensure reduce label returns the same number of masks
-            image, map = prepare_semantic_batch_inputs()
+            image, map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(batched=True)
             encoding = image_processor(image, map, return_tensors="pt")
             self.assertTrue(len(encoding["labels"]) == len(map))
 
@@ -306,7 +286,7 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image, dummy_map = prepare_semantic_single_inputs()
+        dummy_image, dummy_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
 
         # Create processors for each backend
         encodings = {}
@@ -330,7 +310,9 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_images, dummy_maps = prepare_semantic_batch_inputs()
+        dummy_images, dummy_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+            batched=True
+        )
 
         # Create processors for each backend
         encodings = {}

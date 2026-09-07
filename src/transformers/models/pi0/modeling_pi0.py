@@ -40,7 +40,7 @@ class PI0TimestepEmbeddings(nn.Module):
         super().__init__()
         self.config = config
         sinusoid_freq = self.compute_freqs(config)
-        self.register_buffer("sinusoid_freq", sinusoid_freq, persistent=False)
+        self.sinusoid_freq = nn.Buffer(sinusoid_freq, persistent=False)
 
     @staticmethod
     def compute_freqs(config):
@@ -130,12 +130,11 @@ class PI0Model(PI0PreTrainedModel):
         llm_input_ids[input_ids == self.config.vlm_config.image_token_id] = 0
         inputs_embeds = self.vlm.get_input_embeddings()(llm_input_ids)
         special_image_mask = (
-            (input_ids == self.config.vlm_config.image_token_id)
-            .unsqueeze(-1)
-            .expand_as(inputs_embeds)
-            .to(inputs_embeds.device)
+            (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).to(inputs_embeds.device)
         )
-        inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, total_image_features)
+        inputs_embeds = inputs_embeds.masked_scatter(
+            special_image_mask, total_image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+        )
 
         return inputs_embeds
 
@@ -222,7 +221,7 @@ class PI0Model(PI0PreTrainedModel):
 class PI0ForConditionalGeneration(PI0PreTrainedModel):
     """PI0 model with action projection heads and flow matching."""
 
-    _tp_plan = {"action_out_proj": "colwise_allgather"}
+    _tp_plan = {"action_out_proj": "colwise_gather_output"}
 
     def __init__(self, config: PI0Config):
         super().__init__(config)
@@ -259,7 +258,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         pixel_attention_mask (`torch.Tensor`, *optional*):
             The mask indicating padded positions in the input image.
         actions (`torch.Tensor`, *optional*):
-            Input actions that need to be predicted. Used only when training to compiute loss.
+            Input actions that need to be predicted. Used only when training to compute loss.
         """
         batch_size = state.shape[0]
 

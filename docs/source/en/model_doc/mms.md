@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-05-22 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was published in HF papers on 2023-05-22 and contributed to Hugging Face Transformers on 2023-06-20.*
 
 # MMS
 
@@ -36,7 +36,7 @@ for the same number of languages, as well as a language identification model for
 Experiments show that our multilingual speech recognition model more than halves the word error rate of
 Whisper on 54 languages of the FLEURS benchmark while being trained on a small fraction of the labeled data.*
 
-Here are the different models open sourced in the MMS project. The models and code are originally released [here](https://github.com/facebookresearch/fairseq/tree/main/examples/mms). We have add them to the `transformers` framework, making them easier to use.
+Here are the different models open sourced in the MMS project. The models and code are originally released [here](https://github.com/facebookresearch/fairseq/tree/main/examples/mms). We have added them to the `transformers` framework, making them easier to use.
 
 ### Automatic Speech Recognition (ASR)
 

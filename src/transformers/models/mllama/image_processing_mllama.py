@@ -260,7 +260,7 @@ def pad_batches_and_tiles(
             a batch sample containing multiple images, where each image is pre-split into tiles.
             The shape of each tile array is (num_tiles, channels, tile_height, tile_width).
         max_image_tiles (int):
-            The maximum number of tiles any image was potantially split.
+            The maximum number of tiles any image was potentially split.
 
     Returns:
         `Tuple[torch.Tensor, List[List[int]]]`: A tuple containing:
@@ -358,11 +358,11 @@ class MllamaImageProcessor(TorchvisionBackend):
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"height": 224, "width": 224}
-    do_resize = True
+    do_resize = True  # trf-ignore: TRF016 (enforced by validator)
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    do_pad = True
+    do_pad = True  # trf-ignore: TRF016 (enforced by validator)
     max_image_tiles = 4
     valid_kwargs = MllamaImageProcessorKwargs
     model_input_names = ["pixel_values", "num_tiles", "aspect_ratio_ids", "aspect_ratio_mask"]

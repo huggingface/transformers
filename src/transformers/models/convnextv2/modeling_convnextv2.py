@@ -410,8 +410,6 @@ class ConvNextV2Backbone(BackboneMixin, ConvNextV2PreTrainedModel):
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
         ```"""
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
-
         embedding_output = self.embeddings(pixel_values)
         encoder_outputs: BaseModelOutputWithNoAttention = self.encoder(embedding_output, **kwargs)
         hidden_states = encoder_outputs.hidden_states

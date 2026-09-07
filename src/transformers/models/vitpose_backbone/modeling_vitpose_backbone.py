@@ -343,13 +343,11 @@ class VitPoseBackbonePreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm | VitPoseBackboneEmbeddings):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, VitPoseBackboneEmbeddings):
             init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
 
@@ -420,8 +418,6 @@ class VitPoseBackbone(BackboneMixin, VitPoseBackbonePreTrainedModel):
         >>> dataset_index = torch.tensor([1])
         >>> outputs = model(pixel_values, dataset_index)
         ```"""
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
-
         embedding_output = self.embeddings(pixel_values)
         outputs: BaseModelOutput = self.encoder(embedding_output, dataset_index=dataset_index, **kwargs)
         hidden_states = outputs.hidden_states
