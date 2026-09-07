@@ -9,6 +9,7 @@ from parameterized import parameterized
 from transformers.testing_utils import require_torch, run_test_using_subprocess
 from transformers.utils.import_utils import (
     _is_package_available,
+    _LazyModule,
     clear_import_cache,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
@@ -57,6 +58,25 @@ def test_is_package_available_edge_cases():
             patch("transformers.utils.import_utils.importlib.import_module", return_value=fake_module),
         ):
             assert _is_package_available(pkg_name, return_version=True) == expected
+
+
+def test_lazy_module_error_includes_original_error():
+    lazy_module = _LazyModule(
+        "transformers.test_lazy_module",
+        __file__,
+        {"broken_module": []},
+    )
+
+    original_error = RuntimeError("simulated broken dependency")
+
+    with patch.object(lazy_module, "_get_module", side_effect=original_error):
+        try:
+            lazy_module.broken_module
+        except ModuleNotFoundError as error:
+            assert "Could not import module 'broken_module'" in str(error)
+            assert "Original error: simulated broken dependency" in str(error)
+        else:
+            raise AssertionError("Expected ModuleNotFoundError")
 
 
 @contextmanager

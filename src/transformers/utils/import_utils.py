@@ -2630,11 +2630,13 @@ class _LazyModule(ModuleType):
 
                         if value is None:
                             raise ModuleNotFoundError(
-                                f"Could not import module '{name}'. Are this object's requirements defined correctly?"
+                                f"Could not import module '{name}'. Are this object's requirements defined correctly? "
+                                f"Original error: {e}"
                             ) from e
                 else:
                     raise ModuleNotFoundError(
-                        f"Could not import module '{name}'. Are this object's requirements defined correctly?"
+                        f"Could not import module '{name}'. Are this object's requirements defined correctly? "
+                        f"Original error: {e}"
                     ) from e
 
         elif name in self._modules:
@@ -2642,7 +2644,8 @@ class _LazyModule(ModuleType):
                 value = self._get_module(name)
             except (ModuleNotFoundError, RuntimeError) as e:
                 raise ModuleNotFoundError(
-                    f"Could not import module '{name}'. Are this object's requirements defined correctly?"
+                    f"Could not import module '{name}'. Are this object's requirements defined correctly? "
+                    f"Original error: {e}"
                 ) from e
         else:
             # V5: If a *TokenizerFast symbol is requested but not present in the import structure,
