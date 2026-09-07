@@ -5875,10 +5875,6 @@ class ModelTesterMixin(ExportTesterMixin):
         if not _config_supports_rope_scaling(text_config):
             self.skipTest("This model does not support RoPE scaling")
 
-        # TODO: raushan, add separate tests for mrope in MultimodalTester
-        if text_config.rope_parameters.get("mrope_section") is not None:
-            self.skipTest("This model uses 3D multimodal RoPE, the test uses 2D position ids.")
-
         if not hasattr(text_config, "vocab_size"):
             self.skipTest("This model has no vocab size defined and the test doesn't yet support non-text modalities.")
 
@@ -5989,20 +5985,10 @@ class ModelTesterMixin(ExportTesterMixin):
         if rope_class is None:
             self.skipTest("This model has no standardized RoPE module found.")
 
-        # TODO: raushan, add separate tests for mrope in MultimodalTester
         is_nested_rope = (
             "rope_theta" not in text_config.rope_parameters.keys()
             and "rope_theta" in list(text_config.rope_parameters.values())[0]
         )
-        if (not is_nested_rope and text_config.rope_parameters.get("mrope_section") is not None) or (
-            is_nested_rope
-            and any(
-                layer_rope.get("mrope_section") is not None
-                for layer_rope in text_config.rope_parameters.values()
-                if layer_rope is not None
-            )
-        ):
-            self.skipTest("This model uses 3D multimodal RoPE, the test uses 2D position ids.")
 
         scaling_factor = 10
         short_input_length = 10
@@ -6023,6 +6009,10 @@ class ModelTesterMixin(ExportTesterMixin):
         position_ids_short = position_ids_short.unsqueeze(0)
         position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
         position_ids_long = position_ids_long.unsqueeze(0)
+
+        if (num_axis := text_config.num_multimodal_rope_axis) is not None:
+            position_ids_short = position_ids_short[None, ...].repeat(num_axis, 1, 1)
+            position_ids_long = position_ids_long[None, ...].repeat(num_axis, 1, 1)
 
         # Sanity check original RoPE
         _set_config_rope_params(
