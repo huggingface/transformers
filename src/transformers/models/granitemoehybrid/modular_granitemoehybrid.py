@@ -26,7 +26,6 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..bamba.configuration_bamba import BambaConfig
 from ..bamba.modeling_bamba import BambaMixer, BambaRMSNormGated
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..granitemoeshared.modeling_granitemoeshared import (
@@ -93,8 +92,8 @@ class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
 
 
 class GraniteMoeHybridMambaLayer(BambaMixer):
-    def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
-        super().__init__(BambaConfig(config), layer_idx)
+    def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int, initialize_mixer_weights: bool = True):
+        super().__init__(config, layer_idx, initialize_mixer_weights)
 
 
 class GraniteMoeHybridRMSNormGated(BambaRMSNormGated):

@@ -144,7 +144,7 @@ class InitializeMissingKeysTest(unittest.TestCase):
 
         with (
             patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True),
-            patch("transformers.modeling_utils.is_local_dist_rank_0", return_value=False),
+            patch("transformers.distributed.utils.is_local_dist_rank_0", return_value=False),
         ):
             model._move_missing_keys_from_meta_to_device(
                 missing_keys=set(), device_map=None, device_mesh=None, hf_quantizer=None
@@ -161,7 +161,7 @@ class InitializeMissingKeysTest(unittest.TestCase):
 
         with (
             patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True),
-            patch("transformers.modeling_utils.is_local_dist_rank_0", return_value=False),
+            patch("transformers.distributed.utils.is_local_dist_rank_0", return_value=False),
         ):
             model._move_missing_keys_from_meta_to_device(
                 missing_keys=set(), device_map=None, device_mesh=None, hf_quantizer=None

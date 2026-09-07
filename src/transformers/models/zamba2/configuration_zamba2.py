@@ -83,7 +83,6 @@ class Zamba2Config(PreTrainedConfig):
     time_step_min: float = 0.001
     time_step_max: float = 0.1
     time_step_floor: float = 1e-4
-    time_step_limit: list[float] | tuple[float, ...] | None = None
     n_mamba_heads: int = 8
     use_mamba_kernels: bool = True
     use_conv_bias: bool = True

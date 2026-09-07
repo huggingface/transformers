@@ -438,10 +438,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     def test_enable_input_require_grads_with_gradient_checkpointing(self):
         if not self.model_tester.is_training:
             self.skipTest(reason="ModelTester not in training mode")

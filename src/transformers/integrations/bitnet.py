@@ -136,24 +136,12 @@ class BitLinear(nn.Module):
         self.dtype = dtype
         self.in_features = in_features
         self.out_features = out_features
-        self.register_buffer(
-            "weight",
-            torch.zeros(
-                (out_features // VALUES_PER_ITEM, in_features),
-                dtype=torch.uint8,
-                device=device,
-            ),
+        self.weight = nn.Buffer(
+            torch.zeros((out_features // VALUES_PER_ITEM, in_features), dtype=torch.uint8, device=device)
         )
-        self.register_buffer(
-            "weight_scale",
-            torch.ones(
-                (1),
-                dtype=dtype,
-                device=device,
-            ),
-        )
+        self.weight_scale = nn.Buffer(torch.ones((1), dtype=dtype, device=device))
         if bias:
-            self.register_buffer("bias", torch.zeros((out_features), dtype=dtype, device=device))
+            self.bias = nn.Buffer(torch.zeros((out_features), dtype=dtype, device=device))
         else:
             self.bias = None
 
@@ -275,14 +263,7 @@ class AutoBitLinear(nn.Linear):
 
             self.rms_norm = LlamaRMSNorm(in_features, eps=rms_norm_eps)
         if not online_quant:
-            self.register_buffer(
-                "weight_scale",
-                torch.ones(
-                    (1),
-                    dtype=dtype,
-                    device=device,
-                ),
-            )
+            self.weight_scale = nn.Buffer(torch.ones((1), dtype=dtype, device=device))
             self._register_load_state_dict_pre_hook(self.load_hook)
 
     def load_hook(

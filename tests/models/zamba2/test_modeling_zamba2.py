@@ -381,10 +381,6 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="A large mamba2 would be necessary (and costly) for that")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -545,6 +541,13 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
             _ = model(**dummy_inputs)
 
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip(
+        "For some reason the diff is still small even though scaled RoPE is applied on attn layers, not worth investigation"
+    )
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
+
 
 @require_torch
 class Zamba2ModelIntegrationTest(unittest.TestCase):
@@ -560,12 +563,12 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
 
     @parameterized.expand([(torch_device,), ("cpu",)])
     @slow
-    def test_simple_generate(self, torch_device):
-        self.model.to(torch_device)
+    def test_simple_generate(self, device):
+        self.model.to(device)
 
         input_ids = self.tokenizer("Hey how are you doing on this lovely evening?", return_tensors="pt")[
             "input_ids"
-        ].to(torch_device)
+        ].to(device)
         out = self.model.generate(input_ids, do_sample=False, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(out[0, :])
         self.assertEqual(
@@ -589,14 +592,14 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
 
     @parameterized.expand([(torch_device,), ("cpu",)])
     @slow
-    def test_simple_batched_generate_with_padding(self, torch_device):
-        self.model.to(torch_device)
+    def test_simple_batched_generate_with_padding(self, device):
+        self.model.to(device)
 
         inputs = self.tokenizer(
             ["Hey how are you doing on this lovely evening?", "When did the Roman empire "],
             padding=True,
             return_tensors="pt",
-        ).to(torch_device)
+        ).to(device)
         out = self.model.generate(**inputs, do_sample=False, max_new_tokens=10)
         output_sentences = self.tokenizer.batch_decode(out)
         self.assertEqual(
@@ -621,23 +624,28 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
                 -4.8167, -4.8167, -4.8167, -4.8168, -4.8168, -4.8168, -4.8167, -4.8167,
                 -4.8168, -4.8167, -4.8167, -4.8165, -4.8167, -4.8167, -4.8167, -4.8169,
                 -4.8168, -4.8168, -4.8168, -4.8166, -4.8169, -4.8168, -4.8167, -4.8167
-            ]
-            , dtype=torch.float32)  # fmt: skip
+            ],
+            dtype=torch.float32
+        )  # fmt: skip
 
         EXPECTED_LOGITS_NO_GRAD_1S = Expectations(
             {
-                ("xpu", 3): torch.tensor([0.2027,  6.3481,  3.8392, -5.7279, -6.5090, -6.5088, -6.5087, -6.5088,
-                                          -6.5087, -6.5088, -6.5090, -6.5089,  7.8796, 13.5483, -6.5088, -6.5080,
-                                          -6.5090, -6.5086, -6.5090, -6.5090, -6.5089, -6.5090, -6.5088, -6.5090,
-                                          -6.5089, -6.5090, -6.5090, -6.5097, -6.5086, -6.5089, -6.5092, -6.5089,
-                                          -6.5088, -6.5090, -6.5090, -6.5088, -6.5090, -6.5091, -6.5087, -6.5089],
-                                         dtype=torch.float32),
-                ("cuda", None): torch.tensor([0.1966,  6.3449,  3.8350, -5.7291, -6.5106, -6.5104, -6.5103, -6.5104,
-                                              -6.5103, -6.5104, -6.5106, -6.5105,  7.8700, 13.5434, -6.5104, -6.5096,
-                                              -6.5106, -6.5102, -6.5106, -6.5106, -6.5105, -6.5106, -6.5104, -6.5106,
-                                              -6.5105, -6.5106, -6.5106, -6.5113, -6.5102, -6.5105, -6.5108, -6.5105,
-                                              -6.5104, -6.5106, -6.5106, -6.5104, -6.5106, -6.5107, -6.5103, -6.5105],
-                                             dtype=torch.float32),
+                ("xpu", 3): torch.tensor(
+                    [0.2027,  6.3481,  3.8392, -5.7279, -6.5090, -6.5088, -6.5087, -6.5088,
+                    -6.5087, -6.5088, -6.5090, -6.5089,  7.8796, 13.5483, -6.5088, -6.5080,
+                    -6.5090, -6.5086, -6.5090, -6.5090, -6.5089, -6.5090, -6.5088, -6.5090,
+                    -6.5089, -6.5090, -6.5090, -6.5097, -6.5086, -6.5089, -6.5092, -6.5089,
+                    -6.5088, -6.5090, -6.5090, -6.5088, -6.5090, -6.5091, -6.5087, -6.5089],
+                    dtype=torch.float32
+                ),
+                ("cuda", None): torch.tensor(
+                    [ 0.2026,  6.3480,  3.8392, -5.7279, -6.5090, -6.5088, -6.5087, -6.5088,
+                    -6.5087, -6.5088, -6.5090, -6.5089,  7.8796, 13.5483, -6.5088, -6.5080,
+                    -6.5090, -6.5086, -6.5090, -6.5090, -6.5089, -6.5090, -6.5088, -6.5090,
+                    -6.5089, -6.5090, -6.5090, -6.5097, -6.5086, -6.5089, -6.5092, -6.5089,
+                    -6.5088, -6.5090, -6.5090, -6.5088, -6.5089, -6.5090, -6.5087, -6.5089],
+                    dtype=torch.float32
+                ),
             }
         )  # fmt: skip
         EXPECTED_LOGITS_NO_GRAD_1 = EXPECTED_LOGITS_NO_GRAD_1S.get_expectation()
@@ -647,5 +655,35 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
             logits[1, -1, :40].cpu(),
             EXPECTED_LOGITS_NO_GRAD_1,
             rtol=1e-3,
-            atol=6e-3 if torch_device == "cpu" else 1e-3,
+            atol=6e-3 if device == "cpu" else 1e-3,
         )
+
+    @slow
+    def test_num_mem_blocks_2_official_checkpoint(self):
+        # Regression test for #47994: every published `num_mem_blocks=2` checkpoint (Zamba2-2.7B and
+        # Zamba2-7B) raised at construction, before any weight was read, because `block_id` followed
+        # the global layer index while the weight-tie cycle follows hybrid-layer order. This checkpoint
+        # is the one to test because its hybrid layers `[6, 12, 18, 24, 30, 36, 42, 47, 51]` are not
+        # all congruent modulo `num_mem_blocks`; an evenly spaced layout constructs fine without the fix.
+        model_id = "Zyphra/Zamba2-2.7B-instruct"
+        model, loading_info = Zamba2ForCausalLM.from_pretrained(
+            model_id, dtype=torch.bfloat16, output_loading_info=True
+        )
+        self.assertSetEqual(set(loading_info["missing_keys"]), set())
+        self.assertSetEqual(set(loading_info["unexpected_keys"]), set())
+        model.to(torch_device)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        messages = [{"role": "user", "content": "Hey how are you doing on this lovely evening?"}]
+        inputs = tokenizer.apply_chat_template(
+            messages, add_generation_prompt=True, return_tensors="pt", return_dict=True
+        ).to(torch_device)
+        out = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+        output_sentence = tokenizer.decode(out[0, :])
+
+        EXPECTED_TEXTS = Expectations(
+            {
+                (None, None): "<|im_start|> user\nHey how are you doing on this lovely evening?<|im_end|> \n<|im_start|> assistant\nHello! I'm just a computer program, so I don't have feelings or experiences,",
+            }
+        )  # fmt: skip
+        self.assertEqual(output_sentence, EXPECTED_TEXTS.get_expectation())

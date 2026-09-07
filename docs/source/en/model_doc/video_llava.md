@@ -100,7 +100,7 @@ def read_video_pyav(container, indices):
 model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", device_map="auto")
 processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
 
-# Load the video as an np.arrau, sampling uniformly 8 frames
+# Load the video as an np.array, sampling uniformly 8 frames
 video_path = hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset")
 container = av.open(video_path)
 total_frames = container.streams.video[0].frames
@@ -147,7 +147,7 @@ processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokeniza
 
 ### Quantization using Bitsandbytes for memory efficiency
 
-The model can be loaded in lower bits, significantly reducing memory burden while maintaining the performance of the original model. his allows for efficient deployment on resource-constrained cases.
+The model can be loaded in lower bits, significantly reducing memory burden while maintaining the performance of the original model. This allows for efficient deployment on resource-constrained cases.
 
 First make sure to install bitsandbytes by running `pip install bitsandbytes` and to have access to a GPU/accelerator that is supported by the library.
 
@@ -177,7 +177,7 @@ model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-L
 
 ### Flash-Attention 2 to speed-up generation
 
-Additionally, we can greatly speed-up model inference by using [Flash Attention](../perf_train_gpu_one#flash-attention-2), which is a faster implementation of the attention mechanism used inside the model.
+Additionally, we can greatly speed-up model inference by using [Flash Attention](../attention_interface#set-an-attention-backend), which is a faster implementation of the attention mechanism used inside the model.
 
 First, make sure to install the latest version of Flash Attention 2:
 

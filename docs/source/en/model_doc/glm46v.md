@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
 *This model was published in HF papers on 2025-07-01 and contributed to Hugging Face Transformers on 2025-11-15.*
@@ -43,7 +43,7 @@ https URL. Code, models and more information are released at https://github.com/
 
 ## Support Model
 
-This Model Processor support these model of zai-org:
+This Model Processor supports these models of zai-org:
 
 + [GLM-4.6V-Flash](https://huggingface.co/zai-org/GLM-4.6V-Flash)
 + [GLM-4.6V](https://huggingface.co/zai-org/GLM-4.6V)

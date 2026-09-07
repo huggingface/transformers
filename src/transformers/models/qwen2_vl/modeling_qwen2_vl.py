@@ -19,20 +19,18 @@
 """PyTorch Qwen2-VL model."""
 
 import itertools
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
 from torch.nn import LayerNorm
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -54,12 +52,13 @@ from ...utils import (
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
+    get_max_seqlen,
     is_flash_attention_requested,
     maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
+from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from .configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig, Qwen2VLVisionConfig
 
 
@@ -112,10 +111,8 @@ class Qwen2VLRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Qwen2VL
 class Qwen2VLRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Qwen2VLConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -129,24 +126,18 @@ class Qwen2VLRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+        self.mrope_section = config.rope_parameters.get("mrope_section", [16, 24, 24])
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: Qwen2VLConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    @deprecate_kwarg("device", version="5.18")
+    def compute_default_rope_parameters(config: Qwen2VLConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -155,14 +146,10 @@ class Qwen2VLRotaryEmbedding(nn.Module):
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
-    # Ignore copy
     def forward(self, x, position_ids):
         # In contrast to other models, Qwen2_VL has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
@@ -172,11 +159,19 @@ class Qwen2VLRotaryEmbedding(nn.Module):
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
 
+        sin = self.recomposition_frequencies(sin)
+        cos = self.recomposition_frequencies(cos)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq = torch.cat([m[i % 3] for i, m in enumerate(freq.split(self.mrope_section, dim=-1))], dim=-1)
+        return torch.cat((freq, freq), dim=-1)
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
@@ -187,28 +182,16 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding with Multimodal Sections to the query and key tensors (https://qwenlm.github.io/blog/qwen2-vl/).
-
-    Explanation:
-        Multimodal 3D rotary position embedding is an extension to 1D rotary position embedding. The input embedding
-        sequence contains vision (images / videos) embedding and text embedding or just contains text embedding. For
-        vision embedding part, we apply rotary position embedding on temporal, height and width dimension separately.
-        Here we split the channel dimension to 3 chunks for the temporal, height and width rotary position embedding.
-        For text embedding part, we just apply 1D rotary position embedding. The three rotary position index (temporal,
-        height and width) of text embedding is always the same, so the text embedding rotary position embedding has no
-        difference with modern LLMs.
+@use_kernel_forward_from_hub("rotary_pos_emb")
+# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
         q (`torch.Tensor`): The query tensor.
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`):
-            The position indices of the tokens corresponding to the query and key tensors. For example, this can be
-            used to pass offsetted position ids when working with a KV-cache.
-        mrope_section(`List(int)`):
-            Multimodal rope section is for channel dimension of temporal, height and width in rope calculation.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -219,14 +202,8 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
-    mrope_section = mrope_section * 2
-    cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
-        unsqueeze_dim
-    )
-    sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
-        unsqueeze_dim
-    )
-
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
@@ -246,18 +223,70 @@ def apply_rotary_pos_emb_vision(
     return q_embed, k_embed
 
 
-class VisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+class Qwen2VLVisionRotaryEmbedding(nn.Module):
+    """
+    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
+    pre-computed using `head-dim//4` which is later used to concat H and W positions.
+    The final angles rotate over the whole head dim, no partial rotation involved.
+    """
 
-    def __init__(self, dim: int, theta: float = 10000.0) -> None:
+    @deprecate_kwarg("device", version="5.18")
+    def __init__(self, config: Qwen2VLVisionConfig, device=None):
         super().__init__()
-        self.dim = dim
-        self.theta = theta
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.config = config
 
-    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
-        return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    @deprecate_kwarg("device", version="5.18")
+    def compute_axial_rope_parameters(
+        config: Qwen2VLVisionConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the axial RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.embed_dim // config.num_attention_heads
+        spatial_dim = dim // 2
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        return inv_freq.to(device), attention_factor
+
+    @torch.no_grad()
+    def forward(self, x, position_ids):
+        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        position_ids_expanded = position_ids[..., None].float()
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = position_ids_expanded * self.inv_freq.float()
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
+
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
+        return cos, sin
+
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq_h, freq_w = freq[:, 0], freq[:, 1]
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
+        return torch.cat([freq_hw, freq_hw], dim=-1)
 
 
 class PatchEmbed(nn.Module):
@@ -365,12 +394,12 @@ class VisionAttention(nn.Module):
         self.attention_dropout = 0.0
         self.is_causal = False
 
-    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        max_seqlen: int | None = None,
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
@@ -390,7 +419,7 @@ class VisionAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -444,7 +473,6 @@ class Qwen2VLVisionBlock(GradientCheckpointingLayer):
         self.attn = VisionAttention(config=config)
         self.mlp = VisionMlp(dim=config.embed_dim, hidden_dim=mlp_hidden_dim, hidden_act=config.hidden_act)
 
-    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -479,6 +507,7 @@ class Qwen2MLP(nn.Module):
         return down_proj
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class Qwen2VLAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
@@ -524,8 +553,6 @@ class Qwen2VLAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
@@ -540,9 +567,7 @@ class Qwen2VLAttention(nn.Module):
         value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_multimodal_rotary_pos_emb(
-            query_states, key_states, cos, sin, self.config.rope_parameters["mrope_section"]
-        )
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
@@ -651,12 +676,6 @@ class Qwen2VLPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
 
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, VisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
-
 
 @auto_docstring
 class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
@@ -680,9 +699,7 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
             embed_dim=config.embed_dim,
         )
 
-        head_dim = config.embed_dim // config.num_heads
-        self.rotary_pos_emb = VisionRotaryEmbedding(head_dim // 2)
-
+        self.rotary_pos_emb = Qwen2VLVisionRotaryEmbedding(config)
         self.blocks = nn.ModuleList([Qwen2VLVisionBlock(config) for _ in range(config.depth)])
         self.merger = PatchMerger(
             dim=config.hidden_size, context_dim=config.embed_dim, spatial_merge_size=config.spatial_merge_size
@@ -697,16 +714,6 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
     def get_device(self) -> torch.device:
         return self.blocks[0].mlp.fc2.weight.device
 
-    def rot_pos_emb(self, grid_thw):
-        warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        return rotary_pos_emb
-
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -718,17 +725,16 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
             The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
         """
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
-        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
+        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
 
         for blk in self.blocks:
             hidden_states = blk(
                 hidden_states,
                 cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -1036,12 +1042,6 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
@@ -1059,12 +1059,6 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
@@ -1086,11 +1080,11 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
             special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_video_mask = special_video_mask.all(-1)
         else:
@@ -1163,7 +1157,6 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
             position_ids = None
         return position_ids
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1181,13 +1174,6 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen2VLModelOutputWithPast:
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        """
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -1256,8 +1242,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
@@ -1271,12 +1255,9 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1301,10 +1282,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
 
         Example:
 
@@ -1378,44 +1355,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             rope_deltas=outputs.rope_deltas,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_values_videos"] = None
-
-        return model_inputs
-
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # Overwritten -- requires 3D position ids
 
@@ -1479,19 +1418,19 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             vision_start_mask = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(vision_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), vision_start_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
             image_mask = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
             video_mask = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), video_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
         else:

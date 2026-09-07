@@ -133,7 +133,7 @@ class DeepseekOcr2Processor(ProcessorMixin):
         elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
             raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
-        text = text.copy()  # below lines change text in-place
+        text = list(text).copy()  # below lines change text in-place
 
         image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
         num_crops_list = image_inputs["num_local_patches"]

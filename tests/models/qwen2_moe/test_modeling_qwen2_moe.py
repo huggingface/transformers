@@ -19,8 +19,10 @@ import pytest
 
 from transformers import AutoTokenizer, is_torch_available, set_seed
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     is_flaky,
+    require_deterministic_for_xpu,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -133,6 +135,7 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_a2_7b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
         model = self.get_model()
@@ -140,13 +143,26 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-4.2106, -3.6411, -4.9111, -4.2840, -4.9950, -3.4438, -3.5262, -4.1624]])
+        expectations = Expectations(
+            {
+                (None, None): [[-4.2106, -3.6411, -4.9111, -4.2840, -4.9950, -3.4438, -3.5262, -4.1624]],
+                ("xpu", 5): [[-4.3138, -3.4456, -4.6436, -4.5360, -4.7971, -3.6394, -3.5993, -4.2753]],
+            }
+        )  # fmt: skip
+        EXPECTED_MEAN = torch.tensor(expectations.get_expectation())
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
         # slicing logits[0, 0, 0:10]
-        EXPECTED_SLICE = torch.tensor([2.3008, -0.6777, -0.1287, -1.4043, -1.7393, -1.7627, -2.0547, -2.4414, -3.0332, -2.1406])  # fmt: skip
+        expectations = Expectations(
+            {
+                (None, None): [2.3008, -0.6777, -0.1287, -1.4043, -1.7393, -1.7627, -2.0547, -2.4414, -3.0332, -2.1406],
+                ("xpu", 5): [2.4336,  0.1547,  0.6660, -0.9512, -1.3652, -1.4072, -1.5908, -1.7041, -2.8848, -1.5176],
+            }
+        )  # fmt: skip
+        EXPECTED_SLICE = torch.tensor(expectations.get_expectation())  # fmt: skip
         torch.testing.assert_close(out[0, 0, :10], EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_a2_7b_generation(self):
         EXPECTED_TEXT_COMPLETION = """To be or not to be, that is the question. This is the question that has been asked by many people over the"""
         prompt = "To be or not to"
@@ -188,6 +204,7 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_a2_7b_long_prompt_sdpa(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
@@ -219,9 +236,13 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
 
     @slow
     def test_speculative_generation(self):
-        EXPECTED_TEXT_COMPLETION = (
-            "To be or not to be, that is the question: Whether 'tis nobler in the mind to suffer The sl"
-        )
+        expectations = Expectations(
+            {
+                (None, None): "To be or not to be, that is the question: Whether 'tis nobler in the mind to suffer The sl",
+                ("xpu", 5): "To be or not to be, that is the question. The answer is to be, but not to be in the way",
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = expectations.get_expectation()
         prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", use_fast=False)
         model = Qwen2MoeForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16)

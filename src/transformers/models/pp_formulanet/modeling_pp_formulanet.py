@@ -1082,6 +1082,10 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
         >>> print(result)
         ['\\zeta_{0}(\\nu)=-\\frac{\\nu\\varrho^{-2\\nu}}{\\pi}\\int_{\\mu}^{\\infty}d\\omega\\int_{C_{+}}d z\\frac{2z^{2}}{(z^{2}+\\omega^{2})^{\\nu+1}}\\breve{\\Psi}(\\omega;z)e^{i\\epsilon z}\\quad,']
         ```"""
+        # `shift_labels` is consumed by the loss below (the decoder inputs are already right-shifted), so pop it
+        # before the inner model call rather than letting it flow down through `**kwargs`.
+        shift_labels = kwargs.pop("shift_labels", None)
+
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1103,8 +1107,14 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
 
         loss = None
         if labels is not None:
+            # Encoder-decoder logits are position-aligned with the targets, so pass them as `shift_labels`
+            # (with `labels=None`) to stop `ForCausalLMLoss` shifting them a second time.
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+                logits=logits,
+                labels=None,
+                vocab_size=self.config.text_config.vocab_size,
+                shift_labels=shift_labels if shift_labels is not None else labels,
+                **kwargs,
             )
 
         return Seq2SeqLMOutput(
@@ -1118,38 +1128,6 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            # Pixel values are used only in the first iteration if available
-            # In subsequent iterations, they are already merged with text and cached
-            # NOTE: first iteration doesn't have to be prefill, it can be the first
-            # iteration with a question and cached system prompt (continue generate from cache)
-            model_inputs["pixel_values"] = pixel_values
-
-        return model_inputs
 
     # override this function to compatible with `_prepare_encoder_decoder_kwargs_for_generation`
     def get_encoder(self, modality: str | None = None):

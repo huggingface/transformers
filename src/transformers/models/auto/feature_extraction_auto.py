@@ -50,6 +50,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
             },
         ),
         ("audioflamingo3", {"torch": "WhisperAudioProcessor", "numpy": "WhisperAudioProcessorNumpy"}),
+        ("canary", {"torch": "ParakeetAudioProcessor", "numpy": "ParakeetAudioProcessorNumpy"}),
         ("clap", {"torch": "ClapAudioProcessor", "numpy": "ClapAudioProcessorNumpy"}),
         ("clvp", {"torch": "ClvpAudioProcessor", "numpy": "ClvpAudioProcessorNumpy"}),
         ("cohere_asr", {"torch": "CohereAsrAudioProcessor", "numpy": "CohereAsrAudioProcessorNumpy"}),
@@ -66,6 +67,9 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ),
         ("glmasr", {"torch": "WhisperAudioProcessor", "numpy": "WhisperAudioProcessorNumpy"}),
         ("granite_speech", {"torch": "GraniteSpeechAudioProcessor", "numpy": "GraniteSpeechAudioProcessorNumpy"}),
+        # TODO(audio-processor): granite_speech5 still has no AudioProcessor; single-key legacy entry.
+        ("granite_speech5_ctc", {"torch": "GraniteSpeech5FeatureExtractor"}),
+        ("granite_speech5_encoder", {"torch": "GraniteSpeech5FeatureExtractor"}),
         ("granite_speech_plus", {"torch": "GraniteSpeechAudioProcessor", "numpy": "GraniteSpeechAudioProcessorNumpy"}),
         ("higgs_audio_v2_tokenizer", {"torch": "DacAudioProcessor", "numpy": "DacAudioProcessorNumpy"}),
         ("hubert", {"torch": "Wav2Vec2AudioProcessor", "numpy": "Wav2Vec2AudioProcessorNumpy"}),
@@ -111,6 +115,13 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("unispeech", {"torch": "Wav2Vec2AudioProcessor", "numpy": "Wav2Vec2AudioProcessorNumpy"}),
         ("unispeech-sat", {"torch": "Wav2Vec2AudioProcessor", "numpy": "Wav2Vec2AudioProcessorNumpy"}),
         ("univnet", {"torch": "UnivNetAudioProcessor", "numpy": "UnivNetAudioProcessorNumpy"}),
+        (
+            "vibevoice",
+            {
+                "torch": "VibevoiceAcousticTokenizerAudioProcessor",
+                "numpy": "VibevoiceAcousticTokenizerAudioProcessorNumpy",
+            },
+        ),
         (
             "vibevoice_acoustic_tokenizer",
             {
@@ -372,6 +383,9 @@ def get_feature_extractor_config(
         logger.info("Could not locate the audio-processor configuration file.")
         return {}
 
+    # Load feature_extractor dict. Priority goes as (nested config if found -> feature extractor config)
+    # We are downloading both configs because almost all models have a `processor_config.json` but
+    # not all of these are nested. We need to check if it was saved recently as nested or if it is legacy style
     feature_extractor_dict = {}
     if resolved_processor_file is not None:
         processor_dict = safe_load_json_file(resolved_processor_file)
@@ -383,7 +397,7 @@ def get_feature_extractor_config(
 
     if resolved_feature_extractor_file is not None and not feature_extractor_dict:
         feature_extractor_dict = safe_load_json_file(resolved_feature_extractor_file)
-    return feature_extractor_dict
+    return feature_extractor_dict or {}
 
 
 def _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, *, backend: str, **kwargs):

@@ -53,7 +53,7 @@ FlavaPossibleConfigs = FlavaTextConfig | FlavaImageConfig | FlavaMultimodalConfi
     custom_intro="""
     Output from FlavaModel containing embeddings and outputs from individual encoders.
 
-    Note that `image_embeddings` and `text_embeddigns` returned are similar to pooled output returned from a
+    Note that `image_embeddings` and `text_embeddings` returned are similar to pooled output returned from a
     transformer. If you want embeddings for contrastive loss or retrieval use a FLAVA model's `image_projection` and
     `text_projection` layers on `image_embeddings` and `text_embeddings` respectively.
     """
@@ -172,7 +172,7 @@ class FlavaForPreTrainingOutput(ModelOutput):
     multimodal_masked_output (`BaseModelOutputWithPooling`, *optional*, returned when `input_ids_masked` and `pixel_values` are present):
         The output of the [`FlavaMultimodalModel`].
     mim_logits (`torch.FloatTensor` of shape `(batch_size, num_image_patches, image_vocab_size)` or of shape `(total_masked_patches, image_vocab_size)` , *optional*, returned when `pixel_values` are present and `input_ids_masked` are not):
-        The logits for MIM unimodal loss. Uses `book_masked_pos` to get masked patches. The flattened output is
+        The logits for MIM unimodal loss. Uses `bool_masked_pos` to get masked patches. The flattened output is
             returned when `bool_masked_pos` has some of the patches masked.
     mlm_logits (`torch.FloatTensor` of shape `(batch_size, text_seq_length, text_vocab_size)` or of shape `(total_masked_seq_length, text_vocab_size)`, *optional*, returned when `input_ids_masked` are present and `pixel_values` are not):
         The logits for MLM unimodal loss. The flattened output is returned when `input_ids_masked` has some of
@@ -188,9 +188,9 @@ class FlavaForPreTrainingOutput(ModelOutput):
         `text_projection` and `image_projection` layers respectively. This is calculated on unmasked images and
         texts.
     mmm_image_logits (`torch.FloatTensor` of shape `(batch_size, num_image_patches, image_vocab_size)` or of shape`(total_masked_patches, image_vocab_size)`, *optional*, returned when `pixel_values` and `input_ids_masked` are present):
-        The logits for MMM image multimodal loss. Uses `book_masked_pos` to get masked patches. The flattened
+        The logits for MMM image multimodal loss. Uses `bool_masked_pos` to get masked patches. The flattened
             output is returned when `bool_masked_pos` has some of the patches masked.
-    mmm_text_logits (`torch.FloatTensor` of shape `(batch_size, text_seq_length, text_vocab_size)` or of shape `(`(total_masked_seq_length, text_vocab_size)`), *optional*, returned when `pixel_values` and `input_ids_masked` are present):
+    mmm_text_logits (`torch.FloatTensor` of shape `(batch_size, text_seq_length, text_vocab_size)` or of shape `(total_masked_seq_length, text_vocab_size)`, *optional*, returned when `pixel_values` and `input_ids_masked` are present):
         The logits for MMM text multimodal loss. The flattened output is returned when `input_ids_masked` has
             some of the tokens masked.
     """
@@ -379,12 +379,8 @@ class FlavaTextEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
-        self.register_buffer(
-            "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
+        self.token_type_ids = nn.Buffer(torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False)
 
     def forward(
         self,
@@ -1525,7 +1521,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         if self.image_codebook is None and config.init_codebook:
             self.image_codebook = FlavaImageCodebook(config.image_codebook_config)
 
-        # Levarage text and image encoder configs to create the masked
+        # Leverage text and image encoder configs to create the masked
         # head since it has the right vocab
         self.mim_head = FlavaMaskedPredictionHead(config.image_config)
         self.mlm_head = FlavaMaskedPredictionHead(config.text_config)

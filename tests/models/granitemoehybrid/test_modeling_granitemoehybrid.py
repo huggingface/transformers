@@ -343,6 +343,19 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         with pytest.raises(StrictDataclassClassValidationError):
             GraniteMoeHybridConfig(layer_types=["not allowed!"])
 
+    @unittest.skip(
+        "Model doesn't have rope but was added with `config_rope_parameters` which is `None` for some reason..."
+    )
+    def test_model_rope_scaling_frequencies(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip(
+        "Model doesn't have rope but was added with `config_rope_parameters` which is `None` for some reason..."
+    )
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
+
 
 @require_torch_accelerator
 class GraniteMoeHybridIntegrationTest(unittest.TestCase):

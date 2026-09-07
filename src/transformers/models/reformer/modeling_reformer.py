@@ -439,10 +439,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
 
         # save mask value here. Need fp32 and fp16 mask values
-        self.register_buffer("self_mask_value_float16", torch.tensor(-1e3), persistent=False)
-        self.register_buffer("self_mask_value_float32", torch.tensor(-1e5), persistent=False)
-        self.register_buffer("mask_value_float16", torch.tensor(-1e4), persistent=False)
-        self.register_buffer("mask_value_float32", torch.tensor(-1e9), persistent=False)
+        self.self_mask_value_float16 = nn.Buffer(torch.tensor(-1e3), persistent=False)
+        self.self_mask_value_float32 = nn.Buffer(torch.tensor(-1e5), persistent=False)
+        self.mask_value_float16 = nn.Buffer(torch.tensor(-1e4), persistent=False)
+        self.mask_value_float32 = nn.Buffer(torch.tensor(-1e9), persistent=False)
 
     def forward(
         self,
@@ -569,7 +569,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 sequence_length, buckets, num_hashes
             )
 
-            # make sure bucket idx is not longer then sequence length
+            # make sure bucket idx is not longer than sequence length
             sorted_bucket_idx_per_hash = sorted_bucket_idx % sequence_length
 
             # cluster query key value vectors according to hashed buckets
@@ -1130,8 +1130,8 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         self.dropout = config.local_attention_probs_dropout_prob
 
         # save mask value here
-        self.register_buffer("mask_value_float16", torch.tensor(-1e4), persistent=False)
-        self.register_buffer("mask_value_float32", torch.tensor(-1e9), persistent=False)
+        self.mask_value_float16 = nn.Buffer(torch.tensor(-1e4), persistent=False)
+        self.mask_value_float32 = nn.Buffer(torch.tensor(-1e9), persistent=False)
 
     def forward(
         self,
@@ -1382,7 +1382,7 @@ class ReformerAttention(nn.Module):
     ):
         hidden_states = self.layer_norm(hidden_states)
 
-        # use cached buckets for backprob if buckets not None for LSHSelfAttention
+        # use cached buckets for backprop if buckets not None for LSHSelfAttention
         self_attention_outputs = self.self_attention(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -1625,7 +1625,7 @@ class ReformerLayer(nn.Module):
             # set seed to have correct dropout
             torch.manual_seed(self.attention_seed)
             # f(X_2)
-            # use cached buckets for backprob if buckets not None for LSHSelfAttention
+            # use cached buckets for backprop if buckets not None for LSHSelfAttention
             output = self.attention(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,

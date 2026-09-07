@@ -38,14 +38,13 @@ from ...masking_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_accelerate_available,
     logging,
     torch_compilable_check,
 )
@@ -72,14 +71,10 @@ from ..gemma3n.modeling_gemma3n import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import MixtralExperts
 from ..moonshine_streaming.modeling_moonshine_streaming import sliding_window_mask_function
+from ..sam3.modeling_sam3 import Sam3ViTRotaryEmbedding
 from .configuration_gemma4 import Gemma4AudioConfig, Gemma4Config, Gemma4TextConfig, Gemma4VisionConfig
-
-
-if is_accelerate_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
@@ -112,11 +107,18 @@ def create_masks_for_vision_model(
     # Full attention: causal only — no bidirectional blockwise overlay.
     full_mask = create_causal_mask(**mask_kwargs)
 
+    # The sliding mask must be sized against a `sliding_attention` layer, but layer 0 may not be one
+    # and `create_causal_mask` defaults to the first `full_attention` layer, which has a different kv_length.
+    if getattr(past_key_values, "is_sliding", None) and True in past_key_values.is_sliding:
+        sliding_layer_idx = past_key_values.is_sliding.index(True)
+    else:
+        sliding_layer_idx = 0
+
     # We need to manually pad the sequence IDs for the sliding mask
     # as it's passed as an `or_mask_function` which bypasses internal padding.
     early_exit, _, _, _, kv_length, _, kv_offset = _preprocess_mask_arguments(
         **mask_kwargs,
-        layer_idx=0,
+        layer_idx=sliding_layer_idx,
     )
     if early_exit:
         padded_block_sequence_ids = block_sequence_ids
@@ -132,6 +134,7 @@ def create_masks_for_vision_model(
         **mask_kwargs,
         or_mask_function=blockwise_overlay(padded_block_sequence_ids),
         and_mask_function=sliding_window_overlay(config.sliding_window),
+        layer_idx=sliding_layer_idx,
     )
 
     return {
@@ -223,10 +226,10 @@ class Gemma4ClippableLinear(nn.Module):
         self.linear = nn.Linear(in_features, out_features, bias=False)
 
         if self.use_clipped_linears:
-            self.register_buffer("input_min", torch.tensor(-float("inf")))
-            self.register_buffer("input_max", torch.tensor(float("inf")))
-            self.register_buffer("output_min", torch.tensor(-float("inf")))
-            self.register_buffer("output_max", torch.tensor(float("inf")))
+            self.input_min = nn.Buffer(torch.tensor(-float("inf")))
+            self.input_max = nn.Buffer(torch.tensor(float("inf")))
+            self.output_min = nn.Buffer(torch.tensor(-float("inf")))
+            self.output_max = nn.Buffer(torch.tensor(float("inf")))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if self.use_clipped_linears:
@@ -264,7 +267,7 @@ class Gemma4AudioRelPositionalEncoding(nn.Module):
         num_timescales = self.hidden_size // 2
         log_timescale_increment = math.log(max_timescale / min_timescale) / max(num_timescales - 1, 1)
         inv_timescales = min_timescale * torch.exp(torch.arange(num_timescales) * -log_timescale_increment)
-        self.register_buffer("inv_timescales", inv_timescales.unsqueeze(0).unsqueeze(0), persistent=False)
+        self.inv_timescales = nn.Buffer(inv_timescales.unsqueeze(0).unsqueeze(0), persistent=False)
 
     @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -302,7 +305,7 @@ class Gemma4AudioAttention(nn.Module):
         self.relative_k_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.per_dim_scale = nn.Parameter(torch.zeros(self.head_dim))
 
-        self.register_buffer("softcap", torch.tensor(self.attention_logits_soft_cap), persistent=False)
+        self.softcap = nn.Buffer(torch.tensor(self.attention_logits_soft_cap), persistent=False)
 
     def _convert_to_block(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """Splits a `(batch_size, seq_len, num_heads, head_dim)` tensor into non-overlapping blocks of `chunk_size` along the sequence dim."""
@@ -781,65 +784,35 @@ def apply_multidimensional_rope(
     return torch.cat(y_parts, dim=-1)
 
 
-class Gemma4VisionRotaryEmbedding(LlamaRotaryEmbedding):
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: Gemma4VisionConfig | None = None,
-        device: torch.device | None = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+# override -- Gemma4 doesn't pack inputs for attention and thus needs a proper batch dim
+class Gemma4VisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
+    def __init__(self, config: Gemma4VisionConfig, device=None):
+        super().__init__(config, device)
 
-        # The reference implementation computes RoPE frequencies INDEPENDENTLY
-        # for each spatial dimension using the partitioned head_dim (head_dim // ndim),
-        # so both x and y dimensions get identical frequency ranges.
-        # This is different from splitting the global inv_freq between dimensions.
-        spatial_dim = dim // 2
+    def compute_axial_rope_parameters(config: Gemma4VisionConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+        return super().compute_axial_rope_parameters(config, device, **kwargs)
 
-        attention_factor = 1.0  # Unused in this type of RoPE
-        inv_freq = 1.0 / (
-            base
-            ** (torch.arange(0, spatial_dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / spatial_dim)
-        )
-        return inv_freq, attention_factor
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        inv_freq_expanded = self.inv_freq[None, ...].float()
+        position_ids_expanded = position_ids[..., None].float()
+
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = position_ids_expanded @ inv_freq_expanded
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
 
-        # Multidimensional positions: [batch, num_patches, ndim]. Apply rotations to each spatial dim separately
-        all_cos, all_sin = [], []
-        for i in range(2):
-            dim_position_ids = position_ids[:, :, i]
-            dim_position_ids_expanded = dim_position_ids[:, None, :].float()
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
+        return cos.to(x.dtype), sin.to(x.dtype)
 
-            with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-                freqs = (inv_freq_expanded.float() @ dim_position_ids_expanded.float()).transpose(1, 2)
-                emb = torch.cat((freqs, freqs), dim=-1)
-                cos = emb.cos() * self.attention_scaling
-                sin = emb.sin() * self.attention_scaling
-            all_cos.append(cos)
-            all_sin.append(sin)
-
-        cos = torch.cat(all_cos, dim=-1).to(dtype=x.dtype)
-        sin = torch.cat(all_sin, dim=-1).to(dtype=x.dtype)
-        return cos, sin
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        # in contrast to other 2D rope modules, interleave grids as H-H-W-W
+        freq_h, freq_w = freq[:, :, 0], freq[:, :, 1]
+        return torch.cat([freq_h, freq_h, freq_w, freq_w], dim=-1)
 
 
 @no_inherit_decorator
@@ -999,13 +972,13 @@ class Gemma4TextMLP(Gemma3MLP):
 
 
 class Gemma4TextRotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, config: Gemma4TextConfig, device=None, layer_type=None):
+    def __init__(self, config: Gemma4TextConfig, device=None):
         nn.Module.__init__(self)
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.layer_types = set(config.layer_types)
+        self.layer_types = sorted(set(config.layer_types))
         self.rope_init_fns: dict[str, Callable[..., tuple[torch.Tensor, float]]] = {}
         self.rope_type: dict[str, str] = {}
 
@@ -1022,13 +995,12 @@ class Gemma4TextRotaryEmbedding(Gemma3RotaryEmbedding):
             self.rope_init_fns[layer_type] = rope_init_fn
             self.rope_type[layer_type] = rope_type
 
-            rope_init_fn_kwargs = {"device": device, "layer_type": layer_type}
-            if layer_type == "full_attention" and rope_type == "proportional":
-                rope_init_fn_kwargs["head_dim_key"] = "global_head_dim"
-
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, **rope_init_fn_kwargs)
-            self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
-            self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
+            # `inv_freq` depends on the head dim, which varies by layer type, so initialise
+            # from a config resolved for this layer type rather than the global one.
+            rope_config = config.per_layer_config[layer_type]
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, device, layer_type=layer_type)
+            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
+            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
 
@@ -1043,12 +1015,10 @@ class Gemma4TextAttention(nn.Module):
         self.is_sliding = self.layer_type == "sliding_attention"
         self.sliding_window = config.sliding_window if self.is_sliding else None
 
-        self.head_dim = config.global_head_dim if not self.is_sliding and config.global_head_dim else config.head_dim
+        layer_config = config.per_layer_config[layer_idx]
+        self.head_dim = layer_config.head_dim
         self.use_alternative_attention = config.attention_k_eq_v and not self.is_sliding
-        num_key_value_heads = (
-            config.num_global_key_value_heads if self.use_alternative_attention else config.num_key_value_heads
-        )
-        self.num_key_value_groups = config.num_attention_heads // num_key_value_heads
+        self.num_key_value_groups = config.num_attention_heads // layer_config.num_key_value_heads
         self.scaling = 1.0
         self.attention_dropout = self.config.attention_dropout
         self.is_causal = config.use_bidirectional_attention != "all"
@@ -1072,10 +1042,12 @@ class Gemma4TextAttention(nn.Module):
             self.v_norm = Gemma4RMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
             self.k_proj = nn.Linear(
-                config.hidden_size, num_key_value_heads * self.head_dim, bias=config.attention_bias
+                config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
             )
             self.v_proj = (
-                nn.Linear(config.hidden_size, num_key_value_heads * self.head_dim, bias=config.attention_bias)
+                nn.Linear(
+                    config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+                )
                 if not self.use_alternative_attention
                 else None
             )
@@ -1198,7 +1170,7 @@ class Gemma4TextDecoderLayer(Gemma3DecoderLayer):
         super().__init__(config, layer_idx)
         self.self_attn = Gemma4TextAttention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma4TextMLP(config, layer_idx)
-        self.register_buffer("layer_scalar", torch.ones(1))
+        self.layer_scalar = nn.Buffer(torch.ones(1))
 
         self.hidden_size_per_layer_input = config.hidden_size_per_layer_input
         if self.hidden_size_per_layer_input:
@@ -1309,22 +1281,10 @@ class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
             init.zeros_(module.per_dim_scale)
         elif isinstance(module, Gemma4TextRotaryEmbedding):
             for layer_type, rope_init_fn in module.rope_init_fns.items():
-                rope_init_fn_kwargs = {"layer_type": layer_type}
-                if layer_type == "full_attention" and module.rope_type[layer_type] == "proportional":
-                    rope_init_fn_kwargs["head_dim_key"] = "global_head_dim"
-
-                curr_inv_freq, _ = rope_init_fn(module.config, **rope_init_fn_kwargs)
+                rope_config = module.config.per_layer_config[layer_type]
+                curr_inv_freq, _ = rope_init_fn(rope_config, layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
-        elif isinstance(module, Gemma4VisionRotaryEmbedding):
-            rope_fn = (
-                ROPE_INIT_FUNCTIONS[module.rope_type]
-                if module.rope_type != "default"
-                else module.compute_default_rope_parameters
-            )
-            buffer_value, _ = rope_fn(module.config)
-            init.copy_(module.inv_freq, buffer_value)
-            init.copy_(module.original_inv_freq, buffer_value)
         elif isinstance(module, Gemma4TextScaledWordEmbedding):
             init.constant_(module.embed_scale, module.scalar_embed_scale)
         elif isinstance(module, Gemma4TextRouter):
@@ -1732,7 +1692,7 @@ class Gemma4AudioModel(Gemma4PreTrainedModel):
 class Gemma4VisionModel(Gemma4PreTrainedModel):
     """The Gemma 4 Vision Encoder."""
 
-    config = Gemma4VisionConfig
+    config: Gemma4VisionConfig
     _can_record_outputs = {
         "hidden_states": Gemma4VisionEncoderLayer,
         "attentions": Gemma4VisionAttention,
@@ -1745,8 +1705,8 @@ class Gemma4VisionModel(Gemma4PreTrainedModel):
         self.pooler = Gemma4VisionPooler(config)
 
         if self.config.standardize:
-            self.register_buffer("std_bias", torch.empty(self.config.hidden_size))
-            self.register_buffer("std_scale", torch.empty(self.config.hidden_size))
+            self.std_bias = nn.Buffer(torch.empty(self.config.hidden_size))
+            self.std_scale = nn.Buffer(torch.empty(self.config.hidden_size))
 
         self.post_init()
 
@@ -1915,7 +1875,13 @@ class Gemma4Model(Gemma3nModel):
             **kwargs,
         )
         last_hidden_state = vision_outputs.last_hidden_state
-        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+        pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+
+        output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
+        k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
+        non_pad_mask = (image_position_ids != -1).all(dim=-1)
+        split_sizes = (non_pad_mask.sum(dim=-1) // k_squared).tolist()
+        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
         return vision_outputs
 
     @can_return_tuple
@@ -1932,14 +1898,20 @@ class Gemma4Model(Gemma3nModel):
             Passed through to the vision encoder for positional embedding computation.
         """
         pixel_values_videos = pixel_values_videos.flatten(0, 1)
-        video_position_ids = video_position_ids.flatten(0, 1)
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values_videos,
-            pixel_position_ids=video_position_ids,
+            pixel_position_ids=video_position_ids.flatten(0, 1),
             **kwargs,
         )
         last_hidden_state = vision_outputs.last_hidden_state
-        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+        pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+
+        output_length = pixel_values_videos.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
+        k_squared = int((pixel_values_videos.shape[-2] // output_length) ** 0.5) ** 2
+        non_pad_mask = (video_position_ids != -1).all(dim=-1)
+        split_sizes = (non_pad_mask.sum(dim=(-2, -1)) // k_squared).tolist()
+
+        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
         return vision_outputs
 
     def get_placeholder_mask(
@@ -1969,19 +1941,19 @@ class Gemma4Model(Gemma3nModel):
             special_image_mask = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             ).all(-1)
             special_video_mask = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             ).all(-1)
             special_audio_mask = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             ).all(-1)
 
@@ -2009,7 +1981,7 @@ class Gemma4Model(Gemma3nModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4ModelOutputWithPast:
         r"""
-        input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
@@ -2049,7 +2021,7 @@ class Gemma4Model(Gemma3nModel):
         # Merge text and images
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values, image_position_ids, return_dict=True).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -2068,7 +2040,7 @@ class Gemma4Model(Gemma3nModel):
             video_features = self.get_video_features(
                 pixel_values_videos, video_position_ids, return_dict=True
             ).pooler_output
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_features = torch.cat(video_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()
@@ -2103,7 +2075,7 @@ class Gemma4Model(Gemma3nModel):
             )
 
             inputs_embeds = inputs_embeds.masked_scatter(
-                audio_mask.to(inputs_embeds.device), audio_features.to(inputs_embeds.device)
+                audio_mask.to(inputs_embeds.device), audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
             )
 
         # It may already have been prepared by, e.g., `generate`
@@ -2165,9 +2137,9 @@ class Gemma4Model(Gemma3nModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Gemma4AudioModelOutput:
         r"""
-        input_features (`torch.FloatTensor]` of shape `(num_images, seq_length, num_features)`):
+        input_features (`torch.FloatTensor` of shape `(num_images, seq_length, num_features)`):
             The tensors corresponding to the input audio.
-        input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         """
         if self.audio_tower is None:
@@ -2218,7 +2190,7 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4CausalLMOutputWithPast:
         r"""
-        input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
@@ -2322,48 +2294,13 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
 
         return create_masks_for_generate(**mask_kwargs)
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        position_ids=None,
-        pixel_values=None,
-        pixel_values_videos=None,
-        input_features=None,
-        attention_mask=None,
-        input_features_mask=None,
-        token_type_ids=None,
-        use_cache=True,
-        logits_to_keep=None,
-        labels=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- custom `position_ids` and `pixel_values` handling
+    def prepare_inputs_for_generation(self, input_ids, use_cache=True, is_first_iteration=False, **kwargs):
         model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
-            token_type_ids=token_type_ids,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
+            input_ids, use_cache=use_cache, is_first_iteration=is_first_iteration, **kwargs
         )
-
-        # If we're in cached decoding stage, multimodal inputs are already cached and can be dropped
-        if is_first_iteration or not use_cache:
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["pixel_values_videos"] = pixel_values_videos
-            model_inputs["input_features"] = input_features
-            model_inputs["input_features_mask"] = input_features_mask
-        else:
+        if not (is_first_iteration or not use_cache):
             # Don't pass to not apply bidirectional mask on top
             model_inputs["mm_token_type_ids"] = None
-
         # If `per_layer_inputs` was provided along with `inputs_embeds` for first forward, drop it for subsequent forwards
         if not is_first_iteration:
             _ = model_inputs.pop("per_layer_inputs", None)

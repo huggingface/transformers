@@ -136,13 +136,13 @@ class DiaProcessorTest(unittest.TestCase):
 
         # full mask with +1 for bos
         self.assertTrue(audio_mask.sum() == (max(self.delay_pattern) + 1) * len(random_text))
-        self.assertTrue(
-            audio_tokens.shape
-            == (
+        self.assertListEqual(
+            list(audio_tokens.shape),
+            [
                 len(random_text),
                 max(self.delay_pattern) + 1,
                 len(self.delay_pattern),
-            )
+            ],
         )
 
         for channel_idx, delay in enumerate(self.delay_pattern):

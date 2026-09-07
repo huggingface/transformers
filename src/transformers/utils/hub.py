@@ -15,6 +15,7 @@
 Hub utilities: utilities related to download and cache models
 """
 
+import errno
 import json
 import os
 import re
@@ -484,6 +485,13 @@ def cached_files(
                 "Check cache directory permissions. Common causes: 1) another user is downloading the same model (please wait); "
                 "2) a previous download was canceled and the lock file needs manual removal."
             ) from e
+        elif isinstance(e, OSError) and e.errno == errno.EROFS:
+            # Unlike EACCES (errno 13), which Python maps to PermissionError,
+            # EROFS (errno 30) is a plain OSError that does NOT match `isinstance(e, PermissionError)`.
+            # Without this guard it would fall through to the stale-cache recovery block below,
+            # silently returning an old cached file even when a newer revision exists on the Hub.
+            # Re-raise so callers can detect the read-only condition and retry with a writable path.
+            raise
         elif isinstance(e, ValueError):
             raise OSError(f"{e}") from e
 

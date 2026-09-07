@@ -18,10 +18,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import itertools
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -50,12 +49,13 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     can_return_tuple,
+    get_max_seqlen,
     is_flash_attention_requested,
     maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
+from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from .configuration_glm4v_moe import Glm4vMoeConfig, Glm4vMoeTextConfig, Glm4vMoeVisionConfig
 
 
@@ -220,7 +220,7 @@ class Glm4vMoeTextTopkRouter(nn.Module):
         self.num_group = config.n_group
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
-        self.register_buffer("e_score_correction_bias", torch.zeros((self.num_experts), dtype=torch.float32))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros((self.num_experts), dtype=torch.float32))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -425,9 +425,6 @@ class Glm4vMoePreTrainedModel(PreTrainedModel):
         elif isinstance(module, Glm4vMoeTextExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        if isinstance(module, Glm4vMoeVisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring
@@ -445,17 +442,69 @@ class Glm4vMoeCausalLMOutputWithPast(CausalLMOutputWithPast):
 
 
 class Glm4vMoeVisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+    """
+    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
+    pre-computed using `head-dim//4` which is later used to concat H and W positions.
+    The final angles rotate over the whole head dim, no partial rotation involved.
+    """
 
-    def __init__(self, dim: int, theta: float = 10000.0) -> None:
+    @deprecate_kwarg("device", version="5.18")
+    def __init__(self, config: Glm4vMoeVisionConfig, device=None):
         super().__init__()
-        self.dim = dim
-        self.theta = theta
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.config = config
 
-    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
-        return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    @deprecate_kwarg("device", version="5.18")
+    def compute_axial_rope_parameters(
+        config: Glm4vMoeVisionConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        spatial_dim = dim // 2
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        return inv_freq.to(device), attention_factor
+
+    @torch.no_grad()
+    def forward(self, x, position_ids):
+        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        position_ids_expanded = position_ids[..., None].float()
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = position_ids_expanded * self.inv_freq.float()
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
+
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
+        return cos, sin
+
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq_h, freq_w = freq[:, 0], freq[:, 1]
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
+        return torch.cat([freq_hw, freq_hw], dim=-1)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -632,12 +681,12 @@ class Glm4vMoeVisionAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.is_causal = False
 
-    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     def forward(
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        max_seqlen: int | None = None,
         **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
@@ -657,7 +706,7 @@ class Glm4vMoeVisionAttention(nn.Module):
 
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, _ = attention_interface(
                 self,
                 query_states,
@@ -709,7 +758,6 @@ class Glm4vMoeVisionBlock(GradientCheckpointingLayer):
         self.attn = Glm4vMoeVisionAttention(config)
         self.mlp = Glm4vMoeisionMlp(config, bias=False)
 
-    @deprecate_kwarg("rotary_pos_emb", version="v5.10")
     @auto_docstring
     def forward(
         self,
@@ -750,8 +798,7 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
         self.embeddings = Glm4vMoeVisionEmbeddings(config)
         self.patch_embed = Glm4vMoeVisionPatchEmbed(config)
 
-        head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = Glm4vMoeVisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = Glm4vMoeVisionRotaryEmbedding(config)
 
         self.blocks = nn.ModuleList([Glm4vMoeVisionBlock(config) for _ in range(config.depth)])
         self.merger = Glm4vMoeVisionPatchMerger(
@@ -770,16 +817,6 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
-    def rot_pos_emb(self, grid_thw):
-        warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        return rotary_pos_emb, position_ids
-
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -796,13 +833,11 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
             `torch.Tensor`: hidden_states.
         """
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
-        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
         hidden_states = self.post_conv_layernorm(hidden_states)
-        rotary_emb = self.rotary_pos_emb(position_ids)
-        emb = torch.cat((rotary_emb, rotary_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
+        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
 
         seqlens = cu_seqlens[1:] - cu_seqlens[:-1]
         hidden_states = self.embeddings(
@@ -817,6 +852,7 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
             hidden_states = blk(
                 hidden_states,
                 cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -838,8 +874,7 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
 
 
 class Glm4vMoeTextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
+    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Glm4vMoeTextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -853,25 +888,20 @@ class Glm4vMoeTextRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
         self.mrope_section = config.rope_parameters.get("mrope_section", [8, 12, 12])
 
     @staticmethod
+    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
-        config: Glm4vMoeTextConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+        config: Glm4vMoeTextConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -882,12 +912,9 @@ class Glm4vMoeTextRotaryEmbedding(nn.Module):
         dim = int(head_dim * partial_rotary_factor)
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -1205,12 +1232,6 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
         t = video_grid_thw[:, 0]
@@ -1237,12 +1258,6 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
@@ -1264,11 +1279,11 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
             special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_video_mask = special_video_mask.all(-1)
         else:
@@ -1342,7 +1357,6 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
             position_ids = None
         return position_ids
 
-    @deprecate_kwarg("rope_deltas", version="v5.10")
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -1359,12 +1373,6 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Glm4vMoeModelOutputWithPast:
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1445,51 +1453,38 @@ def load_balancing_loss_func(
     if gate_logits is None or not isinstance(gate_logits, tuple):
         return 0
 
-    if isinstance(gate_logits, tuple):
-        compute_device = gate_logits[0].device
-        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+    # Accumulate assignment counts and probability sums layer by layer, normalizing at the end,
+    # so peak memory stays O(seq_len * num_experts) regardless of the number of layers.
+    compute_device = gate_logits[0].device
+    tokens_per_expert_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
+    router_prob_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
+    total_rows = 0.0
 
-    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+    if attention_mask is not None:
+        # The same flat mask applies to every layer's [batch_size * sequence_length] rows.
+        flat_mask = attention_mask.reshape(-1).to(device=compute_device, dtype=torch.float32)
 
-    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+    for layer_gate in gate_logits:
+        routing_weights = torch.nn.functional.softmax(layer_gate.to(compute_device), dim=-1)
+        _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+        if attention_mask is None:
+            # Count of top-k assignments per expert
+            tokens_per_expert_sum = (
+                tokens_per_expert_sum + torch.bincount(selected_experts.reshape(-1), minlength=num_experts).float()
+            )
+            # Sum of routing probabilities per expert
+            router_prob_sum = router_prob_sum + routing_weights.float().sum(dim=0)
+            total_rows = total_rows + routing_weights.shape[0]
+        else:
+            # Same reductions, weighted by the attention mask to exclude padding tokens
+            tokens_per_expert_sum = tokens_per_expert_sum + torch.zeros(
+                num_experts, dtype=torch.float32, device=compute_device
+            ).scatter_add_(0, selected_experts.reshape(-1), flat_mask.repeat_interleave(top_k))
+            router_prob_sum = router_prob_sum + (routing_weights.float() * flat_mask.unsqueeze(-1)).sum(dim=0)
+            total_rows = total_rows + flat_mask.sum()
 
-    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
-
-    if attention_mask is None:
-        # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
-
-        # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.mean(routing_weights, dim=0)
-    else:
-        batch_size, sequence_length = attention_mask.shape
-        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
-
-        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
-        expert_attention_mask = (
-            attention_mask[None, :, :, None, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
-            .reshape(-1, top_k, num_experts)
-            .to(compute_device)
-        )
-
-        # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
-            expert_attention_mask, dim=0
-        )
-
-        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
-        router_per_expert_attention_mask = (
-            attention_mask[None, :, :, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
-            .reshape(-1, num_experts)
-            .to(compute_device)
-        )
-
-        # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
-            router_per_expert_attention_mask, dim=0
-        )
+    tokens_per_expert = tokens_per_expert_sum / total_rows
+    router_prob_per_expert = router_prob_sum / total_rows
 
     overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
     return overall_loss * num_experts
@@ -1519,8 +1514,6 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
@@ -1534,8 +1527,6 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
@@ -1558,15 +1549,6 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Glm4vMoeCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-
         Example:
 
         ```python
@@ -1646,44 +1628,6 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
             router_logits=outputs.router_logits,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_values_videos"] = None
-
-        return model_inputs
-
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # Overwritten -- requires 3D position ids
 
@@ -1744,19 +1688,19 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
             is_image = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.image_start_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
             is_video_start = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.video_start_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
             is_video_end = (
                 inputs_embeds
                 == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_end_token_id, dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), self.config.video_end_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
             )[..., 0]
         else:

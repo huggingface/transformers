@@ -9,14 +9,14 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
 
 # Processors
 
-Multimodal models require a preprocessor capable of handling inputs that combine more than one modality. Depending on the input modality, a processor needs to convert text into an array of tensors, images into pixel values, and audio into an array with tensors with the correct sampling rate.
+Multimodal models require a preprocessor capable of handling inputs that combine more than one modality. Depending on the input modality, a processor needs to convert text into an array of tensors, images into pixel values, and audio into an array of tensors with the correct sampling rate.
 
 For example, [PaliGemma](./model_doc/paligemma) is a vision-language model that uses the [SigLIP](./model_doc/siglip) image processor and the [Llama](./model_doc/llama) tokenizer. A [`ProcessorMixin`] class wraps both of these preprocessor types, providing a single and unified processor class for a multimodal model.
 
@@ -91,7 +91,7 @@ Automatic speech recognition (ASR) tasks require a processor that can handle tex
 ```py
 from datasets import load_dataset
 
-dataset = load_dataset("lj_speech", split="train")
+dataset = load_dataset("keithito/lj_speech", split="train")
 dataset = dataset.map(remove_columns=["file", "id", "normalized_text"])
 dataset[0]["audio"]
 {'array': array([-7.3242188e-04, -7.6293945e-04, -6.4086914e-04, ...,

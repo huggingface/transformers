@@ -480,7 +480,7 @@ You can also manually replicate the results of the `pipeline` if you'd like.
 ```py
 >>> def run_inference(model, video):
 ...     # (num_frames, num_channels, height, width)
-...     perumuted_sample_test_video = video.permute(1, 0, 2, 3)
+...     permuted_sample_test_video = video.permute(1, 0, 2, 3)
 ...     inputs = {
 ...         "pixel_values": perumuted_sample_test_video.unsqueeze(0),
 ...         "labels": torch.tensor(

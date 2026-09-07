@@ -20,7 +20,7 @@ import string
 import time
 from collections.abc import AsyncIterator, Awaitable
 from typing import Annotated, Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 import httpx
 import requests
@@ -101,6 +101,13 @@ If you're a new user, check this basic flag guide: https://huggingface.co/docs/t
 `./chat_history/{{MODEL_ID}}/chat_{{DATETIME}}.yaml` or `{{SAVE_NAME}}` if provided
 - **!exit**: closes the interface
 """
+
+
+def get_service_root_url(base_url: str) -> str:
+    """Return the service root of `base_url`, where the serve management endpoints live."""
+    parsed = urlparse(base_url)
+    path = parsed.path.rstrip("/").removesuffix("/v1")
+    return urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
 
 
 class RichInterface:
@@ -209,7 +216,9 @@ class RichInterface:
         self._console.print()
 
     def print_model_load(self, model: str):
-        response = requests.post(f"{self.base_url.rstrip('/')}/load_model", json={"model": model}, stream=True)
+        response = requests.post(
+            urljoin(get_service_root_url(self.base_url) + "/", "load_model"), json={"model": model}, stream=True
+        )
         response.raise_for_status()
 
         class StatsColumn(ProgressColumn):
@@ -374,7 +383,7 @@ class Chat:
 
     @staticmethod
     def check_health(url):
-        health_url = urljoin(url + "/", "health")
+        health_url = urljoin(get_service_root_url(url) + "/", "health")
         try:
             output = httpx.get(health_url)
             if output.status_code != 200:

@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -76,7 +76,7 @@ print(predicted_token_classes)
 - Shared by: OpenAI
 - Model type: Bidirectional token classification model for privacy span detection
 - Language(s): Primarily English; selected multilingual robustness evaluation reported
-- License: [Apache 2.0](LICENSE)
+- License: [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
 - Source repository: https://github.com/openai/privacy-filter
 - Model weights: https://huggingface.co/openai/privacy-filter

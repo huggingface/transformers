@@ -163,8 +163,23 @@ class ExecutorchConfig(DynamoConfig):
 
             - `"xnnpack"` — CPU inference via the XNNPACK library (default; runs anywhere).
             - `"cuda"` — GPU inference via the ExecuTorch CUDA backend.
+        alloc_graph_input (`bool`, *optional*, defaults to `True`):
+            Whether the memory-planning pass reserves arena memory for graph inputs. When `False`,
+            the runtime uses the caller-provided input buffers directly instead of copying into the
+            arena — so an in-place `USER_INPUT_MUTATION` (e.g. a `StaticCache` write) lands in the
+            caller's tensor rather than an arena copy.
+        alloc_graph_output (`bool`, *optional*, defaults to `True`):
+            Whether the memory-planning pass reserves arena memory for graph outputs. When `False`,
+            the caller must bind output buffers at runtime (`Method::set_output_data_ptr`); binding an
+            output to its mutated input's buffer avoids the copy-out roundtrip.
+        alloc_mutable_buffers (`bool`, *optional*, defaults to `True`):
+            Whether the memory-planning pass reserves arena memory for mutable buffers (model-resident
+            state). Passed through to the `MemoryPlanningPass`.
     """
 
     export_format: ExportFormat = ExportFormat.EXECUTORCH
 
     backend: str = "xnnpack"
+    alloc_graph_input: bool = True
+    alloc_graph_output: bool = True
+    alloc_mutable_buffers: bool = True

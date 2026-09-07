@@ -44,6 +44,10 @@ env:
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
+  # Cap the CPU RAM that psutil reports to pytest so device_map="auto" offloads some layers to disk
+  # instead of packing everything into CPU RAM (K8S runners share a ~750 GB host, causing GPU OOM).
+  # See huggingface/transformers#46539 for details.
+  CI_CPU_MEMORY_LIMIT_GB: 60
 
 
 permissions:

@@ -15,15 +15,9 @@
 import numpy as np
 
 from ...tokenization_mistral_common import MistralCommonBackend
-from ...utils import auto_docstring, is_mistral_common_available, is_soundfile_available, is_torch_available, logging
+from ...utils import auto_docstring, is_mistral_common_available, logging
 from ...utils.import_utils import requires
 
-
-if is_torch_available():
-    pass
-
-if is_soundfile_available():
-    pass
 
 if is_mistral_common_available():
     from mistral_common.protocol.transcription.request import StreamingMode, TranscriptionRequest

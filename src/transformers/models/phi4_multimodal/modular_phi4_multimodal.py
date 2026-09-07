@@ -351,7 +351,7 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
             width = (
                 self.config.hidden_size
                 if isinstance(self.config, Phi4MultimodalVisionConfig)
-                else self.config.hidden_size
+                else self.config.vision_config.hidden_size
             )
             init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
         elif isinstance(module, nn.Embedding):
@@ -909,8 +909,8 @@ class Phi4MultimodalAudioRelativeAttentionBias(nn.Module):
 class Phi4MultimodalAudioMeanVarianceNormLayer(nn.Module):
     def __init__(self, config: Phi4MultimodalAudioConfig):
         super().__init__()
-        self.register_buffer("global_mean", torch.zeros(config.input_size))
-        self.register_buffer("global_invstd", torch.ones(config.input_size))
+        self.global_mean = nn.Buffer(torch.zeros(config.input_size))
+        self.global_invstd = nn.Buffer(torch.ones(config.input_size))
 
     def forward(self, x):
         return (x - self.global_mean) * self.global_invstd

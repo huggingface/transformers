@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
 
@@ -32,7 +32,7 @@ Kimi K2.5 is an open-source, native multimodal agentic model that advances pract
 Kimi K2.5 achieves significant improvements on complex, end-to-end coding tasks, generalizing robustly across programming languages (Rust, Go, Python) and domains spanning front-end, DevOps, and performance optimization. The model is capable of transforming simple prompts and visual inputs into production-ready interfaces and lightweight full-stack workflows, generating structured layouts, interactive elements, and rich animations with deliberate aesthetic precision.
 
 This model was contributed by [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).
-The offical checkpoints are [moonshotai/Kimi-K2.5](https://huggingface.co/moonshotai/Kimi-K2.5), [moonshotai/Kimi-K2.6](https://huggingface.co/moonshotai/Kimi-K2.6) and [moonshotai/Kimi-K2.7-Code](https://huggingface.co/moonshotai/Kimi-K2.7-Code).
+The official checkpoints are [moonshotai/Kimi-K2.5](https://huggingface.co/moonshotai/Kimi-K2.5), [moonshotai/Kimi-K2.6](https://huggingface.co/moonshotai/Kimi-K2.6) and [moonshotai/Kimi-K2.7-Code](https://huggingface.co/moonshotai/Kimi-K2.7-Code).
 
 
 ## Usage examples

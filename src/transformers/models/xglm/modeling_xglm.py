@@ -67,7 +67,7 @@ class XGLMSinusoidalPositionalEmbedding(nn.Module):
             # in forward put the weights on the correct dtype and device of the param
             emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
-        self.register_buffer("weights", emb_weights, persistent=False)
+        self.weights = nn.Buffer(emb_weights, persistent=False)
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: int | None = None):
@@ -206,7 +206,7 @@ class XGLMAttention(nn.Module):
                 )
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = torch.max(
-                attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min, device=attn_weights.device)
+                attn_weights, torch.full((), torch.finfo(attn_weights.dtype).min, device=attn_weights.device)
             )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 

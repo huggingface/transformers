@@ -7,7 +7,6 @@ from ..utils.import_utils import is_torch_greater_or_equal
 logger = logging.get_logger(__name__)
 
 
-_is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5", accept_dev=True)
 _is_torch_greater_or_equal_than_2_8 = is_torch_greater_or_equal("2.8", accept_dev=True)
 _is_torch_xpu_available = is_torch_xpu_available()
 _is_torch_npu_available = is_torch_npu_available()
@@ -28,14 +27,13 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor, value: torch.Tensor) -> bool:
     # GQA can only be used under the following conditions
     # 1.cuda or Ascend NPU
-    #   - torch version >= 2.5
     #   - attention_mask is None (otherwise it will fall back to the math kernel)
     #   - key head_dim == value head_dim <= 256 (otherwise it will fall back to the math kernel)
     # 2.xpu
     #   - torch version >= 2.8
     if _is_torch_xpu_available:
         return _is_torch_greater_or_equal_than_2_8
-    return _is_torch_greater_or_equal_than_2_5 and attention_mask is None and key.shape[-1] == value.shape[-1] <= 256
+    return attention_mask is None and key.shape[-1] == value.shape[-1] <= 256
 
 
 def create_position_bias_mask(
@@ -68,10 +66,12 @@ def create_position_bias_mask(
         # If it's not causal, we can simply use the position_bias as the additive mask in sdpa
         else:
             position_bias_mask = position_bias
-    else:
-        # If we have a mask already, it's always of boolean dtype here. We only have to use the superpose both mask to float
-        # dtype to use as additive mask in sdpa
+    elif attention_mask.dtype == torch.bool:
+        # If we have a boolean mask, superpose both into a single float additive mask to use in sdpa
         position_bias_mask = torch.where(attention_mask, position_bias, min_dtype)
+    else:
+        # A custom float mask is already additive, so we can simply add it to the position_bias
+        position_bias_mask = position_bias + attention_mask
 
     return position_bias_mask
 
@@ -117,6 +117,10 @@ def sdpa_attention_forward(
     #   full graph options. Otherwise, dynamic shapes are prevented from compiling.
     # - It is important to check first for the shape, otherwise compile will fail with
     #   `argument 'is_causal' must be bool, not SymBool`.
+    # TODO: under `torch.export` with dynamic shapes, `q_length > 1` is a `SymBool` and `and` returns the first falsy
+    #   operand, so `is_causal` can end up being that `SymBool` (e.g. the seamless_m4t / seamless_m4t_v2 speech
+    #   encoders). Reordering the conditions fixes it but breaks the compile requirement above, so it should rather be
+    #   handled on the exporter side. See https://github.com/huggingface/transformers/pull/46196#discussion_r3717333141
     is_causal = q_length > 1 and attention_mask is None and is_causal
 
     # Shapes (e.g. query.shape[2]) are tensors during jit tracing, resulting in `is_causal` being a tensor.

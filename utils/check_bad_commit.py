@@ -22,15 +22,16 @@ import subprocess
 from collections import defaultdict
 
 import git
-import requests
+from github_utils import get_github_json
 
 
-def create_script(target_test):
+def create_script(target_test, flake_runs=4):
     """Create a python script to be run by `git bisect run` to determine if `target_test` passes or fails.
     If a test is not found in a commit, the script with exit code `0` (i.e. `Success`).
 
     Args:
         target_test (`str`): The test to check.
+        flake_runs (`int`): Number of times to run the test to detect flakiness. Defaults to 4.
 
     Returns:
         `str`: The script to be run by `git bisect run`.
@@ -47,7 +48,7 @@ _ = subprocess.run(
 )
 
 result = subprocess.run(
-    ["python3", "-m", "pytest", "-v", "--flake-finder", "--flake-runs=4", "-rfEp", f"{target_test}"],
+    ["python3", "-m", "pytest", "-v", "--flake-finder", "--flake-runs={flake_runs}", "-rfEp", f"{target_test}"],
     capture_output = True,
     text=True,
 )
@@ -78,7 +79,7 @@ exit(0)
         fp.write(script.strip())
 
 
-def is_bad_commit(target_test, commit):
+def is_bad_commit(target_test, commit, flake_runs=4):
     repo = git.Repo(".")  # or specify path to your repo
 
     # Save the current HEAD reference
@@ -87,7 +88,7 @@ def is_bad_commit(target_test, commit):
     # Checkout to the commit
     repo.git.checkout(commit)
 
-    create_script(target_test=target_test)
+    create_script(target_test=target_test, flake_runs=flake_runs)
 
     result = subprocess.run(
         ["python3", "target_script.py"],
@@ -136,6 +137,7 @@ def find_bad_commit(target_test, start_commit, end_commit):
     }
 
     is_pr_ci = os.environ.get("GITHUB_EVENT_NAME") in ["issue_comment", "pull_request"]
+    flake_runs = 1 if is_pr_ci else 4
 
     # For PR comment CI, we "assume" all tests at `end_commit` passed, so any failing test during a PR CI run is
     # "a new failing test", and we can perform more detailed checks with this script.
@@ -147,7 +149,9 @@ def find_bad_commit(target_test, start_commit, end_commit):
     #   - if both failing and passing at end_commit: mark it as flaky
 
     # check if `end_commit` fails the test
-    failed_before, n_failed, n_passed, failure_at_base_commit = is_bad_commit(target_test, end_commit)
+    failed_before, n_failed, n_passed, failure_at_base_commit = is_bad_commit(
+        target_test, end_commit, flake_runs=flake_runs
+    )
     # We only need one failure to conclude the test is flaky on the previous run with `end_commit`.
     # However, when running on CI, we need at least one failure and one pass to conclude.
     is_flaky_at_end_commit = ((not is_pr_ci) and n_failed > 0) or (is_pr_ci and n_failed > 0 and n_passed > 0)
@@ -177,7 +181,7 @@ def find_bad_commit(target_test, start_commit, end_commit):
     # Now, we are (almost) sure `target_test` is not failing at `end_commit`. (For a PR CI, it may fail at `end_commit`)
     # Check if `start_commit` fails the test.
     # **IMPORTANT** we only need one pass to conclude the test is flaky on the current run with `start_commit`!
-    _, n_failed, n_passed, failure_at_workflow_commit = is_bad_commit(target_test, start_commit)
+    _, n_failed, n_passed, failure_at_workflow_commit = is_bad_commit(target_test, start_commit, flake_runs=flake_runs)
     if n_passed > 0:
         # failed on CI run, but not reproducible here --> don't report
         result["status"] = (
@@ -220,7 +224,7 @@ def find_bad_commit(target_test, start_commit, end_commit):
         return result
 
     # The test fails on `start_commit` but passed on `end_commit`.
-    create_script(target_test=target_test)
+    create_script(target_test=target_test, flake_runs=flake_runs)
 
     bash = f"""
 git bisect reset
@@ -253,7 +257,7 @@ git bisect run python3 target_script.py
     failure_at_bad_commit = ""
     if len(commits) > 0:
         bad_commit = commits[0]
-        _, _, _, failure_at_bad_commit = is_bad_commit(target_test, bad_commit)
+        _, _, _, failure_at_bad_commit = is_bad_commit(target_test, bad_commit, flake_runs=flake_runs)
 
     print(f"Between `start_commit` {start_commit} and `end_commit` {end_commit}")
     print(f"bad_commit: {bad_commit}\n")
@@ -274,17 +278,13 @@ def get_commit_info(commit, pr_number=None, github_token=None):
     author = None
     merged_author = None
 
-    headers = (
-        {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {github_token}"} if github_token else {}
-    )
-
     # Use PR number from environment if not provided
     if pr_number is None:
         pr_number = os.environ.get("pr_number")
 
     # First, get commit info to check if it's a merge commit
     url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit}"
-    commit_info = requests.get(url, headers=headers).json()
+    commit_info = get_github_json(url, token=github_token)
 
     commit_to_query = commit
 
@@ -300,18 +300,20 @@ def get_commit_info(commit, pr_number=None, github_token=None):
             commit_to_query = match.group(1)
 
     # If no PR number yet, try to discover it from the commit.
-    # The API can return an error dict (e.g. rate limit) instead of a list, so guard with isinstance.
+    # get_github_json either returns valid data or raises. Guard with isinstance in case the endpoint
+    # returns an unexpected shape (e.g. a single object instead of a list).
     if not pr_number:
         url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit_to_query}/pulls"
-        pr_info_for_commit = requests.get(url, headers=headers).json()
+        pr_info_for_commit = get_github_json(url, token=github_token)
         if isinstance(pr_info_for_commit, list) and len(pr_info_for_commit) > 0:
             pr_number = pr_info_for_commit[0].get("number")
 
     # If we have a PR number, get author and merged_by info.
-    # Use .get() throughout: on rate-limit/403 the API returns an error dict, not the expected PR object.
+    # get_github_json either returns valid data or raises. Use .get() defensively in case the
+    # response shape differs from what is expected (e.g. API changes or missing fields).
     if pr_number:
         url = f"https://api.github.com/repos/huggingface/transformers/pulls/{pr_number}"
-        pr_for_commit = requests.get(url, headers=headers).json()
+        pr_for_commit = get_github_json(url, token=github_token)
         author = pr_for_commit.get("user", {}).get("login")
         merged_by = pr_for_commit.get("merged_by")
         if merged_by is not None:

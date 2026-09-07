@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -219,7 +219,7 @@ model = LlavaNextVideoForConditionalGeneration.from_pretrained("llava-hf/LLaVA-N
 
 ### Flash-Attention 2 to speed-up generation
 
-Additionally, we can greatly speed-up model inference by using [Flash Attention](../perf_train_gpu_one#flash-attention-2), which is a faster implementation of the attention mechanism used inside the model.
+Additionally, we can greatly speed-up model inference by using [Flash Attention](../attention_interface#set-an-attention-backend), which is a faster implementation of the attention mechanism used inside the model.
 
 First, make sure to install the latest version of Flash Attention 2:
 
