@@ -138,7 +138,7 @@ class MiMoV2FlashRotaryEmbedding(nn.Module):
 
 
 class MiMoV2FlashTopkRouter(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: MiMoV2FlashConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
@@ -422,10 +422,7 @@ class MiMoV2FlashDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
         self.self_attn = MiMoV2FlashAttention(config, layer_idx)
 
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = MiMoV2FlashMoE(config)
-        else:
-            self.mlp = MiMoV2FlashMLP(config)
+        self.mlp = MiMoV2FlashMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else MiMoV2FlashMLP(config)
 
         self.input_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, config.rms_norm_eps)

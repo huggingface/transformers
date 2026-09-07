@@ -24,8 +24,7 @@ ESMFold2 is an all-atom protein structure prediction model. It predicts 3D coord
 backbone. The architecture combines a sliding-window atom encoder with 3D rotary position embeddings, a pairwise
 folding trunk applied iteratively, a diffusion-based structure head, and a confidence head.
 
-The model checkpoints are available on the Hugging Face Hub at
-[`biohub/ESMFold2`](https://huggingface.co/biohub/ESMFold2) and [`biohub/ESMFold2-Fast`](https://huggingface.co/biohub/ESMFold2-Fast) 
+The model checkpoint is available on the Hugging Face Hub at [`biohub/ESMFold2-hf`](https://huggingface.co/biohub/ESMFold2-hf).
 
 ## Usage example
 
@@ -36,7 +35,7 @@ from transformers import EsmFold2Model
 
 # The ESMC backbone is bundled in the checkpoint and loaded with the model.
 # bf16 is the recommended inference precision.
-model = EsmFold2Model.from_pretrained("biohub/ESMFold2", dtype=torch.bfloat16, device_map="auto")
+model = EsmFold2Model.from_pretrained("biohub/ESMFold2-hf", dtype=torch.bfloat16, device_map="auto")
 
 pdb_string = model.infer_protein_as_pdb("MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ")
 print(pdb_string)
@@ -84,7 +83,7 @@ import torch
 from transformers import EsmFold2Model
 
 model = EsmFold2Model.from_pretrained(
-    "biohub/ESMFold2", dtype=torch.bfloat16, device_map="cuda", use_kernels=True
+    "biohub/ESMFold2-hf", dtype=torch.bfloat16, device_map="cuda", use_kernels=True
 )
 
 pdb_string = model.infer_protein_as_pdb("MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ")
