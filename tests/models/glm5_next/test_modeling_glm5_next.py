@@ -29,6 +29,11 @@ from transformers import (
 from transformers.cache_utils import DynamicCache
 from transformers.generation import CompileConfig
 from transformers.models.glm5_next.configuration_glm5_next import Glm5NextTextConfig
+from transformers.models.glm5_next.modeling_glm5_next import (
+    Glm5NextTextLinearAttention,
+    chunk_kimi_delta_attention,
+    recurrent_kimi_delta_attention,
+)
 from transformers.testing_utils import (
     CaptureLogger,
     require_torch,
@@ -581,6 +586,88 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
 
             for dynamic_result, compiled_result in zip(dynamic_outputs, compiled_outputs):
                 assert_similar_generate_outputs(dynamic_result, compiled_result, atol=atol, rtol=rtol)
+
+    def test_kda_chunked_large_decay_matches_recurrent(self):
+        """
+        Ensures that the chunked KDA implementation matches the recurrent one, gradients included, when the forget
+        gate sits at its lower bound. The pairwise decay `g_i - g_j` is positive for non-causal pairs and reaches
+        `|linear_lower_bound| * (chunk_size - 1)`, i.e. 315 by default, while fp32 `exp` overflows above ~88.7.
+        Those entries are dropped from the output but not from the backward pass, so only the gradients turn into NaNs.
+        """
+        torch.manual_seed(0)
+        batch_size, num_heads, head_dim, chunk_size = 1, 2, 16, 64
+        lower_bound = Glm5NextTextConfig().linear_lower_bound
+
+        # 64 spans exactly one chunk, 72 spans two chunks with padding
+        for seq_length in [64, 72]:
+            with self.subTest(seq_length=seq_length):
+                shape = (batch_size, seq_length, num_heads, head_dim)
+                query = torch.randn(shape, device=torch_device, dtype=torch.float32, requires_grad=True)
+                key = torch.randn(shape, device=torch_device, dtype=torch.float32, requires_grad=True)
+                value = torch.randn(shape, device=torch_device, dtype=torch.float32, requires_grad=True)
+                # `Glm5NextTextForgetGate` returns `linear_lower_bound * sigmoid(...)`, saturated here at that bound
+                gate_input = torch.full(shape, 8.0, device=torch_device, dtype=torch.float32)
+                g = (lower_bound * gate_input.sigmoid()).requires_grad_(True)
+                beta = torch.rand(shape[:-1], device=torch_device, dtype=torch.float32, requires_grad=True)
+
+                inputs = (query, key, value, g, beta)
+                reference_inputs = tuple(x.detach().clone().requires_grad_(True) for x in inputs)
+                kwargs = {"initial_state": None, "output_final_state": True, "use_qk_l2norm_in_kernel": True}
+
+                out, state = chunk_kimi_delta_attention(*inputs, chunk_size=chunk_size, **kwargs)
+                reference_out, reference_state = recurrent_kimi_delta_attention(*reference_inputs, **kwargs)
+
+                # the same cotangents for both, with the final state in the loss so that its backward is covered too
+                out_cotangent, state_cotangent = torch.randn_like(out), torch.randn_like(state)
+                loss = (out * out_cotangent).sum() + (state * state_cotangent).sum()
+                reference_loss = (reference_out * out_cotangent).sum() + (reference_state * state_cotangent).sum()
+                grads = torch.autograd.grad(loss, inputs)
+                reference_grads = torch.autograd.grad(reference_loss, reference_inputs)
+
+                for name, actual, expected in [
+                    ("output", out, reference_out),
+                    ("state", state, reference_state),
+                    *zip(["dq", "dk", "dv", "dg", "dbeta"], grads, reference_grads),
+                ]:
+                    with self.subTest(tensor=name):
+                        self.assertTrue(torch.isfinite(actual).all(), f"non-finite {name}")
+                        self.assertTrue(torch.isfinite(expected).all(), f"non-finite reference {name}")
+                        torch.testing.assert_close(actual, expected, rtol=1e-4, atol=1e-5)
+
+    def test_linear_attention_backward_with_saturated_forget_gate(self):
+        """
+        Ensures that a GLM linear attention layer trains through the chunked KDA path, i.e. that every parameter gets
+        a finite gradient, when its forget gate sits at its lower bound.
+        """
+        torch.manual_seed(0)
+        config = Glm5NextTextConfig(
+            hidden_size=32,
+            num_hidden_layers=1,
+            linear_num_heads=2,
+            linear_head_dim=16,
+            linear_conv_kernel_dim=2,
+            layer_types=["linear_attention"],
+            mlp_layer_types=["dense"],
+        )
+        layer = Glm5NextTextLinearAttention(config, layer_idx=0).to(torch_device).float().train()
+        # pin the gate to `linear_lower_bound * sigmoid(8)`, independently of the randomly initialized projections
+        with torch.no_grad():
+            layer.forget_gate.A_log.zero_()
+            layer.forget_gate.dt_bias.fill_(8.0)
+            layer.forget_gate.f_b_proj.weight.zero_()
+
+        hidden_states = torch.randn(
+            (1, 64, config.hidden_size), device=torch_device, dtype=torch.float32, requires_grad=True
+        )
+        output = layer(hidden_states)
+        self.assertTrue(torch.isfinite(output).all())
+
+        output.square().mean().backward()
+        self.assertTrue(torch.isfinite(hidden_states.grad).all(), "non-finite gradient on the inputs")
+        for name, parameter in layer.named_parameters():
+            with self.subTest(parameter=name):
+                self.assertIsNotNone(parameter.grad, f"missing gradient for `{name}`")
+                self.assertTrue(torch.isfinite(parameter.grad).all(), f"non-finite gradient for `{name}`")
 
     @unittest.skip("Fundamentally incompatible with indexer - indexer has no boundary offset telling sequences apart")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
