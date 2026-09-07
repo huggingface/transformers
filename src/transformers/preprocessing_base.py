@@ -434,6 +434,12 @@ class PreprocessingMixin(PushToHubMixin):
             A processor of type [`~PreprocessingMixin`].
         """
         config_dict = config_dict.copy()
+        # Derived state is stripped when saving (`to_dict`); strip it when loading too.
+        # Otherwise a config written by an older version — e.g. the serialized `mel_filters`
+        # still present in `openai/whisper-tiny`'s `preprocessor_config.json` — overwrites the
+        # value this class computes in `__init__`, with the wrong type and layout.
+        for excluded in cls._excluded_dict_keys:
+            config_dict.pop(excluded, None)
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
         # Use valid_kwargs pattern when available (image/audio processors)
