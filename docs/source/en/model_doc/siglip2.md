@@ -174,7 +174,7 @@ from transformers import AutoModel, AutoProcessor
 
 model_id = "google/siglip2-so400m-patch14-384"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModel.from_pretrained(model_id).eval(device_map="auto")
+model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
 
 texts = [
     "HOME084 Timbangan Badan Digital Kaca Transparan 28CM Body Scale Personal Scale",

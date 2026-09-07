@@ -254,10 +254,6 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
             enable_kernels,
         )
 
-    @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @require_torch_multi_accelerator
     def test_can_use_device_map(self):
         """

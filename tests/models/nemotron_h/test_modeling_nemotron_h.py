@@ -320,6 +320,34 @@ class NemotronHModelTester:
 
         self.parent.assertTrue(torch.allclose(outputs_fast_cached, outputs_slow_cached, atol=1e-3, rtol=1e-3))
 
+    def create_and_check_kwargs_reach_mamba2_mixer(self, config, input_ids, *args):
+        """
+        Kernel kwargs given to the model must reach the Mamba2 mixer, which splats them into
+        the fused conv1d+scan, the conv and the chunk scan. This is how `seq_idx` reaches the
+        kernels for packed / variable-length batches.
+        """
+        model = NemotronHModel(config)
+        model.to(torch_device)
+        model.eval()
+
+        mixer = next(block.mixer for block in model.layers if block.block_type == "linear_attention")
+        original_forward = mixer.forward
+        seen = []
+
+        def recording_forward(*fwd_args, **fwd_kwargs):
+            seen.append(set(fwd_kwargs))
+            return original_forward(*fwd_args, **fwd_kwargs)
+
+        mixer.forward = recording_forward
+
+        input_ids = input_ids.to(torch_device)
+        seq_idx = torch.zeros(input_ids.shape, dtype=torch.int32, device=torch_device)
+        with torch.no_grad():
+            model(input_ids, seq_idx=seq_idx)
+
+        self.parent.assertTrue(seen, "the linear-attention mixer was never called")
+        self.parent.assertIn("seq_idx", seen[0])
+
     def create_and_check_nemotron_h_chunked_prefill(self, config, input_ids, *args, device="cpu"):
         """
         Adapted from `test_linear_attention_multi_token_cached_forward_matches_single_token`
@@ -486,10 +514,6 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_generate_with_quant_cache(self):
         pass
 
-    @unittest.skip(reason="A large nemotron3 would be necessary (and costly) for that")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)
 
@@ -519,6 +543,10 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         """
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
+
+    def test_kwargs_reach_mamba2_mixer(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_kwargs_reach_mamba2_mixer(*config_and_inputs)
 
     def test_attention_outputs(self):
         r"""
