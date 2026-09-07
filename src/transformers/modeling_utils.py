@@ -3108,7 +3108,9 @@ class PreTrainedModel(
             gradient_checkpointing_kwargs = {"use_reentrant": False}
 
         if offload:
-            device_type = torch.accelerator.current_accelerator().type
+            # `current_accelerator()` is None when no accelerator is available, in which case the
+            # activations already live on the host and there is nothing to copy off a device.
+            device_type = (torch.accelerator.current_accelerator() or torch.device("cpu")).type
 
             def checkpoint_func(function, *args, **kwargs):
                 with save_on_cpu(pin_memory=True, device_type=device_type):
