@@ -1867,12 +1867,13 @@ def _build_checkpoint_conversion_mapping():
             operations=[MergeModulelist(dim=0)],
         ),
     ]
-    # Original `OpenGVLab/InternVL2-*` (`internvl_chat`) checkpoints store a different
-    # weight layout than the native `InternVLForConditionalGeneration`. These rules map
-    # the original names onto the native ones (and split the fused vision `attn.qkv`), so
-    # the checkpoints load without remote code. The native `llava`-style rules are appended
-    # so already-converted InternVL checkpoints keep loading through the same mapping.
-    mapping["internvl"] = [
+    # Original `OpenGVLab/InternVL2-*` checkpoints declare `model_type: "internvl_chat"` and store a
+    # different weight layout than the native `InternVLForConditionalGeneration`. These rules map the
+    # original names onto the native ones (and split the fused vision `attn.qkv`), so the checkpoints
+    # load without remote code. Keyed on `internvl_chat` rather than `internvl` so that native
+    # checkpoints keep the plain `llava` mapping, which `test_reverse_loading_mapping` checks against
+    # the native serialized keys.
+    mapping["internvl_chat"] = [
         # Language model (Qwen2 / InternLM2 backbone).
         WeightRenaming(source_patterns=r"^language_model\.lm_head", target_patterns="lm_head"),
         WeightRenaming(source_patterns=r"^language_model\.model\.", target_patterns="model.language_model."),
