@@ -235,6 +235,7 @@ if TYPE_CHECKING:
     from .instructblip import *
     from .instructblipvideo import *
     from .internvl import *
+    from .internvl2 import *
     from .jais2 import *
     from .jamba import *
     from .janus import *
