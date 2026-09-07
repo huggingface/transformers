@@ -5857,7 +5857,7 @@ class ModelTesterMixin(ExportTesterMixin):
         """
         Tests that we can initialize a model with RoPE scaling in the config, that it can run a forward pass, and
         that a few basic model output properties are honored.
-        Note that we test only text backbone's rope module since multimodal rope can be special.
+        Note that we test only text backbone's rope module - if vision/audio backbone has RoPE then it will NOT be tested.
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         text_config = config.get_text_config(decoder=True)
@@ -5941,7 +5941,7 @@ class ModelTesterMixin(ExportTesterMixin):
     def test_model_rope_scaling_frequencies(self):
         """
         Tests the frequency properties of the different RoPE scaling types on the model RoPE layer.
-        Note that we test only text backbone's rope module since multimodal rope can be special.
+        Note that we test only text backbone's rope module - if vision/audio backbone has RoPE then it will NOT be tested.
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         text_config = config.get_text_config(decoder=True)
@@ -6073,12 +6073,13 @@ class ModelTesterMixin(ExportTesterMixin):
         else:
             layer_types = getattr(text_config, "_rope_type_labels", getattr(text_config, "layer_types"))
             for layer_type in layer_types:
-                self.assertTrue(
-                    (
-                        getattr(ntk_scaling_rope, f"{layer_type}_inv_freq")
-                        <= getattr(original_rope, f"{layer_type}_inv_freq")
-                    ).all()
-                )
+                if text_config.rope_parameters[layer_type] is not None:
+                    self.assertTrue(
+                        (
+                            getattr(ntk_scaling_rope, f"{layer_type}_inv_freq")
+                            <= getattr(original_rope, f"{layer_type}_inv_freq")
+                        ).all()
+                    )
 
         # Sanity check Yarn RoPE scaling
         # Scaling should be over the entire input
@@ -6235,7 +6236,6 @@ def _config_supports_rope_scaling(config: PreTrainedConfig) -> bool:
 
     # Axial rope doesn't scale as images usually have a pre-defined length
     # so the config will have no `max_position_embeddings` field defined
-    # FIXME: add non-scaling rope tests for vision models @raushan
     if not hasattr(config, "max_position_embeddings"):
         main_config_scales_rope = False
     return main_config_scales_rope

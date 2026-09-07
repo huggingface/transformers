@@ -89,7 +89,7 @@ class Glm4vMoeVisionText2TextModelTester:
             "depth": 2,
             "hidden_act": "silu",
             "hidden_size": 48,
-            "out_hidden_size": 16,
+            "out_hidden_size": 32,
             "intermediate_size": 22,
             "patch_size": 14,
             "spatial_merge_size": 1,
