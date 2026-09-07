@@ -467,10 +467,11 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_11b_model_integration_generate(self):
         # Prepare inputs
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
 
         prompt = "<|image|>If I had to write a haiku for this one"
-        url = "https://llava-vl.github.io/static/images/view.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
         image = load_test_image(url)
 
         inputs = processor(text=prompt, images=image, return_tensors="pt").to(torch_device)
@@ -563,10 +564,11 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_11b_model_integration_forward(self):
         # Prepare inputs
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
 
         prompt = "<|image|>If I had to write a haiku for this one"
-        url = "https://llava-vl.github.io/static/images/view.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
         image = load_test_image(url)
 
         inputs = processor(text=prompt, images=image, return_tensors="pt").to(torch_device)
@@ -602,6 +604,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @require_bitsandbytes
     def test_11b_model_integration_batched_generate(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
 
         # Prepare inputs
@@ -609,7 +612,9 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "<|image|>If I had to write a haiku for this one",
             "<|image|>This image shows",
         ]
-        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
         image2 = load_test_image(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )
@@ -664,10 +669,13 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @require_bitsandbytes
     def test_11b_model_integration_multi_image_generate(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         processor = AutoProcessor.from_pretrained(self.instruct_model_checkpoint)
 
         # Prepare inputs
-        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
         image2 = load_test_image(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )

@@ -56,9 +56,7 @@ else:
 
 # This is a pinned image from a specific revision of a document question answering space, hosted by HuggingFace,
 # so we can expect it to be available.
-INVOICE_URL = (
-    "https://huggingface.co/spaces/impira/docquery/resolve/2f6c96314dc84dfda62d40de9da55f2f5165d403/invoice.png"
-)
+INVOICE_URL = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoice_docquery_b.png"
 
 
 @is_pipeline_test
@@ -125,6 +123,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
     @require_detectron2
     @require_pytesseract
     def test_small_model_pt(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         dqa_pipeline = pipeline(
             "document-question-answering", model="hf-internal-testing/tiny-random-layoutlmv2-for-dqa-test"
         )
@@ -159,6 +158,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
     @require_detectron2
     @require_pytesseract
     def test_small_model_pt_bf16(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         dqa_pipeline = pipeline(
             "document-question-answering",
             model="hf-internal-testing/tiny-random-layoutlmv2-for-dqa-test",
@@ -195,7 +195,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
     #    def test_small_model_pt_donut(self):
     #        dqa_pipeline = pipeline("document-question-answering", model="hf-internal-testing/tiny-random-donut")
     #        # dqa_pipeline = pipeline("document-question-answering", model="../tiny-random-donut")
-    #        image = "https://templates.invoicehome.com/invoice-template-us-neat-750px.png"
+    #        image = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoicehome_template.png"
     #        question = "How many cats are there?"
     #
     #        outputs = dqa_pipeline(image=image, question=question, top_k=2)

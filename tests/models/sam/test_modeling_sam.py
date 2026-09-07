@@ -679,7 +679,7 @@ def prepare_image():
 
 
 def prepare_dog_img():
-    img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dog-sam.png"
+    img_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dog_sam.png"
     raw_image = load_test_image(img_url).convert("RGB")
     return raw_image
 
@@ -909,6 +909,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(scores[-1], torch.tensor(0.7937), rtol=1e-4, atol=1e-4)
 
     def test_inference_mask_generation_batched_image_one_point(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = SamModel.from_pretrained("facebook/sam-vit-base")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
 

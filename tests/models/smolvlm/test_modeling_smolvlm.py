@@ -506,7 +506,7 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.image1 = Image.open(
             BytesIO(
                 requests.get(
-                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
                 ).content
             )
         )
@@ -517,7 +517,7 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "video",
-                        "path": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/assisted-generation/gif_1_1080p.mov",
+                        "path": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/video/assisted_generation_gif_1_1080p.mov",
                     },
                     {"type": "text", "text": "Describe this video in detail"},
                 ],
@@ -529,6 +529,7 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     def test_integration_test(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = SmolVLMForConditionalGeneration.from_pretrained(
             "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
             dtype=torch.bfloat16,
@@ -549,6 +550,7 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     def test_integration_test_video(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = SmolVLMForConditionalGeneration.from_pretrained(
             "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
             dtype=torch.bfloat16,

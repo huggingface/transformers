@@ -581,7 +581,7 @@ class PPDocLayoutV2ModelIntegrationTest(unittest.TestCase):
         self.model = PPDocLayoutV2ForObjectDetection.from_pretrained(model_path).to(torch_device)
         self.image_processor = PPDocLayoutV2ImageProcessor.from_pretrained(model_path)
         img_url = url_to_local_path(
-            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_layout_demo.jpg"
         )
         self.image = load_image(img_url)
 

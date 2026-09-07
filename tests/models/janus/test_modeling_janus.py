@@ -426,11 +426,15 @@ class JanusIntegrationTest(unittest.TestCase):
     @slow
     @require_deterministic_for_xpu
     def test_model_text_generation(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
         image = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg",
+                stream=True,
+            ).raw
         )
         prompt = "<image_placeholder>\nDescribe what do you see here and tell me about the history behind it?"
         inputs = processor(images=image, text=prompt, generation_mode="text", return_tensors="pt").to(model.device)
@@ -446,14 +450,21 @@ class JanusIntegrationTest(unittest.TestCase):
     @slow
     @require_deterministic_for_xpu
     def test_model_text_generation_batched(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
 
         image_1 = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg",
+                stream=True,
+            ).raw
         )
         image_2 = Image.open(
-            requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/orion.jpg",
+                stream=True,
+            ).raw
         )
         prompts = [
             "<image_placeholder>\nDescribe what do you see here and tell me about the history behind it?",
@@ -488,14 +499,21 @@ class JanusIntegrationTest(unittest.TestCase):
     @slow
     @require_deterministic_for_xpu
     def test_model_text_generation_with_multi_image(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
 
         image_1 = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg",
+                stream=True,
+            ).raw
         )
         image_2 = Image.open(
-            requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/orion.jpg",
+                stream=True,
+            ).raw
         )
         prompt = "What do these two images <image_placeholder> and <image_placeholder> have in common?"
 

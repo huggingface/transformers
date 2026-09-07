@@ -701,11 +701,9 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
         self.processor = AutoProcessor.from_pretrained(
             "Qwen/Qwen3-Omni-30B-A3B-Instruct", min_pixels=28 * 28, max_pixels=56 * 56
         )
-        self.audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
-        self.audio_url_additional = (
-            "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
-        )
-        self.image_url = "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg"
+        self.audio_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"
+        self.audio_url_additional = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/throat_clearing.wav"
+        self.image_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen2_vl_demo_small.jpg"
         self.messages = [
             {
                 "role": "user",
@@ -828,6 +826,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_multiturn(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = self.get_model()
 
         messages = [
@@ -872,8 +871,9 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_w_audio(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = self.get_model()
-        audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/guess_age_gender.wav"
+        audio_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/voice_sample.wav"
 
         messages = [
             {

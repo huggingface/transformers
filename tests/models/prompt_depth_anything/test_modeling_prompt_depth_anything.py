@@ -216,15 +216,13 @@ class PromptDepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
 
 
 def prepare_img():
-    url = "https://raw.githubusercontent.com/DepthAnything/PromptDA/main/assets/example_images/image.jpg"
+    url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/promptda_image.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
     return image
 
 
 def prepare_prompt_depth():
-    prompt_depth_url = (
-        "https://raw.githubusercontent.com/DepthAnything/PromptDA/main/assets/example_images/arkit_depth.png"
-    )
+    prompt_depth_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/promptda_arkit_depth.png"
     prompt_depth = Image.open(requests.get(prompt_depth_url, stream=True).raw)
     return prompt_depth
 
@@ -234,6 +232,7 @@ def prepare_prompt_depth():
 @slow
 class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
     def test_inference_wo_prompt_depth(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         image_processor = AutoImageProcessor.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
         model = PromptDepthAnythingForDepthEstimation.from_pretrained(
             "depth-anything/prompt-depth-anything-vits-hf"
@@ -256,6 +255,7 @@ class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-3))
 
     def test_inference(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         image_processor = AutoImageProcessor.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
         model = PromptDepthAnythingForDepthEstimation.from_pretrained(
             "depth-anything/prompt-depth-anything-vits-hf"

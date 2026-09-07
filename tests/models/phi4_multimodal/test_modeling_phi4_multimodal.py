@@ -348,6 +348,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
     @require_torch_large_accelerator
     def test_multi_image_vision_text_generation(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = AutoModelForCausalLM.from_pretrained(
             self.checkpoint_path, revision=self.revision, dtype=torch.float16, device_map=torch_device
         )
@@ -355,7 +356,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         images = []
         placeholder = ""
         for i in range(1, 5):
-            url = f"https://image.slidesharecdn.com/azureintroduction-191206101932/75/Introduction-to-Microsoft-Azure-Cloud-{i}-2048.jpg"
+            url = f"https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/azure_slide_{i}.jpg"
             images.append(load_test_image(url))
             placeholder += "<|image|>"
 

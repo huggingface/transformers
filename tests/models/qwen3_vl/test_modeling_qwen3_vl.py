@@ -509,7 +509,7 @@ class Qwen3VLIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen2_vl_demo_small.jpg",
                     },
                     {"type": "text", "text": "What kind of dog is this?"},
                 ],
@@ -521,6 +521,7 @@ class Qwen3VLIntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
 
     def test_small_model_integration_test(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = Qwen3VLForConditionalGeneration.from_pretrained("Qwen/Qwen3-VL-4B-Instruct", device_map="auto")
         expected_texts = Expectations(
             {

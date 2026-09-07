@@ -36,7 +36,7 @@ class PPChart2TableIntegrationTest(unittest.TestCase):
                     {
                         "type": "image",
                         "url": url_to_local_path(
-                            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png"
+                            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_chart_parsing_02.png"
                         ),
                     },
                 ],
@@ -47,6 +47,7 @@ class PPChart2TableIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def test_small_model_integration_test_pp_chart2table(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         inputs = self.processor.apply_chat_template(
             self.conversation,
             tokenize=True,
@@ -66,6 +67,7 @@ class PPChart2TableIntegrationTest(unittest.TestCase):
         self.assertEqual(decoded_output, expected_output)
 
     def test_small_model_integration_test_pp_chart2table_batched(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         inputs = self.processor.apply_chat_template(
             [self.conversation, self.conversation],
             tokenize=True,

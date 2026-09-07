@@ -175,12 +175,13 @@ class CHMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 @slow
 class CHMv2IntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         processor = CHMv2ImageProcessor.from_pretrained("facebook/dinov3-vitl16-chmv2-dpt-head", revision="refs/pr/1")
         model = CHMv2ForDepthEstimation.from_pretrained(
             "facebook/dinov3-vitl16-chmv2-dpt-head", revision="refs/pr/1"
         ).to(torch_device)
 
-        img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/chmv2_example.tif"
+        img_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/chmv2_example.tif"
         raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
 
         inputs = processor(images=raw_image, return_tensors="pt").to(torch_device)

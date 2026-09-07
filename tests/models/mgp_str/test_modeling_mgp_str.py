@@ -206,9 +206,9 @@ class MgpstrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
 
-# We will verify our results on an image from the IIIT-5k dataset
+# We will verify our results on a synthetic scene-text image
 def prepare_img():
-    url = "https://i.postimg.cc/ZKwLg2Gw/367-14.png"
+    url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/mgp_str_ticket.png"
     im = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     return im
 
@@ -218,6 +218,7 @@ def prepare_img():
 class MgpstrModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model_name = "alibaba-damo/mgp-str-base"
         model = MgpstrForSceneTextRecognition.from_pretrained(model_name).to(torch_device)
         processor = MgpstrProcessor.from_pretrained(model_name)

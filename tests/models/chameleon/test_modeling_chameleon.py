@@ -372,13 +372,17 @@ class ChameleonIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_model_7b(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = ChameleonForConditionalGeneration.from_pretrained(
             "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
         )
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
         image = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg",
+                stream=True,
+            ).raw
         )
         prompt = "<image>Describe what do you see here and tell me about the history behind it?"
 
@@ -401,16 +405,23 @@ class ChameleonIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_model_7b_batched(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = ChameleonForConditionalGeneration.from_pretrained(
             "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
         )
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
         image = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg",
+                stream=True,
+            ).raw
         )
         image_2 = Image.open(
-            requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/orion.jpg",
+                stream=True,
+            ).raw
         )
         prompts = [
             "<image>Describe what do you see here and tell me about the history behind it?",
@@ -447,16 +458,23 @@ class ChameleonIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_model_7b_multi_image(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = ChameleonForConditionalGeneration.from_pretrained(
             "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
         )
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
         image = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg",
+                stream=True,
+            ).raw
         )
         image_2 = Image.open(
-            requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/orion.jpg",
+                stream=True,
+            ).raw
         )
         prompt = "What do these two images have in common?<image><image>"
 

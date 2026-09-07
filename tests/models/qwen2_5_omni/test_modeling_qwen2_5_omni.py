@@ -581,7 +581,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
         self.audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3"
         self.audio_url_additional = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav"
-        self.image_url = "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg"
+        self.image_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen2_vl_demo_small.jpg"
         self.messages = [
             {
                 "role": "user",
@@ -758,10 +758,11 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_w_audio(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-Omni-7B", dtype=torch.bfloat16, device_map="auto"
         )
-        audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/guess_age_gender.wav"
+        audio_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/voice_sample.wav"
 
         messages = [
             {

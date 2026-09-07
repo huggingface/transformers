@@ -1055,6 +1055,7 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_deterministic_for_xpu
     @require_torch_accelerator
     def test_multi_speaker_voice_cloning(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         torch.manual_seed(0)
 
         conversation = [
@@ -1066,12 +1067,12 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
                     {"type": "text", "text": "SPEAKER0:"},
                     {
                         "type": "audio",
-                        "url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/guess_age_gender.wav",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/voice_sample.wav",
                     },
                     {"type": "text", "text": "SPEAKER1:"},
                     {
                         "type": "audio",
-                        "url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/1272-128104-0000.flac",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mr_quiller.flac",
                     },
                 ],
             },

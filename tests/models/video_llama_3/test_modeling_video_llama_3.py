@@ -802,7 +802,7 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
                 ],
             }
         ]
-        url = "https://raw.githubusercontent.com/DAMO-NLP-SG/VideoLLaMA3/main/assets/sora.png"
+        url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/video_llama3_sora.png"
         self.image = Image.open(requests.get(url, stream=True).raw)
 
     def tearDown(self):

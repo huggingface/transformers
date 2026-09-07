@@ -301,7 +301,7 @@ class PPFormulaNetModelIntegrationTest(unittest.TestCase):
         self.model = PPFormulaNetForConditionalGeneration.from_pretrained(model_path).to(torch_device)
         self.processor = AutoProcessor.from_pretrained(model_path)
         img_url = url_to_local_path(
-            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_formula_rec_001.png"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_formula_rec_001.png"
         )
         self.image = load_image(img_url)
 

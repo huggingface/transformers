@@ -207,7 +207,7 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.processor.tokenizer.padding_side = "left"
         self.image = load_coco_image("000000039769.jpg")
         self.image2 = load_test_image(
-            "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
         )
 
     def tearDown(self):
@@ -245,6 +245,7 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @require_deterministic_for_xpu
     def test_integration_test_high_resolution(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = Lfm2VlForConditionalGeneration.from_pretrained(
             "LiquidAI/LFM2-VL-1.6B",
             dtype=torch.bfloat16,
@@ -267,6 +268,7 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @require_deterministic_for_xpu
     def test_integration_test_batched(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = Lfm2VlForConditionalGeneration.from_pretrained(
             "LiquidAI/LFM2-VL-450M",
             dtype=torch.bfloat16,
@@ -306,7 +308,7 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.processor.tokenizer.padding_side = "left"
         self.image = load_coco_image("000000039769.jpg")
         self.image2 = load_test_image(
-            "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
         )
 
     def tearDown(self):
@@ -336,6 +338,7 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @require_deterministic_for_xpu
     def test_integration_test_high_resolution(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = Lfm2VlForConditionalGeneration.from_pretrained(
             "LiquidAI/LFM2.5-VL-1.6B",
             dtype=torch.bfloat16,
@@ -356,6 +359,7 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @require_deterministic_for_xpu
     def test_integration_test_batched(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = Lfm2VlForConditionalGeneration.from_pretrained(
             "LiquidAI/LFM2.5-VL-1.6B",
             dtype=torch.bfloat16,

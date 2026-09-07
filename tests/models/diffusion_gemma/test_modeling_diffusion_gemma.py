@@ -912,6 +912,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
 
     @slow
     def test_diffusion_gemma_chat_template_image(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         image_tokens = [255999, 258880, 258882]  # These tokens must be present in the `input_ids`
         # TODO(joao): this should be 280! Something is wrong with processing?
         image_token_count = 256
@@ -923,7 +924,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/gemma_golden_gate.png",
                     },
                     {"type": "text", "text": "What is shown in this image?"},
                 ],
@@ -1058,6 +1059,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # fmt: off
         # print(model_out.logits[:, :10, :12])
         # Printed after running `torch.set_printoptions(precision=8, threshold=200, linewidth=100)`
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         expected_logits = Expectations(
             {
                 ("cuda", None): [
@@ -1096,7 +1098,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/gemma_golden_gate.png",
                     },
                     {"type": "text", "text": "What is shown in this image?"},
                 ],
@@ -1218,6 +1220,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # fmt: off
         # print(generated_tokens)
         # Printed after running `torch.set_printoptions(threshold=10000, linewidth=100)`
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         expected_sequences = Expectations(
             {
                 ("cuda", None): [
@@ -1290,7 +1293,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/gemma_golden_gate.png",
                         },
                         {"type": "text", "text": "What is shown in this image?"},
                     ],
@@ -1327,6 +1330,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # fmt: off
         # print(generated_tokens)
         # Printed after running `torch.set_printoptions(threshold=10000, linewidth=100)`
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         expected_sequences = Expectations(
             {
                 ("cuda", None): [
@@ -1399,7 +1403,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/gemma_golden_gate.png",
                         },
                         {"type": "text", "text": "Describe the image in detail."},
                     ],
@@ -1521,6 +1525,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # fmt: off
         # print(model_out.logits[:, :10, :12])
         # Printed after running `torch.set_printoptions(precision=8, threshold=200, linewidth=100)`
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         expected_logits = Expectations(
             {
                 ("cuda", None): [[
@@ -1579,7 +1584,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/gemma_golden_gate.png",
                     },
                     {"type": "text", "text": "What is shown in this image?"},
                 ],
@@ -1710,6 +1715,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         """
         # print(generated_tokens)
         # Printed after running `torch.set_printoptions(threshold=10000, linewidth=100)`
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         expected_sequences = Expectations(
             {
                 ("cuda", None): [
@@ -1769,7 +1775,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/gemma_golden_gate.png",
                         },
                         {"type": "text", "text": "What is shown in this image?"},
                     ],
@@ -1806,6 +1812,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         """
         # print(generated_tokens)
         # Printed after running `torch.set_printoptions(threshold=10000, linewidth=100)`
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         expected_sequences = Expectations(
             {
                 ("cuda", None): [
@@ -1865,7 +1872,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://raw.githubusercontent.com/google-gemma/cookbook/refs/heads/main/apps/sample-data/GoldenGate.png",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/gemma_golden_gate.png",
                         },
                         {"type": "text", "text": "Describe the image in detail."},
                     ],

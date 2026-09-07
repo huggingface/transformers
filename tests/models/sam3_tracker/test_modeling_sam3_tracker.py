@@ -503,7 +503,7 @@ def prepare_groceries_image():
 
 
 def prepare_dog_img():
-    img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dog-sam.png"
+    img_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dog_sam.png"
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
     return raw_image
 
@@ -594,6 +594,7 @@ class Sam3TrackerModelIntegrationTest(unittest.TestCase):
         )
 
     def test_inference_mask_generation_batched_images_multi_points(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         raw_image1 = prepare_image()
         raw_image2 = prepare_dog_img()
         input_points = [[[[500, 375]]], [[[770, 200], [730, 120]]]]

@@ -566,7 +566,7 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
 # We will verify our results on an image of Pikachu
 def prepare_img():
-    url = "https://clip-cn-beijing.oss-cn-beijing.aliyuncs.com/pokemon.jpeg"
+    url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/pokemon.jpeg"
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
@@ -576,6 +576,7 @@ def prepare_img():
 class ChineseCLIPModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model_name = "OFA-Sys/chinese-clip-vit-base-patch16"
         model = ChineseCLIPModel.from_pretrained(model_name).to(torch_device)
         processor = ChineseCLIPProcessor.from_pretrained(model_name)

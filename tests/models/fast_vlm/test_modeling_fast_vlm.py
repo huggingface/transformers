@@ -245,12 +245,13 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @require_vision
     def test_small_model_integration_test(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = FastVlmForConditionalGeneration.from_pretrained(
             "KamilaMila/FastVLM-0.5B", device_map=torch_device, dtype=torch.bfloat16
         )
 
         prompt = "user\n<image>\nWhat are the things I should be cautious about when I visit this place?\nassistant"
-        image_file = "https://llava-vl.github.io/static/images/view.jpg"
+        image_file = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
         raw_image = load_test_image(image_file)
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, dtype=model.dtype)
 
@@ -267,6 +268,7 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_vision
     @require_deterministic_for_xpu
     def test_small_model_integration_test_batch(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = FastVlmForConditionalGeneration.from_pretrained(
             "KamilaMila/FastVLM-0.5B", device_map=torch_device, dtype=torch.bfloat16
         )
@@ -275,7 +277,9 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
             "user\n<image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant",
             "user\n<image>\nWhat is this?\nassistant",
         ]
-        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
         image2 = load_coco_image("000000039769.jpg")
 
         self.processor.tokenizer.padding_side = "left"

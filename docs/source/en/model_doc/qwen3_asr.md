@@ -94,7 +94,7 @@ model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
 
 # Without language hint (auto-detect)
 inputs = processor.apply_transcription_request(
-    audio="https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav",
+    audio="https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mandarin_asr.wav",
 ).to(model.device, model.dtype)
 output_ids = model.generate(**inputs, max_new_tokens=256)
 generated_ids = output_ids[:, inputs["input_ids"].shape[1]:]
@@ -102,7 +102,7 @@ print(f"Auto-detect: {processor.decode(generated_ids, return_format='transcripti
 
 # With forced language
 inputs = processor.apply_transcription_request(
-    audio="https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav",
+    audio="https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mandarin_asr.wav",
     language="Chinese",  # or language code "zh"
 ).to(model.device, model.dtype)
 output_ids = model.generate(**inputs, max_new_tokens=256)
@@ -142,7 +142,7 @@ from transformers import AutoProcessor, AutoModelForMultimodalLM
 model_id = "Qwen/Qwen3-ASR-1.7B-hf"
 audio = [
     "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav",
-    "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mandarin_asr.wav",
 ]
 
 processor = AutoProcessor.from_pretrained(model_id)
@@ -197,7 +197,7 @@ chat_template = [
             "content": [
                 {
                     "type": "audio",
-                    "path": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav",
+                    "path": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mandarin_asr.wav",
                 },
             ],
         },

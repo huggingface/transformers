@@ -489,17 +489,21 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.image1 = Image.open(
             BytesIO(
                 requests.get(
-                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
                 ).content
             )
         )
         self.image2 = Image.open(
-            BytesIO(requests.get("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg").content)
+            BytesIO(
+                requests.get(
+                    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/skyline_chicago.jpg"
+                ).content
+            )
         )
         self.image3 = Image.open(
             BytesIO(
                 requests.get(
-                    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg"
                 ).content
             )
         )
@@ -510,6 +514,7 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @unittest.skip("multi-gpu tests are disabled for now")
     def test_integration_test(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = Idefics3ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/Idefics3-8B-Llama3",
             dtype=torch.bfloat16,
@@ -533,6 +538,7 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @unittest.skip("multi-gpu tests are disabled for now")
     def test_integration_test_4bit(self):
         # Let' s make sure we test the preprocessing to replace what is used
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = Idefics3ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/Idefics3-8B-Llama3",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),

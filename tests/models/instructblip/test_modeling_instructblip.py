@@ -784,6 +784,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @require_accelerate
     def test_inference_vicuna_7b(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
         model = InstructBlipForConditionalGeneration.from_pretrained(
             "Salesforce/instructblip-vicuna-7b",
@@ -791,7 +792,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
             attn_implementation="eager",
         )
 
-        url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/lavis_confusing_pictures.jpg"
         image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
         prompt = "What is unusual about this image?"
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
@@ -822,6 +823,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         self.assertEqual(generated_text, expected_text)
 
     def test_inference_flant5_xl(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-flan-t5-xl")
         model = InstructBlipForConditionalGeneration.from_pretrained(
             "Salesforce/instructblip-flan-t5-xl",
@@ -829,7 +831,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
             dtype=torch.bfloat16,
         ).to(torch_device)
 
-        url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/lavis_confusing_pictures.jpg"
         image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
         prompt = "What is unusual about this image?"
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device)

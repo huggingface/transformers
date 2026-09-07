@@ -307,7 +307,9 @@ class UVDocModelIntegrationTest(unittest.TestCase):
         model_path = "PaddlePaddle/UVDoc_safetensors"
         self.model = AutoModel.from_pretrained(model_path).to(torch_device)
         self.image_processor = UVDocImageProcessor()
-        img_url = url_to_local_path("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/doc_test.jpg")
+        img_url = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_doc_test.jpg"
+        )
         self.image = load_image(img_url)
 
     def test_inference_document_rectification(self):

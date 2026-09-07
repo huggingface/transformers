@@ -229,7 +229,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
                     {
                         "type": "image",
                         "url": url_to_local_path(
-                            "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg"
+                            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen2_vl_demo_small.jpg"
                         ),
                     },
                     {"type": "text", "text": "What kind of dog is this?"},
@@ -257,6 +257,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_deterministic_for_xpu
     def test_small_model_integration(self):
         # Let's make sure we test the preprocessing to replace what is used
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = Cosmos3OmniForConditionalGeneration.from_pretrained(
             "nvidia/Cosmos3-Nano",
             dtype="bfloat16",
@@ -282,6 +283,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @require_deterministic_for_xpu
     def test_small_model_integration_batched(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = Cosmos3OmniForConditionalGeneration.from_pretrained(
             "nvidia/Cosmos3-Nano", dtype="bfloat16", device_map=torch_device
         )

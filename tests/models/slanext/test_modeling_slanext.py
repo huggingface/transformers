@@ -292,7 +292,7 @@ class SLANeXtModelIntegrationTest(unittest.TestCase):
         self.model = AutoModelForTableRecognition.from_pretrained(model_path, dtype=torch.float32).to(torch_device)
         self.image_processor = AutoImageProcessor.from_pretrained(model_path)
         img_url = url_to_local_path(
-            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/table_recognition.jpg"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_table_recognition.jpg"
         )
         self.image = load_image(img_url)
 

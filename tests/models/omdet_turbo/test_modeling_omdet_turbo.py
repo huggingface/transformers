@@ -612,7 +612,7 @@ def prepare_text():
 def prepare_img_batched():
     url1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
     url2 = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/train2017/000000257813.jpg"
-    url3 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+    url3 = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
 
     return [Image.open(BytesIO(requests.get(url).content)).convert("RGB") for url in [url1, url2, url3]]
 
@@ -763,6 +763,7 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         self.assertListEqual(results["text_labels"], expected_text_labels)
 
     def test_inference_object_detection_head_batched(self):
+        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         torch_device = "cpu"
         model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-swin-tiny-hf").to(torch_device)
 

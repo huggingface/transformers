@@ -81,7 +81,7 @@ messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo2.jpg"},
+            {"type": "image", "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_ocr_demo2.jpg"},
             {"type": "text", "text": "OCR:"},
         ]
     }
@@ -104,7 +104,7 @@ messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo2.jpg"},
+            {"type": "image", "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_ocr_demo2.jpg"},
             {"type": "text", "text": "OCR:"},
         ]
     }
@@ -141,7 +141,7 @@ messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo2.jpg"},
+            {"type": "image", "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_ocr_demo2.jpg"},
             {"type": "text", "text": "OCR:"},
         ]
     }
@@ -165,7 +165,7 @@ messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo2.jpg"},
+            {"type": "image", "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_ocr_demo2.jpg"},
             {"type": "text", "text": "OCR:"},
         ]
     }
