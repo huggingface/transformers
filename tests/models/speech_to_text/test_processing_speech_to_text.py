@@ -22,7 +22,7 @@ from transformers import Speech2TextFeatureExtractor, Speech2TextProcessor, Spee
 from transformers.models.speech_to_text.tokenization_speech_to_text import VOCAB_FILES_NAMES, save_json
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_torch, require_torchaudio
 
-from .test_feature_extraction_speech_to_text import floats_list
+from ...test_processing_common import floats_list
 
 
 SAMPLE_SP = get_tests_dir("fixtures/test_sentencepiece.model")

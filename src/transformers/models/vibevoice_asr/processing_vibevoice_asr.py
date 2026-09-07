@@ -40,7 +40,7 @@ class VibeVoiceAsrProcessorKwargs(ProcessingKwargs, total=False):
             "pad_to_multiple_of": 3200,  # tokenizer hop length
         },
         "common_kwargs": {
-            "return_attention_mask": True,
+            "return_padding_mask": True,
         },
     }
 
