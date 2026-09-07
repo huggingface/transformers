@@ -74,7 +74,7 @@ class InternVLVisionConfig(PreTrainedConfig):
     use_mean_pooling: bool = True
 
     def __post_init__(self, **kwargs):
-        # The original `OpenGVLab/InternVL2-*` checkpoints use the InternViT names for these two.
+        # Accept the InternViT spellings of these two, used by the original checkpoints.
         if "qk_normalization" in kwargs:
             self.use_qk_norm = kwargs.pop("qk_normalization")
         if "qkv_bias" in kwargs:
