@@ -68,6 +68,8 @@ class FunAsrNanoAdaptorConfig(PreTrainedConfig):
     attention_dropout: float = 0.0
     layer_norm_eps: float = 1e-5
     hidden_act: str = "relu"
+    projector_hidden_act: str = "relu"
+    projector_hidden_size: int = 2048
 
 
 @auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")
@@ -89,8 +91,6 @@ class FunAsrNanoConfig(PreTrainedConfig):
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     audio_token_id: int = 151646
-    projector_hidden_act: str = "relu"
-    projector_hidden_size: int = 2048
     initializer_range: float = 0.02
     tie_word_embeddings: bool = True
 

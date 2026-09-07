@@ -87,18 +87,17 @@ ROOT_STATE_DICT_MAPPING = (
         r"^audio_encoder\.tp_encoders\.(\d+)\.",
         lambda match: f"model.audio_tower.layers.{int(match[1]) + NUM_TRANSCRIPTION_BLOCKS}.",
     ),
-    # `after_norm` and `tp_norm` are the only non-identity entries of `layer_norms`, one per stack.
-    (r"^audio_encoder\.after_norm\.", f"model.audio_tower.layer_norms.{NUM_TRANSCRIPTION_BLOCKS - 1}."),
+    (
+        r"^audio_encoder\.after_norm\.",
+        f"model.audio_tower.layers.{NUM_TRANSCRIPTION_BLOCKS - 1}.final_layernorm.",
+    ),
     (
         r"^audio_encoder\.tp_norm\.",
-        f"model.audio_tower.layer_norms.{NUM_TRANSCRIPTION_BLOCKS + NUM_TIMESTAMP_PREDICTION_BLOCKS - 1}.",
+        f"model.audio_tower.layers.{NUM_TRANSCRIPTION_BLOCKS + NUM_TIMESTAMP_PREDICTION_BLOCKS - 1}.final_layernorm.",
     ),
     (r"^audio_adaptor\.blocks\.", "model.multi_modal_projector.blocks."),
     (r"^audio_adaptor\.linear1\.", "model.multi_modal_projector.linear_1."),
     (r"^audio_adaptor\.linear2\.", "model.multi_modal_projector.linear_2."),
-    # Keep lm_head.weight explicitly. Although tie_word_embeddings=True, this model load path
-    # does not retie lm_head from the embeddings, and the source already stores lm_head == embeddings.
-    # safetensors deduplicates the shared storage, so this adds no extra disk over the embeddings.
     (r"^llm\.lm_head\.", "lm_head."),
     (r"^llm\.model\.", "model.language_model."),
 )
@@ -229,7 +228,7 @@ def build_config_from_yaml(config_yaml_path: str, qwen3_config_path: str) -> Fun
     # Audio encoder config (standalone encoder model -> standalone config, Parakeet-style).
     enc_conf = cfg.get("audio_encoder_conf", {})
 
-    # `ROOT_STATE_DICT_MAPPING` bakes these counts into the fused `layers` / `layer_norms` indices.
+    # `ROOT_STATE_DICT_MAPPING` bakes these counts into the fused `layers` indices.
     num_transcription_blocks = enc_conf.get("num_blocks", NUM_TRANSCRIPTION_BLOCKS)
     num_timestamp_prediction_blocks = enc_conf.get("tp_blocks", NUM_TIMESTAMP_PREDICTION_BLOCKS)
     if (num_transcription_blocks, num_timestamp_prediction_blocks) != (
