@@ -717,6 +717,8 @@
         title: HyperCLOVAX
       - local: model_doc/hy_v3
         title: HYV3
+      - local: model_doc/hy_v4
+        title: HYV4
       - local: model_doc/ibert
         title: I-BERT
       - local: model_doc/jais2
@@ -727,6 +729,8 @@
         title: JetMoe
       - local: model_doc/jina_embeddings_v3
         title: jina_embeddings_v3
+      - local: model_doc/kimi_linear
+        title: KimiLinear
       - local: model_doc/laguna
         title: Laguna
       - local: model_doc/led
