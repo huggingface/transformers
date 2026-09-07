@@ -24,6 +24,13 @@ if is_torch_available():
     from transformers.activations import gelu_new, gelu_python, get_activation
 
 
+# TEMPORARY — DO NOT MERGE. Two jobs at once: touching a test file gives
+# tests_fetcher a non-empty tests_non_model list, and the deliberate spacing below
+# is a `ruff format` violation, so check_code_quality fails. That is the exact
+# combination the quality gate is supposed to survive on a `New model` PR.
+_QUALITY_GATE_PROBE  =  True
+
+
 @require_torch
 class TestActivations(unittest.TestCase):
     def test_gelu_versions(self):

@@ -20,5 +20,9 @@ permissions:
 jobs:
   pr-ci:
     # DON'T use commit sha here before the CI migration is finished
-    uses: huggingface/transformers-ci/.github/workflows/pr-ci_dynamic_caller_example.yml@main # main
+    #
+    # TEMPORARY — DO NOT MERGE. Points at the branch under test so the quality-gate
+    # fix can be exercised on a real PR. Revert to `@main` before this branch is
+    # considered for anything.
+    uses: huggingface/transformers-ci/.github/workflows/pr-ci_dynamic_caller_example.yml@tarek/quality-gate-if-status-function
 
