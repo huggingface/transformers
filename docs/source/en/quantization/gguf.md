@@ -34,14 +34,12 @@ pip install kernels
 Weights stay packed when the Hub kernel [transformers-community/ggml-quantization](https://huggingface.co/transformers-community/ggml-quantization) is available. The loader defaults to MPS when that kernel is present and runs matmuls directly on the packed blocks. If the kernel isn't available, the model is dequantized at load.
 
 ```py
-import torch
-
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model_id = "unsloth/Qwen3.5-4B-GGUF"
 filename = "Qwen3.5-4B-Q4_K_M.gguf"
 
-model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=filename, dtype=torch.float32)
+model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=filename)
 tokenizer = AutoTokenizer.from_pretrained(model_id, gguf_file=filename)
 ```
 
@@ -51,13 +49,11 @@ The same load works for Qwen3.5 MoE.
 moe_model_id = "unsloth/Qwen3.5-35B-A3B-GGUF"
 moe_filename = "Qwen3.5-35B-A3B-Q4_K_M.gguf"
 
-moe_model = AutoModelForCausalLM.from_pretrained(
-    moe_model_id, gguf_file=moe_filename, dtype=torch.float32
-)
+moe_model = AutoModelForCausalLM.from_pretrained(moe_model_id, gguf_file=moe_filename)
 moe_tokenizer = AutoTokenizer.from_pretrained(moe_model_id, gguf_file=moe_filename)
 ```
 
-The packed path currently supports Qwen3.5 and Qwen3.5 MoE. Use `dtype=torch.float32` for packed loads. The loader warns when another dtype is requested because the kernels compute in float32. Other architectures go through the legacy loader.
+The packed path currently supports Qwen3.5 and Qwen3.5 MoE. Packed loads use float32 automatically because it's faster on MPS. If you set another `dtype`, the loader returns a warning. Other architectures go through the legacy loader.
 
 ## Attention
 
@@ -65,7 +61,7 @@ On Metal, with kernels installed, attention can use [ggml-attn](https://huggingf
 
 ```py
 model = AutoModelForCausalLM.from_pretrained(
-    model_id, gguf_file=filename, dtype=torch.float32, attn_implementation="transformers-community/ggml-attn"
+    model_id, gguf_file=filename, attn_implementation="transformers-community/ggml-attn"
 )
 ```
 
