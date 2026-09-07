@@ -458,11 +458,16 @@ class TorchAudioBackend(BaseAudioProcessor):
         return magnitudes.float()
 
     def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
+        # `torch.stft` returns a non-contiguous tensor and `abs() ** power` keeps that layout.
+        # On some CPU backends the downstream `mel_filters.T @ magnitudes` matmul then falls onto
+        # a slow strided-GEMM path (~8x slower on a ROCm build, see #47351). Forcing contiguity
+        # here is cheap, changes no values, and keeps the matmul on the fast path.
         if spectrogram_config and spectrogram_config.stft_config.magnitude_mode == "sqrt_sum_squares":
             # NeMo-derived form; differs from `abs()` in the last ulp
             magnitudes = torch.view_as_real(stft_out).pow(2).sum(-1).sqrt()
-            return magnitudes.pow(power) if power != 1.0 else magnitudes
-        return stft_out.abs() ** power
+            magnitudes = magnitudes.pow(power) if power != 1.0 else magnitudes
+            return magnitudes.contiguous()
+        return (stft_out.abs() ** power).contiguous()
 
     # ── Mel scale & normalization ─────────────────────────────────────────
     #
