@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import json
 import os
 import tempfile
@@ -18,7 +19,7 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-from huggingface_hub import constants, hf_hub_download
+from huggingface_hub import ResolvedRevision, constants, hf_hub_download
 from huggingface_hub.errors import (
     HfHubHTTPError,
     LocalEntryNotFoundError,
@@ -210,6 +211,33 @@ class GetFromCacheTests(unittest.TestCase):
 
 
 class ResolveRevisionTests(unittest.TestCase):
+    def test_resolved_revision_is_scoped_to_its_repository(self):
+        with tempfile.TemporaryDirectory() as cache_dir:
+            for repo_id, commit in ((RANDOM_BERT, "a" * 40), (TINY_BERT_PT_ONLY, "b" * 40)):
+                ref = Path(cache_dir) / f"models--{repo_id.replace('/', '--')}" / "refs" / "main"
+                ref.parent.mkdir(parents=True)
+                ref.write_text(commit)
+
+            revision = resolve_revision(RANDOM_BERT, cache_dir=cache_dir, local_files_only=True)
+            self.assertIsInstance(revision, ResolvedRevision)
+            # Loading kwargs are deep-copied before being passed to other components.
+            revision = copy.deepcopy(revision)
+            self.assertEqual(revision.resolved, "a" * 40)
+            self.assertIs(resolve_revision(RANDOM_BERT, revision, local_files_only=True), revision)
+
+            other_revision = resolve_revision(TINY_BERT_PT_ONLY, revision, cache_dir=cache_dir, local_files_only=True)
+            self.assertIsInstance(other_revision, ResolvedRevision)
+            self.assertEqual(other_revision, "main")
+            self.assertEqual(other_revision.resolved, "b" * 40)
+
+    def test_cross_repo_resolution_failure_discards_the_pinned_commit(self):
+        for initial in (None, "main", "custom-branch"):
+            with self.subTest(initial=initial), tempfile.TemporaryDirectory() as cache_dir:
+                revision = ResolvedRevision(resolved=FULL_COMMIT_HASH, initial=initial, repo_id=RANDOM_BERT)
+                fallback = resolve_revision(TINY_BERT_PT_ONLY, revision, cache_dir=cache_dir, local_files_only=True)
+                self.assertEqual(fallback, initial)
+                self.assertNotIsInstance(fallback, ResolvedRevision)
+
     def test_resolve_revision(self):
         revision = resolve_revision(RANDOM_BERT, "main")
         self.assertEqual(revision, "main")  # keeps the value the user asked for
