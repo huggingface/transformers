@@ -128,9 +128,11 @@ def _use_local_dtensor_params(module):
 # Messages above 8 MB (a training-side forward over thousands of packed tokens, which also runs through this path
 # under no_grad) stay on NCCL, whose ring is bandwidth-optimal there. One buffer per (group, hidden, dtype) is
 # allocated and rendezvoused the first time a shape is seen, sized to the largest row count seen, and every call
-# reduces in a prefix view of it. Opt-in with HF_TP_SYMM_MEM_ALL_REDUCE=1: measured +5-10% decode at tp2-8 in eager
-# mode, but with CUDA graphs (default_compile_level >= 1) the zero-sync trainer faulted or hung in 6 of 6 runs with it
-# on, whether the two-shot kernel was in the graphs or only in the eager calls around them; NCCL is the default.
+# reduces in a prefix view of it. Opt-in with HF_TP_SYMM_MEM_ALL_REDUCE=1: a 2 MiB all-reduce at tp2 inside a cuda
+# graph takes 22.3 us here against 38.6 us on NCCL, worth +7% decode on Qwen3-8B tp2. It is opt-in because the
+# rendezvous is a collective: with a trainer sharing the device, it is issued from the generation thread while the
+# training thread issues its own, the two communicators have no agreed order, and graph capture faults. Serving is
+# single-threaded and safe; do not turn it on next to a trainer unless the buffers are rendezvoused up front.
 _SYMM_BUFFERS: dict[tuple, torch.Tensor] = {}
 
 
