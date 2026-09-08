@@ -356,7 +356,7 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
                     {
                         "type": "image",
                         "url": url_to_local_path(
-                            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_ocr_demo2.jpg"
+                            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png"
                         ),
                     },
                     {"type": "text", "text": "OCR:"},
@@ -369,6 +369,7 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
 
     def test_small_model_integration_test(self):
+        # TODO(synthetic-assets): re-record; the image changed when duplicate assets were collapsed.
         model = (
             PaddleOCRVLForConditionalGeneration.from_pretrained(
                 "PaddlePaddle/PaddleOCR-VL",
@@ -419,6 +420,7 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
         )
 
     def test_small_model_integration_test_batch(self):
+        # TODO(synthetic-assets): re-record; the image changed when duplicate assets were collapsed.
         model = (
             PaddleOCRVLForConditionalGeneration.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16")
             .to(torch_device)
@@ -456,6 +458,7 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_flashatt2(self):
+        # TODO(synthetic-assets): re-record; the image changed when duplicate assets were collapsed.
         model = (
             PaddleOCRVLForConditionalGeneration.from_pretrained(
                 "PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", attn_implementation="flash_attention_2"
@@ -507,6 +510,7 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
+        # TODO(synthetic-assets): re-record; the image changed when duplicate assets were collapsed.
         model = (
             PaddleOCRVLForConditionalGeneration.from_pretrained(
                 "PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", attn_implementation="flash_attention_2"
