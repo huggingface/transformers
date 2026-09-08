@@ -84,10 +84,12 @@ def _rank_byte_spans(checkpoint_files: list[str], meta_state_dict: dict) -> tupl
     spans come out identical on every rank, so local ranks can share them out between them.
     """
     import json
+    import re
     import struct
 
     from .sharding_utils import DtensorShardOperation
 
+    owned_experts = _owned_expert_range(meta_state_dict)
     own, common = [], []
     for path in checkpoint_files:
         with open(path, "rb") as f:
@@ -100,6 +102,15 @@ def _rank_byte_spans(checkpoint_files: list[str], meta_state_dict: dict) -> tupl
                 continue
             start, end = (base + offset for offset in meta["data_offsets"])
             param = meta_state_dict.get(name)
+            expert = re.search(r"\.experts\.(\d+)\.", name)
+            # A checkpoint that stores one tensor per expert names them in a way the packed parameter
+            # does not match, so they never resolve above. The rank still only wants the experts it
+            # owns, and consecutive experts sit next to each other on disk, so keeping those and
+            # dropping the rest leaves a few long runs.
+            if expert and owned_experts:
+                if owned_experts[0] <= int(expert.group(1)) < owned_experts[1]:
+                    mine.append((start, end))
+                continue
             # Sharding on dim 0 is the only kind that keeps a rank's share contiguous on disk, and only
             # when the checkpoint stores the parameter whole rather than one piece per expert. Slice
             # those; read everything else in full, which covers what the rank needs and then some.
@@ -117,6 +128,20 @@ def _rank_byte_spans(checkpoint_files: list[str], meta_state_dict: dict) -> tupl
         own += _merge(mine, path)
         common += _merge(whole, path)
     return own, common
+
+
+def _owned_expert_range(meta_state_dict: dict) -> tuple[int, int] | None:
+    """The `[start, end)` experts this rank holds, or `None` if the model does not shard experts.
+
+    Every expert parameter is sharded the same way, so one of them answers for all of them.
+    """
+    from .sharding_utils import DtensorShardOperation
+
+    for name, param in meta_state_dict.items():
+        if ".experts." in name and is_dtensor(param) and param.ndim == 3 and _shards_dim_0_contiguously(param):
+            operation = DtensorShardOperation(param)
+            return operation._axis0_offset, operation._axis0_offset + operation._axis0_local_size
+    return None
 
 
 def _shards_dim_0_contiguously(param: DTensor) -> bool:
@@ -161,11 +186,11 @@ def prefetch_checkpoint_shards(checkpoint_files: list[str], meta_state_dict: dic
     whole = [(path, 0, os.path.getsize(path)) for path in checkpoint_files][local_rank::local_world]
     own, common = ([], []) if meta_state_dict is None else _rank_byte_spans(checkpoint_files, meta_state_dict)
     jobs = own + common[local_rank::local_world]
-    # Reading only this rank's shard saves bytes and costs seeks, and a checkpoint that stores experts
-    # one tensor at a time leaves so many small spans that the seeks win. Price the seeks in bytes and
-    # keep whichever plan reads less.
+    # Reading only this rank's shard saves bytes and costs seeks. Price the seeks in bytes and keep
+    # whichever plan reads less. Both sides are the node's read divided by its ranks, so the
+    # comparison holds even when there are fewer shards than local ranks and this rank was dealt none.
     cost = sum(end - start for _, start, end in jobs) + len(jobs) * _SEEK_COST_BYTES
-    if not jobs or cost >= sum(end - start for _, start, end in whole):
+    if not jobs or cost >= sum(os.path.getsize(path) for path in checkpoint_files) / local_world:
         jobs = whole
     described = f"{sum(end - start for _, start, end in jobs) / 2**30:.1f} GiB in {len(jobs)} spans"
 
