@@ -2915,10 +2915,22 @@ def requires(*, backends=()):
     return inner_fn
 
 
+# Matches a module-level (unindented) import of TorchvisionBackend, e.g.:
+#   from ...image_processing_backends import TorchvisionBackend
+#   from transformers.image_processing_backends import TorchvisionBackend
+# Does NOT match occurrences inside docstrings, comments, or indented function bodies.
+_TORCHVISION_BACKEND_MODULE_IMPORT_RE = re.compile(
+    r"^(?:from\s+\S+\s+import\s+(?:\([^)]*\bTorchvisionBackend\b[^)]*\)|[^\n]*\bTorchvisionBackend\b)|import\s+(?:\([^)]*\bTorchvisionBackend\b[^)]*\)|[^\n]*\bTorchvisionBackend\b))",
+    re.MULTILINE,
+)
+
+
 BASE_FILE_REQUIREMENTS = {
     lambda name, content: "modeling_" in name: ("torch",),
     lambda name, content: "tokenization_" in name and name.endswith("_fast"): ("tokenizers",),
-    lambda name, content: "image_processing_" in name and "TorchvisionBackend" in content: (
+    lambda name, content: (
+        "image_processing_" in name and bool(_TORCHVISION_BACKEND_MODULE_IMPORT_RE.search(content))
+    ): (
         "vision",
         "torch",
         "torchvision",

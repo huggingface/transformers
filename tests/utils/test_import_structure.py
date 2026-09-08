@@ -206,3 +206,123 @@ def test_backend_specification(
     assert backend.package_name == package_name
     assert VersionComparison.from_string(backend.version_comparison) == version_comparison
     assert backend.version == version
+
+
+class TestBaseFileRequirements(unittest.TestCase):
+    """
+    Regression tests for https://github.com/huggingface/transformers/issues/48607.
+
+    The BASE_FILE_REQUIREMENTS rule for TorchvisionBackend must fire only when
+    TorchvisionBackend is actually imported at the module level (i.e. an
+    unindented ``from ... import TorchvisionBackend`` statement), NOT when the
+    name merely appears in a docstring, comment, or a lazy/function-level import.
+    """
+
+    base_transformers_path = Path(__file__).parent.parent.parent
+
+    def _get_backends_for_module(self, rel_path: str) -> frozenset:
+        """
+        Return the frozenset of backends that the import-structure machinery
+        assigns to the given module (relative to the repo root).
+        """
+        from transformers.utils.import_utils import define_import_structure
+
+        abs_path = self.base_transformers_path / rel_path
+        module_dir = abs_path.parent
+        import_structure = define_import_structure(module_dir)
+
+        module_stem = abs_path.stem  # filename without .py
+        for backend_set, module_mapping in import_structure.items():
+            if module_stem in module_mapping:
+                return frozenset(backend_set)
+
+        return frozenset()
+
+    def test_pil_processor_docstring_mention_does_not_add_torchvision(self):
+        """
+        image_processing_pil_smolvlm.py mentions TorchvisionBackend only in
+        docstrings ("Mirrors TorchvisionBackend.pad …").  It must NOT be
+        assigned a torchvision requirement — only the base 'vision' requirement.
+        """
+        backends = self._get_backends_for_module("src/transformers/models/smolvlm/image_processing_pil_smolvlm.py")
+        self.assertNotIn(
+            "torchvision",
+            backends,
+            "image_processing_pil_smolvlm.py must not require torchvision: it only "
+            "mentions TorchvisionBackend in docstrings, not as an import.",
+        )
+        self.assertIn(
+            "vision",
+            backends,
+            "image_processing_pil_smolvlm.py should still require the 'vision' backend.",
+        )
+
+    def test_idefics2_pil_processor_docstring_mention_does_not_add_torchvision(self):
+        """
+        image_processing_pil_idefics2.py mentions TorchvisionBackend only in
+        docstrings.  It must NOT be assigned a torchvision requirement.
+        """
+        backends = self._get_backends_for_module("src/transformers/models/idefics2/image_processing_pil_idefics2.py")
+        self.assertNotIn(
+            "torchvision",
+            backends,
+            "image_processing_pil_idefics2.py must not require torchvision: it only "
+            "mentions TorchvisionBackend in docstrings, not as an import.",
+        )
+
+    def test_idefics3_pil_processor_docstring_mention_does_not_add_torchvision(self):
+        """
+        image_processing_pil_idefics3.py mentions TorchvisionBackend only in
+        docstrings.  It must NOT be assigned a torchvision requirement.
+        """
+        backends = self._get_backends_for_module("src/transformers/models/idefics3/image_processing_pil_idefics3.py")
+        self.assertNotIn(
+            "torchvision",
+            backends,
+            "image_processing_pil_idefics3.py must not require torchvision: it only "
+            "mentions TorchvisionBackend in docstrings, not as an import.",
+        )
+
+    def test_ovis2_pil_processor_docstring_mention_does_not_add_torchvision(self):
+        """
+        image_processing_pil_ovis2.py mentions TorchvisionBackend only in
+        docstrings.  It must NOT be assigned a torchvision requirement.
+        """
+        backends = self._get_backends_for_module("src/transformers/models/ovis2/image_processing_pil_ovis2.py")
+        self.assertNotIn(
+            "torchvision",
+            backends,
+            "image_processing_pil_ovis2.py must not require torchvision: it only "
+            "mentions TorchvisionBackend in docstrings, not as an import.",
+        )
+
+    def test_genuine_torchvision_processor_keeps_requirement(self):
+        """
+        image_processing_smolvlm.py (the non-PIL variant) has a module-level
+        ``from ...image_processing_backends import TorchvisionBackend`` import
+        and must still be assigned torchvision as a requirement.
+        """
+        backends = self._get_backends_for_module("src/transformers/models/smolvlm/image_processing_smolvlm.py")
+        self.assertIn(
+            "torchvision",
+            backends,
+            "image_processing_smolvlm.py must still require torchvision: it has a "
+            "genuine module-level import of TorchvisionBackend.",
+        )
+        self.assertIn("torch", backends)
+        self.assertIn("vision", backends)
+
+    def test_auto_image_processor_does_not_require_torchvision(self):
+        """
+        image_processing_auto.py imports TorchvisionBackend lazily inside a
+        function body (not at module level) for backward compatibility.
+        The AUTO module must NOT be assigned a torchvision requirement from this.
+        """
+        backends = self._get_backends_for_module("src/transformers/models/auto/image_processing_auto.py")
+        self.assertNotIn(
+            "torchvision",
+            backends,
+            "image_processing_auto.py must not require torchvision: its "
+            "TorchvisionBackend reference is a lazy inline import for backward "
+            "compatibility, not a module-level dependency.",
+        )
