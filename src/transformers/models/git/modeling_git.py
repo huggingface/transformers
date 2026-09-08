@@ -214,7 +214,7 @@ class GitAttention(nn.Module):
         attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         attn_output, _ = self.self(
             hidden_states,
             attention_mask,
@@ -271,7 +271,7 @@ class GitLayer(GradientCheckpointingLayer):
         attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         attention_output = self.attention(
             hidden_states,
             attention_mask,
@@ -1078,11 +1078,17 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         logits = self.output(hidden_states[:, slice_indices, :])
 
         loss = None
+        # A caller doing sequence/context parallel training pre-shifts the targets on the full sequence and passes
+        # them as `shift_labels`; they are already aligned with the text logits, so no shift is applied here.
+        shift_labels = kwargs.pop("shift_labels", None)
         if labels is not None:
-            # we are doing next-token prediction; shift prediction scores and input ids by one
             num_image_tokens = self.git.encoder.layer[0].attention.self.image_patch_tokens
-            shifted_logits = logits[:, num_image_tokens:-1, :].contiguous()
-            shift_labels = labels[:, 1:].contiguous()
+            if shift_labels is None:
+                # we are doing next-token prediction; shift prediction scores and input ids by one
+                shifted_logits = logits[:, num_image_tokens:-1, :].contiguous()
+                shift_labels = labels[:, 1:].contiguous()
+            else:
+                shifted_logits = logits[:, num_image_tokens:, :].contiguous()
             loss = self.loss_function(
                 logits=shifted_logits,
                 labels=None,

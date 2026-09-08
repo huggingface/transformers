@@ -55,6 +55,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -903,6 +904,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations({
             ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The cow is facing the viewer with its head slightly turned'],
             ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The cow is facing the viewer with its head slightly turned'],
+            ("xpu", 5): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -962,11 +964,15 @@ class Gemma3nIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
+                        ),
                     },
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+                        ),
                     },
                     {"type": "text", "text": "Are these images identical?"},
                 ],
@@ -1033,7 +1039,9 @@ class Gemma3nIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+                        ),
                     },
                     {"type": "text", "text": "What do you see here?"},
                 ],
