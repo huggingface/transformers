@@ -14,7 +14,7 @@
 
 import warnings
 from dataclasses import fields, replace
-from typing import Any, Unpack
+from typing import TYPE_CHECKING, Any, Unpack
 
 import numpy as np
 from huggingface_hub.dataclasses import validate_typed_dict
@@ -32,6 +32,10 @@ from .audio_utils import (
 from .processing_utils import AudioKwargs
 from .tokenization_utils_base import TruncationStrategy
 from .utils import PaddingStrategy, TensorType, logging
+
+
+if TYPE_CHECKING:
+    import torch
 
 
 logger = logging.get_logger(__name__)

@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 class Gemma4AudioProcessorMixin:
@@ -24,31 +23,31 @@ class Gemma4AudioProcessorMixin:
     pad_to_multiple_of = 128
     padding = "longest"
     sampling_rate = 16000
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=512,
-            win_length=320,
-            hop_length=160,
-            window_fn="hann_window_f32",
-            power=1.0,
-            center="left",
-            frame_extension=1,
-            fft_dtype="native",
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=128,
-            f_min=0.0,
-            f_max=8000.0,
-            mel_scale="htk",
-            matmul_order="features_first",
-        ),
-        preemphasis=0.0,
-        preemphasis_mode="htk_per_frame",
-        mel_floor=0.0,
-        pre_log_offset=1e-3,
-        log_mode="log",
-        computation_dtype="float64",
-    )
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 512,
+            "win_length": 320,
+            "hop_length": 160,
+            "window_fn": "hann_window_f32",
+            "power": 1.0,
+            "center": "left",
+            "frame_extension": 1,
+            "fft_dtype": "native",
+        },
+        "mel_scale_config": {
+            "n_mels": 128,
+            "f_min": 0.0,
+            "f_max": 8000.0,
+            "mel_scale": "htk",
+            "matmul_order": "features_first",
+        },
+        "preemphasis": 0.0,
+        "preemphasis_mode": "htk_per_frame",
+        "mel_floor": 0.0,
+        "pre_log_offset": 1e-3,
+        "log_mode": "log",
+        "computation_dtype": "float64",
+    }
     truncation = True
 
 

@@ -18,7 +18,7 @@ import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...audio_utils import SpectrogramConfig
 from ...processing_utils import AudioKwargs
 from ...utils import PaddingStrategy
 
@@ -40,20 +40,20 @@ class ClapAudioProcessorMixin:
     max_length = 480000
     return_padding_mask = False
     # released checkpoints use "repeatpad"; the legacy FE spelled this its `padding` argument.
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(n_fft=1024, hop_length=480, power=2.0),
-        mel_scale_config=MelScaleConfig(
-            n_mels=64,
-            f_min=50,
-            f_max=14000,
-            mel_scale="slaney",
-            norm="slaney",
-            frequency_bin_mode="linspace",
-            computation_dtype="float64",
-        ),
-        log_mode="dB",
-        computation_dtype="float64",
-    )
+    spectrogram_config = {
+        "stft_config": {"n_fft": 1024, "hop_length": 480, "power": 2.0},
+        "mel_scale_config": {
+            "n_mels": 64,
+            "f_min": 50,
+            "f_max": 14000,
+            "mel_scale": "slaney",
+            "norm": "slaney",
+            "frequency_bin_mode": "linspace",
+            "computation_dtype": "float64",
+        },
+        "log_mode": "dB",
+        "computation_dtype": "float64",
+    }
     # built: `rand_trunc` audio reaches HTSAT as a waveform and is mel'd by its torchlibrosa
     # front-end (librosa defaults, i.e. the slaney scale + slaney norm above), while `fusion`
     # mels are precomputed with torchaudio defaults instead. The checkpoints are therefore
@@ -75,6 +75,8 @@ class ClapAudioProcessorMixin:
     valid_kwargs = ClapAudioProcessorKwargs
 
     def _set_attributes(self, **kwargs):
+        if isinstance(self.spectrogram_config, dict):
+            self.spectrogram_config = SpectrogramConfig.from_dict(self.spectrogram_config)
         if self.truncation_mode == "fusion":
             mel_scale_config = replace(self.spectrogram_config.mel_scale_config, **self._fusion_mel_overrides)
             self.spectrogram_config = replace(self.spectrogram_config, mel_scale_config=mel_scale_config)

@@ -16,7 +16,7 @@ import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, _array_namespace
+from ...audio_utils import _array_namespace
 from ...processing_utils import AudioKwargs
 
 
@@ -41,32 +41,32 @@ class CohereAsrAudioProcessorMixin:
     padding = "longest"
     dither: float = 1e-5
 
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=512,
-            hop_length=160,
-            win_length=400,
-            window_fn="hann_window",
-            power=2.0,
-            pad_mode="constant",
-            periodic=False,
-            magnitude_mode="sqrt_sum_squares",
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=128,
-            f_min=0.0,
-            norm="slaney",
-            mel_scale="slaney",
-            matmul_order="filters_first_matmul",
-            bank_rounding="librosa",
-        ),
-        preemphasis=0.97,
-        preemphasis_mode="waveform",
-        log_mode="log",
-        mel_floor=0.0,
-        pre_log_offset=2**-24,
-        transpose_features=True,
-    )
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 512,
+            "hop_length": 160,
+            "win_length": 400,
+            "window_fn": "hann_window",
+            "power": 2.0,
+            "pad_mode": "constant",
+            "periodic": False,
+            "magnitude_mode": "sqrt_sum_squares",
+        },
+        "mel_scale_config": {
+            "n_mels": 128,
+            "f_min": 0.0,
+            "norm": "slaney",
+            "mel_scale": "slaney",
+            "matmul_order": "filters_first_matmul",
+            "bank_rounding": "librosa",
+        },
+        "preemphasis": 0.97,
+        "preemphasis_mode": "waveform",
+        "log_mode": "log",
+        "mel_floor": 0.0,
+        "pre_log_offset": 2**-24,
+        "transpose_features": True,
+    }
 
     skip_tensor_conversion = ["audio_chunk_index"]
     extra_model_input_names = ["audio_chunk_index"]

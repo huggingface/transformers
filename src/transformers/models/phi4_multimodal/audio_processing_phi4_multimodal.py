@@ -15,7 +15,6 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 from ...processing_utils import AudioKwargs
 
 
@@ -37,30 +36,30 @@ class Phi4MultimodalAudioProcessorKwargs(AudioKwargs, total=False):
 class Phi4MultimodalAudioProcessorMixin:
     sampling_rate = 16000
     extra_model_input_names = ["audio_embed_sizes"]
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=512,
-            win_length=400,
-            hop_length=160,
-            window_fn="hamming_window",
-            periodic=False,
-            center=False,
-            power=2.0,
-            window_dtype="float64",
-        ),
-        preemphasis=0.97,
-        mel_scale_config=MelScaleConfig(
-            n_mels=80,
-            f_min=0,
-            f_max=7690,
-            mel_scale="kaldi",
-            triangularize_in_mel_space=True,
-            matmul_order="features_first",
-            computation_dtype="float64",
-        ),
-        mel_floor=1.0,
-        log_mode="log",
-    )
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 512,
+            "win_length": 400,
+            "hop_length": 160,
+            "window_fn": "hamming_window",
+            "periodic": False,
+            "center": False,
+            "power": 2.0,
+            "window_dtype": "float64",
+        },
+        "preemphasis": 0.97,
+        "mel_scale_config": {
+            "n_mels": 80,
+            "f_min": 0,
+            "f_max": 7690,
+            "mel_scale": "kaldi",
+            "triangularize_in_mel_space": True,
+            "matmul_order": "features_first",
+            "computation_dtype": "float64",
+        },
+        "mel_floor": 1.0,
+        "log_mode": "log",
+    }
 
     audio_compression_rate = 8
     audio_downsample_rate = 1

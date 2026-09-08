@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 from ...processing_utils import AudioKwargs
 
 
@@ -42,30 +41,30 @@ class AudioSpectrogramTransformerAudioProcessorMixin:
     model_input_names = ["audio_values"]
     return_padding_mask = False
     sampling_rate = 16000
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=512,
-            win_length=400,
-            hop_length=160,
-            window_fn="hann_window",
-            power=2.0,
-            center=False,
-            periodic=False,
-            left_align_fft=True,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=128,
-            f_min=20.0,
-            f_max=8000.0,
-            mel_scale="kaldi",
-            triangularize_in_mel_space=True,
-        ),
-        log_mode="log",
-        preemphasis=0.97,
-        remove_dc_offset=True,
-        mel_floor=1.192092955078125e-07,
-        transpose_features=True,  # kaldi's (time, num_mel_bins) orientation
-    )
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 512,
+            "win_length": 400,
+            "hop_length": 160,
+            "window_fn": "hann_window",
+            "power": 2.0,
+            "center": False,
+            "periodic": False,
+            "left_align_fft": True,
+        },
+        "mel_scale_config": {
+            "n_mels": 128,
+            "f_min": 20.0,
+            "f_max": 8000.0,
+            "mel_scale": "kaldi",
+            "triangularize_in_mel_space": True,
+        },
+        "log_mode": "log",
+        "preemphasis": 0.97,
+        "remove_dc_offset": True,
+        "mel_floor": 1.192092955078125e-07,
+        "transpose_features": True,  # kaldi's (time, num_mel_bins) orientation
+    }
 
     do_normalize = True
     ast_mean = -4.2677393

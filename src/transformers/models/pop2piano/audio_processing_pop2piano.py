@@ -13,16 +13,15 @@
 # limitations under the License.
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 class Pop2PianoAudioProcessorMixin:
     sampling_rate = 22050
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(n_fft=4096, hop_length=1024, power=2.0),
-        mel_scale_config=MelScaleConfig(n_mels=512, f_min=10.0, mel_scale="htk"),
-        log_mode="log10",
-    )
+    spectrogram_config = {
+        "stft_config": {"n_fft": 4096, "hop_length": 1024, "power": 2.0},
+        "mel_scale_config": {"n_mels": 512, "f_min": 10.0, "mel_scale": "htk"},
+        "log_mode": "log10",
+    }
 
 
 class Pop2PianoAudioProcessor(Pop2PianoAudioProcessorMixin, TorchAudioBackend):

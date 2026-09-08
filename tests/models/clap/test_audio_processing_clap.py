@@ -38,3 +38,13 @@ class ClapAudioProcessingTest(AudioProcessingTestMixin, unittest.TestCase):
     def setUp(self):
         self.audio_processor_tester = ClapAudioProcessingTester()
         super().setUp()
+
+    def test_fusion_initializes_nested_dict_config(self):
+        for processor_class in self.audio_processing_classes.values():
+            with self.subTest(processor_class=processor_class):
+                processor = processor_class(truncation_mode="fusion")
+                mel_config = processor.spectrogram_config.mel_scale_config
+                self.assertEqual(mel_config.mel_scale, "htk")
+                self.assertIsNone(mel_config.norm)
+                self.assertEqual(processor.mel_filters.shape[-1], mel_config.n_mels)
+                self.assertEqual(processor_class().spectrogram_config.mel_scale_config.norm, "slaney")

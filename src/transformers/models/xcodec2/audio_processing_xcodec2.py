@@ -15,7 +15,6 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 from ...processing_utils import AudioKwargs
 
 
@@ -51,30 +50,30 @@ class Xcodec2AudioProcessorMixin:
     model_input_names = ["audio_features", "audio_features_mask", "audio_values", "audio_values_mask"]
     pad_to_multiple_of = 320
     sampling_rate = 16000
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=512,
-            win_length=400,
-            hop_length=160,
-            window_fn="povey",
-            power=2.0,
-            center=False,
-            periodic=False,
-            left_align_fft=True,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=80,
-            f_min=20.0,
-            f_max=8000.0,
-            mel_scale="kaldi",
-            triangularize_in_mel_space=True,
-        ),
-        log_mode="log",
-        preemphasis=0.97,
-        remove_dc_offset=True,
-        mel_floor=1.192092955078125e-07,
-        waveform_scale=32768.0,
-    )
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 512,
+            "win_length": 400,
+            "hop_length": 160,
+            "window_fn": "povey",
+            "power": 2.0,
+            "center": False,
+            "periodic": False,
+            "left_align_fft": True,
+        },
+        "mel_scale_config": {
+            "n_mels": 80,
+            "f_min": 20.0,
+            "f_max": 8000.0,
+            "mel_scale": "kaldi",
+            "triangularize_in_mel_space": True,
+        },
+        "log_mode": "log",
+        "preemphasis": 0.97,
+        "remove_dc_offset": True,
+        "mel_floor": 1.192092955078125e-07,
+        "waveform_scale": 32768.0,
+    }
 
     hop_length = 320
     stride = 2

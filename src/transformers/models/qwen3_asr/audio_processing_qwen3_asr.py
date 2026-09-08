@@ -16,7 +16,6 @@ import torch
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_processing_utils import BaseAudioProcessor
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 from ...processing_utils import AudioKwargs
 
 
@@ -37,25 +36,25 @@ class Qwen3ASRAudioProcessorMixin:
     max_length = 480000
     padding = "max_length"
     sampling_rate = 16000
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=400,
-            hop_length=160,
-            power=2.0,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=128,
-            mel_scale="slaney",
-            norm="slaney",
-            computation_dtype="float64",
-        ),
-        log_mode="log10",
-        clip_max_offset=8.0,
-        post_log_shift=4.0,
-        post_log_scale=0.25,
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 400,
+            "hop_length": 160,
+            "power": 2.0,
+        },
+        "mel_scale_config": {
+            "n_mels": 128,
+            "mel_scale": "slaney",
+            "norm": "slaney",
+            "computation_dtype": "float64",
+        },
+        "log_mode": "log10",
+        "clip_max_offset": 8.0,
+        "post_log_shift": 4.0,
+        "post_log_scale": 0.25,
         # legacy masks by striding the sample mask -> boundary-straddling frames count as valid
-        count_partial_frames=True,
-    )
+        "count_partial_frames": True,
+    }
 
     min_length = 8000
     n_window = 50

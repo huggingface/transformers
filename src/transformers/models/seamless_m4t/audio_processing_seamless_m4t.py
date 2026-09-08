@@ -16,7 +16,6 @@ import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 from ...processing_utils import AudioKwargs
 
 
@@ -33,30 +32,30 @@ class SeamlessM4tAudioProcessorMixin:
     do_batch_spectrogram = False
     pad_to_multiple_of = 2
     sampling_rate = 16000
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=512,
-            win_length=400,
-            hop_length=160,
-            window_fn="povey",
-            power=2.0,
-            center=False,
-            periodic=False,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=80,
-            f_min=20.0,
-            f_max=8000.0,
-            mel_scale="kaldi",
-            triangularize_in_mel_space=True,
-        ),
-        log_mode="log",
-        preemphasis=0.97,
-        remove_dc_offset=True,
-        waveform_scale=32768.0,
-        mel_floor=1.192092955078125e-07,
-        computation_dtype="float64",
-    )
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 512,
+            "win_length": 400,
+            "hop_length": 160,
+            "window_fn": "povey",
+            "power": 2.0,
+            "center": False,
+            "periodic": False,
+        },
+        "mel_scale_config": {
+            "n_mels": 80,
+            "f_min": 20.0,
+            "f_max": 8000.0,
+            "mel_scale": "kaldi",
+            "triangularize_in_mel_space": True,
+        },
+        "log_mode": "log",
+        "preemphasis": 0.97,
+        "remove_dc_offset": True,
+        "waveform_scale": 32768.0,
+        "mel_floor": 1.192092955078125e-07,
+        "computation_dtype": "float64",
+    }
 
     stride = 2
     valid_kwargs = SeamlessM4tAudioProcessorKwargs

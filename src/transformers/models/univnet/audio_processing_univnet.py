@@ -15,7 +15,6 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 from ...processing_utils import AudioKwargs
 
 
@@ -57,28 +56,28 @@ class UnivNetAudioProcessorMixin:
     # `spectrogram_config.mel_floor` is a separate value the port introduced.
     legacy_field_mapping = {"feature_size": None, "mel_floor": "magnitude_floor"}
 
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=1024,
-            hop_length=256,
-            center=False,
-            window_fn="hann",
-            periodic=True,
-            power=1.0,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=100,
-            f_min=0.0,
-            f_max=12000.0,
-            mel_scale="slaney",
-            norm="slaney",
-        ),
-        log_mode="log",
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 1024,
+            "hop_length": 256,
+            "center": False,
+            "window_fn": "hann",
+            "periodic": True,
+            "power": 1.0,
+        },
+        "mel_scale_config": {
+            "n_mels": 100,
+            "f_min": 0.0,
+            "f_max": 12000.0,
+            "mel_scale": "slaney",
+            "norm": "slaney",
+        },
+        "log_mode": "log",
         # the clamp applied before `log()`; distinct from `magnitude_floor` above
-        mel_floor=1e-5,
-        computation_dtype="float64",
-        transpose_features=True,  # UnivNet consumes (frames, n_mels)
-    )
+        "mel_floor": 1e-5,
+        "computation_dtype": "float64",
+        "transpose_features": True,  # UnivNet consumes (frames, n_mels)
+    }
 
     magnitude_floor = 1e-9
     do_normalize = False

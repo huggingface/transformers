@@ -15,7 +15,6 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 from ...processing_utils import AudioKwargs
 
 
@@ -33,25 +32,25 @@ class ClvpAudioProcessorMixin:
     # and never masks it (the legacy FE defaulted to `return_attention_mask=False` too).
     return_padding_mask = False
     sampling_rate = 22050
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=1024,
-            hop_length=256,
-            window_fn="hann_window",
-            power=2.0,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=80,
-            f_min=0.0,
-            f_max=8000.0,
-            norm="slaney",
-            mel_scale="htk",
-            frequency_bin_mode="linspace",
-        ),
-        log_mode="log",
-        mel_floor=1e-5,
-        computation_dtype="float64",
-    )
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 1024,
+            "hop_length": 256,
+            "window_fn": "hann_window",
+            "power": 2.0,
+        },
+        "mel_scale_config": {
+            "n_mels": 80,
+            "f_min": 0.0,
+            "f_max": 8000.0,
+            "norm": "slaney",
+            "mel_scale": "htk",
+            "frequency_bin_mode": "linspace",
+        },
+        "log_mode": "log",
+        "mel_floor": 1e-5,
+        "computation_dtype": "float64",
+    }
     truncation = True
 
     mel_norms = None

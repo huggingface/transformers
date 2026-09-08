@@ -15,36 +15,36 @@
 import math
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, _clamp_min
+from ...audio_utils import _clamp_min
 
 
 class InklingAudioProcessorMixin:
     sampling_rate = 16000
     model_input_names = ["input_features", "input_features_mask"]
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=1600,
-            hop_length=800,
-            win_length=1600,
-            window_fn="hann_window",
-            power=1.0,
-            center=False,
-            periodic=True,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=80,
-            f_min=0.0,
-            f_max=8000.0,
-            norm="slaney",
-            mel_scale="slaney",
-        ),
-        log_mode="log10",
-        mel_floor=1e-10,
-        transpose_features=True,
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 1600,
+            "hop_length": 800,
+            "win_length": 1600,
+            "window_fn": "hann_window",
+            "power": 1.0,
+            "center": False,
+            "periodic": True,
+        },
+        "mel_scale_config": {
+            "n_mels": 80,
+            "f_min": 0.0,
+            "f_max": 8000.0,
+            "norm": "slaney",
+            "mel_scale": "slaney",
+        },
+        "log_mode": "log10",
+        "mel_floor": 1e-10,
+        "transpose_features": True,
         # `_stft` left-pads by `n_fft - hop`, so frame k is centred on sample k*hop and counts as
         # valid whenever that centre lies in the real audio, even if its window reaches padding.
-        count_partial_frames=True,
-    )
+        "count_partial_frames": True,
+    }
 
     def _stft(self, audio, *, spectrogram_config, audio_ranges=None, **kwargs):
         # Inkling's fixed framing: left-pad (n_fft - hop) and right-pad up to a hop multiple, center=False.

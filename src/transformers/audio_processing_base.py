@@ -17,7 +17,7 @@ import warnings
 from dataclasses import fields, replace
 from typing import Any, ClassVar, TypeVar
 
-from .audio_utils import MelScaleConfig, is_valid_audio, load_audio
+from .audio_utils import MelScaleConfig, SpectrogramConfig, is_valid_audio, load_audio
 from .preprocessing_base import BatchFeature as BaseBatchFeature
 from .preprocessing_base import PreprocessingMixin
 from .utils import (
@@ -192,7 +192,7 @@ class AudioProcessingMixin(PreprocessingMixin):
         """
         config = cls
         for part in target.split(".")[:-1]:
-            config = getattr(config, part, None)
+            config = config.get(part) if isinstance(config, dict) else getattr(config, part, None)
             if config is None:
                 return False
         return True
@@ -256,11 +256,12 @@ class AudioProcessingMixin(PreprocessingMixin):
             return
 
         incoming = dict(incoming)
-        merged = default
+        merged = SpectrogramConfig.from_dict(default) if isinstance(default, dict) else default
         for key, nested_cls in (("stft_config", None), ("mel_scale_config", MelScaleConfig)):
-            nested = incoming.pop(key, None)
+            nested = incoming.get(key)
             if not isinstance(nested, dict):
                 continue
+            incoming.pop(key)
             current = getattr(merged, key)
             if current is None:
                 # No class-level nested config (e.g. a raw-audio model gaining a mel scale).

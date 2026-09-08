@@ -15,7 +15,6 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 from ...processing_utils import AudioKwargs
 
 
@@ -35,24 +34,24 @@ class WhisperAudioProcessorMixin:
     max_length = 480000
     return_padding_mask = False
     sampling_rate = 16000
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=400,
-            hop_length=160,
-            power=2.0,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=80,
-            mel_scale="slaney",
-            norm="slaney",
-            computation_dtype="float64",
-        ),
-        log_mode="log10",
-        skip_last_frame=True,
-        clip_max_offset=8.0,
-        post_log_shift=4.0,
-        post_log_scale=0.25,
-    )
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 400,
+            "hop_length": 160,
+            "power": 2.0,
+        },
+        "mel_scale_config": {
+            "n_mels": 80,
+            "mel_scale": "slaney",
+            "norm": "slaney",
+            "computation_dtype": "float64",
+        },
+        "log_mode": "log10",
+        "skip_last_frame": True,
+        "clip_max_offset": 8.0,
+        "post_log_shift": 4.0,
+        "post_log_scale": 0.25,
+    }
     truncation = True
 
     chunk_length = 30

@@ -15,7 +15,7 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, _clamp_min
+from ...audio_utils import _clamp_min
 from ...processing_utils import AudioKwargs
 
 
@@ -30,21 +30,21 @@ class VoxtralRealtimeAudioProcessorKwargs(AudioKwargs, total=False):
 
 class VoxtralRealtimeAudioProcessorMixin:
     sampling_rate = 16000
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=400,
-            hop_length=160,
-            power=2.0,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=128,
-            mel_scale="slaney",
-            norm="slaney",
-            computation_dtype="float64",
-        ),
-        log_mode="log10",
-        skip_last_frame=True,
-    )
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 400,
+            "hop_length": 160,
+            "power": 2.0,
+        },
+        "mel_scale_config": {
+            "n_mels": 128,
+            "mel_scale": "slaney",
+            "norm": "slaney",
+            "computation_dtype": "float64",
+        },
+        "log_mode": "log10",
+        "skip_last_frame": True,
+    }
 
     global_log_mel_max = 1.5
     valid_kwargs = VoxtralRealtimeAudioProcessorKwargs

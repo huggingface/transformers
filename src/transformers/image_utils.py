@@ -15,7 +15,7 @@
 import base64
 import os
 from collections.abc import Iterable
-from dataclasses import astuple, dataclass, fields
+from dataclasses import astuple, dataclass
 from io import BytesIO
 from typing import Any, Union
 
@@ -41,6 +41,7 @@ from .utils.constants import (  # noqa: F401
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
 )
+from .utils.generic import DataclassDict
 from .utils.import_utils import requires
 
 
@@ -1009,8 +1010,8 @@ def validate_kwargs(valid_processor_keys: list[str], captured_kwargs: list[str])
         logger.warning(f"Unused or unrecognized kwargs: {unused_key_str}.")
 
 
-@dataclass()
-class SizeDict:
+@dataclass(eq=False)
+class SizeDict(DataclassDict):
     """
     Hashable dictionary to store image size information.
     """
@@ -1024,53 +1025,10 @@ class SizeDict:
     min_pixels: int | None = None
     max_pixels: int | None = None
 
-    def __getitem__(self, key):
-        if hasattr(self, key):
-            return getattr(self, key)
-        raise KeyError(f"Key {key} not found in SizeDict.")
-
-    def get(self, key, default=None):
-        if hasattr(self, key) and getattr(self, key) is not None:
-            return getattr(self, key)
-        return default
-
-    def __iter__(self):
-        # Yield only non-None (key, value) pairs so dict(self) excludes missing values.
-        for f in fields(self):
-            val = getattr(self, f.name)
-            if val is not None:
-                yield f.name, val
-
     def __hash__(self):
         return hash(astuple(self))
 
-    def __contains__(self, key):
-        return hasattr(self, key) and getattr(self, key) is not None
-
     def __setitem__(self, key, value):
-        if not hasattr(self, key):
+        if key not in self.__dataclass_fields__:
             raise KeyError(f"Key {key} is not a valid field of SizeDict.")
-        object.__setattr__(self, key, value)
-
-    def __eq__(self, other):
-        if isinstance(other, dict):
-            return dict(self) == other
-        if isinstance(other, SizeDict):
-            return tuple(getattr(self, f.name) for f in fields(self)) == tuple(
-                getattr(other, f.name) for f in fields(self)
-            )
-        return NotImplemented
-
-    def __or__(self, other) -> "SizeDict":
-        if isinstance(other, dict | SizeDict):
-            merged = dict(self)
-            merged.update(dict(other))
-            return SizeDict(**merged)
-        return NotImplemented
-
-    def __ror__(self, other) -> dict:
-        if isinstance(other, dict):
-            merged = dict(other)
-            merged.update(dict(self))
-            return merged
-        return NotImplemented
+        setattr(self, key, value)

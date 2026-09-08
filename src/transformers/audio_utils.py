@@ -22,7 +22,7 @@ import io
 import math
 import os
 import warnings
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, Union
 from urllib.parse import urlparse
@@ -41,7 +41,7 @@ from .utils import (
     is_torchcodec_available,
     requires_backends,
 )
-from .utils.generic import retry
+from .utils.generic import DataclassDict, retry
 
 
 if TYPE_CHECKING:
@@ -65,8 +65,8 @@ if is_torchcodec_available():
 AudioInput = Union[np.ndarray, "torch.Tensor", list[np.ndarray], list["torch.Tensor"]]
 
 
-@dataclass(frozen=True)
-class StftConfig:
+@dataclass(frozen=True, eq=False, unsafe_hash=True)
+class StftConfig(DataclassDict):
     n_fft: int = 400
     win_length: int | None = None
     hop_length: int | None = None
@@ -84,17 +84,9 @@ class StftConfig:
     fft_dtype: str | None = None
     magnitude_mode: str | None = None
 
-    def to_dict(self) -> dict:
-        return {f.name: getattr(self, f.name) for f in fields(self) if getattr(self, f.name) is not None}
 
-    @classmethod
-    def from_dict(cls, d: dict) -> "StftConfig":
-        valid_keys = {f.name for f in fields(cls)}
-        return cls(**{k: v for k, v in d.items() if k in valid_keys})
-
-
-@dataclass(frozen=True)
-class MelScaleConfig:
+@dataclass(frozen=True, eq=False, unsafe_hash=True)
+class MelScaleConfig(DataclassDict):
     n_mels: int = 128
     f_min: float = 0.0
     f_max: float | None = None
@@ -107,17 +99,11 @@ class MelScaleConfig:
     matmul_order: str = "filters_first"
     bank_rounding: str | None = None
 
-    def to_dict(self) -> dict:
-        return {f.name: getattr(self, f.name) for f in fields(self) if getattr(self, f.name) is not None}
 
-    @classmethod
-    def from_dict(cls, d: dict) -> "MelScaleConfig":
-        valid_keys = {f.name for f in fields(cls)}
-        return cls(**{k: v for k, v in d.items() if k in valid_keys})
+@dataclass(frozen=True, eq=False, unsafe_hash=True)
+class SpectrogramConfig(DataclassDict):
+    _nested_config_types = {"stft_config": StftConfig, "mel_scale_config": MelScaleConfig}
 
-
-@dataclass(frozen=True)
-class SpectrogramConfig:
     stft_config: StftConfig = field(default_factory=StftConfig)
     mel_scale_config: MelScaleConfig | None = None
     log_mode: str = "log10"
@@ -134,41 +120,6 @@ class SpectrogramConfig:
     clip_max_offset: float | None = None
     post_log_shift: float | None = None
     post_log_scale: float | None = None
-
-    def __getitem__(self, key):
-        if hasattr(self, key):
-            return getattr(self, key)
-        raise KeyError(f"Key {key} not found in SpectrogramConfig.")
-
-    def __iter__(self):
-        for f in fields(self):
-            val = getattr(self, f.name)
-            if val is not None:
-                if hasattr(val, "to_dict"):
-                    yield f.name, val.to_dict()
-                else:
-                    yield f.name, val
-
-    def __eq__(self, other):
-        if isinstance(other, dict):
-            return dict(self) == other
-        if isinstance(other, SpectrogramConfig):
-            return tuple(getattr(self, f.name) for f in fields(self)) == tuple(
-                getattr(other, f.name) for f in fields(self)
-            )
-        return NotImplemented
-
-    def to_dict(self) -> dict:
-        return dict(self)
-
-    @classmethod
-    def from_dict(cls, d: dict) -> "SpectrogramConfig":
-        kwargs = {k: v for k, v in d.items() if k in {f.name for f in fields(cls)}}
-        if "stft_config" in kwargs and isinstance(kwargs["stft_config"], dict):
-            kwargs["stft_config"] = StftConfig.from_dict(kwargs["stft_config"])
-        if "mel_scale_config" in kwargs and isinstance(kwargs["mel_scale_config"], dict):
-            kwargs["mel_scale_config"] = MelScaleConfig.from_dict(kwargs["mel_scale_config"])
-        return cls(**kwargs)
 
 
 @retry(exceptions=(httpx.HTTPError,))

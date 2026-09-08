@@ -13,35 +13,34 @@
 # limitations under the License.
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 class LasrAudioProcessorMixin:
     sampling_rate = 16000
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=512,
-            hop_length=160,
-            win_length=400,
-            power=2.0,
-            center=False,
-            periodic=False,
-            left_align_fft=True,
-        ),
-        mel_scale_config=MelScaleConfig(
-            n_mels=128,
-            f_min=125.0,
-            f_max=7500.0,
-            mel_scale="kaldi",
-            triangularize_in_mel_space=True,
-            bands_to_zero=1,
-            computation_dtype="float64",
-            matmul_order="features_first",
-        ),
-        log_mode="log",
-        mel_floor=1e-5,
-        computation_dtype="float64",
-    )
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 512,
+            "hop_length": 160,
+            "win_length": 400,
+            "power": 2.0,
+            "center": False,
+            "periodic": False,
+            "left_align_fft": True,
+        },
+        "mel_scale_config": {
+            "n_mels": 128,
+            "f_min": 125.0,
+            "f_max": 7500.0,
+            "mel_scale": "kaldi",
+            "triangularize_in_mel_space": True,
+            "bands_to_zero": 1,
+            "computation_dtype": "float64",
+            "matmul_order": "features_first",
+        },
+        "log_mode": "log",
+        "mel_floor": 1e-5,
+        "computation_dtype": "float64",
+    }
 
 
 class LasrAudioProcessor(LasrAudioProcessorMixin, TorchAudioBackend):

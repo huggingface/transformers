@@ -17,7 +17,6 @@ import math
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 from ...processing_utils import AudioKwargs
 
 
@@ -43,20 +42,20 @@ class GraniteSpeechAudioProcessorMixin:
 
     # Native pipeline, bit-equal to the upstream FE's `torchaudio.transforms.MelSpectrogram`
     # + log10 + Whisper-style max-clip/rescale (ADR 0004 post-log fields).
-    spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(
-            n_fft=512,
-            win_length=400,
-            hop_length=160,
-            power=2.0,
-        ),
-        mel_scale_config=MelScaleConfig(n_mels=80),
-        log_mode="log10",
-        mel_floor=1e-10,
-        clip_max_offset=8.0,
-        post_log_shift=4.0,
-        post_log_scale=0.25,
-    )
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 512,
+            "win_length": 400,
+            "hop_length": 160,
+            "power": 2.0,
+        },
+        "mel_scale_config": {"n_mels": 80},
+        "log_mode": "log10",
+        "mel_floor": 1e-10,
+        "clip_max_offset": 8.0,
+        "post_log_shift": 4.0,
+        "post_log_scale": 0.25,
+    }
 
     projector_window_size = 15
     projector_downsample_rate = 5
