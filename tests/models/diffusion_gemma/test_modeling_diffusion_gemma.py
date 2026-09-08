@@ -924,7 +924,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/gemma_golden_gate.png",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
                     },
                     {"type": "text", "text": "What is shown in this image?"},
                 ],
@@ -1097,7 +1097,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/gemma_golden_gate.png",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
                     },
                     {"type": "text", "text": "What is shown in this image?"},
                 ],
@@ -1291,7 +1291,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/gemma_golden_gate.png",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
                         },
                         {"type": "text", "text": "What is shown in this image?"},
                     ],
@@ -1400,7 +1400,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/gemma_golden_gate.png",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
                         },
                         {"type": "text", "text": "Describe the image in detail."},
                     ],
@@ -1580,7 +1580,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/gemma_golden_gate.png",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
                     },
                     {"type": "text", "text": "What is shown in this image?"},
                 ],
@@ -1754,7 +1754,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/gemma_golden_gate.png",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
                         },
                         {"type": "text", "text": "What is shown in this image?"},
                     ],
@@ -1835,7 +1835,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/gemma_golden_gate.png",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
                         },
                         {"type": "text", "text": "Describe the image in detail."},
                     ],

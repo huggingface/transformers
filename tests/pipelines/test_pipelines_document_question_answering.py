@@ -56,7 +56,7 @@ else:
 
 # This is a pinned image from a specific revision of a document question answering space, hosted by HuggingFace,
 # so we can expect it to be available.
-INVOICE_URL = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoice_docquery_b.png"
+INVOICE_URL = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoice_docquery_a.png"
 
 
 @is_pipeline_test
