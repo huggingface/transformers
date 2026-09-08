@@ -100,7 +100,7 @@ conversation = [
     ]},
     {"role": "assistant", "content": "Yes, the speaker is female and in her twenties."},
     {"role": "user", "content": [
-        {"type": "audio", "audio_url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mandarin_asr.wav"},
+        {"type": "audio", "audio_url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/mandarin_voxcpm_zh.wav"},
     ]},
 ]
 text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
