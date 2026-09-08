@@ -166,10 +166,6 @@ class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="PPOCRV5MobileDet does not support.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 

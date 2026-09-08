@@ -66,8 +66,8 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
 @slow
 class Glm4MoeIntegrationTest(unittest.TestCase):
     def tearDown(self):
-        # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
-        cleanup(torch_device, gc_collect=False)
+        # See LlamaIntegrationTest.tearDown().
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_torch_accelerator
