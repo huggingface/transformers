@@ -235,6 +235,32 @@ class GPTNeoXModelJapaneseTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
+    def test_partial_rotary_factor(self):
+        config, input_ids, input_mask, _ = self.model_tester.prepare_config_and_inputs()
+        head_dim = config.hidden_size // config.num_attention_heads
+
+        for partial_rotary_factor in (1.0, 0.5, 0.25):
+            with self.subTest(partial_rotary_factor=partial_rotary_factor):
+                config.rope_parameters["partial_rotary_factor"] = partial_rotary_factor
+                model = GPTNeoXJapaneseModel(config).to(torch_device).eval()
+
+                rotary_ndims = model.layers[0].attention.rotary_ndims
+                self.assertEqual(rotary_ndims, int(head_dim * partial_rotary_factor))
+                self.assertEqual(model.rotary_emb.inv_freq.shape[-1], rotary_ndims // 2)
+
+                base = config.rope_parameters["rope_theta"]
+                expected_inv_freq = 1.0 / (
+                    base ** (torch.arange(0, rotary_ndims, 2, dtype=torch.float) / rotary_ndims)
+                )
+                torch.testing.assert_close(model.rotary_emb.inv_freq.cpu(), expected_inv_freq)
+
+                with torch.no_grad():
+                    result = model(input_ids, attention_mask=input_mask)
+                self.assertEqual(
+                    result.last_hidden_state.shape,
+                    (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.hidden_size),
+                )
+
     @slow
     def test_generation(self):
         model_id = "abeja/gpt-neox-japanese-2.7b"
