@@ -53,8 +53,9 @@ as it is upstream. The examples below use the Mini checkpoint because it runs an
 ## Getting initial conditions
 
 Unlike text or images, the input here is a physical atmospheric state that has to come from somewhere. The checkpoints
-are fine-tuned to be initialized from ECMWF HRES *analysis* - the operational best estimate of the current atmosphere -
-rather than from reanalysis. [earth2studio](https://github.com/NVIDIA/earth2studio) wraps the public sources:
+are fine-tuned to be initialized from the *analysis* of the ECMWF high-resolution forecast (HRES) - the operational
+best estimate of the current atmosphere - rather than from reanalysis.
+[earth2studio](https://github.com/NVIDIA/earth2studio) wraps the public sources:
 
 ```python
 from earth2studio.data import IFS

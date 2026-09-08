@@ -49,8 +49,9 @@ class WeatherNext2FiLM(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, conditioning: torch.Tensor) -> torch.Tensor:
         scale, offset = self.linear(conditioning).chunk(2, dim=-1)
-        # `conditioning` is [batch, noise_channels] and `hidden_states` is [batch, ..., hidden];
-        # insert singleton axes for whatever sits in between.
+        # `conditioning` is [batch, noise_channels]; `hidden_states` is [batch, nodes, hidden] outside
+        # the mesh transformer and [batch, blocks, block, hidden] inside it, so the axes in between
+        # are filled with singletons.
         broadcast_shape = (scale.shape[0], *([1] * (hidden_states.ndim - 2)), scale.shape[-1])
         return hidden_states * (1.0 + scale.view(broadcast_shape)) + offset.view(broadcast_shape)
 

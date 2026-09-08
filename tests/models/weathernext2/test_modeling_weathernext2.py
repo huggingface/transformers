@@ -497,11 +497,50 @@ class WeatherNext2ModelIntegrationTest(unittest.TestCase):
         global_features = torch.zeros(1, config.num_mesh_input_channels - 3, device=torch_device)
         noise = torch.zeros(1, config.noise_channels, device=torch_device)
 
-        with torch.no_grad():
-            first = model(grid_features=grid_features, global_features=global_features, noise=noise).prediction
-            second = model(grid_features=grid_features, global_features=global_features, noise=noise).prediction
+        # The graph aggregation is an `index_add`, whose CUDA kernel accumulates with atomics, so
+        # repeating a forward pass reorders the additions unless deterministic algorithms are on.
+        previous = torch.are_deterministic_algorithms_enabled()
+        try:
+            torch.use_deterministic_algorithms(True, warn_only=True)
+            with torch.no_grad():
+                first = model(grid_features=grid_features, global_features=global_features, noise=noise).prediction
+                second = model(grid_features=grid_features, global_features=global_features, noise=noise).prediction
+        finally:
+            torch.use_deterministic_algorithms(previous, warn_only=True)
 
         self.assertEqual(first.shape, (1, config.num_output_channels, config.grid_latitudes, config.grid_longitudes))
         self.assertTrue(torch.isfinite(first).all())
         torch.testing.assert_close(first, second)
         self.assertEqual(len(processor.target_variables), len(config.target_variables))
+
+    def test_inference_expected_values(self):
+        """Pins the forward pass, so that a change to it has to be a deliberate one.
+
+        The inputs are drawn from a fixed seed in the model's normalized space, so this needs no data
+        file, and the numbers came out the same on CPU and on an H100 to four decimals. Agreement with
+        the original JAX implementation was checked separately, on a real forecast.
+        """
+        model = WeatherNext2ForWeatherForecasting.from_pretrained(self.checkpoint).to(torch_device).eval()
+        config = model.config
+
+        generator = torch.Generator().manual_seed(0)
+        grid_features = torch.randn(
+            1, config.num_grid_input_channels - 3, config.grid_latitudes, config.grid_longitudes, generator=generator
+        )
+        global_features = torch.randn(1, config.num_mesh_input_channels - 3, generator=generator)
+        noise = torch.randn(1, config.noise_channels, generator=generator)
+
+        with torch.no_grad():
+            prediction = model(
+                grid_features=grid_features.to(torch_device),
+                global_features=global_features.to(torch_device),
+                noise=noise.to(torch_device),
+            ).prediction
+
+        expected_pole = torch.tensor([-0.0312, -5.3831, -3.9925, -7.2537, -4.8488], device=torch_device)
+        expected_equator = torch.tensor([-5.7967, -4.5518, -2.5775, -2.2516, -4.0098], device=torch_device)
+        torch.testing.assert_close(prediction[0, 0, 0, :5].float(), expected_pole, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            prediction[0, 0, config.grid_latitudes // 2, :5].float(), expected_equator, rtol=1e-3, atol=1e-3
+        )
+        self.assertAlmostEqual(prediction.float().mean().item(), 0.3225, delta=1e-3)
