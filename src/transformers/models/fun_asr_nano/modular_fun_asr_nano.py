@@ -493,6 +493,7 @@ class FunAsrNanoModel(AudioFlamingo3Model):
         encoder_outputs = self.audio_tower(
             input_features=input_features,
             input_features_mask=input_features_mask,
+            return_dict=True,
             **kwargs,
         )
         encoder_out = encoder_outputs.last_hidden_state

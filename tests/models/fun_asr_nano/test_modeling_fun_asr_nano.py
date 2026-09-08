@@ -95,6 +95,74 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
     pipeline_model_mapping = {"audio-text-to-text": FunAsrNanoForConditionalGeneration} if is_torch_available() else {}
     model_split_percents = [0.5, 0.9]
 
+    def test_projector_attention_kwargs(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = FunAsrNanoModel(config).to(torch_device).eval()
+        model.set_attn_implementation("eager")
+        input_features = inputs["input_features"][:2]
+        input_features_mask = inputs["input_features_mask"][:2].clone()
+        input_features_mask[-1, -5:] = 0
+        position_ids = torch.arange(input_features.shape[1], device=torch_device).expand(input_features.shape[0], -1)
+
+        with torch.no_grad():
+            encoder_output = model.audio_tower(input_features, input_features_mask).last_hidden_state
+
+        for entry_point in ("projector", "audio_features"):
+            with self.subTest(entry_point=entry_point):
+                received_kwargs = []
+
+                def record_kwargs(module, args, kwargs):
+                    received_kwargs.append(kwargs)
+
+                handles = [
+                    layer.self_attn.register_forward_pre_hook(record_kwargs, with_kwargs=True)
+                    for layer in model.multi_modal_projector.layers
+                ]
+                try:
+                    with torch.no_grad():
+                        if entry_point == "projector":
+                            output = model.multi_modal_projector(
+                                encoder_output, input_features_mask, position_ids=position_ids
+                            )
+                        else:
+                            output = model.get_audio_features(
+                                input_features, input_features_mask, position_ids=position_ids
+                            ).pooler_output
+                    self.assertEqual(len(received_kwargs), len(model.multi_modal_projector.layers))
+                    self.assertGreater(len(received_kwargs), 0)
+                    for kwargs in received_kwargs:
+                        self.assertIn("position_ids", kwargs)
+                        self.assertIs(kwargs["position_ids"], position_ids)
+                finally:
+                    for handle in handles:
+                        handle.remove()
+
+                with torch.no_grad():
+                    if entry_point == "projector":
+                        expected = model.multi_modal_projector(encoder_output, input_features_mask)
+                    else:
+                        expected = model.get_audio_features(input_features, input_features_mask).pooler_output
+                torch.testing.assert_close(output, expected)
+
+    def test_audio_features_return_dict(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = FunAsrNanoModel(config).to(torch_device).eval()
+        model.set_attn_implementation("eager")
+        for encoder_return_dict in (False, True):
+            model.audio_tower.config.return_dict = encoder_return_dict
+            for return_dict in (False, True):
+                with self.subTest(encoder_return_dict=encoder_return_dict, return_dict=return_dict):
+                    with torch.no_grad():
+                        output = model.get_audio_features(
+                            inputs["input_features"], inputs["input_features_mask"], return_dict=return_dict
+                        )
+                    if return_dict:
+                        self.assertIsNotNone(output.last_hidden_state)
+                        self.assertIsNotNone(output.pooler_output)
+                    else:
+                        self.assertIsInstance(output, tuple)
+                        self.assertEqual(len(output), 2)
+
     @unittest.skip(
         reason="This test does not apply to Fun-ASR-Nano since inputs_embeds corresponding to audio tokens "
         "are replaced when input features are provided."
