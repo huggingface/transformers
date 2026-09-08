@@ -324,6 +324,12 @@ def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None
 
     # If num_frames is not given but fps is, calculate num_frames from fps
     if num_frames is None and fps is not None:
+        if metadata.fps is None:
+            raise ValueError(
+                "Asked to sample `fps` frames per second but no original FPS was provided in video metadata "
+                f"which is required when sampling with `{fps}`. "
+                "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
+            )
         num_frames = int(total_num_frames / video_fps * fps)
 
     if num_frames is not None:
