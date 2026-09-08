@@ -662,7 +662,7 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
                 logits,
                 labels,
                 vocab_size=self.config.vocab_size,
-                num_items_in_batch=kwargs.get("num_items_in_batch"),
+                **kwargs,
             )
 
         if not return_dict:
