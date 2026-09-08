@@ -14,7 +14,9 @@ from ...audio_processing_base import make_legacy_audio_processor_alias
 from .audio_processing_speech_to_text import SpeechToTextAudioProcessor
 
 
-Speech2TextFeatureExtractor = make_legacy_audio_processor_alias(SpeechToTextAudioProcessor, "Speech2TextFeatureExtractor")
+Speech2TextFeatureExtractor = make_legacy_audio_processor_alias(
+    SpeechToTextAudioProcessor, "Speech2TextFeatureExtractor"
+)
 
 
 __all__ = ["Speech2TextFeatureExtractor"]

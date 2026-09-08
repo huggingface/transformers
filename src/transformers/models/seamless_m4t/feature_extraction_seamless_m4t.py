@@ -14,7 +14,9 @@ from ...audio_processing_base import make_legacy_audio_processor_alias
 from .audio_processing_seamless_m4t import SeamlessM4tAudioProcessor
 
 
-SeamlessM4TFeatureExtractor = make_legacy_audio_processor_alias(SeamlessM4tAudioProcessor, "SeamlessM4TFeatureExtractor")
+SeamlessM4TFeatureExtractor = make_legacy_audio_processor_alias(
+    SeamlessM4tAudioProcessor, "SeamlessM4TFeatureExtractor"
+)
 
 
 __all__ = ["SeamlessM4TFeatureExtractor"]

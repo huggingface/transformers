@@ -25,8 +25,8 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class ClvpProcessor(ProcessorMixin):
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
+    def __init__(self, audio_processor, tokenizer):
+        super().__init__(audio_processor, tokenizer)
 
     @auto_docstring
     def __call__(self, *args, text=None, audio=None, **kwargs):

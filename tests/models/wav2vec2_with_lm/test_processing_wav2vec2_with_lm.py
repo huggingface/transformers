@@ -26,7 +26,7 @@ from datasets import load_dataset
 from parameterized import parameterized
 
 from transformers import AutoFeatureExtractor, AutoProcessor
-from transformers.models.wav2vec2 import Wav2Vec2CTCTokenizer, Wav2Vec2FeatureExtractor
+from transformers.models.wav2vec2 import Wav2Vec2AudioProcessor, Wav2Vec2CTCTokenizer
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_pyctcdecode, require_torch, require_torchaudio, slow
 from transformers.utils import is_pyctcdecode_available, is_torch_available
@@ -56,7 +56,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
             "bos_token": "<s>",
             "eos_token": "</s>",
         }
-        feature_extractor_map = {
+        audio_processor_map = {
             "feature_size": 1,
             "padding_value": 0.0,
             "sampling_rate": 16000,
@@ -71,9 +71,9 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
         # load decoder from hub
         self.decoder_name = "hf-internal-testing/ngram-beam-search-decoder"
-        feature_extractor = Wav2Vec2FeatureExtractor(**feature_extractor_map)
+        audio_processor = Wav2Vec2AudioProcessor(**audio_processor_map)
         processor = Wav2Vec2ProcessorWithLM(
-            tokenizer=self.get_tokenizer(), feature_extractor=feature_extractor, decoder=self.get_decoder()
+            tokenizer=self.get_tokenizer(), audio_processor=audio_processor, decoder=self.get_decoder()
         )
         processor.save_pretrained(self.tmpdirname)
 
@@ -82,8 +82,8 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         kwargs.update(kwargs_init)
         return Wav2Vec2CTCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
-    def get_feature_extractor(self, **kwargs):
-        return Wav2Vec2FeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
+    def get_audio_processor(self, **kwargs):
+        return Wav2Vec2AudioProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_decoder(self, **kwargs):
         return BeamSearchDecoderCTC.load_from_hf_hub(self.decoder_name, **kwargs)
@@ -93,10 +93,10 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         decoder = self.get_decoder()
 
-        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, feature_extractor=feature_extractor, decoder=decoder)
+        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, audio_processor=audio_processor, decoder=decoder)
 
         processor.save_pretrained(self.tmpdirname)
         processor = Wav2Vec2ProcessorWithLM.from_pretrained(self.tmpdirname)
@@ -106,8 +106,8 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, Wav2Vec2CTCTokenizer)
 
         # feature extractor
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, Wav2Vec2FeatureExtractor)
+        self.assertEqual(processor.audio_processor.to_json_string(), audio_processor.to_json_string())
+        self.assertIsInstance(processor.audio_processor, Wav2Vec2AudioProcessor)
 
         # decoder
         self.assertEqual(processor.decoder._alphabet.labels, decoder._alphabet.labels)
@@ -119,7 +119,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
     def test_save_load_pretrained_additional_features(self):
         processor = Wav2Vec2ProcessorWithLM(
-            tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor(), decoder=self.get_decoder()
+            tokenizer=self.get_tokenizer(), audio_processor=self.get_audio_processor(), decoder=self.get_decoder()
         )
         processor.save_pretrained(self.tmpdirname)
 
@@ -140,34 +140,34 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         tokenizer.add_tokens(["xx"])
         with self.assertRaisesRegex(ValueError, "include"):
             Wav2Vec2ProcessorWithLM(
-                tokenizer=tokenizer, feature_extractor=self.get_feature_extractor(), decoder=self.get_decoder()
+                tokenizer=tokenizer, audio_processor=self.get_audio_processor(), decoder=self.get_decoder()
             )
 
-    def test_feature_extractor(self):
-        feature_extractor = self.get_feature_extractor()
+    def test_audio_processor(self):
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
         decoder = self.get_decoder()
 
-        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, feature_extractor=feature_extractor, decoder=decoder)
+        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, audio_processor=audio_processor, decoder=decoder)
 
         raw_speech = floats_list((3, 1000))
 
-        input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
+        input_feat_extract = audio_processor(raw_speech, return_tensors="np")
         input_processor = processor(raw_speech, return_tensors="np")
 
         for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
-    def test_another_feature_extractor(self):
-        feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/w2v-bert-2.0")
+    def test_another_audio_processor(self):
+        audio_processor = AutoFeatureExtractor.from_pretrained("facebook/w2v-bert-2.0")
         tokenizer = self.get_tokenizer()
         decoder = self.get_decoder()
 
-        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, feature_extractor=feature_extractor, decoder=decoder)
+        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, audio_processor=audio_processor, decoder=decoder)
 
         raw_speech = floats_list((3, 1000))
 
-        input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
+        input_feat_extract = audio_processor(raw_speech, return_tensors="np")
         input_processor = processor(raw_speech, return_tensors="np")
 
         for key in input_feat_extract:
@@ -175,24 +175,24 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
         self.assertListEqual(
             processor.model_input_names,
-            feature_extractor.model_input_names,
-            msg="`processor` and `feature_extractor` model input names do not match",
+            audio_processor.model_input_names,
+            msg="`processor` and `audio_processor` model input names do not match",
         )
 
-    def test_wrong_feature_extractor_raises_error(self):
-        feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-large-v3")
+    def test_wrong_audio_processor_raises_error(self):
+        audio_processor = AutoFeatureExtractor.from_pretrained("openai/whisper-large-v3")
         tokenizer = self.get_tokenizer()
         decoder = self.get_decoder()
 
         with self.assertRaises(ValueError):
-            Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, feature_extractor=feature_extractor, decoder=decoder)
+            Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, audio_processor=audio_processor, decoder=decoder)
 
     def test_tokenizer(self):
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
         decoder = self.get_decoder()
 
-        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, feature_extractor=feature_extractor, decoder=decoder)
+        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, audio_processor=audio_processor, decoder=decoder)
 
         input_str = "This is a test string"
 
@@ -208,11 +208,11 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         return np.random.rand(*shape)
 
     def test_decoder(self):
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
         decoder = self.get_decoder()
 
-        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, feature_extractor=feature_extractor, decoder=decoder)
+        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, audio_processor=audio_processor, decoder=decoder)
 
         logits = self._get_dummy_logits(shape=(10, 16), seed=13)
 
@@ -227,11 +227,11 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
     @parameterized.expand([[None], ["fork"], ["spawn"]])
     def test_decoder_batch(self, pool_context):
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
         decoder = self.get_decoder()
 
-        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, feature_extractor=feature_extractor, decoder=decoder)
+        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, audio_processor=audio_processor, decoder=decoder)
 
         logits = self._get_dummy_logits()
 
@@ -261,11 +261,11 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         self.assertListEqual(lm_scores_decoder, decoded_processor.lm_score)
 
     def test_decoder_with_params(self):
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
         decoder = self.get_decoder()
 
-        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, feature_extractor=feature_extractor, decoder=decoder)
+        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, audio_processor=audio_processor, decoder=decoder)
 
         logits = self._get_dummy_logits()
 
@@ -306,11 +306,11 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         self.assertTrue(np.allclose([-15.554, -13.9474], lm_scores, atol=1e-3))
 
     def test_decoder_with_params_of_lm(self):
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
         decoder = self.get_decoder()
 
-        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, feature_extractor=feature_extractor, decoder=decoder)
+        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, audio_processor=audio_processor, decoder=decoder)
 
         logits = self._get_dummy_logits()
 
@@ -466,7 +466,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
         output = processor.decode(logits[0], output_word_offsets=True)
 
-        time_offset = model.config.inputs_to_logits_ratio / processor.feature_extractor.sampling_rate
+        time_offset = model.config.inputs_to_logits_ratio / processor.audio_processor.sampling_rate
         word_time_stamps = [
             {
                 "start_time": d["start_offset"] * time_offset,

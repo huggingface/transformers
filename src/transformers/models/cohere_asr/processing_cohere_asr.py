@@ -52,8 +52,8 @@ class CohereAsrProcessor(ProcessorMixin):
     valid_processor_kwargs = CohereAsrProcessorKwargs
     skip_tensor_conversion = ["audio_chunk_index"]
 
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
+    def __init__(self, audio_processor, tokenizer):
+        super().__init__(audio_processor, tokenizer)
 
     def get_decoder_prompt_ids(self, language: str, punctuation: bool = True) -> list[int]:
         """Build the decoder prompt token IDs for the given language and punctuation settings."""
@@ -101,7 +101,7 @@ class CohereAsrProcessor(ProcessorMixin):
         if sampling_rate is None:
             logger.warning_once(
                 f"You've provided audio without specifying the sampling rate. It will be assumed to be "
-                f"{self.feature_extractor.sampling_rate}, which can result in silent errors."
+                f"{self.audio_processor.sampling_rate}, which can result in silent errors."
             )
         else:
             # Forward the caller's assertion; the audio processor resamples if it differs from its own rate.
@@ -179,8 +179,8 @@ class CohereAsrProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        names = feature_extractor_input_names + ["labels"]
+        audio_processor_input_names = self.audio_processor.model_input_names
+        names = audio_processor_input_names + ["labels"]
         return [name for name in names if name not in self.unused_input_names]
 
 

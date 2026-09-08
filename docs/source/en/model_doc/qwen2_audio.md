@@ -58,7 +58,7 @@ processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B", trust_remote_co
 
 prompt = "<|audio_bos|><|AUDIO|><|audio_eos|>Generate the caption in English:"
 url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-Audio/glass-breaking-151256.mp3"
-audio, sr = librosa.load(BytesIO(urlopen(url).read()), sr=processor.feature_extractor.sampling_rate)
+audio, sr = librosa.load(BytesIO(urlopen(url).read()), sr=processor.audio_processor.sampling_rate)
 inputs = processor(text=prompt, audio=audio, return_tensors="pt").to(model.device)
 
 generate_ids = model.generate(**inputs, max_length=256)
@@ -111,7 +111,7 @@ for message in conversation:
             if ele["type"] == "audio":
                 audios.append(librosa.load(
                     BytesIO(urlopen(ele['audio_url']).read()),
-                    sr=processor.feature_extractor.sampling_rate)[0]
+                    sr=processor.audio_processor.sampling_rate)[0]
                 )
 
 inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True).to(model.device)
@@ -164,7 +164,7 @@ for message in conversation:
                 audios.append(
                     librosa.load(
                         BytesIO(urlopen(ele['audio_url']).read()),
-                        sr=processor.feature_extractor.sampling_rate)[0]
+                        sr=processor.audio_processor.sampling_rate)[0]
                 )
 
 inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True).to(model.device)
@@ -224,7 +224,7 @@ for conversation in conversations:
                     audios.append(
                         librosa.load(
                             BytesIO(urlopen(ele['audio_url']).read()),
-                            sr=processor.feature_extractor.sampling_rate)[0]
+                            sr=processor.audio_processor.sampling_rate)[0]
                     )
 
 inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True).to(model.device)

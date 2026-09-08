@@ -370,9 +370,7 @@ class PreprocessingMixin(PushToHubMixin):
         # Reject config-only kwargs: names that configure the processor but that no read site consults
         # per call, so accepting them would silently drop the caller's value.
         call_kwargs_names = self._call_kwargs_names
-        config_only = [
-            name for name in kwargs if name in self._valid_kwargs_names and name not in call_kwargs_names
-        ]
+        config_only = [name for name in kwargs if name in self._valid_kwargs_names and name not in call_kwargs_names]
         if config_only:
             raise ValueError(
                 f"{', '.join(sorted(config_only))} configure{'s' if len(config_only) == 1 else ''} "
@@ -685,9 +683,7 @@ class PreprocessingMixin(PushToHubMixin):
         if is_local:
             logger.info(f"loading configuration file {resolved_config_file}")
         else:
-            logger.info(
-                f"loading configuration file {config_file} from cache at {resolved_config_file}"
-            )
+            logger.info(f"loading configuration file {config_file} from cache at {resolved_config_file}")
 
         return config_dict, kwargs
 

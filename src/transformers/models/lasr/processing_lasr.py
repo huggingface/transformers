@@ -48,8 +48,8 @@ class LasrProcessorKwargs(ProcessingKwargs, total=False):
 class LasrProcessor(ProcessorMixin):
     valid_processor_kwargs = LasrProcessorKwargs
 
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
+    def __init__(self, audio_processor, tokenizer):
+        super().__init__(audio_processor, tokenizer)
 
     @auto_docstring
     def __call__(
@@ -88,8 +88,8 @@ class LasrProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return feature_extractor_input_names + ["labels"]
+        audio_processor_input_names = self.audio_processor.model_input_names
+        return audio_processor_input_names + ["labels"]
 
 
 __all__ = ["LasrProcessor"]

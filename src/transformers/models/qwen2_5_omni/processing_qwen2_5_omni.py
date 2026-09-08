@@ -106,9 +106,9 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
     valid_processor_kwargs = Qwen2_5OmniProcessorKwargs
 
     def __init__(
-        self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None
+        self, image_processor=None, video_processor=None, audio_processor=None, tokenizer=None, chat_template=None
     ):
-        super().__init__(image_processor, video_processor, feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(image_processor, video_processor, audio_processor, tokenizer, chat_template=chat_template)
         self.image_token = self.tokenizer.image_token
         self.audio_token = self.tokenizer.audio_token
         self.video_token = self.tokenizer.video_token
@@ -141,7 +141,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
 
         if audio is not None:
             output_kwargs["audio_kwargs"]["padding"] = "max_length"  # Support "max_length" padding only here
-            audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+            audio_inputs = self.audio_processor(audio, **output_kwargs["audio_kwargs"])
             audio_inputs["feature_attention_mask"] = audio_inputs.pop(
                 "attention_mask"
             )  # rename feature_attention_mask to prevent conflicts later on
@@ -365,13 +365,13 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
-        feature_extractor_input_names = self.feature_extractor.model_input_names
+        audio_processor_input_names = self.audio_processor.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         video_processor_input_names = self.video_processor.model_input_names
         return list(
             dict.fromkeys(
                 tokenizer_input_names
-                + feature_extractor_input_names
+                + audio_processor_input_names
                 + image_processor_input_names
                 + video_processor_input_names
                 + ["feature_attention_mask"]

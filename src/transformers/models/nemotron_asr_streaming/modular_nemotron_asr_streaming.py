@@ -674,7 +674,7 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
         >>> encoder = NemotronAsrStreamingEncoder.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 
         >>> inputs = processor(ds[0]["audio"]["array"])
         >>> encoder_outputs = encoder(**inputs)
@@ -847,7 +847,7 @@ class NemotronAsrStreamingForRNNT(
         >>> model = NemotronAsrStreamingForRNNT.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 
         >>> inputs = processor(ds[0]["audio"]["array"])
         >>> outputs = model(**inputs)

@@ -57,17 +57,17 @@ model = AutoModelForRNNT.from_pretrained(model_id, device_map="auto")
 
 audio = load_audio(
     "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
-    sampling_rate=processor.feature_extractor.sampling_rate,
+    sampling_rate=processor.audio_processor.sampling_rate,
 )
 
 # Condition on a known language ...
-inputs = processor(audio, sampling_rate=processor.feature_extractor.sampling_rate, language="en-US")
+inputs = processor(audio, sampling_rate=processor.audio_processor.sampling_rate, language="en-US")
 inputs.to(model.device, dtype=model.dtype)
 output = model.generate(**inputs, return_dict_in_generate=True)
 print(processor.decode(output.sequences, skip_special_tokens=True))
 
 # ... or let the model detect it and keep the emitted <xx-XX> language tag.
-inputs = processor(audio, sampling_rate=processor.feature_extractor.sampling_rate) # equiv to ..., language="auto"
+inputs = processor(audio, sampling_rate=processor.audio_processor.sampling_rate) # equiv to ..., language="auto"
 inputs.to(model.device, dtype=model.dtype)
 output = model.generate(**inputs, return_dict_in_generate=True)
 print(processor.decode(output.sequences, skip_special_tokens=False))
@@ -97,7 +97,7 @@ print(f"Streaming latency: {processor.streaming_latency_ms} ms")
 # The language prompt rides along on every chunk; use a locale (e.g. "de-DE") or "auto".
 language = "en-US"
 
-sampling_rate = processor.feature_extractor.sampling_rate
+sampling_rate = processor.audio_processor.sampling_rate
 audio = load_audio(
     "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
     sampling_rate=sampling_rate,
@@ -118,8 +118,8 @@ def input_features_generator():
     yield first_chunk_inputs.input_features[:, : processor.num_mel_frames_first_audio_chunk, :]
 
     mel_frame_idx = processor.num_mel_frames_first_audio_chunk
-    hop_length = processor.feature_extractor.hop_length
-    n_fft = processor.feature_extractor.n_fft
+    hop_length = processor.audio_processor.hop_length
+    n_fft = processor.audio_processor.n_fft
 
     start_idx = mel_frame_idx * hop_length - n_fft // 2
     while (end_idx := start_idx + processor.num_samples_per_audio_chunk) < audio.shape[0]:

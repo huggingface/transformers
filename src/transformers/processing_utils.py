@@ -24,6 +24,7 @@ import os
 import re
 import sys
 import typing
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -106,7 +107,7 @@ class _LazyAutoProcessorMapping(dict):
         "image_processor": ("transformers.models.auto.image_processing_auto", "AutoImageProcessor"),
         "video_processor": ("transformers.models.auto.video_processing_auto", "AutoVideoProcessor"),
         "feature_extractor": ("transformers.models.auto.feature_extraction_auto", "AutoFeatureExtractor"),
-        "audio_processor": ("transformers.models.auto.feature_extraction_auto", "AutoFeatureExtractor"),
+        "audio_processor": ("transformers.models.auto.feature_extraction_auto", "AutoAudioProcessor"),
         "tokenizer": ("transformers.models.auto.tokenization_auto", "AutoTokenizer"),
     }
 
@@ -133,7 +134,12 @@ MODALITY_TO_BASE_CLASS_MAPPING = {
     ),  # TODO: @eustlb, to be replaced with PreTrainedAudioTokenizerBase
     "audio_processor": ("FeatureExtractionMixin", "TorchAudioBackend", "NumpyAudioBackend"),
     "tokenizer": ("PreTrainedTokenizerBase", "MistralCommonBackend"),
-    "feature_extractor": ("FeatureExtractionMixin", "TorchAudioBackend", "NumpyAudioBackend"),
+    "feature_extractor": (
+        "FeatureExtractionMixin",
+        "TorchAudioBackend",
+        "NumpyAudioBackend",
+        "MarkupLMFeatureExtractor",
+    ),
     "image_processor": "ImageProcessingMixin",
     "video_processor": "BaseVideoProcessor",
 }
@@ -642,17 +648,56 @@ class ProcessorMixin(PushToHubMixin):
     # they are populated via setattr in __init__ based on each subclass's `attributes`.
     tokenizer: Any
     feature_extractor: Any
+    audio_processor: Any
     image_processor: Any
     video_processor: Any
     chat_template: str | dict[str, str] | None
 
     # Names need to be attr_class for attr in attributes
     _auto_class = None
+    _attribute_aliases: dict[str, str] = {"feature_extractor": "audio_processor"}
     valid_processor_kwargs = ProcessingKwargs
     skip_tensor_conversion = ["video_metadata", "text_replacement_offsets"]
 
+    def __init_subclass__(cls, **kwargs):
+        """Translate legacy keywords before Python binds required constructor arguments."""
+        super().__init_subclass__(**kwargs)
+        init = cls.__dict__.get("__init__")
+        if init is None or "audio_processor" not in inspect.signature(init).parameters:
+            return
+
+        @functools.wraps(init)
+        def init_with_audio_alias(self, *args, **kwargs):
+            kwargs = self._normalize_attribute_aliases(kwargs, warn=True)
+            return init(self, *args, **kwargs)
+
+        cls.__init__ = init_with_audio_alias
+
+    @property
+    def feature_extractor(self):
+        if "audio_processor" in self.get_attributes():
+            warnings.warn(
+                "`feature_extractor` is deprecated; use `audio_processor` instead.", FutureWarning, stacklevel=2
+            )
+            return self.audio_processor
+        try:
+            return self.__dict__["feature_extractor"]
+        except KeyError:
+            raise AttributeError("This processor has no feature_extractor") from None
+
+    @feature_extractor.setter
+    def feature_extractor(self, value):
+        if "audio_processor" in self.get_attributes():
+            warnings.warn(
+                "`feature_extractor` is deprecated; use `audio_processor` instead.", FutureWarning, stacklevel=2
+            )
+            self.audio_processor = value
+        else:
+            self.__dict__["feature_extractor"] = value
+
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
+        kwargs = self._normalize_attribute_aliases(kwargs, warn=True)
         # First, extract chat template from kwargs. It can never be a positional arg
         setattr(self, "chat_template", kwargs.pop("chat_template", None))
 
@@ -830,7 +875,7 @@ class ProcessorMixin(PushToHubMixin):
     @property
     def _audio_processor(self):
         # TODO: To be replaced with `audio_processor`
-        return getattr(self, "audio_processor", getattr(self, "feature_extractor", None))
+        return getattr(self, "audio_processor", None) or getattr(self, "feature_extractor", None)
 
     def _process_audio(self, audio: AudioInput, **kwargs):
         processed_audio = self._audio_processor(audio, **kwargs)
@@ -1510,7 +1555,8 @@ class ProcessorMixin(PushToHubMixin):
             [`~processing_utils.ProcessingMixin`]: The processor object instantiated from those
             parameters.
         """
-        processor_dict = processor_dict.copy()
+        processor_dict = cls._normalize_attribute_aliases(processor_dict)
+        kwargs = cls._normalize_attribute_aliases(kwargs)
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
         # We have to pop up some unused (but specific) kwargs and then validate that it doesn't contain unused kwargs
@@ -1522,7 +1568,11 @@ class ProcessorMixin(PushToHubMixin):
         processor_dict.update(kwargs)
 
         # check if there is an overlap between args and processor_dict
-        accepted_args_and_kwargs = cls.__init__.__code__.co_varnames[: cls.__init__.__code__.co_argcount][1:]
+        accepted_args_and_kwargs = [
+            name
+            for name, parameter in inspect.signature(cls.__init__).parameters.items()
+            if name != "self" and parameter.kind not in (parameter.VAR_POSITIONAL, parameter.VAR_KEYWORD)
+        ]
 
         # validate both processor_dict and given kwargs
         unused_kwargs, valid_kwargs = cls.validate_init_kwargs(
@@ -1613,7 +1663,7 @@ class ProcessorMixin(PushToHubMixin):
         map_preprocessor_kwargs = {
             "text_kwargs": "tokenizer",
             "images_kwargs": "image_processor",
-            "audio_kwargs": "feature_extractor",
+            "audio_kwargs": "audio_processor" if "audio_processor" in self.get_attributes() else "feature_extractor",
             "videos_kwargs": "video_processor",
         }
 
@@ -1771,6 +1821,21 @@ class ProcessorMixin(PushToHubMixin):
         processor_dict, instantiation_kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, processor_dict, **kwargs)
         return cls.from_args_and_dict(args, processor_dict, **instantiation_kwargs)
+
+    @classmethod
+    def _normalize_attribute_aliases(cls, values, warn=False):
+        """Accept legacy component names while giving canonical names precedence."""
+        values = values.copy()
+        for alias, canonical in cls._attribute_aliases.items():
+            if canonical not in cls.get_attributes():
+                continue
+            if alias in values:
+                if warn:
+                    warnings.warn(f"`{alias}` is deprecated; use `{canonical}` instead.", FutureWarning, stacklevel=3)
+                value = values.pop(alias)
+                if values.get(canonical) is None:
+                    values[canonical] = value
+        return values
 
     @classmethod
     def get_attributes(cls):

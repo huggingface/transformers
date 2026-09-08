@@ -42,12 +42,12 @@ class Gemma3nProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.boi_token
 
-    def test_audio_feature_extractor(self):
+    def test_audio_audio_processor(self):
         processor = self.get_processor()
-        feature_extractor = self.get_component("feature_extractor")
+        audio_processor = self.get_component("audio_processor")
 
         raw_speech = floats_list((3, 1000))
-        input_feat_extract = feature_extractor(raw_speech, return_tensors="pt")
+        input_feat_extract = audio_processor(raw_speech, return_tensors="pt")
         input_processor = processor(text="Transcribe:", audio=raw_speech, return_tensors="pt")
 
         for key in input_feat_extract:

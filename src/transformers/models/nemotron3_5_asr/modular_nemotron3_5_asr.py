@@ -176,7 +176,7 @@ class Nemotron3_5AsrProcessorKwargs(NemotronAsrStreamingProcessorKwargs, total=F
 class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
     def __init__(
         self,
-        feature_extractor,
+        audio_processor,
         tokenizer,
         blank_token="<blank>",
         decoder_type=None,
@@ -208,7 +208,7 @@ class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
         self.prompt_dictionary = prompt_dictionary if prompt_dictionary is not None else DEFAULT_PROMPT_DICTIONARY
         self.num_prompts = num_prompts
         super().__init__(
-            feature_extractor,
+            audio_processor,
             tokenizer,
             blank_token=blank_token,
             decoder_type=decoder_type,
@@ -285,7 +285,7 @@ class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
 
         if audio is not None:
             # `center=True` for the first/offline chunk, `center=False` for subsequent streaming chunks.
-            inputs = self.feature_extractor(audio, center=bool(is_first_audio_chunk), **output_kwargs["audio_kwargs"])
+            inputs = self.audio_processor(audio, center=bool(is_first_audio_chunk), **output_kwargs["audio_kwargs"])
         if text is not None:
             encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
@@ -307,8 +307,8 @@ class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
 
     @property
     def model_input_names(self):
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return feature_extractor_input_names + ["labels", "decoder_input_ids", "prompt_ids"]
+        audio_processor_input_names = self.audio_processor.model_input_names
+        return audio_processor_input_names + ["labels", "decoder_input_ids", "prompt_ids"]
 
 
 @auto_docstring
@@ -457,7 +457,7 @@ class Nemotron3_5AsrForRNNT(NemotronAsrStreamingForRNNT, Nemotron3_5AsrGeneratio
         >>> model = Nemotron3_5AsrForRNNT.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 
         >>> inputs = processor(ds[0]["audio"]["array"], language="en-US")
         >>> outputs = model(**inputs)

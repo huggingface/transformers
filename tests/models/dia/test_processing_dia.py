@@ -19,7 +19,7 @@ import unittest
 import numpy as np
 from parameterized import parameterized
 
-from transformers import DacModel, DiaFeatureExtractor, DiaProcessor, DiaTokenizer
+from transformers import DacModel, DiaAudioProcessor, DiaProcessor, DiaTokenizer
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
@@ -48,7 +48,7 @@ class DiaProcessorTest(unittest.TestCase):
         # Audio tokenizer is a bigger model so we will reuse this if possible
         self.processor = DiaProcessor(
             tokenizer=self.get_tokenizer(),
-            feature_extractor=self.get_feature_extractor(),
+            audio_processor=self.get_audio_processor(),
             audio_tokenizer=self.get_audio_tokenizer(),
         )
 
@@ -61,8 +61,8 @@ class DiaProcessorTest(unittest.TestCase):
     def get_tokenizer(self, **kwargs):
         return DiaTokenizer.from_pretrained(self.checkpoint, **kwargs)
 
-    def get_feature_extractor(self, **kwargs):
-        return DiaFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
+    def get_audio_processor(self, **kwargs):
+        return DiaAudioProcessor.from_pretrained(self.checkpoint, **kwargs)
 
     def get_audio_tokenizer(self, **kwargs):
         return DacModel.from_pretrained(self.audio_tokenizer_checkpoint, **kwargs)
@@ -73,12 +73,10 @@ class DiaProcessorTest(unittest.TestCase):
 
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         audio_tokenizer = self.get_audio_tokenizer()
 
-        processor = DiaProcessor(
-            tokenizer=tokenizer, feature_extractor=feature_extractor, audio_tokenizer=audio_tokenizer
-        )
+        processor = DiaProcessor(tokenizer=tokenizer, audio_processor=audio_processor, audio_tokenizer=audio_tokenizer)
 
         processor.save_pretrained(self.tmpdirname)
         processor = DiaProcessor.from_pretrained(self.tmpdirname)
@@ -86,8 +84,8 @@ class DiaProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertIsInstance(processor.tokenizer, DiaTokenizer)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, DiaFeatureExtractor)
+        self.assertEqual(processor.audio_processor.to_json_string(), audio_processor.to_json_string())
+        self.assertIsInstance(processor.audio_processor, DiaAudioProcessor)
 
         self.assertEqual(processor.audio_tokenizer.__class__.__name__, audio_tokenizer.__class__.__name__)
         self.assertEqual(processor.audio_tokenizer.name_or_path, audio_tokenizer.name_or_path)
@@ -97,13 +95,13 @@ class DiaProcessorTest(unittest.TestCase):
     def test_save_load_pretrained_additional_features(self):
         processor = DiaProcessor(
             tokenizer=self.get_tokenizer(),
-            feature_extractor=self.get_feature_extractor(),
+            audio_processor=self.get_audio_processor(),
             audio_tokenizer=self.get_audio_tokenizer(),
         )
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer()
-        feature_extractor_add_kwargs = self.get_feature_extractor()
+        audio_processor_add_kwargs = self.get_audio_processor()
         audio_tokenizer_add_kwargs = self.get_audio_tokenizer()
 
         processor = DiaProcessor.from_pretrained(self.tmpdirname)
@@ -111,8 +109,8 @@ class DiaProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, DiaTokenizer)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, DiaFeatureExtractor)
+        self.assertEqual(processor.audio_processor.to_json_string(), audio_processor_add_kwargs.to_json_string())
+        self.assertIsInstance(processor.audio_processor, DiaAudioProcessor)
 
         self.assertEqual(processor.audio_tokenizer.__class__.__name__, audio_tokenizer_add_kwargs.__class__.__name__)
         self.assertEqual(processor.audio_tokenizer.name_or_path, audio_tokenizer_add_kwargs.name_or_path)
@@ -152,7 +150,7 @@ class DiaProcessorTest(unittest.TestCase):
 
     def test_audio(self):
         audio_tokenizer = self.get_audio_tokenizer()
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
 
         random_text = ["Dummy Input"] * 2
         # Dac only starts accepting audio from a certain length (ensured via >=1024)
@@ -162,7 +160,7 @@ class DiaProcessorTest(unittest.TestCase):
 
         sequence_len = audio_mask.shape[1]
         for batch_idx, speech in enumerate(raw_speeches):
-            raw_audio = feature_extractor(speech, return_tensors="pt")["input_values"]
+            raw_audio = audio_processor(speech, return_tensors="pt")["input_values"]
             codebooks = audio_tokenizer(raw_audio).audio_codes.transpose(1, 2)
 
             pad_len = sequence_len - audio_mask.sum(dim=-1)[batch_idx]
@@ -183,7 +181,7 @@ class DiaProcessorTest(unittest.TestCase):
 
     @parameterized.expand([([1, 1],), ([1, 5],), ([2, 4, 6],)])
     def test_decode_audio(self, audio_lens):
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         audio_tokenizer = self.get_audio_tokenizer()
 
         random_text = ["Dummy Input"] * len(audio_lens)
@@ -194,7 +192,7 @@ class DiaProcessorTest(unittest.TestCase):
 
         decoded_speeches = self.processor.batch_decode(audio_tokens)
         for batch_idx, speech in enumerate(raw_speeches):
-            raw_audio = feature_extractor(speech, return_tensors="pt")["input_values"]
+            raw_audio = audio_processor(speech, return_tensors="pt")["input_values"]
             codebooks = audio_tokenizer(raw_audio).audio_codes
 
             decoded_audio = decoded_speeches[batch_idx]

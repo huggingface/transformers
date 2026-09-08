@@ -74,7 +74,7 @@ class CsmProcessor(ProcessorMixin):
 
     def __init__(
         self,
-        feature_extractor,
+        audio_processor,
         tokenizer,
         chat_template=None,
     ):
@@ -92,7 +92,7 @@ class CsmProcessor(ProcessorMixin):
             self.audio_eos_token = tokenizer.audio_eos_token
             self.audio_eos_token_id = tokenizer.audio_eos_token_id
 
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(audio_processor, tokenizer, chat_template=chat_template)
 
     @staticmethod
     def _get_encoded_length(audio_length, kernel_sizes=None, strides=None, dilations=None, use_causal_conv=None):
@@ -278,7 +278,7 @@ class CsmProcessor(ProcessorMixin):
                     )
                     offset += n_audio
 
-            audio_inputs = self.feature_extractor(concatenated_audio, **audio_kwargs)
+            audio_inputs = self.audio_processor(concatenated_audio, **audio_kwargs)
             audio_inputs.pop("padding_mask", None)  # not applicable here
             data.update(audio_inputs)
 
@@ -314,12 +314,12 @@ class CsmProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
-        feature_extractor_input_names = self.feature_extractor.model_input_names
+        audio_processor_input_names = self.audio_processor.model_input_names
 
         # Remove `padding_mask`, it is popped and not used when processing. Make a copy of list when removing
-        # otherwise `self.feature_extractor.model_input_names` is also modified
-        feature_extractor_input_names = [name for name in feature_extractor_input_names if name != "padding_mask"]
-        return list(tokenizer_input_names + feature_extractor_input_names + ["input_values_cutoffs"])
+        # otherwise `self.audio_processor.model_input_names` is also modified
+        audio_processor_input_names = [name for name in audio_processor_input_names if name != "padding_mask"]
+        return list(tokenizer_input_names + audio_processor_input_names + ["input_values_cutoffs"])
 
 
 __all__ = ["CsmProcessor"]

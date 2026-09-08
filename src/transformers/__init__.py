@@ -364,7 +364,12 @@ except OptionalDependencyNotAvailable:
 
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
-    _import_structure["audio_processing_backends"] = ["NumpyAudioBackend", "NumpyBackend", "TorchAudioBackend", "TorchBackend"]
+    _import_structure["audio_processing_backends"] = [
+        "NumpyAudioBackend",
+        "NumpyBackend",
+        "TorchAudioBackend",
+        "TorchBackend",
+    ]
     _import_structure["activations"] = []
     _import_structure["backbone_utils"] = ["BackboneConfigMixin", "BackboneMixin"]
     _import_structure["cache_utils"] = [

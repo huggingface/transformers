@@ -80,13 +80,13 @@ class VoxtralProcessorKwargs(ProcessingKwargs, total=False):
 class VoxtralProcessor(ProcessorMixin):
     def __init__(
         self,
-        feature_extractor,
+        audio_processor,
         tokenizer,
     ):
         self.audio_token_id = 24
         self.audio_token = tokenizer.convert_ids_to_tokens(self.audio_token_id)
 
-        super().__init__(feature_extractor, tokenizer)
+        super().__init__(audio_processor, tokenizer)
 
     def _retrieve_input_features(self, audio, max_source_positions, **kwargs):
         """
@@ -95,11 +95,11 @@ class VoxtralProcessor(ProcessorMixin):
         """
         input_features_list = []
         for audio_array in audio:
-            audio_inputs = self.feature_extractor(audio_array, **kwargs)
+            audio_inputs = self.audio_processor(audio_array, **kwargs)
 
             # let's split into chunks of max_source_positions, and then stack them along batch dimension
             input_features = audio_inputs["input_features"].reshape(
-                self.feature_extractor.feature_size, -1, max_source_positions
+                self.audio_processor.feature_size, -1, max_source_positions
             )
             input_features_list.append(input_features.transpose(0, 1))
 
@@ -319,7 +319,7 @@ class VoxtralProcessor(ProcessorMixin):
                 audio_kwargs["sampling_rate"] = sampling_rate
 
         # Rate used to decode audio referenced by URL/path below: always the processor's own.
-        sampling_rate = self.feature_extractor.sampling_rate
+        sampling_rate = self.audio_processor.sampling_rate
 
         # make sure to remove from text_kwargs and audio_kwargs
         return_dict = text_kwargs.pop("return_dict", False)

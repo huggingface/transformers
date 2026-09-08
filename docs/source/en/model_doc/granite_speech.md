@@ -61,7 +61,7 @@ processor = GraniteSpeechProcessor.from_pretrained("ibm-granite/granite-3.2-8b-s
 
 # Load audio from dataset (16kHz sampling rate required)
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 audio = ds['audio'][0]['array']
 
 # Process audio
@@ -91,7 +91,7 @@ processor = GraniteSpeechProcessor.from_pretrained("ibm-granite/granite-3.2-8b-s
 
 # Load audio from dataset
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 audio = ds['audio'][0]
 
 # Prepare conversation with audio and text
@@ -132,7 +132,7 @@ processor = GraniteSpeechProcessor.from_pretrained("ibm-granite/granite-3.2-8b-s
 
 # Load multiple audio samples from dataset
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 audio_samples = [ds['audio'][i]['array'] for i in range(3)]
 
 # Process batch

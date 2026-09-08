@@ -48,7 +48,7 @@ class VibeVoiceProcessor(ProcessorMixin):
 
     def __init__(
         self,
-        feature_extractor,
+        audio_processor,
         tokenizer,
         chat_template=None,
         audio_bos_token="<|vision_start|>",
@@ -81,11 +81,11 @@ class VibeVoiceProcessor(ProcessorMixin):
             if getattr(tokenizer, "audio_token_id", None)
             else tokenizer.convert_tokens_to_ids(audio_token)
         )
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(audio_processor, tokenizer, chat_template=chat_template)
 
     def _process_audio(self, audio: AudioInput, **kwargs):
-        processed_audio = self.feature_extractor(audio, **kwargs)
-        pad_to_multiple_of = kwargs.get("pad_to_multiple_of") or self.feature_extractor.pad_to_multiple_of
+        processed_audio = self.audio_processor(audio, **kwargs)
+        pad_to_multiple_of = kwargs.get("pad_to_multiple_of") or self.audio_processor.pad_to_multiple_of
         self._num_audio_tokens = (
             torch.ceil(processed_audio["padding_mask"].sum(dim=-1) / pad_to_multiple_of).int().tolist()
         )
@@ -181,7 +181,7 @@ class VibeVoiceProcessor(ProcessorMixin):
         if len(audio) == 1:
             if output_path is None:
                 output_path = "vibevoice_output.wav"
-            sf.write(output_path, audio[0], self.feature_extractor.sampling_rate)
+            sf.write(output_path, audio[0], self.audio_processor.sampling_rate)
             return [output_path]
         else:
             if output_path is None:
@@ -190,7 +190,7 @@ class VibeVoiceProcessor(ProcessorMixin):
             saved_paths = []
             for i, audio_array in enumerate(audio):
                 file_path = os.path.join(output_path, f"audio_{i}.wav")
-                sf.write(file_path, audio_array, self.feature_extractor.sampling_rate)
+                sf.write(file_path, audio_array, self.audio_processor.sampling_rate)
                 saved_paths.append(file_path)
         return saved_paths
 

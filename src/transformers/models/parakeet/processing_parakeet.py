@@ -43,7 +43,7 @@ class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class ParakeetProcessor(ProcessorMixin):
-    def __init__(self, feature_extractor, tokenizer, blank_token="<blank>", decoder_type=None):
+    def __init__(self, audio_processor, tokenizer, blank_token="<blank>", decoder_type=None):
         r"""
         blank_token (`str`, *optional*, defaults to `"<blank>"`):
             Blank token for transducer decoding.
@@ -59,7 +59,7 @@ class ParakeetProcessor(ProcessorMixin):
         self.blank_token = blank_token
         self.blank_token_id = tokenizer.convert_tokens_to_ids(blank_token)
         self.decoder_type = decoder_type
-        super().__init__(feature_extractor, tokenizer)
+        super().__init__(audio_processor, tokenizer)
 
     @property
     def _decoder_type(self):
@@ -102,7 +102,7 @@ class ParakeetProcessor(ProcessorMixin):
             output_kwargs["audio_kwargs"]["sampling_rate"] = sampling_rate
 
         if audio is not None:
-            inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+            inputs = self.audio_processor(audio, **output_kwargs["audio_kwargs"])
         if text is not None:
             encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
@@ -121,8 +121,8 @@ class ParakeetProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return feature_extractor_input_names + ["labels", "decoder_input_ids"]
+        audio_processor_input_names = self.audio_processor.model_input_names
+        return audio_processor_input_names + ["labels", "decoder_input_ids"]
 
     def batch_decode(self, *args, **kwargs):
         kwargs.setdefault("group_tokens", self._decoder_type == "ctc")
@@ -146,8 +146,8 @@ class ParakeetProcessor(ProcessorMixin):
                 tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             )
             frame_rate = (
-                self.feature_extractor.hop_length
-                / self.feature_extractor.sampling_rate
+                self.audio_processor.hop_length
+                / self.audio_processor.sampling_rate
                 * output_kwargs["audio_kwargs"]["subsampling_factor"]
             )
             # Filter padding/blank tokens and decode per sequence to keep track of token-level timestamps

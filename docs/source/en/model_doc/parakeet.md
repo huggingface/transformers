@@ -79,10 +79,10 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForCTC.from_pretrained(model_id, device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 speech_samples = [el['array'] for el in ds["audio"][:5]]
 
-inputs = processor(speech_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs = processor(speech_samples, sampling_rate=processor.audio_processor.sampling_rate)
 inputs.to(model.device, dtype=model.dtype)
 outputs = model.generate(**inputs)
 print(processor.decode(outputs))
@@ -120,10 +120,10 @@ processor = AutoProcessor.from_pretrained(model_id, revision=revision)
 model = AutoModelForRNNT.from_pretrained(model_id, revision=revision, device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 speech_samples = [el['array'] for el in ds["audio"][:5]]
 
-inputs = processor(speech_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs = processor(speech_samples, sampling_rate=processor.audio_processor.sampling_rate)
 inputs.to(model.device, dtype=model.dtype)
 output = model.generate(**inputs, return_dict_in_generate=True)
 print(processor.decode(output.sequences, skip_special_tokens=True))
@@ -144,10 +144,10 @@ processor = AutoProcessor.from_pretrained(model_id, revision=revision)
 model = AutoModelForRNNT.from_pretrained(model_id, revision=revision, device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 speech_samples = [el['array'] for el in ds["audio"][:1]]
 
-inputs = processor(speech_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs = processor(speech_samples, sampling_rate=processor.audio_processor.sampling_rate)
 inputs.to(model.device, dtype=model.dtype)
 output = model.generate(**inputs, return_dict_in_generate=True)
 decoded_output, decoded_timestamps = processor.decode(
@@ -196,10 +196,10 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForTDT.from_pretrained(model_id, device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 speech_samples = [el['array'] for el in ds["audio"][:5]]
 
-inputs = processor(speech_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs = processor(speech_samples, sampling_rate=processor.audio_processor.sampling_rate)
 inputs.to(model.device, dtype=model.dtype)
 output = model.generate(**inputs, return_dict_in_generate=True)
 print(processor.decode(output.sequences, skip_special_tokens=True))
@@ -217,10 +217,10 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForTDT.from_pretrained(model_id, device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 speech_samples = [el['array'] for el in ds["audio"][:1]]
 
-inputs = processor(speech_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs = processor(speech_samples, sampling_rate=processor.audio_processor.sampling_rate)
 inputs.to(model.device, dtype=model.dtype)
 output = model.generate(**inputs, return_dict_in_generate=True)
 decoded_output, decoded_timestamps = processor.decode(
@@ -256,7 +256,7 @@ processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
 model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 speech_samples = [el['array'] for el in ds["audio"][:5]]
 
 # Compile the generate method with fullgraph and graph capture
@@ -265,7 +265,7 @@ model.generate = torch.compile(model.generate, fullgraph=True, mode="reduce-over
 # let's define processor kwargs to pad to 30 seconds
 processor_kwargs = {
     "padding": "max_length",
-    "max_length": 30 * processor.feature_extractor.sampling_rate,
+    "max_length": 30 * processor.audio_processor.sampling_rate,
 }
 
 # Define a timing context using accelerator events
@@ -337,12 +337,12 @@ model = AutoModelForCTC.from_pretrained(model_id, device_map="auto")
 model.train()
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 speech_samples = [el['array'] for el in ds["audio"][:NUM_SAMPLES]]
 text_samples = ds["text"][:NUM_SAMPLES]
 
 # passing `text` to the processor will prepare inputs' `labels` key
-inputs = processor(audio=speech_samples, text=text_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs = processor(audio=speech_samples, text=text_samples, sampling_rate=processor.audio_processor.sampling_rate)
 inputs.to(model.device, dtype=model.dtype)
 
 outputs = model(**inputs)
@@ -369,12 +369,12 @@ model = AutoModelForRNNT.from_pretrained(model_id, revision=revision,  device_ma
 model.train()
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 speech_samples = [el['array'] for el in ds["audio"][:NUM_SAMPLES]]
 text_samples = ds["text"][:NUM_SAMPLES]
 
 # passing `text` to the processor will prepare inputs' `labels` key
-inputs = processor(audio=speech_samples, text=text_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs = processor(audio=speech_samples, text=text_samples, sampling_rate=processor.audio_processor.sampling_rate)
 inputs.to(model.device, dtype=model.dtype)
 
 outputs = model(**inputs)
@@ -398,12 +398,12 @@ model = AutoModelForTDT.from_pretrained(model_id, device_map="auto")
 model.train()
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 speech_samples = [el['array'] for el in ds["audio"][:NUM_SAMPLES]]
 text_samples = ds["text"][:NUM_SAMPLES]
 
 # passing `text` to the processor will prepare inputs' `labels` key
-inputs = processor(audio=speech_samples, text=text_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs = processor(audio=speech_samples, text=text_samples, sampling_rate=processor.audio_processor.sampling_rate)
 inputs.to(model.device, dtype=model.dtype)
 
 outputs = model(**inputs)

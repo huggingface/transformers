@@ -122,7 +122,7 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
 class MusicFlamingoProcessor(AudioFlamingo3Processor):
     def __init__(
         self,
-        feature_extractor,
+        audio_processor,
         tokenizer,
         chat_template=None,
         audio_token="<sound>",
@@ -141,7 +141,7 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
             Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
         """
         super().__init__(
-            feature_extractor,
+            audio_processor,
             tokenizer,
             chat_template=chat_template,
             audio_token=audio_token,

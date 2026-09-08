@@ -55,7 +55,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
     def __init__(
         self,
-        feature_extractor,
+        audio_processor,
         tokenizer,
         chat_template=None,
         audio_token="<sound>",
@@ -74,7 +74,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
         self.default_transcription_prompt = default_transcription_prompt
         self.max_audio_len = max_audio_len
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(audio_processor, tokenizer, chat_template=chat_template)
 
     @auto_docstring
     def __call__(
@@ -126,8 +126,8 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
     def _process_audio(self, audio: AudioInput, **kwargs):
         # Determine number of chunks per sample, and flatten
-        window_size = int(kwargs["sampling_rate"] * self.feature_extractor.chunk_length)
-        max_windows = int(self.max_audio_len // self.feature_extractor.chunk_length)
+        window_size = int(kwargs["sampling_rate"] * self.audio_processor.chunk_length)
+        max_windows = int(self.max_audio_len // self.audio_processor.chunk_length)
 
         per_sample_windows: list[int] = []
         flat_chunks: list[np.ndarray] = []
@@ -147,8 +147,8 @@ class AudioFlamingo3Processor(ProcessorMixin):
                 end = min((i + 1) * window_size, time_cap)
                 flat_chunks.append(audio_el[start:end])
 
-        audio = self.feature_extractor.fetch_audio(audio)
-        audio_inputs = self.feature_extractor(flat_chunks, **kwargs)
+        audio = self.audio_processor.fetch_audio(audio)
+        audio_inputs = self.audio_processor(flat_chunks, **kwargs)
         audio_inputs["input_features_mask"] = audio_inputs.pop("attention_mask")
 
         # AudioFlamingo doesn't have its own feature extractor and crops audio into

@@ -14,7 +14,9 @@ from ...audio_processing_base import make_legacy_audio_processor_alias
 from .audio_processing_audio_spectrogram_transformer import AudioSpectrogramTransformerAudioProcessor
 
 
-ASTFeatureExtractor = make_legacy_audio_processor_alias(AudioSpectrogramTransformerAudioProcessor, "ASTFeatureExtractor")
+ASTFeatureExtractor = make_legacy_audio_processor_alias(
+    AudioSpectrogramTransformerAudioProcessor, "ASTFeatureExtractor"
+)
 
 
 __all__ = ["ASTFeatureExtractor"]
