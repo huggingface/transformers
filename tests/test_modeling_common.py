@@ -1938,11 +1938,13 @@ class ModelTesterMixin(ExportTesterMixin):
                 model_config = copy.deepcopy(config)
                 model_config.use_cache = False
                 model_config.return_dict = True
+                # Heads that damp their logits (Cohere scales them by `logit_scale`) report a loss that moves by
+                # a few 1e-5 when the targets change, so seed the init to keep that margin the same on every run.
+                set_seed(42)
                 model = model_class(model_config).to(torch_device).eval()
 
                 # `_prepare_for_class` builds targets only for the heads it knows about; read the shape off the
-                # logits for the others. Constant targets are enough here: only whether the loss reacts to
-                # `labels` or to `shift_labels` matters, not the target values themselves.
+                # logits for the others.
                 target_shape = self._prepare_for_class(inputs_dict, model_class, return_labels=True).get("labels")
                 if isinstance(target_shape, torch.Tensor):
                     target_shape = target_shape.shape
@@ -1956,12 +1958,16 @@ class ModelTesterMixin(ExportTesterMixin):
                         self.skipTest(reason="Tester does not build targets for this head")
                     target_shape = probe_logits.shape[:2]
 
-                def reported_loss(label_id, shift_label_id, model_class=model_class, model=model):
+                def targets(seed):
+                    # Vary the target id from one position to the next, so that changing the targets moves the
+                    # reported loss. Ids 0 and 1 are in range for every vocabulary.
+                    generator = torch.Generator().manual_seed(seed)
+                    return torch.randint(2, target_shape, generator=generator, dtype=torch.long).to(torch_device)
+
+                def reported_loss(label_seed, shift_label_seed, model_class=model_class, model=model):
                     inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                    inputs["labels"] = torch.full(target_shape, label_id, dtype=torch.long, device=torch_device)
-                    inputs["shift_labels"] = torch.full(
-                        target_shape, shift_label_id, dtype=torch.long, device=torch_device
-                    )
+                    inputs["labels"] = targets(label_seed)
+                    inputs["shift_labels"] = targets(shift_label_seed)
                     # Some heads run a stochastic front end (audio tokenizers sample); reseed so that the three
                     # forward passes below differ only in the targets they are given.
                     set_seed(42)
@@ -1973,7 +1979,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     baseline, msg=f"{model_class.__name__}: no loss is returned when targets are passed"
                 )
                 self.assertFalse(
-                    torch.allclose(baseline, reported_loss(0, 1)),
+                    torch.equal(baseline, reported_loss(0, 1)),
                     msg=(
                         f"{model_class.__name__}: the training loss does not depend on `shift_labels`. Pre-shifted "
                         f"targets are the only correct ones under sequence/context parallelism, so the loss must "
@@ -1981,7 +1987,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     ),
                 )
                 self.assertTrue(
-                    torch.allclose(baseline, reported_loss(1, 0)),
+                    torch.equal(baseline, reported_loss(1, 0)),
                     msg=(
                         f"{model_class.__name__}: the training loss still depends on `labels` although "
                         f"`shift_labels` was passed. `shift_labels` holds the targets already aligned with the "
