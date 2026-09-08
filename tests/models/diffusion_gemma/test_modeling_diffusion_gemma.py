@@ -912,7 +912,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
 
     @slow
     def test_diffusion_gemma_chat_template_image(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
+        # TODO(synthetic-assets): refresh the image-token count from the next GPU run.
         image_tokens = [255999, 258880, 258882]  # These tokens must be present in the `input_ids`
         # TODO(joao): this should be 280! Something is wrong with processing?
         image_token_count = 256
@@ -935,7 +935,7 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         )
         for token in image_tokens:
             self.assertIn(token, model_inputs["input_ids"])
-        self.assertTrue((model_inputs["input_ids"] == 258880).sum() == image_token_count)
+        self.assertEqual((model_inputs["input_ids"] == 258880).sum().item(), image_token_count)
 
         for expected_model_input in ("attention_mask", "pixel_values", "image_position_ids", "mm_token_type_ids"):
             self.assertIn(expected_model_input, model_inputs)
