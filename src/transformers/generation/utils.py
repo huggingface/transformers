@@ -48,6 +48,7 @@ from ..tokenization_python import ExtensionsTrie
 from ..utils import (
     ModelOutput,
     TransformersKwargs,
+    has_file,
     is_accelerate_available,
     logging,
 )
@@ -601,13 +602,24 @@ class GenerationMixin(ContinuousMixin):
         Returns:
             A callable that can be used to generate text.
         """
-        # Fetches the generate.py file from the model repo. If it doesn't exist, a file in `.no_exist` cache directory
-        # is created (preventing future hub requests), and an OSError is raised.
-        try:
-            module = get_cached_module_file(
-                pretrained_model_name_or_path, module_file="custom_generate/generate.py", **kwargs
-            )
-        except OSError:
+        custom_generate_file = "custom_generate/generate.py"
+
+        # Check for the existence of the file without actually downloading it
+        # (preventing unwanted downloads of files, even if not executed)
+        has_file_kwargs = {
+            "revision": kwargs.get("_commit_hash") or kwargs.get("revision") or "main",
+            "proxies": kwargs.get("proxies"),
+            "token": kwargs.get("token"),
+            "cache_dir": kwargs.get("cache_dir"),
+            "local_files_only": kwargs.get("local_files_only", False),
+            "repo_type": kwargs.get("repo_type"),
+        }
+
+        if not has_file(
+            pretrained_model_name_or_path,
+            custom_generate_file,
+            **has_file_kwargs,
+        ):
             raise OSError(
                 f"`{pretrained_model_name_or_path}` does not contain a `custom_generate` subdirectory with a "
                 "`generate.py` file, can't load the custom generate function."
@@ -623,12 +635,19 @@ class GenerationMixin(ContinuousMixin):
             f"The repository `{pretrained_model_name_or_path}` contains custom generation code that will override "
             "the default `generate` method."
         )
+        import sys
+        sys.exit(0)
         resolve_trust_remote_code(
             trust_remote_code,
             pretrained_model_name_or_path,
             has_local_code=False,
             has_remote_code=True,
             error_message=error_message,
+        )
+
+        # Load the remote module
+        module = get_cached_module_file(
+            pretrained_model_name_or_path, module_file="custom_generate/generate.py", **kwargs
         )
 
         # Load the custom generate function
