@@ -686,7 +686,8 @@ def get_same_padding(kernel_size: int | tuple[int, ...]) -> int | tuple[int, ...
     if isinstance(kernel_size, tuple):
         return tuple([get_same_padding(ks) for ks in kernel_size])
     else:
-        assert kernel_size % 2 > 0, "kernel size should be odd number"
+        if kernel_size % 2 == 0:
+            raise ValueError(f"Kernel size must be odd, but got {kernel_size}.")
         return kernel_size // 2
 
 
@@ -1053,22 +1054,23 @@ class LiteMLA(nn.Module):
             norm=norm[0],
             act_func=act_func[0],
         )
-        self.aggreg = nn.ModuleList(
-            [
-                nn.Sequential(
-                    nn.Conv2d(
-                        3 * total_dim,
-                        3 * total_dim,
-                        scale,
-                        padding=get_same_padding(scale),
-                        groups=3 * total_dim,
-                        bias=use_bias[0],
-                    ),
-                    nn.Conv2d(3 * total_dim, 3 * total_dim, 1, groups=3 * heads, bias=use_bias[0]),
+        self.aggreg = nn.ModuleList()
+        for scale in scales:
+            self.aggreg.append(
+                nn.ModuleList(
+                    [
+                        nn.Conv2d(
+                            3 * total_dim,
+                            3 * total_dim,
+                            scale,
+                            padding=get_same_padding(scale),
+                            groups=3 * total_dim,
+                            bias=use_bias[0],
+                        ),
+                        nn.Conv2d(3 * total_dim, 3 * total_dim, 1, groups=3 * heads, bias=use_bias[0]),
+                    ]
                 )
-                for scale in scales
-            ]
-        )
+            )
         self.kernel_func = get_activation(kernel_func) if kernel_func is not None else nn.Identity()
 
         self.proj = ConvLayer(
@@ -1163,8 +1165,8 @@ class LiteMLA(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         qkv = self.qkv(x)
         multi_scale_qkv = [qkv]
-        for op in self.aggreg:
-            multi_scale_qkv.append(op(qkv))
+        for depthwise, pointwise in self.aggreg:
+            multi_scale_qkv.append(pointwise(depthwise(qkv)))
         qkv = torch.cat(multi_scale_qkv, dim=1)
 
         H, W = list(qkv.size())[-2:]
@@ -1265,7 +1267,7 @@ class EfficientViTLargeBackbone(nn.Module):
             )
             stage0.append(ResidualBlock(block, nn.Identity()))
         in_channels = width_list[0]
-        self.stages.append(nn.Sequential(*stage0))
+        self.stages.append(nn.ModuleList(stage0))
         self.width_list.append(in_channels)
 
         # stages 1-N
@@ -1305,7 +1307,7 @@ class EfficientViTLargeBackbone(nn.Module):
                         fewer_norm=fewer_norm_list[stage_id],
                     )
                     stage.append(ResidualBlock(block, nn.Identity()))
-            self.stages.append(nn.Sequential(*stage))
+            self.stages.append(nn.ModuleList(stage))
             self.width_list.append(in_channels)
 
     @staticmethod
@@ -1356,7 +1358,9 @@ class EfficientViTLargeBackbone(nn.Module):
     def forward(self, x: torch.Tensor) -> dict[str, torch.Tensor]:
         output_dict = {"input": x}
         for stage_id, stage in enumerate(self.stages):
-            output_dict[f"stage{stage_id}"] = x = stage(x)
+            for layer in stage:
+                x = layer(x)
+            output_dict[f"stage{stage_id}"] = x
         output_dict["stage_final"] = x
         return output_dict
 
@@ -1379,9 +1383,8 @@ class SamNeck(nn.Module):
 
         self.proj_layers = nn.ModuleDict()
         for fid, in_channel in zip(fid_list, in_channel_list):
-            self.proj_layers[fid] = nn.Sequential(
-                ConvLayer(in_channel, head_width, 1, norm=norm, act_func=None),
-                UpSampleLayer(size=(64, 64)),
+            self.proj_layers[fid] = nn.ModuleList(
+                [ConvLayer(in_channel, head_width, 1, norm=norm, act_func=None), UpSampleLayer(size=(64, 64))]
             )
 
         middle = []
@@ -1413,7 +1416,7 @@ class SamNeck(nn.Module):
             else:
                 raise NotImplementedError(f"Neck operator {middle_op} is not supported.")
             middle.append(ResidualBlock(block, nn.Identity()))
-        self.middle = nn.Sequential(*middle)
+        self.middle = nn.ModuleList(middle)
 
         self.proj_out = ConvLayer(
             head_width,
@@ -1425,14 +1428,21 @@ class SamNeck(nn.Module):
         )
 
     def forward(self, features: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-        projected = [self.proj_layers[fid](features[fid]) for fid in self.fid_list]
+        projected = []
+        for fid in self.fid_list:
+            projected_feature = features[fid]
+            for layer in self.proj_layers[fid]:
+                projected_feature = layer(projected_feature)
+            projected.append(projected_feature)
         fused = sum(projected)
-        fused = self.middle(fused)
+        for layer in self.middle:
+            fused = layer(fused)
         out = self.proj_out(fused)
         features["sam_encoder"] = out
         return features
 
 
+@auto_docstring
 class EfficientViTSamPreTrainedModel(PreTrainedModel):
     config_class = EfficientViTSamConfig
     base_model_prefix = "efficientvitsam"
@@ -1472,6 +1482,7 @@ class EfficientViTSamImageEncoder(EfficientViTSamPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | EfficientViTSamVisionEncoderOutput:
@@ -1481,6 +1492,7 @@ class EfficientViTSamImageEncoder(EfficientViTSamPreTrainedModel):
         return EfficientViTSamVisionEncoderOutput(last_hidden_state=output)
 
 
+@auto_docstring
 class EfficientViTSamVisionModel(EfficientViTSamPreTrainedModel):
     config_class = EfficientViTSamVisionConfig
     main_input_name = "pixel_values"
@@ -1490,6 +1502,7 @@ class EfficientViTSamVisionModel(EfficientViTSamPreTrainedModel):
         self.vision_encoder = EfficientViTSamImageEncoder(config)
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
