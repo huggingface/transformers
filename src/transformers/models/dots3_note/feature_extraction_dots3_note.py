@@ -52,14 +52,6 @@ def compute_audio_token_length(
     )
 
 
-def _pad_or_trim(waveform: torch.Tensor, length: int) -> torch.Tensor:
-    if waveform.shape[-1] > length:
-        waveform = waveform[..., :length]
-    if waveform.shape[-1] < length:
-        waveform = F.pad(waveform, (0, length - waveform.shape[-1]))
-    return waveform
-
-
 @requires(backends=("torch",))
 class Dots3NoteFeatureExtractor(SequenceFeatureExtractor):
     """Convert 16 kHz mono waveforms into Dots 3 Note Preview log-mel chunks."""
@@ -206,7 +198,7 @@ class Dots3NoteFeatureExtractor(SequenceFeatureExtractor):
                 chunk = waveform[start : start + self.chunk_samples]
                 sample_length = int(chunk.numel())
                 token_length = math.ceil(sample_length / self.token_stride)
-                chunks.append(_pad_or_trim(chunk, self.chunk_samples))
+                chunks.append(F.pad(chunk, (0, self.chunk_samples - sample_length)))
                 chunk_sample_lengths.append(sample_length)
                 chunk_token_lengths.append(token_length)
                 chunk_audio_indices.append(audio_index)

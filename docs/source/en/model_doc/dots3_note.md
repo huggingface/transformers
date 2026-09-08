@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-09-04.*
+*This model was contributed to Hugging Face Transformers on 2026-09-09.*
 
 # Dots 3 Note Preview
 
@@ -24,16 +24,7 @@ into the language model's hidden space before autoregressive text generation.
 Dots 3 Note Preview checkpoints are available with BF16 weights or with fine-grained FP8 language-model weights and BF16
 vision, audio, and language-model-head weights. Both formats load through the standard Transformers APIs.
 
-> [!NOTE]
-> Dots 3 Note Preview support is inference-only. In particular, the DSA indexer's discrete FP8 top-k selection runs under
-> `torch.no_grad()`, so its parameters do not receive gradients and training or fine-tuning is not supported.
-
-> [!NOTE]
-> Loading encoded audio or video sources requires the optional `torchcodec` dependency. Native video preprocessing
-> follows the training-time sampling pipeline and expands each video into timestamped image blocks with interleaved
-> audio blocks. The `<|video_pad|>` marker is only an external prompt placeholder and is removed before tokenization;
-> it is never passed to the model. Decoded frame arrays are supported as visual-only inputs because their original
-> audio track is absent.
+## Usage
 
 ```python
 from transformers import AutoModelForMultimodalLM, AutoProcessor
@@ -64,6 +55,29 @@ output_ids = model.generate(**inputs, max_new_tokens=128)
 print(processor.batch_decode(output_ids, skip_special_tokens=True)[0])
 ```
 
+Use the same processing and generation calls with any of these user messages:
+
+```python
+# Text
+conversation = [{"role": "user", "content": [{"type": "text", "text": "Briefly introduce yourself."}]}]
+
+# Audio: replace the path with a local recording.
+conversation = [{"role": "user", "content": [
+    {"type": "audio", "path": "speech.wav"},
+    {"type": "text", "text": "Transcribe this recording."},
+]}]
+
+# Native video, including its audio track when present.
+conversation = [{"role": "user", "content": [
+    {"type": "video", "path": "concert.mp4"},
+    {"type": "text", "text": "Describe what you see and hear."},
+]}]
+```
+
+`Dots3NoteModel` combines the text, vision and audio encoders. `Dots3NoteForConditionalGeneration` adds the
+language-model head and generation interface. `Dots3NoteTextForCausalLM` provides the text-only variant;
+`Dots3NoteForCausalLM` remains a compatibility name for the original multimodal checkpoints.
+
 ## Dots3NoteConfig
 
 [[autodoc]] Dots3NoteConfig
@@ -79,6 +93,11 @@ print(processor.batch_decode(output_ids, skip_special_tokens=True)[0])
 ## Dots3NoteForCausalLM
 
 [[autodoc]] Dots3NoteForCausalLM
+    - forward
+
+## Dots3NoteModel
+
+[[autodoc]] Dots3NoteModel
     - forward
 
 ## Dots3NoteForConditionalGeneration

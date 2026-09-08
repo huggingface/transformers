@@ -20,8 +20,10 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_dots3_note import *
     from .feature_extraction_dots3_note import *
+    from .image_processing_dots3_note import *
     from .modeling_dots3_note import *
     from .processing_dots3_note import *
+    from .video_processing_dots3_note import *
 else:
     import sys
 

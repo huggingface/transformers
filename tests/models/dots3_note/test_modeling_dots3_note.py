@@ -24,6 +24,7 @@ from transformers import (
     Dots3NoteConfig,
     Dots3NoteForCausalLM,
     Dots3NoteForConditionalGeneration,
+    Dots3NoteModel,
     FineGrainedFP8Config,
     is_torch_available,
 )
@@ -56,11 +57,13 @@ if is_torch_available():
         Dots3NoteTextForCausalLM,
         Dots3NoteTextIndexer,
         Dots3NoteTextModel,
+        Dots3NoteTextSparseAttention,
         Dots3NoteVisionModel,
         Dots3NoteVisionMoE,
         dsa_sparse_attention_forward,
-        eager_attention_forward,
-        quantize_indexer_fp8,
+    )
+    from transformers.models.dots3_note.modeling_dots3_note import (
+        dots3_note_text_eager_attention_forward as eager_attention_forward,
     )
 
 
@@ -99,6 +102,8 @@ def get_tiny_config(use_dsa=False):
         "downsample_hidden_size": 4,
         "conv_bucket_step": None,
         "conv_bucket_max_elements": None,
+        "conv_chunksize": 500,
+        "conv_stem_gradient_checkpointing": False,
         "adapter_input_size": 32,
         "adapter_output_size": 32,
     }
@@ -268,6 +273,7 @@ class Dots3NoteModelTest(unittest.TestCase):
             Dots3NoteAudioModel,
             Dots3NoteForCausalLM,
             Dots3NoteForConditionalGeneration,
+            Dots3NoteModel,
             Dots3NoteVisionModel,
         )
         if is_torch_available()
@@ -277,6 +283,7 @@ class Dots3NoteModelTest(unittest.TestCase):
     def test_text_forward_and_cache(self):
         config = get_tiny_config()
         model = Dots3NoteTextForCausalLM(config).eval()
+        self.assertIn(type(model.model.layers[0]).__name__, model._no_split_modules)
         input_ids = torch.tensor([[1, 7, 11, 9, 2]])
 
         with torch.no_grad():
@@ -301,8 +308,7 @@ class Dots3NoteModelTest(unittest.TestCase):
         query = torch.randn(batch_size, num_heads, query_length, 8)
         key = torch.randn(batch_size, num_heads, key_length, 8)
         value = torch.randn(batch_size, num_heads, key_length, 6)
-        cache_position = torch.arange(4, 9)
-        query_positions = cache_position.expand(batch_size, -1)
+        query_positions = torch.arange(4, 9).expand(batch_size, -1)
         topk_indices = torch.stack(
             [query_positions, query_positions - 1, query_positions - 2, query_positions - 3], dim=-1
         ).to(torch.int32)
@@ -318,7 +324,7 @@ class Dots3NoteModelTest(unittest.TestCase):
             value,
             attention_mask=attention_mask,
             indices=topk_indices,
-            cache_position=cache_position,
+            query_positions=query_positions[0],
             padding_mask=padding_mask,
             scaling=scaling,
             query_chunk_size=2,
@@ -337,70 +343,67 @@ class Dots3NoteModelTest(unittest.TestCase):
     def test_dsa_indexer_left_padding_uses_physical_cache_positions(self):
         config = get_tiny_config(use_dsa=True)
         config.index_topk = 2
-        indexer = Dots3NoteTextIndexer(config, layer_idx=0).eval()
-        for parameter in indexer.parameters():
+        attention = Dots3NoteTextSparseAttention(config, layer_idx=0).eval()
+        for parameter in attention.indexer.parameters():
             torch.nn.init.zeros_(parameter)
-
-        sequence_length = 5
-        hidden_states = torch.zeros(1, sequence_length, config.hidden_size)
-        q_lora = torch.zeros(1, sequence_length, config.q_lora_rank)
-        cos = torch.ones(1, sequence_length, config.qk_rope_head_dim // 2)
-        sin = torch.zeros_like(cos)
-        padding_mask = torch.tensor([[0, 0, 0, 1, 1]])
-
-        topk_indices = indexer(
+        hidden_states = torch.zeros(1, 5, config.hidden_size)
+        q_lora = torch.zeros(1, 5, config.q_lora_rank)
+        cos = torch.ones(1, 5, config.qk_rope_head_dim)
+        key_states = torch.zeros(1, config.num_attention_heads, 5, config.head_dim)
+        mask, _, _, _ = attention._prepare_attention(
             hidden_states,
             q_lora,
             cos,
-            sin,
-            padding_mask,
-            torch.arange(sequence_length),
+            torch.zeros_like(cos),
+            key_states,
+            None,
+            torch.tensor([[0, 0, 0, 1, 1]]),
+            torch.arange(5),
+            None,
+            True,
         )
-
-        self.assertEqual(set(topk_indices[0, -1].tolist()), {3, 4})
+        torch.testing.assert_close(mask[0, 0, -1], torch.tensor([False, False, False, True, True]))
 
     def test_dsa_indexer_requires_shared_4d_attention_mask(self):
         config = get_tiny_config(use_dsa=True)
         config.index_topk = 1
-        indexer = Dots3NoteTextIndexer(config, layer_idx=0).eval()
-        for parameter in indexer.parameters():
+        attention = Dots3NoteTextSparseAttention(config, layer_idx=0).eval()
+        for parameter in attention.indexer.parameters():
             torch.nn.init.zeros_(parameter)
-
-        sequence_length = 4
-        hidden_states = torch.zeros(1, sequence_length, config.hidden_size)
-        q_lora = torch.zeros(1, sequence_length, config.q_lora_rank)
-        cos = torch.ones(1, sequence_length, config.qk_rope_head_dim // 2)
-        sin = torch.zeros_like(cos)
-        allowed = torch.eye(sequence_length, dtype=torch.bool).view(1, 1, sequence_length, sequence_length)
-
+        hidden_states = torch.zeros(1, 4, config.hidden_size)
+        q_lora = torch.zeros(1, 4, config.q_lora_rank)
+        cos = torch.ones(1, 4, config.qk_rope_head_dim)
+        key_states = torch.zeros(1, config.num_attention_heads, 4, config.head_dim)
+        allowed = torch.eye(4, dtype=torch.bool).view(1, 1, 4, 4)
         for attention_mask in (allowed, torch.where(allowed, 0.0, -10_000.0)):
             with self.subTest(dtype=attention_mask.dtype):
-                topk_indices = indexer(
+                mask, _, _, _ = attention._prepare_attention(
                     hidden_states,
                     q_lora,
                     cos,
-                    sin,
+                    torch.zeros_like(cos),
+                    key_states,
+                    attention_mask,
                     None,
-                    torch.arange(sequence_length),
-                    attention_mask=attention_mask,
+                    torch.arange(4),
+                    None,
+                    True,
                 )
-                torch.testing.assert_close(
-                    topk_indices.squeeze(0).squeeze(-1),
-                    torch.arange(sequence_length, dtype=torch.int32),
-                )
-
+                torch.testing.assert_close(mask if mask.dtype == torch.bool else mask == 0, allowed)
         per_head_mask = allowed.expand(-1, config.num_attention_heads, -1, -1).clone()
         per_head_mask[:, 1, :, 0] = False
-
         with self.assertRaisesRegex(ValueError, "different per-head masks are not supported"):
-            indexer(
+            attention._prepare_attention(
                 hidden_states,
                 q_lora,
                 cos,
-                sin,
+                torch.zeros_like(cos),
+                key_states,
+                per_head_mask,
                 None,
-                torch.arange(sequence_length),
-                attention_mask=per_head_mask,
+                torch.arange(4),
+                None,
+                True,
             )
 
     def test_dsa_sparse_attention_left_padding_uses_physical_cache_positions(self):
@@ -417,7 +420,7 @@ class Dots3NoteModelTest(unittest.TestCase):
             value,
             attention_mask=None,
             indices=topk_indices,
-            cache_position=torch.tensor([4]),
+            query_positions=torch.tensor([4]),
             padding_mask=padding_mask,
             scaling=1.0,
         )
@@ -432,7 +435,7 @@ class Dots3NoteModelTest(unittest.TestCase):
             value=torch.tensor([[[[2.0], [6.0]]]]),
             attention_mask=torch.full((1, 1, 1, 2), -10_000.0),
             indices=torch.tensor([[[0, 1]]], dtype=torch.int32),
-            cache_position=torch.tensor([1]),
+            query_positions=torch.tensor([1]),
             scaling=1.0,
         )
 
@@ -445,7 +448,7 @@ class Dots3NoteModelTest(unittest.TestCase):
         model = Dots3NoteTextModel(config).eval()
         hidden_states = torch.randn(1, 2, config.hidden_size)
         position_ids = torch.arange(2).unsqueeze(0)
-        cos, sin = model.rotary_emb(hidden_states, position_ids)
+        cos, sin = model.rotary_emb(hidden_states, position_ids, config.layer_types[0])
 
         with torch.no_grad():
             actual, _ = model.layers[0].self_attn(
@@ -453,7 +456,6 @@ class Dots3NoteModelTest(unittest.TestCase):
                 cos,
                 sin,
                 attention_mask=torch.full((1, 1, 2, 2), -10_000.0),
-                cache_position=torch.arange(2),
             )
 
         torch.testing.assert_close(actual, torch.zeros_like(actual))
@@ -619,14 +621,12 @@ class Dots3NoteModelTest(unittest.TestCase):
                 input_ids,
                 attention_mask=attention_mask,
                 past_key_values=static_cache,
-                cache_position=torch.arange(input_ids.shape[1]),
                 use_cache=True,
             )
             static_decode = model(
                 next_token,
                 attention_mask=decode_mask,
                 past_key_values=static.past_key_values,
-                cache_position=torch.tensor([input_ids.shape[1]]),
                 use_cache=True,
             )
 
@@ -634,85 +634,66 @@ class Dots3NoteModelTest(unittest.TestCase):
         self.assertIsInstance(static_cache.layers[1], StaticSlidingWindowLayer)
         torch.testing.assert_close(static_decode.logits, dynamic_decode.logits, rtol=1e-4, atol=1e-4)
 
-    def test_dsa_fp8_index_key_keeps_sglang_scale_in_fp32(self):
-        torch.manual_seed(0)
-        key = torch.randn(2, 7, 128) * 10
-        quantized_key, key_scale = quantize_indexer_fp8(key)
-        dequantized_key = quantized_key.float() * key_scale
+    @parameterized.expand(["float32", "bfloat16"])
+    def test_dsa_indexer_matches_glm_scoring(self, dtype):
+        from transformers.models.glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaIndexer
 
-        expected_scale = key.abs().amax(dim=-1, keepdim=True).clamp_min(1e-4) / 448.0
-        torch.testing.assert_close(key_scale, expected_scale, rtol=0, atol=0)
-        self.assertEqual(dequantized_key.dtype, torch.float32)
-        self.assertTrue(torch.any(dequantized_key.bfloat16().float() != dequantized_key))
-
-    def test_dsa_fused_indexer_projection_keeps_bf16_and_fp8_paths_distinct(self):
-        with self.assertRaisesRegex(ValueError, "index_head_dim=128, got 256"):
-            Dots3NoteConfig(index_head_dim=256)
-        Dots3NoteConfig(quantization_config=FineGrainedFP8Config().to_dict())
-        with self.assertRaisesRegex(ValueError, "scale_fmt='float', got 'ue8m0'"):
-            Dots3NoteConfig(quantization_config=FineGrainedFP8Config(scale_fmt="ue8m0").to_dict())
-
+        dtype = getattr(torch, dtype)
         config = get_tiny_config(use_dsa=True)
-        config.hidden_size = 256
-        hidden_states = torch.randn(2, 3, config.hidden_size, dtype=torch.bfloat16)
+        indexer = Dots3NoteTextIndexer(config, layer_idx=0).to(dtype).eval()
+        reference = GlmMoeDsaIndexer(config, layer_idx=0).to(dtype).eval()
+        reference.load_state_dict(indexer.state_dict())
+        hidden_states = torch.randn(2, 7, config.hidden_size, dtype=dtype)
+        q_lora = torch.randn(2, 7, config.q_lora_rank, dtype=dtype)
+        angles = torch.randn(2, 7, config.qk_rope_head_dim // 2, dtype=dtype).repeat(1, 1, 2)
+        cos, sin = angles.cos(), angles.sin()
+        positions = torch.arange(7)
+        padding_mask = torch.tensor([[0, 0, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1]], dtype=torch.bool)
+        mask = positions[None, :, None] >= positions[None, None, :]
+        mask = mask & padding_mask[:, None, :]
+        expected = reference(hidden_states, q_lora, (cos, sin), mask, positions)
+        actual = indexer(hidden_states, q_lora, (cos, sin), mask, positions)
+        torch.testing.assert_close(actual, expected)
 
-        bf16_indexer = Dots3NoteTextIndexer(config, layer_idx=0).to(torch.bfloat16)
-        bf16_weight = torch.cat((bf16_indexer.wk.weight, bf16_indexer.weights_proj.weight))
-        bf16_actual = torch.cat(bf16_indexer._project_key_and_weights(hidden_states), dim=-1)
-        self.assertIsNone(bf16_indexer.wk.weight_scale_inv)
-        torch.testing.assert_close(bf16_actual, torch.nn.functional.linear(hidden_states, bf16_weight), rtol=0, atol=0)
-
-        reloaded_state = {name: tensor.clone() for name, tensor in bf16_indexer.state_dict().items()}
-        reloaded_state["wk.weight"].zero_()
-        reloaded_state["weights_proj.weight"].zero_()
-        bf16_indexer.load_state_dict(reloaded_state)
-        self.assertIsNone(bf16_indexer._wk_weights_proj_weight)
-        reloaded_actual = torch.cat(bf16_indexer._project_key_and_weights(hidden_states), dim=-1)
-        self.assertEqual(torch.count_nonzero(reloaded_actual), 0)
-
-        config.quantization_config = FineGrainedFP8Config(dequantize=False, weight_block_size=(128, 128))
-        config._is_quantized = True
-        fp8_indexer = Dots3NoteTextIndexer(config, layer_idx=0)
-        torch.manual_seed(0)
-        for projection in (fp8_indexer.wk, fp8_indexer.weights_proj):
-            projection.weight.data.fill_(1)
-            projection.weight_scale_inv.data.copy_(
-                torch.arange(1, projection.weight_scale_inv.numel() + 1, dtype=torch.float32).reshape_as(
-                    projection.weight_scale_inv
-                )
-            )
-
-        expected_weight = torch.cat(
-            (fp8_indexer.wk.get_compute_weight(), fp8_indexer.weights_proj.get_compute_weight())
-        )
-        fp8_actual = torch.cat(fp8_indexer._project_key_and_weights(hidden_states), dim=-1)
-        self.assertEqual(fp8_indexer.wk.weight.dtype, torch.float8_e4m3fn)
-        self.assertEqual(fp8_indexer.wk.weight_scale_inv.shape, (1, 2))
-        torch.testing.assert_close(
-            fp8_actual, torch.nn.functional.linear(hidden_states, expected_weight), rtol=0, atol=0
-        )
-
-        config.quantization_config = FineGrainedFP8Config(dequantize=True, weight_block_size=(128, 128))
-        dequantized_indexer = Dots3NoteTextIndexer(config, layer_idx=0)
-        self.assertIsNone(dequantized_indexer.wk.weight_scale_inv)
+    def test_dsa_indexer_projection_loading(self):
+        with self.assertRaisesRegex(ValueError, "at least two experts per group"):
+            Dots3NoteConfig(n_routed_experts=8, n_group=8)
+        for model_class in (Dots3NoteTextForCausalLM, Dots3NoteForConditionalGeneration):
+            with self.subTest(model_class=model_class), tempfile.TemporaryDirectory() as folder:
+                model = model_class(get_tiny_config(use_dsa=True)).bfloat16().eval()
+                model.save_pretrained(folder)
+                loaded, info = model_class.from_pretrained(folder, dtype=torch.bfloat16, output_loading_info=True)
+                self.assertFalse(info["missing_keys"])
+                self.assertFalse(info["unexpected_keys"])
+                for name, module in loaded.named_modules():
+                    if name.endswith(("indexer.wk", "indexer.weights_proj")):
+                        self.assertIs(type(module), torch.nn.Linear)
+                        torch.testing.assert_close(module.weight, model.get_submodule(name).weight, rtol=0, atol=0)
 
     def test_dsa_precomputed_mask_uses_dispatched_layer_type(self):
         model = Dots3NoteTextForCausalLM(get_tiny_config(use_dsa=True)).eval()
         full_mask = torch.ones(1, 1, 2, 2, dtype=torch.bool)
         sliding_mask = torch.eye(2, dtype=torch.bool).view(1, 1, 2, 2)
 
-        actual_full, actual_sliding = model.model._make_masks(
-            {
-                "deepseek_sparse_attention": full_mask,
-                "sliding_attention": sliding_mask,
-            },
-            inputs_embeds=None,
-            past_key_values=None,
-            position_ids=None,
-        )
-
-        self.assertIs(actual_full, full_mask)
-        self.assertIs(actual_sliding, sliding_mask)
+        received = []
+        handles = [
+            layer.register_forward_pre_hook(
+                lambda module, args, kwargs: received.append(kwargs["attention_mask"]), with_kwargs=True
+            )
+            for layer in model.model.layers
+        ]
+        try:
+            with torch.no_grad():
+                model(
+                    torch.tensor([[1, 2]]),
+                    attention_mask={"deepseek_sparse_attention": full_mask, "sliding_attention": sliding_mask},
+                    use_cache=False,
+                )
+        finally:
+            for handle in handles:
+                handle.remove()
+        self.assertIs(received[0], full_mask)
+        self.assertIs(received[1], sliding_mask)
 
     def test_vision_forward(self):
         config = get_tiny_config().vision_config
@@ -758,15 +739,19 @@ class Dots3NoteModelTest(unittest.TestCase):
     def test_audio_forward(self):
         config = get_tiny_config().audio_config
         model = Dots3NoteAudioModel(config).eval()
-        with torch.no_grad():
+        with (
+            torch.no_grad(),
+            patch.object(model.audio_adapter, "forward", wraps=model.audio_adapter.forward) as adapter,
+        ):
             outputs = model(
-                input_features=torch.randn(1, config.feature_size, 16),
-                chunk_sample_lengths=torch.tensor([64]),
-                chunk_token_lengths=torch.tensor([2]),
-                audio_chunk_counts=torch.tensor([1]),
+                input_features=torch.randn(3, config.feature_size, 32),
+                chunk_sample_lengths=torch.tensor([64, 128, 96]),
+                chunk_token_lengths=torch.tensor([2, 4, 3]),
+                audio_chunk_counts=torch.tensor([2, 1]),
             )
-        self.assertEqual(outputs.audio_embeds.shape, (2, config.adapter_output_size))
-        self.assertEqual(outputs.audio_token_lengths.tolist(), [2])
+        adapter.assert_called_once()
+        self.assertEqual(outputs.audio_embeds.shape, (9, config.adapter_output_size))
+        self.assertEqual(outputs.audio_token_lengths.tolist(), [6, 3])
 
     def test_audio_flash_attention_3_uses_requested_backend(self):
         config = get_tiny_config().audio_config
@@ -776,26 +761,36 @@ class Dots3NoteModelTest(unittest.TestCase):
 
         def flash_attention_spy(query, key, value, *args, attn_implementation=None, **kwargs):
             requested_backends.append(attn_implementation)
+            self.assertEqual(query.shape[:2], (2, 4))
+            self.assertFalse(kwargs["is_causal"])
+            torch.testing.assert_close(args[0].bool(), torch.tensor([[1, 1, 0, 0], [1, 1, 1, 1]]).bool())
+            self.assertNotIn("cu_seq_lens_q", kwargs)
             return query
 
         with patch(
-            "transformers.models.dots3_note.modeling_dots3_note._flash_attention_forward",
+            "transformers.integrations.flash_attention._flash_attention_forward",
             side_effect=flash_attention_spy,
         ):
             with torch.no_grad():
                 outputs = model(
-                    input_features=torch.randn(1, config.feature_size, 16),
-                    chunk_sample_lengths=torch.tensor([64]),
-                    chunk_token_lengths=torch.tensor([2]),
-                    audio_chunk_counts=torch.tensor([1]),
+                    input_features=torch.randn(2, config.feature_size, 32),
+                    chunk_sample_lengths=torch.tensor([64, 128]),
+                    chunk_token_lengths=torch.tensor([2, 4]),
+                    audio_chunk_counts=torch.tensor([1, 1]),
                 )
 
         self.assertEqual(requested_backends, ["flash_attention_3"] * config.whisper_config["encoder_layers"])
         self.assertTrue(torch.isfinite(outputs.audio_embeds).all())
 
-    def test_multimodal_image_and_audio_forward(self):
+    @parameterized.expand(["base", "causal_lm", "conditional_generation"])
+    def test_multimodal_image_and_audio_forward(self, variant):
         config = get_tiny_config()
-        model = Dots3NoteForCausalLM(config).eval()
+        model_class = {
+            "base": Dots3NoteModel,
+            "causal_lm": Dots3NoteForCausalLM,
+            "conditional_generation": Dots3NoteForConditionalGeneration,
+        }[variant]
+        model = model_class(config).eval()
         input_ids = torch.tensor([[1, 120, 5, 121, 121, 7, 2]])
         pixel_values = torch.randn(4, 3 * config.vision_config.temporal_patch_size * 2**2)
 
@@ -811,8 +806,10 @@ class Dots3NoteModelTest(unittest.TestCase):
                 audio_token_lengths=torch.tensor([2]),
                 use_cache=False,
             )
-        self.assertEqual(outputs.logits.shape, (1, input_ids.shape[1], config.vocab_size))
-        self.assertTrue(torch.isfinite(outputs.logits).all())
+        output = outputs.last_hidden_state if variant == "base" else outputs.logits
+        width = config.hidden_size if variant == "base" else config.vocab_size
+        self.assertEqual(output.shape, (1, input_ids.shape[1], width))
+        self.assertTrue(torch.isfinite(output).all())
 
     def test_multimodal_video_forward(self):
         config = get_tiny_config()
@@ -912,7 +909,12 @@ class Dots3NoteModelTest(unittest.TestCase):
             self.assertIn("model.layers.1.mlp.experts.0.down_proj.weight", checkpoint_keys)
             self.assertNotIn("model.layers.1.mlp.experts.gate_up_proj", checkpoint_keys)
 
-            reloaded = Dots3NoteForCausalLM.from_pretrained(tmpdirname).eval()
+            reloaded, info = Dots3NoteForCausalLM.from_pretrained(tmpdirname, output_loading_info=True)
+            self.assertFalse(info["missing_keys"])
+            self.assertFalse(info["unexpected_keys"])
+            self.assertEqual(reloaded.config.audio_config.conv_chunksize, 500)
+            self.assertFalse(reloaded.config.audio_config.conv_stem_gradient_checkpointing)
+            torch.testing.assert_close(reloaded.state_dict(), model.state_dict(), rtol=0, atol=0)
 
         with torch.no_grad():
             actual = reloaded(input_ids, use_cache=False).logits
@@ -923,12 +925,13 @@ class Dots3NoteModelTest(unittest.TestCase):
         model.config.quantization_config = FineGrainedFP8Config(dequantize=True)
         conversions = get_model_conversion_mapping(model)
         converters = [conversion for conversion in conversions if isinstance(conversion, WeightConverter)]
+        renamings = [conversion for conversion in conversions if not isinstance(conversion, WeightConverter)]
         prefix = "model.layers.1.mlp.experts.0.gate_proj"
 
-        weight_key, _ = rename_source_key(f"{prefix}.weight", [], converters)
-        scale_key, _ = rename_source_key(f"{prefix}.weight_scale_inv", [], converters)
-        self.assertEqual(weight_key, "model.layers.1.mlp.experts.gate_up_proj")
-        self.assertEqual(scale_key, "model.layers.1.mlp.experts.gate_up_proj_scale_inv")
+        weight_key, _ = rename_source_key(f"{prefix}.weight", renamings, converters)
+        scale_key, _ = rename_source_key(f"{prefix}.weight_scale_inv", renamings, converters)
+        self.assertEqual(weight_key, "model.language_model.layers.1.mlp.experts.gate_up_proj")
+        self.assertEqual(scale_key, "model.language_model.layers.1.mlp.experts.gate_up_proj_scale_inv")
 
         quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config(dequantize=True))
         quantizer.pre_quantized = True
@@ -936,10 +939,16 @@ class Dots3NoteModelTest(unittest.TestCase):
         dequant_converters = [
             conversion for conversion in dequant_conversions if isinstance(conversion, WeightConverter)
         ]
-        dequant_weight_key, _ = rename_source_key(f"{prefix}.weight", [], dequant_converters)
-        dequant_scale_key, _ = rename_source_key(f"{prefix}.weight_scale_inv", [], dequant_converters)
-        self.assertEqual(dequant_weight_key, "model.layers.1.mlp.experts.gate_up_proj")
+        dequant_weight_key, _ = rename_source_key(f"{prefix}.weight", renamings, dequant_converters)
+        dequant_scale_key, _ = rename_source_key(f"{prefix}.weight_scale_inv", renamings, dequant_converters)
+        self.assertEqual(dequant_weight_key, "model.language_model.layers.1.mlp.experts.gate_up_proj")
         self.assertEqual(dequant_scale_key, dequant_weight_key)
+
+        for candidates in (converters, dequant_converters):
+            vision_key, _ = rename_source_key(
+                "vision_encoder.blocks.1.mlp.experts.0.fc1.weight", renamings, candidates
+            )
+            self.assertEqual(vision_key, "vision_encoder.blocks.1.mlp.experts.0.gate_proj.weight")
 
     def test_fp8_partial_weight_block_dequantization(self):
         from transformers.integrations.finegrained_fp8 import Fp8Dequantize

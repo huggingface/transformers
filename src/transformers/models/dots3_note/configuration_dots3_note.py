@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from copy import copy
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -54,6 +56,7 @@ class Dots3NoteVisionConfig(PreTrainedConfig):
 
     model_type = "dots3_note_vision_encoder"
     base_config_key = "vision_config"
+    attribute_map = {"num_heads": "num_attention_heads"}
 
     embed_dim: int = 1536
     hidden_size: int = 5120
@@ -69,6 +72,7 @@ class Dots3NoteVisionConfig(PreTrainedConfig):
     use_bias: bool = False
     use_qk_norm: bool = True
     attention_dropout: float = 0.0
+    rope_parameters: dict | None = None
     initializer_range: float = 0.02
     is_causal: bool = False
     post_norm: bool = True
@@ -83,6 +87,8 @@ class Dots3NoteVisionConfig(PreTrainedConfig):
     adapter_merge_size: int = 2
 
     def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_type": "axial", "rope_theta": 10_000.0}
         if self.pyramid_num_routed is None:
             self.pyramid_num_routed = [-1] * 25 + list(range(4, 65, 4)) + [64]
         else:
@@ -138,10 +144,6 @@ class Dots3NoteAudioConfig(PreTrainedConfig):
         Whether audio self-attention uses a causal mask.
     downsample_hidden_size (`int`, *optional*, defaults to 480):
         Hidden width of the temporal downsampling projection.
-    conv_chunksize (`int`, *optional*, defaults to 500):
-        Number of mel frames processed per convolutional stem chunk.
-    conv_stem_gradient_checkpointing (`bool`, *optional*, defaults to `False`):
-        Whether to checkpoint the convolutional stem during training.
     conv_bucket_step (`int`, *optional*, defaults to 10):
         Length step used to bucket variable-length audio chunks. Set to `None` to disable bucketing.
     conv_bucket_max_elements (`int`, *optional*, defaults to 20000):
@@ -165,14 +167,22 @@ class Dots3NoteAudioConfig(PreTrainedConfig):
     model_type = "dots3_note_audio_encoder"
     base_config_key = "audio_config"
     attribute_map = {
-        "hidden_size": "d_model",
-        "num_attention_heads": "encoder_attention_heads",
-        "num_hidden_layers": "encoder_layers",
-        "intermediate_size": "encoder_ffn_dim",
+        "d_model": "hidden_size",
+        "encoder_attention_heads": "num_attention_heads",
+        "encoder_layers": "num_hidden_layers",
+        "encoder_ffn_dim": "intermediate_size",
     }
 
     encoder_type: str = "dots"
     whisper_config: dict | None = None
+    hidden_size: int = 1280
+    intermediate_size: int = 5120
+    num_attention_heads: int = 20
+    num_hidden_layers: int = 32
+    max_position_embeddings: int = 6000
+    dropout: float = 0.0
+    attention_dropout: float = 0.0
+    activation_dropout: float = 0.0
     sampling_rate: int = 16_000
     feature_size: int = 128
     n_fft: int = 400
@@ -183,8 +193,6 @@ class Dots3NoteAudioConfig(PreTrainedConfig):
     use_rms_norm: bool = True
     use_causal: bool = False
     downsample_hidden_size: int = 480
-    conv_chunksize: int = 500
-    conv_stem_gradient_checkpointing: bool = False
     conv_bucket_step: int | None = 10
     conv_bucket_max_elements: int | None = 20_000
     rope_parameters: dict | None = None
@@ -206,14 +214,22 @@ class Dots3NoteAudioConfig(PreTrainedConfig):
 
         if self.whisper_config is None:
             self.whisper_config = {
-                "d_model": 1280,
-                "encoder_attention_heads": 20,
-                "encoder_ffn_dim": 5120,
-                "encoder_layers": 32,
-                "num_mel_bins": 128,
-                "max_source_positions": 6000,
+                "d_model": self.hidden_size,
+                "encoder_attention_heads": self.num_attention_heads,
+                "encoder_ffn_dim": self.intermediate_size,
+                "encoder_layers": self.num_hidden_layers,
+                "num_mel_bins": self.feature_size,
+                "max_source_positions": self.max_position_embeddings,
                 "activation_function": "swiglu",
             }
+        # Released checkpoints store the encoder dimensions in this legacy dictionary.
+        for legacy_name, name in self.attribute_map.items():
+            setattr(self, name, self.whisper_config[legacy_name])
+        self.max_position_embeddings = self.whisper_config["max_source_positions"]
+        for name in ("dropout", "attention_dropout", "activation_dropout"):
+            setattr(self, name, self.whisper_config.get(name, getattr(self, name)))
+        if self.activation_dropout != 0:
+            raise ValueError(f"Dots 3 Note Preview requires activation_dropout=0, got {self.activation_dropout!r}")
         if self.rope_parameters is None:
             self.rope_parameters = {"partial_rotary_factor": 0.5, "rope_theta": 10_000.0}
 
@@ -324,6 +340,8 @@ class Dots3NoteConfig(PreTrainedConfig):
         Compatibility alias for the number of experts selected per token.
     moe_gating_fp32 (`bool`, *optional*, defaults to `False`):
         Whether to compute expert router logits in float32.
+    mlp_layer_types (`list[str]`, *optional*):
+        Per-layer `"dense"` or `"sparse"` MLP types, derived from the released MoE schedule when omitted.
     n_group (`int`, *optional*, defaults to 1):
         Number of groups into which routed experts are partitioned during selection.
     use_dynamic_rsf (`bool`, *optional*, defaults to `False`):
@@ -416,6 +434,7 @@ class Dots3NoteConfig(PreTrainedConfig):
     shared_experts_intermediate_size: int = 1536
     moe_shared_expert_intermediate_size: int = 1536
     moe_layer_freq: int | list[int] = 1
+    mlp_layer_types: list[str] | None = None
     first_k_dense_replace: int = 1
     norm_topk_prob: bool = True
     scoring_func: str = "sigmoid"
@@ -438,6 +457,36 @@ class Dots3NoteConfig(PreTrainedConfig):
     audio_token_id: int = 151720
 
     def __post_init__(self, **kwargs):
+        if self.mlp_layer_types is None:
+            self.mlp_layer_types = [
+                "sparse"
+                if i >= self.first_k_dense_replace
+                and (
+                    bool(self.moe_layer_freq[i])
+                    if isinstance(self.moe_layer_freq, (list, tuple))
+                    else i % self.moe_layer_freq == 0
+                )
+                else "dense"
+                for i in range(self.num_hidden_layers)
+            ]
+        if len(self.mlp_layer_types) != self.num_hidden_layers or set(self.mlp_layer_types) - {"dense", "sparse"}:
+            raise ValueError("mlp_layer_types must contain one 'dense' or 'sparse' entry per hidden layer")
+        if self.n_shared_experts is None or self.n_shared_experts < 1:
+            raise ValueError(
+                f"Dots 3 Note Preview requires shared experts, got n_shared_experts={self.n_shared_experts!r}"
+            )
+        if self.normalization != "RMSNorm" or self.final_norm != "RMSNorm":
+            raise ValueError(
+                f"Dots 3 Note Preview requires RMSNorm, got normalization={self.normalization!r}, final_norm={self.final_norm!r}"
+            )
+        for name, expected in (
+            ("scoring_func", "sigmoid"),
+            ("topk_method", "noaux_tc"),
+            ("moe_gating_fp32", False),
+            ("use_dynamic_rsf", False),
+        ):
+            if getattr(self, name) != expected:
+                raise ValueError(f"Dots 3 Note Preview requires {name}={expected!r}, got {getattr(self, name)!r}")
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
         if self.num_key_value_heads != self.num_attention_heads:
@@ -475,12 +524,12 @@ class Dots3NoteConfig(PreTrainedConfig):
         unsupported = set(self.layer_types) - {"full_attention", "sliding_attention", "deepseek_sparse_attention"}
         if unsupported:
             raise ValueError(f"Unsupported layer types: {sorted(unsupported)}")
-        if self.index_head_dim != 128:
-            raise ValueError(f"Dots 3 Note Preview requires index_head_dim=128, got {self.index_head_dim}")
         if self.qk_rope_head_dim > self.index_head_dim:
             raise ValueError("qk_rope_head_dim must not exceed index_head_dim")
         if self.n_group < 1 or self.n_routed_experts % self.n_group != 0:
             raise ValueError("n_group must evenly divide n_routed_experts")
+        if self.n_routed_experts // self.n_group < 2:
+            raise ValueError("Grouped routing requires at least two experts per group")
         if self.topk_group < 1 or self.topk_group > self.n_group:
             raise ValueError("topk_group must be in [1, n_group]")
 
@@ -513,6 +562,26 @@ class Dots3NoteConfig(PreTrainedConfig):
             self._is_quantized = True
             quantization_config.setdefault("modules_to_not_convert", ["vision_encoder", "audio_encoder", "lm_head"])
         super().__post_init__(**kwargs)
+
+    def get_layer_config(self, layer_type: str):
+        """Resolve SWA projection dimensions without changing the released checkpoint schema."""
+        config = copy(self)
+        if layer_type == "sliding_attention":
+            for name in (
+                "num_attention_heads",
+                "num_key_value_heads",
+                "q_lora_rank",
+                "kv_lora_rank",
+                "head_dim",
+                "qk_nope_head_dim",
+                "qk_rope_head_dim",
+                "v_head_dim",
+                "rope_theta",
+                "attention_gate_type",
+            ):
+                setattr(config, name, getattr(self, f"swa_{name}"))
+        config.rope_parameters = {"rope_type": "default", "rope_theta": config.rope_theta}
+        return config
 
 
 __all__ = [

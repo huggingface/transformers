@@ -88,28 +88,47 @@ SPECIAL_CASES_TO_ALLOW = {
     # Fixed architecture flags, preprocessing metadata, and compatibility aliases
     # carried by the released Dots 3 Note Preview checkpoint.
     "Dots3NoteAudioConfig": [
+        "activation_dropout",  # Validated as zero; the inference MLP forward is inherited.
         "audio_end_token",
         "audio_pad_token",
         "audio_start_token",
         "chunk_seconds",
-        "conv_chunksize",
-        "conv_stem_gradient_checkpointing",
         "encoder_type",
         "n_fft",
+        "use_causal",
         "use_conv2d_stem",
         "use_rope",
+        "whisper_config",  # Legacy dictionary resolved into canonical fields in __post_init__.
     ],
     "Dots3NoteConfig": [
+        # Resolved or validated in configuration_dots3_note, not directly in modeling.
+        "final_norm",
+        "first_k_dense_replace",
+        "moe_gating_fp32",
+        "moe_layer_freq",
         "moe_shared_expert_intermediate_size",
         "moe_topk",
         "multi_latent_attention",
+        "normalization",
         "qk_layernorm",
         "rope_scaling",
+        "scoring_func",
         "seq_length",
         "sliding_window_size",
         "softmax_type",
+        "swa_attention_gate_type",
+        "swa_head_dim",
+        "swa_kv_lora_rank",
+        "swa_num_attention_heads",
+        "swa_num_key_value_heads",
+        "swa_q_lora_rank",
+        "swa_qk_nope_head_dim",
+        "swa_v_head_dim",
+        "topk_method",
+        "use_dsa",  # Resolved into layer_types in the config.
+        "use_dynamic_rsf",
     ],
-    "Dots3NoteVisionConfig": ["adapter_type", "post_norm", "pre_pixel_shuffle"],
+    "Dots3NoteVisionConfig": ["adapter_type", "pre_pixel_shuffle", "temporal_patch_size"],
     "JambaConfig": [
         "attn_layer_offset",
         "attn_layer_period",

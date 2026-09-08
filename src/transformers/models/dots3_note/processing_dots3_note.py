@@ -172,11 +172,6 @@ class Dots3NoteProcessor(ProcessorMixin):
                 f"{self.audio_token!r} placeholder(s)"
             )
 
-    def _process_audio(self, audio, **kwargs):
-        audio_inputs = self.feature_extractor(audio, **kwargs)
-        replacements = [self.audio_token * int(token_length) for token_length in audio_inputs["audio_token_lengths"]]
-        return audio_inputs, replacements
-
     def _process_videos(self, videos, **kwargs):
         if isinstance(videos, (str, bytes, Path)) or not isinstance(videos, (list, tuple)):
             videos = [videos]
@@ -220,8 +215,8 @@ class Dots3NoteProcessor(ProcessorMixin):
             tokenizer=self.tokenizer,
             **video_kwargs,
         )
-        images = [part.value for part in parts if part.kind == "image"]
-        audios = [part.value for part in parts if part.kind == "audio"]
+        images = [part["image"] for part in parts if part["type"] == "image"]
+        audios = [part["audio"] for part in parts if part["type"] == "audio"]
         if not images:
             raise ValueError("Dots 3 Note Preview video preprocessing produced no frames")
 
@@ -233,9 +228,9 @@ class Dots3NoteProcessor(ProcessorMixin):
         audio_lengths = iter(audio_inputs.get("audio_token_lengths", []))
         replacement = []
         for part in parts:
-            if part.kind == "text":
-                replacement.append(part.value)
-            elif part.kind == "image":
+            if part["type"] == "text":
+                replacement.append(part["text"])
+            elif part["type"] == "image":
                 token_count = int(next(image_grids).prod()) // self.image_processor.merge_size**2
                 replacement.append(self.image_start_token + self.image_token * token_count + self.image_end_token)
             else:
@@ -245,18 +240,21 @@ class Dots3NoteProcessor(ProcessorMixin):
         processed = {**image_inputs, **audio_inputs}
         return processed, ["".join(replacement)]
 
+    # Copied from transformers.models.qwen2_vl.processing_qwen2_vl.Qwen2VLProcessor.replace_image_token
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         merge_length = self.image_processor.merge_size**2
-        num_tokens = int(image_inputs["image_grid_thw"][image_idx].prod()) // merge_length
-        return self.image_token * num_tokens
+        num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
+        return self.image_token * num_image_tokens
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         raise RuntimeError(
             "Native Dots 3 Note Preview videos are expanded into timestamped image/audio blocks before tokenization"
         )
 
+    # Copied from transformers.models.vibevoice_asr.processing_vibevoice_asr.VibeVoiceAsrProcessor.replace_audio_token with num_audio_tokens->audio_token_lengths
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
-        return self.audio_token * int(audio_inputs["audio_token_lengths"][audio_idx])
+        audio_token_lengths = audio_inputs["audio_token_lengths"][audio_idx]
+        return self.audio_token * audio_token_lengths
 
     @property
     def model_input_names(self) -> list[str]:

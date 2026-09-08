@@ -295,11 +295,14 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 other = [p for p in conv.source_patterns if not p.removesuffix("$").endswith(".weight")]
                 new_sources = anchored_weight + scale_sources + other
                 new_ops = [Fp8Dequantize(self)] + list(conv.operations)
-                conv = WeightConverter(
+                new_conv = WeightConverter(
                     source_patterns=new_sources,
                     target_patterns=conv._original_target_patterns,
                     operations=new_ops,
                 )
+                new_conv.scope_prefix = conv.scope_prefix
+                new_conv.base_model_prefix = conv.base_model_prefix
+                conv = new_conv
             updated.append(conv)
         # Generic fallback for plain ``nn.Linear`` weights with no model-specific converter.
         updated.extend(self.get_weight_conversions())

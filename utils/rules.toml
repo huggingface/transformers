@@ -548,8 +548,7 @@ diff = '''
 [rules.TRF026]
 description = "A module whose forward only delegates to its single submodule adds nothing; inline it."
 default_enabled = true
-# Dots 3 Note keeps the audio adapter wrapper to preserve published `audio_adapter.proj.*` checkpoint keys.
-allowlist_models = ["dots3_note"]
+allowlist_models = []
 cutoff_date = "2026-06-20"
 
 [rules.TRF026.explanation]
@@ -745,8 +744,7 @@ diff = '''
 [rules.TRF036]
 description = "nn.Sequential hides the forward flow; declare the submodules explicitly."
 default_enabled = true
-# Dots 3 Note preserves the published indexed adapter weight names.
-allowlist_models = ["dots3_note", "x_clip"]
+allowlist_models = ["x_clip"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF036.explanation]
@@ -908,8 +906,7 @@ diff = '''
 [rules.TRF044]
 description = "cache_position must not appear as a parameter in modeling code; it is removed framework surface."
 default_enabled = true
-# Dots 3 Note DSA needs physical cache columns to keep sparse indices correct for padded batches.
-allowlist_models = ["dots3_note"]
+allowlist_models = []
 
 [rules.TRF044.explanation]
 what_it_does = "Flags a parameter named cache_position on any function in modeling_*.py and modular_*.py."
@@ -929,6 +926,10 @@ diff = '''
 [rules.TRF045]
 description = "forward must not declare output_attentions/output_hidden_states/return_dict; decorators own them."
 default_enabled = true
+# kosmos2 and openai have doc pages (kosmos-2.md, openai-gpt.md) whose names cannot be derived from the
+# model directory, and the timm wrappers have no contribution date line, so the cutoff cannot exempt them.
+# kosmos2 and openai have doc pages (kosmos-2.md, openai-gpt.md) whose names cannot be derived from the
+# model directory, and the timm wrappers have no contribution date line, so the cutoff cannot exempt them.
 # kosmos2 and openai have doc pages (kosmos-2.md, openai-gpt.md) whose names cannot be derived from the
 # model directory, and the timm wrappers have no contribution date line, so the cutoff cannot exempt them.
 # Dots 3 Note retains explicit output controls for its custom DSA, audio, and vision outputs.

@@ -146,6 +146,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("doge", "DogeModel"),
         ("donut-swin", "DonutSwinModel"),
         ("dots1", "Dots1Model"),
+        ("dots3_note", "Dots3NoteModel"),
         ("dpr", "DPRQuestionEncoder"),
         ("dpt", "DPTModel"),
         ("edgetam", "EdgeTamModel"),

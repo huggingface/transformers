@@ -154,6 +154,8 @@ class Dots3NoteProcessorTest(unittest.TestCase):
 
     def test_expands_audio_placeholder(self):
         processor = get_tiny_processor()
+        for lengths in ([2], np.array([2], dtype=np.int64), torch.tensor([2])):
+            self.assertEqual(processor.replace_audio_token({"audio_token_lengths": lengths}, 0), AUDIO_PAD * 2)
         output = processor(
             text=f"{AUDIO_START}{AUDIO_PAD}{AUDIO_END} describe",
             audio=[torch.zeros(33)],
@@ -249,13 +251,13 @@ class Dots3NoteProcessorTest(unittest.TestCase):
                 video_processing_dots3_note,
                 "_open_video",
                 return_value=SimpleNamespace(metadata=SimpleNamespace(duration_seconds=10)),
-            ),
+            ) as open_video,
             patch.object(
                 video_processing_dots3_note,
                 "_decode_audio",
                 return_value=(np.zeros(320, dtype=np.int16), 10.0),
             ),
-            patch.object(video_processing_dots3_note, "_decode_frames", return_value=(frames, 10.0)),
+            patch.object(video_processing_dots3_note, "_decode_frames", return_value=(frames, 10.0)) as decode_frames,
             self.assertLogs(video_processing_dots3_note.logger, level="WARNING") as logs,
         ):
             processor(
@@ -267,6 +269,8 @@ class Dots3NoteProcessorTest(unittest.TestCase):
                 add_special_tokens=False,
             )
         self.assertIn("audio_cap", " ".join(logs.output))
+        open_video.assert_called_once_with(b"video")
+        self.assertIs(decode_frames.call_args.args[0], open_video.return_value)
 
     @slow
     @require_torchcodec

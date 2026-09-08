@@ -914,19 +914,6 @@ def replace_with_fp8_linear(
     return model
 
 
-def _resolve_weight_block_size(hf_quantizer, value: torch.Tensor) -> tuple[int, int]:
-    block_size = None
-    quantization_config = hf_quantizer.quantization_config
-    if quantization_config is not None:
-        if isinstance(quantization_config, dict):
-            block_size = quantization_config.get("weight_block_size")
-        else:
-            block_size = getattr(quantization_config, "weight_block_size", None)
-    if block_size is None:
-        block_size = value.shape[-2:]
-    return tuple(block_size)
-
-
 class Fp8Quantize(ConversionOps):
     """
     A quantization operation that creates two tensors, weight and scale out of a weight.
@@ -936,7 +923,15 @@ class Fp8Quantize(ConversionOps):
         self.hf_quantizer = hf_quantizer
 
     def _resolve_block_size(self, value: torch.Tensor) -> tuple[int, int]:
-        return _resolve_weight_block_size(self.hf_quantizer, value)
+        block_size = None
+        if self.hf_quantizer.quantization_config is not None:
+            if isinstance(self.hf_quantizer.quantization_config, dict):
+                block_size = self.hf_quantizer.quantization_config.get("weight_block_size")
+            else:
+                block_size = getattr(self.hf_quantizer.quantization_config, "weight_block_size", None)
+        if block_size is None:
+            block_size = (value.shape[-2], value.shape[-1])
+        return tuple(block_size)
 
     def _quantize_one(self, key: str, value: torch.Tensor) -> dict[str, torch.Tensor]:
         # Norms and biases are not block-quantized.
@@ -945,9 +940,8 @@ class Fp8Quantize(ConversionOps):
         block_m, block_n = self._resolve_block_size(value)
         rows, cols = value.shape[-2], value.shape[-1]
         has_partial_block = rows % block_m != 0 or cols % block_n != 0
-        quantization_config = self.hf_quantizer.quantization_config
         requantizing_pre_quantized_checkpoint = getattr(self.hf_quantizer, "pre_quantized", False) and getattr(
-            quantization_config, "dequantize", False
+            self.hf_quantizer.quantization_config, "dequantize", False
         )
         # Keep the existing on-the-fly quantization behavior for odd-shaped linears:
         # they stay in full precision. Partial blocks are only required when reversing
@@ -1068,32 +1062,27 @@ class Fp8Dequantize(ConversionOps):
         except Exception:
             # scale can be a single tensor in extreme cases where it was not wrapped properly but is [1,0].
             scale_rows, scale_cols = 1, 1
-        if is_fp4:
-            # MXFP4 experts use a different block layout and keep the existing
-            # scale-grid-derived behavior.
+        quantization_config = self.hf_quantizer.quantization_config
+        block_size = (
+            quantization_config.get("weight_block_size")
+            if isinstance(quantization_config, dict)
+            else getattr(quantization_config, "weight_block_size", None)
+        )
+        # Use configured FP8 blocks when their ceil-divided grid matches, including partial blocks.
+        # FP4 and legacy layouts retain the scale-grid-derived behavior.
+        if (
+            not is_fp4
+            and block_size is not None
+            and (scale_rows, scale_cols) == (_cdiv(rows, block_size[0]), _cdiv(cols, block_size[1]))
+        ):
+            block_m, block_n = block_size
+        else:
             if rows % scale_rows or cols % scale_cols:
                 raise ValueError(
                     f"Weight shape ({rows}, {cols}) not divisible by scale grid ({scale_rows}, {scale_cols})."
                 )
             block_m = rows // scale_rows
             block_n = cols // scale_cols
-        else:
-            # FP8 checkpoints encode the block size in their quantization config. The
-            # scale grid uses ceil division, so its last row/column may describe a
-            # partial weight block.
-            block_m, block_n = _resolve_weight_block_size(self.hf_quantizer, quantized_fp32)
-            expected_scale_shape = (_cdiv(rows, block_m), _cdiv(cols, block_n))
-            if (scale_rows, scale_cols) != expected_scale_shape:
-                # Preserve the legacy path for existing checkpoints whose scale grid
-                # is valid but does not match the global block-size metadata.
-                if rows % scale_rows == 0 and cols % scale_cols == 0:
-                    block_m = rows // scale_rows
-                    block_n = cols // scale_cols
-                else:
-                    raise ValueError(
-                        f"Weight shape ({rows}, {cols}) with block size ({block_m}, {block_n}) expects scale grid "
-                        f"{expected_scale_shape}, but got ({scale_rows}, {scale_cols})."
-                    )
         # ``ue8m0`` (``float8_e8m0fnu``) scales have no CUDA ``mul`` kernel, and casting
         # the FP8 weight to that dtype loses precision. Promote both sides to fp32 for
         # the math; prefer the destination parameter's dtype when known so eager modules
