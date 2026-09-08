@@ -292,7 +292,7 @@ class PPLCNetModelIntegrationTest(unittest.TestCase):
             outputs = self.model(**inputs)
 
         expected_shape_logits = torch.Size((1, 4))
-        expected_logits = torch.tensor([[-0.3655, -1.0573, 2.4883, -1.0640]]).to(torch_device)
+        expected_logits = torch.tensor([[2.7272, -0.9074, -0.8011, -0.983]]).to(torch_device)
 
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape_logits)
         torch.testing.assert_close(outputs.last_hidden_state, expected_logits, rtol=2e-2, atol=2e-2)

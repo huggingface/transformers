@@ -394,7 +394,6 @@ class Cohere2IntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @require_deterministic_for_xpu
     def test_model_integration_batched_generate_multi_image(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = self.get_model()
         # Prepare inputs

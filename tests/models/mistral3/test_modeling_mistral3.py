@@ -320,7 +320,6 @@ class Mistral3IntegrationTest(unittest.TestCase):
 
     @require_deterministic_for_xpu
     def test_mistral3_integration_batched_generate(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         processor.tokenizer.padding_side = "left"
         processor.chat_template = processor.chat_template.replace('strftime_now("%Y-%m-%d")', '"2025-06-20"')
@@ -366,10 +365,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Calm lake's mirror gleams,\nWhispering pines stand in silence,\nPath to peace begins.",
-                ("cuda", (8, 0)): "Wooden path to calm,\nReflections whisper secrets,\nNature's peace unfolds.",
-                ("cuda", (8, 6)): "Calm waters reflect\nWooden path to distant shore\nSilence in the scene",
-                ("rocm", (9, 5)): "Calm waters reflect\nWooden path to distant shore\nSilence in the scene"
+                (None, None): 'Sure, here is a haiku inspired by the image:\n\nSilent waters stretch,\nMountains stand in quiet grace,\nPe',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -396,7 +392,6 @@ class Mistral3IntegrationTest(unittest.TestCase):
 
     @require_deterministic_for_xpu
     def test_mistral3_integration_batched_generate_multi_image(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         processor.tokenizer.padding_side = "left"
         processor.chat_template = processor.chat_template.replace('strftime_now("%Y-%m-%d")', '"2025-06-20"')
@@ -446,8 +441,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(gen_tokens[0], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("cuda", 8): "Calm waters reflect\nWooden path to distant shore\nSilence in the scene",
-                ("rocm", (9, 4)): "Calm waters reflect\nWooden path to distant shore\nSilence in the pines"
+                (None, None): 'Sure, here is a haiku inspired by the image:\n\nSilent waters stretch,\nMountains stand in quiet grace,\nPe',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

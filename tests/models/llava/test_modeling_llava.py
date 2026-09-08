@@ -291,7 +291,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_deterministic_for_xpu
     def test_small_model_integration_test(self):
         # Let's make sure we test the preprocessing to replace what is used
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = LlavaForConditionalGeneration.from_pretrained(
             "llava-hf/bakLlava-v1-hf",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
@@ -321,7 +320,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_deterministic_for_xpu
     def test_small_model_integration_test_llama_single(self):
         # Let's make sure we test the preprocessing to replace what is used
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model_id = "llava-hf/llava-1.5-7b-hf"
 
         model = LlavaForConditionalGeneration.from_pretrained(
@@ -338,10 +336,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                ("xpu", 3): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the presence of boats or other watercraft in the area, as they may be moving at high speeds or making sudden turns, which could pose a risk to pedestrians. Lastly, be aware of any posted signs or warnings, as they may provide important information about the pier\'s conditions or potential dangers.',
-                ("cuda", 7): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Lastly, be respectful of the environment and other visitors, as the pier is a shared space where people can enjoy the view, relax, or engage in recreational activities.',
-                ("cuda", 8): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Lastly, be respectful of the environment and other visitors, as the pier is a shared space where people can enjoy the view, relax, or engage in recreational activities.',
-                ("rocm", (9, 5)): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock overlooking a lake, you should be cautious about the following:\n\n1. Safety: Ensure that the pier or dock is stable and secure before stepping onto it. Avoid walking on the edge of the pier or dock, as it could be unstable or unsafe.\n\n2. Weather conditions: Be aware of the weather forecast before visiting the area. Strong winds, heavy rain, or storms can make the pier or dock unsafe to use.\n\n3. Wildlife: Be mindful of the wildlife in the area, such as birds or aquatic animals. Avoid disturbing their natural habitat or causing harm to the local ecosystem.\n\n4. Water safety: If you plan to go swimming or engage in water activities, be aware of the water conditions, such as currents, tides, or potential hazards like submerged objects.\n\n5. Personal belongings: Keep an eye on your personal belongings, such as bags or backpacks, to prevent theft or loss.\n\n6. Leave no trace: When visiting the area, make sure to clean up after yourself and leave no trace of your presence to preserve the natural environment.',
+                (None, None): "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a dock on a large body of water, there are several things to be cautious about. First, be mindful of the weather conditions, as sudden changes in weather can make the dock unsafe to use. Second, be aware of the water depth and any potential hazards, such as rocks or debris, that may be present in the water. Third, be cautious of the dock's stability and the possibility of it collapsing or shifting due to external factors or human interference. Lastly, be aware of any local regulations or guidelines for dock usage, as these may include restrictions on certain activities or requirements for safety equipment. By being cautious and following any applicable rules, you can ensure a safe and enjoyable experience at this location.",
             }
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
@@ -352,7 +347,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched(self):
         # Let's make sure we test the preprocessing to replace what is used
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model_id = "llava-hf/llava-1.5-7b-hf"
 
         model = LlavaForConditionalGeneration.from_pretrained(
@@ -375,26 +369,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_decoded_texts = Expectations(
             {
-                ("xpu", 3): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
-                    "with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, "
-                    "you",
-                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
-                    "is located on",
-                ],
-                ("cuda", None): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
-                    "with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, "
-                    "you",
-                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
-                    "is located on",
-                ],
-                ("rocm", (9, 5)): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
-                    "with me? ASSISTANT: When visiting this serene location, which features a wooden pier overlooking a "
-                    "lake, you should",
-                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
-                    "is located on",
+                (None, None): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT: When visiting this place, which appears to be a dock or pier extending out into the water,",
+                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat is located on",
                 ],
             }
         )
@@ -406,7 +383,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         # Let's make sure we test the preprocessing to replace what is used
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = LlavaForConditionalGeneration.from_pretrained(
             "llava-hf/bakLlava-v1-hf",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
@@ -431,22 +407,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                ("xpu", 3): [
-                    'USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring along',
-                    'USER:  \nWhat is this?\nASSISTANT: Cats',
-                ],
-                ("cuda", 7): [
-                    'USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring along',
-                    'USER:  \nWhat is this?\nASSISTANT: Cats',
-                ],
-                ("cuda", 8): [
-                    'USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring along',
-                    'USER:  \nWhat is this?\nASSISTANT: Cats',
-                ],
-                ("rocm", (9, 5)): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this dock on a lake, there are several things to be cautious about and items to",
-                    "USER:  \nWhat is this?\nASSISTANT: This is a picture of two cats lying on a couch.",
-                ],
+                (None, None): ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this dock on a mountain lake, there are several things to be cautious about and items', 'USER:  \nWhat is this?\nASSISTANT: Cats'],
             }
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
@@ -459,7 +420,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched_regression(self):
         # Let's make sure we test the preprocessing to replace what is used
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model_id = "llava-hf/llava-1.5-7b-hf"
 
         # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
@@ -487,26 +447,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_decoded_texts = Expectations(
             {
-                ("xpu", 3): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
-                    "with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a "
-                    "body of water",
-                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat "
-                    "sleeping on a bed.",
-                ],
-                ("cuda", None): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
-                    "with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a "
-                    "body of water",
-                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat "
-                    "sleeping on a bed.",
-                ],
-                ("rocm", (9, 5)): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
-                    "with me?\nASSISTANT: When visiting this place, which is a pier or dock overlooking a lake, you should "
-                    "be",
-                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat "
-                    "sleeping on a bed.",
+                (None, None): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending out into a large body",
+                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.",
                 ],
             }
         )

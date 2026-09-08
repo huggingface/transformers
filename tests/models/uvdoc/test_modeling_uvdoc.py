@@ -325,11 +325,7 @@ class UVDocModelIntegrationTest(unittest.TestCase):
 
         expected_shape_logits = torch.Size((bs, 2, 45, 31))
         expected_logits = torch.tensor(
-            [
-                [-0.7635, -0.7251, -0.6819],
-                [-0.7643, -0.7250, -0.6814],
-                [-0.7647, -0.7252, -0.6816],
-            ],
+            [[-0.8466, -0.7975, -0.7427], [-0.8476, -0.798, -0.7427], [-0.8476, -0.7981, -0.743]],
             device=torch_device,
         )
 

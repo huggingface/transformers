@@ -521,11 +521,10 @@ class Qwen3VLIntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
 
     def test_small_model_integration_test(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = Qwen3VLForConditionalGeneration.from_pretrained("Qwen/Qwen3-VL-4B-Instruct", device_map="auto")
         expected_texts = Expectations(
             {
-                ("cuda", None): "user\nWhat kind of dog is this?\nassistant\nBased on the image, this appears to be a **Labrador Retriever**.\n\nHere’s why:\n\n- **Build and Size**: The dog has a large, muscular, and sturdy build, which is characteristic of Labradors.\n- **",
+                (None, None): 'user\nWhat kind of dog is this?\nassistant\nThis is a **Yellow Labrador Retriever**.\n\nKey identifying features:\n- **Color**: Golden-yellow coat, which is the classic color for a Yellow Labrador.\n- **Build**: Stocky, muscular, and friendly-looking — typical of the breed',
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()

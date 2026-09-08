@@ -596,7 +596,7 @@ class PPDocLayoutV2ModelIntegrationTest(unittest.TestCase):
 
         expected_shape_logits = torch.Size((1, 300, self.model.config.num_labels))
         expected_logits = torch.tensor(
-            [[-3.6572, -4.4185, -4.3930], [-3.7213, -4.5011, -4.6771], [-3.8721, -4.4524, -4.4162]]
+            [[-4.6888, -4.0497, -4.5854], [-4.9177, -3.628, -4.9805], [-4.5637, -3.6381, -4.6998]]
         ).to(torch_device)
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=2e-2, atol=2e-2)

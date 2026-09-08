@@ -348,7 +348,6 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
     @require_torch_large_accelerator
     def test_multi_image_vision_text_generation(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = AutoModelForCausalLM.from_pretrained(
             self.checkpoint_path, revision=self.revision, dtype=torch.float16, device_map=torch_device
         )
@@ -370,7 +369,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         output = output[:, inputs["input_ids"].shape[1] :]
         response = self.processor.batch_decode(output, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
-        EXPECTED_RESPONSE = "The presentation provides an overview of Microsoft Azure, a cloud computing platform by Microsoft, and its various services"
+        EXPECTED_RESPONSE = "This presentation introduces the concept of cloud computing, focusing on Microsoft Azure, a leading cloud platform. It"
 
         self.assertEqual(response, EXPECTED_RESPONSE)
 

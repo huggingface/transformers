@@ -514,7 +514,6 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @unittest.skip("multi-gpu tests are disabled for now")
     def test_integration_test(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = Idefics3ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/Idefics3-8B-Llama3",
             dtype=torch.bfloat16,
@@ -538,7 +537,6 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @unittest.skip("multi-gpu tests are disabled for now")
     def test_integration_test_4bit(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = Idefics3ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/Idefics3-8B-Llama3",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),

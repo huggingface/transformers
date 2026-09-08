@@ -529,7 +529,6 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     def test_integration_test(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = SmolVLMForConditionalGeneration.from_pretrained(
             "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
             dtype=torch.bfloat16,
@@ -545,12 +544,11 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=9)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "\n\n\n\nIn this image, we see a view of the Statue of Liberty and the"
+        expected_generated_text = "\n\n\n\nIn this image, we see the Statue of Liberty, a green statue,"
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     @slow
     def test_integration_test_video(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = SmolVLMForConditionalGeneration.from_pretrained(
             "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
             dtype=torch.bfloat16,
@@ -571,11 +569,7 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_generated_text = Expectations(
             {
-                (None, None): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video depicts a large language model architecture, specifically a language model with a "quick brown" feature',
-                ("cuda", (8, 0)): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video showcases a large language model architecture, specifically a "Quick Brown" model, which is designed',
-                ("cuda", (8, 6)): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video depicts a large language model architecture, specifically a language model with a "quick brown" feature',
-                ("rocm", (9, 4)): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video depicts a large language model architecture, specifically a language model with a "quick brown" feature',
-                ("rocm", None): 'User: You are provided the following series of nine frames from a 0:00:09 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\nFrame from 00:04:\nFrame from 00:05:\nFrame from 00:06:\nFrame from 00:08:\nFrame from 00:09:\n\nDescribe this video in detail\nAssistant: The video showcases a large language model architecture, specifically a "Quick Brown" model, which is designed',
+                (None, None): 'User: You are provided the following series of four frames from a 0:00:04 [H:MM:SS] video.\n\nFrame from 00:00:\nFrame from 00:01:\nFrame from 00:02:\nFrame from 00:03:\n\nDescribe this video in detail\nAssistant: The video begins with a blue sky and a yellow sun in the upper left corner, suggesting a day',
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(generated_texts[0], expected_generated_text)

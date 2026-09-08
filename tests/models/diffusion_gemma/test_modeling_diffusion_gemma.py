@@ -1059,7 +1059,6 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # fmt: off
         # print(model_out.logits[:, :10, :12])
         # Printed after running `torch.set_printoptions(precision=8, threshold=200, linewidth=100)`
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         expected_logits = Expectations(
             {
                 ("cuda", None): [
@@ -1220,7 +1219,6 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # fmt: off
         # print(generated_tokens)
         # Printed after running `torch.set_printoptions(threshold=10000, linewidth=100)`
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         expected_sequences = Expectations(
             {
                 ("cuda", None): [
@@ -1330,7 +1328,6 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # fmt: off
         # print(generated_tokens)
         # Printed after running `torch.set_printoptions(threshold=10000, linewidth=100)`
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         expected_sequences = Expectations(
             {
                 ("cuda", None): [
@@ -1525,7 +1522,6 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
         # fmt: off
         # print(model_out.logits[:, :10, :12])
         # Printed after running `torch.set_printoptions(precision=8, threshold=200, linewidth=100)`
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         expected_logits = Expectations(
             {
                 ("cuda", None): [[

@@ -323,7 +323,6 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_model_pt_chat_template(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
         image_ny = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
         image_chicago = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/skyline_chicago.jpg"
@@ -354,9 +353,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         outputs = pipe(text=messages, return_full_text=True, max_new_tokens=10)
         EXPECTED_CONTENT = Expectations(
             {
-                ("rocm", (9, 4)): "The first image shows a statue of the Statue of",
-                ("cuda", 8): "The first image shows a statue of Liberty in the",
-                ("xpu", 3): "The first image shows a statue of Liberty in the",
+                (None, None): "The first image shows a statue of the Statue of",
             }
         ).get_expectation()
 
@@ -458,14 +455,11 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                         {
                             "role": "assistant",
                             "content": [
-                                {
-                                    "type": "text",
-                                    "text": "There is a dog and a person in the image. The dog is sitting",
-                                }
+                                {"type": "text", "text": "There is a dog and a cat in the image. The dog is located"}
                             ],
                         },
                     ],
-                }
+                },
             ],
         )
 
@@ -502,8 +496,8 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                             ],
                         }
                     ],
-                    "generated_text": "In the image, a woman is sitting on the",
-                }
+                    "generated_text": "The image presents a vibrant and dynamic scene. Domin",
+                },
             ],
         )
 
@@ -526,7 +520,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
             }
         ]
         outputs = pipe(text=messages, return_full_text=False, max_new_tokens=10)[0]["generated_text"]
-        self.assertEqual(outputs, "A statue of liberty in the foreground of a city")
+        self.assertEqual(outputs, "A statue of liberty in the foreground next to a")
 
     @slow
     @require_torch

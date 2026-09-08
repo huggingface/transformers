@@ -763,7 +763,6 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         self.assertListEqual(results["text_labels"], expected_text_labels)
 
     def test_inference_object_detection_head_batched(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         torch_device = "cpu"
         model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-swin-tiny-hf").to(torch_device)
 
@@ -783,7 +782,7 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         self.assertEqual(outputs.decoder_class_logits.shape, expected_shape_class_logits)
 
         expected_class_logits = torch.tensor(
-            [[[0.9427, -2.5958, -7.7601]], [[-2.3408, -9.3516, -9.3516]], [[1.0740, -2.3315, -1.1885]]]
+            [[[0.9427, -2.5958, -7.7601]], [[-2.3408, -9.3516, -9.3516]], [[1.292, -2.2389, -1.371]]]
         ).to(torch_device)
 
         expected_coord_logits = torch.tensor(

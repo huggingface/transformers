@@ -806,18 +806,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                ("cuda", 8): [
-                    "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information provided:\n\nThe sound you hear is the distinct, high-pitched",
-                    "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information provided:\n\nThe sound you hear is the distinct, high-pitched",
-                ],
-                ("rocm", (9, 4)): [
-                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
-                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
-                ],
-                ("xpu", 5): [
-                    "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n",
-                    "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n",
-                ],
+                (None, None): ["user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n", "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n"],
             }
         ).get_expectation()  # fmt: skip
 
@@ -826,7 +815,6 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_multiturn(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = self.get_model()
 
         messages = [
@@ -862,7 +850,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
             **inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False, thinker_max_new_tokens=20
         )
 
-        EXPECTED_DECODED_TEXT = "user\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.\nuser\nHow about this one?\nassistant\nThe sound is a person coughing."
+        EXPECTED_DECODED_TEXT = "user\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.\nuser\nHow about this one?\nassistant\nThe sound is a heartbeat."
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -871,7 +859,6 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_w_audio(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = self.get_model()
         audio_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/voice_sample.wav"
 
@@ -907,8 +894,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                ("cuda", 8): "system\nYou are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.\nuser\n\nassistant\nYes, I can analyze audio inputs to understand spoken content, and I can also process and respond to",
-                ("xpu", 5): "system\nYou are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.\nuser\n\nassistant\nYes, I can analyze audio inputs to understand spoken content, and I can also make educated guesses about",
+                (None, None): 'system\nYou are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.\nuser\n\nassistant\nHello, I am Qwen-Omni, a multimodal large-scale language model developed by Alibaba',
             }
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()

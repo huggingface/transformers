@@ -278,11 +278,7 @@ class PPOCRV5ServerDetModelIntegrationTest(unittest.TestCase):
         expected_shape_logits = torch.Size((bs, c // 3, h, w))
 
         expected_logits = torch.tensor(
-            [
-                [0.0004, 0.0003, 0.0002],
-                [0.0003, 0.0002, 0.0002],
-                [0.0006, 0.0003, 0.0003],
-            ],
+            [[0.0008, 0.0007, 0.0004], [0.0007, 0.0005, 0.0005], [0.0013, 0.0007, 0.0005]],
             device=torch_device,
         )
 

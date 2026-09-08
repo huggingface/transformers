@@ -201,7 +201,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays', '[INST]  \nWhat is shown in this image? [/INST] The image shows two cats lying on a pink surface, which appears to be a couch or a cush']  # fmt: skip
+        EXPECTED_DECODED_TEXT = ['[INST]  \nWhat is shown in this image? [/INST] The image shows a stylized graphic with a hexagonal shape at its center, outlined in yellow', '[INST]  \nWhat is shown in this image? [/INST] The image shows two cats lying on a pink surface, which appears to be a couch or a cush']  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -226,7 +226,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=40)
-        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this   image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays values for multiple quantitative variables represented on axes starting from the same point. This particular radar chart'  # fmt: skip
+        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this   image? [/INST] The image shows a stylized graphic with a hexagonal shape at its center, outlined in yellow. The hexagon is set against a dark background with a grid-like pattern. The overall design'  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -323,7 +323,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays values for multiple quantitative variables represented on axes'  # fmt: skip
+        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image shows a stylized graphic with a hexagonal shape at its center, outlined in yellow. The hexagon is set against a dark background'  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -344,7 +344,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = "<|user|>\n\nWhat is shown in this image?\n<|assistant|>\nThe image displays a radar chart comparing the performance of various machine learning models."  # fmt: skip
+        EXPECTED_DECODED_TEXT = '<|user|>\n\nWhat is shown in this image?\n<|assistant|>\nA pentagon'  # fmt: skip
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,

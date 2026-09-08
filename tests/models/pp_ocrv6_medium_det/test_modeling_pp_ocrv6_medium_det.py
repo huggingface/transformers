@@ -259,6 +259,7 @@ class PPOCRV6MediumDetModelIntegrationTest(unittest.TestCase):
         self.image = load_image(img_url)
 
     def test_inference_object_detection_head(self):
+        # TODO(synthetic-assets): boxes/scores follow the 5 -> 4 detection-count change.
         inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)
         bs, c, h, w = inputs["pixel_values"].shape
 
@@ -287,7 +288,7 @@ class PPOCRV6MediumDetModelIntegrationTest(unittest.TestCase):
 
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape_logits)
         torch.testing.assert_close(outputs.last_hidden_state[0, 0, :3, :3], expected_logits, rtol=2e-4, atol=2e-4)
-        expected_shape_boxes = torch.Size((5, 4, 2))
+        expected_shape_boxes = torch.Size((4, 4, 2))
         expected_boxes = torch.tensor(
             [
                 [[76, 551], [397, 541], [398, 575], [78, 586]],

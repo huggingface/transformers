@@ -218,7 +218,6 @@ def prepare_img():
 class MgpstrModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model_name = "alibaba-damo/mgp-str-base"
         model = MgpstrForSceneTextRecognition.from_pretrained(model_name).to(torch_device)
         processor = MgpstrProcessor.from_pretrained(model_name)
@@ -239,7 +238,7 @@ class MgpstrModelIntegrationTest(unittest.TestCase):
         self.assertEqual(out_strs["generated_text"][0], expected_text)
 
         expected_slice = torch.tensor(
-            [[[-39.5397, -44.4024, -36.1844], [-61.4709, -63.8639, -58.3454], [-74.0225, -68.5494, -71.2164]]],
+            [[[-61.4632, -59.8325, -59.796], [-55.6928, -56.5443, -56.4869], [-58.8731, -59.3695, -58.9453]]],
             device=torch_device,
         )
 

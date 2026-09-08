@@ -123,7 +123,6 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
     @require_detectron2
     @require_pytesseract
     def test_small_model_pt(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         dqa_pipeline = pipeline(
             "document-question-answering", model="hf-internal-testing/tiny-random-layoutlmv2-for-dqa-test"
         )
@@ -158,7 +157,6 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
     @require_detectron2
     @require_pytesseract
     def test_small_model_pt_bf16(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         dqa_pipeline = pipeline(
             "document-question-answering",
             model="hf-internal-testing/tiny-random-layoutlmv2-for-dqa-test",
@@ -266,8 +264,8 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9974, "answer": "1110212019", "start": 23, "end": 23},
-                {"score": 0.9948, "answer": "us-001", "start": 16, "end": 16},
+                {"score": 0.9953, "answer": "SYN-2026-001", "start": 7, "end": 7},
+                {"score": 0.9736, "answer": "SYN-2026-001", "start": 7, "end": 7},
             ],
         )
 
@@ -315,8 +313,8 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         self.assertEqual(
             nested_simplify(outputs, decimals=3),
             [
-                {"score": 0.425, "answer": "us-001", "start": 16, "end": 16},
-                {"score": 0.082, "answer": "1110212019", "start": 23, "end": 23},
+                {"score": 1.0, "answer": "SYN-2026-001", "start": 7, "end": 7},
+                {"score": 0.0, "answer": "SYN-2026-001", "start": 7, "end": 7},
             ],
         )
 
@@ -377,8 +375,8 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9999, "answer": "us-001", "start": 16, "end": 16},
-                {"score": 0.9998, "answer": "us-001", "start": 16, "end": 16},
+                {"score": 0.9999, "answer": "SYN-2026-001", "start": 7, "end": 7},
+                {"score": 0.0, "answer": "SYN-2026-001", "start": 7, "end": 7},
             ],
         )
 
@@ -421,4 +419,9 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         image = INVOICE_URL
         question = "What is the invoice number?"
         outputs = dqa_pipeline(image=image, question=question, top_k=2)
-        self.assertEqual(nested_simplify(outputs, decimals=4), [{"answer": "us-001"}])
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {"answer": "syn-2026-001"},
+            ],
+        )

@@ -47,7 +47,6 @@ class PPChart2TableIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def test_small_model_integration_test_pp_chart2table(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         inputs = self.processor.apply_chat_template(
             self.conversation,
             tokenize=True,
@@ -63,11 +62,10 @@ class PPChart2TableIntegrationTest(unittest.TestCase):
             generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
         )
 
-        expected_output = ["年份 | 单家五星级旅游饭店年平均营收 (百万元) | 单家五星级旅游饭店年平均利润 (百万元)\n"]
+        expected_output = ["年份 | 火锅店经营情况\n2018 | 95\n2019 | 100\n20"]
         self.assertEqual(decoded_output, expected_output)
 
     def test_small_model_integration_test_pp_chart2table_batched(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         inputs = self.processor.apply_chat_template(
             [self.conversation, self.conversation],
             tokenize=True,
@@ -83,5 +81,5 @@ class PPChart2TableIntegrationTest(unittest.TestCase):
             generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
         )
 
-        expected_output = ["年份 | 单家", "年份 | 单家"]
+        expected_output = ["年份 | 火", "年份 | 火"]
         self.assertEqual(decoded_output, expected_output)

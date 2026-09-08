@@ -257,7 +257,6 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_deterministic_for_xpu
     def test_small_model_integration(self):
         # Let's make sure we test the preprocessing to replace what is used
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = Cosmos3OmniForConditionalGeneration.from_pretrained(
             "nvidia/Cosmos3-Nano",
             dtype="bfloat16",
@@ -301,14 +300,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_decoded_texts = Expectations(
             {
-                ("cuda", None): [
-                    "user\nWhat kind of dog is this?\nassistant\nThe dog in the image appears to be a Labrador Retriever. It has a light brown or golden coat, which is characteristic of this breed. Labrador Retrievers are known for their friendly demeanor and",
-                    "user\nWhat do you see in this image?\nassistant\nIn this image, I see two cats sleeping on a pink blanket. The cats appear to be of the same breed, with brown and black striped fur. They are lying on their sides, facing each",
-                ],
-                ("xpu", None): [
-                    'user\nWhat kind of dog is this?\nassistant\nThe dog in the image appears to be a Labrador Retriever. It has a light brown or golden color, which is characteristic of this breed. Labrador Retrievers are known for their friendly demeanor and',
-                    'user\nWhat do you see in this image?\nassistant\nIn this image, I see two cats sleeping on a pink blanket. The cats appear to be of the same breed, with brown and black striped fur. They are lying on their sides, facing each'
-                ],
+                (None, None): ["user\nWhat kind of dog is this?\nassistant\nThe dog in the image is a Labrador Retriever. It's a light brown Labrador with a black collar, sitting on the beach next to its owner. The dog appears to be well-groom", 'user\nWhat do you see in this image?\nassistant\nIn this image, I see two cats sleeping on a pink blanket. The cats appear to be of the same breed, with brown and black striped fur. They are lying on their sides, facing each'],
             }
         )  # fmt: skip
 

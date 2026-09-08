@@ -175,7 +175,6 @@ class CHMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 @slow
 class CHMv2IntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         processor = CHMv2ImageProcessor.from_pretrained("facebook/dinov3-vitl16-chmv2-dpt-head", revision="refs/pr/1")
         model = CHMv2ForDepthEstimation.from_pretrained(
             "facebook/dinov3-vitl16-chmv2-dpt-head", revision="refs/pr/1"
@@ -192,9 +191,9 @@ class CHMv2IntegrationTest(unittest.TestCase):
         expected_shape = torch.Size([1, 736, 736])
         self.assertEqual(outputs.predicted_depth.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [[0.1028, 0.0562, 0.0575], [0.4136, 0.5476, 0.4333], [1.8045, 2.3640, 1.6928]]
-        ).to(torch_device)
+        expected_slice = torch.tensor([[0.0104, 0.01, 0.0101], [0.0104, 0.0098, 0.0098], [0.0106, 0.0099, 0.0098]]).to(
+            torch_device
+        )
         print(outputs.predicted_depth[0, :3, :3])
         print(expected_slice)
         torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, atol=5e-3, rtol=5e-3)

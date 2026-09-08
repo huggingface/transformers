@@ -594,7 +594,6 @@ class Sam3TrackerModelIntegrationTest(unittest.TestCase):
         )
 
     def test_inference_mask_generation_batched_images_multi_points(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         raw_image1 = prepare_image()
         raw_image2 = prepare_dog_img()
         input_points = [[[[500, 375]]], [[[770, 200], [730, 120]]]]
@@ -636,7 +635,7 @@ class Sam3TrackerModelIntegrationTest(unittest.TestCase):
 
         torch.testing.assert_close(
             scores2,
-            torch.tensor([0.7675, 0.7505, 0.5348]).to(torch_device),
+            torch.tensor([0.9252, 0.6841, 0.0445]).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )

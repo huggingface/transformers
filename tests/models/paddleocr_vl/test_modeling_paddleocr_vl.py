@@ -369,7 +369,6 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
 
     def test_small_model_integration_test(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = (
             PaddleOCRVLForConditionalGeneration.from_pretrained(
                 "PaddlePaddle/PaddleOCR-VL",
@@ -420,7 +419,6 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
         )
 
     def test_small_model_integration_test_batch(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = (
             PaddleOCRVLForConditionalGeneration.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16")
             .to(torch_device)
@@ -444,7 +442,10 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
             generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
         )
 
-        EXPECTED_DECODED_TEXT = ["生甘草", "生甘草"]
+        EXPECTED_DECODED_TEXT = [
+            "绿洲仕格维花园公寓\n楼栋 A 座\n访客登记\n2026-09-07\n___",
+            "绿洲仕格维花园公寓\n楼栋 A 座\n访客登记\n2026-09-07\n___",
+        ]
 
         self.assertEqual(
             result,
@@ -455,7 +456,6 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_flashatt2(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = (
             PaddleOCRVLForConditionalGeneration.from_pretrained(
                 "PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", attn_implementation="flash_attention_2"
@@ -507,7 +507,6 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = (
             PaddleOCRVLForConditionalGeneration.from_pretrained(
                 "PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", attn_implementation="flash_attention_2"

@@ -163,7 +163,6 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
         """
         reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/3e0551708631784aeb684e0e838299f3#file-reproducer-py
         """
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         path = self.fixtures_path / "expected_results_batched.json"
         with open(path, "r", encoding="utf-8") as f:
             raw = json.load(f)

@@ -236,7 +236,6 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let's make sure we test the preprocessing to replace what is used
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = AriaForConditionalGeneration.from_pretrained(
             "rhymes-ai/Aria",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True, llm_int8_skip_modules=["multihead_attn"]),
@@ -274,7 +273,6 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_llama_single(self):
         # Let's make sure we test the preprocessing to replace what is used
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model_id = "rhymes-ai/Aria"
 
         model = AriaForConditionalGeneration.from_pretrained(
@@ -306,7 +304,6 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched(self):
         # Let's make sure we test the preprocessing to replace what is used
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model_id = "rhymes-ai/Aria"
 
         model = AriaForConditionalGeneration.from_pretrained(
@@ -348,7 +345,6 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         # Let's make sure we test the preprocessing to replace what is used
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = AriaForConditionalGeneration.from_pretrained(
             "rhymes-ai/Aria",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True, llm_int8_skip_modules=["multihead_attn"]),
@@ -385,7 +381,6 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched_regression(self):
         # Let's make sure we test the preprocessing to replace what is used
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model_id = "rhymes-ai/Aria"
 
         # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)

@@ -822,7 +822,6 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         )
 
     def test_inference_mask_generation_batched_images_multi_points(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         raw_image1 = prepare_image()
         raw_image2 = prepare_dog_img()
         input_points = [[[[500, 375]]], [[[770, 200], [730, 120]]]]
@@ -856,7 +855,7 @@ class Sam2ModelIntegrationTest(unittest.TestCase):
         )
 
         torch.testing.assert_close(
-            scores2, torch.tensor([0.9504, 0.8117, 0.7426]).to(torch_device), atol=1e-4, rtol=1e-4
+            scores2, torch.tensor([0.9469, 0.7221, 0.194]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
             masks_logits2,

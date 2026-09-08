@@ -426,7 +426,6 @@ class JanusIntegrationTest(unittest.TestCase):
     @slow
     @require_deterministic_for_xpu
     def test_model_text_generation(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -450,7 +449,6 @@ class JanusIntegrationTest(unittest.TestCase):
     @slow
     @require_deterministic_for_xpu
     def test_model_text_generation_batched(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
 
@@ -477,17 +475,9 @@ class JanusIntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXT_COMPLETION = Expectations(
             {
-                ("xpu", None): [
-                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is part of the zodiac and the constellation",  # fmt: skip
-                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a constellation that is shaped like a stylized figure with a long tail. This",  # fmt: skip
-                ],
-                ("cuda", 8): [
-                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is part of the zodiac and the constellation",  # fmt: skip
-                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a constellation of a winged figure. This constellation is often associated with the constellation Peg",  # fmt: skip
-                ],
                 (None, None): [
-                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is part of the zodiac and is one",  # fmt: skip
-                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a constellation of a winged figure. This constellation is the **Luna**, also",  # fmt: skip
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThis image shows a night sky filled with stars, and there are silhouettes of trees at",
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a night sky filled with stars. There are several bright stars visible, and a",
                 ],
             }
         )
@@ -499,7 +489,6 @@ class JanusIntegrationTest(unittest.TestCase):
     @slow
     @require_deterministic_for_xpu
     def test_model_text_generation_with_multi_image(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
 

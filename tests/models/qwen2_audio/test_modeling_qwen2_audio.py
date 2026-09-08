@@ -138,7 +138,6 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = Qwen2AudioForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2-Audio-7B-Instruct", device_map=torch_device, dtype=torch.float16
         )
@@ -207,7 +206,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXT = [
             "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat's that sound?\nassistant\nIt is the sound of glass shattering.\nuser\nAudio 2: \nWhat can you hear?\nassistant\ncough and throat clearing.",
-            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat does the person say?\nassistant\nThe original content of this audio is: 'Mister Quiller is the apostle of the middle classes and we are glad to welcome his gospel.'",
+            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat does the person say?\nassistant\nThe person says, 'Kids are talking by the door'.",
         ]
 
         self.assertEqual(

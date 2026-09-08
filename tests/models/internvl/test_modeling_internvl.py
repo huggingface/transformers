@@ -350,7 +350,6 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
 
     @require_deterministic_for_xpu
     def test_qwen2_small_model_integration_batched_generate(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
             self.small_model_checkpoint, device_map=torch_device, dtype=torch.float16
@@ -375,7 +374,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
 
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
-        expected_output = "user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace."  # fmt: skip
+        expected_output = "user\n\nWrite a haiku for this image\nassistant\nLakeside, serene,  \nWooden pier, calm waters,  \nNature's peace."  # fmt: skip
 
         self.assertEqual(
             decoded_output,
@@ -400,7 +399,6 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         )
 
     def test_qwen2_small_model_integration_batched_generate_multi_image(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
             self.small_model_checkpoint, device_map=torch_device, dtype=torch.float16
@@ -439,9 +437,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
         expected_outputs = Expectations(
             {
-                ("xpu", 3): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s peace.',
-                ("cuda", 8): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s peace.',
-                ("rocm", (9, 4)): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s embrace.',
+                (None, None): "user\n\nWrite a haiku for this image\nassistant\nLakeside, serene,  \nWooden pier, calm waters,  \nNature's peace.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -520,7 +516,6 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
     @require_av
     @require_deterministic_for_xpu
     def test_qwen2_small_model_integration_interleaved_images_videos(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
             self.small_model_checkpoint, dtype=torch.float16, device_map=torch_device
@@ -591,9 +586,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image:**\n   - The Statue of Liberty is prominently featured on an",
-                ("cuda", 8): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image:**\n   - The Statue of Liberty is prominently featured on an',
-                ("rocm", (9, 4)): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image:**\n   - This image features the Statue of Liberty on Liberty',
+                (None, None): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe two images depict different scenes:\n\n1. **Left Image**: This shows the Statue of Liberty in New York City. The',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -762,7 +755,6 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(decoded_output, expected_output)
 
     def test_llama_small_model_integration_batched_generate(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
             self.small_model_checkpoint, device_map=torch_device, dtype=torch.float16
@@ -789,8 +781,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.",
-                ("cuda", 8): 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.',
+                (None, None): "user\n\nWrite a haiku for this image\nassistant\nWooden path leads to water,\nMajestic mountains in the distance,\nNature's peaceful grace.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -811,7 +802,6 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         )
 
     def test_llama_small_model_integration_batched_generate_multi_image(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
             self.small_model_checkpoint, device_map=torch_device, dtype=torch.float16
@@ -848,7 +838,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
-        expected_output = "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors."
+        expected_output = "user\n\nWrite a haiku for this image\nassistant\nWooden path leads to water,\nMajestic mountains in the distance,\nNature's peaceful grace."
 
         self.assertEqual(
             decoded_output,
@@ -909,7 +899,6 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
 
     @require_av
     def test_llama_small_model_integration_interleaved_images_videos(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
             self.small_model_checkpoint, dtype=torch.float16, device_map=torch_device
@@ -980,10 +969,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. Upon closer inspection, the differences between the two images are:\n\n1. **",
-                ("cuda", 8): 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. Upon closer inspection, the differences between the two images are:\n\n1. **',
-                ("rocm", (9, 4)): 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After re-examining the images, I can see that there are no',
-                ("rocm", (9, 5)): 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After re-examining the images, I can see that there are no',
+                (None, None): 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After closely examining the images again, I can see that there are several differences',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
