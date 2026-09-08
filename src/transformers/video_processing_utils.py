@@ -20,20 +20,13 @@ from functools import partial
 from typing import Any
 
 import numpy as np
-import torch
-import torchvision.transforms.v2.functional as tvF
 from huggingface_hub import is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 
 from .dynamic_module_utils import custom_object_save
 from .image_processing_backends import TorchvisionBackend
 from .image_processing_utils import BatchFeature
-from .image_utils import (
-    ChannelDimension,
-    PILImageResampling,
-    SizeDict,
-    validate_kwargs,
-)
+from .image_utils import ChannelDimension, SizeDict, validate_kwargs
 from .processing_utils import Unpack, VideosKwargs
 from .utils import (
     IMAGE_PROCESSOR_NAME,
@@ -42,7 +35,10 @@ from .utils import (
     TensorType,
     auto_docstring,
     copy_func,
+    is_torch_available,
     is_torchcodec_available,
+    is_torchvision_available,
+    is_vision_available,
     logging,
     safe_load_json_file,
 )
@@ -64,6 +60,15 @@ from .video_utils import (
     reorder_videos,
 )
 
+
+if is_vision_available():
+    from .image_utils import PILImageResampling
+
+if is_torch_available():
+    import torch
+
+if is_torchvision_available():
+    import torchvision.transforms.v2.functional as tvF
 
 logger = logging.get_logger(__name__)
 
