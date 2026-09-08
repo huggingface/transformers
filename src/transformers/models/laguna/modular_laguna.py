@@ -150,11 +150,6 @@ class LagunaConfig(Qwen2MoeConfig):
         )
 
     def convert_rope_params_to_dict(self, **kwargs):
-        # config on the hub has nested rope dict AND also a `rope_type` key
-        # This will raise an error in further validation, and should be fixed on the hub
-        # Workaround until PR merged (poolside/Laguna-tiny-per-element/discussions/1)
-        if self.rope_parameters.get("rope_type") is not None:
-            del self.rope_parameters["rope_type"]
         return kwargs
 
     def validate_architecture(self):
