@@ -825,6 +825,15 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
         self.class_embed = nn.ModuleList(
             [nn.Linear(config.d_model, config.num_labels) for _ in range(config.decoder_layers)]
         )
+        self.order_head = nn.ModuleList(
+            [nn.Linear(config.d_model, config.d_model) for _ in range(config.decoder_layers)]
+        )
+        self.global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=True)
+        self.successor_order_head = nn.ModuleList(
+            [nn.Linear(config.d_model, config.d_model) for _ in range(config.decoder_layers)]
+        )
+        self.successor_global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=False)
+        self.s2r_fusion = PPDocLayoutV4S2RFusion(config) if config.use_s2r else None
 
     def forward(
         self,
@@ -835,11 +844,6 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
         spatial_shapes=None,
         spatial_shapes_list=None,
         level_start_index=None,
-        order_head=None,
-        global_pointer=None,
-        successor_order_head=None,
-        successor_global_pointer=None,
-        s2r_fusion=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
@@ -862,17 +866,6 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
             attention can index them without a device synchronization.
         level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
             Indexes for the start of each feature level. In range `[0, sequence_length]`.
-        order_head (`nn.ModuleList`, *optional*):
-            Per-layer projections feeding the relative order global pointer.
-        global_pointer (`PPDocLayoutV4GlobalPointer`, *optional*):
-            Antisymmetric pairwise scorer producing the relative reading order logits.
-        successor_order_head (`nn.ModuleList`, *optional*):
-            Per-layer projections feeding the successor global pointer.
-        successor_global_pointer (`PPDocLayoutV4GlobalPointer`, *optional*):
-            Pairwise scorer producing the direct successor (ROOR) logits.
-        s2r_fusion (`PPDocLayoutV4S2RFusion`, *optional*):
-            Fuses the successor logits into the relative order logits. When `None` the relative order logits are
-            returned unchanged.
         """
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
@@ -880,8 +873,6 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
         intermediate = ()
         intermediate_reference_points = ()
         logits = None
-        relative_order_logits = None
-        successor_order_logits = None
 
         reference_points = F.sigmoid(reference_points)
 
@@ -907,12 +898,11 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
             intermediate_reference_points += (reference_points,)
 
         logits = self.class_embed[-1](hidden_states)
-        if order_head is not None and global_pointer is not None:
-            valid_query = hidden_states[:, -self.num_queries :] if self.num_queries is not None else hidden_states
-            successor_order_logits = successor_global_pointer(successor_order_head[-1](valid_query))
-            relative_order_logits = global_pointer(order_head[-1](valid_query))
-            if s2r_fusion is not None:
-                relative_order_logits = s2r_fusion(relative_order_logits, successor_order_logits)
+        valid_query = hidden_states[:, -self.num_queries :] if self.num_queries is not None else hidden_states
+        successor_order_logits = self.successor_global_pointer(self.successor_order_head[-1](valid_query))
+        relative_order_logits = self.global_pointer(self.order_head[-1](valid_query))
+        if self.s2r_fusion is not None:
+            relative_order_logits = self.s2r_fusion(relative_order_logits, successor_order_logits)
 
         return PPDocLayoutV4DecoderOutput(
             last_hidden_state=hidden_states,
@@ -1003,15 +993,10 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
         self.decoder = PPDocLayoutV4Decoder(config)
         del self.decoder.class_embed
         del self.decoder.bbox_embed
-        self.decoder_order_head = nn.ModuleList(
-            [nn.Linear(config.d_model, config.d_model) for _ in range(config.decoder_layers)]
-        )
-        self.decoder_global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=True)
-        self.decoder_roor_order_head = nn.ModuleList(
-            [nn.Linear(config.d_model, config.d_model) for _ in range(config.decoder_layers)]
-        )
-        self.decoder_roor_global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=False)
-        self.s2r_fusion = PPDocLayoutV4S2RFusion(config) if config.use_s2r else None
+        # [`PPDocLayoutV3Model`] keeps its reading order heads at the model level and passes them into the decoder
+        # `forward`. PP-DocLayoutV4 instead owns them on the decoder, next to the other prediction heads.
+        del self.decoder_order_head
+        del self.decoder_global_pointer
 
         del self.decoder_norm
         del self.mask_enhanced
@@ -1152,11 +1137,6 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
             level_start_index=level_start_index,
-            order_head=self.decoder_order_head,
-            global_pointer=self.decoder_global_pointer,
-            successor_order_head=self.decoder_roor_order_head,
-            successor_global_pointer=self.decoder_roor_global_pointer,
-            s2r_fusion=self.s2r_fusion,
             **kwargs,
         )
 
