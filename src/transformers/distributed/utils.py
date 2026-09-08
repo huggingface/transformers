@@ -232,8 +232,7 @@ def prefetch_checkpoint_shards(checkpoint_files: list[str], meta_state_dict: dic
     prefetch_start = time.time()
     with ThreadPoolExecutor(max_workers=prefetch_threads) as pool:
         list(pool.map(functools.partial(_warm, readahead=readahead), jobs))
-    if _is_torch_distributed_initialized():
-        torch.distributed.barrier()
+    _distributed_barrier()
     logger.warning_once(f"Prefetched {described} in {time.time() - prefetch_start:.0f}s")
 
 
