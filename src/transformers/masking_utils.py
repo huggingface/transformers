@@ -1038,8 +1038,10 @@ def create_bidirectional_mask(
             Whether to allow returning `None` (no bias) when the mask is plain bidirectional with no padding. Set to
             `False` to always materialize the mask, e.g. when it is later concatenated with another mask. Defaults to
             `True`.
-        layer_idx (`int`, optional):
-            The cache layer to size the mask against. If omitted, a full-attention layer is selected from the cache.
+        layer_idx (`int`, *optional*):
+            The cache layer to size the mask against. By default, the first "full_attention" layer is used, which is
+            correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
+            where layers of the same type hold different lengths (e.g. per-depth MTP streams).
     """
     # If we have a hybrid cache structure, here we want to create the mask for the full layers
     if layer_idx is None:
@@ -1149,7 +1151,7 @@ def create_sliding_window_causal_mask(
             the same block will keep a bidirectional mask within the block, attending causally to the past. Index `-1`
             can be used for blocks that have to keep complete causality within itself.
         layer_idx (`int`, *optional*):
-            The cache layer to size the mask against. By default, the first "full_attention" layer is used, which is
+            The cache layer to size the mask against. By default, the first "sliding_attention" layer is used, which is
             correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
             where layers of the same type hold different lengths (e.g. per-depth MTP streams).
         allow_is_causal_skip (`bool`, optional):
@@ -1286,8 +1288,10 @@ def create_bidirectional_sliding_window_mask(
             Whether to allow returning `None` (no bias) when the mask is plain bidirectional with no padding. Set to
             `False` to always materialize the mask, e.g. when it is later concatenated with another mask. Defaults to
             `True`.
-        layer_idx (`int`, optional):
-            The cache layer to size the mask against. If omitted, a sliding-attention layer is selected from the cache.
+        layer_idx (`int`, *optional*):
+            The cache layer to size the mask against. By default, the first "sliding_attention" layer is used, which is
+            correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
+            where layers of the same type hold different lengths (e.g. per-depth MTP streams).
     """
     # If we have a hybrid cache structure, here we want to create the mask for the sliding layers
     if layer_idx is None:
@@ -1389,7 +1393,7 @@ def create_chunked_causal_mask(
             An optional mask function to combine with the chunked causal mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top of the chunked causal one, for example for image tokens handling.
         layer_idx (`int`, *optional*):
-            The cache layer to size the mask against. By default, the first "full_attention" layer is used, which is
+            The cache layer to size the mask against. By default, the first "chunked_attention" layer is used, which is
             correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
             where layers of the same type hold different lengths (e.g. per-depth MTP streams).
         allow_is_causal_skip (`bool`, optional):
