@@ -69,7 +69,7 @@ The rest of the model is handled as follows:
 - The parameters outside the experts are data-parallel across the whole group, so they are sharded with [FSDP2](./fsdp) across every rank (`fsdp` and `tp` together when both are set), and FSDP2 reduces their gradients.
 - The experts stay sharded across `tp`, and across `fsdp` too when `fsdp_size > 1`. With `fsdp_size=1` they are outside FSDP2, so `fsdp_mixed_precision` and `fsdp_cpu_offload` do not apply to them.
 - The [`Trainer`] gives each rank its own training batches and counts tokens across all of them. Evaluation is unchanged from plain expert parallelism: every `tp` rank sees the same batches.
-
+- Training needs a sized (map-style_ dataset, `dispatch_batches=False`, and `train_sampling_strategy="random"`. Iterable datasets and other sampling strategies are rejected.
 ## Combining with FSDP2
 
 Expert parallelism only shards the experts. Everything else (attention, embeddings, norms) and its optimizer state is replicated on every expert-parallel rank, which is what limits the model size you can train. Set `fsdp_size` together with `tp_size` to add [FSDP2](./fsdp) on a second mesh dimension.
