@@ -21,6 +21,23 @@ from click.testing import CliRunner
 import transformers.cli.transformers
 
 
+@pytest.fixture(autouse=True, scope="session")
+def set_cuda_expandable_segments():
+    """Enable expandable CUDA memory segments for all CLI tests.
+
+    Without this, loading multiple large models sequentially (e.g. gemma-4 in
+    TestMultimodalLM followed by TestToolCallGemma) causes memory fragmentation
+    that prevents new large allocations even when enough total GPU memory is free.
+    """
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.memory.set_allocator_settings("expandable_segments:True")
+
+
 @pytest.fixture
 def cli():
     app = transformers.cli.transformers.app
