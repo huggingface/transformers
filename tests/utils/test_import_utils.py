@@ -65,16 +65,16 @@ def test_lazy_module_error_includes_original_error():
     lazy_module = _LazyModule(
         "transformers.test_lazy_module",
         __file__,
-        {"broken_module": []},
+        {"broken_module": ["BrokenObject"]},
     )
 
     original_error = RuntimeError("simulated broken dependency")
 
     with patch.object(lazy_module, "_get_module", side_effect=original_error):
         try:
-            lazy_module.broken_module
+            lazy_module.BrokenObject
         except ModuleNotFoundError as error:
-            assert "Could not import module 'broken_module'" in str(error)
+            assert "Could not import module 'BrokenObject'" in str(error)
             assert "Original error: simulated broken dependency" in str(error)
         else:
             raise AssertionError("Expected ModuleNotFoundError")
