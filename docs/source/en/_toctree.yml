@@ -19,7 +19,7 @@
     - local: custom_models
       title: Customizing models
     - local: heterogeneous_configurations
-      title: Heterogeneous configurations
+      title: Per-layer configurations
     - local: how_to_hack_models
       title: Customizing model components
     - local: monkey_patching
