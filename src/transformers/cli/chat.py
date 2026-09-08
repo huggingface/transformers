@@ -608,12 +608,12 @@ def parse_generate_flags(generate_flags: list[str] | None) -> dict:
     if generate_flags is None or len(generate_flags) == 0:
         return {}
 
-    for flag in generate_flags:
-        if "=" not in flag:
-            raise typer.BadParameter(
-                f"Invalid flag format, missing `=` after `{flag}`. Please use the format "
-                "`arg_1=value_1 arg_2=value_2 ...`."
-            )
+    invalid_flags = [flag for flag in generate_flags if "=" not in flag]
+    if invalid_flags:
+        raise typer.BadParameter(
+            f"Invalid flag format, missing `=` after `{'`, `'.join(invalid_flags)}`. Please use the format "
+            "`arg_1=value_1 arg_2=value_2 ...`."
+        )
 
     # Assumption: `generate_flags` is a list of strings, each string being a `flag=value` pair, that can be parsed
     # into a json string if we:
