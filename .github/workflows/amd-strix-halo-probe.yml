@@ -26,11 +26,11 @@ jobs:
     name: Hello from the DevLab pool
     # `devlab-dispatch` is the opt-in token that reaches the AMD Ryzen pool. A
     # fresh ephemeral runner is built for this job alone and destroyed when it
-    # finishes, so nothing persists between runs. This matches the proven
-    # optimum-amd#180 label set exactly; a `strix-halo` narrowing label was
-    # tried first but left the job queued (the pool did not appear to advertise
-    # it), so the orchestrator picks whichever pool machine is free.
-    runs-on: [self-hosted, Linux, devlab-dispatch]
+    # finishes, so nothing persists between runs. `strix-halo` narrows which
+    # machine answers; the orchestrator picks whichever such machine is free.
+    # (Runners register into the `amd-devlab-dispatch` runner group on the pool
+    # side, which grants this repo and any workflow, so labels now gate cleanly.)
+    runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
