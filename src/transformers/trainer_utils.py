@@ -1243,7 +1243,7 @@ def align_special_tokens(model, processing_class):
 
     # 4 - Warn users about the changes
     if len(updated_tokens) > 0:
-        logger.warning_once(
+        logger.warning(
             "The tokenizer has new PAD/BOS/EOS tokens that differ from the model config and generation config. "
             "The model config and generation config were aligned accordingly, being updated with the tokenizer's "
             f"values. Updated tokens: {updated_tokens}."
