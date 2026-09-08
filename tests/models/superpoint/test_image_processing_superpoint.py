@@ -18,7 +18,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_torch_available():
@@ -27,7 +27,7 @@ if is_torch_available():
     from transformers.models.superpoint.modeling_superpoint import SuperPointKeypointDescriptionOutput
 
 
-class SuperPointImageProcessingTester:
+class SuperPointImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -57,20 +57,6 @@ class SuperPointImageProcessingTester:
             "size": self.size,
             "do_grayscale": self.do_grayscale,
         }
-
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
     def prepare_keypoint_detection_output(self, pixel_values):
         max_number_keypoints = 50

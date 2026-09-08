@@ -356,7 +356,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         # filter self.pad_token which is used as CTC-blank token
         processed_chars = list(filter(lambda char: char != self.pad_token, chars))
 
-        # also filter self.word_delimiter_token if not not
+        # also filter self.word_delimiter_token if not
         if filter_word_delimiter_token and self.word_delimiter_token is not None:
             processed_chars = list(filter(lambda token: token != self.word_delimiter_token, processed_chars))
 

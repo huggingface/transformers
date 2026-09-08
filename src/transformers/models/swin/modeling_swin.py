@@ -345,11 +345,7 @@ class SwinRelativePositionBias(nn.Module):
         )
         # Non-persistent: fully determined by window_size, no need to serialise.
         # Stored flat so forward avoids an extra .view() call.
-        self.register_buffer(
-            "relative_position_index",
-            self._create_relative_position_index().view(-1),
-            persistent=False,
-        )
+        self.relative_position_index = nn.Buffer(self._create_relative_position_index().view(-1), persistent=False)
 
     def _create_relative_position_index(self) -> torch.Tensor:
         coords_h = torch.arange(self.window_size[0])

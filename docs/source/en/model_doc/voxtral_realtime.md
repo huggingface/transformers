@@ -89,6 +89,7 @@ For real-time transcription, audio is split into chunks following:
 from threading import Thread
 
 import numpy as np
+import torch
 from datasets import load_dataset
 
 from transformers import (
@@ -100,7 +101,7 @@ from transformers import (
 
 model_id = "mistralai/Voxtral-Mini-4B-Realtime-2602"
 processor = VoxtralRealtimeProcessor.from_pretrained(model_id)
-model = VoxtralRealtimeForConditionalGeneration.from_pretrained(model_id, device_map="cuda:0")
+model = VoxtralRealtimeForConditionalGeneration.from_pretrained(model_id, device_map=torch.accelerator.current_accelerator())
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 audio = ds[0]["audio"]["array"]

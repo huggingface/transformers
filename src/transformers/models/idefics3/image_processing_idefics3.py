@@ -505,7 +505,9 @@ class Idefics3ImageProcessor(TorchvisionBackend):
         encoder_dict.pop("return_row_col_info", None)
         return encoder_dict
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict):
+    def get_number_of_image_patches(
+        self, height: int, width: int, images_kwargs: dict | None = None
+    ) -> tuple[int, int, int]:
         """
         A utility that returns number of image patches for a given image size.
 
@@ -514,11 +516,12 @@ class Idefics3ImageProcessor(TorchvisionBackend):
                 Height of the input image.
             width (`int`):
                 Width of the input image.
-            images_kwargs (`dict`)
+            images_kwargs (`dict`, *optional*)
                 Any kwargs to override defaults of the image processor.
         Returns:
-            `int`: Number of patches per image.
+            `tuple[int, int, int]`: Number of patches per image, and the number of rows and columns they form.
         """
+        images_kwargs = images_kwargs or {}
         do_image_splitting = images_kwargs.get("do_image_splitting", self.do_image_splitting)
         max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
         size = images_kwargs.get("size", self.size)

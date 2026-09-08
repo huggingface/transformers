@@ -16,8 +16,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING
-from ..parakeet.configuration_parakeet import ParakeetEncoderConfig
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="CohereLabs/cohere-transcribe-03-2026")
@@ -35,7 +34,7 @@ class CohereAsrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "cohere_asr"
-    sub_configs = {"encoder_config": ParakeetEncoderConfig}
+    sub_configs = {"encoder_config": AutoConfig}
 
     _default_encoder_config_kwargs = {
         "hidden_size": 1280,

@@ -24,6 +24,7 @@ import dataclasses
 import math
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -983,7 +984,7 @@ class TrainerInterruptedTrainingTest(TestCasePlus, TrainerIntegrationCommon):
                 super().__init__()
                 self.fc = nn.Linear(10, 10, bias=False)
                 # data_order logs the order of data points seen by the model
-                self.register_buffer("data_order", torch.empty(0, dtype=torch.long))
+                self.data_order = nn.Buffer(torch.empty(0, dtype=torch.long))
 
             def load_state_dict(self, state_dict, strict=True):
                 # Handle data_order buffer size mismatch during checkpoint loading
@@ -2049,6 +2050,67 @@ class TrainerBestModelTest(TestCasePlus, TrainerIntegrationCommon):
                 trainer.train()
                 self.check_saved_checkpoints(tmpdir, 5, total, is_pretrained=pretrained)
                 self.check_best_model_has_been_loaded(tmpdir, 5, total, trainer, "eval_loss", is_pretrained=pretrained)
+
+    def test_resume_from_checkpoint_with_stale_best_model_checkpoint(self):
+        def constant_metrics(_):
+            return {"accuracy": 0.5}
+
+        with (
+            tempfile.TemporaryDirectory() as tmp_dir_a,
+            tempfile.TemporaryDirectory() as tmp_dir_moved,
+            tempfile.TemporaryDirectory() as tmp_dir_b,
+        ):
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir_a,
+                learning_rate=0.1,
+                eval_strategy="steps",
+                eval_steps=2,
+                save_steps=2,
+                save_total_limit=1,
+                load_best_model_at_end=True,
+                metric_for_best_model="accuracy",
+                greater_is_better=True,
+                compute_metrics=constant_metrics,
+                max_steps=4,
+            )
+            trainer.train()
+
+            stale_best = trainer.state.best_model_checkpoint
+            self.assertIsNotNone(stale_best)
+            # With save_total_limit=1 only the best checkpoint survived the first run
+            checkpoints_a = [os.path.basename(str(p)) for p in Path(tmp_dir_a).glob(f"{PREFIX_CHECKPOINT_DIR}-*")]
+            self.assertEqual(checkpoints_a, [os.path.basename(stale_best)])
+
+            # Simulate the original run being deleted and its checkpoints moved elsewhere
+            moved_checkpoint = os.path.join(tmp_dir_moved, os.path.basename(stale_best))
+            shutil.move(stale_best, moved_checkpoint)
+
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir_b,
+                learning_rate=0.1,
+                eval_strategy="steps",
+                eval_steps=2,
+                save_steps=2,
+                save_total_limit=1,
+                load_best_model_at_end=True,
+                metric_for_best_model="accuracy",
+                greater_is_better=True,
+                compute_metrics=constant_metrics,
+                max_steps=6,
+            )
+            with CaptureLogger(logging.get_logger()) as cl:
+                output = trainer.train(resume_from_checkpoint=moved_checkpoint)
+
+            self.assertEqual(output.global_step, 6)
+            self.assertIn("does not exist", cl.out)
+            self.assertTrue(
+                trainer.state.best_model_checkpoint is None
+                or trainer.state.best_model_checkpoint.startswith(tmp_dir_b + os.sep)
+            )
+            checkpoints_b = sorted(
+                os.path.basename(str(p)) for p in Path(tmp_dir_b).glob(f"{PREFIX_CHECKPOINT_DIR}-*")
+            )
+            self.assertEqual(checkpoints_b, [f"{PREFIX_CHECKPOINT_DIR}-6"])
 
 
 # ---------------------------------------------------------------------------

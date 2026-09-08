@@ -95,7 +95,7 @@ class BarkSelfAttention(nn.Module):
         if is_causal:
             block_size = config.block_size
             bias = torch.tril(torch.ones((block_size, block_size), dtype=bool)).view(1, 1, block_size, block_size)
-            self.register_buffer("bias", bias)
+            self.bias = nn.Buffer(bias)
 
     # Copied from transformers.models.gpt_neo.modeling_gpt_neo.GPTNeoSelfAttention._split_heads
     def _split_heads(self, tensor, num_heads, attn_head_size):

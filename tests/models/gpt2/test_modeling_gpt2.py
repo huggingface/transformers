@@ -315,6 +315,39 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
         )
         result.loss.backward()
 
+    def test_cross_attention_respects_encoder_padding_mask(self):
+        torch.manual_seed(0)
+        config, input_ids, _, _, _, _, _, encoder_hidden_states, encoder_attention_mask = (
+            self.model_tester.prepare_config_and_inputs_for_decoder()
+        )
+        config.add_cross_attention = True
+        model = GPT2Model(config).to(device=torch_device).eval()
+
+        # Mark the second half of encoder sequence as padding
+        padding = encoder_attention_mask.shape[1] // 2
+        encoder_attention_mask = encoder_attention_mask.clone()
+        encoder_attention_mask[:, padding:] = 0
+
+        # Fill the padded encoder positions with garbage
+        corrupted_encoder_states = encoder_hidden_states.clone()
+        corrupted_encoder_states[:, padding:] = 1e6
+
+        # Corrupted encoder states should be ignored via mask
+        with torch.no_grad():
+            output = model(
+                input_ids=input_ids,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+            ).last_hidden_state
+
+            output_corrupted = model(
+                input_ids=input_ids,
+                encoder_hidden_states=corrupted_encoder_states,
+                encoder_attention_mask=encoder_attention_mask,
+            ).last_hidden_state
+
+        self.assertTrue(torch.equal(output, output_corrupted))
+
     def test_training_gradient_checkpointing(self):
         # overwritten: GPT2DoubleHeadsModel fails this test, non-standard class
         self.original_all_model_classes = self.all_model_classes

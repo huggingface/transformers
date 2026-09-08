@@ -359,7 +359,15 @@ class ResponseParser:
         value = process_field(self._body, field, self._captures)
         if self._tool_params:
             value = self._coerce_tool_calls(value)
-        if field.repeats:
+        if field.join is not None:
+            if not isinstance(value, str):
+                raise ValueError(
+                    f"Field '{field.name}': 'join' requires each match to parse to a string, "
+                    f"got {type(value).__name__}."
+                )
+            previous = self._output.get(self._current)
+            self._output[self._current] = value if previous is None else previous + field.join + value
+        elif field.repeats:
             self._output.setdefault(self._current, []).append(value)
         else:
             self._output[self._current] = value

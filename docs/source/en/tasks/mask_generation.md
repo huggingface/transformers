@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Mask Generation
+# Mask generation
 
 Mask generation is the task of generating semantically meaningful masks for an image.
 This task is very similar to [image segmentation](semantic_segmentation), but many differences exist. Image segmentation models are trained on labeled datasets and are limited to the classes they have seen during training; they return a set of masks and corresponding classes, given an image.
@@ -497,7 +497,7 @@ import torch
 
 num_epochs = 30
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
 model.to(device)
 
 model.train()

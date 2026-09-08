@@ -243,7 +243,7 @@ Timestamped tokens: [[{'token': 'm', 'start': 0.24, 'end': 0.48}, {'token': 'ist
 
 ### Making The Model Go Brrr
 
-Parakeet supports full-graph compilation with CUDA graphs! This optimization is most effective when you know the maximum audio length you want to transcribe. The key idea is using static input shapes to avoid recompilation. For example, if you know your audio will be under 30 seconds, you can use the processor to pad all inputs to 30 seconds, preparing consistent input features and attention masks. See the example below!
+Parakeet supports full-graph compilation with graph capture (CUDA graphs on NVIDIA GPUs, and the equivalent mechanism on other accelerators)! This optimization is most effective when you know the maximum audio length you want to transcribe. The key idea is using static input shapes to avoid recompilation. For example, if you know your audio will be under 30 seconds, you can use the processor to pad all inputs to 30 seconds, preparing consistent input features and attention masks. See the example below!
 
 ```python
 import torch
@@ -259,7 +259,7 @@ ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="v
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
 speech_samples = [el['array'] for el in ds["audio"][:5]]
 
-# Compile the generate method with fullgraph and CUDA graphs
+# Compile the generate method with fullgraph and graph capture
 model.generate = torch.compile(model.generate, fullgraph=True, mode="reduce-overhead")
 
 # let's define processor kwargs to pad to 30 seconds
@@ -268,7 +268,7 @@ processor_kwargs = {
     "max_length": 30 * processor.feature_extractor.sampling_rate,
 }
 
-# Define a timing context using CUDA events
+# Define a timing context using accelerator events
 class TimerContext:
     def __init__(self, name="Execution"):
         self.name = name
@@ -276,15 +276,15 @@ class TimerContext:
         self.end_event = None
 
     def __enter__(self):
-        # Use CUDA events for more accurate GPU timing
-        self.start_event = torch.cuda.Event(enable_timing=True)
-        self.end_event = torch.cuda.Event(enable_timing=True)
+        # Use accelerator events for more accurate device timing
+        self.start_event = torch.Event(enable_timing=True)
+        self.end_event = torch.Event(enable_timing=True)
         self.start_event.record()
         return self
 
     def __exit__(self, *args):
         self.end_event.record()
-        torch.cuda.synchronize()
+        torch.accelerator.synchronize()
         elapsed_time = self.start_event.elapsed_time(self.end_event) / 1000.0
         print(f"{self.name} time: {elapsed_time:.4f} seconds")
 
@@ -301,7 +301,7 @@ print(processor.decode(outputs))
 inputs = processor(speech_samples[1], **processor_kwargs)
 inputs.to(model.device, dtype=model.dtype)
 print("\n" + "="*50)
-print("Second generation - recording CUDA graphs...")
+print("Second generation - recording graphs...")
 with TimerContext("Second generation"):
     outputs = model.generate(**inputs)
 print(processor.decode(outputs))

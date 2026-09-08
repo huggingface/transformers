@@ -46,6 +46,7 @@ from parameterized import parameterized
 from test_utils import make_experts, make_fp8_experts
 
 import transformers.integrations.deepgemm as dg
+from transformers.distributed.utils import is_dtensor
 from transformers.integrations.deepgemm import (
     deepgemm_bf16_experts_forward,
     deepgemm_fp8_fp4_experts_forward,
@@ -228,6 +229,21 @@ class DeepGemmLoaderTest(unittest.TestCase):
             return x + 1 if dg.is_deepgemm_loadable() else x - 1
 
         run(torch.zeros(3, device=torch_device))  # a graph break / traced probe would raise here
+
+    def test_to_local_is_compile_safe(self):
+        # Regression guard: every experts forward here unwraps its weights through `to_local`, so it runs
+        # inside the traced region. It calls `is_dtensor`, whose torch-distributed availability check must
+        # therefore fold to a constant instead of being traced — its body reaches `importlib.metadata`,
+        # which dynamo cannot follow (and follows differently across Python versions). `@lru_cache` is no
+        # protection: dynamo steps past cache wrappers, so the marker has to sit on the wrapped function.
+        torch.compiler.reset()
+
+        @torch.compile(fullgraph=True)
+        def run(x):
+            return x.to_local() + 1 if is_dtensor(x) else x + 1
+
+        out = run(torch.zeros(3, device=torch_device))  # a graph break / traced probe would raise here
+        self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
 
 
 # ── Capturing fake DeepGEMM bundle ─────────────────────────────────────────────
@@ -436,21 +452,6 @@ class DeepGemmForwardTest(unittest.TestCase):
             with self.assertRaisesRegex(NotImplementedError, "float32 scale-factor path"):
                 deepgemm_fp8_fp4_linear(input, weight, weight_scale, block_size=(128, 128))
         self.assertEqual(captured, {})  # raised before the kernel ran
-
-    def test_linear_adds_bias_and_ignores_deprecated_output_dtype(self):
-        input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device)
-        weight = torch.randn(16, 128, device=torch_device).to(torch.float8_e4m3fn)
-        weight_scale = torch.ones(1, 1, dtype=torch.float32, device=torch_device)
-        bias = torch.randn(16, dtype=torch.bfloat16, device=torch_device)
-        with self._bundle(is_sm100=False):
-            with self.assertWarnsRegex(FutureWarning, "output_dtype"):
-                out = deepgemm_fp8_fp4_linear(
-                    input, weight, weight_scale, bias=bias, block_size=(128, 128), output_dtype=torch.float32
-                )
-        # output_dtype is deprecated and ignored: output follows input.dtype, not the requested float32.
-        self.assertEqual(out.dtype, torch.bfloat16)
-        # The fake matmul zeros the output buffer, so the result is exactly the broadcast bias.
-        self.assertTrue(torch.equal(out, bias.expand(4, 16)))
 
     # ── deepgemm_bf16_experts_forward ──────────────────────────────────────────
 

@@ -77,10 +77,6 @@ hello_world()
 [[autodoc]] CodeGenTokenizer
     - save_vocabulary
 
-## CodeGenTokenizerFast
-
-[[autodoc]] CodeGenTokenizerFast
-
 ## CodeGenModel
 
 [[autodoc]] CodeGenModel
