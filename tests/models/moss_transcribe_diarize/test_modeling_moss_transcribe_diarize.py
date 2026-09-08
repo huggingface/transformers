@@ -85,6 +85,13 @@ class MossTranscribeDiarizeForConditionalGenerationModelTest(ALMModelTest, unitt
         {"audio-text-to-text": MossTranscribeDiarizeForConditionalGeneration} if is_torch_available() else {}
     )
 
+    # Override, see qwen3_asr tests for more info.
+    def _audio_features_get_expected_num_attentions(self, model_tester=None):
+        return self.model_tester.encoder_layers
+
+    def _audio_features_get_expected_num_hidden_states(self, model_tester=None):
+        return self.model_tester.encoder_layers + 1
+
     @unittest.skip(
         reason="This test does not apply to MossTranscribeDiarize since inputs_embeds corresponding to audio tokens are replaced when input features are provided."
     )
@@ -103,7 +110,7 @@ class MossTranscribeDiarizeForConditionalGenerationIntegrationTest(unittest.Test
     @classmethod
     def setUp(cls):
         cleanup(torch_device, gc_collect=True)
-        cls.checkpoint = "OpenMOSS-Team/MOSS-Transcribe-Diarize"
+        cls.checkpoint = "itazap/MOSS-Transcribe-Diarize-HF"
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint)
 
     def tearDown(self):
@@ -119,7 +126,6 @@ class MossTranscribeDiarizeForConditionalGenerationIntegrationTest(unittest.Test
                         "type": "audio",
                         "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
                     },
-                    {"type": "text", "text": self.processor.default_transcription_prompt},
                 ],
             },
         ]
@@ -161,7 +167,6 @@ class MossTranscribeDiarizeForConditionalGenerationIntegrationTest(unittest.Test
                         "type": "audio",
                         "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
                     },
-                    {"type": "text", "text": self.processor.default_transcription_prompt},
                 ],
             },
         ]
@@ -204,7 +209,6 @@ class MossTranscribeDiarizeForConditionalGenerationIntegrationTest(unittest.Test
                             "type": "audio",
                             "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
                         },
-                        {"type": "text", "text": self.processor.default_transcription_prompt},
                     ],
                 },
             ],
@@ -216,7 +220,6 @@ class MossTranscribeDiarizeForConditionalGenerationIntegrationTest(unittest.Test
                             "type": "audio",
                             "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
                         },
-                        {"type": "text", "text": self.processor.default_transcription_prompt},
                     ],
                 },
             ],
