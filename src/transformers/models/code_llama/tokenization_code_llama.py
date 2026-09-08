@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from tokenizers import Tokenizer, decoders, normalizers, processors
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -155,17 +155,14 @@ class CodeLlamaTokenizer(TokenizersBackend):
                 unk_token=str(unk_token),
             )
         )
+        prepend_scheme = "first" if self.add_prefix_space else "never"
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
+            replacement="▁", prepend_scheme=prepend_scheme, split=False
+        )
 
-        normalizer_sequence = []
-        if self.add_prefix_space:
-            normalizer_sequence.append(normalizers.Prepend(prepend="▁"))
-        normalizer_sequence.append(normalizers.Replace(pattern=" ", content="▁"))
-        self._tokenizer.normalizer = normalizers.Sequence(normalizer_sequence)
-
-        decoder_sequence = [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()]
-        if self.add_prefix_space:
-            decoder_sequence.append(decoders.Strip(content=" ", left=1))
-        self._tokenizer.decoder = decoders.Sequence(decoder_sequence)
+        self._tokenizer.decoder = decoders.Sequence(
+            [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse(), decoders.Strip(content=" ", left=1)]
+        )
 
         super().__init__(
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
@@ -241,11 +238,12 @@ class CodeLlamaTokenizer(TokenizersBackend):
         is to add a prefix space for the normalizer, and add a `bos_token` to the input text for the `post_processor`.
         """
         if reset:
-            normalizer_sequence = []
-            if self.add_prefix_space:
-                normalizer_sequence.append(normalizers.Prepend(prepend="▁"))
-            normalizer_sequence.append(normalizers.Replace(pattern=" ", content="▁"))
-            self._tokenizer.normalizer = normalizers.Sequence(normalizer_sequence)
+            self._tokenizer.normalizer = normalizers.Sequence(
+                [
+                    normalizers.Prepend(prepend="▁"),
+                    normalizers.Replace(pattern=" ", content="▁"),
+                ]
+            )
             self.update_post_processor()
             return
 

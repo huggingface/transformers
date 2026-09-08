@@ -28,7 +28,7 @@ from transformers import AutoImageProcessor, AutoModelForKeypointMatching
 import torch
 
 processor = AutoImageProcessor.from_pretrained("zju-community/matchanything_eloftr")
-model = AutoModelForKeypointMatching.from_pretrained("zju-community/matchanything_eloftr"))
+model = AutoModelForKeypointMatching.from_pretrained("zju-community/matchanything_eloftr")
 ```
 
 Load two images that have the same object of interest. The second photo is taken a second apart, it's colors are edited, and it is further cropped and rotated.

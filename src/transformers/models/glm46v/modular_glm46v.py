@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import numpy as np
 from huggingface_hub.dataclasses import strict
 
@@ -86,9 +85,6 @@ class Glm46VConfig(PreTrainedConfig):
 class Glm46VPreTrainedModel(Glm4vPreTrainedModel):
     _can_record_outputs = None
     _no_split_modules = None
-
-    def _init_weights(self, module):
-        raise AttributeError("Not needed")
 
 
 class Glm46VModel(Glm4vModel):
@@ -182,7 +178,7 @@ class Glm46VVideoProcessor(Glm4vVideoProcessor):
         if len(uniq) & 1:
             uniq.append(uniq[-1])
 
-        return np.array(uniq)
+        return np.array(uniq, dtype=int)
 
 
 __all__ = [

@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Image Processor
+# Image processor
 
 An image processor is in charge of loading images (optionally), preparing input features for vision models and post processing their outputs. This includes transformations such as resizing, normalization, and conversion to PyTorch and Numpy tensors. It may also include model specific post-processing such as converting logits to segmentation masks.
 

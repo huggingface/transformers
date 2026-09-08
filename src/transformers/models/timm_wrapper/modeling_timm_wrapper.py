@@ -19,12 +19,15 @@ from torch import Tensor
 
 from ...modeling_outputs import ImageClassifierOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, is_timm_available, requires_backends
+from ...utils import auto_docstring, is_timm_available, logging, requires_backends
 from .configuration_timm_wrapper import TimmWrapperConfig
 
 
 if is_timm_available():
     import timm
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(
@@ -84,12 +87,21 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     # add WA here as `timm` does not support model parallelism
     _no_split_modules = ["TimmWrapperModel"]
     model_tags = ["timm"]
+    # `timm` attention layers already dispatch to `F.scaled_dot_product_attention` by default
+    _supports_sdpa = True
 
     # used in Trainer to avoid passing `loss_kwargs` to model forward
     accepts_loss_kwargs = False
 
     def post_init(self):
         self.supports_gradient_checkpointing = self._timm_model_supports_gradient_checkpointing()
+        # trf-ignore: TRF051 (warning only, `timm` owns its own attention dispatch)
+        if self.config._attn_implementation == "eager":
+            # `timm` resolves the attention implementation on its own, there is no model level API to change it yet
+            logger.warning_once(
+                "`attn_implementation='eager'` is not propagated to the wrapped `timm` model, which keeps using "
+                "`F.scaled_dot_product_attention` whenever it is available."
+            )
         super().post_init()
 
     def load_state_dict(self, state_dict, *args, **kwargs):

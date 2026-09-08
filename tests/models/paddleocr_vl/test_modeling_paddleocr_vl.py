@@ -294,10 +294,6 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     def test_generate_compile_model_forward_fullgraph(self):
         pass
 
-    @unittest.skip(reason="PaddleOCRVL does not support.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @pytest.mark.generate
     @unittest.skip(reason="PaddleOCRVL does not support beam search.")
     def test_beam_sample_generate(self):

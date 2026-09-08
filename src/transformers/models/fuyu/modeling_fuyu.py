@@ -149,7 +149,6 @@ class FuyuModel(FuyuPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
         image_patches: torch.Tensor | None = None,
-        image_patches_indices: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -161,8 +160,6 @@ class FuyuModel(FuyuPreTrainedModel):
         image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):
             Image patches to be used as continuous embeddings. The patches are flattened and then projected to the
             hidden size of the model.
-        image_patches_indices (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Tensor of indices of the image patches in the input_ids tensor.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -221,7 +218,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         input_ids: torch.LongTensor | None = None,
         # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
         image_patches: torch.Tensor | None = None,
-        image_patches_indices: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -235,8 +231,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):
             Image patches to be used as continuous embeddings. The patches are flattened and then projected to the
             hidden size of the model.
-        image_patches_indices (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Tensor of indices of the image patches in the input_ids tensor.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -270,7 +264,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         outputs = self.model(
             input_ids=input_ids,
             image_patches=image_patches,
-            image_patches_indices=image_patches_indices,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
