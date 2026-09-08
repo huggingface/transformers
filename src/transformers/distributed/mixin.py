@@ -214,10 +214,11 @@ class DistributedMixin:
                     # Every rank trains on its own part of the batch, so only the experts can be sharded across the
                     # group: the experts get the dispatch style, the router keeps its global ids and scores, and
                     # whatever else the plan shards stays replicated, data-parallel like the rest of the trunk.
+                    # Replicated parameters inside the experts module keep their gradient all-reduce: FSDP2 treats
+                    # that module as expert-owned and does not reduce them, and each rank saw different tokens.
+                    kept = ("grouped_gemm", "moe_tp_experts", "replicated_with_grad_allreduce")
                     replicated = sorted(
-                        name
-                        for name, style in model.tp_plan.items()
-                        if style not in ("ep_router", "grouped_gemm", "moe_tp_experts")
+                        name for name, style in model.tp_plan.items() if style not in ("ep_router", *kept)
                     )
                     if replicated:
                         logger.warning(
@@ -228,7 +229,7 @@ class DistributedMixin:
                     model._ep_plan = {
                         name: "ep_dispatch_experts" if style == "moe_tp_experts" else style
                         for name, style in model.tp_plan.items()
-                        if style in ("grouped_gemm", "moe_tp_experts")
+                        if style in kept
                     }
                 model = apply_tensor_parallelism(model, tp_mesh)
 
