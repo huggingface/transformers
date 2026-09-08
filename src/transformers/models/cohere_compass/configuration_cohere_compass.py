@@ -38,6 +38,8 @@ class CohereCompassVisionConfig(PreTrainedConfig):
 
     model_type = "cohere_compass_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -52,6 +54,7 @@ class CohereCompassVisionConfig(PreTrainedConfig):
     num_position_embeddings: int = 2304
     deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="CohereLabs/North-Micro-Vision-Instruct")
@@ -130,6 +133,11 @@ class CohereCompassTextConfig(PreTrainedConfig):
     def convert_rope_params_to_dict(self, **kwargs):
         # allow per layer rope with optional NoPE layers
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
+        # workaround until the hub config is fixed, dangling entries were saved that fire on validation
+        # ref: https://huggingface.co/CohereLabs/North-Micro-Vision-Instruct/discussions/3
+        if self.layer_types is not None and not set(self.rope_parameters.keys()).isdisjoint(self.layer_types):
+            self.rope_parameters.pop("rope_theta", None)
+            self.rope_parameters.pop("rope_type", None)
         self.standardize_rope_params()
         return kwargs
 
