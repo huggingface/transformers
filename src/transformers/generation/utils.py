@@ -606,19 +606,10 @@ class GenerationMixin(ContinuousMixin):
 
         # Check for the existence of the file without actually downloading it
         # (preventing unwanted downloads of files, even if not executed)
-        has_file_kwargs = {
-            "revision": kwargs.get("_commit_hash") or kwargs.get("revision") or "main",
-            "proxies": kwargs.get("proxies"),
-            "token": kwargs.get("token"),
-            "cache_dir": kwargs.get("cache_dir"),
-            "local_files_only": kwargs.get("local_files_only", False),
-            "repo_type": kwargs.get("repo_type"),
-        }
-
         if not has_file(
             pretrained_model_name_or_path,
             custom_generate_file,
-            **has_file_kwargs,
+            **kwargs,
         ):
             raise OSError(
                 f"`{pretrained_model_name_or_path}` does not contain a `custom_generate` subdirectory with a "
