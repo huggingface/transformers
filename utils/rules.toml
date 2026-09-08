@@ -315,7 +315,7 @@ default_enabled = true
 # (`video_processing_kimi_k25.py:98`, `video_processing_minimax_m3_vl.py:45`) but never read by the
 # `_preprocess` override, so only the model owner can say whether the flag is dead or the override lost a
 # step. Left to the follow-ups with the two owners.
-allowlist_models = ["kimi_k25", "minimax_m3_vl"]
+allowlist_models = ["kimi_k25", "minimax_m3_vl", "ernie4_5_vl_moe", "glm4v", "instructblipvideo", "internvl", "qwen2_vl", "smolvlm"]
 
 [rules.TRF016.explanation]
 what_it_does = "When an image_processing_*.py or video_processing_*.py class declares boolean do_* attributes (do_resize, do_rescale, do_normalize, do_convert_rgb, ...) and overrides preprocess() or _preprocess(), checks each flag is still consumed there: referenced directly, delegated via super().preprocess/_preprocess(..., **kwargs), or -- image processors only -- forwarded through _preprocess_image_like_inputs/_prepare_image_like_inputs. do_sample_frames is exempt: the base preprocess() consumes it before _preprocess() runs."
