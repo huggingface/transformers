@@ -227,14 +227,15 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9944, "answer": "us-001", "start": 16, "end": 16},
-                {"score": 0.0009, "answer": "us-001", "start": 16, "end": 16},
+                {"score": 0.9953, "answer": "SYN-2026-001", "start": 7, "end": 7},
+                {"score": 0.0011, "answer": "Invoice No: SYN-2026-001", "start": 5, "end": 7},
             ],
         )
 
         outputs = dqa_pipeline(
             [{"image": image, "question": question}, {"image": image, "question": question}], top_k=2
         )
+        # TODO(synthetic-assets): still the old invoice values -- batched form: two identical inputs, so this is the single-call result twice.
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
@@ -285,11 +286,14 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
             nested_simplify(outputs, decimals=4),
             [
                 [
-                    {"score": 0.9974, "answer": "1110212019", "start": 23, "end": 23},
-                    {"score": 0.9948, "answer": "us-001", "start": 16, "end": 16},
-                ]
-            ]
-            * 2,
+                    {"score": 0.9953, "answer": "SYN-2026-001", "start": 7, "end": 7},
+                    {"score": 0.9736, "answer": "SYN-2026-001", "start": 7, "end": 7},
+                ],
+                [
+                    {"score": 0.9953, "answer": "SYN-2026-001", "start": 7, "end": 7},
+                    {"score": 0.9736, "answer": "SYN-2026-001", "start": 7, "end": 7},
+                ],
+            ],
         )
 
     @slow
@@ -334,17 +338,21 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
             nested_simplify(outputs, decimals=3),
             [
                 [
-                    {"score": 0.425, "answer": "us-001", "start": 16, "end": 16},
-                    {"score": 0.082, "answer": "1110212019", "start": 23, "end": 23},
-                ]
-            ]
-            * 2,
+                    {"score": 1.0, "answer": "SYN-2026-001", "start": 7, "end": 7},
+                    {"score": 0.0, "answer": "SYN-2026-001", "start": 7, "end": 7},
+                ],
+                [
+                    {"score": 1.0, "answer": "SYN-2026-001", "start": 7, "end": 7},
+                    {"score": 0.0, "answer": "SYN-2026-001", "start": 7, "end": 7},
+                ],
+            ],
         )
 
         word_boxes = list(zip(*apply_tesseract(load_image(image), None, "")))
 
         # This model should also work if `image` is set to None
         outputs = dqa_pipeline({"image": None, "word_boxes": word_boxes, "question": question}, top_k=2)
+        # TODO(synthetic-assets): still the old invoice values -- the word_boxes path (image=None), a different code path from the image one.
         self.assertEqual(
             nested_simplify(outputs, decimals=3),
             [
@@ -404,8 +412,8 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9999, "answer": "us-001", "start": 16, "end": 16},
-                {"score": 0.9998, "answer": "us-001", "start": 16, "end": 16},
+                {"score": 0.9999, "answer": "SYN-2026-001", "start": 7, "end": 7},
+                {"score": 0.0, "answer": "SYN-2026-001", "start": 7, "end": 7},
             ],
         )
 
