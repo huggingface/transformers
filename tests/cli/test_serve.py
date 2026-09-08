@@ -610,6 +610,7 @@ class TestChatCompletion(unittest.TestCase):
     def tearDownClass(cls):
         cls.serve.kill_server()
         cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
         cleanup(torch_device, gc_collect=True)
 
     def test_non_streaming(self):
@@ -814,6 +815,7 @@ class TestCompletion(unittest.TestCase):
     def tearDownClass(cls):
         cls.serve.kill_server()
         cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
         cleanup(torch_device, gc_collect=True)
 
     # ----- non-streaming -----
@@ -1156,6 +1158,7 @@ class TestResponsesIntegration(unittest.TestCase):
     def tearDownClass(cls):
         cls.serve.kill_server()
         cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
         cleanup(torch_device, gc_collect=True)
 
     def test_streaming(self):
@@ -1320,6 +1323,7 @@ class TestLoadModel(unittest.TestCase):
     def tearDownClass(cls):
         cls.serve.kill_server()
         cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
         cleanup(torch_device, gc_collect=True)
 
     def setUp(self):
@@ -1573,6 +1577,7 @@ class TestVLM(unittest.TestCase):
     def tearDownClass(cls):
         cls.serve.kill_server()
         cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
         cleanup(torch_device, gc_collect=True)
 
     def test_chat_completion_with_image(self):
@@ -1639,6 +1644,7 @@ class TestMultimodalLM(unittest.TestCase):
     def tearDownClass(cls):
         cls.serve.kill_server()
         cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
         cleanup(torch_device, gc_collect=True)
 
     def _get_audio_messages(self):
@@ -2002,6 +2008,7 @@ class _TestToolCallBase:
     def tearDownClass(cls):
         cls.serve.kill_server()
         cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
         cleanup(torch_device, gc_collect=True)
 
     def _get_tool_def(self):
@@ -2388,6 +2395,7 @@ class _TestReasoningBase:
     def tearDownClass(cls):
         cls.serve.kill_server()
         cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
         cleanup(torch_device, gc_collect=True)
 
     @staticmethod
@@ -2626,6 +2634,7 @@ class TestTranscription(unittest.TestCase):
     def tearDownClass(cls):
         cls.serve.kill_server()
         cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
         cleanup(torch_device, gc_collect=True)
 
     @classmethod
@@ -2724,6 +2733,7 @@ class TestContinuousBatchingChatCompletion(unittest.TestCase):
     def tearDownClass(cls):
         cls.serve.kill_server()
         cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
         cleanup(torch_device, gc_collect=True)
 
     def test_streaming(self):
@@ -2854,6 +2864,7 @@ class TestContinuousBatchingResponses(unittest.TestCase):
     def tearDownClass(cls):
         cls.serve.kill_server()
         cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
         cleanup(torch_device, gc_collect=True)
 
     def test_streaming(self):
