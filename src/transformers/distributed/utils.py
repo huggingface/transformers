@@ -28,9 +28,11 @@ logger = logging.get_logger(__name__)
 # stream); a local NVMe is far below that, where the effect is only to fall back more readily.
 _SEEK_COST_BYTES = 12 * 2**20
 
-# Ranges up to this size are warmed by asking the kernel to read ahead, which costs almost nothing.
-# Past it, warming is done by reading: queueing that much readahead is more than the kernel honours.
-_READAHEAD_MAX_BYTES = 64 * 2**20
+# How much a rank may warm by asking the kernel to read ahead, which costs almost nothing but is
+# only advice: past a few GiB the kernel drops most of it, the pages are not there when the loader
+# asks for them, and the load pays for the miss. Beyond this, warming reads the bytes itself.
+# Measured: 1.3 and 4.4 GiB of readahead land, 8 and 29.7 GiB do not.
+_READAHEAD_MAX_TOTAL_BYTES = 8 * 2**30
 
 
 if TYPE_CHECKING:
@@ -174,18 +176,16 @@ def prefetch_checkpoint_shards(checkpoint_files: list[str], meta_state_dict: dic
     prefetch_threads = int(os.environ.get("HF_SHARD_PREFETCH", "0"))
     if not checkpoint_files or not prefetch_threads:
         return
+    import functools
     import time
     from concurrent.futures import ThreadPoolExecutor
 
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     local_world = int(os.environ.get("LOCAL_WORLD_SIZE", "1"))
 
-    def _warm(job, bufsize=16 * 2**20):
+    def _warm(job, bufsize=16 * 2**20, readahead=False):
         path, start, end = job
-        # A short range is cheaper to hand to the kernel than to copy through userspace. A whole
-        # shard is not: that queues more readahead than the kernel will honour, and the outstanding
-        # requests then compete with the per-tensor reads that follow.
-        if end - start <= _READAHEAD_MAX_BYTES:
+        if readahead:
             fd = os.open(path, os.O_RDONLY)
             try:
                 os.posix_fadvise(fd, start, end - start, os.POSIX_FADV_WILLNEED)
@@ -212,9 +212,12 @@ def prefetch_checkpoint_shards(checkpoint_files: list[str], meta_state_dict: dic
         jobs = whole
     described = f"{sum(end - start for _, start, end in jobs) / 2**30:.1f} GiB in {len(jobs)} spans"
 
+    # Handing the whole plan to the kernel is nearly free, but only while it is small enough to be
+    # honoured; a rank warming tens of GiB has to read them, or the pages will not be there.
+    readahead = sum(end - start for _, start, end in jobs) <= _READAHEAD_MAX_TOTAL_BYTES
     prefetch_start = time.time()
     with ThreadPoolExecutor(max_workers=prefetch_threads) as pool:
-        list(pool.map(_warm, jobs))
+        list(pool.map(functools.partial(_warm, readahead=readahead), jobs))
     if _is_torch_distributed_initialized():
         torch.distributed.barrier()
     logger.warning_once(f"Prefetched {described} in {time.time() - prefetch_start:.0f}s")
