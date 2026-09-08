@@ -43,6 +43,7 @@ from transformers.cli.serving.utils import (
     response_events_to_chunks,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_librosa,
     require_multipart,
     require_serve,
@@ -50,6 +51,7 @@ from transformers.testing_utils import (
     require_torchcodec,
     require_vision,
     slow,
+    torch_device,
 )
 from transformers.utils.chat_parsing import ResponseParser
 from transformers.utils.import_utils import is_serve_available
@@ -607,6 +609,9 @@ class TestChatCompletion(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.serve.kill_server()
+        cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
+        cleanup(torch_device, gc_collect=True)
 
     def test_non_streaming(self):
         resp = self.client.chat.completions.create(
@@ -809,6 +814,9 @@ class TestCompletion(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.serve.kill_server()
+        cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
+        cleanup(torch_device, gc_collect=True)
 
     # ----- non-streaming -----
 
@@ -1149,6 +1157,9 @@ class TestResponsesIntegration(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.serve.kill_server()
+        cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
+        cleanup(torch_device, gc_collect=True)
 
     def test_streaming(self):
         events = list(
@@ -1311,6 +1322,9 @@ class TestLoadModel(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.serve.kill_server()
+        cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
+        cleanup(torch_device, gc_collect=True)
 
     def setUp(self):
         # Clear model cache so each test starts fresh
@@ -1562,6 +1576,9 @@ class TestVLM(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.serve.kill_server()
+        cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
+        cleanup(torch_device, gc_collect=True)
 
     def test_chat_completion_with_image(self):
         """Chat completions should accept image_url content and produce a meaningful response."""
@@ -1626,6 +1643,9 @@ class TestMultimodalLM(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.serve.kill_server()
+        cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
+        cleanup(torch_device, gc_collect=True)
 
     def _get_audio_messages(self):
         import base64
@@ -1987,6 +2007,9 @@ class _TestToolCallBase:
     @classmethod
     def tearDownClass(cls):
         cls.serve.kill_server()
+        cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
+        cleanup(torch_device, gc_collect=True)
 
     def _get_tool_def(self):
         return {
@@ -2371,6 +2394,9 @@ class _TestReasoningBase:
     @classmethod
     def tearDownClass(cls):
         cls.serve.kill_server()
+        cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
+        cleanup(torch_device, gc_collect=True)
 
     @staticmethod
     def _reasoning_field(obj):
@@ -2607,6 +2633,9 @@ class TestTranscription(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.serve.kill_server()
+        cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
+        cleanup(torch_device, gc_collect=True)
 
     @classmethod
     def _get_audio_bytes(cls):
@@ -2703,6 +2732,9 @@ class TestContinuousBatchingChatCompletion(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.serve.kill_server()
+        cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
+        cleanup(torch_device, gc_collect=True)
 
     def test_streaming(self):
         """Streaming chat completion with CB produces text."""
@@ -2831,6 +2863,9 @@ class TestContinuousBatchingResponses(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.serve.kill_server()
+        cls.serve = None
+        # kill_server() calls delete_model() which already runs gc+cache flush; we still call cleanup() to follow test-file convention
+        cleanup(torch_device, gc_collect=True)
 
     def test_streaming(self):
         """Streaming response with CB produces text."""
