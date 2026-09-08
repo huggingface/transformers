@@ -6155,15 +6155,15 @@ class ModelTesterMixin(ExportTesterMixin):
         self.assertEqual(attention_scale, 1.0)  # attention scale is always 1
         torch.testing.assert_close(inv_freq, rope_module.inv_freq.cpu())
 
-        # create 2D position IDs for a single grid of one row and 10 columns
+        # create 2D position IDs for a single grid of one row and 10 cols `size=(10, 2)`
         position_ids = torch.stack(
             [
                 torch.arange(10, dtype=torch.long, device=torch_device),
                 torch.zeros(10, dtype=torch.long, device=torch_device),
             ]
-        )
+        ).transpose(0, 1)
         # and an empty hidden states used only to infer device/dtype
-        hidden_states = torch.empty(1, 10, 32, dtype=torch.float32, device=torch_device)
+        hidden_states = torch.empty(1, dtype=torch.float32, device=torch_device)
         cos, sin = rope_module(hidden_states, position_ids)
         self.assertEqual(cos.shape[-1], inv_freq.shape[-1] * 4)  # the freq are `//4` of head dim
 

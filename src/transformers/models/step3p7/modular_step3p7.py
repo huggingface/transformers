@@ -592,7 +592,7 @@ class Step3p7VisionRotaryEmbedding(Kimi_K25VisionRotaryEmbedding):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        freq_hw = freq.permute(1, 0, 2).flatten(1)
+        freq_hw = freq.flatten(1)
         return torch.cat((freq_hw, freq_hw), dim=-1)
 
 
@@ -756,7 +756,7 @@ class Step3p7VisionModel(Step3p7PreTrainedModel):
         # temporal/merge dims: t=1, spatial_merge_size=1) broadcasts across the whole batch, since
         # every image in `pixel_values` shares the same (grid_h, grid_w).
         grid_thw = torch.tensor([[1, grid_h, grid_w]], device=hidden_state.device)
-        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1).unsqueeze(0)
+        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1)
         position_embeddings = self.rotary_emb(hidden_state, position_ids)
         for layer in self.layers:
             hidden_state = layer(hidden_state, position_embeddings=position_embeddings, **kwargs)
