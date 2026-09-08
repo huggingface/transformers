@@ -104,11 +104,6 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         audio_encoder_stride: int = 2,
         time_marker_every_seconds: int = 2,
         enable_time_marker: bool = True,
-        default_transcription_prompt: str = (
-            "请将音频转写为文本，每一段需以起始时间戳和说话人编号"
-            "（[S01]、[S02]、[S03]…）开头，正文为对应的语音内容，"
-            "并在段末标注结束时间戳，以清晰标明该段语音范围。"
-        ),
     ):
         r"""
         audio_token (`str`, *optional*, defaults to `"<|audio_pad|>"`):
@@ -130,11 +125,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
             Insert numeric time-marker tokens into the audio span every N seconds.
         enable_time_marker (`bool`, *optional*, defaults to `True`):
             Whether to inject time-marker tokens into the audio placeholder span.
-        default_transcription_prompt (`str`, *optional*):
-            Default prompt used by [`~MossTranscribeDiarizeProcessor.apply_transcription_request`] when `prompt` is
-            `None`. Requests timestamped transcription with speaker labels such as `[S01]`.
         """
-        self.default_transcription_prompt = default_transcription_prompt
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
         self.audio_bos_token = audio_bos_token
@@ -215,9 +206,6 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
                 if example.ndim != 1:
                     raise ValueError(f"Audio should be mono, got shape: {example.shape}")
 
-            if len(text) != len(audio):
-                raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
-
     def _process_audio(self, audio: AudioInput, **kwargs) -> tuple[dict[str, torch.Tensor], list[str]]:
         # Determine number of Whisper-window chunks per sample, and flatten
         window_size = int(self.feature_extractor.n_samples)
@@ -293,8 +281,8 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
                 Audio to transcribe. Strings are interpreted as local paths or URLs and will be loaded automatically by
                 the chat template loader; NumPy arrays and PyTorch tensors are forwarded directly.
             prompt (`str` or `list[str]`, *optional*):
-                Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When `None`,
-                each sample uses the default diarization prompt from [`default_transcription_prompt`].
+                Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When
+                `None`, the chat template supplies the default timestamped diarization prompt.
             **kwargs:
                 Additional keyword arguments forwarded to [`~MossTranscribeDiarizeProcessor.apply_chat_template`].
         """
@@ -305,10 +293,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         if batch_size == 0:
             raise ValueError("`audio` must contain at least one sample.")
 
-        prompts = [
-            self.default_transcription_prompt if item is None else item
-            for item in prepare_prompt_input(prompt, batch_size, input_name="prompt")
-        ]
+        prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
 
         conversations = [
             [{"role": "user", "content": make_audio_chat_content(audio_item, prompt_text)}]

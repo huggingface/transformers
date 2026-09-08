@@ -169,11 +169,6 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
         audio_encoder_stride: int = 2,
         time_marker_every_seconds: int = 2,
         enable_time_marker: bool = True,
-        default_transcription_prompt: str = (
-            "请将音频转写为文本，每一段需以起始时间戳和说话人编号"
-            "（[S01]、[S02]、[S03]…）开头，正文为对应的语音内容，"
-            "并在段末标注结束时间戳，以清晰标明该段语音范围。"
-        ),
     ):
         r"""
         audio_token (`str`, *optional*, defaults to `"<|audio_pad|>"`):
@@ -195,11 +190,7 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
             Insert numeric time-marker tokens into the audio span every N seconds.
         enable_time_marker (`bool`, *optional*, defaults to `True`):
             Whether to inject time-marker tokens into the audio placeholder span.
-        default_transcription_prompt (`str`, *optional*):
-            Default prompt used by [`~MossTranscribeDiarizeProcessor.apply_transcription_request`] when `prompt` is
-            `None`. Requests timestamped transcription with speaker labels such as `[S01]`.
         """
-        self.default_transcription_prompt = default_transcription_prompt
         super().__init__(
             feature_extractor,
             tokenizer,
@@ -313,8 +304,8 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
                 Audio to transcribe. Strings are interpreted as local paths or URLs and will be loaded automatically by
                 the chat template loader; NumPy arrays and PyTorch tensors are forwarded directly.
             prompt (`str` or `list[str]`, *optional*):
-                Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When `None`,
-                each sample uses the default diarization prompt from [`default_transcription_prompt`].
+                Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When
+                `None`, the chat template supplies the default timestamped diarization prompt.
             **kwargs:
                 Additional keyword arguments forwarded to [`~MossTranscribeDiarizeProcessor.apply_chat_template`].
         """
@@ -325,10 +316,7 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
         if batch_size == 0:
             raise ValueError("`audio` must contain at least one sample.")
 
-        prompts = [
-            self.default_transcription_prompt if item is None else item
-            for item in prepare_prompt_input(prompt, batch_size, input_name="prompt")
-        ]
+        prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
 
         conversations = [
             [{"role": "user", "content": make_audio_chat_content(audio_item, prompt_text)}]
@@ -481,7 +469,7 @@ class MossTranscribeDiarizeModel(GlmAsrModel):
             flat_features = sample_features[sample_valid_mask]
             if flat_features.numel() == 0:
                 continue
-            sample_features = flat_features.unsqueeze(0).to(self.dtype)
+            sample_features = flat_features.unsqueeze(0).to(whisper_features.dtype)
             seq_len = sample_features.shape[1]
             trimmed_seq_len = (seq_len // merge_size) * merge_size
             if trimmed_seq_len == 0:
@@ -609,7 +597,7 @@ class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditional
         ```python
         >>> from transformers import MossTranscribeDiarizeForConditionalGeneration, AutoProcessor
 
-        >>> model_id = "OpenMOSS-Team/MOSS-Transcribe-Diarize"
+        >>> model_id = "itazap/MOSS-Transcribe-Diarize-HF"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained(model_id, device_map="auto")
         >>> inputs = processor.apply_transcription_request("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
