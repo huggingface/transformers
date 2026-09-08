@@ -635,8 +635,6 @@ class GenerationMixin(ContinuousMixin):
             f"The repository `{pretrained_model_name_or_path}` contains custom generation code that will override "
             "the default `generate` method."
         )
-        import sys
-        sys.exit(0)
         resolve_trust_remote_code(
             trust_remote_code,
             pretrained_model_name_or_path,
