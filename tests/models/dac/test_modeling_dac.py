@@ -25,6 +25,7 @@ from parameterized import parameterized
 from tests.utils.test_audio_utils import compute_rmse
 from transformers import AutoProcessor, DacConfig, DacModel
 from transformers.testing_utils import (
+    get_json_expectation,
     is_torch_available,
     require_deterministic_for_xpu,
     require_torch,
@@ -352,7 +353,10 @@ class DacIntegrationTest(unittest.TestCase):
                 atol=1e-6,
             )
             torch.testing.assert_close(
-                quantizer_outputs[4].squeeze().item(), expected["quant_codebook_loss"], rtol=1e-4, atol=1e-4
+                quantizer_outputs[4].squeeze().item(),
+                get_json_expectation(expected["quant_codebook_loss"]),
+                rtol=1e-4,
+                atol=1e-4,
             )
 
             # compare decoder outputs
