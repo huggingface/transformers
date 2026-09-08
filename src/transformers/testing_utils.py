@@ -4216,6 +4216,9 @@ def patch_testing_methods_to_collect_info():
     _patch_with_call_info(
         unittest.case.TestCase, "assertTupleEqual", _parse_call_info, target_args=("tuple1", "tuple2")
     )
+    _patch_with_call_info(
+        unittest.case.TestCase, "assertSequenceEqual", _parse_call_info, target_args=("seq1", "seq2")
+    )
     _patch_with_call_info(unittest.case.TestCase, "assertSetEqual", _parse_call_info, target_args=("set1", "set1"))
     _patch_with_call_info(unittest.case.TestCase, "assertDictEqual", _parse_call_info, target_args=("d1", "d2"))
     _patch_with_call_info(unittest.case.TestCase, "assertIn", _parse_call_info, target_args=("member", "container"))
@@ -4537,7 +4540,9 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
                             return False
 
                         # only one element that is iterable, but not the same type as `obj` --> no one line repr.
-                        if type(obj) is not type(obj[0]):
+                        # (`obj[0]` on a dict is a *key* lookup, not positional: use its single value)
+                        only_element = next(iter(obj.values())) if type(obj) is dict else obj[0]
+                        if type(obj) is not type(only_element):
                             return False
 
                         # one-line repr. if possible, without width limit
