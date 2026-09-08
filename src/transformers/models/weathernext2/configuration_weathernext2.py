@@ -19,6 +19,11 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
+# Each node carries sin(lat), sin(lon), cos(lon); each edge carries distance and the three
+# components of the relative position vector.
+NUM_NODE_SPATIAL_FEATURES = 3
+NUM_EDGE_SPATIAL_FEATURES = 4
+
 ATMOSPHERIC_VARIABLES = (
     "temperature",
     "geopotential",
@@ -269,11 +274,11 @@ class WeatherNext2Config(PreTrainedConfig):
 
     @property
     def num_grid_input_channels(self) -> int:
-        return 3 + sum(levels for _, _, levels in self.input_channel_layout)
+        return NUM_NODE_SPATIAL_FEATURES + sum(levels for _, _, levels in self.input_channel_layout)
 
     @property
     def num_mesh_input_channels(self) -> int:
-        return 3 + sum(levels for _, _, levels in self.mesh_channel_layout)
+        return NUM_NODE_SPATIAL_FEATURES + sum(levels for _, _, levels in self.mesh_channel_layout)
 
     @property
     def num_output_channels(self) -> int:

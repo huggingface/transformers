@@ -37,7 +37,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from .configuration_weathernext2 import WeatherNext2Config
+from .configuration_weathernext2 import NUM_EDGE_SPATIAL_FEATURES, NUM_NODE_SPATIAL_FEATURES, WeatherNext2Config
 
 
 class WeatherNext2FiLM(nn.Module):
@@ -144,7 +144,9 @@ class WeatherNext2BipartiteGraphNetwork(nn.Module):
         self.aggregate_normalization = config.aggregate_normalization if grid_to_mesh else None
         hidden_size = config.hidden_size
 
-        self.edge_encoder = WeatherNext2ConditionedMlp(config, 4, config.edge_hidden_size, config.edge_hidden_size)
+        self.edge_encoder = WeatherNext2ConditionedMlp(
+            config, NUM_EDGE_SPATIAL_FEATURES, config.edge_hidden_size, config.edge_hidden_size
+        )
         self.edge_update = WeatherNext2EdgeUpdate(config, use_receiver_proj=not grid_to_mesh)
         self.mesh_node_update = WeatherNext2ConditionedMlp(
             config, 2 * hidden_size if grid_to_mesh else hidden_size, hidden_size, hidden_size
@@ -499,14 +501,14 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         num_blocks = -(-config.num_mesh_nodes // block_size)
         mesh_to_grid_edges = 3 * config.num_grid_points
         shapes = {
-            "grid_spatial_features": ((config.num_grid_points, 3), torch.float32),
-            "mesh_spatial_features": ((config.num_mesh_nodes, 3), torch.float32),
+            "grid_spatial_features": ((config.num_grid_points, NUM_NODE_SPATIAL_FEATURES), torch.float32),
+            "mesh_spatial_features": ((config.num_mesh_nodes, NUM_NODE_SPATIAL_FEATURES), torch.float32),
             "grid_to_mesh_senders": ((edges,), torch.int64),
             "grid_to_mesh_receivers": ((edges,), torch.int64),
-            "grid_to_mesh_edge_features": ((edges, 4), torch.float32),
+            "grid_to_mesh_edge_features": ((edges, NUM_EDGE_SPATIAL_FEATURES), torch.float32),
             "mesh_to_grid_senders": ((mesh_to_grid_edges,), torch.int64),
             "mesh_to_grid_receivers": ((mesh_to_grid_edges,), torch.int64),
-            "mesh_to_grid_edge_features": ((mesh_to_grid_edges, 4), torch.float32),
+            "mesh_to_grid_edge_features": ((mesh_to_grid_edges, NUM_EDGE_SPATIAL_FEATURES), torch.float32),
             "attention_mask": ((num_blocks, 1, block_size, 3 * block_size), torch.bool),
         }
         for name in GEOMETRY_BUFFERS:
