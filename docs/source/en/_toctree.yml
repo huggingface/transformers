@@ -506,6 +506,8 @@
       title: Trainer
     - local: main_classes/deepspeed
       title: DeepSpeed
+    - local: main_classes/distributed
+      title: Distributed
     - local: main_classes/executorch
       title: ExecuTorch
     - local: main_classes/feature_extractor
