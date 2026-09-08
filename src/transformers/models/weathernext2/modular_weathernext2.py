@@ -414,7 +414,12 @@ class WeatherNext2PreTrainedModel(PreTrainedModel):
     # Flash attention cannot take an arbitrary mask, and mesh adjacency is one.
     _supports_flash_attn = False
     _supports_attention_backend = True
-    _can_record_outputs = {"attentions": WeatherNext2Attention}
+    # Hidden states are recorded on the mesh transformer's layers, which is where this model has a
+    # stack to record. The grid representations either side of it are in `last_hidden_state`.
+    _can_record_outputs = {
+        "attentions": WeatherNext2Attention,
+        "hidden_states": WeatherNext2Layer,
+    }
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -435,10 +440,15 @@ class WeatherNext2ModelOutput(ModelOutput):
         Grid-point features after the mesh-to-grid graph network.
     mesh_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_mesh_nodes, hidden_size)`):
         Mesh-node features after the transformer.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Mesh-node features entering the transformer and leaving each of its layers, so `num_hidden_layers + 1`
+        entries. Attention runs over blocks of neighbouring mesh nodes, so these are shaped
+        `(batch_size, num_blocks, block_size, hidden_size)` and the tail of the last block is padding.
     """
 
     last_hidden_state: torch.FloatTensor = None
     mesh_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
@@ -453,10 +463,13 @@ class WeatherNext2ForecastOutput(ModelOutput):
         [`WeatherNext2FeatureExtractor.postprocess`] to get physical units.
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_grid_points, hidden_size)`):
         Grid-point features the prediction was decoded from.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Mesh-node features after each transformer layer, shaped as in [`WeatherNext2ModelOutput`].
     """
 
     prediction: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
@@ -543,7 +556,9 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
             self.attention_mask[:, :, :, block_size : 2 * block_size] = True
 
     @merge_with_config_defaults
-    @capture_outputs
+    # `last_hidden_state` is the grid representation, not the last mesh-transformer layer, so it must
+    # not be tied over the last recorded hidden state.
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -710,6 +725,7 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel):
         return WeatherNext2ForecastOutput(
             prediction=prediction,
             last_hidden_state=outputs.last_hidden_state,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 

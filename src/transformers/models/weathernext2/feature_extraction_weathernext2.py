@@ -23,7 +23,7 @@ accelerator: numpy inputs are adopted with `torch.as_tensor`, which does not cop
 handed back as numpy again unless the caller passed tensors.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
@@ -60,20 +60,20 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
     Constructs a WeatherNext 2 feature extractor.
 
     Args:
-        input_variables (`Sequence[str]`):
+        input_variables (`list[str]`):
             Variables the model consumes, in channel order.
-        target_variables (`Sequence[str]`):
+        target_variables (`list[str]`):
             Variables the model predicts, in channel order.
-        forcing_variables (`Sequence[str]`):
+        forcing_variables (`list[str]`):
             Variables supplied for the predicted time step. These are all derived from the clock, so this class
             computes them itself in [`~WeatherNext2FeatureExtractor.compute_forcings`].
-        atmospheric_variables (`Sequence[str]`):
+        atmospheric_variables (`list[str]`):
             Variables that carry a pressure-level dimension.
-        static_variables (`Sequence[str]`):
+        static_variables (`list[str]`):
             Input variables that do not change over time.
-        global_variables (`Sequence[str]`):
+        global_variables (`list[str]`):
             Variables with neither a latitude nor a longitude dimension.
-        pressure_levels (`Sequence[int]`):
+        pressure_levels (`list[int]`):
             Pressure levels in hPa, ascending.
         mean_by_level (`dict[str, float | list[float]]`):
             Per-variable mean used to normalize inputs, and to unnormalize predictions of variables that are not
@@ -101,17 +101,17 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
 
     def __init__(
         self,
-        input_variables: Sequence[str],
-        target_variables: Sequence[str],
-        forcing_variables: Sequence[str],
-        atmospheric_variables: Sequence[str],
-        static_variables: Sequence[str],
-        global_variables: Sequence[str],
-        pressure_levels: Sequence[int],
-        mean_by_level: Mapping[str, Any],
-        stddev_by_level: Mapping[str, Any],
-        diffs_stddev_by_level: Mapping[str, Any],
-        nan_fill_values: Mapping[str, float] | None = None,
+        input_variables: list[str],
+        target_variables: list[str],
+        forcing_variables: list[str],
+        atmospheric_variables: list[str],
+        static_variables: list[str],
+        global_variables: list[str],
+        pressure_levels: list[int],
+        mean_by_level: dict[str, float | list[float]],
+        stddev_by_level: dict[str, float | list[float]],
+        diffs_stddev_by_level: dict[str, float | list[float]],
+        nan_fill_values: dict[str, float] | None = None,
         num_input_timesteps: int = 2,
         time_step_hours: int = 6,
         grid_latitudes: int = 721,
@@ -121,17 +121,17 @@ class WeatherNext2FeatureExtractor(FeatureExtractionMixin):
         # The arithmetic here is all torch, so that a rollout can stay on the accelerator.
         requires_backends(self, ["torch"])
         super().__init__(**kwargs)
-        self.input_variables = list(input_variables)
-        self.target_variables = list(target_variables)
-        self.forcing_variables = list(forcing_variables)
-        self.atmospheric_variables = list(atmospheric_variables)
-        self.static_variables = list(static_variables)
-        self.global_variables = list(global_variables)
-        self.pressure_levels = list(pressure_levels)
-        self.mean_by_level = dict(mean_by_level)
-        self.stddev_by_level = dict(stddev_by_level)
-        self.diffs_stddev_by_level = dict(diffs_stddev_by_level)
-        self.nan_fill_values = dict(nan_fill_values or {})
+        self.input_variables = input_variables
+        self.target_variables = target_variables
+        self.forcing_variables = forcing_variables
+        self.atmospheric_variables = atmospheric_variables
+        self.static_variables = static_variables
+        self.global_variables = global_variables
+        self.pressure_levels = pressure_levels
+        self.mean_by_level = mean_by_level
+        self.stddev_by_level = stddev_by_level
+        self.diffs_stddev_by_level = diffs_stddev_by_level
+        self.nan_fill_values = nan_fill_values or {}
         self.num_input_timesteps = num_input_timesteps
         self.time_step_hours = time_step_hours
         self.grid_latitudes = grid_latitudes

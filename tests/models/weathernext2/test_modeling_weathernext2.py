@@ -315,18 +315,47 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model_class._from_config(config).to(torch_device).eval()(**inputs_dict)
             self.assertIsNone(outputs.attentions)
 
+    def test_hidden_states_output(self):
+        """Same contract as the shared test, with this model's blocked mesh-node shape.
+
+        Hidden states come from the mesh transformer, whose nodes are grouped into blocks of
+        neighbours, so a layer's output is `[batch, num_blocks, block_size, hidden]`. The grid
+        representations either side of the transformer are not in here: they are what
+        `last_hidden_state` and `mesh_hidden_state` carry.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            num_blocks, _, block_size, _ = model.get_submodule(
+                "model" if model_class is not WeatherNext2Model else ""
+            ).attention_mask.shape
+            expected = (self.model_tester.batch_size, num_blocks, block_size, self.model_tester.hidden_size)
+
+            # via the forward argument
+            with torch.no_grad():
+                outputs = model(**inputs_dict, output_hidden_states=True)
+            self.assertEqual(len(outputs.hidden_states), self.model_tester.num_hidden_layers + 1)
+            self.assertEqual(tuple(outputs.hidden_states[0].shape), expected)
+
+            # via the config
+            config.output_hidden_states = True
+            model = model_class(config).to(torch_device).eval()
+            with torch.no_grad():
+                outputs = model(**inputs_dict)
+            self.assertEqual(len(outputs.hidden_states), self.model_tester.num_hidden_layers + 1)
+            self.assertEqual(tuple(outputs.hidden_states[0].shape), expected)
+            config.output_hidden_states = False
+
+            # and off by default
+            with torch.no_grad():
+                outputs = model_class(config).to(torch_device).eval()(**inputs_dict)
+            self.assertIsNone(outputs.hidden_states)
+
     # WeatherNext 2 consumes gridded physical fields, not tokens or images, and masks by mesh
     # adjacency rather than by sequence position, so several of the shared tests do not apply.
     @unittest.skip(reason="WeatherNext 2 has no token embeddings.")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Hidden states are per grid point and per mesh node, not per token.")
-    def test_hidden_states_output(self):
-        pass
-
-    @unittest.skip(reason="Hidden states are per grid point and per mesh node, not per token.")
-    def test_retain_grad_hidden_states_attentions(self):
         pass
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
