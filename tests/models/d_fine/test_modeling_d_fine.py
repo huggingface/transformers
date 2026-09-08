@@ -42,6 +42,7 @@ if is_torch_available():
     import torch
 
     from transformers import DFineForObjectDetection, DFineModel
+    from transformers.loss.loss_d_fine import DFineLoss
 
 if is_vision_available():
     from PIL import Image
@@ -656,39 +657,23 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_main_loss_excludes_denoising_queries(self):
         """The Hungarian-matched main loss must only see the normal queries, not the contrastive denoising ones."""
-        from transformers.loss.loss_d_fine import DFineLoss
-
-        config = copy.deepcopy(self.model_tester.get_config())
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_denoising = 10
         config.auxiliary_loss = True
-        config.num_labels = self.model_tester.num_labels
+        inputs_dict = self._prepare_for_class(inputs_dict, DFineForObjectDetection, return_labels=True)
 
         model = DFineForObjectDetection(config)
         model.to(torch_device)
         model.train()
 
-        pixel_values = torch.rand(
-            self.model_tester.batch_size,
-            self.model_tester.num_channels,
-            self.model_tester.image_size,
-            self.model_tester.image_size,
-        ).to(torch_device)
-        labels = []
-        for _ in range(self.model_tester.batch_size):
-            labels.append(
-                {
-                    "class_labels": torch.randint(0, self.model_tester.num_labels, (self.model_tester.n_targets,)).to(
-                        torch_device
-                    ),
-                    "boxes": torch.rand(self.model_tester.n_targets, 4).to(torch_device),
-                }
-            )
+        outputs = model(**inputs_dict)
 
-        outputs = model(pixel_values=pixel_values, labels=labels)
-
-        # In training mode the last-layer outputs contain the denoising queries followed by the normal queries
+        # In training mode the last-layer outputs contain the denoising queries followed by the normal queries.
+        # `num_denoising` is split into groups of one positive and one negative query per (padded) target.
         num_denoising_queries, num_queries = outputs.denoising_meta_values["dn_num_split"]
-        self.assertGreater(num_denoising_queries, 0)
+        max_num_targets = max(len(target["class_labels"]) for target in inputs_dict["labels"])
+        num_groups = config.num_denoising // max_num_targets
+        self.assertEqual(num_denoising_queries, 2 * max_num_targets * num_groups)
         self.assertEqual(outputs.logits.shape[1], num_denoising_queries + num_queries)
 
         # The main loss terms must equal the loss computed on the normal queries alone
@@ -696,9 +681,9 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         reference = criterion(
             {
                 "logits": outputs.logits[:, num_denoising_queries:],
-                "pred_boxes": outputs.pred_boxes[:, num_denoising_queries:].clamp(min=0, max=1),
+                "pred_boxes": outputs.pred_boxes[:, num_denoising_queries:],
             },
-            labels,
+            inputs_dict["labels"],
         )
         for key in ("loss_vfl", "loss_bbox", "loss_giou"):
             torch.testing.assert_close(outputs.loss_dict[key], reference[key])
