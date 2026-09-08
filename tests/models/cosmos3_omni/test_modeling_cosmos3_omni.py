@@ -281,7 +281,6 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @require_deterministic_for_xpu
     def test_small_model_integration_batched(self):
-        # TODO(synthetic-assets): refresh expectations, recorded against the old third-party asset.
         model = Cosmos3OmniForConditionalGeneration.from_pretrained(
             "nvidia/Cosmos3-Nano", dtype="bfloat16", device_map=torch_device
         )

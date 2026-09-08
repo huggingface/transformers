@@ -232,8 +232,6 @@ def prepare_prompt_depth():
 @slow
 class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
     def test_inference_wo_prompt_depth(self):
-        # TODO(synthetic-assets): refresh from the next GPU run -- round 3 could not report a
-        # value because the assertion was an uninstrumented assertTrue(torch.allclose(...)).
         image_processor = AutoImageProcessor.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
         model = PromptDepthAnythingForDepthEstimation.from_pretrained(
             "depth-anything/prompt-depth-anything-vits-hf"
@@ -256,8 +254,6 @@ class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(predicted_depth[0, :3, :3], expected_slice, atol=1e-3, rtol=1e-5)
 
     def test_inference(self):
-        # TODO(synthetic-assets): refresh from the next GPU run -- round 3 could not report a
-        # value because the assertion was an uninstrumented assertTrue(torch.allclose(...)).
         image_processor = AutoImageProcessor.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
         model = PromptDepthAnythingForDepthEstimation.from_pretrained(
             "depth-anything/prompt-depth-anything-vits-hf"

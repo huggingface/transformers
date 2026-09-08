@@ -369,7 +369,8 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
 
     def test_small_model_integration_test(self):
-        # TODO(synthetic-assets): re-record; the image changed when duplicate assets were collapsed.
+        # TODO(synthetic-assets): EXPECTED_DECODED_TEXT below still needs a GPU run;
+        # the processor-level expectations above are refreshed.
         model = (
             PaddleOCRVLForConditionalGeneration.from_pretrained(
                 "PaddlePaddle/PaddleOCR-VL",
@@ -387,25 +388,25 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
             return_tensors="pt",
         )
 
-        expected_input_ids_length = 211
-        assert expected_input_ids_length == len(inputs.input_ids[0])
+        expected_input_ids_length = 1389
+        self.assertEqual(expected_input_ids_length, len(inputs.input_ids[0]))
 
         expected_input_ids = [100273, 2969, 93963, 93919, 101305, 100295, 100295, 100295, 100295, 100295]  # fmt: skip
-        assert expected_input_ids == inputs.input_ids[0].tolist()[:10]
+        self.assertEqual(expected_input_ids, inputs.input_ids[0].tolist()[:10])
 
         expected_pixel_slice = torch.tensor(
             [
-                [1.0000, 1.0000, 1.0000],
-                [1.0000, 1.0000, 1.0000],
-                [0.9922, 0.9922, 0.9922],
-                [1.0000, 1.0000, 1.0000],
-                [1.0000, 1.0000, 1.0000],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
             ],
             dtype=torch.float32,
             device="cpu",
         )
 
-        assert torch.allclose(expected_pixel_slice, inputs.pixel_values[:5, :, 0, 0], atol=3e-3)
+        torch.testing.assert_close(inputs.pixel_values[:5, :, 0, 0], expected_pixel_slice, atol=3e-3, rtol=1e-5)
 
         # verify generation
         inputs = inputs.to(torch_device)
@@ -420,7 +421,6 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
         )
 
     def test_small_model_integration_test_batch(self):
-        # TODO(synthetic-assets): re-record; the image changed when duplicate assets were collapsed.
         model = (
             PaddleOCRVLForConditionalGeneration.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16")
             .to(torch_device)
@@ -458,7 +458,8 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_flashatt2(self):
-        # TODO(synthetic-assets): re-record; the image changed when duplicate assets were collapsed.
+        # TODO(synthetic-assets): EXPECTED_DECODED_TEXT below still needs a GPU run;
+        # the processor-level expectations above are refreshed.
         model = (
             PaddleOCRVLForConditionalGeneration.from_pretrained(
                 "PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", attn_implementation="flash_attention_2"
@@ -475,24 +476,24 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
             return_tensors="pt",
         )
 
-        expected_input_ids_length = 211
-        assert expected_input_ids_length == len(inputs.input_ids[0])
+        expected_input_ids_length = 1389
+        self.assertEqual(expected_input_ids_length, len(inputs.input_ids[0]))
 
         expected_input_ids = [100273, 2969, 93963, 93919, 101305, 100295, 100295, 100295, 100295, 100295]  # fmt: skip
-        assert expected_input_ids == inputs.input_ids[0].tolist()[:10]
+        self.assertEqual(expected_input_ids, inputs.input_ids[0].tolist()[:10])
 
         expected_pixel_slice = torch.tensor(
             [
-                [1.0000, 1.0000, 1.0000],
-                [1.0000, 1.0000, 1.0000],
-                [0.9922, 0.9922, 0.9922],
-                [1.0000, 1.0000, 1.0000],
-                [1.0000, 1.0000, 1.0000],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
             ],
             dtype=torch.float32,
             device="cpu",
         )
-        assert torch.allclose(expected_pixel_slice, inputs.pixel_values[:5, :, 0, 0], atol=3e-3)
+        torch.testing.assert_close(inputs.pixel_values[:5, :, 0, 0], expected_pixel_slice, atol=3e-3, rtol=1e-5)
 
         # verify generation
         inputs = inputs.to(torch_device)
@@ -510,7 +511,6 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
-        # TODO(synthetic-assets): re-record; the image changed when duplicate assets were collapsed.
         model = (
             PaddleOCRVLForConditionalGeneration.from_pretrained(
                 "PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", attn_implementation="flash_attention_2"

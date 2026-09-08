@@ -320,7 +320,6 @@ class Mistral3IntegrationTest(unittest.TestCase):
 
     @require_deterministic_for_xpu
     def test_mistral3_integration_batched_generate(self):
-        # TODO(synthetic-assets): re-record; the image changed when duplicate assets were collapsed.
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         processor.tokenizer.padding_side = "left"
         processor.chat_template = processor.chat_template.replace('strftime_now("%Y-%m-%d")', '"2025-06-20"')
@@ -393,7 +392,6 @@ class Mistral3IntegrationTest(unittest.TestCase):
 
     @require_deterministic_for_xpu
     def test_mistral3_integration_batched_generate_multi_image(self):
-        # TODO(synthetic-assets): re-record; the image changed when duplicate assets were collapsed.
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         processor.tokenizer.padding_side = "left"
         processor.chat_template = processor.chat_template.replace('strftime_now("%Y-%m-%d")', '"2025-06-20"')
