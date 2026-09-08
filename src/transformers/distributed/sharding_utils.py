@@ -81,10 +81,11 @@ class DtensorShardOperation:
        we skip it. Later, `MergeModulelist` will stack the owned expert we kept to create the rank's local shard
     """
 
-    def __init__(self, param: DTensor):
+    def __init__(self, param: DTensor, source_dim_mapping: dict[int, int] | None = None):
         self.device_mesh = param.device_mesh
         self.placements = tuple(param.placements)
         self.param_ndim = param.ndim
+        self.source_dim_mapping = source_dim_mapping or {}
         local_shape, offsets = compute_local_shape_and_global_offset(param.shape, self.device_mesh, self.placements)
         # Axis-0 range owned by this rank (used to filter per-expert pieces)
         # [_axis0_offset, _axis0_offset + _axis0_local_size)
@@ -122,7 +123,7 @@ class DtensorShardOperation:
             for mesh_dim, placement in dim_placements:
                 sub_mesh = self._get_sub_mesh(mesh_dim)
                 rank, world_size = sub_mesh.get_local_rank(), sub_mesh.size()
-                dim_idx = self._normalize_param_dim(placement.dim)
+                dim_idx = self._map_param_dim_to_source_dim(placement.dim)
                 planned_ops_by_dim[dim_idx].append((placement, rank, world_size))
 
             # prepare the slices to fetch on disk for each tensor dimension.
@@ -153,7 +154,8 @@ class DtensorShardOperation:
         # MoE path
         # tensor_idx identifies the axis-0 piece in param space (not in source.shape).
         normalized_dim_placements = [
-            (mesh_dim, placement, self._normalize_param_dim(placement.dim)) for mesh_dim, placement in dim_placements
+            (mesh_dim, placement, self._map_param_dim_to_source_dim(placement.dim))
+            for mesh_dim, placement in dim_placements
         ]
 
         # if this rank owns expert `tensor_idx` along axis 0, we need to slice the inner dimensions, else we drop it
@@ -313,9 +315,12 @@ class DtensorShardOperation:
             return self.device_mesh
         return self.device_mesh[self.device_mesh.mesh_dim_names[mesh_dim]]
 
-    def _normalize_param_dim(self, dim: int) -> int:
+    def _map_param_dim_to_source_dim(self, param_dim: int) -> int:
         # if dim is negative, it should be normalized to the last axis
-        return dim if dim >= 0 else self.param_ndim + dim
+        param_dim = param_dim if param_dim >= 0 else self.param_ndim + param_dim
+        if param_dim in self.source_dim_mapping:
+            return self.source_dim_mapping[param_dim]
+        return param_dim
 
 
 def _dtensor_from_local_like(local_tensor: torch.Tensor, ref: DTensor) -> DTensor:
