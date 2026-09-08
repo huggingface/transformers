@@ -636,9 +636,7 @@ class GenerationMixin(ContinuousMixin):
         )
 
         # Load the remote generation module
-        module = get_cached_module_file(
-            pretrained_model_name_or_path, module_file=custom_generate_file, **kwargs
-        )
+        module = get_cached_module_file(pretrained_model_name_or_path, module_file=custom_generate_file, **kwargs)
 
         # Load the custom generate function
         check_python_requirements(
