@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import sys
 
 import pytest
@@ -20,22 +21,17 @@ from click.testing import CliRunner
 
 import transformers.cli.transformers
 
-
-@pytest.fixture(autouse=True, scope="session")
-def set_cuda_expandable_segments():
-    """Enable expandable CUDA memory segments for all CLI tests.
-
-    Without this, loading multiple large models sequentially (e.g. gemma-4 in
-    TestMultimodalLM followed by TestToolCallGemma) causes memory fragmentation
-    that prevents new large allocations even when enough total GPU memory is free.
-    """
-    import contextlib
-
-    with contextlib.suppress(Exception):
-        import torch
-
-        if torch.cuda.is_available():
-            torch.cuda.memory.set_allocator_settings("expandable_segments:True")
+# Set expandable CUDA memory segments before any CUDA initialization.
+# This must be done via os.environ (not torch API) to take effect before the
+# CUDA allocator is first used. Without this, loading multiple large models
+# sequentially (e.g. gemma-4 in TestMultimodalLM followed by TestToolCallGemma)
+# causes fragmentation that prevents new large allocations even when enough
+# total GPU memory is free.
+_existing = os.environ.get("PYTORCH_CUDA_ALLOC_CONF", "")
+if "expandable_segments" not in _existing:
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = (
+        f"{_existing},expandable_segments:True" if _existing else "expandable_segments:True"
+    )
 
 
 @pytest.fixture
