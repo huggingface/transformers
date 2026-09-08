@@ -55,6 +55,9 @@ torchrun --nproc-per-node 8 your_script.py
 By default every expert-parallel rank runs the whole batch, keeps only the experts it owns, and the group all-reduces the expert outputs at the end of every MoE layer. The parameters outside the experts do `tp_size` times the same work, and the all-reduce moves the full activations. `expert_parallel_dispatch=True` sends each token to the rank that owns its experts instead: this means a lot less data needs to travel between GPUs / nodes in large scale trainings.
 
 ```py
+from transformers import AutoModelForCausalLM
+from transformers.distributed import DistributedConfig
+
 distributed_config = DistributedConfig(
     tp_size=8,
     enable_expert_parallel=True,
