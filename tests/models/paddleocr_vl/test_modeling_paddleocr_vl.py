@@ -369,8 +369,6 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
 
     def test_small_model_integration_test(self):
-        # TODO(synthetic-assets): EXPECTED_DECODED_TEXT below still needs a GPU run;
-        # the processor-level expectations above are refreshed.
         model = (
             PaddleOCRVLForConditionalGeneration.from_pretrained(
                 "PaddlePaddle/PaddleOCR-VL",
@@ -413,7 +411,7 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
         result = self.processor.decode(output[0][inputs["input_ids"].shape[-1] : -1])
 
-        EXPECTED_DECODED_TEXT = "生甘草"
+        EXPECTED_DECODED_TEXT = "绿洲仕格维花园公寓\n楼栋 A 座\n访客登记\n2026-09-07\n"
 
         self.assertEqual(
             result,
@@ -458,8 +456,11 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_flashatt2(self):
-        # TODO(synthetic-assets): EXPECTED_DECODED_TEXT below still needs a GPU run;
-        # the processor-level expectations above are refreshed.
+        # EXPECTED_DECODED_TEXT mirrors test_small_model_integration_test: same model,
+        # image, prompt, generation args and decode path -- only attn_implementation
+        # differs, and the two held identical expectations before the asset swap.
+        # @require_flash_attn keeps this out of run_models_gpu, so no CI round can
+        # measure it; confirm with a local flash-attn run.
         model = (
             PaddleOCRVLForConditionalGeneration.from_pretrained(
                 "PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", attn_implementation="flash_attention_2"
@@ -500,7 +501,7 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
         result = self.processor.decode(output[0][inputs["input_ids"].shape[-1] : -1])
 
-        EXPECTED_DECODED_TEXT = "生甘草"
+        EXPECTED_DECODED_TEXT = "绿洲仕格维花园公寓\n楼栋 A 座\n访客登记\n2026-09-07\n"
 
         self.assertEqual(
             result,
@@ -536,7 +537,10 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
             generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
         )
 
-        EXPECTED_DECODED_TEXT = ["生甘草", "生甘草"]
+        EXPECTED_DECODED_TEXT = [
+            "绿洲仕格维花园公寓\n楼栋 A 座\n访客登记\n2026-09-07\n___",
+            "绿洲仕格维花园公寓\n楼栋 A 座\n访客登记\n2026-09-07\n___",
+        ]
 
         self.assertEqual(
             result,

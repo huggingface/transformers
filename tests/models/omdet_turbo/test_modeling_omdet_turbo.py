@@ -803,7 +803,7 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
             target_sizes=[image.size[::-1] for image in images_batched],
             threshold=0.2,
         )
-        expected_scores = torch.tensor([0.7675, 0.3016, 0.7454]).to(torch_device)
+        expected_scores = torch.tensor([0.7675, 0.3016, 0.7845]).to(torch_device)
         expected_slice_boxes = torch.tensor(
             [
                 [39.8870, 70.3522, 176.7424, 118.0354],

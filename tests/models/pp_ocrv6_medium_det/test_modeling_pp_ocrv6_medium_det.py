@@ -259,7 +259,6 @@ class PPOCRV6MediumDetModelIntegrationTest(unittest.TestCase):
         self.image = load_image(img_url)
 
     def test_inference_object_detection_head(self):
-        # TODO(synthetic-assets): boxes/scores follow the 5 -> 4 detection-count change.
         inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)
         bs, c, h, w = inputs["pixel_values"].shape
 
@@ -303,9 +302,9 @@ class PPOCRV6MediumDetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(results[0]["boxes"].shape, expected_shape_boxes)
         torch.testing.assert_close(results[0]["boxes"], expected_boxes, rtol=2e-2, atol=2e-2)
 
-        expected_scores = torch.tensor([0.8665, 0.8453, 0.4558, 0.8601, 0.8996], device=torch_device)
+        expected_scores = torch.tensor([0.9016, 0.9150, 0.9287, 0.8561], device=torch_device)
         self.assertEqual(results[0]["scores"].shape, (4,))
         torch.testing.assert_close(results[0]["scores"], expected_scores, rtol=2e-2, atol=2e-2)
 
-        self.assertEqual(results[0]["labels"].shape, (5,))
+        self.assertEqual(results[0]["labels"].shape, (4,))
         self.assertTrue((results[0]["labels"] == 0).all())  # Single class: text

@@ -492,11 +492,16 @@ class PPDocLayoutV3ModelIntegrationTest(unittest.TestCase):
             outputs, threshold=0.5, target_sizes=[self.image.size[::-1]]
         )[0]
 
-        expected_scores = torch.tensor(
-            [0.9605, 0.9050, 0.9517, 0.9482, 0.9640, 0.9519, 0.9216, 0.7799, 0.7979, 0.5582, 0.7412, 0.7018, 0.8377]
-        ).to(torch_device)
+        expected_scores = torch.tensor([0.7808, 0.7698, 0.7643, 0.7504, 0.9043, 0.7467, 0.7556, 0.7409]).to(
+            torch_device
+        )
         torch.testing.assert_close(results["scores"], expected_scores, rtol=2e-2, atol=2e-2)
 
+        # TODO(synthetic-assets): next layer -- `expected_labels` still holds 13 entries
+        # but the detection count is now 8 (see expected_scores above), and
+        # `expected_slice_boxes` below is measured against the old detections.
+        # assertSequenceEqual was uninstrumented, so no round has ever reported these;
+        # it is patched in testing_utils now, so the next round should capture them.
         expected_labels = [22, 17, 22, 22, 22, 22, 22, 10, 10, 10, 10, 16, 8]
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
 
