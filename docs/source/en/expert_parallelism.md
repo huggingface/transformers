@@ -67,7 +67,7 @@ distributed_config = DistributedConfig(
 
 Each rank trains on its own part of the batch. At every MoE layer it routes its tokens, sends each (token, expert) pair to the rank that owns the expert with an all-to-all, runs its local experts, and gets the results back with a second all-to-all. Only the routed tokens travel.
 
-The rest of the model is handled as follows:
+For the rest of the model:
 
 - The parameters outside the experts are data-parallel across the whole group, so they are sharded with [FSDP2](./fsdp) across every rank (`fsdp` and `tp` together when both are set), and FSDP2 reduces their gradients.
 - The experts stay sharded across `tp`, and across `fsdp` too when `fsdp_size > 1`. With `fsdp_size=1` they are outside FSDP2, so `fsdp_mixed_precision` and `fsdp_cpu_offload` do not apply to them.
