@@ -45,23 +45,29 @@ class FunAsrNanoModelTester(ALMModelTester):
         kwargs.setdefault("audio_token_id", 0)
         kwargs.setdefault("is_training", False)
 
-        # Small Qwen3 text config for common tests.
-        kwargs.setdefault("hidden_size", 32)
+        # Small text (Qwen3) and encoder configs
+        kwargs.setdefault("hidden_size", 64)
         kwargs.setdefault("intermediate_size", 64)
         kwargs.setdefault("num_hidden_layers", 2)
         kwargs.setdefault("num_attention_heads", 4)
         kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 8)
+        kwargs.setdefault("head_dim", 16)
         kwargs.setdefault("max_position_embeddings", 128)
-
-        # Small encoder config.
-        kwargs.setdefault("hidden_size", 32)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("intermediate_size", 64)
-        kwargs.setdefault("num_hidden_layers", 2)
         kwargs.setdefault("num_timestamp_prediction_layers", 1)
         kwargs.setdefault("fsmn_kernel_size", 5)
         kwargs.setdefault("hidden_dropout", 0.0)
+
+        # Compatible adapter config for the text model
+        kwargs.setdefault(
+            "adaptor_config",
+            {
+                "hidden_size": kwargs["hidden_size"],
+                "intermediate_size": kwargs["hidden_size"] // 4,
+                "num_attention_heads": kwargs["num_attention_heads"],
+                "num_hidden_layers": kwargs["num_hidden_layers"],
+                "projector_hidden_size": kwargs["hidden_size"],
+            },
+        )
 
         super().__init__(parent, **kwargs)
 
