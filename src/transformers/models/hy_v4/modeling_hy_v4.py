@@ -582,7 +582,7 @@ class HYV4Experts(nn.Module):
     ) -> torch.Tensor:
         final = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            mask = F.one_hot(top_k_index, num_classes=self.num_experts+1).permute(2, 1, 0)
+            mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
             hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in hit:
             expert_idx = expert_idx[0]

@@ -13,8 +13,8 @@
 # limitations under the License.
 from __future__ import annotations
 
-import re
 import contextlib
+import re
 
 from ..utils import logging
 from ..utils.generic import GeneralInterface
@@ -28,7 +28,7 @@ if is_torch_available():
 
 if is_torch_distributed_available():
     import torch.distributed as dist
-    from torch.distributed.tensor import Shard, DTensor, Partial, Replicate, distribute_tensor
+    from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
 
 
@@ -61,24 +61,17 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
         if generic_param_name in tp_plan:
             unused_rules.pop(generic_param_name, None)
             unsharded_layers.discard(key)
-        elif (
-            "." in generic_param_name
-            and (parent_param_name := generic_param_name.rsplit(".", 1)[0]) in tp_plan
-        ):
+        elif "." in generic_param_name and (parent_param_name := generic_param_name.rsplit(".", 1)[0]) in tp_plan:
             unused_rules.pop(parent_param_name, None)
             unsharded_layers.discard(key)
 
     if len(unused_rules) > 0:
-        logger.warning(
-            f"The following TP rules were not applied on any of the layers: {unused_rules}"
-        )
+        logger.warning(f"The following TP rules were not applied on any of the layers: {unused_rules}")
     if len(unsharded_layers) > 0:
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
 
 
-def _get_parameter_tp_plan(
-    parameter_name: str, tp_plan: dict[str, str], is_weight=True
-) -> str | None:
+def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weight=True) -> str | None:
     """
     Get the TP style for a parameter from the TP plan.
 
@@ -91,11 +84,7 @@ def _get_parameter_tp_plan(
     generic_param_name = replace_layer_number_by_wildcard(parameter_name)
     if generic_param_name in tp_plan:
         return tp_plan[generic_param_name]
-    elif (
-        is_weight
-        and "." in generic_param_name
-        and (module_name := generic_param_name.rsplit(".", 1)[0]) in tp_plan
-    ):
+    elif is_weight and "." in generic_param_name and (module_name := generic_param_name.rsplit(".", 1)[0]) in tp_plan:
         return tp_plan[module_name]
     return None
 
@@ -104,11 +93,7 @@ def _get_parameter_tp_plan(
 def _use_local_dtensor_params(module):
     # Kernels as DeepGEMM require local tensors rather than DTensors.
     # We temporarily convert the DTensors to local tensors for the duration of forward() and swap them back after.
-    originals = {
-        name: param
-        for name, param in module.named_parameters(recurse=False)
-        if isinstance(param, DTensor)
-    }
+    originals = {name: param for name, param in module.named_parameters(recurse=False) if isinstance(param, DTensor)}
     local_params = {name: param.to_local() for name, param in originals.items()}
     module._parameters.update(local_params)
     try:
@@ -183,9 +168,7 @@ class ColwiseParallel(TensorParallelLayer):
 
     def should_use_local_tensors(self, module):
         use_local_quantized_path = getattr(module, "_hf_quantized_needs_local_tp", False)
-        uses_local_inference_kernel = (
-            isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
-        )
+        uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
         return use_local_quantized_path or uses_local_inference_kernel
 
     def validate_param(self, module, param, mesh, parameter_name=None):
@@ -249,11 +232,7 @@ class ColwiseParallel(TensorParallelLayer):
             and isinstance(self.output_layouts, Shard)
             and self.output_layouts.dim in (-1, output.dim() - 1)
         )
-        if (
-            self.should_use_local_tensors(module)
-            and self.use_local_output
-            and output_is_local_shard
-        ):
+        if self.should_use_local_tensors(module) and self.use_local_output and output_is_local_shard:
             return output
         if not isinstance(output, DTensor):
             output = DTensor.from_local(output, mesh, [Shard(-1)], run_check=False)
@@ -277,9 +256,7 @@ class RowwiseParallel(TensorParallelLayer):
 
     def should_use_local_tensors(self, module):
         use_local_quantized_path = getattr(module, "_hf_quantized_needs_local_tp", False)
-        uses_local_inference_kernel = (
-            isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
-        )
+        uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
         return use_local_quantized_path or uses_local_inference_kernel
 
     def shard_param(self, module, param, mesh):
@@ -303,11 +280,7 @@ class RowwiseParallel(TensorParallelLayer):
         # A local kernel can use a plain input when the previous layer already split it.
         #  avoid a redundant Tensor -> DTensor -> Tensor round trip.
         input_has_desired_layout = self.input_layouts == desired
-        if (
-            self.should_use_local_tensors(module)
-            and input_has_desired_layout
-            and not isinstance(x, DTensor)
-        ):
+        if self.should_use_local_tensors(module) and input_has_desired_layout and not isinstance(x, DTensor):
             return args, kwargs
         if not isinstance(x, DTensor):
             x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
@@ -353,10 +326,7 @@ class RowwiseParallel(TensorParallelLayer):
                 output = DTensor.from_local(output, mesh, [Partial()], run_check=False)
             if output.placements != (self.output_layouts,):
                 output = output.redistribute(placements=[self.output_layouts])
-            if (
-                self.should_use_local_tensors(module)
-                and (bias := module._parameters.get("bias")) is not None
-            ):
+            if self.should_use_local_tensors(module) and (bias := module._parameters.get("bias")) is not None:
                 output = output + bias
             if self.use_local_output:
                 output = output.to_local()
@@ -513,9 +483,7 @@ class PackedColwiseParallel(TensorParallelLayer):
         input_tensor = args[0]
         # Ensure the input is a Replicate DTensor on the TP mesh.
         if not isinstance(input_tensor, DTensor):
-            input_tensor = DTensor.from_local(
-                input_tensor, mesh, self.input_layouts, run_check=False
-            )
+            input_tensor = DTensor.from_local(input_tensor, mesh, self.input_layouts, run_check=False)
         elif input_tensor.placements != self.input_layouts:
             input_tensor = input_tensor.redistribute(placements=self.input_layouts)
 
@@ -543,9 +511,7 @@ class PackedRowwiseParallel(TensorParallelLayer):
         meta = module._parameters.get(param)
         if meta is None:
             return
-        placement = (
-            Replicate() if meta.ndim == 1 else _StridedShard(dim=-1, split_factor=self.split_factor)
-        )
+        placement = Replicate() if meta.ndim == 1 else _StridedShard(dim=-1, split_factor=self.split_factor)
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, mesh, [placement], src_data_rank=None),
             requires_grad=meta.requires_grad,
@@ -645,8 +611,7 @@ class MoeExpertsParallel(TensorParallelLayer):
         output_source = (
             Partial()
             if any(
-                isinstance(param, DTensor)
-                and any(not placement.is_replicate() for placement in param.placements)
+                isinstance(param, DTensor) and any(not placement.is_replicate() for placement in param.placements)
                 for param in module.parameters()
             )
             else Replicate()
@@ -668,8 +633,7 @@ class MoeExpertsParallel(TensorParallelLayer):
             return None
 
         has_sharded_parameters = any(
-            isinstance(param, DTensor)
-            and any(not placement.is_replicate() for placement in param.placements)
+            isinstance(param, DTensor) and any(not placement.is_replicate() for placement in param.placements)
             for param in module.parameters()
         )
         if not has_sharded_parameters:
@@ -742,9 +706,7 @@ class EpRouterParallel(TensorParallelLayer):
                 f"Router module {type(module).__name__} is missing `num_experts` and `config.num_experts`"
             )
         if num_experts % ep_size != 0:
-            raise ValueError(
-                f"num_experts must be divisible by ep_size: {num_experts} % {ep_size} != 0"
-            )
+            raise ValueError(f"num_experts must be divisible by ep_size: {num_experts} % {ep_size} != 0")
         num_local_experts = num_experts // ep_size
 
         router_logits, router_scores, router_indices, *extra_outputs = output
@@ -754,9 +716,7 @@ class EpRouterParallel(TensorParallelLayer):
         if num_local_experts > 1:
             router_indices = torch.fmod(router_indices, num_local_experts)
         else:
-            router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(
-                router_indices < 0, -1
-            )
+            router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(router_indices < 0, -1)
         router_indices = router_indices.masked_fill(router_indices == -1, num_local_experts)
         return router_logits, router_scores, router_indices, *extra_outputs
 
@@ -798,18 +758,12 @@ class ParallelInterface(GeneralInterface):
 
     _global_mapping = (
         {
-            "embedding_rowwise": RowwiseParallel(
-                input_layouts=Replicate(), output_layouts=Replicate()
-            ),
-            "colwise_gather_output": ColwiseParallel(
-                input_layouts=Replicate(), output_layouts=Replicate()
-            ),
+            "embedding_rowwise": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
+            "colwise_gather_output": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "colwise_rep": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "colwise": ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
             "rowwise": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()),
-            "rowwise_split_input": RowwiseParallel(
-                input_layouts=Replicate(), output_layouts=Replicate()
-            ),
+            "rowwise_split_input": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "rowwise_rep": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "packed_colwise": PackedColwiseParallel(),
             "packed_rowwise": PackedRowwiseParallel(),
@@ -833,9 +787,7 @@ ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
 def _validate_tp_plan_styles(tp_plan: dict[str, str] | None) -> None:
-    unsupported_styles = {
-        style for style in (tp_plan or {}).values() if style not in ALL_PARALLEL_STYLES
-    }
+    unsupported_styles = {style for style in (tp_plan or {}).values() if style not in ALL_PARALLEL_STYLES}
     if unsupported_styles:
         raise ValueError(
             f"Unsupported tensor parallel styles: {unsupported_styles}. "
@@ -852,18 +804,14 @@ def apply_tensor_parallelism(model, tp_mesh):
         # Create DTensor placeholders so the loader knows which shard belongs to this rank.
         for p_name, _ in list(module.named_parameters(recurse=False)):
             full = f"{name}.{p_name}" if name else p_name
-            style_name = _get_parameter_tp_plan(
-                parameter_name=full, tp_plan=model.tp_plan, is_weight=True
-            )
+            style_name = _get_parameter_tp_plan(parameter_name=full, tp_plan=model.tp_plan, is_weight=True)
             if style_name is not None and style_name in ALL_PARALLEL_STYLES:
                 style = ALL_PARALLEL_STYLES[style_name]
                 style.validate_param(module, p_name, tp_mesh, parameter_name=full)
                 style.shard_param(module, p_name, tp_mesh)
 
         # Install the input/output transforms required by this module's TP style.
-        style_name = _get_parameter_tp_plan(
-            parameter_name=name, tp_plan=model.tp_plan, is_weight=False
-        )
+        style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=model.tp_plan, is_weight=False)
         if style_name is not None and style_name in ALL_PARALLEL_STYLES:
             if style_name == "mla_kv_a_proj":
                 # MLA needs to know the qk_rope_head_dim to split the projection output into KV and RoPE parts.
