@@ -52,7 +52,7 @@ torchrun --nproc-per-node 8 your_script.py
 
 ## Token dispatch
 
-By default every expert-parallel rank runs the whole batch, keeps only the experts it owns, and the group all-reduces the expert outputs at the end of every MoE layer. The parameters outside the experts do `tp_size` times the same work, and the all-reduce moves the full activations. `expert_parallel_dispatch=True` sends each token to the rank that owns its experts instead: this means a lot less data needs to travel between GPUs / nodes in large scale trainings.
+By default, every expert parallel rank runs the whole batch, keeps only the experts it own, and all-reduces expert outputs after every MoE layer. Dense layers then do `tp_size` times the same work, and the all-reduce moves full activations. Set `expert_parallel_dispatch=True` to send each token to the rank that owns its experts. Each rank trains on its own batch shard, and a lot less data is required to travel between GPUs/nodes during larg-scale training.
 
 ```py
 from transformers import AutoModelForCausalLM
