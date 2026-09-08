@@ -504,7 +504,7 @@ def _dispatch_routed_input(
     num_experts: int,
     m_alignment: int,
     use_psum_layout: bool,
-    is_expert_parallel: bool = False,
+    is_expert_parallel: bool,
 ) -> tuple:
     """Sort tokens by expert id and build the M-grouped padded layout.
 
