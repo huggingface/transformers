@@ -612,7 +612,7 @@ def grouped_mm_experts_forward(
         selected_biases = self.up_proj_bias[expert_ids_g] if self.has_bias else None
 
     # Pre-mask (bwd path).
-    if self.is_expert_parallel:
+    if sentinel_mask is not None:
         selected_hidden_states_g.masked_fill_(sentinel_mask, 0.0)
 
     # --- Up projection per expert (grouped) ---
@@ -620,8 +620,8 @@ def grouped_mm_experts_forward(
         selected_hidden_states_g, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, 2 * intermediate_dim) or  (S, intermediate_dim) depending on whether we have gating
 
-    if self.is_expert_parallel:
-        # Zero the sentinel-tail rows the kernel left uninitialized (fwd output and bwd `d_input`).
+    # Zero the sentinel-tail rows the kernel left uninitialized (fwd output and bwd `d_input`).
+    if sentinel_mask is not None:
         proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
 
     # Apply gating or activation
@@ -641,8 +641,8 @@ def grouped_mm_experts_forward(
         proj_out, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
-    if self.is_expert_parallel:
-        # Same: zero the uninitialized sentinel-tail rows.
+    # Same: zero the uninitialized sentinel-tail rows.
+    if sentinel_mask is not None:
         proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
 
     # Apply routing weights

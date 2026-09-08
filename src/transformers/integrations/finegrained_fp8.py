@@ -501,7 +501,7 @@ def fp8_batched_mm_experts_forward(
 
     # Post-mask sentinel rows: kernel left them uninitialized, so zero them out
     # before the reduction below (uninit may be NaN; NaN * 0 = NaN).
-    if self.is_expert_parallel:
+    if sentinel_mask is not None:
         weighted_out.masked_fill_(sentinel_mask, 0.0)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
@@ -591,7 +591,7 @@ def fp8_grouped_mm_experts_forward(
     weighted_out = proj_out * sample_weights_g.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
 
     # Post-mask (fwd path).
-    if self.is_expert_parallel:
+    if sentinel_mask is not None:
         weighted_out.masked_fill_(sentinel_mask, 0.0)
 
     # Restore original order
