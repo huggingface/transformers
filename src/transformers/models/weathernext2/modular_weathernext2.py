@@ -571,9 +571,13 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         noise (`torch.FloatTensor` of shape `(batch_size, noise_channels)`):
             One standard normal draw per ensemble member.
         """
+        dtype = self.grid_encoder.fc1.weight.dtype
+        grid_features = grid_features.to(dtype=dtype)
+        global_features = global_features.to(dtype=dtype)
+        noise = noise.to(dtype=dtype)
+
         batch_size = grid_features.shape[0]
         conditioning = self.noise_encoder(noise)
-        dtype = grid_features.dtype
 
         def expand(features: torch.Tensor) -> torch.Tensor:
             return features.unsqueeze(0).expand(batch_size, -1, -1).to(dtype)

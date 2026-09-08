@@ -222,6 +222,16 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         torch.testing.assert_close(baseline, repeated)
         self.assertFalse(torch.allclose(baseline, perturbed))
 
+    def test_bfloat16_model_accepts_float32_inputs(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = WeatherNext2ForWeatherForecasting(config).to(device=torch_device, dtype=torch.bfloat16).eval()
+
+        with torch.no_grad():
+            prediction = model(**inputs).prediction
+
+        self.assertEqual(prediction.dtype, torch.bfloat16)
+        self.assertTrue(torch.isfinite(prediction).all())
+
     def test_batched_rollout_matches_running_members_alone(self):
         """The batch axis carries ensemble members, so a batched rollout must equal member-by-member runs.
 
@@ -242,8 +252,8 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 prediction = model(**inputs, noise=noise).prediction
             forecast = extractor.postprocess(prediction, state)
-            valid_time = valid_time + extractor.time_step_hours * 3600
             state = extractor.advance_state(state, forecast, valid_time)
+            valid_time = valid_time + extractor.time_step_hours * 3600
 
         for member in range(batch_size):
             solo_state = {
@@ -256,8 +266,8 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
                 with torch.no_grad():
                     prediction = model(**inputs, noise=noise[member : member + 1]).prediction
                 forecast = extractor.postprocess(prediction, solo_state)
-                solo_time = solo_time + extractor.time_step_hours * 3600
                 solo_state = extractor.advance_state(solo_state, forecast, solo_time)
+                solo_time = solo_time + extractor.time_step_hours * 3600
 
             for name, values in solo_state.items():
                 if name in extractor.static_variables:

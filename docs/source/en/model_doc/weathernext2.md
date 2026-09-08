@@ -108,6 +108,20 @@ print(forecast["2m_temperature"].shape)  # (1, 181, 360)
 The noise is drawn on the generator's device and moved to the model's, so a plain CPU `torch.Generator` gives the
 same ensemble on any accelerator.
 
+The released checkpoints and the reference configuration use fp32. Lower-precision inference is optional rather than
+reference-equivalent. The model casts the processor's fp32 outputs to its parameter dtype, so loading in bf16 does not
+require a different preprocessing path:
+
+```python
+model = WeatherNext2ForWeatherForecasting.from_pretrained(
+    "kashif/weathernext2-mini", device_map="auto", dtype=torch.bfloat16
+).eval()
+inputs = processor(state, seconds_since_epoch=valid_time).to(model.device)
+```
+
+Attention and graph aggregation still accumulate in fp32 for numerical stability. The pinned integration values below
+cover the reference fp32 path; bf16 should be validated against the forecast metrics required by the application.
+
 ### Ensembles
 
 Each member is one draw of the 32-dimensional noise vector through the same weights, so an ensemble is a batch: stack
@@ -274,8 +288,10 @@ tripling the keys and values and expanding the mask. It is inference-only: the k
 always uses the PyTorch path, and on CPU or without the kernel installed the model falls back to it too. CUDA, ROCm and
 XPU are supported. Make sure the model is on an accelerator when kernelization happens (e.g. with `device_map`).
 
-Keep `attn_implementation` at `sdpa` or `eager`. `flex_attention` hands the layer a `BlockMask` rather than the banded
-mask the kernel reads, so it falls back silently and you lose the speedup without any error.
+The fused fast path currently requires `attn_implementation="sdpa"` and a batch size of one. Eager attention produces
+an additive mask, and a multi-member batch expands the mask over the folded block axis; both use the differentiable
+PyTorch fallback. `flex_attention` hands the layer a `BlockMask` that the kernel cannot read and raises a `ValueError`
+with instructions to use SDPA.
 
 ```python
 from transformers import WeatherNext2ForWeatherForecasting
