@@ -24,7 +24,6 @@ from dataclasses import dataclass
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -825,14 +824,7 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # move labels to correct device
-            labels = labels.to(logits.device)
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if not return_dict:
             output = (logits,) + falcon_mamba_outputs[1:]
