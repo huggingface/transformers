@@ -180,6 +180,24 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_sdpa_can_compile_dynamic(self):
         pass
 
+    @unittest.skip(
+        reason=(
+            "Moshi uses position-dependent codebook embedding lookup (text at pos 0, audio at pos 1+), "
+            "so packed/padding-free inference changes which embedding is selected and produces different outputs."
+        )
+    )
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(
+        reason=(
+            "Moshi uses position-dependent codebook embedding lookup (text at pos 0, audio at pos 1+), "
+            "so packed/padding-free inference changes which embedding is selected and produces different outputs."
+        )
+    )
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
     def _get_input_ids_and_config(self, batch_size=1):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common(batch_size)
         input_ids = inputs_dict.pop("input_ids").to(torch_device)
