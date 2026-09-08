@@ -604,12 +604,12 @@ def convert_state_dict(params: dict[str, np.ndarray], config: WeatherNext2Config
 
     def convert_conditioned_mlp(target: str, module: str) -> None:
         """The `Linear -> act -> Linear -> LayerNorm -> FiLM` block, minus its first weight."""
-        put(f"{target}.in_proj.bias", take(f"{module}/shared_dense/mlp/linear_0:b"))
-        put(f"{target}.out_proj.weight", take(f"{module}/shared_dense/mlp/linear_1:w").T)
-        put(f"{target}.out_proj.bias", take(f"{module}/shared_dense/mlp/linear_1:b"))
+        put(f"{target}.fc1.bias", take(f"{module}/shared_dense/mlp/linear_0:b"))
+        put(f"{target}.fc2.weight", take(f"{module}/shared_dense/mlp/linear_1:w").T)
+        put(f"{target}.fc2.bias", take(f"{module}/shared_dense/mlp/linear_1:b"))
         film = f"{module}/shared_dense/normalization/linear_norm_conditioning/linear"
-        put(f"{target}.norm.film.linear.weight", take(f"{film}:w").T)
-        put(f"{target}.norm.film.linear.bias", take(f"{film}:b"))
+        put(f"{target}.norm.linear.weight", take(f"{film}:w").T)
+        put(f"{target}.norm.linear.bias", take(f"{film}:b"))
 
     # --- noise, encoders
     put(
@@ -624,7 +624,7 @@ def convert_state_dict(params: dict[str, np.ndarray], config: WeatherNext2Config
         ("model.grid_encoder", "grid_encoder", config.input_channel_layout),
         ("model.mesh_encoder", "mesh_encoder", config.mesh_channel_layout),
     ):
-        put(f"{target}.in_proj.weight", stacked_input_weight(params, config, module, layout, SPATIAL_NODE_FEATURES))
+        put(f"{target}.fc1.weight", stacked_input_weight(params, config, module, layout, SPATIAL_NODE_FEATURES))
         for variable, time_offset, _ in layout:
             prefix = "forcing_" if time_offset is not None and time_offset > 0 else "input_"
             consumed.add(f"{module}/split_input_matmul:{split_weight_name(config, variable, time_offset, prefix)}")
@@ -638,7 +638,7 @@ def convert_state_dict(params: dict[str, np.ndarray], config: WeatherNext2Config
     ):
         edge_module = f"{module}/edge_encoder"
         put(
-            f"{target}.edge_encoder.in_proj.weight",
+            f"{target}.edge_encoder.fc1.weight",
             take(f"{edge_module}/split_input_matmul:w_spatial_feature={SPATIAL_EDGE_FEATURES}").T,
         )
         convert_conditioned_mlp(f"{target}.edge_encoder", edge_module)
@@ -653,22 +653,22 @@ def convert_state_dict(params: dict[str, np.ndarray], config: WeatherNext2Config
                 take(f"{gnn}/processor_edges_0_receiver_{edge_set}:w").T,
             )
         edge_update = f"{gnn}/processor_edges_0_{edge_set}"
-        put(f"{target}.edge_update.bias", take(f"{edge_update}/mlp/linear_0:b"))
+        put(f"{target}.edge_update.edge_proj.bias", take(f"{edge_update}/mlp/linear_0:b"))
         put(f"{target}.edge_update.out_proj.weight", take(f"{edge_update}/mlp/linear_1:w").T)
         put(f"{target}.edge_update.out_proj.bias", take(f"{edge_update}/mlp/linear_1:b"))
         film = f"{edge_update}/normalization/linear_norm_conditioning/linear"
-        put(f"{target}.edge_update.norm.film.linear.weight", take(f"{film}:w").T)
-        put(f"{target}.edge_update.norm.film.linear.bias", take(f"{film}:b"))
+        put(f"{target}.edge_update.norm.linear.weight", take(f"{film}:w").T)
+        put(f"{target}.edge_update.norm.linear.bias", take(f"{film}:b"))
 
         for node_target, node_set in (("mesh_node_update", "mesh_nodes"), ("grid_node_update", "point_nodes")):
             node_module = f"{gnn}/processor_nodes_0_{node_set}"
-            put(f"{target}.{node_target}.in_proj.weight", take(f"{node_module}/mlp/linear_0:w").T)
-            put(f"{target}.{node_target}.in_proj.bias", take(f"{node_module}/mlp/linear_0:b"))
-            put(f"{target}.{node_target}.out_proj.weight", take(f"{node_module}/mlp/linear_1:w").T)
-            put(f"{target}.{node_target}.out_proj.bias", take(f"{node_module}/mlp/linear_1:b"))
+            put(f"{target}.{node_target}.fc1.weight", take(f"{node_module}/mlp/linear_0:w").T)
+            put(f"{target}.{node_target}.fc1.bias", take(f"{node_module}/mlp/linear_0:b"))
+            put(f"{target}.{node_target}.fc2.weight", take(f"{node_module}/mlp/linear_1:w").T)
+            put(f"{target}.{node_target}.fc2.bias", take(f"{node_module}/mlp/linear_1:b"))
             film = f"{node_module}/normalization/linear_norm_conditioning/linear"
-            put(f"{target}.{node_target}.norm.film.linear.weight", take(f"{film}:w").T)
-            put(f"{target}.{node_target}.norm.film.linear.bias", take(f"{film}:b"))
+            put(f"{target}.{node_target}.norm.linear.weight", take(f"{film}:w").T)
+            put(f"{target}.{node_target}.norm.linear.bias", take(f"{film}:b"))
 
     # --- mesh transformer
     for layer_idx in range(config.num_hidden_layers):
@@ -685,19 +685,19 @@ def convert_state_dict(params: dict[str, np.ndarray], config: WeatherNext2Config
         # Haiku names the two FiLM layers of a block by call order, so the second gets a `_1` suffix.
         for norm, suffix in (("input_layernorm", ""), ("post_attention_layernorm", "_1")):
             film = f"{block}/block_{layer_idx:02d}_norm_conditioning{suffix}/linear"
-            put(f"{target}.{norm}.film.linear.weight", take(f"{film}:w").T)
-            put(f"{target}.{norm}.film.linear.bias", take(f"{film}:b"))
+            put(f"{target}.{norm}.linear.weight", take(f"{film}:w").T)
+            put(f"{target}.{norm}.linear.bias", take(f"{film}:b"))
 
     film = "mesh_transformer/transformer/transformer_final_norm_conditioning/linear"
-    put("model.mesh_transformer.norm.film.linear.weight", take(f"{film}:w").T)
-    put("model.mesh_transformer.norm.film.linear.bias", take(f"{film}:b"))
+    put("model.mesh_transformer.norm.linear.weight", take(f"{film}:w").T)
+    put("model.mesh_transformer.norm.linear.bias", take(f"{film}:b"))
 
     # --- decoder
-    put("decoder_proj.weight", take("grid_decoder/shared_dense/mlp/linear_0:w").T)
-    put("decoder_proj.bias", take("grid_decoder/shared_dense/mlp/linear_0:b"))
+    put("head.decoder_proj.weight", take("grid_decoder/shared_dense/mlp/linear_0:w").T)
+    put("head.decoder_proj.bias", take("grid_decoder/shared_dense/mlp/linear_0:b"))
     output_weight, output_bias = stacked_output_weight(params, config, "grid_decoder")
-    put("output_proj.weight", output_weight)
-    put("output_proj.bias", output_bias)
+    put("head.output_proj.weight", output_weight)
+    put("head.output_proj.bias", output_bias)
     for variable, time_offset, _ in config.target_channel_layout:
         name = split_weight_name(config, variable, time_offset, prefix="")
         consumed.add(f"grid_decoder/split_output_linear:{name}")

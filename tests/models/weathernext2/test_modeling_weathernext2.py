@@ -267,9 +267,9 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_channel_layout_matches_projection_shapes(self):
         config = self.model_tester.get_config()
         model = WeatherNext2ForWeatherForecasting(config)
-        self.assertEqual(model.model.grid_encoder.in_proj.in_features, config.num_grid_input_channels)
-        self.assertEqual(model.model.mesh_encoder.in_proj.in_features, config.num_mesh_input_channels)
-        self.assertEqual(model.output_proj.out_features, config.num_output_channels)
+        self.assertEqual(model.model.grid_encoder.fc1.in_features, config.num_grid_input_channels)
+        self.assertEqual(model.model.mesh_encoder.fc1.in_features, config.num_mesh_input_channels)
+        self.assertEqual(model.head.output_proj.out_features, config.num_output_channels)
         self.assertEqual(
             sum(levels for _, _, levels in config.input_channel_layout) + 3, config.num_grid_input_channels
         )

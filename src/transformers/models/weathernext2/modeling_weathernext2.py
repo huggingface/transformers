@@ -40,14 +40,35 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_weathernext2 import NUM_EDGE_SPATIAL_FEATURES, NUM_NODE_SPATIAL_FEATURES, WeatherNext2Config
 
 
-class WeatherNext2FiLM(nn.Module):
-    """Derives a per-channel scale and offset from the global conditioning vector."""
+class WeatherNext2MLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
+class WeatherNext2ConditionedNorm(nn.Module):
+    """LayerNorm whose scale and offset are FiLM-derived from the global conditioning vector.
+
+    The normalization itself has no affine parameters of its own: this is the only place the noise
+    vector defining an ensemble member enters the network.
+    """
 
     def __init__(self, config: WeatherNext2Config, num_features: int):
         super().__init__()
+        self.norm = nn.LayerNorm(num_features, eps=config.layer_norm_eps, elementwise_affine=False)
         self.linear = nn.Linear(config.noise_channels, 2 * num_features)
 
     def forward(self, hidden_states: torch.Tensor, conditioning: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.norm(hidden_states)
         scale, offset = self.linear(conditioning).chunk(2, dim=-1)
         # `conditioning` is [batch, noise_channels]; `hidden_states` is [batch, nodes, hidden] outside
         # the mesh transformer and [batch, blocks, block, hidden] inside it, so the axes in between
@@ -56,23 +77,11 @@ class WeatherNext2FiLM(nn.Module):
         return hidden_states * (1.0 + scale.view(broadcast_shape)) + offset.view(broadcast_shape)
 
 
-class WeatherNext2ConditionedNorm(nn.Module):
-    """LayerNorm with no affine parameters of its own; the FiLM layer owns the scale and offset."""
-
-    def __init__(self, config: WeatherNext2Config, num_features: int):
-        super().__init__()
-        self.norm = nn.LayerNorm(num_features, eps=config.layer_norm_eps, elementwise_affine=False)
-        self.film = WeatherNext2FiLM(config, num_features)
-
-    def forward(self, hidden_states: torch.Tensor, conditioning: torch.Tensor) -> torch.Tensor:
-        return self.film(self.norm(hidden_states), conditioning)
-
-
-class WeatherNext2ConditionedMlp(nn.Module):
-    """The model's universal building block: `Linear -> act -> Linear -> LayerNorm -> FiLM`.
+class WeatherNext2ConditionedMlp(WeatherNext2MLP):
+    """The model's universal building block: [`WeatherNext2MLP`] followed by a conditioned norm.
 
     Used unchanged for the grid, mesh and edge encoders and for both node updates in each graph
-    network. Only the input width varies.
+    network. Only the widths vary, which is why they are arguments rather than read from the config.
     """
 
     def __init__(
@@ -82,15 +91,15 @@ class WeatherNext2ConditionedMlp(nn.Module):
         hidden_features: int,
         out_features: int,
     ):
-        super().__init__()
-        self.in_proj = nn.Linear(in_features, hidden_features)
-        self.out_proj = nn.Linear(hidden_features, out_features)
-        self.act_fn = ACT2FN[config.mlp_act]
+        nn.Module.__init__(self)
+        self.config = config
+        self.activation_fn = ACT2FN[config.mlp_act]
+        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.fc2 = nn.Linear(hidden_features, out_features)
         self.norm = WeatherNext2ConditionedNorm(config, out_features)
 
     def forward(self, hidden_states: torch.Tensor, conditioning: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.out_proj(self.act_fn(self.in_proj(hidden_states)))
-        return self.norm(hidden_states, conditioning)
+        return self.norm(super().forward(hidden_states), conditioning)
 
 
 class WeatherNext2EdgeUpdate(nn.Module):
@@ -98,17 +107,18 @@ class WeatherNext2EdgeUpdate(nn.Module):
 
     The first projection of the edge MLP is split across the edge features, the sender node and
     (in the mesh-to-grid direction) the receiver node. Each part is applied to the *nodes* and only
-    then gathered onto the edges, which is much cheaper than gathering first: summing the parts and
-    adding the shared bias is exactly the concatenated first matmul.
+    then gathered onto the edges, which is much cheaper than gathering first: summing the parts is
+    exactly the concatenated first matmul.
     """
 
     def __init__(self, config: WeatherNext2Config, use_receiver_proj: bool):
         super().__init__()
         hidden_size = config.hidden_size
-        self.edge_proj = nn.Linear(config.edge_hidden_size, hidden_size, bias=False)
+        # The bias of the concatenated first matmul rides on `edge_proj`, the one part that is
+        # always present.
+        self.edge_proj = nn.Linear(config.edge_hidden_size, hidden_size)
         self.sender_proj = nn.Linear(hidden_size, hidden_size, bias=False)
         self.receiver_proj = nn.Linear(hidden_size, hidden_size, bias=False) if use_receiver_proj else None
-        self.bias = nn.Parameter(torch.zeros(hidden_size))
         self.out_proj = nn.Linear(hidden_size, hidden_size)
         self.act_fn = ACT2FN[config.mlp_act]
         self.norm = WeatherNext2ConditionedNorm(config, hidden_size)
@@ -122,7 +132,7 @@ class WeatherNext2EdgeUpdate(nn.Module):
         receivers: torch.Tensor,
         conditioning: torch.Tensor,
     ) -> torch.Tensor:
-        messages = self.edge_proj(edge_states) + self.sender_proj(sender_states)[:, senders] + self.bias
+        messages = self.edge_proj(edge_states) + self.sender_proj(sender_states)[:, senders]
         if self.receiver_proj is not None:
             messages = messages + self.receiver_proj(receiver_states)[:, receivers]
         return self.norm(self.out_proj(self.act_fn(messages)), conditioning)
@@ -298,21 +308,6 @@ class WeatherNext2Attention(nn.Module):
         return self.o_proj(attn_output), attn_weights
 
 
-class WeatherNext2MLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
-
-
 class WeatherNext2Layer(GradientCheckpointingLayer):
     def __init__(self, config: WeatherNext2Config, layer_idx: int):
         super().__init__()
@@ -417,12 +412,9 @@ class WeatherNext2PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, WeatherNext2EdgeUpdate):
-            # The shared bias of the split first matmul is a bare parameter.
-            init.zeros_(module.bias)
-        elif isinstance(module, WeatherNext2Model):
+        if isinstance(module, WeatherNext2Model):
             module.init_geometry_buffers()
-        elif isinstance(module, WeatherNext2ForWeatherForecasting):
+        elif isinstance(module, WeatherNext2ForecastHead):
             module.register_output_activation_buffers()
 
 
@@ -614,19 +606,16 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
         return WeatherNext2ModelOutput(last_hidden_state=grid_states, mesh_hidden_state=mesh_states)
 
 
-@auto_docstring(
-    custom_intro="WeatherNext 2 with its forecasting head: advances the global atmospheric state by one time step."
-)
-class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel):
+class WeatherNext2ForecastHead(nn.Module):
+    """Decodes grid-point features into the predicted state, as `[batch, channels, lat, lon]`."""
+
     def __init__(self, config: WeatherNext2Config):
-        super().__init__(config)
-        self.model = WeatherNext2Model(config)
+        super().__init__()
+        self.config = config
         self.decoder_proj = nn.Linear(config.hidden_size, config.hidden_size)
         self.output_proj = nn.Linear(config.hidden_size, config.num_output_channels)
         self.act_fn = ACT2FN[config.mlp_act]
-
         self.register_output_activation_buffers()
-        self.post_init()
 
     def register_output_activation_buffers(self):
         """Marks which output channels are squashed, and by how much.
@@ -651,6 +640,24 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel):
         device = existing.device if existing is not None and existing.device.type != "meta" else None
         self.sigmoid_gate = nn.Buffer(gate.to(device), persistent=False)
         self.sigmoid_shift = nn.Buffer(shifts.to(device), persistent=False)
+
+    def forward(self, grid_states: torch.Tensor) -> torch.Tensor:
+        prediction = self.output_proj(self.act_fn(self.decoder_proj(grid_states)))
+        prediction = torch.where(self.sigmoid_gate, torch.sigmoid(prediction - self.sigmoid_shift), prediction)
+        return prediction.transpose(1, 2).reshape(
+            prediction.shape[0], -1, self.config.grid_latitudes, self.config.grid_longitudes
+        )
+
+
+@auto_docstring(
+    custom_intro="WeatherNext 2 with its forecasting head: advances the global atmospheric state by one time step."
+)
+class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel):
+    def __init__(self, config: WeatherNext2Config):
+        super().__init__(config)
+        self.model = WeatherNext2Model(config)
+        self.head = WeatherNext2ForecastHead(config)
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring
@@ -709,15 +716,8 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel):
             grid_features=grid_features, global_features=global_features, noise=noise, **kwargs
         )
 
-        hidden_states = self.act_fn(self.decoder_proj(outputs.last_hidden_state))
-        prediction = self.output_proj(hidden_states)
-        prediction = torch.where(self.sigmoid_gate, torch.sigmoid(prediction - self.sigmoid_shift), prediction)
-
-        prediction = prediction.transpose(1, 2).reshape(
-            prediction.shape[0], -1, self.config.grid_latitudes, self.config.grid_longitudes
-        )
         return WeatherNext2ForecastOutput(
-            prediction=prediction,
+            prediction=self.head(outputs.last_hidden_state),
             last_hidden_state=outputs.last_hidden_state,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
