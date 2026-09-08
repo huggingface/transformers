@@ -166,8 +166,9 @@ def _all_ranks_agree(value: bool) -> bool:
     """`value` on every rank, once every rank has answered."""
     if not _is_torch_distributed_initialized():
         return value
-    device = "cuda" if torch.distributed.get_backend() == "nccl" else "cpu"
-    agreed = torch.tensor([value], dtype=torch.uint8, device=device)
+    device_type = torch._C._get_accelerator().type
+    index = None if device_type == "cpu" else getattr(torch, device_type).current_device()
+    agreed = torch.tensor([value], dtype=torch.uint8, device=torch.device(device_type, index))
     torch.distributed.all_reduce(agreed, op=torch.distributed.ReduceOp.MIN)
     return bool(agreed.item())
 
