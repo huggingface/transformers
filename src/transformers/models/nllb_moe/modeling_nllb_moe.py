@@ -217,7 +217,7 @@ class NllbMoeTop2Router(nn.Module):
         # Apply Softmax and cast back to the original `dtype`
         router_probs = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(input_dtype)
         top_1_expert_index = torch.argmax(router_probs, dim=-1)
-        top_1_mask = torch.nn.functional.one_hot(top_1_expert_index, num_classes=self.num_experts)
+        top_1_mask = torch.nn.functional.one_hot(top_1_expert_index, num_classes=self.num_experts+1)
 
         if self.second_expert_policy == "sampling":
             gumbel = torch.distributions.gumbel.Gumbel(0, 1).rsample
@@ -226,7 +226,7 @@ class NllbMoeTop2Router(nn.Module):
         # replace top_1_expert_index with min values
         logits_except_top_1 = router_logits.masked_fill(top_1_mask.bool(), float("-inf"))
         top_2_expert_index = torch.argmax(logits_except_top_1, dim=-1)
-        top_2_mask = torch.nn.functional.one_hot(top_2_expert_index, num_classes=self.num_experts)
+        top_2_mask = torch.nn.functional.one_hot(top_2_expert_index, num_classes=self.num_experts+1)
 
         if self.normalize_router_prob_before_dropping:
             top_1_max_probs, top_2_max_probs = self.normalize_router_probabilities(
@@ -348,7 +348,7 @@ class NllbMoeExperts(nn.ModuleDict):
 
     def forward(self, hidden_states: torch.Tensor, router_mask: torch.Tensor, router_probs: torch.Tensor):
         final_hidden_states = torch.zeros_like(hidden_states)
-        expert_mask = torch.nn.functional.one_hot(router_mask, num_classes=self.num_experts).permute(2, 1, 0)
+        expert_mask = torch.nn.functional.one_hot(router_mask, num_classes=self.num_experts+1).permute(2, 1, 0)
 
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in expert_hit:
