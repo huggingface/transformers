@@ -154,10 +154,11 @@ class HunYuanVLRotaryEmbedding(nn.Module):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
+        freq = torch.cat((freq, freq), dim=-1)
         freq = torch.cat(
-            [m[i % len(self.mrope_section)] for i, m in enumerate(freq.split(self.mrope_section, dim=-1))], dim=-1
+            [m[i % len(self.mrope_section)] for i, m in enumerate(freq.split(self.mrope_section * 2, dim=-1))], dim=-1
         )
-        return torch.cat((freq, freq), dim=-1)
+        return freq
 
 
 class HunYuanVLVisionMLP(nn.Module):
