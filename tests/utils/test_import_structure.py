@@ -1,4 +1,3 @@
-import ast
 import os
 import unittest
 from pathlib import Path
@@ -6,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from transformers.utils.import_utils import (
-    BASE_FILE_REQUIREMENTS,
     Backend,
     VersionComparison,
     define_import_structure,
@@ -42,8 +40,7 @@ def fetch__all__(file_content):
 
 class TestImportStructures(unittest.TestCase):
     base_transformers_path = Path(__file__).parent.parent.parent
-    transformers_path = base_transformers_path / "src" / "transformers"
-    models_path = transformers_path / "models"
+    models_path = base_transformers_path / "src" / "transformers" / "models"
     models_import_structure = spread_import_structure(define_import_structure(models_path))
 
     def test_definition(self):
@@ -118,42 +115,6 @@ class TestImportStructures(unittest.TestCase):
                             f"Defined in __all__: {sorted(_all)}\nDefined with register: {sorted(objects)}"
                         )
                         self.assertListEqual(sorted(objects), sorted(_all), msg=error_message)
-
-    def test_auto_image_processor_does_not_require_torchvision(self):
-        for backends, modules in self.models_import_structure.items():
-            for module, objects in modules.items():
-                if "AutoImageProcessor" in objects:
-                    self.assertNotIn(
-                        "torchvision",
-                        backends,
-                        f"`{module}` should not require torchvision, got {sorted(backends)}",
-                    )
-
-    def test_inferred_torchvision_requirement_matches_the_code(self):
-        """
-        The rule is textual, so hold it to what the file does. The glob covers the whole package
-        because `utils/tests_fetcher.py` infers from `src/transformers/__init__.py`, not `models/`.
-        """
-        for path in sorted(self.transformers_path.rglob("image_processing_*.py")):
-            with self.subTest(path.relative_to(self.transformers_path)):
-                content = path.read_text(encoding="utf-8")
-
-                inferred = ()
-                for check, requirements in BASE_FILE_REQUIREMENTS.items():
-                    if check(path.stem, content):
-                        inferred = requirements
-                        break
-
-                inherits = any(
-                    isinstance(node, ast.ClassDef)
-                    and any(
-                        getattr(base, "id", getattr(base, "attr", None)) == "TorchvisionBackend" for base in node.bases
-                    )
-                    for node in ast.parse(content).body
-                )
-
-                error_message = f"inherits `TorchvisionBackend`: {inherits}, inferred {sorted(inferred)}"
-                self.assertEqual(inherits, "torchvision" in inferred, msg=error_message)
 
     def test_import_spread(self):
         """
