@@ -665,7 +665,7 @@ def load_and_register_attn_kernel(
 
     Args:
         attn_implementation: A string, usually a kernel repo like "kernels-community/flash-mla".
-        attn_wrapper: a callable for the wrapper around the attention implementation. In `transformers` we
+        attention_wrapper: a callable for the wrapper around the attention implementation. In `transformers` we
             have a wrapper around the `flash_attn_var_len` call, and the same goes for `sdpa` and `eager`.
             They just prepare the arguments properly. This is mostly used for continuous batching, where we
             want the `paged` wrapper, which calls the paged cache.
@@ -722,6 +722,9 @@ def load_and_register_attn_kernel(
         from .msa_attention import msa_attention_forward
 
         kernel_function = attention_wrapper if attention_wrapper is not None else msa_attention_forward
+        mask_implementation = "sdpa"
+    elif hasattr(kernel, "flash_attn_forward") and hasattr(kernel, "supports_flash_attn"):
+        kernel_function = attention_wrapper if attention_wrapper is not None else kernel.flash_attn_forward
         mask_implementation = "sdpa"
     elif kernel_name is not None:
         kernel_function = getattr(kernel, kernel_name)

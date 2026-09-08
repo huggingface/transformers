@@ -835,6 +835,7 @@ class Qwen3_5MLP(nn.Module):
         return down_proj
 
 
+@use_kernel_forward_from_hub("RMSNormZeroCentered")
 class Qwen3_5RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
@@ -1871,7 +1872,9 @@ class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return Qwen3_5CausalLMOutputWithPast(
             loss=loss,
