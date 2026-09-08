@@ -77,6 +77,8 @@ def apply_generic_heterogeneous_modeling_if_applicable(model: PreTrainedModel) -
     skip_descriptors = heterogeneous_modeling_spec.skip_descriptors or {}
     _validate_skip_descriptors(per_layer_skip_types, skip_descriptors)
 
+    model.config._heterogeneity_spec.generic_modeling_applied = True
+
     # Record which layers have their KV-cache update disabled on the config's heterogeneity spec,
     # where cache construction (e.g. `StaticCache`) can read it from the config alone.
     model.config._heterogeneity_spec.disabled_kv_layer_indices = tuple(

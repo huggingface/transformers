@@ -42,6 +42,8 @@ class _HeterogeneitySpec:
     per_layer_attributes: set[str]
     explicit_per_layer_attributes: set[str]
 
+    generic_modeling_applied: bool = False
+
     # Layers that never update their KV cache because a skip replaced the submodule responsible for it.
     # Resolved from the modeling spec by `apply_generic_heterogeneous_modeling_if_applicable`; `None` until a model has been
     # constructed from this config.

@@ -146,12 +146,14 @@ class TestHeterogeneousModeling(unittest.TestCase):
     def test_layer_configs_reflect_model_init_attention_implementation(self):
         config = tiny_llama_config(per_layer_config={0: {"intermediate_size": 64}})
         self.assertIsNone(config._attn_implementation)
+        self.assertFalse(config._heterogeneity_spec.generic_modeling_applied)
 
         with hetero_context("llama"):
             model = build_model(config, LlamaForCausalLM)
 
         expected_attn_implementation = model.config._attn_implementation
         self.assertIsNotNone(expected_attn_implementation)
+        self.assertTrue(model.config._heterogeneity_spec.generic_modeling_applied)
         for layer in model.model.layers:
             self.assertEqual(layer.self_attn.config._attn_implementation, expected_attn_implementation)
 

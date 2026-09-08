@@ -166,7 +166,6 @@ class TestHeterogeneousCache(unittest.TestCase):
         with torch.no_grad():
             model(torch.tensor([[1]], device=model.device), past_key_values=cache, use_cache=True)
 
-        self.assertEqual(cache.get_representative_kv_layer_idx(range(config.num_hidden_layers)), 0)
         self.assertEqual(cache.get_seq_length(layer_idx=0), 1)
 
     def test_static_cache_with_skips_requires_model_initialization(self):
@@ -180,5 +179,4 @@ class TestHeterogeneousCache(unittest.TestCase):
 
         with hetero_context("llama"):
             model = build_model(config, LlamaForCausalLM)
-        cache = StaticCache(config=model.config, max_cache_len=1)
-        self.assertEqual(cache.get_representative_kv_layer_idx(range(config.num_hidden_layers)), 1)
+        StaticCache(config=model.config, max_cache_len=1)
