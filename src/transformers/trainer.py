@@ -1678,11 +1678,6 @@ class Trainer:
         # wrapped (e.g. in DataParallel) on subsequent `train()` calls and avoid double wrapping.
         model = self._wrap_model(self.model_wrapped)
 
-        # A model sharded via `DistributedConfig(fsdp_size=...)` at `from_pretrained` time already
-        # carries DTensor parameters. Accelerate's own model preparation doesn't know about this
-        # native sharding and will try to DDP-wrap it, which raises since DTensor + DDP is normally
-        # a user mistake. The model is already fully prepared for distributed training, so route it
-        # around `accelerator.prepare` like the other unhandled cases below.
         is_natively_fsdp_sharded = getattr(model, "_is_fsdp_managed_module", False)
 
         # If the model is wrapped, don't use `accelerator.prepare`
@@ -3935,9 +3930,6 @@ class Trainer:
                 self.model_wrapped.save_checkpoint(output_dir)
 
         elif getattr(self.model.config, "distributed_config", None) is not None:
-            # `model.save_pretrained` does a collective all_gather internally to reconstruct full
-            # tensors from TP/FSDP-native (`DistributedConfig`) sharding, so it must be called on
-            # every rank; only the saving rank actually writes to disk (`save_on_this_rank`).
             os.makedirs(output_dir, exist_ok=True)
             self.model.save_pretrained(output_dir)
             if self.args.should_save:
