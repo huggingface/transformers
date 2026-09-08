@@ -41,11 +41,11 @@ from ..glm4v.configuration_glm4v import Glm4vConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
     Glm4vTextModel,
+    Glm4vTextRotaryEmbedding,
     Glm4vVisionModel,
     Glm4vVisionRotaryEmbedding,
 )
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
-from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLRotaryEmbedding
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
     Qwen3VLMoeCausalLMOutputWithPast,
     Qwen3VLMoeModelOutputWithPast,
@@ -142,8 +142,13 @@ class Glm4vMoeConfig(Glm4vConfig):
     video_token_id: int = 151364
 
 
-class Glm4vMoeTextRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
-    pass
+class Glm4vMoeTextRotaryEmbedding(Glm4vTextRotaryEmbedding):
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq = torch.cat([m[i % 3] for i, m in enumerate(freq.split(self.mrope_section, dim=-1))], dim=-1)
+        return torch.cat([freq, freq], dim=-1)
 
 
 class Glm4vMoeTextAttention(Glm4Attention):
