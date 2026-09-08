@@ -65,6 +65,7 @@ if is_torch_available():
         LinearAttentionAndSlidingWindowAttentionLayer,
         LinearAttentionLayer,
         StaticLayer,
+        StaticSlidingWindowLayer,
     )
     from transformers.integrations.executorch import export_with_dynamic_cache, register_dynamic_cache_export_support
 
@@ -160,6 +161,90 @@ class CacheTest(unittest.TestCase):
         config.layer_types = ["full_attention", "linear_attention"]
         cache = StaticCache(config=config, max_cache_len=8)
         self.assertEqual(cache.get_max_length(), 8)
+
+    def test_dynamic_cache_uses_populated_layer_as_representative(self):
+        empty_states = torch.empty(1, 1, 0, 4)
+        populated_states = torch.randn(1, 1, 3, 4)
+
+        cache = DynamicCache([(empty_states, empty_states), (populated_states, populated_states)])
+
+        self.assertEqual(cache.get_seq_length(), 3)
+        self.assertEqual(cache.get_representative_kv_layer_idx([0, 1]), 1)
+
+    def test_static_cache_uses_first_kv_layer_as_representative(self):
+        config = LlamaConfig(
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            number_of_conv_states=1,
+            layer_types=["linear_attention", "full_attention"],
+        )
+        cache = StaticCache(config=config, max_cache_len=8)
+        states = torch.randn(1, config.num_key_value_heads, 3, config.hidden_size // config.num_attention_heads)
+        cache.update(states, states, layer_idx=1)
+
+        self.assertEqual(cache.get_representative_kv_layer_idx(range(config.num_hidden_layers)), 1)
+        self.assertEqual(cache.get_seq_length(), 3)
+
+    def test_dynamic_cache_uses_per_layer_sliding_windows(self):
+        config = LlamaConfig(
+            hidden_size=64,
+            num_hidden_layers=4,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            sliding_window=None,
+            per_layer_config={0: {"sliding_window": 32}, 2: {"sliding_window": 16}},
+        )
+        layers = DynamicCache(config=config).layers
+
+        self.assertEqual(len(layers), 4)
+        self.assertIsInstance(layers[0], DynamicSlidingWindowLayer)
+        self.assertEqual(layers[0].sliding_window, 32)
+        self.assertFalse(layers[1].is_sliding)
+        self.assertIsInstance(layers[2], DynamicSlidingWindowLayer)
+        self.assertEqual(layers[2].sliding_window, 16)
+        self.assertFalse(layers[3].is_sliding)
+
+    def test_dynamic_cache_uses_per_layer_conv_state_counts(self):
+        config = LlamaConfig(
+            hidden_size=64,
+            num_hidden_layers=4,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            number_of_conv_states=1,
+            layer_types=["linear_attention", "hybrid", "full_attention", "conv"],
+            per_layer_config={
+                0: {"number_of_conv_states": 2},
+                1: {"number_of_conv_states": 3},
+                3: {"number_of_conv_states": 4},
+            },
+        )
+        layers = DynamicCache(config=config).layers
+
+        self.assertEqual(
+            [getattr(layer, "number_of_states", None) for layer in layers],
+            [2, 3, None, 4],
+        )
+
+    def test_static_cache_uses_per_layer_sliding_windows(self):
+        config = LlamaConfig(
+            hidden_size=64,
+            num_hidden_layers=4,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            sliding_window=None,
+            per_layer_config={1: {"sliding_window": 24}, 3: {"sliding_window": 48}},
+        )
+        layers = StaticCache(config=config, max_cache_len=64).layers
+
+        self.assertEqual(len(layers), 4)
+        self.assertFalse(layers[0].is_sliding)
+        self.assertIsInstance(layers[1], StaticSlidingWindowLayer)
+        self.assertEqual(layers[1].max_cache_len, 24)
+        self.assertFalse(layers[2].is_sliding)
+        self.assertIsInstance(layers[3], StaticSlidingWindowLayer)
+        self.assertEqual(layers[3].max_cache_len, 48)
 
     @require_torch_accelerator
     def test_offloaded_cache_prefetches_across_linear_attention_layers(self):

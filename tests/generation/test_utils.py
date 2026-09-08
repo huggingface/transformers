@@ -90,7 +90,7 @@ if is_torch_available():
         MtpCache,
         QuantoQuantizedLayer,
         StaticCache,
-        get_layer_types_and_kwargs,
+        _get_layer_types_and_kwargs,
     )
     from transformers.generation import (
         CompileConfig,
@@ -1577,7 +1577,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
             # Same source of truth as `QuantizedCache`: models that don't set `layer_types` explicitly still
             # infer non-full attention from e.g. `sliding_window`.
-            layer_types, _ = get_layer_types_and_kwargs(config.get_text_config(decoder=True))
+            layer_types, _ = _get_layer_types_and_kwargs(config.get_text_config(decoder=True))
             if any(layer_type != "full_attention" for layer_type in layer_types):
                 self.skipTest(reason="`QuantizedCache` is only supported for models with full attention layers")
 
