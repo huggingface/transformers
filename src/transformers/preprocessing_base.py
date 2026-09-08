@@ -11,11 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-Base mixin for image processors and feature extractors, providing shared
-save/load/serialization logic.
-"""
-
 import copy
 import json
 import os
@@ -260,7 +255,7 @@ class BatchFeature(UserDict):
 class PreprocessingMixin(PushToHubMixin):
     """
     Base mixin providing saving/loading functionality shared by
-    ImageProcessingMixin, AudioProcessingMixin and FeatureExtractionMixin.
+    ImageProcessingMixin and AudioProcessingMixin.
 
     Subclasses must set the following class attributes:
         _config_name: str            — config file name (e.g. IMAGE_PROCESSOR_NAME)
