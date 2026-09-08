@@ -31,8 +31,8 @@ _SEEK_COST_BYTES = 12 * 2**20
 # How much a rank may warm by asking the kernel to read ahead, which costs almost nothing but is
 # only advice: past a few GiB the kernel drops most of it, the pages are not there when the loader
 # asks for them, and the load pays for the miss. Beyond this, warming reads the bytes itself.
-# Measured: 1.3 and 4.4 GiB of readahead land, 8 and 29.7 GiB do not.
-_READAHEAD_MAX_TOTAL_BYTES = 8 * 2**30
+# Measured: 1.3 and 4.4 GiB of readahead land, 7.5, 8 and 29.7 GiB do not.
+_READAHEAD_MAX_TOTAL_BYTES = 5 * 2**30
 
 
 if TYPE_CHECKING:
@@ -162,6 +162,16 @@ def _owned_expert_range(meta_state_dict: dict) -> tuple[int, int] | None:
     return None
 
 
+def _all_ranks_agree(value: bool) -> bool:
+    """`value` on every rank, once every rank has answered."""
+    if not _is_torch_distributed_initialized():
+        return value
+    device = "cuda" if torch.distributed.get_backend() == "nccl" else "cpu"
+    agreed = torch.tensor([value], dtype=torch.uint8, device=device)
+    torch.distributed.all_reduce(agreed, op=torch.distributed.ReduceOp.MIN)
+    return bool(agreed.item())
+
+
 def prefetch_checkpoint_shards(checkpoint_files: list[str], meta_state_dict: dict | None = None) -> None:
     """Warm the page cache for the checkpoint shards before the per-tensor loading pass, opt-in via
     `HF_SHARD_PREFETCH=<read threads per rank>`.
@@ -208,7 +218,10 @@ def prefetch_checkpoint_shards(checkpoint_files: list[str], meta_state_dict: dic
     # whichever plan reads less. Both sides are the node's read divided by its ranks, so the
     # comparison holds even when there are fewer shards than local ranks and this rank was dealt none.
     cost = sum(end - start for _, start, end in jobs) + len(jobs) * _SEEK_COST_BYTES
-    if not jobs or cost >= sum(os.path.getsize(path) for path in checkpoint_files) / local_world:
+    take_spans = bool(jobs) and cost < sum(os.path.getsize(path) for path in checkpoint_files) / local_world
+    # The two plans divide the checkpoint up differently, so ranks that disagree leave parts of it
+    # cold: take the spans only where every rank does.
+    if not _all_ranks_agree(take_spans):
         jobs = whole
     described = f"{sum(end - start for _, start, end in jobs) / 2**30:.1f} GiB in {len(jobs)} spans"
 
