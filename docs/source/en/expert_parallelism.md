@@ -42,7 +42,7 @@ model = AutoModelForCausalLM.from_pretrained(
 > [!TIP]
 > Expert parallelism automatically enables [tensor parallelism](./perf_infer_gpu_multi) for attention layers.
 
-This argument switches to the `ep_plan` (expert parallel plan) defined in each MoE model's config file. The [`~integrations.tensor_parallel.GroupedGemmParallel`] class splits expert weights so each device loads only its local experts. The `ep_router` routes tokens to experts and an all-reduce operation combines their outputs.
+This argument switches to the `base_model_ep_plan` defined on each MoE model's config. Expert styles live on [`~distributed.tensor_parallel.ParallelInterface`]. The `grouped_gemm` style (`MoEParamShard`) splits expert weights so each device loads only its local experts. The `ep_router` style routes tokens to experts and combines their outputs.
 
 Launch your inference script with [torchrun](https://pytorch.org/docs/stable/elastic/run.html) and specify how many devices to use. The number of devices must evenly divide the total number of experts.
 

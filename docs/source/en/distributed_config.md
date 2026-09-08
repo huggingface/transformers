@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # DistributedConfig
 
-[`~distributed.DistributedConfig`] shards a model across GPUs directly through [`~PreTrainedModel.from_pretrained`]. It supports [tensor parallelism](./tensor_parallelism), [FSDP2](./fsdp), and [expert parallelism](./expert_parallelism).
+[`~distributed.DistributedConfig`] shards a model across GPUs directly through [`~PreTrainedModel.from_pretrained`]. It supports [tensor parallelism](./tensor_parallelism), [FSDP2](./fsdp), [expert parallelism](./expert_parallelism), and [pipeline parallelism for inference](./pipeline_parallel_inference).
 
 Use this for a custom training loop or inference, where you shard the model at load time instead of through [`Trainer`]. If you're training with [`Trainer`], configure FSDP2 through [Accelerate](./accelerate) instead.
 
@@ -26,14 +26,23 @@ The fields below control how the model is sharded.
 
 | field | description |
 |---|---|
-| `tp_size` | Number of devices for tensor parallelism. Defaults to 1 when only `fsdp_size` is set. |
+| `tp_size` | Number of devices for tensor parallelism. Defaults to 1 when unset. |
 | `tp_plan` | Tensor parallel sharding plan. Leave as `None` to use the model's default plan. |
-| `fsdp_size` | Number of devices for FSDP2. Defaults to 1 when only `tp_size` is set. |
+| `fsdp_size` | Number of devices for FSDP2. Defaults to 1 when unset. |
 | `fsdp_cpu_offload` | Offload parameters and gradients to CPU to save GPU memory. Defaults to `False`. |
 | `fsdp_mixed_precision` | Compute in `bfloat16` and reduce gradients in `float32`. Defaults to `False`. |
 | `enable_expert_parallel` | Shard mixture-of-experts layers across devices. See [Expert parallelism](./expert_parallelism). |
+| `pp_size` | Number of pipeline stages for inference. Defaults to 1 when unset. See [Pipeline parallelism for inference](./pipeline_parallel_inference). This is not a training pipeline parallel switch. |
 
-The product of `tp_size` and `fsdp_size` must equal the number of devices you launch with. Set one of them at a time. Setting both above 1 raises a `ValueError` because combining FSDP2 and tensor parallelism in a single mesh isn't supported yet. To stack parallelism strategies today, train with [`Trainer`] and see [N-D parallelism](./perf_train_gpu_many).
+`enable_sequence_parallel` exists on the config as a reserved field and is not set up for load time sharding. For real sequence parallelism, use Ulysses through [`Trainer`] and Accelerate. See [Ulysses sequence parallelism](./deepspeed_alst).
+
+At load time, Transformers applies one of TP, FSDP2, or PP in that order (`if tp_size > 1`, else FSDP2, else PP). Stacking strategies in one mesh is a [`Trainer`] N-D job. See [N-D parallelism](./perf_train_gpu_many).
+
+`WORLD_SIZE` rules match the launcher:
+
+- For TP or FSDP2, `tp_size * fsdp_size` must equal `WORLD_SIZE`.
+- For PP, `pp_size` must equal `WORLD_SIZE`.
+- Setting `tp_size`, `fsdp_size`, and `pp_size` all above 1 raises a `ValueError`.
 
 [`~distributed.DistributedConfig`] is mutually exclusive with `device_map`. `device_map` places whole modules on specific GPUs, while a distributed config shards those same parameters across GPUs.
 
@@ -111,7 +120,9 @@ distributed_config = DistributedConfig(
 )
 ```
 
-## Save a sharded model
+## Save and load sharded weights
+
+Loading with a [`~distributed.DistributedConfig`] uses shard-on-read for DTensor parameters. Each rank reads only the checkpoint slice it needs, based on the parameter's mesh and placements, instead of materializing the full tensor on every rank and sharding afterward.
 
 [`~PreTrainedModel.save_pretrained`] writes a single Hugging Face checkpoint by default. Each rank sends its shards to rank 0, which gathers the full weights on CPU and writes the safetensors files. Call it from every rank so the non-writing ranks wait at the barrier instead of racing ahead.
 
@@ -150,5 +161,7 @@ torchrun --nproc-per-node 4 train.py
 - See [Tensor parallelism](./tensor_parallelism) for how weight sharding works and how to combine it with [`Trainer`].
 - See [FSDP2](./fsdp) for sharded training through [`Trainer`] and Accelerate.
 - See [Expert parallelism](./expert_parallelism) for sharding mixture-of-experts models.
-- See [N-D parallelism](./perf_train_gpu_many) for stacking parallelism strategies.
+- See [Pipeline parallelism for inference](./pipeline_parallel_inference) for `pp_size` stage splitting.
+- See [N-D parallelism](./perf_train_gpu_many) for stacking parallelism strategies under [`Trainer`].
+- See [Ulysses sequence parallelism](./deepspeed_alst) for sequence parallelism (not `enable_sequence_parallel`).
 - Read [The Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook) for a deeper look at how these strategies work.

@@ -245,8 +245,9 @@ Sharding a model at load time with [`~distributed.DistributedConfig`] fails fast
 
 | Error | Cause |
 |---|---|
-| `tp_size (N) * fsdp_size (M) is not equal to world_size (W)` | The mesh doesn't match your launcher. Set `--nproc-per-node` to `tp_size * fsdp_size`. |
-| `FSDP+TP is not supported yet` | Both `tp_size` and `fsdp_size` are above 1. Set one at a time, and see [N-D parallelism](./perf_train_gpu_many) to stack strategies through [`Trainer`] instead. |
+| `tp_size (N) * fsdp_size (M) is not equal to world_size (W)` | The TP/FSDP mesh doesn't match your launcher. Set `--nproc-per-node` to `tp_size * fsdp_size`. |
+| `world_size (W) must be equal to pp_size (N)` | Pipeline parallelism uses every process as a stage. Set `pp_size` to `WORLD_SIZE`. |
+| `FSDP+TP+PP is not supported yet` | `tp_size`, `fsdp_size`, and `pp_size` are all above 1. Load time sharding applies one of TP, FSDP2, or PP (`if tp elif fsdp elif pp`). Stack strategies through [`Trainer`] instead. See [N-D parallelism](./perf_train_gpu_many). |
 | ``` `tp_plan` and `device_map` are mutually exclusive ``` | Drop `device_map`. A distributed config places the shards itself. |
 | `<Model> does not have a FSDP2 plan declared` | The architecture has no FSDP plan. See [DistributedConfig](./distributed_config#fsdp2) for what a plan looks like. |
 | `FSDP2 requires torch>=2.7` | Upgrade torch. `fully_shard` alone needs 2.6, but distributed checkpoint save and load need 2.7. |

@@ -25,6 +25,7 @@ Distributed training splits work across accelerators, and each strategy targets 
 | A single layer doesn't fit on one GPU | Tensor parallelism | [Tensor parallelism](./tensor_parallelism) |
 | Sequences are too long to fit in memory | Sequence parallelism | [Ulysses sequence parallelism](./deepspeed_alst) |
 | A mixture-of-experts model is too large | Expert parallelism | [Expert parallelism](./expert_parallelism) |
+| A model is too deep for one GPU at inference | Pipeline parallelism (inference) | [Pipeline parallelism for inference](./pipeline_parallel_inference) |
 | One strategy isn't enough on its own | Stack several | [N-D parallelism](./perf_train_gpu_many) |
 
 1. Start with data parallelism if a single layer fits on one GPU. With DeepSpeed, begin at ZeRO-1 for the least communication overhead and move to ZeRO-2 or ZeRO-3 as you run out of memory. Add offloading if the model still doesn't fit.
@@ -42,7 +43,7 @@ Transformers has two entry points for sharding.
 | When | Training through [`Trainer`] | Custom training loop, or inference |
 | Where you configure it | [`TrainingArguments`] or an [Accelerate config file](./accelerate#accelerate-config-file) | [`~PreTrainedModel.from_pretrained`] |
 | When sharding happens | After the model loads | At load time, so the full model never lands on one device |
-| Strategies | DDP, FSDP2, DeepSpeed ZeRO, TP, sequence parallelism | FSDP2, TP, expert parallelism |
+| Strategies | DDP, FSDP2, DeepSpeed ZeRO, TP, sequence parallelism | FSDP2, TP, expert parallelism, PP (inference) |
 
 See [Accelerate](./accelerate) for the [`Trainer`] path and [DistributedConfig](./distributed_config) for the load-time path.
 

@@ -189,5 +189,6 @@ torchrun --nproc-per-node 8 train.py
 
 - See [Choosing a strategy](./distributed_overview) if you aren't sure which strategies you need.
 - See [Ulysses sequence parallelism](./deepspeed_alst) for the sequence parallel fields used above.
+- See [Pipeline parallelism for inference](./pipeline_parallel_inference) for load-time `pp_size` stages (not training PP).
 - See [Debugging](./debugging) for diagnosing mesh and communication errors.
 - Read the [5D Parallelism in a Nutshell](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=5d_parallelism_in_a_nutshell) chapter from The Ultra-Scale Playbook for more details about how the different parallelism strategies interact with each other.

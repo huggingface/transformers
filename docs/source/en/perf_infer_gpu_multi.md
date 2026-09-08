@@ -35,7 +35,12 @@ Configure the number of tensor parallel devices with `tp_size` in [`DistributedC
 - Set `DistributedConfig(tp_size=N)` to use the model's predefined plan.
 - Define a manual `tp_plan` and pass it to [`DistributedConfig`] along with `tp_size`.
 
-You can also set `tp_plan="auto"` to request the predefined plan explicitly. When `tp_size` is omitted and a `tp_plan` is set, `tp_size` is derived from `WORLD_SIZE` divided by the other parallel sizes. Passing `tp_plan` directly to [`~PreTrainedModel.from_pretrained`] is deprecated and will be removed in v5.18.
+You can also set `tp_plan="auto"` to request the predefined plan explicitly. When `tp_size` is omitted and a `tp_plan` is set, `tp_size` is derived from `WORLD_SIZE` divided by the other parallel sizes.
+
+> [!WARNING]
+> Passing a bare `tp_plan` or `tp_size` directly to [`~PreTrainedModel.from_pretrained`] is deprecated. Use `distributed_config=DistributedConfig(...)` instead. `tp_plan` emits a `FutureWarning` and will be removed in v5.18.
+
+For models with `tie_word_embeddings=True`, Transformers injects an `embedding_rowwise` plan for `embed_tokens` so vocabulary parallel TP stays consistent with the tied `lm_head`. Keep those layouts aligned in any manual `tp_plan`.
 
 <hfoptions id="tp_plan">
 <hfoption id="auto plan">
@@ -267,7 +272,7 @@ This chart shows the expected speedup for a single forward pass on [Llama](./mod
 
 ## Design implementation
 
-Transformers implements tensor parallelism in a framework-agnostic way. It relies on [DeviceMesh](https://docs.pytorch.org/tutorials/recipes/distributed_device_mesh.html) and [DTensor](https://docs.pytorch.org/docs/stable/distributed.tensor.html) from [torch.distributed](https://docs.pytorch.org/tutorials/beginner/dist_overview.html) to provide a simple, extensible interface.
+Transformers implements tensor parallelism on a DTensor backend. Placement and parameter sharding are outsourced to [DeviceMesh](https://docs.pytorch.org/tutorials/recipes/distributed_device_mesh.html) and [DTensor](https://docs.pytorch.org/docs/stable/distributed.tensor.html) from [torch.distributed](https://docs.pytorch.org/tutorials/beginner/dist_overview.html). Strategies still keep fast paths for kernels and quantized modules that need local tensors during forward.
 
 ### DeviceMesh
 

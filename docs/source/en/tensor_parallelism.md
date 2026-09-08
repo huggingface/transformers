@@ -46,10 +46,16 @@ print(config.base_model_tp_plan is not None)
 print(config.base_model_tp_plan)
 ```
 
+TP uses a DTensor backend. Parameters become DTensor placeholders at load time, and each strategy installs forward hooks that redistribute layouts instead of calling collectives by hand.
+
 If a model supports TP, pass a [`~distributed.DistributedConfig`] with `tp_size` to [`~PreTrainedModel.from_pretrained`]. Transformers initializes the device mesh and shards the supported layers for you.
 
 > [!WARNING]
 > Don't use `device_map` with a [`~distributed.DistributedConfig`]. The two conflict at the weight-loading level. `device_map` places whole modules on specific GPUs, while TP shards those same parameters across all GPUs.
+
+Passing bare `tp_plan` or `tp_size` to [`~PreTrainedModel.from_pretrained`] is deprecated. Put them on [`~distributed.DistributedConfig`] instead. `tp_plan` currently emits a `FutureWarning` and will be removed in v5.18.
+
+For models with `tie_word_embeddings=True`, Transformers adds an `embedding_rowwise` rule for `embed_tokens` automatically when the config enables weight tying. Prefer models and plans that keep the tied embed and `lm_head` layouts consistent.
 
 ```py
 import torch
