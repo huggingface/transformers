@@ -274,14 +274,15 @@ class WeatherNext2Attention(nn.Module):
         key_states = gather_neighbouring_blocks(self.k_proj(hidden_states).view(hidden_shape).transpose(2, 3))
         value_states = gather_neighbouring_blocks(self.v_proj(hidden_states).view(hidden_shape).transpose(2, 3))
 
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
         # Fold the block axis into the batch axis so the attention interface sees a plain 4-D
         # problem, and upcast: the original implementation runs attention in float32.
         def flatten(states: torch.Tensor) -> torch.Tensor:
             return states.reshape(-1, *states.shape[-3:]).float()
 
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
         attn_output, attn_weights = attention_interface(
             self,
             flatten(query_states),
