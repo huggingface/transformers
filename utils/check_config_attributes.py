@@ -44,6 +44,9 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 SPECIAL_CASES_TO_ALLOW = {
     # For consistency we keep head dim but it's not used as NoPE is applied
     "Glm5NextTextConfig": ["head_dim"],
+    # Training-time contrastive denoising noise knobs: PP-DocLayoutV4 is inference-only in Transformers, so its
+    # modeling never reads them, but the config keeps them for the checkpoint round-trip.
+    "PPDocLayoutV4Config": ["box_noise_scale", "label_noise_ratio"],
     # EP related refactor that also relies on correct naming for FP8/4 conventions
     "DeepseekV3Config": ["n_routed_experts"],
     "Glm4MoeConfig": ["n_routed_experts"],

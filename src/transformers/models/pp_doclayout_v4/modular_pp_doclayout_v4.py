@@ -656,7 +656,7 @@ class PPDocLayoutV4GlobalPointer(nn.Module):
         self.q_proj = nn.Linear(config.d_model, self.head_dim)
         self.k_proj = nn.Linear(config.d_model, self.head_dim)
         self.dropout = nn.Dropout(config.gp_dropout_value)
-        self.register_buffer("eye", torch.eye(config.num_queries), persistent=False)
+        self.eye = nn.Buffer(torch.eye(config.num_queries), persistent=False)
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         queries = self.dropout(self.q_proj(inputs))
@@ -683,7 +683,7 @@ class PPDocLayoutV4S2RFusion(nn.Module):
         self.damping = config.s2r_damping
         self.a = nn.Parameter(torch.full((1,), config.s2r_a_init))
         self.b = 1.0
-        self.register_buffer("one_minus_eye", 1.0 - torch.eye(config.num_queries), persistent=False)
+        self.one_minus_eye = nn.Buffer(1.0 - torch.eye(config.num_queries), persistent=False)
 
     def forward(self, relative_logits: torch.Tensor, successor_logits: torch.Tensor) -> torch.Tensor:
         # Soft directed adjacency, where adjacency[i, j] approximates P(i directly precedes j).
@@ -833,6 +833,8 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
             [nn.Linear(config.d_model, config.d_model) for _ in range(config.decoder_layers)]
         )
         self.successor_global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=False)
+        # CODEPATH: PP-DocLayoutV4_safetensors enables S2R fusion; the `None` branch is only for configs that
+        # turn `use_s2r` off.
         self.s2r_fusion = PPDocLayoutV4S2RFusion(config) if config.use_s2r else None
 
     def forward(
@@ -987,6 +989,8 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
         # top-level plain assignments, and the parent's allocation is nested in an `if` block, so both allocations
         # survive into the generated file, the second one winning.
         self.denoising_class_embed = (
+            # CODEPATH: PP-DocLayoutV4_safetensors trains with denoising; the `None` branch is only for configs
+            # that disable it.
             nn.Embedding(config.num_labels, config.d_model) if config.num_denoising > 0 else None
         )
 
