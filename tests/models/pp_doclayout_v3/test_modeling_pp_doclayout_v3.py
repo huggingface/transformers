@@ -474,9 +474,9 @@ class PPDocLayoutV3ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=2e-4, atol=2e-2)
 
         expected_shape_boxes = torch.Size((1, 300, 4))
-        expected_boxes = torch.tensor(
-            [[0.3725, 0.1789, 0.3373], [0.7256, 0.2672, 0.3378], [0.7247, 0.1389, 0.3352]]
-        ).to(torch_device)
+        expected_boxes = torch.tensor([[0.5449, 0.131, 0.8272], [0.3296, 0.2403, 0.403], [0.4999, 0.5335, 0.7372]]).to(
+            torch_device
+        )
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
         torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=2e-4, atol=2e-2)
 

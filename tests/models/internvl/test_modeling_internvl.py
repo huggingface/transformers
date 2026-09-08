@@ -451,9 +451,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the differences:\n\n1. **Foreground",
-                ("cuda", 8): "user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the differences:\n\n1. **Foreground",
-                ("rocm", (9, 4)): "user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the main differences:\n\n1. **",
+                (None, None): 'user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the New York City skyline with the Golden Gate Bridge in the background. Here are the',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -616,9 +614,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[2], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s peace.',
-                ("cuda", 8): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s peace.',
-                ("rocm", (9, 4)): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s embrace.',
+                (None, None): "user\n\nWrite a haiku for this image\nassistant\nLakeside, serene,  \nWooden pier, calm waters,  \nNature's peace.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -848,7 +844,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = "user\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After closely examining the images again, I can see that there are several differences"
+        expected_output = "user\n\nWhat are the difference between these two images?\nassistant\nI apologize for the mistake. Upon closer inspection, here are the differences between the two images:\n\n1. **Statue of"
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -998,8 +994,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[2], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.",
-                ("cuda", 8): 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.',
+                (None, None): "user\n\nWrite a haiku for this image\nassistant\nWooden path leads to water,\nMajestic mountains in the distance,\nNature's peaceful grace.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

@@ -784,7 +784,6 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @require_accelerate
     def test_inference_vicuna_7b(self):
-        # TODO(synthetic-assets): re-record after the lavis_confusing_pictures.jpg regeneration (2026-09-07).
         processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
         model = InstructBlipForConditionalGeneration.from_pretrained(
             "Salesforce/instructblip-vicuna-7b",
@@ -810,7 +809,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                (None, None): "What is unusual about this image? The image is unusual because it features a simple, minimalist design with a red cross and a blue square, which creates a striking contrast between the two",
+                (None, None): 'What is unusual about this image? The unusual aspect of this image is the presence of a man standing on top of a taxi cab, which is driving down a busy city street.',
             }
         )  # fmt: off
         expected_text = expected_texts.get_expectation()

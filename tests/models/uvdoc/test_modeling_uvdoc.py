@@ -333,11 +333,7 @@ class UVDocModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs.last_hidden_state[0, 0, :3, :3], expected_logits, rtol=2e-4, atol=2e-4)
 
         expected_images = torch.tensor(
-            [
-                [131, 130, 128],
-                [131, 129, 127],
-                [130, 129, 127],
-            ],
+            [[248, 204, 184], [248, 205, 184], [248, 206, 184]],
             device=torch_device,
             dtype=torch.uint8,
         )

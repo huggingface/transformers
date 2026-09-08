@@ -786,7 +786,7 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         ).to(torch_device)
 
         expected_coord_logits = torch.tensor(
-            [[[0.2550, 0.5501, 0.4738]], [[0.2535, 0.6006, 0.0353]], [[0.3742, 0.3337, 0.0666]]]
+            [[[0.255, 0.5501, 0.4738]], [[0.2535, 0.6006, 0.0353]], [[0.4041, 0.2596, 0.1161]]]
         ).to(torch_device)
 
         torch.testing.assert_close(
