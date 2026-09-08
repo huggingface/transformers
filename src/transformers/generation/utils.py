@@ -603,6 +603,7 @@ class GenerationMixin(ContinuousMixin):
             A callable that can be used to generate text.
         """
         custom_generate_file = "custom_generate/generate.py"
+        custom_generate_requirements = "custom_generate/requirements.txt"
 
         # Check for the existence of the file without actually downloading it
         # (preventing unwanted downloads of files, even if not executed)
@@ -634,14 +635,14 @@ class GenerationMixin(ContinuousMixin):
             error_message=error_message,
         )
 
-        # Load the remote module
+        # Load the remote generation module
         module = get_cached_module_file(
-            pretrained_model_name_or_path, module_file="custom_generate/generate.py", **kwargs
+            pretrained_model_name_or_path, module_file=custom_generate_file, **kwargs
         )
 
         # Load the custom generate function
         check_python_requirements(
-            pretrained_model_name_or_path, requirements_file="custom_generate/requirements.txt", **kwargs
+            pretrained_model_name_or_path, requirements_file=custom_generate_requirements, **kwargs
         )
         custom_generate_function = get_class_in_module("generate", module)
         return custom_generate_function
