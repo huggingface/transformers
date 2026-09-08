@@ -1271,16 +1271,16 @@ def spawn_materialize(
 
 def shards_after_conversion(mapping: WeightRenaming | WeightConverter, placements, ndim: int) -> bool:
     """Whether a DTensor parameter with these `placements` has to be converted in full before this rank's shard is
-    taken: a transpose or a RoPE permutation on a sharded dim makes the shard of the source the wrong slice."""
+    taken.
+
+    `PermuteForRope` interleaves rows and reads the head size off `tensor.shape[0]`, so on a shard it permutes with
+    the local row count and silently produces the wrong weights. A transpose is not handled here: it only moves axes
+    around, so the target shard maps to a source slice and shard-on-read still applies (#48373).
+    """
     if not isinstance(mapping, WeightConverter):
         return False
     shard_dims = {placement.dim % ndim for placement in placements if placement.is_shard()}
-    for op in mapping.operations:
-        if isinstance(op, Transpose) and {op.dim0 % ndim, op.dim1 % ndim} & shard_dims:
-            return True
-        if isinstance(op, PermuteForRope) and 0 in shard_dims:
-            return True
-    return False
+    return any(isinstance(op, PermuteForRope) for op in mapping.operations) and 0 in shard_dims
 
 
 def dot_natural_key(s: str):
