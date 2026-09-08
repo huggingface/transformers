@@ -144,7 +144,7 @@ class TensorParallelLayer:
     def transform_output_post_forward(self, module, output, mesh):
         return output
 
-    def install_forward(self, module, mesh, *, is_expert_parallel=False):
+    def install_forward(self, module, mesh):
         """Install pre / around / post transforms by replacing module.forward."""
         original_forward = module.forward
 
@@ -344,7 +344,7 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
     summed across the mesh.
     """
 
-    def install_forward(self, module, mesh, *, is_expert_parallel=False):
+    def install_forward(self, module, mesh):
         # A module hook rather than `param.register_hook`: params are replaced during weight
         # loading, which happens after TP is applied, and would drop a param-level hook.
         def _all_reduce_grads(mod, grad_input, grad_output):
@@ -415,7 +415,7 @@ class SequenceParallel(TensorParallelLayer):
         self.sequence_dim = sequence_dim
         self.use_local_output = use_local_output
 
-    def install_forward(self, module, mesh, *, is_expert_parallel=False):
+    def install_forward(self, module, mesh):
         # Replicate the module's params (LayerNorm/RMSNorm ones-init → from_local is safe).
         for p_name, p in list(module.named_parameters(recurse=False)):
             module.register_parameter(
@@ -604,9 +604,8 @@ class MoeExpertsParallel(TensorParallelLayer):
 
         return (hidden_states, *routing_args), kwargs
 
-    def install_forward(self, module, mesh, *, is_expert_parallel=False):
+    def install_forward(self, module, mesh):
         """Install the transforms but pass `is_expert_parallel` in the forward call."""
-        module.is_expert_parallel = is_expert_parallel
         original_forward = module.forward
         output_source = (
             Partial()
@@ -619,7 +618,7 @@ class MoeExpertsParallel(TensorParallelLayer):
 
         def tp_forward(*args, **kwargs):
             args, kwargs = self.transform_inputs_pre_forward(
-                module, args, kwargs, mesh, is_expert_parallel=is_expert_parallel
+                module, args, kwargs, mesh, is_expert_parallel=module.is_expert_parallel
             )
             with self.context_around_forward(module, mesh):
                 output = original_forward(*args, **kwargs)
@@ -817,9 +816,8 @@ def apply_tensor_parallelism(model, tp_mesh):
                 # MLA needs to know the qk_rope_head_dim to split the projection output into KV and RoPE parts.
                 # TODO: Store qk_rope_head_dim on MLA projection modules when the models initialize them.
                 module.config = model.config.get_text_config()
-            ALL_PARALLEL_STYLES[style_name].install_forward(
-                module, tp_mesh, is_expert_parallel=model.config.distributed_config.enable_expert_parallel
-            )
+            module.is_expert_parallel = model.config.distributed_config.enable_expert_parallel
+            ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
         module._is_hooked = True
 
     return model
