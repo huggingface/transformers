@@ -715,8 +715,10 @@ class EpRouterParallel(TensorParallelLayer):
         if num_local_experts > 1:
             router_indices = torch.fmod(router_indices, num_local_experts)
         else:
-            router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(router_indices < 0, -1)
-        router_indices = router_indices.masked_fill(router_indices == -1, num_local_experts)
+            router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(
+                router_indices < 0, -1
+            )
+        router_indices = router_indices.masked_fill(router_indices == -1, num_local_experts + 1)
         return router_logits, router_scores, router_indices, *extra_outputs
 
 
