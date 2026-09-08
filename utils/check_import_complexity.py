@@ -36,7 +36,7 @@ from types import ModuleType
 from typing import Any
 
 
-MAX_IMPORT_COUNT = 1500  # temporarily increased from 1000 pending investigation
+MAX_IMPORT_COUNT = 1000
 
 
 # ---------------------------------------------------------------------------
