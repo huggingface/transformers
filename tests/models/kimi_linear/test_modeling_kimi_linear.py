@@ -69,6 +69,7 @@ class KimiLinearModelTester(CausalLMModelTester):
         self.v_head_dim = 32
         # MoE
         self.moe_intermediate_size = 16
+        self.num_local_experts = 4
         self.n_routed_experts = 8
         self.n_shared_experts = 1
         self.num_experts_per_tok = 2
