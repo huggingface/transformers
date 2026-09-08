@@ -39,7 +39,13 @@ from huggingface_hub.errors import EntryNotFoundError
 from .audio_utils import AudioInput, SpectrogramConfig, load_audio, make_list_of_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
-from .image_utils import ChannelDimension, ImageInput, is_vision_available, make_flat_list_of_images
+from .image_utils import (
+    ChannelDimension,
+    ImageInput,
+    SizeDict,
+    is_vision_available,
+    make_flat_list_of_images,
+)
 from .tokenization_utils_base import (
     PaddingStrategy,
     PreTokenizedInput,
@@ -293,9 +299,9 @@ class ImagesKwargs(TypedDict, total=False):
 
     do_convert_rgb: bool | None
     do_resize: bool | None
-    size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
+    size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | SizeDict | None, image_size_validator()]
     default_to_square: bool | None
-    crop_size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
+    crop_size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | SizeDict | None, image_size_validator()]
     resample: Annotated[Union["PILImageResampling", int] | None, resampling_validator()]
     do_rescale: bool | None
     rescale_factor: float | None
@@ -303,7 +309,7 @@ class ImagesKwargs(TypedDict, total=False):
     image_mean: float | list[float] | tuple[float, ...] | None
     image_std: float | list[float] | tuple[float, ...] | None
     do_pad: bool | None
-    pad_size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
+    pad_size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | SizeDict | None, image_size_validator()]
     do_center_crop: bool | None
     data_format: str | ChannelDimension | None
     input_data_format: str | ChannelDimension | None
@@ -368,7 +374,7 @@ class VideosKwargs(TypedDict, total=False):
 
     do_convert_rgb: bool | None
     do_resize: bool | None
-    size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
+    size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | SizeDict | None, image_size_validator()]
     default_to_square: bool | None
     resample: Annotated[Union["PILImageResampling", int] | None, resampling_validator()]
     do_rescale: bool | None
@@ -378,7 +384,7 @@ class VideosKwargs(TypedDict, total=False):
     image_std: float | list[float] | tuple[float, ...] | None
     do_center_crop: bool | None
     do_pad: bool | None
-    crop_size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
+    crop_size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | SizeDict | None, image_size_validator()]
     data_format: str | ChannelDimension | None
     input_data_format: str | ChannelDimension | None
     device: Annotated[Union[str, "torch.device"] | None, device_validator()]

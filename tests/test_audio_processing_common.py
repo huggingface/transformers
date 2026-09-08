@@ -363,6 +363,44 @@ class AudioProcessingTestMixin:
                     f"mask valid-frame counts {valid_per_row} are not monotonic in input length {lengths}",
                 )
 
+    @require_torch
+    def test_explicit_none_kwarg_falls_back_to_default(self):
+        """An explicitly-passed `None` means "unset" and must resolve to the processor's own value.
+
+        This mirrors init, where `_init_kwargs_from_valid_kwargs` (`preprocessing_base.py:324`)
+        coerces an explicit `None` to the class default. Call time used to disagree: the
+        `kwargs.setdefault(...)` in `PreprocessingMixin.preprocess` is a no-op when the key is
+        present, so `processor(x, do_rescale=None)` passed `None` straight through and every
+        `if do_x:` read site downstream evaluated it as `False` -- silently skipping a step the
+        caller never asked to disable.
+
+        Belongs in `PreprocessingTestMixin` (the fix is in `PreprocessingMixin`); it lives here
+        until that file exists, and covers the image side once the mixins are chained.
+        """
+        init_dict = self.audio_processor_tester.prepare_audio_processor_dict()
+        waveform = prepare_audio_inputs(batch_size=1, seed=0)[0]
+
+        for backend, cls in self.audio_processing_classes.items():
+            with self.subTest(backend=backend):
+                processor = cls(**init_dict)
+                reference = processor(waveform, return_tensors="pt")
+
+                # Only boolean switches that are currently *on* can demonstrate the bug: a `None`
+                # read as `False` flips them off, which shows up in the output.
+                kwarg_names = getattr(processor, "_call_kwargs_names", processor._valid_kwargs_names)
+                candidates = [
+                    name
+                    for name in kwarg_names
+                    if isinstance(getattr(processor, name, None), bool) and getattr(processor, name)
+                ]
+                if not candidates:
+                    self.skipTest("no truthy boolean per-call kwarg to exercise")
+
+                for name in candidates:
+                    with self.subTest(kwarg=name):
+                        encoding = processor(waveform, return_tensors="pt", **{name: None})
+                        self._assert_outputs_bit_exact(reference, encoding, atol=0, rtol=0)
+
     # ── JSON round-trip ───────────────────────────────────────────────────
 
     def test_audio_processor_to_json_string(self):

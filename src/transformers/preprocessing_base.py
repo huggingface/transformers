@@ -43,6 +43,8 @@ logger = logging.get_logger(__name__)
 
 PreprocessingMixinType = TypeVar("PreprocessingMixinType", bound="PreprocessingMixin")
 
+_UNSET = object()
+
 
 class BatchFeature(UserDict):
     r"""
@@ -320,10 +322,16 @@ class PreprocessingMixin(PushToHubMixin):
         For each key in `self.valid_kwargs.__annotations__`, pops it from `kwargs`
         and sets it on the instance (or deep-copies the class default).
         Also sets `self._valid_kwargs_names`.
+
+        An *explicitly passed* `None` is a stored config value and is kept, so that it survives
+        `to_dict` and a `save_pretrained`/`from_pretrained` round-trip; only an *absent* key falls
+        back to the class default. The two cases are distinguished with a sentinel rather than by
+        statement order -- this method pops the `valid_kwargs` keys before `__init__`'s generic
+        `setattr` loop can see them, so `getattr(self, key)` here reads the class attribute.
         """
         for key in self.valid_kwargs.__annotations__:
-            kwarg = kwargs.pop(key, None)
-            if kwarg is not None:
+            kwarg = kwargs.pop(key, _UNSET)
+            if kwarg is not _UNSET:
                 setattr(self, key, kwarg)
             else:
                 setattr(self, key, deepcopy(getattr(self, key, None)))
@@ -374,9 +382,9 @@ class PreprocessingMixin(PushToHubMixin):
                 f"Kwargs accepted per call: {', '.join(call_kwargs_names)}."
             )
 
-        # Set default kwargs from self
         for kwarg_name in call_kwargs_names:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
+            if kwargs.get(kwarg_name) is None:
+                kwargs[kwarg_name] = getattr(self, kwarg_name, None)
 
         # Type- and value-validate the *merged* kwargs. Validating only what the caller passed would leave
         # the rest filled with `validate_typed_dict`'s internal sentinel, which any real `Annotated`
