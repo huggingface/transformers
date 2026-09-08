@@ -506,6 +506,34 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.assertEqual(output.beam_indices.shape[0], input_features.shape[0] * 3)
         self.assertEqual(output.sequences_scores.shape[0], input_features.shape[0] * 3)
 
+    def test_beam_search_transition_scores(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs()
+        model = WhisperForConditionalGeneration(config).to(torch_device).eval()
+
+        input_features = input_dict["input_features"]
+
+        output = model.generate(
+            input_features,
+            num_beams=3,
+            num_return_sequences=3,
+            return_dict_in_generate=True,
+            output_scores=True,
+            length_penalty=0.0,
+        )
+
+        transition_scores = model.compute_transition_scores(output.sequences, output.scores, output.beam_indices)
+
+        # `scores` are gathered from the beam each step was generated on, so every transition score has to come
+        # from the row of the sequence it belongs to
+        cut_idx = output.sequences.shape[-1] - transition_scores.shape[-1]
+        for seq_idx in range(output.sequences.shape[0]):
+            for step, token_id in enumerate(output.sequences[seq_idx, cut_idx:]):
+                if output.beam_indices[seq_idx, step] < 0:
+                    continue
+                self.assertEqual(transition_scores[seq_idx, step], output.scores[step][seq_idx, token_id])
+
+        torch.testing.assert_close(transition_scores.sum(dim=-1), output.sequences_scores, atol=1e-3, rtol=1e-3)
+
     @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
