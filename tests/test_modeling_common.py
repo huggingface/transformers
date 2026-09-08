@@ -6010,9 +6010,33 @@ class ModelTesterMixin(ExportTesterMixin):
         position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
         position_ids_long = position_ids_long.unsqueeze(0)
 
-        if (num_axis := text_config.num_multimodal_rope_axis) is not None:
-            position_ids_short = position_ids_short[None, ...].repeat(num_axis, 1, 1)
-            position_ids_long = position_ids_long[None, ...].repeat(num_axis, 1, 1)
+        # Infer number of mrope axis which is usually `3` but can be different in special models
+        if getattr(text_config, "layer_types", None) is None or set(text_config.rope_parameters.keys()).isdisjoint(
+            text_config.layer_types
+        ):
+            has_per_layer_rope = False
+        else:
+            has_per_layer_rope = True
+
+        num_multimodal_rope_axis = None
+        if not has_per_layer_rope and "mrope_section" in text_config.rope_parameters:
+            num_multimodal_rope_axis = len(text_config.rope_parameters["mrope_section"])
+        else:
+            mrope_sections = [
+                sub_dict["mrope_section"]
+                for sub_dict in text_config.rope_parameters.values()
+                if isinstance(sub_dict, dict) and "mrope_section" in sub_dict
+            ]
+            if mrope_sections:
+                if len({tuple(sections) for sections in mrope_sections}) > 1:
+                    raise ValueError(
+                        "Model has different `mrope_section` per layer type, override the test if needed!"
+                    )
+                num_multimodal_rope_axis = len(mrope_sections[0])
+
+        if num_multimodal_rope_axis is not None:
+            position_ids_short = position_ids_short[None, ...].repeat(num_multimodal_rope_axis, 1, 1)
+            position_ids_long = position_ids_long[None, ...].repeat(num_multimodal_rope_axis, 1, 1)
 
         # Sanity check original RoPE
         _set_config_rope_params(
@@ -6129,7 +6153,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 break
 
         if rope_class is None:
-            self.skipTest("Couldn't infer RoPE layer for this model class.")
+            self.skipTest(f"{base_model_class} has no axial RoPE layer defined.")
 
         # First make sure that validation on default config raises no rope-related warnings
         logger = logging.get_logger("transformers.modeling_rope_utils")

@@ -740,41 +740,6 @@ class RotaryEmbeddingConfigMixin:
     default_rope_type = "default"  # override only for axial models
     ignore_keys_at_rope_validation = set()
 
-    @property
-    def has_per_layer_rope(self) -> bool:
-        if self.rope_parameters is None or getattr(self, "layer_types", None) is None:
-            return False
-        if set(self.rope_parameters.keys()).isdisjoint(self.layer_types):
-            return False
-        return True
-
-    @property
-    def num_multimodal_rope_axis(self, layer_type: str | None = None) -> int | None:
-        if (
-            self.rope_parameters is None
-            or (not self.has_per_layer_rope and "mrope_section" not in self.rope_parameters)
-            or (
-                self.has_per_layer_rope
-                and not any("mrope_section" in sub_dict for sub_dict in self.rope_parameters.values())
-            )
-        ):
-            return None
-
-        if not self.has_per_layer_rope:
-            mrope_section = self.rope_parameters.get("mrope_section")
-        else:
-            mrope_sections = [
-                sub_dict["mrope_section"]
-                for sub_dict in self.rope_parameters.values()
-                if sub_dict and "mrope_section" in sub_dict
-            ]
-            if len({tuple(sections) for sections in mrope_sections}) > 1 and layer_type is None:
-                raise ValueError(
-                    "Model has different `mrope_section` per layer type, please pass `layer_type` argument"
-                )
-            mrope_section = mrope_sections[0]
-        return len(mrope_section)
-
     def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
