@@ -541,6 +541,8 @@ class MoEParamShard(TensorParallelLayer):
                     f"{expert_parallel_size} expert-parallel ranks."
                 )
             module.num_experts = global_num_experts // expert_parallel_size
+            # The experts forward masks sentinel rows only when its experts are actually split.
+            module.is_expert_parallel = True
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, mesh, [self.placement], src_data_rank=None),
             requires_grad=meta.requires_grad,
@@ -604,7 +606,7 @@ class MoeExpertsParallel(TensorParallelLayer):
 
         return (hidden_states, *routing_args), kwargs
 
-    def install_forward(self, module, mesh):
+    def install_forward(self, module, mesh, *, is_expert_parallel=False):
         """Install the transforms but pass `is_expert_parallel` in the forward call."""
         original_forward = module.forward
         output_source = (
@@ -618,7 +620,7 @@ class MoeExpertsParallel(TensorParallelLayer):
 
         def tp_forward(*args, **kwargs):
             args, kwargs = self.transform_inputs_pre_forward(
-                module, args, kwargs, mesh, is_expert_parallel=module.is_expert_parallel
+                module, args, kwargs, mesh, is_expert_parallel=is_expert_parallel
             )
             with self.context_around_forward(module, mesh):
                 output = original_forward(*args, **kwargs)
@@ -816,7 +818,6 @@ def apply_tensor_parallelism(model, tp_mesh):
                 # MLA needs to know the qk_rope_head_dim to split the projection output into KV and RoPE parts.
                 # TODO: Store qk_rope_head_dim on MLA projection modules when the models initialize them.
                 module.config = model.config.get_text_config()
-            module.is_expert_parallel = model.config.distributed_config.enable_expert_parallel
             ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
         module._is_hooked = True
 
