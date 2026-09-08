@@ -31,7 +31,6 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging, requires_backends
-from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -199,7 +198,6 @@ def construct_full_unpacked_stream(
     return all_bi_stream
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class FuyuProcessor(ProcessorMixin):
     valid_processor_kwargs = FuyuProcessorKwargs

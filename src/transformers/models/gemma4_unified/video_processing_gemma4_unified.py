@@ -24,14 +24,29 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling
-from ...processing_utils import Unpack
+from ...processing_utils import Unpack, VideosKwargs
 from ...utils import (
     TensorType,
     auto_docstring,
 )
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoInput
-from .processing_gemma4_unified import Gemma4UnifiedVideoProcessorKwargs
+
+
+class Gemma4UnifiedVideoProcessorKwargs(VideosKwargs, total=False):
+    """
+    patch_size (`int`, *optional*):
+        Size of each image patch in pixels.
+    max_soft_tokens (`int`, *optional*):
+        Maximum number of soft (vision) tokens per video frame.
+        Must be one of {70, 140, 280, 560, 1120}.
+    pooling_kernel_size (`int`, *optional*):
+        Spatial pooling kernel size applied after patchification.
+    """
+
+    patch_size: int
+    max_soft_tokens: int
+    pooling_kernel_size: int
 
 
 _SUPPORTED_SOFT_TOKENS = (70, 140, 280, 560, 1120)

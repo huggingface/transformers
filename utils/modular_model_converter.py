@@ -1185,6 +1185,7 @@ TYPE_TO_FILE_TYPE = {
     "ImageProcessorPil": "image_processing_pil",
     "VideoProcessor": "video_processing",
     "VideoProcessorInitKwargs": "video_processing",
+    "VideoProcessorKwargs": "video_processing",
     "ImageProcessorKwargs": "image_processing",
     "FeatureExtractor": "feature_extraction",
     "ProcessorKwargs": "processing",
