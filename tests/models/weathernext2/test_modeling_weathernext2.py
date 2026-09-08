@@ -364,6 +364,13 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
+        reason="Every forward passes a mesh-adjacency mask, which SDPA's flash backend cannot take. This is the "
+        "same reason the model sets `_supports_flash_attn = False`."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip(
         reason="The shared test calls `state_dict()` on the state dict it already has whenever a buffer is a "
         "`BoolTensor`, which the banded attention mask is."
     )
