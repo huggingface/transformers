@@ -319,9 +319,6 @@ def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None
     Returns:
         `np.ndarray`: Array of frame indices to sample.
     """
-    if fps is not None and num_frames is not None:
-        raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")
-
     total_num_frames = metadata.total_num_frames
     video_fps = metadata.fps
 
