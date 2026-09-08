@@ -46,7 +46,7 @@ URLS_FOR_TESTING_DATA = [
     # basename and `dummy-audio-samples` ships a *different* glass_breaking.mp3. Prefetching
     # both would make one silently shadow the other, so that one is fetched at test time.
     # Source generators live in the dataset repo; see its README.
-    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mandarin_asr.wav",
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/mandarin_voxcpm_zh.wav",
     "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mr_quiller.flac",
     "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/throat_clearing.wav",
     "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/voice_sample.wav",

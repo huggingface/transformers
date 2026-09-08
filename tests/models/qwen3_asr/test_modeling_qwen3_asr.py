@@ -163,6 +163,7 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
         """
         reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/3e0551708631784aeb684e0e838299f3#file-reproducer-py
         """
+        # TODO(synthetic-assets): re-record; the Mandarin clip is now real speech, not a sine tone.
         path = self.fixtures_path / "expected_results_batched.json"
         with open(path, "r", encoding="utf-8") as f:
             raw = json.load(f)
@@ -187,7 +188,7 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mandarin_asr.wav",
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/mandarin_voxcpm_zh.wav",
                         },
                     ],
                 }
@@ -289,7 +290,7 @@ class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
         model = self._load_aligner()
         audio_urls = [
             "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav",
-            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mandarin_asr.wav",
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/mandarin_voxcpm_zh.wav",
         ]
 
         batch_timestamps = self._run_alignment(
