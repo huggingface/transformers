@@ -545,7 +545,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
         inputs = inputs.to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices"
+        EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture is a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular pets. They"
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),

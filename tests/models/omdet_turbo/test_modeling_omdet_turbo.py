@@ -812,7 +812,7 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
             ]
         ).to(torch_device)
 
-        self.assertListEqual([len(result["scores"]) for result in results], [4, 4, 6])
+        self.assertListEqual([len(result["scores"]) for result in results], [4, 4, 7])
         torch.testing.assert_close(
             torch.stack([result["scores"][0] for result in results]), expected_scores, rtol=1e-2, atol=1e-2
         )

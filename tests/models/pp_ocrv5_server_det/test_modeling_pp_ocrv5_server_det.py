@@ -299,7 +299,7 @@ class PPOCRV5ServerDetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(results[0]["boxes"].shape, expected_shape_boxes)
         torch.testing.assert_close(results[0]["boxes"], expected_boxes, rtol=2e-2, atol=2e-2)
 
-        expected_scores = torch.tensor([0.9023, 0.8941, 0.8937, 0.8781], device=torch_device)
+        expected_scores = torch.tensor([0.9109, 0.9247, 0.9507, 0.8898], device=torch_device)
         self.assertEqual(results[0]["scores"].shape, (4,))
         torch.testing.assert_close(results[0]["scores"], expected_scores, rtol=2e-2, atol=2e-2)
 

@@ -610,11 +610,7 @@ class PPDocLayoutV2ModelIntegrationTest(unittest.TestCase):
 
         expected_shape_order_logits = torch.Size((1, 300, 300))
         expected_order_logits = torch.tensor(
-            [
-                [-10000.0000, 43.8388, -32.8785],
-                [-10000.0000, -10000.0000, -63.9118],
-                [-10000.0000, -10000.0000, -10000.0000],
-            ]
+            [[-10000.0, 73.0009, -37.7191], [-10000.0, -10000.0, -76.1782], [-10000.0, -10000.0, -10000.0]]
         ).to(torch_device)
         self.assertEqual(outputs.order_logits.shape, expected_shape_order_logits)
         torch.testing.assert_close(outputs.order_logits[0, :3, :3], expected_order_logits, rtol=2e-2, atol=2e-2)

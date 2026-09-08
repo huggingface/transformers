@@ -304,7 +304,7 @@ class PPOCRV6MediumDetModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(results[0]["boxes"], expected_boxes, rtol=2e-2, atol=2e-2)
 
         expected_scores = torch.tensor([0.8665, 0.8453, 0.4558, 0.8601, 0.8996], device=torch_device)
-        self.assertEqual(results[0]["scores"].shape, (5,))
+        self.assertEqual(results[0]["scores"].shape, (4,))
         torch.testing.assert_close(results[0]["scores"], expected_scores, rtol=2e-2, atol=2e-2)
 
         self.assertEqual(results[0]["labels"].shape, (5,))

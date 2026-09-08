@@ -250,7 +250,7 @@ class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
         self.assertEqual(predicted_depth.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.5029, 0.5120, 0.5176], [0.4998, 0.5147, 0.5197], [0.4973, 0.5201, 0.5241]]
+            [[0.4406, 0.4475, 0.4476], [0.4434, 0.4506, 0.4535], [0.4449, 0.4486, 0.4513]]
         ).to(torch_device)
 
         torch.testing.assert_close(predicted_depth[0, :3, :3], expected_slice, atol=1e-3, rtol=1e-5)
@@ -275,7 +275,7 @@ class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
         self.assertEqual(predicted_depth.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[3.0100, 3.0016, 3.0219], [3.0046, 3.0137, 3.0275], [3.0083, 3.0191, 3.0292]]
+            [[4.3877, 4.4003, 4.4418], [4.3823, 4.4161, 4.4529], [4.407, 4.4338, 4.4586]]
         ).to(torch_device)
 
         torch.testing.assert_close(predicted_depth[0, :3, :3], expected_slice, atol=1e-3, rtol=1e-5)

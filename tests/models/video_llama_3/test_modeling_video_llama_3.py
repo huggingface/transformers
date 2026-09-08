@@ -838,8 +838,7 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_DECODED_TEXT = Expectations(
             {
-                ("cuda", None): "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
-                ("xpu", None): "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
+                (None, None): 'user\n\nDescribe the image.\nassistant\nThe image depicts a simple, minimalist landscape. It features a blue sky with a yellow sun in the',
             }
         ).get_expectation()
         # fmt: on

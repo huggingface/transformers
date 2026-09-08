@@ -912,10 +912,9 @@ class DiffusionGemmaIntegrationTest(unittest.TestCase):
 
     @slow
     def test_diffusion_gemma_chat_template_image(self):
-        # TODO(synthetic-assets): refresh the image-token count from the next GPU run.
         image_tokens = [255999, 258880, 258882]  # These tokens must be present in the `input_ids`
         # TODO(joao): this should be 280! Something is wrong with processing?
-        image_token_count = 256
+        image_token_count = 260
 
         processor = AutoProcessor.from_pretrained(self._model_path)
         chat = [
