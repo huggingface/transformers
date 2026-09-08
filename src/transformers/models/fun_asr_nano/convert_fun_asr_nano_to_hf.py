@@ -95,7 +95,7 @@ ROOT_STATE_DICT_MAPPING = (
         r"^audio_encoder\.tp_norm\.",
         f"model.audio_tower.layers.{NUM_TRANSCRIPTION_BLOCKS + NUM_TIMESTAMP_PREDICTION_BLOCKS - 1}.final_layernorm.",
     ),
-    (r"^audio_adaptor\.blocks\.", "model.multi_modal_projector.blocks."),
+    (r"^audio_adaptor\.blocks\.", "model.multi_modal_projector.layers."),
     (r"^audio_adaptor\.linear1\.", "model.multi_modal_projector.linear_1."),
     (r"^audio_adaptor\.linear2\.", "model.multi_modal_projector.linear_2."),
     (r"^llm\.lm_head\.", "lm_head."),
