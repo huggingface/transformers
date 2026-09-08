@@ -160,7 +160,7 @@ def _owned_expert_range(meta_state_dict: dict) -> tuple[int, int] | None:
     return None
 
 
-def prefetch_checkpoint_shards(checkpoint_files: list[str], model: torch.nn.Module | None = None) -> None:
+def prefetch_checkpoint_shards(checkpoint_files: list[str], meta_state_dict: dict | None = None) -> None:
     """Warm the page cache for the checkpoint shards before the per-tensor loading pass, opt-in via
     `HF_SHARD_PREFETCH=<read threads per rank>`.
 
@@ -202,9 +202,7 @@ def prefetch_checkpoint_shards(checkpoint_files: list[str], model: torch.nn.Modu
                 left -= len(chunk)
 
     whole = [(path, 0, os.path.getsize(path)) for path in checkpoint_files][local_rank::local_world]
-    # `named_parameters` rather than `state_dict`, whose hooks build device meshes that later collide
-    # with the one FSDP wraps the model in, and only once the prefetch is known to be running.
-    own, common = ([], []) if model is None else _rank_byte_spans(checkpoint_files, dict(model.named_parameters()))
+    own, common = ([], []) if meta_state_dict is None else _rank_byte_spans(checkpoint_files, meta_state_dict)
     jobs = own + common[local_rank::local_world]
     # Reading only this rank's shard saves bytes and costs seeks. Price the seeks in bytes and keep
     # whichever plan reads less. Both sides are the node's read divided by its ranks, so the
