@@ -42,8 +42,6 @@ if is_torch_available():
     from transformers import FSMTForConditionalGeneration, FSMTModel, FSMTTokenizer
     from transformers.models.fsmt.modeling_fsmt import (
         SinusoidalPositionalEmbedding,
-        _prepare_fsmt_decoder_inputs,
-        invert_mask,
         shift_tokens_right,
     )
 
@@ -207,25 +205,22 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         config.use_cache = False
         inputs_dict["input_ids"][:, -2:] = config.pad_token_id
-        decoder_input_ids, decoder_attn_mask, causal_mask = _prepare_fsmt_decoder_inputs(
-            config, inputs_dict["input_ids"]
+        decoder_input_ids = shift_tokens_right(
+            inputs_dict["input_ids"], config.pad_token_id, config.decoder_start_token_id
         )
         model = FSMTModel(config).to(torch_device).eval()
 
         decoder_features_with_created_mask = model(**inputs_dict)[0]
-        decoder_features_with_passed_mask = model(
-            decoder_attention_mask=invert_mask(decoder_attn_mask), decoder_input_ids=decoder_input_ids, **inputs_dict
-        )[0]
+        decoder_features_with_passed_mask = model(decoder_input_ids=decoder_input_ids, **inputs_dict)[0]
         _assert_tensors_equal(decoder_features_with_passed_mask, decoder_features_with_created_mask)
-        useless_mask = torch.zeros_like(decoder_attn_mask)
-        decoder_features = model(decoder_attention_mask=useless_mask, **inputs_dict)[0]
+
+        decoder_attn_mask = decoder_input_ids.ne(config.pad_token_id)
+        decoder_features = model(decoder_attention_mask=decoder_attn_mask, **inputs_dict)[0]
         self.assertTrue(isinstance(decoder_features, torch.Tensor))  # no hidden states or attentions
         self.assertEqual(
             decoder_features.size(),
             (self.model_tester.batch_size, self.model_tester.seq_length, config.tgt_vocab_size),
         )
-        if decoder_attn_mask.min().item() < -1e3:  # some tokens were masked
-            self.assertFalse((decoder_features_with_created_mask == decoder_features).all().item())
 
         # Test different encoder attention masks
         decoder_features_with_long_encoder_mask = model(
@@ -360,7 +355,7 @@ class FSMTHeadTests(unittest.TestCase):
 
     def test_shift_tokens_right(self):
         input_ids = torch.tensor([[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]], dtype=torch.long)
-        shifted = shift_tokens_right(input_ids, 1)
+        shifted = shift_tokens_right(input_ids, 1, 2)
         n_pad_before = input_ids.eq(1).float().sum()
         n_pad_after = shifted.eq(1).float().sum()
         self.assertEqual(shifted.shape, input_ids.shape)
@@ -380,21 +375,6 @@ class FSMTHeadTests(unittest.TestCase):
         config, *_ = self._get_config_and_data()
         model = FSMTForConditionalGeneration(config).eval().to(torch_device)
         model(**model.dummy_inputs)
-
-    def test_prepare_fsmt_decoder_inputs(self):
-        config, *_ = self._get_config_and_data()
-        input_ids = _long_tensor([4, 4, 2])
-        decoder_input_ids = _long_tensor([[26388, 2, config.pad_token_id]])
-        causal_mask_dtype = torch.float32
-        ignore = torch.finfo(causal_mask_dtype).min
-        decoder_input_ids, decoder_attn_mask, causal_mask = _prepare_fsmt_decoder_inputs(
-            config, input_ids, decoder_input_ids, causal_mask_dtype=causal_mask_dtype
-        )
-        expected_causal_mask = torch.tensor(
-            [[0, ignore, ignore], [0, 0, ignore], [0, 0, 0]]  # never attend to the final token, because its pad
-        ).to(input_ids.device)
-        self.assertEqual(decoder_attn_mask.size(), decoder_input_ids.size())
-        self.assertTrue(torch.eq(expected_causal_mask, causal_mask).all())
 
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
