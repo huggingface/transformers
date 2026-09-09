@@ -18,7 +18,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="llava-hf/llava-1.5-7b-hf")
@@ -51,6 +51,20 @@ class LlavaConfig(PreTrainedConfig):
         "image_token_id": "image_token_index",
     }
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "vision_config": {
+            "model_type": "clip_vision_model",
+            "intermediate_size": 4096,
+            "hidden_size": 1024,
+            "patch_size": 14,
+            "image_size": 336,
+            "num_hidden_layers": 24,
+            "num_attention_heads": 16,
+            "vocab_size": 32000,
+            "projection_dim": 768,
+        },
+        "text_config": {"model_type": "llama"},
+    }
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -63,34 +77,13 @@ class LlavaConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "clip_vision_model")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["clip_vision_model"](
-                intermediate_size=4096,
-                hidden_size=1024,
-                patch_size=14,
-                image_size=336,
-                num_hidden_layers=24,
-                num_attention_heads=16,
-                vocab_size=32000,
-                projection_dim=768,
-            )
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "llama")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["llama"]()
+        super().__post_init__(**kwargs)
 
         # The default value is `False` but this config is used with many model types
         # Attr `tie_word_embeddings` was saved in text config for those models, so we
         # need an ugly workaround and forward-pass the attr from text config
         if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
             self.tie_word_embeddings = self.text_config.tie_word_embeddings
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["LlavaConfig"]

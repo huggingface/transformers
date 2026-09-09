@@ -240,6 +240,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
     # creating a model class
     base_config_key: ClassVar[str] = ""
     sub_configs: ClassVar[dict[str, type["PreTrainedConfig"]]] = {}
+    sub_configs_defaults: ClassVar[dict[str, dict]] = {}
+
     keys_to_ignore_at_inference: ClassVar[list[str]] = []
     attribute_map: ClassVar[dict[str, str]] = {}
     base_model_tp_plan: ClassVar[dict[str, Any] | None] = None
@@ -271,6 +273,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
     problem_type: Literal["regression", "single_label_classification", "multi_label_classification"] | None = None
 
     def __post_init__(self, **kwargs):
+        if self.sub_configs_defaults:
+            self._init_sub_configs()
+
         # BC for the `torch_dtype` argument instead of the simpler `dtype`
         # Do not warn, as it would otherwise always be triggered since most configs on the hub have `torch_dtype`
         if (torch_dtype := kwargs.pop("torch_dtype", None)) is not None:
@@ -365,6 +370,44 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             # remote code has an init defined, but some model are not
             # See https://huggingface.co/hmellor/Ilama-3.2-1B/blob/main/configuration_ilama.py
             cls = wrap_init_to_accept_kwargs(cls)
+
+    def _init_sub_configs(self) -> None:
+        """
+        Initiliazes sub-config classes for nested models based in class attributes - `sub_configs`
+        and `sub_configs_defaults`. It expects a valid dict with `model_type` to initialize a subconfig,
+        otherwise it will set a default attribute. All subconfigs are converted to a `PreTrainedConfig`
+        class before setting the attribute!
+        """
+        for key, subconfig_cls in self.sub_configs.items():
+            current_value = getattr(self, key)
+            default_dict = self.sub_configs_defaults.get(key, {})
+
+            if isinstance(current_value, PretrainedConfig):
+                # early eixt if sub-config is already a config instance
+                continue
+
+            # Copy the dict to not mutate the dict in-place
+            if isinstance(current_value, dict):
+                current_value = {**current_value}
+            elif current_value is None:
+                current_value = dict(default_dict)
+                logger.info(f"`{key}` is None, initializing with default {subconfig_cls.__name__} values.")
+            else:
+                raise TypeError(
+                    f"`{key}` must be a `dict`, `PretrainedConfig`, or `None`, got `{type(current_value)}`"
+                )
+
+            if subconfig_cls.__name__ == "AutoConfig":
+                model_type = current_value.get("model_type", default_dict.get("model_type"))
+                if model_type is None:
+                    raise ValueError(
+                        f"Cannot resolve `{key}`: no model_type given and no default in "
+                        f"`{type(self).__name__}.sub_configs_defaults`."
+                    )
+                current_value.setdefault("model_type", model_type)
+                setattr(self, key, subconfig_cls.for_model(**current_value))
+            else:
+                setattr(self, key, subconfig_cls(**current_value))
 
     @property
     def name_or_path(self) -> str | None:
@@ -1304,6 +1347,21 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
             if default_value is not None:
                 default_config_fields[f.name] = default_value
+
+        if cls.sub_configs_defaults:
+            for key, subconfig_cls in cls.sub_configs.items():
+                subconfig_default_dict = cls.sub_configs_defaults.get(key, {})
+                if subconfig_cls.__name__ == "AutoConfig":
+                    if subconfig_default_dict.get("model_type") is None:
+                        raise ValueError(
+                            f"Cannot resolve `{key}`: no model_type given and no default in `{cls.__name__}.sub_configs_defaults`."
+                        )
+                    subconfig_cls = subconfig_cls.resolve_config_class(subconfig_default_dict["model_type"])
+
+                subconfig_default_fields = subconfig_cls.default_config_fields()
+                subconfig_default_fields.update(subconfig_default_dict)
+                default_config_fields[key] = subconfig_default_fields
+
         return default_config_fields
 
     def _get_generation_parameters(self) -> dict[str, Any]:

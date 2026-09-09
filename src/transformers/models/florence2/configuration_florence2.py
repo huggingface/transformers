@@ -21,7 +21,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -113,27 +113,16 @@ class Florence2Config(PreTrainedConfig):
         "text_config": AutoConfig,
         "vision_config": Florence2VisionConfig,
     }
+    sub_configs_defaults = {
+        "vision_config": {"model_type": "florence_vision"},
+        "text_config": {"model_type": "bart"},
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 51289
     is_encoder_decoder: bool = True
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "bart")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["bart"]()
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Florence2VisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            logger.info("vision_config is None. Initializing the Florence2VisionConfig with default values.")
-            self.vision_config = Florence2VisionConfig()
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Florence2Config", "Florence2VisionConfig"]
