@@ -13,9 +13,6 @@
 # limitations under the License.
 """PyTorch ConvNext model."""
 
-# TODO(molbap): make this modular once convnext / convnextv2 have been
-# modernised
-
 import numpy as np
 import torch
 from torch import nn

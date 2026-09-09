@@ -41,7 +41,7 @@ from ...image_utils import (
     get_max_height_width,
     validate_annotations,
 )
-from ...modeling_outputs import BackboneOutput
+from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -49,8 +49,7 @@ from ...utils import (
     logging,
     torch_int,
 )
-from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple
 from ..clip.modeling_clip import CLIPMLP
 from ..convnext.modeling_convnext import ConvNextLayer
 from ..detr.image_processing_detr import (
@@ -755,9 +754,6 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
         hidden_state = hidden_state.transpose(2, 3)
         return hidden_state
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -788,11 +784,8 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
         [1, 768, 16, 16]
         ```"""
         embedding_output = self.embeddings(pixel_values)
-        hidden_state = embedding_output
-        hidden_states = (hidden_state,)
-        for layer in self.encoder.layer:
-            hidden_state = layer(hidden_state, **kwargs)
-            hidden_states = hidden_states + (hidden_state,)
+        output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
+        hidden_states = output.hidden_states
 
         feature_maps = ()
         for stage, hidden_state in zip(self.stage_names, hidden_states):
@@ -816,7 +809,11 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
 
                 feature_maps += (hidden_state,)
 
-        return BackboneOutput(feature_maps=tuple(feature_maps))
+        return BackboneOutput(
+            feature_maps=feature_maps,
+            hidden_states=hidden_states,
+            attentions=output.attentions,
+        )
 
 
 class RfDetrLayerNorm(LwDetrLayerNorm):

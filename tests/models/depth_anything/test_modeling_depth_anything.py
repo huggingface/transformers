@@ -252,10 +252,9 @@ class DepthAnythingModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size([1, 518, 686])
         self.assertEqual(predicted_depth.shape, expected_shape)
 
-        # Re-baselined after the dinov2 refactor adopted ViT's fp32-softmax `eager_attention_forward`.
         slice_expectations = Expectations(
             {
-                ("cpu", None): [[8.8223, 8.6483, 8.6215], [8.3332, 8.6047, 8.7545], [8.6547, 8.6885, 8.7472]],
+                (None, None): [[8.8223, 8.6483, 8.6215], [8.3332, 8.6047, 8.7545], [8.6547, 8.6885, 8.7472]],
                 ("cuda", (8, 0)): [[8.8223, 8.6483, 8.6215], [8.3332, 8.6047, 8.7545], [8.6547, 8.6885, 8.7472]],
                 ("xpu", None): [[8.8223, 8.6483, 8.6215], [8.3332, 8.6047, 8.7545], [8.6547, 8.6885, 8.7472]],
             }
