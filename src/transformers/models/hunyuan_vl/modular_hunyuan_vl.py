@@ -29,6 +29,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_utils import PILImageResampling, SizeDict
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -49,9 +50,9 @@ from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import (
     HunYuanDenseV1Model,
     HunYuanDenseV1PreTrainedModel,
     HunYuanDenseV1RotaryEmbedding,
-    apply_rotary_pos_emb,
     eager_attention_forward,
     repeat_kv,  # noqa: F401  - re-exported for downstream tooling
+    rotate_half,
 )
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..mllama.modeling_mllama import MllamaVisionAttention
@@ -584,7 +585,7 @@ class HunYuanVLRotaryEmbedding(HunYuanDenseV1RotaryEmbedding):
 
         sin = self.recomposition_frequencies(sin)
         cos = self.recomposition_frequencies(cos)
-        return cos, sin
+        return cos.to(x.dtype), sin.to(x.dtype)
 
     def recomposition_frequencies(self, freq):
         """
@@ -799,6 +800,34 @@ class HunYuanVLVisionBlock(SiglipEncoderLayer):
         self.mlp = HunYuanVLVisionMLP(config)
 
 
+@use_kernel_forward_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    origin_dtype = q.dtype
+    q, k = q.float(), k.float()
+    cos = cos.unsqueeze(unsqueeze_dim).float()
+    sin = sin.unsqueeze(unsqueeze_dim).float()
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed.to(origin_dtype), k_embed.to(origin_dtype)
+
+
 class HunYuanVLDenseV1Attention(HunYuanDenseV1Attention):
     """
     HunYuan dense attention with optional multimodal rotary embeddings.
@@ -828,10 +857,7 @@ class HunYuanVLDenseV1Attention(HunYuanDenseV1Attention):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-
-        origin_dtype = key_states.dtype
-        query_states, key_states = apply_rotary_pos_emb(query_states.float(), key_states.float(), cos, sin)
-        query_states, key_states = query_states.to(origin_dtype), key_states.to(origin_dtype)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         query_states = self.query_layernorm(query_states)
         key_states = self.key_layernorm(key_states)

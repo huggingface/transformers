@@ -148,7 +148,7 @@ class HunYuanVLRotaryEmbedding(nn.Module):
 
         sin = self.recomposition_frequencies(sin)
         cos = self.recomposition_frequencies(cos)
-        return cos, sin
+        return cos.to(x.dtype), sin.to(x.dtype)
 
     def recomposition_frequencies(self, freq):
         """
@@ -470,11 +470,13 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
+    origin_dtype = q.dtype
+    q, k = q.float(), k.float()
+    cos = cos.unsqueeze(unsqueeze_dim).float()
+    sin = sin.unsqueeze(unsqueeze_dim).float()
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
+    return q_embed.to(origin_dtype), k_embed.to(origin_dtype)
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
@@ -529,10 +531,7 @@ class HunYuanVLDenseV1Attention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-
-        origin_dtype = key_states.dtype
-        query_states, key_states = apply_rotary_pos_emb(query_states.float(), key_states.float(), cos, sin)
-        query_states, key_states = query_states.to(origin_dtype), key_states.to(origin_dtype)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         query_states = self.query_layernorm(query_states)
         key_states = self.key_layernorm(key_states)
