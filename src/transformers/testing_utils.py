@@ -2909,10 +2909,9 @@ def run_command(command: list[str], return_stdout=False):
 
 class RequestCounter:
     """
-    Helper class that will count all requests made online, per HTTP method.
+    Helper class that will count all requests made online.
 
-    Only the requests sent from the thread entering the context manager are counted, so that background work (e.g. the
-    safetensors auto-conversion thread) does not make the counts unpredictable.
+    Might not be robust if urllib3 changes its logging format but should be good enough for us.
 
     Usage:
     ```py
