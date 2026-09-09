@@ -17,7 +17,6 @@ import unittest
 
 import numpy as np
 import pytest
-import requests
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
@@ -40,6 +39,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -421,8 +421,8 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
             device_map=torch_device,
         )
 
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+        image = load_test_image(url)
         prompt = (
             "user\n<image><image>\nWhat is the difference between these images?<|im_end|>\n<|im_start|>assistant\n"
         )
@@ -455,8 +455,8 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
             device_map=torch_device,
         )
 
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+        image = load_test_image(url)
         prompts = [
             "user\nTell me about the french revolution.<|im_end|>\n<|im_start|>assistant\n",  # text-only case
             "user\n<image><image>\nWhat is the difference between these images?<|im_end|>\n<|im_start|>assistant\n",
@@ -524,10 +524,10 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
             "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", dtype="float16", device_map=torch_device
         )
 
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
         lowres_url = "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
-        cats_image = Image.open(requests.get(url, stream=True).raw)
-        lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
+        cats_image = load_test_image(url)
+        lowres_img = load_test_image(lowres_url)
 
         inputs = self.processor(
             text=[self.prompt_image, self.prompt_image],
@@ -556,10 +556,10 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
             device_map=torch_device,
         )
 
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
         lowres_url = "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
-        cats_image = Image.open(requests.get(url, stream=True).raw)
-        lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
+        cats_image = load_test_image(url)
+        lowres_img = load_test_image(lowres_url)
 
         inputs_batched = self.processor(
             text=[self.prompt_image, self.prompt_image],

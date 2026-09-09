@@ -27,6 +27,8 @@ from ...utils import auto_docstring
 class Qwen2VLVisionConfig(PreTrainedConfig):
     model_type = "qwen2_vl_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 32
     embed_dim: int = 1280
@@ -39,6 +41,7 @@ class Qwen2VLVisionConfig(PreTrainedConfig):
     spatial_merge_size: int = 2
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")

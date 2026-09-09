@@ -42,6 +42,7 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
     """
 
     model_type = "muse_glimmer_vision"
+    default_rope_type = "axial"
 
     patch_size: int = 14
     pos_emb_height: int = 32
@@ -52,8 +53,7 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
     hidden_size: int = 1536
     intermediate_size: int = 8960
     hidden_act: str = "gelu"
-    rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
-    max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
+    rope_parameters: dict | None = None
     base_model_tp_plan = {
         "patch_embedder.patch_embedding": "colwise_gather_output",
         "layers.*.attn.q_proj": "colwise",
@@ -65,6 +65,7 @@ class MuseGlimmerVisionConfig(PreTrainedConfig):
     }
     patch_temporal: int = 2
     merge_size: int = 2
+    max_position_embeddings: int = 32 * 32  # == `pos_h * pos_w`
     layer_norm_eps: float = 1e-05
     layer_types: list[str] | None = None
 
