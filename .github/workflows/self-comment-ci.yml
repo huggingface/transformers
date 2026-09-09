@@ -149,7 +149,7 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "repos/${github_repository}/issues/${pr_number}/comments" \
             --paginate \
-            --jq '.[] | select(.body | startswith("## Nvidia CI") or startswith("## AMD CI")) | .id')
+            --jq '.[] | select(.body | startswith("## Nvidia CI")) | .id')
           for comment_id in $existing_comment_ids; do
             gh api \
               --method DELETE \
