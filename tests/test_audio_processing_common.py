@@ -15,11 +15,8 @@ sibling backend classes (`torch` and optionally `numpy`) from
 
 from __future__ import annotations
 
-import json
-import os
 import pathlib
 import sys
-import tempfile
 
 import numpy as np
 
@@ -27,8 +24,10 @@ from transformers.models.auto.feature_extraction_auto import (
     FEATURE_EXTRACTOR_MAPPING_NAMES,
     feature_extractor_class_from_name,
 )
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch
+from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
+
+from .test_preprocessing_common import PreprocessingTesterMixin
 
 
 if is_torch_available():
@@ -52,7 +51,7 @@ def prepare_audio_inputs(
     return [rng.uniform(-1.0, 1.0, size=length).astype(np.float32) for length in lengths]
 
 
-class AudioProcessingTestMixin:
+class AudioProcessingTestMixin(PreprocessingTesterMixin):
     """Shared tests for every `XxxAudioProcessor` (and its sibling `XxxAudioProcessorNumpy`).
 
     Subclasses must set ``self.audio_processor_tester`` in their `setUp`. The tester is
@@ -90,6 +89,25 @@ class AudioProcessingTestMixin:
         self.audio_processing_classes = {b: c for b, c in self.audio_processing_classes.items() if c is not None}
 
     # ── Cross-backend parity ──────────────────────────────────────────────
+
+    # ── `PreprocessingTesterMixin` surface ────────────────────────────────
+
+    @property
+    def processing_classes(self) -> dict:
+        return self.audio_processing_classes
+
+    @property
+    def processor_dict(self) -> dict:
+        return self.audio_processor_tester.prepare_audio_processor_dict()
+
+    @property
+    def auto_class(self):
+        from transformers.models.auto.feature_extraction_auto import AutoAudioProcessor
+
+        return AutoAudioProcessor
+
+    def _prepare_inputs(self):
+        return prepare_audio_inputs(batch_size=1, seed=0)[0]
 
     def _to_torch(self, x):
         if isinstance(x, np.ndarray):
@@ -363,96 +381,6 @@ class AudioProcessingTestMixin:
                     f"mask valid-frame counts {valid_per_row} are not monotonic in input length {lengths}",
                 )
 
-    @require_torch
-    def test_explicit_none_kwarg_falls_back_to_default(self):
-        """An explicitly-passed `None` means "unset" and must resolve to the processor's own value.
-
-        This mirrors init, where `_init_kwargs_from_valid_kwargs` (`preprocessing_base.py:324`)
-        coerces an explicit `None` to the class default. Call time used to disagree: the
-        `kwargs.setdefault(...)` in `PreprocessingMixin.preprocess` is a no-op when the key is
-        present, so `processor(x, do_rescale=None)` passed `None` straight through and every
-        `if do_x:` read site downstream evaluated it as `False` -- silently skipping a step the
-        caller never asked to disable.
-
-        Belongs in `PreprocessingTestMixin` (the fix is in `PreprocessingMixin`); it lives here
-        until that file exists, and covers the image side once the mixins are chained.
-        """
-        init_dict = self.audio_processor_tester.prepare_audio_processor_dict()
-        waveform = prepare_audio_inputs(batch_size=1, seed=0)[0]
-
-        for backend, cls in self.audio_processing_classes.items():
-            with self.subTest(backend=backend):
-                processor = cls(**init_dict)
-                reference = processor(waveform, return_tensors="pt")
-
-                # Only boolean switches that are currently *on* can demonstrate the bug: a `None`
-                # read as `False` flips them off, which shows up in the output.
-                kwarg_names = getattr(processor, "_call_kwargs_names", processor._valid_kwargs_names)
-                candidates = [
-                    name
-                    for name in kwarg_names
-                    if isinstance(getattr(processor, name, None), bool) and getattr(processor, name)
-                ]
-                if not candidates:
-                    self.skipTest("no truthy boolean per-call kwarg to exercise")
-
-                for name in candidates:
-                    with self.subTest(kwarg=name):
-                        encoding = processor(waveform, return_tensors="pt", **{name: None})
-                        self._assert_outputs_bit_exact(reference, encoding, atol=0, rtol=0)
-
     # ── JSON round-trip ───────────────────────────────────────────────────
 
-    def test_audio_processor_to_json_string(self):
-        if self.audio_processor_tester is None:
-            self.skipTest("audio_processor_tester not set.")
-        init_dict = self.audio_processor_tester.prepare_audio_processor_dict()
-        for cls in self.audio_processing_classes.values():
-            ap = cls(**init_dict)
-            obj = json.loads(ap.to_json_string())
-            self.assertEqual(obj["audio_processor_type"], cls.__name__)
-
-    def test_audio_processor_to_json_file(self):
-        if self.audio_processor_tester is None:
-            self.skipTest("audio_processor_tester not set.")
-        init_dict = self.audio_processor_tester.prepare_audio_processor_dict()
-        for cls in self.audio_processing_classes.values():
-            ap_first = cls(**init_dict)
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                json_file_path = os.path.join(tmpdirname, "audio_processor.json")
-                ap_first.to_json_file(json_file_path)
-                ap_second = cls.from_json_file(json_file_path)
-            self.assertEqual(ap_second.to_dict(), ap_first.to_dict())
-
-    def test_audio_processor_from_and_save_pretrained(self):
-        if self.audio_processor_tester is None:
-            self.skipTest("audio_processor_tester not set.")
-        init_dict = self.audio_processor_tester.prepare_audio_processor_dict()
-        for cls in self.audio_processing_classes.values():
-            ap_first = cls(**init_dict)
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                saved_file = ap_first.save_pretrained(tmpdirname)[0]
-                check_json_file_has_correct_format(saved_file)
-                ap_second = cls.from_pretrained(tmpdirname)
-            self.assertEqual(ap_second.to_dict(), ap_first.to_dict())
-
-    def test_audio_processor_save_load_with_autoaudioprocessor(self):
-        if self.audio_processor_tester is None:
-            self.skipTest("audio_processor_tester not set.")
-        from transformers.models.auto.feature_extraction_auto import AutoAudioProcessor
-
-        init_dict = self.audio_processor_tester.prepare_audio_processor_dict()
-        for backend, cls in self.audio_processing_classes.items():
-            ap_first = cls(**init_dict)
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                ap_first.save_pretrained(tmpdirname)
-                ap_second = AutoAudioProcessor.from_pretrained(tmpdirname, backend=backend)
-            self.assertEqual(type(ap_second), cls)
-            self.assertEqual(ap_second.to_dict(), ap_first.to_dict())
-
     # ── Basic instantiation ───────────────────────────────────────────────
-
-    def test_init_without_params(self):
-        for cls in self.audio_processing_classes.values():
-            ap = cls()
-            self.assertIsNotNone(ap)

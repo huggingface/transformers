@@ -175,7 +175,7 @@ class VideoLlama3VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
         )
         self.assertEqual(video_processor.size, {"shortest_edge": 100, "longest_edge": 200})
 
-    def test_video_processor_to_json_string(self):
+    def test_to_json_string(self):
         for video_processing_class in self.video_processor_list:
             video_processor = video_processing_class(**self.video_processor_dict)
             obj = json.loads(video_processor.to_json_string())

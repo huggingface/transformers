@@ -139,7 +139,7 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "temporal_patch_size"))
             self.assertTrue(hasattr(image_processing, "merge_size"))
 
-    def test_image_processor_to_json_string(self):
+    def test_to_json_string(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             obj = json.loads(image_processor.to_json_string())

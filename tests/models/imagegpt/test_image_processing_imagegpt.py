@@ -136,7 +136,7 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
             self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
-    def test_image_processor_to_json_string(self):
+    def test_to_json_string(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             obj = json.loads(image_processor.to_json_string())
@@ -146,7 +146,7 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 else:
                     self.assertEqual(obj[key], value)
 
-    def test_image_processor_to_json_file(self):
+    def test_to_json_file(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processor_first = image_processing_class(**self.image_processor_dict)
 
@@ -162,7 +162,7 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 else:
                     self.assertEqual(image_processor_first[key], value)
 
-    def test_image_processor_from_and_save_pretrained(self):
+    def test_from_and_save_pretrained(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processor_first = image_processing_class(**self.image_processor_dict)
 
@@ -177,7 +177,7 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 else:
                     self.assertEqual(value, value)
 
-    def test_image_processor_save_load_with_autoimageprocessor(self):
+    def test_save_load_with_auto_class(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processor_first = image_processing_class(**self.image_processor_dict)
 
