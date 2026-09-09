@@ -57,6 +57,25 @@ class InternVL2OriginalCheckpointTest(unittest.TestCase):
         self.assertEqual(len(loading_info["unexpected_keys"]), 0)
         self.assertEqual(len(loading_info["mismatched_keys"]), 0)
 
+    # Checkpoints whose tokenizer loads natively, so config and tokenizer can be compared here.
+    # InternVL2-4B is deliberately absent: its Phi3 backbone is not supported (see
+    # `_BACKBONE_TO_TEXT_MODEL_TYPE`), so loading its config raises rather than returning an id.
+    NATIVE_TOKENIZER_CHECKPOINTS = [
+        ("OpenGVLab/InternVL2-1B", "qwen2", 151648),
+        ("OpenGVLab/InternVL2-40B", "llama", 64000),
+    ]
+
+    # The InternLM2-backbone checkpoints declare `InternLM2Tokenizer` through `auto_map`, so
+    # loading their tokenizer executes remote code even though the config now loads natively.
+    # That vendored tokenizer is also tied to an older sentencepiece; on current versions it
+    # fails with `RuntimeError: INTERNAL: piece must not include null character`. Both are
+    # upstream properties of the checkpoints, unrelated to the config normalization tested here.
+    REMOTE_CODE_TOKENIZER_CHECKPOINTS = [
+        "OpenGVLab/InternVL2-2B",
+        "OpenGVLab/InternVL2-8B",
+        "OpenGVLab/InternVL2-26B",
+    ]
+
     def test_image_token_id_matches_tokenizer(self):
         """`config.image_token_id` must equal the checkpoint tokenizer's `<IMG_CONTEXT>` id.
 
@@ -64,13 +83,19 @@ class InternVL2OriginalCheckpointTest(unittest.TestCase):
         the id from the tokenizer. If the two disagree no image features are ever spliced in and
         the model silently answers as if no image was given, without raising.
         """
-        for checkpoint, text_model_type in [
-            ("OpenGVLab/InternVL2-1B", "qwen2"),
-            ("OpenGVLab/InternVL2-2B", "llama"),
-        ]:
+        for checkpoint, text_model_type, expected_image_token_id in self.NATIVE_TOKENIZER_CHECKPOINTS:
             with self.subTest(checkpoint=checkpoint):
                 config = AutoConfig.from_pretrained(checkpoint, trust_remote_code=False)
-                # InternLM2 checkpoints ship a remote-code tokenizer, hence trust_remote_code here.
-                tokenizer = AutoTokenizer.from_pretrained(checkpoint, trust_remote_code=True)
+                tokenizer = AutoTokenizer.from_pretrained(checkpoint, trust_remote_code=False)
                 self.assertEqual(config.text_config.model_type, text_model_type)
+                self.assertEqual(config.image_token_id, expected_image_token_id)
                 self.assertEqual(config.image_token_id, tokenizer.convert_tokens_to_ids("<IMG_CONTEXT>"))
+
+        for checkpoint in self.REMOTE_CODE_TOKENIZER_CHECKPOINTS:
+            with self.subTest(checkpoint=checkpoint):
+                self.skipTest(
+                    f"{checkpoint} declares InternLM2Tokenizer via `auto_map`, so comparing against "
+                    "the tokenizer needs `trust_remote_code=True`, and that vendored tokenizer does "
+                    "not load on current sentencepiece. The config side is covered by the other "
+                    "checkpoints."
+                )
