@@ -64,7 +64,7 @@ class PPDocLayoutV4Config(PPDocLayoutV3Config):
     r"""
     initializer_bias_prior_prob (`float`, *optional*):
         The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
-        If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
+        If `None`, it defaults to `1 / (num_labels + 1)`.
     freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
         Whether to freeze the batch normalization layers in the backbone.
     encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
@@ -202,13 +202,12 @@ class PPDocLayoutV4Config(PPDocLayoutV3Config):
             **kwargs,
         )
 
-        self.encoder_in_channels = list(self.encoder_in_channels)
-        self.feat_strides = list(self.feat_strides)
-        self.encode_proj_layers = list(self.encode_proj_layers)
-        self.eval_size = list(self.eval_size) if self.eval_size is not None else None
-        self.decoder_in_channels = list(self.decoder_in_channels)
-        self.anchor_image_size = list(self.anchor_image_size) if self.anchor_image_size is not None else None
         PreTrainedConfig.__post_init__(self, **kwargs)
+
+        # Resolved here rather than in `_init_weights` so that the effective prior is visible on the config.
+        # `num_labels` is only materialized by `PreTrainedConfig.__post_init__`, hence the ordering.
+        if self.initializer_bias_prior_prob is None:
+            self.initializer_bias_prior_prob = 1 / (self.num_labels + 1)
 
     # Not a config field: kept as a class attribute so the `__init__` code inherited from
     # RT-DETR stays inert. Every released checkpoint takes the top-k encoder features as queries.
@@ -613,9 +612,11 @@ class PPDocLayoutV4MLPPredictionHead(PPDocLayoutV3MLPPredictionHead):
     pass
 
 
-# Soft `-inf` masking the diagonal of the successor logits so that a query is never its own successor. Kept below the
-# fp16 maximum of 65504 to stay finite in half precision, where `-inf` would leak `NaN` into `exp`-based sigmoids.
-SELF_LOOP_MASK_VALUE = 1e4
+class PPDocLayoutV4ClassificationHead(nn.Linear):
+    """
+    A plain `nn.Linear` under a dedicated name, so that `_init_weights` can recognize the classification heads and
+    give them their prior biased initialization without reaching into the modules that own them.
+    """
 
 
 class PPDocLayoutV4GlobalPointer(nn.Module):
@@ -644,7 +645,9 @@ class PPDocLayoutV4GlobalPointer(nn.Module):
         logits = (queries @ keys.transpose(-2, -1)) * self.scaling
         if self.antisymmetric:
             return logits - logits.transpose(-2, -1)
-        return logits - self.eye * SELF_LOOP_MASK_VALUE
+        # Soft `-inf` masking the diagonal so that a query is never its own successor. Kept below the fp16 maximum
+        # of 65504 to stay finite in half precision, where `-inf` would leak `NaN` into `exp`-based sigmoids.
+        return logits - self.eye * 1e4
 
 
 class PPDocLayoutV4S2RFusion(nn.Module):
@@ -710,15 +713,11 @@ class PPDocLayoutV4PreTrainedModel(PPDocLayoutV3PreTrainedModel):
             init.xavier_uniform_(module.output_proj.weight)
             init.constant_(module.output_proj.bias, 0.0)
 
-        elif isinstance(module, PPDocLayoutV4Model):
-            prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
-            bias = float(-math.log((1 - prior_prob) / prior_prob))
-            init.xavier_uniform_(module.enc_score_head.weight)
-            init.constant_(module.enc_score_head.bias, bias)
-            # The class heads are untied, so every decoder layer gets its own biased initialization.
-            for class_embed in module.decoder.class_embed:
-                init.xavier_uniform_(class_embed.weight)
-                init.constant_(class_embed.bias, bias)
+        elif isinstance(module, PPDocLayoutV4ClassificationHead):
+            # The class heads are untied, so `enc_score_head` and every decoder layer's head are visited separately.
+            prior_prob = self.config.initializer_bias_prior_prob
+            init.xavier_uniform_(module.weight)
+            init.constant_(module.bias, float(-math.log((1 - prior_prob) / prior_prob)))
 
         elif isinstance(module, PPDocLayoutV4S2RFusion):
             init.constant_(module.closure_weight, self.config.s2r_a_init)
@@ -803,7 +802,7 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
             ]
         )
         self.class_embed = nn.ModuleList(
-            [nn.Linear(config.d_model, config.num_labels) for _ in range(config.decoder_layers)]
+            [PPDocLayoutV4ClassificationHead(config.d_model, config.num_labels) for _ in range(config.decoder_layers)]
         )
         self.order_head = nn.ModuleList(
             [nn.Linear(config.d_model, config.d_model) for _ in range(config.decoder_layers)]
@@ -963,6 +962,7 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
         self.enc_bbox_head = PPDocLayoutV4MLPPredictionHead(
             config.d_model, config.d_model, config.num_coords, num_layers=3
         )
+        self.enc_score_head = PPDocLayoutV4ClassificationHead(config.d_model, config.num_labels)
 
         # PP-DocLayoutV4 does not reserve an extra "no object" row in the denoising embedding, so the `num_labels + 1`
         # embedding built by [`PPDocLayoutV3Model`] is overwritten here. The modular converter only deduplicates
