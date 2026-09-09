@@ -34,7 +34,7 @@ class Swin2SRImageProcessorKwargs(ImagesKwargs, total=False):
         The size to make the height and width divisible by when padding.
     """
 
-    size_divisor: int
+    size_divisor: int | None
 
 
 @auto_docstring

@@ -53,7 +53,7 @@ class MobileVitImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     do_flip_channel_order: bool
-    do_reduce_labels: bool
+    do_reduce_labels: bool | None
 
 
 @auto_docstring

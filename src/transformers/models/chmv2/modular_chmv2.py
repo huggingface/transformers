@@ -135,9 +135,9 @@ class CHMv2ImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     ensure_multiple_of: int
-    size_divisor: int
+    size_divisor: int | None
     keep_aspect_ratio: bool
-    do_reduce_labels: bool
+    do_reduce_labels: bool | None
 
 
 class CHMv2ImageProcessor(DPTImageProcessor):

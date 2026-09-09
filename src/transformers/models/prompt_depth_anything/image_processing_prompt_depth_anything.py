@@ -56,7 +56,7 @@ class PromptDepthAnythingImageProcessorKwargs(ImagesKwargs, total=False):
 
     keep_aspect_ratio: bool
     ensure_multiple_of: int
-    size_divisor: int
+    size_divisor: int | None
     prompt_scale_to_meter: float
 
 

@@ -39,7 +39,7 @@ class UnivNetAudioProcessorKwargs(AudioKwargs, total=False):
     """
 
     magnitude_floor: float
-    do_normalize: bool
+    do_normalize: bool | None
     normalize_min: float
     normalize_max: float
     compression_factor: float

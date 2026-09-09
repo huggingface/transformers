@@ -24,7 +24,7 @@ class Wav2Vec2AudioProcessorKwargs(AudioKwargs, total=False):
         Whether to zero-mean unit-variance normalize the raw waveform.
     """
 
-    do_normalize: bool
+    do_normalize: bool | None
 
 
 class Wav2Vec2AudioProcessorMixin:

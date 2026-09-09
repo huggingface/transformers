@@ -28,7 +28,7 @@ class AudioSpectrogramTransformerAudioProcessorKwargs(AudioKwargs, total=False):
         Number of mel frames the features are padded or truncated to.
     """
 
-    do_normalize: bool
+    do_normalize: bool | None
     ast_mean: float
     ast_std: float
     max_length_frames: int

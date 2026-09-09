@@ -42,7 +42,7 @@ class TvpImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     do_flip_channel_order: bool
-    constant_values: float | list[float] | None
+    constant_values: float | int | list[float] | None
     pad_mode: str | None
 
 

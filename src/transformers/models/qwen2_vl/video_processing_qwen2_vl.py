@@ -100,8 +100,8 @@ class Qwen2VLVideoProcessorInitKwargs(VideosKwargs, total=False):
         `cap_pixels_per_frame` (the budget is 90% of this many tokens.
     """
 
-    min_pixels: int
-    max_pixels: int
+    min_pixels: int | None
+    max_pixels: int | None
     patch_size: int
     temporal_patch_size: int
     merge_size: int

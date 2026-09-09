@@ -233,9 +233,9 @@ class GlmgaVideoProcessorInitKwargs(VideosKwargs, total=False):
 
     max_image_size: dict[str, int]
     patch_size: int
-    temporal_patch_size: int
-    merge_size: int
-    patch_expand_factor: int
+    temporal_patch_size: int | None
+    merge_size: int | None
+    patch_expand_factor: int | None
     max_frames: int
 
 

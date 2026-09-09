@@ -1133,13 +1133,13 @@ class VideoLlama3VideoProcessorInitKwargs(VideosKwargs, total=False):
         Whether to compress videos when processing or not.
     """
 
-    min_pixels: int
-    max_pixels: int
+    min_pixels: int | None
+    max_pixels: int | None
     patch_size: int
-    temporal_patch_size: int
-    merge_size: int
-    min_frames: int
-    max_frames: int
+    temporal_patch_size: int | None
+    merge_size: int | None
+    min_frames: int | None
+    max_frames: int | None
     use_token_compression: bool | None
 
 

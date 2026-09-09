@@ -45,7 +45,7 @@ class SegGptImageProcessorKwargs(ImagesKwargs, total=False):
         channel dimension when `do_convert_rgb` is `True`.
     """
 
-    num_labels: int
+    num_labels: int | None
 
 
 # Adapted from transformers.models.seggpt.image_processing_seggpt.build_palette

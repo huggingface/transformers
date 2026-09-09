@@ -66,7 +66,7 @@ class SegGptImageProcessorKwargs(ImagesKwargs, total=False):
         channel dimension when `do_convert_rgb` is `True`.
     """
 
-    num_labels: int
+    num_labels: int | None
 
 
 @auto_docstring

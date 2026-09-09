@@ -24,8 +24,8 @@ class MiniMaxM3VLVideoProcessorKwargs(VideosKwargs, total=False):
     patch_size: int
     temporal_patch_size: int
     merge_size: int
-    min_pixels: int
-    max_pixels: int
+    min_pixels: int | None
+    max_pixels: int | None
     total_pixels: int
     min_frames: int
     max_frames: int

@@ -44,8 +44,8 @@ class VideoLlama3ImageProcessorKwargs(ImagesKwargs, total=False):
         The merge size of the vision encoder to llm encoder.
     """
 
-    min_pixels: int
-    max_pixels: int
+    min_pixels: int | None
+    max_pixels: int | None
     patch_size: int
     temporal_patch_size: int
     merge_size: int

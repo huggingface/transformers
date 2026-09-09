@@ -1071,12 +1071,12 @@ class Qwen3VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     """
 
     patch_size: int
-    temporal_patch_size: int
-    merge_size: int
-    min_frames: int
-    max_frames: int
-    cap_pixels_per_frame: bool
-    max_video_tokens: int
+    temporal_patch_size: int | None
+    merge_size: int | None
+    min_frames: int | None
+    max_frames: int | None
+    cap_pixels_per_frame: bool | None
+    max_video_tokens: int | None
 
 
 class Qwen3VLVideoProcessor(Qwen2VLVideoProcessor):
