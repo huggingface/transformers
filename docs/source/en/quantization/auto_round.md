@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 It leverages sign gradient descent to fine-tune both rounding values and min-max clipping thresholds in just 200 steps. Designed for broad compatibility, it seamlessly supports a wide range of LLMs and is actively expanding to cover more VLMs as well.
 It also supports quantization and inference across multiple hardware platforms, including CPU, XPU, and CUDA.
 
-AutoRound also offers a variety of useful features, including mixed-bit tuning and inference, lm-head quantization, support for exporting to formats like GPTQ/AWQ/GGUF, and flexible tuning recipes.
+AutoRound also offers a variety of useful features, including automatically mixed-bit tuning and inference, mxfp4/nvfp4 datatypes, support for exporting to formats like GPTQ/AWQ/GGUF/LLM-Compressor, and flexible tuning recipes.
 For a comprehensive overview and the latest updates, check out the AutoRound [README](https://github.com/intel/auto-round).
 
 AutoRound was originally developed as part of the [Intel Neural Compressor](https://github.com/intel/neural-compressor), serving as a general-purpose model compression library for deep learning.
@@ -33,6 +33,9 @@ pip install auto-round
 AutoRound supports several quantization configurations:
 
 - **Int8 Weight Only**
+- **Int7 Weight Only**
+- **Int6 Weight Only**
+- **Int5 Weight Only**
 - **Int4 Weight Only**
 - **Int3 Weight Only**
 - **Int2 Weight Only**
@@ -54,13 +57,32 @@ Currently, only offline mode is supported to generate quantized models.
 ```bash
 auto-round \
     --model facebook/opt-125m \
-    --bits 4 \
+    --scheme "W4A16" \
     --group_size 128 \
     --output_dir ./tmp_autoround
 ```
 
 AutoRound also offer another two recipes, `auto-round-best` and `auto-round-light`, designed for optimal accuracy and improved speed, respectively.
-For 2 bits, we recommend using `auto-round-best` or `auto-round`.
+For 2 bits, we recommend using `auto-round-best` with `--enable_alg_ext`.
+
+</hfoption>
+
+
+<hfoption id="auto scheme cmd">
+
+### AutoScheme Usage
+
+AutoScheme is a feature that automatically selects the best quantization scheme from the available options for each layer to be quantized, subject to a target average bit width.
+
+
+```bash
+auto-round \
+    --model facebook/opt-125m \
+    --options "W4A16,W2A16G64" \
+    --target_bits 3.5 \
+    --output_dir ./tmp_autoround
+```
+
 </hfoption>
 
 <hfoption id="quantization auto-round api">
@@ -70,28 +92,21 @@ For 2 bits, we recommend using `auto-round-best` or `auto-round`.
 This setting offers a better trade-off between accuracy and tuning cost, and is recommended in all scenarios.
 
 ```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
 from auto_round import AutoRound
 
 model_name = "facebook/opt-125m"
-model = AutoModelForCausalLM.from_pretrained(model_name, dtype="auto")
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-bits, group_size, sym = 4, 128, True
 # mixed bits config
 # layer_config = {"model.decoder.layers.6.self_attn.out_proj": {"bits": 2, "group_size": 32}}
-autoround = AutoRound(
-    model,
-    tokenizer,
-    bits=bits,
-    group_size=group_size,
-    sym=sym,
+ar = AutoRound(
+    model_name,
+    scheme="W4A16",
     # enable_torch_compile=True,
     # layer_config=layer_config,
 )
 
 output_dir = "./tmp_autoround"
-# format= 'auto_round'(default), 'auto_gptq', 'auto_awq'
-autoround.quantize_and_save(output_dir, format='auto_round') 
+# format= 'auto_round'(default), 'llm_compressor', "gguf:q4_k_m", 'auto_gptq', 'auto_awq'
+ar.quantize_and_save(output_dir, format='auto_round') 
 ```
 
 </hfoption>
@@ -103,26 +118,18 @@ autoround.quantize_and_save(output_dir, format='auto_round')
 This setting provides the best accuracy in most scenarios but is 4–5× slower than the standard AutoRound recipe. It is especially recommended for 2-bit quantization and is a good choice if sufficient resources are available.
 
 ```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
 from auto_round import AutoRound
 
 model_name = "facebook/opt-125m"
-model = AutoModelForCausalLM.from_pretrained(model_name, dtype="auto")
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-bits, group_size, sym = 4, 128, True
-autoround = AutoRound(
-    model,
-    tokenizer,
-    bits=bits,
-    group_size=group_size,
-    sym=sym,
+ar = AutoRound(
+    model_name,
+    scheme="W4A16",
     nsamples=512,
     iters=1000,
-    low_gpu_mem_usage=True
 )
 
 output_dir = "./tmp_autoround"
-autoround.quantize_and_save(output_dir, format='auto_round') 
+ar.quantize_and_save(output_dir, format='auto_round') 
 ```
 
 </hfoption>
@@ -138,21 +145,14 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from auto_round import AutoRound
 
 model_name = "facebook/opt-125m"
-model = AutoModelForCausalLM.from_pretrained(model_name, dtype="auto")
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-bits, group_size, sym = 4, 128, True
-autoround = AutoRound(
-    model,
-    tokenizer,
-    bits=bits,
-    group_size=group_size,
-    sym=sym,
+ar = AutoRound(
+    model_name,
     iters=50,
     lr=5e-3,
 )
 
 output_dir = "./tmp_autoround"
-autoround.quantize_and_save(output_dir, format='auto_round') 
+ar.quantize_and_save(output_dir, format='auto_round') 
 ```
 
 </hfoption>
@@ -176,7 +176,7 @@ AutoRound automatically selects the best available backend based on the installe
 
 ### CPU
 
-Supports 2, 4, and 8 bits. We recommend using the AutoRound Kernel (ARK) backend for inference. PyTorch 2.8.0 or later is required with ARK.
+Supports 2, 4 and 8 bits. We recommend using the AutoRound Kernel (ARK) backend for inference. PyTorch 2.8.0 or later is required with ARK.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -195,7 +195,7 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 
 ### XPU
 
-Supports 4 and 8 bits. We recommend using the AutoRound Kernel (ARK) backend for inference. PyTorch 2.8.0 or later is required with ARK.
+Supports 2, 4 and 8 bits. We recommend using the AutoRound Kernel (ARK) backend for inference. PyTorch 2.8.0 or later is required with ARK.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -214,7 +214,7 @@ print(tokenizer.decode(model.generate(**inputs, max_new_tokens=50, do_sample=Fal
 
 ### CUDA
 
-Supports 2, 3, 4, and 8 bits. We recommend using GPTQModel for 4 and 8 bits inference.
+Supports 2-8 bits. We recommend using GPTQModel for 4 and 8 bits inference.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
