@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 It leverages sign gradient descent to fine-tune both rounding values and min-max clipping thresholds in just 200 steps. Designed for broad compatibility, it seamlessly supports a wide range of LLMs and is actively expanding to cover more VLMs as well.
 It also supports quantization and inference across multiple hardware platforms, including CPU, XPU, and CUDA.
 
-AutoRound also offers a variety of useful features, including automatically mixed-bit tuning and inference, mxfp4/nvfp4 datatypes, support for exporting to formats like GPTQ/AWQ/GGUF/LLM-Compressor, and flexible tuning recipes.
+AutoRound also offers a variety of useful features, including automatically mixed-bit tuning and inference, mxfp4/nvfp4 datatypes, model-free quantization, support for exporting to formats like GPTQ/AWQ/GGUF/LLM-Compressor, and flexible tuning recipes.
 For a comprehensive overview and the latest updates, check out the AutoRound [README](https://github.com/intel/auto-round).
 
 AutoRound was originally developed as part of the [Intel Neural Compressor](https://github.com/intel/neural-compressor), serving as a general-purpose model compression library for deep learning.
@@ -56,13 +56,13 @@ Currently, only offline mode is supported to generate quantized models.
 
 ```bash
 auto-round \
-    --model facebook/opt-125m \
+    --model Qwen/Qwen3-0.6B \
     --scheme "W4A16" \
     --group_size 128 \
     --output_dir ./tmp_autoround
 ```
 
-AutoRound also offer another two recipes, `auto-round-best` and `auto-round-light`, designed for optimal accuracy and improved speed, respectively.
+AutoRound also offer another two recipes, `auto-round-best`, `auto-round-light`,`auto-round-opt-rtn`,`auto-round-rtn`, designed for optimal accuracy and improved speed, respectively.
 For 2 bits, we recommend using `auto-round-best` with `--enable_alg_ext`.
 
 </hfoption>
@@ -72,12 +72,12 @@ For 2 bits, we recommend using `auto-round-best` with `--enable_alg_ext`.
 
 ### AutoScheme Usage
 
-AutoScheme is a feature that automatically selects the best quantization scheme from the available options for each layer to be quantized, subject to a target average bit width.
+AutoScheme is a feature that automatically selects the best quantization scheme from the available options for each layer to be quantized in minutes, subject to a target average bit width.
 
 
 ```bash
 auto-round \
-    --model facebook/opt-125m \
+    --model Qwen/Qwen3-0.6B \
     --options "W4A16,W2A16G64" \
     --target_bits 3.5 \
     --output_dir ./tmp_autoround
@@ -94,7 +94,7 @@ This setting offers a better trade-off between accuracy and tuning cost, and is 
 ```python
 from auto_round import AutoRound
 
-model_name = "facebook/opt-125m"
+model_name = "Qwen/Qwen3-0.6B"
 # mixed bits config
 # layer_config = {"model.decoder.layers.6.self_attn.out_proj": {"bits": 2, "group_size": 32}}
 ar = AutoRound(
@@ -120,7 +120,7 @@ This setting provides the best accuracy in most scenarios but is 4–5× slower 
 ```python
 from auto_round import AutoRound
 
-model_name = "facebook/opt-125m"
+model_name = "Qwen/Qwen3-0.6B"
 ar = AutoRound(
     model_name,
     scheme="W4A16",
@@ -144,7 +144,7 @@ This setting offers the best speed (2 - 3X faster than AutoRound), but it may ca
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from auto_round import AutoRound
 
-model_name = "facebook/opt-125m"
+model_name = "Qwen/Qwen3-0.6B"
 ar = AutoRound(
     model_name,
     iters=50,
