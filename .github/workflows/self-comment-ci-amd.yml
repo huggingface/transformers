@@ -131,12 +131,27 @@ jobs:
       - name: Reply to the comment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PREFIX: '[Workflow Run ⚙️](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})'
+          PREFIX: '## AMD CI\n\n[Workflow Run ⚙️](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})'
           INFO: '\n\nThis comment contains `run-slow`, running the specified jobs on AMD'
           BODY: '\n\nmodels: ${{ needs.get-tests.outputs.models }}'
           github_repository: ${{ github.repository }}
           pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
         run: |
+          # Delete previous Nvidia CI and AMD CI comments before posting
+          existing_comment_ids=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/${github_repository}/issues/${pr_number}/comments" \
+            --paginate \
+            --jq '.[] | select(.body | startswith("## Nvidia CI") or startswith("## AMD CI")) | .id')
+          for comment_id in $existing_comment_ids; do
+            gh api \
+              --method DELETE \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "repos/${github_repository}/issues/comments/${comment_id}"
+          done
+
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
