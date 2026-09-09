@@ -65,6 +65,10 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 @slow
 class Glm4MoeIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        # Clean up memory from earlier tests in this pytest process before loading the large checkpoint.
+        cleanup(torch_device, gc_collect=True)
+
     def tearDown(self):
         # See LlamaIntegrationTest.tearDown().
         cleanup(torch_device, gc_collect=True)
