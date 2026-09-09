@@ -206,7 +206,6 @@ class PeftAdapterMixin:
                 peft_model_id,
                 load_config.download_kwargs.get("revision"),
                 token=load_config.download_kwargs.get("token"),
-                proxies=load_config.download_kwargs.get("proxies"),
                 local_files_only=bool(load_config.download_kwargs.get("local_files_only", False)),
                 cache_dir=load_config.download_kwargs.get("cache_dir"),
             )

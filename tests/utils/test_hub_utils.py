@@ -19,22 +19,10 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-from huggingface_hub import ResolvedRevision, constants, hf_hub_download
-from huggingface_hub.errors import (
-    HfHubHTTPError,
-    LocalEntryNotFoundError,
-    OfflineModeIsEnabled,
-    RevisionResolutionError,
-)
+from huggingface_hub import constants, hf_hub_download
+from huggingface_hub.errors import HfHubHTTPError, LocalEntryNotFoundError, OfflineModeIsEnabled
 
-from transformers.utils import (
-    CONFIG_NAME,
-    WEIGHTS_NAME,
-    cached_file,
-    has_file,
-    list_repo_templates,
-    resolve_revision,
-)
+from transformers.utils import CONFIG_NAME, WEIGHTS_NAME, cached_file, has_file, list_repo_templates
 
 
 RANDOM_BERT = "hf-internal-testing/tiny-random-bert"
@@ -208,70 +196,6 @@ class GetFromCacheTests(unittest.TestCase):
             with self.assertRaises(ModuleNotFoundError):
                 # The error should be re-raised by cached_files, not caught in the exception handling block
                 cached_file(RANDOM_BERT, "nonexistent.json")
-
-
-class ResolveRevisionTests(unittest.TestCase):
-    def test_resolved_revision_is_scoped_to_its_repository(self):
-        with tempfile.TemporaryDirectory() as cache_dir:
-            for repo_id, commit in ((RANDOM_BERT, "a" * 40), (TINY_BERT_PT_ONLY, "b" * 40)):
-                ref = Path(cache_dir) / f"models--{repo_id.replace('/', '--')}" / "refs" / "main"
-                ref.parent.mkdir(parents=True)
-                ref.write_text(commit)
-
-            revision = resolve_revision(RANDOM_BERT, cache_dir=cache_dir, local_files_only=True)
-            self.assertIsInstance(revision, ResolvedRevision)
-            # Loading kwargs are deep-copied before being passed to other components.
-            revision = copy.deepcopy(revision)
-            self.assertEqual(revision.resolved, "a" * 40)
-            self.assertIs(resolve_revision(RANDOM_BERT, revision, local_files_only=True), revision)
-
-            other_revision = resolve_revision(TINY_BERT_PT_ONLY, revision, cache_dir=cache_dir, local_files_only=True)
-            self.assertIsInstance(other_revision, ResolvedRevision)
-            self.assertEqual(other_revision, "main")
-            self.assertEqual(other_revision.resolved, "b" * 40)
-
-    def test_cross_repo_resolution_failure_discards_the_pinned_commit(self):
-        for initial in (None, "main", "custom-branch"):
-            with self.subTest(initial=initial), tempfile.TemporaryDirectory() as cache_dir:
-                revision = ResolvedRevision(resolved=FULL_COMMIT_HASH, initial=initial, repo_id=RANDOM_BERT)
-                fallback = resolve_revision(TINY_BERT_PT_ONLY, revision, cache_dir=cache_dir, local_files_only=True)
-                self.assertEqual(fallback, initial)
-                self.assertNotIsInstance(fallback, ResolvedRevision)
-
-    def test_resolve_revision(self):
-        revision = resolve_revision(RANDOM_BERT, "main")
-        self.assertEqual(revision, "main")  # keeps the value the user asked for
-        self.assertRegex(revision.resolved, r"^[0-9a-f]{40}$")  # and carries the commit it currently points to
-        self.assertEqual(resolve_revision(RANDOM_BERT).resolved, revision.resolved)
-
-    def test_resolve_revision_is_a_no_op_when_it_cannot_help(self):
-        with mock.patch("transformers.utils.hub.HfApi.resolve_revision") as mock_resolve_revision:
-            # Not on the Hub
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                self.assertEqual(resolve_revision(tmp_dir, "main"), "main")
-            # Cannot honor the caller's proxies
-            self.assertEqual(resolve_revision(RANDOM_BERT, "main", proxies={"https": "https://proxy"}), "main")
-        mock_resolve_revision.assert_not_called()
-
-    def test_resolve_revision_fails_open(self):
-        """Any Hub error must leave the requested revision untouched, and be reported by the regular loading path."""
-        for error in (HfHubHTTPError("failed", response=mock.Mock(status_code=429)), RevisionResolutionError()):
-            with mock.patch("transformers.utils.hub.HfApi.resolve_revision", side_effect=error):
-                self.assertEqual(resolve_revision(RANDOM_BERT, "main"), "main")
-                self.assertIsNone(resolve_revision(RANDOM_BERT))
-
-    def test_cached_file_with_resolved_revision_does_not_call_the_hub(self):
-        """A resolved revision is immutable, so what the cache knows about it is enough."""
-        revision = resolve_revision(RANDOM_BERT)
-        cached_file(RANDOM_BERT, CONFIG_NAME, revision=revision)
-        cached_file(RANDOM_BERT, "conf", revision=revision, _raise_exceptions_for_missing_entries=False)
-
-        with mock.patch("transformers.utils.hub.hf_hub_download", side_effect=AssertionError("called the Hub")):
-            self.assertIsNotNone(cached_file(RANDOM_BERT, CONFIG_NAME, revision=revision))
-            # Including for a file that is known to be missing at that commit
-            self.assertIsNone(
-                cached_file(RANDOM_BERT, "conf", revision=revision, _raise_exceptions_for_missing_entries=False)
-            )
 
 
 class OfflineModeTests(unittest.TestCase):

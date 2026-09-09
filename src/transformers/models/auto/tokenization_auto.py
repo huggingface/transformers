@@ -614,7 +614,6 @@ def get_tokenizer_config(
         pretrained_model_name_or_path,
         revision,
         token=token,
-        proxies=proxies,
         local_files_only=local_files_only,
         cache_dir=cache_dir,
     )
@@ -757,7 +756,6 @@ class AutoTokenizer:
             pretrained_model_name_or_path,
             kwargs.get("revision"),
             token=kwargs.get("token"),
-            proxies=kwargs.get("proxies"),
             local_files_only=kwargs.get("local_files_only", False),
             cache_dir=kwargs.get("cache_dir"),
         )

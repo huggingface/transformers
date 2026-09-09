@@ -242,7 +242,6 @@ def resolve_revision(
     *,
     repo_type: str | None = None,
     token: bool | str | None = None,
-    proxies: dict[str, str] | None = None,
     local_files_only: bool = False,
     cache_dir: str | os.PathLike | None = None,
 ) -> str | None:
@@ -272,9 +271,6 @@ def resolve_revision(
             The type of the repo (`"model"` if not provided).
         token (`str` or `bool`, *optional*):
             The token to use as HTTP bearer authorization for remote files.
-        proxies (`dict[str, str]`, *optional*):
-            Proxies used by the caller. Resolution is skipped when set, as the shared `HfApi` client cannot honor
-            per-call proxies.
         local_files_only (`bool`, *optional*, defaults to `False`):
             If `True`, resolve the revision from the local cache only, without contacting the Hub.
         cache_dir (`str` or `os.PathLike`, *optional*):
@@ -284,7 +280,7 @@ def resolve_revision(
     Returns:
         `Optional[str]`: The resolved revision, or `revision` if it could not be resolved.
     """
-    if path_or_repo_id is None or proxies or os.path.isdir(path_or_repo_id) or os.path.isfile(path_or_repo_id):
+    if path_or_repo_id is None or os.path.exists(path_or_repo_id):
         return revision
 
     try:
@@ -301,7 +297,7 @@ def resolve_revision(
         # loading path, with a much more helpful error message - or recovered from, using the local cache. Only the
         # revision the caller asked for is kept: a revision resolved for another repository does not apply here.
         logger.debug(f"Could not resolve revision {revision} of {path_or_repo_id}.", exc_info=True)
-        return revision.initial if isinstance(revision, ResolvedRevision) else revision
+        return revision
 
 
 def _pinned_commit_hash(revision: str | None) -> str | None:

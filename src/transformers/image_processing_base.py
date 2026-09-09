@@ -176,7 +176,6 @@ class ImageProcessingMixin(PushToHubMixin):
             pretrained_model_name_or_path,
             revision,
             token=token,
-            proxies=kwargs.get("proxies"),
             local_files_only=local_files_only,
             cache_dir=cache_dir,
         )
@@ -270,7 +269,6 @@ class ImageProcessingMixin(PushToHubMixin):
             pretrained_model_name_or_path,
             revision,
             token=token,
-            proxies=proxies,
             local_files_only=local_files_only,
             cache_dir=cache_dir,
         )

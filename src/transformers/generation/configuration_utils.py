@@ -1033,7 +1033,6 @@ class GenerationConfig(PushToHubMixin):
             pretrained_model_name,
             revision,
             token=token,
-            proxies=proxies,
             local_files_only=local_files_only,
             cache_dir=cache_dir,
         )

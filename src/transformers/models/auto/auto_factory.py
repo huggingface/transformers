@@ -287,7 +287,6 @@ class _BaseAutoModelClass:
             pretrained_model_name_or_path,
             requested_revision,
             token=token,
-            proxies=hub_kwargs.get("proxies"),
             local_files_only=hub_kwargs.get("local_files_only", False),
             cache_dir=hub_kwargs.get("cache_dir"),
         )
@@ -321,7 +320,6 @@ class _BaseAutoModelClass:
                             pretrained_model_name_or_path,
                             requested_revision,
                             token=token,
-                            proxies=hub_kwargs.get("proxies"),
                             local_files_only=hub_kwargs.get("local_files_only", False),
                             cache_dir=hub_kwargs.get("cache_dir"),
                         )

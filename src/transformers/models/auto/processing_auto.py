@@ -209,7 +209,6 @@ class AutoProcessor:
             pretrained_model_name_or_path,
             kwargs.get("revision"),
             token=kwargs.get("token"),
-            proxies=kwargs.get("proxies"),
             local_files_only=kwargs.get("local_files_only", False),
             cache_dir=kwargs.get("cache_dir"),
         )

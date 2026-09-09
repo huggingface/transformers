@@ -80,7 +80,6 @@ class BarkProcessor(ProcessorMixin):
             pretrained_processor_name_or_path,
             kwargs.get("revision"),
             token=token,
-            proxies=kwargs.get("proxies"),
             local_files_only=kwargs.get("local_files_only", False),
             cache_dir=kwargs.get("cache_dir"),
         )
@@ -207,7 +206,6 @@ class BarkProcessor(ProcessorMixin):
             repo_or_path,
             kwargs.pop("revision", None),
             token=token,
-            proxies=proxies,
             local_files_only=local_files_only,
             cache_dir=cache_dir,
         )
