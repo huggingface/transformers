@@ -77,6 +77,9 @@ class MiniCPMV4_6Config(PreTrainedConfig):
         Token id used as the video placeholder.
     downsample_mode (`str`, *optional*, defaults to `"16x"`):
         Visual token downsampling ratio. `"4x"` keeps 4× more tokens.
+    mrope_mode (`str`, *optional*, defaults to `"disabled"`):
+        M-RoPE position assignment mode. Use ``"canvas"`` for checkpoints trained
+        with spatial canvas MRoPE.
     merge_kernel_size (`tuple[int, int]`, *optional*, defaults to `(2, 2)`):
         Kernel size `(h, w)` for merging adjacent visual patches in the Merger.
     merger_times (`int`, *optional*, defaults to 1):
@@ -95,6 +98,7 @@ class MiniCPMV4_6Config(PreTrainedConfig):
     video_token_id: int | None = None
     tie_word_embeddings: bool = False
     downsample_mode: str = "16x"
+    mrope_mode: str = "disabled"
     merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
     merger_times: int = 1
 
@@ -113,7 +117,28 @@ class MiniCPMV4_6Config(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen3_5_text"]()
 
+        if getattr(self.text_config, "base_model_tp_plan", None):
+            self.base_model_tp_plan = {
+                f"language_model.{k}": v for k, v in self.text_config.base_model_tp_plan.items()
+            }
+        ep_plan = getattr(self.text_config, "base_model_ep_plan", None)
+        if ep_plan is None and getattr(self.text_config, "num_experts", None):
+            ep_plan = {
+                "layers.*.mlp.gate": "ep_router",
+                "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+                "layers.*.mlp.experts.down_proj": "grouped_gemm",
+                "layers.*.mlp.experts": "moe_tp_experts",
+            }
+        if ep_plan:
+            self.base_model_ep_plan = {f"language_model.{k}": v for k, v in ep_plan.items()}
+
         super().__post_init__(**kwargs)
+
+    @property
+    def uses_mrope_canvas(self) -> bool:
+        from .mrope_minicpmv4_6 import uses_mrope_canvas
+
+        return uses_mrope_canvas(self.mrope_mode)
 
 
 __all__ = ["MiniCPMV4_6Config", "MiniCPMV4_6VisionConfig"]

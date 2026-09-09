@@ -12,13 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+
 import numpy as np
 
 from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import BatchFeature, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, cached_file, logging
 from ...video_utils import VideoInput, make_batched_videos
+from .mrope_minicpmv4_6 import build_image_bounds, uses_mrope_canvas
 
 
 logger = logging.get_logger(__name__)
@@ -61,6 +64,35 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         self.slice_end_token = tokenizer.slice_end_token
         self.image_id_start_token = tokenizer.image_id_start_token
         self.image_id_end_token = tokenizer.image_id_end_token
+        self.mrope_mode = kwargs.pop("mrope_mode", "disabled")
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *args, **kwargs):
+        mrope_mode = kwargs.pop("mrope_mode", None)
+        processor = super().from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
+        if mrope_mode is not None:
+            processor.mrope_mode = mrope_mode
+        elif not uses_mrope_canvas(getattr(processor, "mrope_mode", None)):
+            config_mode = cls._load_mrope_mode_from_config(pretrained_model_name_or_path)
+            if config_mode is not None:
+                processor.mrope_mode = config_mode
+        return processor
+
+    @staticmethod
+    def _load_mrope_mode_from_config(pretrained_model_name_or_path):
+        """Read `mrope_mode` from the model config, so a processor saved without it stays in sync with the model."""
+        if pretrained_model_name_or_path is None:
+            return None
+        try:
+            config_file = cached_file(
+                pretrained_model_name_or_path, "config.json", _raise_exceptions_for_missing_entries=False
+            )
+            if config_file is None:
+                return None
+            with open(config_file) as f:
+                return json.load(f).get("mrope_mode")
+        except (OSError, ValueError):
+            return None
 
     @auto_docstring
     def __call__(
@@ -82,13 +114,25 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         )
         use_image_id = merged_kwargs["images_kwargs"].pop("use_image_id", None)
         use_image_id = use_image_id if use_image_id is not None else self.default_use_image_id
+        mrope_mode = merged_kwargs.get("common_kwargs", {}).pop("mrope_mode", self.mrope_mode)
 
         processed_images = processed_videos = {}
         images_replacements = videos_replacements = []
+        mrope_tgt_sizes_per_sample: list[list[list[int]]] = [[] for _ in text] if text is not None else []
         if images is not None:
-            processed_images, images_replacements = self._process_images(images, **merged_kwargs["images_kwargs"])
+            processed_images, images_replacements = self._process_images(
+                images,
+                mrope_tgt_sizes_per_sample,
+                self._sample_ids_per_visual(text, self.image_token),
+                **merged_kwargs["images_kwargs"],
+            )
         if videos is not None:
-            processed_videos, videos_replacements = self._process_videos(videos, **merged_kwargs["videos_kwargs"])
+            processed_videos, videos_replacements = self._process_videos(
+                videos,
+                mrope_tgt_sizes_per_sample,
+                self._sample_ids_per_visual(text, self.video_token),
+                **merged_kwargs["videos_kwargs"],
+            )
 
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
@@ -118,8 +162,48 @@ class MiniCPMV4_6Processor(ProcessorMixin):
             if return_mm_token_type_ids:
                 text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
 
+        mrope_inputs = {}
+        if uses_mrope_canvas(mrope_mode):
+            import torch
+
+            tokenizer = self.tokenizer
+            special_token_ids = {
+                "im_start_id": tokenizer.convert_tokens_to_ids(self.image_start_token),
+                "im_end_id": tokenizer.convert_tokens_to_ids(self.image_end_token),
+                "slice_start_id": tokenizer.convert_tokens_to_ids(self.slice_start_token),
+                "slice_end_id": tokenizer.convert_tokens_to_ids(self.slice_end_token),
+                "newline_id": tokenizer.encode("\n", add_special_tokens=False)[0],
+            }
+            image_bounds = []
+            target_sizes_mrope = []
+            input_ids_for_bounds = text_inputs["input_ids"]
+            if return_tensors == "pt" and not isinstance(input_ids_for_bounds, list):
+                batch_size = input_ids_for_bounds.shape[0]
+                for b in range(batch_size):
+                    ids = input_ids_for_bounds[b]
+                    image_bounds.append(build_image_bounds(ids, special_token_ids))
+                    target_sizes_mrope.append(
+                        torch.tensor(mrope_tgt_sizes_per_sample[b], dtype=torch.int32)
+                        if mrope_tgt_sizes_per_sample[b]
+                        else torch.zeros(0, 2, dtype=torch.int32)
+                    )
+            else:
+                for b, ids in enumerate(input_ids_for_bounds):
+                    ids_tensor = torch.tensor(ids, dtype=torch.long)
+                    image_bounds.append(build_image_bounds(ids_tensor, special_token_ids))
+                    target_sizes_mrope.append(
+                        torch.tensor(mrope_tgt_sizes_per_sample[b], dtype=torch.int32)
+                        if mrope_tgt_sizes_per_sample[b]
+                        else torch.zeros(0, 2, dtype=torch.int32)
+                    )
+            mrope_inputs = {
+                "image_bounds": image_bounds,
+                "target_sizes_mrope": target_sizes_mrope,
+                "special_token_ids": special_token_ids,
+            }
+
         # Pop unused keys from the inputs, e.g. inputs used only to compute number of image tokens
-        data = {**text_inputs, **processed_images, **processed_videos}
+        data = {**text_inputs, **processed_images, **processed_videos, **mrope_inputs}
         data = {k: v for k, v in data.items() if k not in self.unused_input_names}
 
         return BatchFeature(data, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion)
@@ -129,7 +213,7 @@ class MiniCPMV4_6Processor(ProcessorMixin):
             raise ValueError("You have to specify `text` input to process.")
         super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
-    def _process_images(self, images, **kwargs):
+    def _process_images(self, images, mrope_tgt_sizes_per_sample, sample_ids, **kwargs):
         img_downsample = kwargs.get("downsample_mode", self.image_processor.downsample_mode)
         image_token_divisor = 4 if img_downsample == "4x" else 16
         processed_images = self.image_processor(images, **kwargs)
@@ -141,19 +225,24 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                 processed_images, image_idx=idx, image_token_divisor=image_token_divisor
             )
             image_replacements.append(replacement_text)
+            if idx < len(sample_ids):
+                img_target_sizes = self._image_target_sizes(processed_images, idx)
+                mrope_tgt_sizes_per_sample[sample_ids[idx]].extend(img_target_sizes.tolist())
+
         return processed_images, image_replacements
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
-        image_grids = image_inputs["grids"]
-        num_patches_per_image = image_inputs["num_patches_per_image"]
-        target_sizes = image_inputs["target_sizes"]
-
-        cum_patches = np.cumsum(num_patches_per_image)
+    @staticmethod
+    def _image_target_sizes(image_inputs: dict, image_idx: int):
+        """Return the patch target sizes belonging to one image of the flattened batch."""
+        cum_patches = np.cumsum(image_inputs["num_patches_per_image"])
         start_idx = cum_patches[image_idx - 1] if image_idx > 0 else 0
         end_idx = cum_patches[image_idx]
-        img_target_sizes = target_sizes[start_idx:end_idx]
+        return image_inputs["target_sizes"][start_idx:end_idx]
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        img_target_sizes = self._image_target_sizes(image_inputs, image_idx)
         num_tokens_per_patch = img_target_sizes.prod(-1) // kwargs["image_token_divisor"]
-        num_rows, num_cols = image_grids[image_idx]
+        num_rows, num_cols = image_inputs["grids"][image_idx]
 
         # Build replacement WITHOUT image_id prefix; local ID added in get_text_with_replacements
         image_placeholder = (
@@ -168,7 +257,7 @@ class MiniCPMV4_6Processor(ProcessorMixin):
 
         return image_placeholder
 
-    def _process_videos(self, videos, **kwargs):
+    def _process_videos(self, videos, mrope_tgt_sizes_per_sample, sample_ids, **kwargs):
         vid_downsample = kwargs.get("downsample_mode", self.video_processor.downsample_mode)
         video_token_divisor = 4 if vid_downsample == "4x" else 16
         processed_videos = self.video_processor(videos, **kwargs)
@@ -180,9 +269,13 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                 processed_videos, video_idx=idx, video_token_divisor=video_token_divisor
             )
             video_replacements.append(replacement_text)
+            if idx < len(sample_ids):
+                for frame_ts, _, _ in self._iter_video_frames(processed_videos, idx):
+                    mrope_tgt_sizes_per_sample[sample_ids[idx]].extend(frame_ts.tolist())
         return processed_videos, video_replacements
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
+    def _iter_video_frames(self, video_inputs: dict, video_idx: int):
+        """Yield `(frame_target_sizes, grid_rows, grid_cols)` per frame of one video, in text order."""
         video_target_sizes = video_inputs["target_sizes_videos"]  # (total_num_frames * num_patches_per_frame, ...)
         num_frames_per_video = video_inputs["num_frames_per_video"]  # (total_num_videos, ...)
         video_grids = video_inputs["grids_videos"]  # (total_num_frames, ...)
@@ -192,7 +285,6 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         cum_patches_per_frame = np.cumsum(num_patches_per_frame)
         num_past_frames = np.cumsum(num_frames_per_video)[video_idx] - num_frames
 
-        video_placeholder = ""
         for frame_idx in range(num_frames):
             # we need cumulative frame idx, because inputs are shaped as `(total_num_frames, ...)`
             frame_start_idx = num_past_frames + frame_idx
@@ -200,10 +292,13 @@ class MiniCPMV4_6Processor(ProcessorMixin):
             start_idx = cum_patches_per_frame[frame_start_idx - 1] if frame_start_idx > 0 else 0
             end_idx = cum_patches_per_frame[frame_start_idx]
 
-            frame_ts = video_target_sizes[start_idx:end_idx]
-            frame_tokens = frame_ts.prod(-1) // kwargs["video_token_divisor"]
             grid_rows, grid_cols = video_grids[frame_start_idx]
+            yield video_target_sizes[start_idx:end_idx], grid_rows, grid_cols
 
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
+        video_placeholder = ""
+        for frame_ts, grid_rows, grid_cols in self._iter_video_frames(video_inputs, video_idx):
+            frame_tokens = frame_ts.prod(-1) // kwargs["video_token_divisor"]
             if len(frame_tokens) == 0:
                 continue
 
@@ -215,6 +310,12 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                 frame_placeholder += "\n".join(slices)
             video_placeholder += frame_placeholder
         return video_placeholder
+
+    def _sample_ids_per_visual(self, text, token) -> list[int]:
+        """Map each visual input to the index of the sample it belongs to, following the order of `token` in `text`."""
+        if text is None:
+            return []
+        return [sample_idx for sample_idx, sample in enumerate(text) for _ in range(sample.count(token))]
 
     def _prepend_local_ids(self, text, replacements, token):
         """Prepend local (per-sample) image/video ID tokens to each replacement string."""
