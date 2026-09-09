@@ -4117,7 +4117,9 @@ def _patch_with_call_info(module_or_class, attr_name, _parse_call_info_func, tar
 
             # This is specific
             info = _parse_call_info_func(orig_method, args, kwargs, call_argument_expressions, target_args)
-            info = _prepare_debugging_info(test_info, info)
+            # An empty `info` means the call site's expressions could not be matched to this call
+            # (a delegated call, see `_parse_call_info`): don't append a record with no values.
+            info = _prepare_debugging_info(test_info, info) if info else ""
 
             # If the test is running in a CI environment (e.g. not a manual run), let's raise and fail the test, so it
             # behaves as usual.
@@ -4169,6 +4171,15 @@ def _parse_call_info(func, args, kwargs, call_argument_expressions, target_args)
         # We simply add "self" as the expression despite it might not be the actual argument name.
         # (This part is very unlikely what a user would be interest to know)
         call_argument_expressions["positional_args"] = ["self"] + call_argument_expressions["positional_args"]
+
+    # The expressions are parsed from the *source line of the call site*, so they only describe this
+    # call if the counts line up. They do not when a patched method is reached by delegation from
+    # another one: `assertListEqual(a, b)` calls `assertSequenceEqual(a, b, msg, seq_type=list)`, so
+    # `args` gains entries the caller's source line never mentioned. Indexing anyway raised
+    # `IndexError` and took the test down with it; indexing "safely" would be worse, silently
+    # attributing the wrong expression to a value. Report nothing instead.
+    if len(args) != len(call_argument_expressions["positional_args"]):
+        return ""
 
     param_position_mapping = {param_name: idx for idx, param_name in enumerate(signature_names)}
 
