@@ -458,16 +458,32 @@ class TorchAudioBackend(BaseAudioProcessor):
         return magnitudes.float()
 
     def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
-        # `torch.stft` returns a non-contiguous tensor and `abs() ** power` keeps that layout.
-        # On some CPU backends the downstream `mel_filters.T @ magnitudes` matmul then falls onto
-        # a slow strided-GEMM path (~8x slower on a ROCm build, see #47351). Forcing contiguity
-        # here is cheap, changes no values, and keeps the matmul on the fast path.
+        # TODO(audio-processor): reinstate the contiguity fix once the perf/parity trade-off is
+        # decided. `torch.stft` returns a non-contiguous tensor and `abs() ** power` keeps that
+        # layout, so the downstream `mel_filters.T @ magnitudes` matmul can fall onto a slow
+        # strided-GEMM path (~8x slower on a ROCm build). Upstream fixed that in the legacy
+        # `WhisperFeatureExtractor` (#47351) and it was ported here in 55db94210b, adding
+        # `.contiguous()` to both returns below.
+        #
+        # It was reverted because it is NOT value-neutral, contrary to what that commit claimed.
+        # Contiguity preserves the values exactly but changes which GEMM kernel and blocking the
+        # mel projection selects, which changes accumulation order and shifts float32 results by
+        # ~1 ulp. That breaks bit-exact parity against the legacy numpy feature extractors for
+        # `whisper`, `voxtral_realtime`, `audio_spectrogram_transformer` and `speech_to_text`
+        # (the last amplifies 1 ulp to 4.77e-06 through its per-utterance CMVN).
+        #
+        # Bit-equality is the correctness guide for now; trading it for throughput is a separate,
+        # explicitly-motivated decision. Do not re-add this without resolving that.
+        #
+        # Note: the `test-spectrogram` harness does NOT catch this class of change — its kaldi and
+        # torchaudio families stay green because the reference libraries consume the same
+        # contiguous layout we produce. Only the numpy legacy extractors pin the strided
+        # accumulation order, so run the parity suite (`./validate`) for any layout change.
         if spectrogram_config and spectrogram_config.stft_config.magnitude_mode == "sqrt_sum_squares":
             # NeMo-derived form; differs from `abs()` in the last ulp
             magnitudes = torch.view_as_real(stft_out).pow(2).sum(-1).sqrt()
-            magnitudes = magnitudes.pow(power) if power != 1.0 else magnitudes
-            return magnitudes.contiguous()
-        return (stft_out.abs() ** power).contiguous()
+            return magnitudes.pow(power) if power != 1.0 else magnitudes
+        return stft_out.abs() ** power
 
     # ── Mel scale & normalization ─────────────────────────────────────────
     #
