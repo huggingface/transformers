@@ -231,6 +231,10 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     def test_flex_attention_with_grads(self):
         pass
 
+    @unittest.skip("Pixtral backbone already overrides this test, no need to test again.")
+    def test_vision_axial_rope(self):
+        pass
+
 
 @slow
 @require_torch_accelerator
