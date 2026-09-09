@@ -1172,13 +1172,11 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"encoder.encoder.(\d+).layers", r"encoder.aifi.\1.layers"),
         ],
         "pp_doclayout_v4": [
-            # The reading order heads live on the decoder together with the other prediction heads; checkpoints
-            # converted before the move keep them at the model level under the legacy names below.
             WeightRenaming("decoder_roor_order_head.", "decoder.successor_order_head."),
             WeightRenaming("decoder_roor_global_pointer.", "decoder.successor_global_pointer."),
             WeightRenaming("decoder_order_head.", "decoder.order_head."),
             WeightRenaming("decoder_global_pointer.", "decoder.global_pointer."),
-            WeightRenaming("s2r_fusion.", "decoder.s2r_fusion."),
+            WeightRenaming("s2r_fusion.a", "decoder.s2r_fusion.closure_weight"),
         ],
         "RfDetrModel": [
             # RfDetrConvEncoder — backbone checkpoint layout + projector stages
