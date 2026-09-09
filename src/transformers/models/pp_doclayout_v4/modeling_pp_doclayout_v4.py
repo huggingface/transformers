@@ -228,9 +228,11 @@ class PPDocLayoutV4MLPPredictionHead(nn.Module):
         return x
 
 
-# Soft `-inf` masking the diagonal of the successor logits so that a query is never its own successor. Kept below the
-# fp16 maximum of 65504 to stay finite in half precision, where `-inf` would leak `NaN` into `exp`-based sigmoids.
-SELF_LOOP_MASK_VALUE = 1e4
+class PPDocLayoutV4ClassificationHead(nn.Linear):
+    """
+    A plain `nn.Linear` under a dedicated name, so that `_init_weights` can recognize the classification heads and
+    give them their prior biased initialization without reaching into the modules that own them.
+    """
 
 
 class PPDocLayoutV4GlobalPointer(nn.Module):
@@ -259,7 +261,9 @@ class PPDocLayoutV4GlobalPointer(nn.Module):
         logits = (queries @ keys.transpose(-2, -1)) * self.scaling
         if self.antisymmetric:
             return logits - logits.transpose(-2, -1)
-        return logits - self.eye * SELF_LOOP_MASK_VALUE
+        # Soft `-inf` masking the diagonal so that a query is never its own successor. Kept below the fp16 maximum
+        # of 65504 to stay finite in half precision, where `-inf` would leak `NaN` into `exp`-based sigmoids.
+        return logits - self.eye * 1e4
 
 
 class PPDocLayoutV4S2RFusion(nn.Module):
@@ -335,15 +339,11 @@ class PPDocLayoutV4PreTrainedModel(PreTrainedModel):
             init.xavier_uniform_(module.output_proj.weight)
             init.constant_(module.output_proj.bias, 0.0)
 
-        elif isinstance(module, PPDocLayoutV4Model):
-            prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
-            bias = float(-math.log((1 - prior_prob) / prior_prob))
-            init.xavier_uniform_(module.enc_score_head.weight)
-            init.constant_(module.enc_score_head.bias, bias)
-            # The class heads are untied, so every decoder layer gets its own biased initialization.
-            for class_embed in module.decoder.class_embed:
-                init.xavier_uniform_(class_embed.weight)
-                init.constant_(class_embed.bias, bias)
+        elif isinstance(module, PPDocLayoutV4ClassificationHead):
+            # The class heads are untied, so `enc_score_head` and every decoder layer's head are visited separately.
+            prior_prob = self.config.initializer_bias_prior_prob
+            init.xavier_uniform_(module.weight)
+            init.constant_(module.bias, float(-math.log((1 - prior_prob) / prior_prob)))
 
         elif isinstance(module, PPDocLayoutV4S2RFusion):
             init.constant_(module.closure_weight, self.config.s2r_a_init)
@@ -1061,7 +1061,7 @@ class PPDocLayoutV4Decoder(PPDocLayoutV4PreTrainedModel):
             ]
         )
         self.class_embed = nn.ModuleList(
-            [nn.Linear(config.d_model, config.num_labels) for _ in range(config.decoder_layers)]
+            [PPDocLayoutV4ClassificationHead(config.d_model, config.num_labels) for _ in range(config.decoder_layers)]
         )
 
         self.num_queries = config.num_queries
@@ -1363,7 +1363,7 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
             nn.Linear(config.d_model, config.d_model),
             nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
         )
-        self.enc_score_head = nn.Linear(config.d_model, config.num_labels)
+        self.enc_score_head = PPDocLayoutV4ClassificationHead(config.d_model, config.num_labels)
 
         self.enc_bbox_head = PPDocLayoutV4MLPPredictionHead(
             config.d_model, config.d_model, config.num_coords, num_layers=3

@@ -34,7 +34,7 @@ class PPDocLayoutV4Config(PreTrainedConfig):
     r"""
     initializer_bias_prior_prob (`float`, *optional*):
         The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
-        If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
+        If `None`, it defaults to `1 / (num_labels + 1)`.
     freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
         Whether to freeze the batch normalization layers in the backbone.
     encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
@@ -202,13 +202,12 @@ class PPDocLayoutV4Config(PreTrainedConfig):
             **kwargs,
         )
 
-        self.encoder_in_channels = list(self.encoder_in_channels)
-        self.feat_strides = list(self.feat_strides)
-        self.encode_proj_layers = list(self.encode_proj_layers)
-        self.eval_size = list(self.eval_size) if self.eval_size is not None else None
-        self.decoder_in_channels = list(self.decoder_in_channels)
-        self.anchor_image_size = list(self.anchor_image_size) if self.anchor_image_size is not None else None
         super().__post_init__(**kwargs)
+
+        # Resolved here rather than in `_init_weights` so that the effective prior is visible on the config.
+        # `num_labels` is only materialized by `PreTrainedConfig.__post_init__`, hence the ordering.
+        if self.initializer_bias_prior_prob is None:
+            self.initializer_bias_prior_prob = 1 / (self.num_labels + 1)
 
 
 __all__ = ["PPDocLayoutV4Config"]
