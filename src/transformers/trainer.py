@@ -3881,8 +3881,6 @@ class Trainer:
     def save_model(self, output_dir: str | None = None, _internal_call: bool = False) -> None:
         """
         Will save the model, so you can reload it using `from_pretrained()`.
-
-        Will only save from the main process.
         """
 
         if output_dir is None:
@@ -3896,14 +3894,12 @@ class Trainer:
             # Calling the state_dict needs to be done on the wrapped model and on all processes.
             os.makedirs(output_dir, exist_ok=True)
             state_dict = self.model_wrapped.state_dict()
-            if self.args.should_save:
-                self._save(output_dir, state_dict=state_dict)
+            self._save(output_dir, state_dict=state_dict)
             Path(os.path.join(output_dir, "user_content.pt")).touch()
         elif self.is_fsdp_enabled:
             if "FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type):
                 state_dict = self.accelerator.get_state_dict(self.model)
-                if self.args.should_save:
-                    self._save(output_dir, state_dict=state_dict)
+                self._save(output_dir, state_dict=state_dict)
         elif self.is_deepspeed_enabled:
             try:
                 accept_exclude_frozen_parameters = "exclude_frozen_parameters" in set(
@@ -3916,33 +3912,18 @@ class Trainer:
                     state_dict = self.deepspeed._zero3_consolidated_16bit_state_dict(exclude_frozen_parameters=True)
                 else:
                     state_dict = self.accelerator.get_state_dict(self.deepspeed)
-                if self.args.should_save:
-                    self._save(output_dir, state_dict=state_dict)
+                self._save(output_dir, state_dict=state_dict)
             except ValueError:
                 logger.warning(
                     " stage3_gather_16bit_weights_on_model_save=false. Saving the full checkpoint instead, use"
                     " zero_to_fp32.py to recover weights"
                 )
-                if self.args.should_save:
-                    self._save(output_dir, state_dict={})
+                self._save(output_dir, state_dict={})
                 # remove the dummy state_dict
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
 
-        elif getattr(self.model.config, "distributed_config", None) is not None:
-            os.makedirs(output_dir, exist_ok=True)
-            self.model.save_pretrained(output_dir)
-            if self.args.should_save:
-                if self.processing_class is not None:
-                    self.processing_class.save_pretrained(output_dir)
-                elif (
-                    self.data_collator is not None
-                    and hasattr(self.data_collator, "tokenizer")
-                    and self.data_collator.tokenizer is not None
-                ):
-                    self.data_collator.tokenizer.save_pretrained(output_dir)
-                torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
-        elif self.args.should_save:
+        else:
             self._save(output_dir)
 
         # Push to the Hub when `save_model` is called by the user.
@@ -3950,43 +3931,50 @@ class Trainer:
             self.push_to_hub(commit_message="Model save", revision=self.args.hub_revision)
 
     def _save(self, output_dir: str | None = None, state_dict: dict | None = None) -> None:
-        """Save model weights, configuration, and processing class to `output_dir`."""
-        # If we are executing this function, we are the process zero, so we don't check for that.
+        """
+        Save model weights, configuration, and processing class to `output_dir`.
+        """
         output_dir = output_dir if output_dir is not None else self.args.output_dir
-        os.makedirs(output_dir, exist_ok=True)
-        logger.info(f"Saving model checkpoint to {output_dir}")
+        if self.args.should_save:
+            os.makedirs(output_dir, exist_ok=True)
+            logger.info(f"Saving model checkpoint to {output_dir}")
 
         supported_classes = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, supported_classes):
-            if state_dict is None:
-                state_dict = self.model.state_dict()
+            if self.args.should_save:
+                if state_dict is None:
+                    state_dict = self.model.state_dict()
 
-            if isinstance(self.accelerator.unwrap_model(self.model, keep_torch_compile=False), supported_classes):
-                self.accelerator.unwrap_model(self.model, keep_torch_compile=False).save_pretrained(
-                    output_dir, state_dict=state_dict
-                )
-            else:
-                logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-                safetensors.torch.save_file(
-                    state_dict, os.path.join(output_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"}
-                )
+                if isinstance(self.accelerator.unwrap_model(self.model, keep_torch_compile=False), supported_classes):
+                    self.accelerator.unwrap_model(self.model, keep_torch_compile=False).save_pretrained(
+                        output_dir, state_dict=state_dict
+                    )
+                else:
+                    logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
+                    safetensors.torch.save_file(
+                        state_dict, os.path.join(output_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"}
+                    )
         else:
-            self.model.save_pretrained(output_dir, state_dict=state_dict)
+            # Distributed model needs to call `save_pretrained` from every rank to gather the weights.
+            # If the model is not distributed, we only save from the main process.
+            if self.args.should_save or getattr(self.model.config, "distributed_config", None) is not None:
+                self.model.save_pretrained(output_dir, state_dict=state_dict)
 
-        if self.processing_class is not None:
-            self.processing_class.save_pretrained(output_dir)
-        elif (
-            self.data_collator is not None
-            and hasattr(self.data_collator, "tokenizer")
-            and self.data_collator.tokenizer is not None
-        ):
-            logger.info("Saving Trainer.data_collator.tokenizer by default as Trainer.processing_class is `None`")
-            self.data_collator.tokenizer.save_pretrained(output_dir)
+        if self.args.should_save:
+            if self.processing_class is not None:
+                self.processing_class.save_pretrained(output_dir)
+            elif (
+                self.data_collator is not None
+                and hasattr(self.data_collator, "tokenizer")
+                and self.data_collator.tokenizer is not None
+            ):
+                logger.info("Saving Trainer.data_collator.tokenizer by default as Trainer.processing_class is `None`")
+                self.data_collator.tokenizer.save_pretrained(output_dir)
 
-        # Good practice: save your training arguments together with the trained model
-        torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
+            # Good practice: save your training arguments together with the trained model
+            torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
 
     # ---- Logging & Metrics ----
 
