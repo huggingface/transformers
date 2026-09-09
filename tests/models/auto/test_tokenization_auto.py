@@ -1020,6 +1020,7 @@ class NopConfig(PreTrainedConfig):
         "google/rembert",
         "facebook/xglm-564M",
         "xlnet/xlnet-base-cased",
+        "allenai/OLMo-7B-hf",
     ]
 
     @slow
@@ -1051,6 +1052,7 @@ class NopConfig(PreTrainedConfig):
         "allenai/OLMo-2-0425-1B",
         "stabilityai/tiny-random-stablelm-2",
         "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+        "naver-clova-ix/donut-base-finetuned-docvqa",
     ]
 
     @slow
