@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # DistributedConfig
 
-[`~distributed.DistributedConfig`] shards a model across GPUs directly through [`~PreTrainedModel.from_pretrained`]. It supports [tensor parallelism](./tensor_parallelism), [FSDP2](./fsdp), [expert parallelism](./expert_parallelism), and [pipeline parallelism for inference](./pipeline_parallel_inference).
+[`~distributed.DistributedConfig`] shards a model across GPUs directly through [`~PreTrainedModel.from_pretrained`]. It supports [tensor parallelism](./tensor_parallelism), [FSDP2](./fsdp), and [expert parallelism](./expert_parallelism).
 
 Use this for a custom training loop or inference, where you shard the model at load time instead of through [`Trainer`]. If you're training with [`Trainer`], configure FSDP2 through [Accelerate](./accelerate) instead.
 
@@ -32,7 +32,7 @@ The fields below control how the model is sharded.
 | `fsdp_cpu_offload` | Offload parameters and gradients to CPU to save GPU memory. Defaults to `False`. |
 | `fsdp_mixed_precision` | Compute in `bfloat16` and reduce gradients in `float32`. Defaults to `False`. |
 | `enable_expert_parallel` | Shard mixture-of-experts layers across devices. See [Expert parallelism](./expert_parallelism). |
-| `pp_size` | Number of pipeline stages for inference. Defaults to 1 when unset. See [Pipeline parallelism for inference](./pipeline_parallel_inference). This is not a training pipeline parallel switch. |
+| `pp_size` | Number of pipeline stages for inference. Defaults to 1 when unset. This is not a training pipeline parallel switch. |
 
 `enable_sequence_parallel` exists on the config as a reserved field and is not set up for load time sharding. For real sequence parallelism, use Ulysses through [`Trainer`] and Accelerate. See [Ulysses sequence parallelism](./deepspeed_alst).
 
@@ -161,7 +161,6 @@ torchrun --nproc-per-node 4 train.py
 - See [Tensor parallelism](./tensor_parallelism) for how weight sharding works and how to combine it with [`Trainer`].
 - See [FSDP2](./fsdp) for sharded training through [`Trainer`] and Accelerate.
 - See [Expert parallelism](./expert_parallelism) for sharding mixture-of-experts models.
-- See [Pipeline parallelism for inference](./pipeline_parallel_inference) for `pp_size` stage splitting.
 - See [N-D parallelism](./perf_train_gpu_many) for stacking parallelism strategies under [`Trainer`].
 - See [Ulysses sequence parallelism](./deepspeed_alst) for sequence parallelism (not `enable_sequence_parallel`).
 - Read [The Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook) for a deeper look at how these strategies work.

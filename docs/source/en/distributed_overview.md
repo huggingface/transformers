@@ -25,7 +25,6 @@ Distributed training splits work across accelerators, and each strategy targets 
 | A single layer doesn't fit on one GPU | Tensor parallelism | [Tensor parallelism](./tensor_parallelism) |
 | Sequences are too long to fit in memory | Sequence parallelism | [Ulysses sequence parallelism](./deepspeed_alst) |
 | A mixture-of-experts model is too large | Expert parallelism | [Expert parallelism](./expert_parallelism) |
-| A model is too deep for one GPU at inference | Pipeline parallelism (inference) | [Pipeline parallelism for inference](./pipeline_parallel_inference) |
 | One strategy isn't enough on its own | Stack several | [N-D parallelism](./perf_train_gpu_many) |
 
 1. Start with data parallelism if a single layer fits on one GPU. With DeepSpeed, begin at ZeRO-1 for the least communication overhead and move to ZeRO-2 or ZeRO-3 as you run out of memory. Add offloading if the model still doesn't fit.
