@@ -895,14 +895,13 @@ class CustomPipelineTest(unittest.TestCase):
 
     @require_torch
     def test_cached_pipeline_has_minimum_calls_to_head(self):
-        # A warm cache only needs the call resolving `main` into a commit hash - shared by the config, the model and
-        # the tokenizer - plus the two repository listings the tokenizer uses to discover its files.
+        # Make sure we have cached the pipeline.
         _ = pipeline("text-classification", model="hf-internal-testing/tiny-random-bert")
         with RequestCounter() as counter:
             _ = pipeline("text-classification", model="hf-internal-testing/tiny-random-bert")
-        self.assertEqual(counter["HEAD"], 0)
-        self.assertEqual(counter["GET"], 3)
-        self.assertEqual(counter.total_calls, 3)
+        self.assertEqual(counter["GET"], 0)
+        self.assertEqual(counter["HEAD"], 1)
+        self.assertEqual(counter.total_calls, 1)
 
     @require_torch
     def test_chunk_pipeline_batching_single_file(self):
