@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
 from collections.abc import Callable
 from typing import Any
@@ -29,7 +28,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..sam2.modeling_sam2 import eager_attention_forward, window_partition
@@ -55,6 +54,9 @@ from ..sam2_video.modeling_sam2_video import (
     Sam2VideoVisionRotaryEmbedding,
     rotate_pairwise,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
@@ -113,8 +115,6 @@ class EdgeTamVideoConfig(PreTrainedConfig):
         The non-linear activation function in the feedforward network in the memory attention module.
     memory_attention_dropout (`float`, *optional*, defaults to 0.1):
         The dropout rate for the memory attention module.
-    memory_attention_rope_theta (`float`, *optional*, defaults to 10000):
-        The Rope theta parameter.
     memory_attention_rope_feat_sizes (`Tuple[int, int]`, *optional*, defaults to `[64, 64]`):
         The feature sizes for the Rope positional encoding.
     memory_attention_rope_k_sizes (`List[int]`, *optional*, defaults to `[16, 16]`):
@@ -201,6 +201,7 @@ class EdgeTamVideoConfig(PreTrainedConfig):
     ```"""
 
     model_type = "edgetam_video"
+    default_rope_type = "axial"
     sub_configs = {
         "vision_config": AutoConfig,
         "prompt_encoder_config": EdgeTamVideoPromptEncoderConfig,
@@ -232,10 +233,10 @@ class EdgeTamVideoConfig(PreTrainedConfig):
     memory_attention_mlp_hidden_size: int = 2048
     memory_attention_mlp_hidden_act: str = "relu"
     memory_attention_dropout: float | int = 0.1
-    memory_attention_rope_theta: float | int = 10000
     memory_attention_rope_feat_sizes: list | None = None
     memory_attention_rope_k_sizes: list | None = None
     memory_attention_rope_dropout: float | int = 0.1
+    rope_parameters: dict | None = None
 
     # spatial perceiver resampler
     perceiver_resampler_num_latents: int = 256
@@ -290,7 +291,24 @@ class EdgeTamVideoConfig(PreTrainedConfig):
             self.mask_decoder_config = EdgeTamVideoMaskDecoderConfig(**self.mask_decoder_config)
         elif self.mask_decoder_config is None:
             self.mask_decoder_config = EdgeTamVideoMaskDecoderConfig()
+
         super().__post_init__(**kwargs)
+
+    @property
+    def memory_attention_rope_theta(self):
+        logger.warning_once(
+            "`memory_attention_rope_theta` is deprecated and will be removed in v5.0. "
+            "Use `rope_parameters['rope_theta']` instead."
+        )
+        return self.rope_parameters.get("rope_theta", 10_000)
+
+    @memory_attention_rope_theta.setter
+    def memory_attention_rope_theta(self, value):
+        logger.warning_once(
+            "`memory_attention_rope_theta` is deprecated and will be removed in v5.0. "
+            "Use `rope_parameters['rope_theta']` instead."
+        )
+        self.rope_parameters["rope_theta"] = value
 
 
 class EdgeTamVideoLayerNorm(Sam2VideoLayerNorm):
@@ -306,21 +324,7 @@ class EdgeTamVideoVisionEncoderOutput(Sam2VideoVisionEncoderOutput):
 
 
 class EdgeTamVideoVisionRotaryEmbedding(Sam2VideoVisionRotaryEmbedding):
-    def __init__(self, config: EdgeTamVideoConfig, end_x: int | None = None, end_y: int | None = None):
-        nn.Module.__init__()
-        self.dim = config.memory_attention_hidden_size // (
-            config.memory_attention_downsample_rate * config.memory_attention_num_attention_heads
-        )
-        # Ensure even dimension for proper axial splitting
-        if self.dim % 4 != 0:
-            raise ValueError("Dimension must be divisible by 4 for axial RoPE")
-        self.end_x, self.end_y = config.memory_attention_rope_feat_sizes if end_x is None else (end_x, end_y)
-        self.memory_attention_rope_theta = config.memory_attention_rope_theta
-
-        # directly register the cos and sin embeddings as we have a fixed feature shape
-        inv_freq = self.create_inv_freq()
-        self.rope_embeddings_cos = nn.Buffer(inv_freq.cos(), persistent=False)
-        self.rope_embeddings_sin = nn.Buffer(inv_freq.sin(), persistent=False)
+    pass
 
 
 class EdgeTamVideoAttention(Sam2VideoAttention):
@@ -590,11 +594,10 @@ class EdgeTamVideoFeedForward(Sam2VideoFeedForward):
 
 class EdgeTamVideoPreTrainedModel(Sam2VideoPreTrainedModel):
     def _init_weights(self, module):
-        super()._init_weights()
-        if isinstance(module, EdgeTamVideoVisionRotaryEmbedding):
-            inv_freq = module.create_inv_freq()
-            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
-            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
+        super()._init_weights(module)
+        if isinstance(module, EdgeTamVideoMemoryAttention):
+            position_ids_k = module.precompute_positions(module.config, is_key=True)
+            init.copy_(module.position_ids_k, position_ids_k)
 
 
 class EdgeTamVideoInferenceSession(Sam2VideoInferenceSession):
@@ -670,9 +673,26 @@ class EdgeTamVideoMemoryAttentionLayer(nn.Module):
 class EdgeTamVideoMemoryAttention(Sam2VideoMemoryAttention):
     def __init__(self, config: EdgeTamVideoConfig):
         super().__init__()
-        self.rotary_emb_k = EdgeTamVideoVisionRotaryEmbedding(
-            config, end_x=config.memory_attention_rope_k_sizes[0], end_y=config.memory_attention_rope_k_sizes[1]
-        )
+        position_ids_k = self.precompute_positions(config, is_key=True)
+        self.position_ids_k = nn.Buffer(position_ids_k, persistent=False)
+
+    @staticmethod
+    def precompute_positions(config: EdgeTamVideoConfig, is_key: bool = False):
+        "Precompute position IDs for query or key since they are different."
+        if not is_key:
+            hpos_ids, wpos_ids = torch.meshgrid(
+                torch.arange(config.memory_attention_rope_feat_sizes[1]),
+                torch.arange(config.memory_attention_rope_feat_sizes[0]),
+                indexing="ij",
+            )
+        else:
+            hpos_ids, wpos_ids = torch.meshgrid(
+                torch.arange(config.memory_attention_rope_k_sizes[1]),
+                torch.arange(config.memory_attention_rope_k_sizes[0]),
+                indexing="ij",
+            )
+        position_ids = torch.stack([wpos_ids.flatten(), hpos_ids.flatten()], dim=-1)
+        return position_ids
 
     def forward(
         self,
@@ -704,8 +724,9 @@ class EdgeTamVideoMemoryAttention(Sam2VideoMemoryAttention):
         output = output.transpose(0, 1)
         memory = memory.transpose(0, 1).unsqueeze(1)
         memory_posision_embeddings = memory_posision_embeddings.transpose(0, 1).unsqueeze(1)
-        rope_position_embeddings = self.rotary_emb()
-        rope_position_embeddings_k = self.rotary_emb_k()
+
+        rope_position_embeddings = self.rotary_emb(output, self.position_ids)
+        rope_position_embeddings_k = self.rotary_emb(output, self.position_ids_k)
         for layer in self.layers:
             output = layer(
                 queries=output.unsqueeze(1) if output.ndim == 3 else output,

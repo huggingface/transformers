@@ -53,7 +53,7 @@ from ..glm4v.modeling_glm4v import (
     Glm4vVisionModel,
     Glm4vVisionPatchEmbed,
 )
-from ..glm4v_moe.modeling_glm4v_moe import Glm4vMoeTextAttention, eager_attention_forward
+from ..glm4v_moe.modeling_glm4v_moe import Glm4vMoeTextAttention, Glm4vMoeTextRotaryEmbedding, eager_attention_forward
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
@@ -111,6 +111,7 @@ class GlmImageVisionConfig(Glm4vVisionConfig):
     out_hidden_size = AttributeError()
     rms_norm_eps = AttributeError()
     temporal_patch_size = AttributeError()
+    rope_parameters = AttributeError()
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
@@ -199,6 +200,10 @@ class GlmImageConfig(PreTrainedConfig):
             self.text_config = self.sub_configs["text_config"](**kwargs)
 
         super().__post_init__(**kwargs)
+
+
+class GlmImageTextRotaryEmbedding(Glm4vMoeTextRotaryEmbedding):
+    pass
 
 
 class GlmImageVisionMLP(SiglipMLP):
@@ -340,9 +345,6 @@ class GlmImageTextAttention(Glm4vMoeTextAttention):
 class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
     config: GlmImageConfig
     input_modalities = ("image", "text")
-
-    def _init_weights(self, module):
-        raise AttributeError("Normal super call")
 
 
 class GlmImageModelOutputWithPast(Glm4vModelOutputWithPast):
@@ -961,7 +963,9 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return GlmImageCausalLMOutputWithPast(
             loss=loss,

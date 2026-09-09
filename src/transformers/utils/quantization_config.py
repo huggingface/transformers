@@ -53,6 +53,7 @@ class QuantizationMethod(str, Enum):
     COMPRESSED_TENSORS = "compressed-tensors"
     FBGEMM_FP8 = "fbgemm_fp8"
     TORCHAO = "torchao"
+    GGUF = "gguf"
     BITNET = "bitnet"
     SPQR = "spqr"
     FP8 = "fp8"
@@ -138,9 +139,6 @@ class QuantizationConfigMixin:
         Args:
             json_file_path (`str` or `os.PathLike`):
                 Path to the JSON file in which this configuration instance's parameters will be saved.
-            use_diff (`bool`, *optional*, defaults to `True`):
-                If set to `True`, only the difference between the config instance and the default
-                `QuantizationConfig()` is serialized to JSON file.
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
             config_dict = self.to_dict()
@@ -213,7 +211,7 @@ class AutoRoundConfig(QuantizationConfigMixin):
 
     Args:
         bits (`int`, *optional*, defaults to 4):
-            The number of bits to quantize to, supported numbers are (2, 3, 4, 8).
+            The number of bits to quantize to, supported numbers are (2, 3, 4, 5, 6, 7, 8).
         group_size (`int`, *optional*, defaults to 128): Group-size value
         sym (`bool`, *optional*, defaults to `True`): Symmetric quantization or not
         backend (`str`, *optional*, defaults to `"auto"`): The inference backend. By default, AutoRound selects a compatible backend based on the device, quantization settings, and installed libraries. See [Specify inference backend](https://github.com/intel/auto-round/blob/main/docs/step_by_step.md#specify-inference-backend) for all backend options.
@@ -240,7 +238,7 @@ class AutoRoundConfig(QuantizationConfigMixin):
 
     def post_init(self):
         r"""Safety checker that arguments are correct."""
-        if self.bits not in [2, 3, 4, 8]:
+        if self.bits not in [2, 3, 4, 5, 6, 7, 8]:
             raise ValueError(f"Only support quantization to [2,3,4,8] bits but found {self.bits}")
         if self.group_size != -1 and self.group_size <= 0:
             raise ValueError("group_size must be greater than 0 or equal to -1")
@@ -2085,3 +2083,23 @@ class NVFP4Config(QuantizationConfigMixin):
             logger.info(
                 f"Unused kwargs: {list(kwargs.keys())}. These kwargs are not used in {self.__class__.__name__}."
             )
+
+
+@dataclass
+class GgufConfig(QuantizationConfigMixin):
+    """Load a quantized GGUF checkpoint with its weights left in GGUF blocks.
+
+    Args:
+        gguf_file (`str`, *optional*):
+            path to the `.gguf` file holding the weights. Can be left out when it is named through
+            `from_pretrained(..., gguf_file=...)`, which fills it in.
+        dequantize (`bool`, *optional*, defaults to `False`):
+            Unpack every weight at load time into a plain dense model instead. Always correct, but
+            gives up the memory saving; this is also the automatic fallback when no matmul kernel is
+            available for the file's quantization types.
+    """
+
+    def __init__(self, gguf_file: str | None = None, dequantize: bool = False, **kwargs):
+        self.quant_method = QuantizationMethod.GGUF
+        self.gguf_file = gguf_file
+        self.dequantize = dequantize

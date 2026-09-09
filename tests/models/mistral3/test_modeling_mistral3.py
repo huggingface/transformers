@@ -37,6 +37,7 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -230,6 +231,10 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     def test_flex_attention_with_grads(self):
         pass
 
+    @unittest.skip("Pixtral backbone already overrides this test, no need to test again.")
+    def test_vision_axial_rope(self):
+        pass
+
 
 @slow
 @require_torch_accelerator
@@ -282,7 +287,12 @@ class Mistral3IntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
+                    },
                     {"type": "text", "text": "Describe this image"},
                 ],
             }
@@ -332,7 +342,9 @@ class Mistral3IntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+                            ),
                         },
                         {"type": "text", "text": "Describe this image"},
                     ],
