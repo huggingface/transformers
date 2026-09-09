@@ -109,12 +109,6 @@ class InternVL2Config(PreTrainedConfig):
     downsample_ratio (`float`, *optional*, defaults to 0.5):
         Factor by which to downsample the image.
 
-    Configuration for the original ``OpenGVLab/InternVL2-*`` checkpoints.
-
-    These ship the bespoke ``internvl_chat`` layout, which this class normalizes onto the native
-    [`InternVLConfig`] fields so the checkpoints load into [`InternVLForConditionalGeneration`]
-    without `trust_remote_code`. The modeling and processor classes are auto-mapped to InternVL's.
-
     Example:
 
     ```python

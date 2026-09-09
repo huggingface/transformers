@@ -339,12 +339,6 @@ decoded_outputs
 
 ## InternVL2Config
 
-Configuration for the original `OpenGVLab/InternVL2-*` checkpoints, which declare
-`model_type: "internvl_chat"` and store the bespoke `llm_config` / InternViT layout.
-It normalizes that layout onto the fields above so those checkpoints load into
-[`InternVLForConditionalGeneration`] without `trust_remote_code`. The model and
-processor classes are the InternVL ones documented on this page.
-
 [[autodoc]] InternVL2Config
 
 ## InternVLVisionModel
