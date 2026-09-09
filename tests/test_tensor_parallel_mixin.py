@@ -454,6 +454,27 @@ def _test_ep_backward_impl(_rank, model_path, model_class, atol, rtol, dispatch=
         f"Diff: {(loss_ref - loss_ep).abs().item()}"
     )
 
+    # A missing or doubled gradient reduction leaves the forward, and so the loss, untouched: only the parameter
+    # gradients show it. Sharded gradients are gathered back to the full parameter before comparing.
+    from torch.distributed.tensor import DTensor
+
+    grads_ref = {name: param.grad for name, param in model_ref.named_parameters() if param.grad is not None}
+    grads_ep = {name: param.grad for name, param in model_ep.named_parameters() if param.grad is not None}
+    assert grads_ep.keys() == grads_ref.keys(), (
+        f"Parameters with a gradient differ. Only in EP: {sorted(grads_ep.keys() - grads_ref.keys())}, "
+        f"only in reference: {sorted(grads_ref.keys() - grads_ep.keys())}"
+    )
+    mismatched = []
+    for name, grad in grads_ep.items():
+        grad = grad.full_tensor() if isinstance(grad, DTensor) else grad
+        ref = grads_ref[name]
+        if not torch.allclose(ref, grad.to(ref.device), atol=atol, rtol=rtol):
+            mismatched.append(
+                f"{name}: max abs diff {(ref - grad).abs().max().item():.3e}, "
+                f"ref norm {ref.norm().item():.3e}, EP norm {grad.norm().item():.3e}"
+            )
+    assert not mismatched, "EP and non-EP model gradients differ:\n" + "\n".join(mismatched)
+
     dist.barrier()
 
 
