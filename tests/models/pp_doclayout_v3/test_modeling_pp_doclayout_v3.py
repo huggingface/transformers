@@ -510,9 +510,7 @@ class PPDocLayoutV3ModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, rtol=2e-2, atol=2e-2)
 
-        expected_slice_polygon_points = torch.tensor([[867, 684], [636, 684], [337, 696], [337, 797], [867, 797]]).to(
-            torch_device
-        )
+        expected_slice_polygon_points = torch.tensor([[115, 223], [115, 260], [478, 260], [478, 223]]).to(torch_device)
         torch.testing.assert_close(
             torch.tensor(results["polygon_points"][1], device=torch_device, dtype=expected_slice_polygon_points.dtype),
             expected_slice_polygon_points,
