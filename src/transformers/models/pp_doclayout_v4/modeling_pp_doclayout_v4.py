@@ -1118,14 +1118,16 @@ class PPDocLayoutV4Decoder(PPDocLayoutV4PreTrainedModel):
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
 
+        # Only the hidden states and the refined quads are accumulated here: PP-DocLayoutV3 also collects a class,
+        # an order and a mask output per layer, none of which PP-DocLayoutV4 produces.
         intermediate = ()
         intermediate_reference_points = ()
-        logits = None
 
         reference_points = F.sigmoid(reference_points)
 
         for idx, decoder_layer in enumerate(self.layers):
-            # Deformable attention samples on the enclosing rect of the quad.
+            # Deformable attention samples on the enclosing rect of the quad, while the position embedding below sees
+            # the full quad. PP-DocLayoutV3 feeds the same 4 dimensional box to both.
             reference_points_input = quad_to_rect(reference_points).unsqueeze(2)
 
             hidden_states = decoder_layer(
@@ -1140,13 +1142,19 @@ class PPDocLayoutV4Decoder(PPDocLayoutV4PreTrainedModel):
                 **kwargs,
             )
 
+            # One untied bbox head per layer, so unlike the single head PP-DocLayoutV3 shares with the encoder there
+            # is no `None` branch to guard here. The refined quads are also handed to the next layer without the
+            # `.detach()` PP-DocLayoutV3 applies, which only affects gradients -- and this model does not train.
             reference_points = F.sigmoid(self.bbox_embed[idx](hidden_states) + inverse_sigmoid(reference_points))
 
             intermediate += (hidden_states,)
             intermediate_reference_points += (reference_points,)
 
+        # PP-DocLayoutV3 scores every layer from inside the loop, on hidden states passed through a `norm` first.
+        # PP-DocLayoutV4 has no such norm and only scores the last layer, so the earlier heads stay unused.
         logits = self.class_embed[-1](hidden_states)
         valid_query = hidden_states[:, -self.num_queries :] if self.num_queries is not None else hidden_states
+        # The direct successor branch and its fusion into the relative order logits are new in PP-DocLayoutV4.
         successor_order_logits = self.successor_global_pointer(self.successor_order_head[-1](valid_query))
         relative_order_logits = self.global_pointer(self.order_head[-1](valid_query))
         if self.s2r_fusion is not None:
@@ -1397,10 +1405,7 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
 
         self.decoder = PPDocLayoutV4Decoder(config)
 
-        # PP-DocLayoutV4 does not reserve an extra "no object" row in the denoising embedding, so the `num_labels + 1`
-        # embedding built by [`PPDocLayoutV3Model`] is overwritten here. The modular converter only deduplicates
-        # top-level plain assignments, and the parent's allocation is nested in an `if` block, so both allocations
-        # survive into the generated file, the second one winning.
+        # No extra "no object" row, unlike the `num_labels + 1` embedding of PP-DocLayoutV3.
         self.denoising_class_embed = (
             # CODEPATH: PP-DocLayoutV4_safetensors trains with denoising; the `None` branch is only for configs
             # that disable it.
