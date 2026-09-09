@@ -669,6 +669,10 @@ class InferenceThread:
                     loop.call_soon_threadsafe(future.set_exception, e)
                 else:
                     future.set_exception(e)
+            finally:
+                # Release closure references (e.g. model captured in generate fn)
+                # before blocking on the next queue.get(), so GPU memory can be freed.
+                fn = args = kwargs = None
 
     def submit(self, fn, *args, **kwargs) -> Future:
         """Submit a callable to the inference thread. Returns a blocking Future."""
