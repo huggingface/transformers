@@ -81,7 +81,7 @@ class Kimi_K25VisionText2TextModelTester(VLMModelTester):
         # `first_k_dense_replace` enables MoEs after `layer=0`
         kwargs.setdefault("first_k_dense_replace", 1)
         kwargs.setdefault("n_group", 2)
-        kwargs.setdefault("topk_group", 1)
+        kwargs.setdefault("topk_group", 2)
         kwargs.setdefault("num_experts_per_tok", 8)
         kwargs.setdefault("n_shared_experts", 1)
         kwargs.setdefault("n_routed_experts", 8)

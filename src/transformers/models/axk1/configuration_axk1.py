@@ -121,5 +121,37 @@ class AXK1Config(PreTrainedConfig):
         self.head_dim = self.qk_rope_head_dim
         super().__post_init__(**kwargs)
 
+    def validate_architecture(self):
+        super().validate_architecture()
+
+        n_routed_experts = getattr(self, "n_routed_experts", None)
+        if n_routed_experts is None:
+            return
+
+        n_group = getattr(self, "n_group", None)
+        topk_group = getattr(self, "topk_group", None)
+        num_experts_per_tok = getattr(self, "num_experts_per_tok", None)
+        if n_group is None or n_group <= 0:
+            raise ValueError(f"`n_group` must be a positive integer, got {n_group}.")
+        if topk_group is None or topk_group <= 0:
+            raise ValueError(f"`topk_group` must be a positive integer, got {topk_group}.")
+        if n_routed_experts % n_group != 0:
+            raise ValueError(f"`n_routed_experts` ({n_routed_experts}) must be divisible by `n_group` ({n_group}).")
+        experts_per_group = n_routed_experts // n_group
+        if experts_per_group < 2:
+            raise ValueError(
+                f"DeepSeek-V3 grouped routing requires at least 2 routed experts per group, got {experts_per_group}."
+            )
+        if topk_group > n_group:
+            raise ValueError(f"`topk_group` ({topk_group}) cannot exceed `n_group` ({n_group}).")
+        routing_capacity = topk_group * experts_per_group
+        if num_experts_per_tok is None or num_experts_per_tok <= 0:
+            raise ValueError(f"`num_experts_per_tok` must be a positive integer, got {num_experts_per_tok}.")
+        if num_experts_per_tok > routing_capacity:
+            raise ValueError(
+                f"`num_experts_per_tok` ({num_experts_per_tok}) cannot exceed the {routing_capacity} experts "
+                "available in the selected expert groups."
+            )
+
 
 __all__ = ["AXK1Config"]

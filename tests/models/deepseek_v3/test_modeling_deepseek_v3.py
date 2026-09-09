@@ -75,7 +75,7 @@ class DeepseekV3ModelTester:
         v_head_dim=32,
         qk_nope_head_dim=32,
         n_group=2,
-        topk_group=1,
+        topk_group=2,
         num_experts_per_tok=8,
         first_k_dense_replace=1,
         norm_topk_prob=True,
