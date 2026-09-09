@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
-import io
 import json
 import os
 import pathlib
@@ -20,13 +19,13 @@ import sys
 import tempfile
 import warnings
 from copy import deepcopy
+from typing import Any
 
-import httpx
 import numpy as np
 import pytest
 
 from transformers import AutoImageProcessor, BatchFeature
-from transformers.image_utils import AnnotationFormat
+from transformers.image_utils import AnnotationFormat, ImageInput
 from transformers.models.auto.image_processing_auto import (
     IMAGE_PROCESSOR_MAPPING_NAMES,
     get_image_processor_class_from_name,
@@ -45,8 +44,39 @@ from transformers.utils import is_torch_available, is_vision_available
 if is_torch_available():
     import torch
 
+    from transformers.modeling_outputs import SemanticSegmenterOutput
+
 if is_vision_available():
     from PIL import Image
+
+
+_parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(os.path.join(_parent_dir, "utils"))
+from fetch_hub_objects_for_ci import url_to_local_path  # noqa: E402
+
+
+COCO_CATS_IMAGE_URL = (
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+)
+
+ADE20K_IMAGE_URLS = [
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000002.jpg",
+]
+ADE20K_SEGMENTATION_MAP_URLS = [
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.png",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000002.png",
+]
+
+
+def load_test_image(url: str):
+    """
+    Loads a test image from a given URL, properly routing through HuggingFace's
+    local hub caching mechanism using url_to_local_path.
+    """
+    from transformers.image_utils import load_image
+
+    return load_image(url_to_local_path(url))
 
 
 def prepare_image_inputs(
@@ -147,6 +177,87 @@ def prepare_video_inputs(
     return video_inputs
 
 
+class ImageProcessingTester:
+    """Base class for the `<Model>ImageProcessingTester` classes used by `ImageProcessingTestMixin`."""
+
+    def prepare_image_inputs(
+        self,
+        batch_size=None,
+        min_resolution=None,
+        max_resolution=None,
+        num_channels=None,
+        size_divisor=None,
+        equal_resolution=False,
+        numpify=False,
+        torchify=False,
+    ):
+        return prepare_image_inputs(
+            batch_size=self.batch_size if batch_size is None else batch_size,
+            num_channels=self.num_channels if num_channels is None else num_channels,
+            min_resolution=self.min_resolution if min_resolution is None else min_resolution,
+            max_resolution=self.max_resolution if max_resolution is None else max_resolution,
+            size_divisor=size_divisor,
+            equal_resolution=equal_resolution,
+            numpify=numpify,
+            torchify=torchify,
+        )
+
+    def prepare_semantic_segmentation_inputs_ade20k(self, batched: bool = False):
+        """Loads image/segmentation map pairs from ADE20k as PIL images."""
+        num_inputs = 2 if batched else 1
+        images = [load_test_image(url) for url in ADE20K_IMAGE_URLS[:num_inputs]]
+        # `load_test_image` converts the single channel label maps to RGB, duplicating the labels across channels
+        segmentation_maps = [
+            Image.fromarray(np.array(load_test_image(url))[..., 0])
+            for url in ADE20K_SEGMENTATION_MAP_URLS[:num_inputs]
+        ]
+        if batched:
+            return images, segmentation_maps
+        return images[0], segmentation_maps[0]
+
+    def expected_output_image_shape(self, images: list[ImageInput]) -> tuple[int, ...]:
+        crop_size = getattr(self, "crop_size", None)
+        if crop_size is not None:
+            return self.num_channels, crop_size["height"], crop_size["width"]
+
+        if "shortest_edge" in self.size:
+            # Images are resized so that their shortest edge matches `size["shortest_edge"]` while keeping the aspect
+            # ratio, then padded to the largest height and width in the batch.
+            shortest_edge = self.size["shortest_edge"]
+            expected_sizes = []
+            for image in images:
+                if isinstance(image, Image.Image):
+                    width, height = image.size
+                elif isinstance(image, np.ndarray):
+                    height, width = image.shape[0], image.shape[1]
+                else:
+                    height, width = image.shape[1], image.shape[2]
+                if width < height:
+                    expected_sizes.append((int(shortest_edge * height / width), shortest_edge))
+                elif width > height:
+                    expected_sizes.append((shortest_edge, int(shortest_edge * width / height)))
+                else:
+                    expected_sizes.append((shortest_edge, shortest_edge))
+            expected_height = max(expected_size[0] for expected_size in expected_sizes)
+            expected_width = max(expected_size[1] for expected_size in expected_sizes)
+            return self.num_channels, expected_height, expected_width
+
+        return self.num_channels, self.size["height"], self.size["width"]
+
+    def prepare_post_process_semantic_segmentation_inputs(self) -> tuple[dict[str, Any], dict[str, Any]]:
+        inputs = {
+            "outputs": SemanticSegmenterOutput(
+                logits=torch.randn(self.batch_size, self.num_labels, self.size["height"], self.size["width"])
+            )
+        }
+        expected_shape = {
+            "num_labels": self.num_labels,
+            "height": self.size["height"],
+            "width": self.size["width"],
+        }
+        return inputs, expected_shape
+
+
 class ImageProcessingTestMixin:
     test_cast_dtype = None
 
@@ -175,11 +286,7 @@ class ImageProcessingTestMixin:
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image = Image.open(
-            io.BytesIO(
-                httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
-            )
-        )
+        dummy_image = load_test_image(COCO_CATS_IMAGE_URL)
 
         # Create processors for each backend
         encodings = {}
@@ -810,3 +917,13 @@ class AnnotationFormatTestMixin:
                 first_encoding = image_processor_first(**params)
                 second_encoding = image_processor_second(**params)
                 _compare(first_encoding, second_encoding)
+
+
+COCO_DATASET_URL = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/"
+
+
+def load_coco_image(image_name: str):
+    """
+    Helper to load a COCO fixture image by its filename.
+    """
+    return load_test_image(f"{COCO_DATASET_URL}{image_name}")

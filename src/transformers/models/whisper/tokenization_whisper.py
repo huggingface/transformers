@@ -495,9 +495,18 @@ class WhisperTokenizer(TokenizersBackend):
         )
         if decode_with_timestamps:
             # legacy method to decode timestamps when not included in the tokenizer vocabulary
-            text = self._decode_with_timestamps(
-                filtered_ids, time_precision=time_precision, skip_special_tokens=skip_special_tokens
-            )
+            if isinstance(filtered_ids, list) and filtered_ids and isinstance(filtered_ids[0], list):
+                # batched input: process each sequence individually
+                text = [
+                    self._decode_with_timestamps(
+                        seq, time_precision=time_precision, skip_special_tokens=skip_special_tokens
+                    )
+                    for seq in filtered_ids
+                ]
+            else:
+                text = self._decode_with_timestamps(
+                    filtered_ids, time_precision=time_precision, skip_special_tokens=skip_special_tokens
+                )
         else:
             # Handle both single string and batch (list of strings) outputs
             if isinstance(text, list):

@@ -128,7 +128,7 @@ Let's visualize the predictions:
 
 Now that you've seen how to use the zero-shot object detection pipeline, let's replicate the same result manually.
 
-Start by loading the model and associated processor from a [checkpoint on the Hugging Face Hub](hf.co/iSEE-Laboratory/llmdet_large).
+Start by loading the model and associated processor from a [checkpoint on the Hugging Face Hub](https://huggingface.co/iSEE-Laboratory/llmdet_large).
 Here we'll use the same checkpoint as before:
 
 ```py
@@ -154,7 +154,7 @@ Use the processor to prepare the inputs for the model.
 
 ```py
 >>> text_labels = ["hat", "book", "sunglasses", "camera"]
->>> inputs = processor(text=text_labels, images=image, return_tensors="pt")to(model.device)
+>>> inputs = processor(text=text_labels, images=image, return_tensors="pt").to(model.device)
 ```
 
 Pass the inputs through the model, post-process, and visualize the results. Since the image processor resized images before

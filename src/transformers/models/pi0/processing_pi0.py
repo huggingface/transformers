@@ -24,7 +24,7 @@ import torch.nn.functional as F
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 from ...utils.import_utils import requires
@@ -42,10 +42,6 @@ class PI0ProcessorKwargs(ProcessingKwargs, total=False):
         },
         "common_kwargs": {"return_tensors": "pt"},
     }
-
-
-IMAGE_TOKEN = "<image>"
-EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)]
 
 
 @auto_docstring
@@ -69,17 +65,19 @@ class PI0Processor(ProcessorMixin):
 
         self.image_seq_length = image_processor.image_seq_length
 
-        if not hasattr(tokenizer, "image_token"):
-            image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
+        if not hasattr(tokenizer, "<image>"):
+            # Just add to vocab if not yet there. Note that the model isn't yet converted and
+            # can be modified when lerobot team decided to adopt it
+            self.image_token = "<image>"
+            image_token = AddedToken(self.image_token, normalized=False, special=True)
             tokens_to_add = {"additional_special_tokens": [image_token]}
             tokenizer.add_special_tokens(tokens_to_add)
-            self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
-            self.image_token = IMAGE_TOKEN
+            self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         else:
             self.image_token_id = tokenizer.image_token_id
             self.image_token = tokenizer.image_token
 
-        tokenizer.add_tokens(EXTRA_TOKENS)
+        tokenizer.add_tokens([f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)])
         tokenizer.add_bos_token = False
         tokenizer.add_eos_token = False
 
@@ -155,7 +153,7 @@ class PI0Processor(ProcessorMixin):
             pixel_attention_mask[batch, :num_cameras] = True
             padded_pixel_values[batch, :num_cameras] = processed["pixel_values"]
 
-        return_data = {
+        model_inputs = {
             **text_inputs,
             "pixel_values": padded_pixel_values,
             "pixel_attention_mask": pixel_attention_mask,
@@ -165,33 +163,15 @@ class PI0Processor(ProcessorMixin):
             actions = (torch.tensor(actions) - self.actions_mean) / (self.actions_std + 1e-08)
             if actions.shape[-1] < self.max_state_dim:
                 actions = F.pad(actions, (0, self.max_state_dim - actions.shape[-1]))
-            return_data["actions"] = actions.view(-1, self.chunk_size, self.max_state_dim)
+            model_inputs["actions"] = actions.view(-1, self.chunk_size, self.max_state_dim)
 
         if state is not None:
             state = (torch.tensor(state) - self.state_mean) / (self.state_std + 1e-08)
             if state.shape[-1] < self.max_state_dim:
                 state = F.pad(state, (0, self.max_state_dim - state.shape[-1]))
-            return_data["state"] = state.view(-1, self.max_state_dim)
+            model_inputs["state"] = state.view(-1, self.max_state_dim)
 
-        return BatchFeature(data=return_data, tensor_type=return_tensors)
-
-    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
-        """
-        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
-
-        Args:
-            image_sizes (list[list[str]], *optional*):
-                The input sizes formatted as (height, width) per each image.
-        Returns:
-            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
-            input modalities, along with other useful data.
-        """
-        vision_data = {}
-        if image_sizes is not None:
-            num_image_tokens = [self.image_seq_length] * len(image_sizes)
-            num_image_patches = [1] * len(image_sizes)
-            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
-        return MultiModalData(**vision_data)
+        return BatchFeature(data=model_inputs, tensor_type=return_tensors)
 
     @property
     def model_input_names(self):

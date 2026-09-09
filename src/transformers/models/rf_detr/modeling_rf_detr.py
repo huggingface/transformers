@@ -29,7 +29,7 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithCrossAttentions
@@ -76,14 +76,15 @@ class RfDetrDinov2Embeddings(nn.Module):
 
     def __init__(self, config: RfDetrDinov2Config) -> None:
         super().__init__()
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size)) if config.use_mask_token else None
         self.patch_embeddings = RfDetrDinov2PatchEmbeddings(config)
+        self.patch_size = config.patch_size
         self.position_embeddings = nn.Parameter(
             torch.randn(1, self.patch_embeddings.num_patches + 1, config.hidden_size)
         )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.patch_size = config.patch_size
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
@@ -202,13 +203,13 @@ def eager_attention_forward(
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
-    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    # the original RfDetrDinov2 runs the softmax in the input dtype, ViT upcasts to float32
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     attn_output = torch.matmul(attn_weights, value)
@@ -278,11 +279,11 @@ class RfDetrDinov2LayerScale(nn.Module):
 class RfDetrDinov2MLP(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
-        in_features = out_features = config.hidden_size
-        hidden_features = int(config.hidden_size * config.mlp_ratio)
-        self.fc1 = nn.Linear(in_features, hidden_features, bias=True)
+        self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(hidden_features, out_features, bias=True)
+        # the hidden size comes from mlp_ratio; the config has no intermediate_size
+        self.fc1 = nn.Linear(config.hidden_size, int(config.hidden_size * config.mlp_ratio))
+        self.fc2 = nn.Linear(int(config.hidden_size * config.mlp_ratio), config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states)
@@ -295,6 +296,7 @@ class RfDetrDinov2SwiGLUFFN(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
         hidden_features = int(config.hidden_size * config.mlp_ratio)
+        # SwiGLU keeps two thirds of the MLP hidden size, rounded up to a multiple of 8
         hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
         self.gate_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
         self.up_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
@@ -472,8 +474,8 @@ class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_init()
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -505,11 +507,8 @@ class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
         [1, 768, 16, 16]
         ```"""
         embedding_output = self.embeddings(pixel_values)
-        hidden_state = embedding_output
-        hidden_states = (hidden_state,)
-        for layer in self.encoder.layer:
-            hidden_state = layer(hidden_state, **kwargs)
-            hidden_states = hidden_states + (hidden_state,)
+        output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
+        hidden_states = output.hidden_states
 
         feature_maps = ()
         for stage, hidden_state in zip(self.stage_names, hidden_states):
@@ -533,7 +532,11 @@ class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
 
                 feature_maps += (hidden_state,)
 
-        return BackboneOutput(feature_maps=tuple(feature_maps))
+        return BackboneOutput(
+            feature_maps=feature_maps,
+            hidden_states=hidden_states,
+            attentions=output.attentions,
+        )
 
     def window_unpartition(self, hidden_state: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -1046,8 +1049,9 @@ class RfDetrPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "attentions": [RfDetrAttention, RfDetrMultiscaleDeformableAttention],
-        "hidden_states": [RfDetrDecoderLayer],
+        "attentions": RfDetrAttention,
+        "cross_attentions": RfDetrMultiscaleDeformableAttention,
+        "hidden_states": RfDetrDecoderLayer,
     }
     # Roboflow checkpoints use bare keys with no top-level prefix
     _checkpoint_conversion_prefix_free = True

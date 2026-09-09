@@ -98,6 +98,8 @@ _tracer = _otel if _otel is not None else _NullTrace()
 UTILS_DIR = Path(__file__).parent
 REPO_ROOT = UTILS_DIR.parent
 CACHE_PATH = UTILS_DIR / ".checkers_cache.json"
+REQUIREMENTS_PATH = UTILS_DIR / "checkers-requirements.txt"
+REQUIREMENTS_STAMP_PATH = UTILS_DIR / ".checkers_requirements.json"
 
 # Required keys in each module's CHECKER_CONFIG dict.
 _CHECKER_CONFIG_KEYS = {"name", "label", "cache_globs", "check_args", "fix_args"}
@@ -114,6 +116,7 @@ def _discover_checkers() -> tuple[dict, dict]:
     """
     checkers = {}
     cache_globs = {}
+    needs_requirements = set()
 
     for py_file in sorted(UTILS_DIR.glob("*.py")):
         if py_file.name == Path(__file__).name:
@@ -164,8 +167,11 @@ def _discover_checkers() -> tuple[dict, dict]:
         )
         if config["cache_globs"] is not None:
             cache_globs[name] = config["cache_globs"]
+        # Optional: this checker needs something from checkers-requirements.txt.
+        if config.get("needs_requirements"):
+            needs_requirements.add(name)
 
-    return checkers, cache_globs
+    return checkers, cache_globs, needs_requirements
 
 
 # Inline checkers have no separate script file; they use custom runner functions below.
@@ -213,7 +219,7 @@ _INLINE_CACHE_GLOBS = {
 }
 
 # Build the registries: discovered modules + inline custom runners.
-_discovered_checkers, _discovered_cache_globs = _discover_checkers()
+_discovered_checkers, _discovered_cache_globs, CHECKERS_NEEDING_REQUIREMENTS = _discover_checkers()
 
 CHECKERS = {**_discovered_checkers, **_INLINE_CHECKERS}
 CHECKER_CACHE_GLOBS = {**_discovered_cache_globs, **_INLINE_CACHE_GLOBS}
@@ -516,6 +522,57 @@ def run_checker(name, fix=False, line_callback=None):
     return _run_cmd(cmd, line_callback=line_callback)
 
 
+def ensure_requirements(names):
+    """Install `utils/checkers-requirements.txt` if any of `names` declares it needs it.
+
+    Gated on the checkers actually about to run, because `pip` is the wrong thing to reach for
+    in most of the places these are invoked. `make style` runs under serge's normalize sandbox,
+    a read-only container with `--network none`, where an install cannot succeed and every
+    attempt costs pip's retry budget for nothing. A checker opts in with
+    ``"needs_requirements": True`` in its ``CHECKER_CONFIG``.
+
+    What the checkers need is not what `transformers` needs, and some of it cannot go in
+    `setup.py` at all — a `git+` URL there is a direct reference, which PyPI rejects when this
+    package is uploaded. Installing it here means nobody has to know that: running a checker, or
+    `make check-repo`, is enough.
+
+    A stamp keyed on the file *and* the interpreter keeps this to one `pip` call per environment,
+    which matters because pip re-clones a URL requirement every time it is asked. Failure is never
+    fatal: running the checkers offline is normal, and a checker that needs one of these packages
+    reports it itself.
+    """
+    if not CHECKERS_NEEDING_REQUIREMENTS.intersection(names):
+        return
+    if os.environ.get("TRANSFORMERS_SKIP_CHECKER_REQUIREMENTS") or not REQUIREMENTS_PATH.exists():
+        return
+
+    stamp = hashlib.sha256(REQUIREMENTS_PATH.read_bytes() + sys.executable.encode()).hexdigest()
+    try:
+        if json.loads(REQUIREMENTS_STAMP_PATH.read_text())["stamp"] == stamp:
+            return
+    except (OSError, ValueError, KeyError):
+        pass  # no stamp, unreadable, or from another environment -- install and write a fresh one
+
+    # Displayed as `utils/<name>`, built from the path itself: REPO_ROOT is patched in tests, and
+    # `relative_to` on a path that is not under it raises.
+    display = f"{REQUIREMENTS_PATH.parent.name}/{REQUIREMENTS_PATH.name}"
+    print(f"Installing {display} (once per environment)")
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-q", "-r", str(REQUIREMENTS_PATH)],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip().splitlines()
+        print(f"  could not install: {detail[-1] if detail else 'pip failed'}")
+        print("  continuing; a checker that needs one of these will say so")
+        return
+    try:
+        REQUIREMENTS_STAMP_PATH.write_text(json.dumps({"stamp": stamp}))
+    except OSError:
+        pass  # a read-only checkout still gets the install, it just pays for it again next time
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run check/fix scripts.")
     parser.add_argument(
@@ -564,6 +621,9 @@ def main():
                 f"Skipping {len(not_fixable)} check-only checker(s) in fix mode: {', '.join(not_fixable)}\n",
                 flush=True,
             )
+
+    # After the fix-mode filtering above, so this reflects what will actually run.
+    ensure_requirements(names)
 
     is_ci = os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CIRCLECI") == "true"
     is_tty = sys.stdout.isatty() and not is_ci

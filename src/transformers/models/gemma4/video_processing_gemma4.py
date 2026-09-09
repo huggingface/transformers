@@ -19,14 +19,14 @@ from ...image_processing_utils import BatchFeature
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
     is_vision_available,
     logging,
 )
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
+from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoInput
 
 
@@ -151,10 +151,7 @@ def pad_to_max_patches(
     return video, positions
 
 
-@add_start_docstrings(
-    "Constructs a Gemma4 video processor that samples frames from videos for use with the Gemma4 model.",
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-)
+@auto_docstring
 class Gemma4VideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     image_mean = [0.0, 0.0, 0.0]

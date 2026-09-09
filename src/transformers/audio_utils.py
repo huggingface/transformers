@@ -35,6 +35,7 @@ from .utils import (
     is_numpy_array,
     is_soundfile_available,
     is_torch_tensor,
+    is_torchaudio_available,
     is_torchcodec_available,
     requires_backends,
 )
@@ -52,6 +53,9 @@ if is_librosa_available():
 
     # TODO: @eustlb, we actually don't need librosa but soxr is installed with librosa
     import soxr
+
+if is_torchaudio_available():
+    import torchaudio
 
 if is_torchcodec_available():
     TORCHCODEC_VERSION = version.parse(importlib.metadata.version("torchcodec"))
@@ -207,7 +211,9 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
             The timeout value in seconds for the URL request.
         backend (`str`, *optional*, defaults to `"auto"`):
             Decoding backend: `"auto"` uses torchcodec when available (>=0.3.0) and falls back to
-            librosa; `"torchcodec"` or `"librosa"` force that backend (and error if it is missing).
+            librosa; `"torchcodec"`, `"librosa"` or `"torchaudio"` force that backend (and error if it
+            is missing). `"torchaudio"` decodes with `torchaudio.load` and resamples with
+            `torchaudio.functional.resample` (matches serving stacks such as sglang bit-for-bit).
 
     Returns:
         `np.ndarray`: A numpy array representing the audio.
@@ -222,11 +228,15 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
 
     # torchcodec handles audio/video; librosa only plain audio. `backend` lets callers pin one.
     if backend == "auto":
-        use_torchcodec = is_torchcodec_available() and version.parse("0.3.0") <= TORCHCODEC_VERSION
-    elif backend in ("torchcodec", "librosa"):
-        use_torchcodec = backend == "torchcodec"
+        resolved_backend = (
+            "torchcodec" if is_torchcodec_available() and version.parse("0.3.0") <= TORCHCODEC_VERSION else "librosa"
+        )
+    elif backend in ("torchcodec", "librosa", "torchaudio"):
+        resolved_backend = backend
     else:
-        raise ValueError(f"Unknown backend {backend!r}; expected 'auto', 'torchcodec', or 'librosa'.")
+        raise ValueError(f"Unknown backend {backend!r}; expected 'auto', 'torchcodec', 'librosa', or 'torchaudio'.")
+    # soundfile-based backends (librosa / torchaudio) cannot decode the video-ish formats below.
+    use_torchcodec = resolved_backend == "torchcodec"
 
     # 1. Identify the format from the source string (extension / `data:` media type), without fetching.
     filetype = _format_from_source(audio)
@@ -255,6 +265,15 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
 
         # `num_channels=1` matches what most models expect and librosa's default.
         return AudioDecoder(source, sample_rate=sampling_rate, num_channels=1).get_all_samples().data[0].numpy()
+
+    if resolved_backend == "torchaudio":
+        requires_backends(load_audio, ["torchaudio"])
+        waveform, src_sampling_rate = torchaudio.load(BytesIO(source) if isinstance(source, bytes) else source)
+        waveform = waveform.mean(dim=0)  # to mono
+
+        if src_sampling_rate != sampling_rate:
+            waveform = torchaudio.functional.resample(waveform, orig_freq=src_sampling_rate, new_freq=sampling_rate)
+        return waveform.numpy().astype(np.float32)
 
     requires_backends(load_audio, ["librosa"])
     return librosa.load(BytesIO(source) if isinstance(source, bytes) else source, sr=sampling_rate)[0]
@@ -400,6 +419,128 @@ def make_list_of_audio(
         return [audio]
 
     raise ValueError("Invalid input type. Must be a single audio or a list of audio")
+
+
+def make_list_of_audio_chat_template(
+    audio: list[AudioInput] | AudioInput | str | list[str],
+) -> AudioInput:
+    """
+    Ensure that the output is a list of audio. Unlike `make_list_of_audio`, this function also accepts a URL string or
+    local path, as accepted by chat templates.
+
+    Args:
+        audio (`Union[list[AudioInput], AudioInput]`):
+            The input audio. Can be a URL string, local path, numpy/torch array,  or a list of these.
+    Returns:
+        list: A list of audio.
+    """
+
+    # Handle string inputs
+    if isinstance(audio, str):
+        return [audio]
+    if isinstance(audio, (list, tuple)) and audio and all(isinstance(a, str) for a in audio):
+        return list(audio)
+
+    # Handle numpy/torch array inputs
+    return make_list_of_audio(audio)
+
+
+def make_audio_chat_template_content(audio_item) -> dict:
+    """
+    Build a chat-template content dict for a single audio item.
+
+    Args:
+        audio_item (`str` or array-like):
+            A single audio item. Strings are treated as local paths or URLs; other values (numpy/torch arrays) are
+            forwarded directly.
+
+    Returns:
+        `dict`: A chat-template content dict, e.g. `{"type": "audio", "path": ...}` for strings or
+        `{"type": "audio", "audio": ...}` otherwise.
+    """
+    if isinstance(audio_item, str):
+        return {"type": "audio", "path": audio_item}
+    return {"type": "audio", "audio": audio_item}
+
+
+def resolve_language(language: str | None, code_to_name: dict[str, str], return_code: bool = True) -> str | None:
+    """
+    Map a language code or name to its canonical form, with validation.
+
+    Accepts either a language code (e.g. ``"zh"``, ``"en"``) or a full name (e.g. ``"Chinese"``, ``"English"``) and
+    returns the canonical code or name depending on ``return_code``. ``None`` passes through unchanged (auto-detect).
+
+    Args:
+        language (`str` or `None`):
+            The language code or full name to resolve. ``None`` is returned unchanged.
+        code_to_name (`dict[str, str]`):
+            Mapping from language code to full language name for the model's supported languages.
+        return_code (`bool`, *optional*, defaults to `True`):
+            Whether to return the canonical language ``code``. If ``False``, returns the full language ``name``.
+
+    Returns:
+        `str` or `None`: The canonical language code or name, or ``None`` if ``language`` is ``None``.
+
+    Raises:
+        `ValueError`: If the language is not recognized.
+    """
+    if language is None:
+        return None
+
+    language_lower = language.lower()
+    # Try code lookup first, then full-name lookup (both case-insensitive)
+    for code, name in code_to_name.items():
+        if language_lower == code.lower() or language_lower == name.lower():
+            return code if return_code else name
+
+    raise ValueError(
+        f"Unsupported language: {language!r}. Use a language code "
+        f"(e.g. 'en', 'zh') or full name (e.g. 'English', 'Chinese'). "
+        f"Supported codes: {sorted(code_to_name.keys())}. "
+        f"Supported names: {sorted(set(code_to_name.values()))}."
+    )
+
+
+def prepare_language_inputs(
+    language: str | list[str] | None,
+    batch_size: int,
+    code_to_name: dict[str, str],
+    allow_broadcast: bool = False,
+    return_code: bool = True,
+) -> list[str | None]:
+    """
+    Broadcast and validate a language argument to match ``batch_size``.
+
+    Accepts language codes (e.g. ``"zh"``, ``"en"``) or full names (e.g. ``"Chinese"``, ``"English"``). Each value is
+    resolved to its canonical form via [`resolve_language`].
+
+    Args:
+        language (`str`, `list[str]`, or `None`):
+            The language hint(s). A single value is broadcast to the whole batch; a list must match ``batch_size``
+            (unless ``allow_broadcast`` is set). ``None`` disables language hints for the whole batch.
+        batch_size (`int`):
+            The number of samples in the batch.
+        code_to_name (`dict[str, str]`):
+            Mapping from language code to full language name for the model's supported languages.
+        allow_broadcast (`bool`, *optional*, defaults to `False`):
+            Whether a single-element list may be broadcast to the whole batch.
+        return_code (`bool`, *optional*, defaults to `True`):
+            Whether to return canonical language ``code``s. If ``False``, returns full language ``name``s.
+
+    Returns:
+        `list[str | None]`: The resolved language for each sample.
+    """
+    if language is None:
+        return [None] * batch_size
+    if isinstance(language, str):
+        return [resolve_language(language, code_to_name, return_code)] * batch_size
+    if isinstance(language, (list, tuple)):
+        if allow_broadcast and len(language) == 1 and batch_size > 1:
+            return [resolve_language(language[0], code_to_name, return_code)] * batch_size
+        if len(language) != batch_size:
+            raise ValueError(f"Got {len(language)} language(s) for {batch_size} sample(s); counts must match.")
+        return [resolve_language(lang, code_to_name, return_code) for lang in language]
+    raise TypeError("`language` must be a string, a list of strings, or `None`.")
 
 
 def hertz_to_mel(freq: float | np.ndarray, mel_scale: str = "htk") -> float | np.ndarray:

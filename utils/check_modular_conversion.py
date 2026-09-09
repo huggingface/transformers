@@ -56,7 +56,7 @@ def process_file(
     if diff_list:
         # first save the copy of the original file, to be able to restore it later
         shutil.copy(file_path, file_path + BACKUP_EXT)
-        # we always save the generated content, to be able to update dependant files
+        # we always save the generated content, to be able to update dependent files
         with open(file_path, "w", encoding="utf-8", newline="\n") as modeling_file:
             modeling_file.write(generated_modeling_content[file_type])
         if not show_diff:
@@ -267,7 +267,7 @@ if __name__ == "__main__":
                         is_changed_flags.append(result)
                     except Exception as individual_error:
                         console.print(f"[bold red]Failed to convert {file_path}: {individual_error}[/bold red]")
-                        is_changed_flags.append(0)  # Mark as no change to continue processing
+                        is_changed_flags.append(1)  # Mark as changed to let it raise a proper Error
 
             # Collect changed files and their original paths
             for is_changed, file_path in zip(is_changed_flags, files_to_check):

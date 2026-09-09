@@ -75,18 +75,27 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
     def __init__(self, config: Dinov2WithRegistersConfig) -> None:
         super().__init__()
 
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        # the registers config has no `use_mask_token`; the checkpoints always carry the mask token
         self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
-        self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
         self.patch_embeddings = Dinov2WithRegistersPatchEmbeddings(config)
+        self.patch_size = config.patch_size
         self.position_embeddings = nn.Parameter(
             torch.randn(1, self.patch_embeddings.num_patches + 1, config.hidden_size)
         )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.patch_size = config.patch_size
         self.config = config
+        self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing and interpolation at torch.float32 precision.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2_with_registers/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2_with_registers/models/vision_transformer.py#L179-L211
+        """
         num_patches = embeddings.shape[1] - 1
         num_positions = self.position_embeddings.shape[1] - 1
 
@@ -160,13 +169,13 @@ def eager_attention_forward(
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
-    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    # the original Dinov2WithRegisters runs the softmax in the input dtype, ViT upcasts to float32
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     attn_output = torch.matmul(attn_weights, value)
@@ -236,11 +245,11 @@ class Dinov2WithRegistersLayerScale(nn.Module):
 class Dinov2WithRegistersMLP(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
-        in_features = out_features = config.hidden_size
-        hidden_features = int(config.hidden_size * config.mlp_ratio)
-        self.fc1 = nn.Linear(in_features, hidden_features, bias=True)
+        self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(hidden_features, out_features, bias=True)
+        # the hidden size comes from mlp_ratio; the config has no intermediate_size
+        self.fc1 = nn.Linear(config.hidden_size, int(config.hidden_size * config.mlp_ratio))
+        self.fc2 = nn.Linear(int(config.hidden_size * config.mlp_ratio), config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states)
@@ -253,6 +262,7 @@ class Dinov2WithRegistersSwiGLUFFN(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
         hidden_features = int(config.hidden_size * config.mlp_ratio)
+        # SwiGLU keeps two thirds of the MLP hidden size, rounded up to a multiple of 8
         hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
         self.gate_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
         self.up_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
@@ -455,12 +465,11 @@ class Dinov2WithRegistersForImageClassification(Dinov2WithRegistersPreTrainedMod
         outputs: BaseModelOutputWithPooling = self.dinov2_with_registers(
             pixel_values, attention_mask=attention_mask, **kwargs
         )
+
         sequence_output = outputs.last_hidden_state
-
         cls_token = sequence_output[:, 0]
-        # cls and register tokens should not be included in patch tokens variable
-        patch_tokens = sequence_output[:, 1 + self.config.num_register_tokens :]
-
+        # Override the inherited patch slice to exclude CLS and register tokens.
+        patch_tokens = sequence_output[:, 1 + self.config.num_register_tokens :]  # noqa: F821, F841
         linear_input = torch.cat([cls_token, patch_tokens.mean(dim=1)], dim=1)
         logits = self.classifier(linear_input)
 
@@ -526,6 +535,7 @@ class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedMo
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
+        pixel_values = pixel_values.to(self.embeddings.patch_embeddings.projection.weight.dtype)
         embedding_output = self.embeddings(pixel_values)
         attention_mask = create_bidirectional_mask(
             config=self.config,

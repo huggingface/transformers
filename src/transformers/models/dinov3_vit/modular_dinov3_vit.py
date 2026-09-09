@@ -21,25 +21,24 @@ import numpy as np
 import torch
 from torch import nn
 
-from transformers.models.arcee.modeling_arcee import ArceeMLP
-from transformers.models.dinov2.modeling_dinov2 import (
-    Dinov2LayerScale,
-    Dinov2PreTrainedModel,
-    eager_attention_forward,
-)
-from transformers.models.llama.modeling_llama import LlamaMLP
-from transformers.models.pixtral.modeling_pixtral import PixtralAttention, rotate_half
-
 from ... import initialization as init
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, logging, no_inherit_decorator
 from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..arcee.modeling_arcee import ArceeMLP
+from ..dinov2.modeling_dinov2 import (
+    Dinov2LayerScale,
+    Dinov2PreTrainedModel,
+    eager_attention_forward,
+)
+from ..llama.modeling_llama import LlamaMLP
+from ..pixtral.modeling_pixtral import PixtralAttention, rotate_half
 from ..swin.modeling_swin import SwinDropPath
 from .configuration_dinov3_vit import DINOv3ViTConfig
 
@@ -176,7 +175,7 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
         self.num_patches_w = image_width // patch_width
 
         inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = pixel_values.shape
@@ -251,6 +250,7 @@ def apply_rotary_pos_emb(
     return q, k
 
 
+@no_inherit_decorator
 class DINOv3ViTAttention(PixtralAttention):
     def __init__(self, config: DINOv3ViTConfig):
         super().__init__(config)
@@ -378,13 +378,11 @@ class DINOv3ViTPreTrainedModel(Dinov2PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module) -> None:
         """Initialize the weights"""
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, DINOv3ViTEmbeddings):
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             if module.config.num_register_tokens > 0:
@@ -405,6 +403,7 @@ class DINOv3ViTEncoder(DINOv3ViTPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,

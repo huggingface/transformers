@@ -230,6 +230,7 @@ class BltConfig(PreTrainedConfig):
     decoder_config: dict | PreTrainedConfig | None = None
     global_config: dict | PreTrainedConfig | None = None
     tie_word_embeddings: bool = False
+    use_cache: bool = True
     pad_token_id: int | None = None
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None

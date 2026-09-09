@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 import torch
 import torch.distributed as _dist
 
+from ...distributed.utils import _is_torch_distributed_initialized
 from .requests import logger
 
 
@@ -39,7 +40,7 @@ class DistributedHelper:
     """A helper class to handle distributed-related operations. Notably, it does not crash when distributed is off."""
 
     def __init__(self, device_mesh: DeviceMesh | None, cpu_group_timeout: float | None) -> None:
-        self.dist_on = dist.is_available() and dist.is_initialized()
+        self.dist_on = _is_torch_distributed_initialized()
         self.device_mesh = device_mesh
 
         # Check validity of the device mesh
@@ -59,10 +60,17 @@ class DistributedHelper:
             self.tp_group = tp_mesh.get_group()
             self.tp_root_global_rank = dist.get_global_rank(self.tp_group, 0)
             self.tp_local_rank = tp_mesh.get_local_rank()
-            # If TP is on, we create a dedicated CPU group, with an eventual timeout
+            # If TP is on, we create a dedicated CPU group, with an eventual timeout. When the TP group
+            # is a subset of the world (e.g. one TP group per node with data parallelism across nodes),
+            # only the group members join the creation (use_local_synchronization)
             tp_ranks = dist.get_process_group_ranks(self.tp_group)
             timeout = None if cpu_group_timeout is None else timedelta(seconds=cpu_group_timeout)
-            self.cpu_comm_group = dist.new_group(ranks=tp_ranks, backend="gloo", timeout=timeout)
+            self.cpu_comm_group = dist.new_group(
+                ranks=tp_ranks,
+                backend="gloo",
+                timeout=timeout,
+                use_local_synchronization=len(tp_ranks) < self.world_size,
+            )
         else:
             self.tp_size = 1
             self.tp_group = None
@@ -161,7 +169,8 @@ class DistributedHelper:
         if tp_on and graph_mixing_not_disabled:
             logger.warning(
                 "NCCL_GRAPH_MIXING_SUPPORT was not set to '0' before init_process_group: performance will be harmed. "
-                "Construct your `ContinuousBatchingConfig(...)` BEFORE calling `from_pretrained(tp_plan='auto')`, or "
+                "Construct your `ContinuousBatchingConfig(...)` BEFORE calling "
+                "`from_pretrained(distributed_config=DistributedConfig(tp_size=...))`, or "
                 "set NCCL_GRAPH_MIXING_SUPPORT=0 in the launch environment."
             )
 

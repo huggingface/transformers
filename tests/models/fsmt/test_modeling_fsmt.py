@@ -447,26 +447,25 @@ class FSMTModelIntegrationTests(unittest.TestCase):
             self.tokenizers_cache[mname] = FSMTTokenizer.from_pretrained(mname)
         return self.tokenizers_cache[mname]
 
-    def get_model(self, mname):
-        if mname not in self.models_cache:
+    def get_model(self, mname, model_class=FSMTForConditionalGeneration, half=True):
+        key = (mname, model_class, half)
+        if key not in self.models_cache:
             # The safetensors checkpoint on `facebook/wmt19-de-en` (and other repositories) has issues.
             # Hub PRs are opened, see https://huggingface.co/facebook/wmt19-de-en/discussions/6
             # We have asked Meta to merge them but no response yet:
             # https://huggingface.slack.com/archives/C01NE71C4F7/p1749565278015529?thread_ts=1749031628.757929&cid=C01NE71C4F7
-            # Below is what produced the Hub PRs that work (loading without safetensors, saving the reloading)
-            model = FSMTForConditionalGeneration.from_pretrained(mname, use_safetensors=False)
-            with tempfile.TemporaryDirectory() as tmpdir:
-                model.save_pretrained(tmpdir)
-                self.models_cache[mname] = FSMTForConditionalGeneration.from_pretrained(tmpdir).to(torch_device)
-
-            if torch_device == "cuda":
-                self.models_cache[mname].half()
-        return self.models_cache[mname]
+            # Until they are merged, load the (correct) PyTorch weights instead.
+            model = model_class.from_pretrained(mname, use_safetensors=False).to(torch_device)
+            if half and torch_device == "cuda":
+                model.half()
+            self.models_cache[key] = model
+        return self.models_cache[key]
 
     @slow
     def test_inference_no_head(self):
         tokenizer = self.default_tokenizer
-        model = FSMTModel.from_pretrained(self.default_mname).to(torch_device)
+        # `half=False`: the expected slice below is fp32, the default fp16 on GPU is far outside TOLERANCE
+        model = self.get_model(self.default_mname, model_class=FSMTModel, half=False)
 
         src_text = "My friend computer will translate this for me"
         input_ids = tokenizer([src_text], return_tensors="pt")["input_ids"]

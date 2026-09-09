@@ -320,7 +320,7 @@ class ImageProcessingMixin(PushToHubMixin):
 
         # Load image_processor dict. Priority goes as (nested config if found -> image processor config)
         # We are downloading both configs because almost all models have a `processor_config.json` but
-        # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
+        # not all of these are nested. We need to check if it was saved recently as nested or if it is legacy style
         image_processor_dict = None
         if resolved_processor_file is not None:
             processor_dict = safe_load_json_file(resolved_processor_file)

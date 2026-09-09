@@ -17,7 +17,6 @@ import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
-from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -100,15 +99,16 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     ignore_keys_at_rope_validation = {"mrope_section"}
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+    }
 
     vocab_size: int = 151424
     max_position_embeddings: int = 65536
     attention_bias: bool = True
     router_aux_loss_coef: float = 0.0001
     use_qk_norm = AttributeError()
-
-    def __post_init__(self, **kwargs):
-        super().__post_init__(self, **kwargs)
+    num_mtp_layers = AttributeError()
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5V")
@@ -227,12 +227,6 @@ class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
     _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _can_record_outputs = {}
-
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, Glm4vMoeVisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
 
 
 class Glm4vMoeCausalLMOutputWithPast(Qwen3VLMoeCausalLMOutputWithPast):

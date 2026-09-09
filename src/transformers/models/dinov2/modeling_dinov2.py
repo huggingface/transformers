@@ -72,14 +72,15 @@ class Dinov2Embeddings(nn.Module):
 
     def __init__(self, config: Dinov2Config) -> None:
         super().__init__()
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size)) if config.use_mask_token else None
         self.patch_embeddings = Dinov2PatchEmbeddings(config)
+        self.patch_size = config.patch_size
         self.position_embeddings = nn.Parameter(
             torch.randn(1, self.patch_embeddings.num_patches + 1, config.hidden_size)
         )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.patch_size = config.patch_size
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
@@ -109,6 +110,7 @@ class Dinov2Embeddings(nn.Module):
         sqrt_num_positions = torch_int(num_positions**0.5)
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+        # interpolate in float32; bicubic resampling in half precision shifts the embeddings
         target_dtype = patch_pos_embed.dtype
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed.to(torch.float32),
@@ -158,13 +160,13 @@ def eager_attention_forward(
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
-    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    # the original DINOv2 runs the softmax in the input dtype, ViT upcasts to float32
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     attn_output = torch.matmul(attn_weights, value)
@@ -234,11 +236,11 @@ class Dinov2LayerScale(nn.Module):
 class Dinov2MLP(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
-        in_features = out_features = config.hidden_size
-        hidden_features = int(config.hidden_size * config.mlp_ratio)
-        self.fc1 = nn.Linear(in_features, hidden_features, bias=True)
+        self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(hidden_features, out_features, bias=True)
+        # the hidden size comes from mlp_ratio; the config has no intermediate_size
+        self.fc1 = nn.Linear(config.hidden_size, int(config.hidden_size * config.mlp_ratio))
+        self.fc2 = nn.Linear(int(config.hidden_size * config.mlp_ratio), config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states)
@@ -251,6 +253,7 @@ class Dinov2SwiGLUFFN(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
         hidden_features = int(config.hidden_size * config.mlp_ratio)
+        # SwiGLU keeps two thirds of the MLP hidden size, rounded up to a multiple of 8
         hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
         self.gate_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
         self.up_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)

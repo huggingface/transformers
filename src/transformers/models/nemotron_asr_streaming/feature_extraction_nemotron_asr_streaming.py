@@ -20,16 +20,17 @@
 
 
 import numpy as np
-import torch
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import TensorType, is_librosa_available, logging
+from ...utils import TensorType, is_librosa_available, is_torch_available, logging
 from ...utils.import_utils import requires
 
 
 if is_librosa_available():
     import librosa
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)

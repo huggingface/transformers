@@ -23,7 +23,7 @@ Each recipe below demonstrates a specific [`Trainer`] feature: custom loss funct
 
 ## Custom loss function
 
-Pass [compute_loss_func](https://huggingface.co/docs/transformers/en/main_classes/trainer#transformers.Trainer.compute_loss_func) to [`Trainer`] to replace the default loss function. The function runs *after* the forward pass and only defines how loss is computed from the outputs. To modify the forward pass itself, [subclass](./trainer_customize#compute_loss) [`~Trainer.compute_loss`] instead.
+Pass [`~Trainer#compute_loss_func`] to [`Trainer`] to replace the default loss function. The function runs *after* the forward pass and only defines how loss is computed from the outputs. To modify the forward pass itself, [subclass](./trainer_customize#compute_loss) [`~Trainer.compute_loss`] instead.
 
 The custom loss function must have the following signature:
 
@@ -156,6 +156,57 @@ args = TrainingArguments(
     dataloader_prefetch_factor=2,        # each worker preloads 2 batches ahead
 )
 ```
+
+## Group samples by length
+
+Use `train_sampling_strategy="group_by_length"` to batch examples with similar lengths and reduce padding. When you
+don't provide precomputed lengths, [`Trainer`] infers them from the first model input in each dataset item. This also
+works when processor-based multimodal datasets return [`BatchFeature`] objects, because they are mapping-like feature
+containers.
+
+```py
+from transformers import TrainingArguments
+
+training_args = TrainingArguments(
+    output_dir="qwen3-vl-finetuned",
+    train_sampling_strategy="group_by_length",
+)
+```
+
+If a [`~datasets.Dataset`] already has a precomputed length column, [`Trainer`] uses that column instead. The default
+column name is `length`. Set `length_column_name` when your dataset uses another name. This strategy requires a
+dataset with a known length and is ignored for [`~datasets.IterableDataset`].
+
+## Batch rebalance sampling
+
+On variable-length datasets, imbalance within a micro-batch and across devices causes devices to waste time on padding and to idle at gradient synchronization steps.
+
+Set `train_sampling_strategy="batch_rebalance"` in [`TrainingArguments`] to reduce both effects. For each optimizer step, the sampler:
+
+1. Sorts the batch's samples by length.
+2. Shards the sorted batch across devices so that the padded-token cost of each micro-batch is balanced. Micro-batches with long samples get fewer samples, and micro-batches with short samples get more.
+
+This reduces padding within each micro-batch, and each device finishes a micro-batch at roughly the same time, which reduces idle time at synchronization and keeps peak memory lower than `"group_by_length"`. This strategy is only supported for data-parallel training for now (tensor parallelism is not yet supported).
+
+```py
+from transformers import Trainer, TrainingArguments
+
+trainer = Trainer(
+    model=model,
+    args=TrainingArguments(
+        output_dir="out",
+        train_sampling_strategy="batch_rebalance",  # balance padding cost across devices
+        per_device_train_batch_size=8,              # average samples per micro-batch
+        length_column_name="length",                # optional: dataset column with precomputed lengths
+    ),
+    train_dataset=train_dataset,
+)
+trainer.train()
+```
+
+`per_device_train_batch_size` is an average here rather than an exact per-step count: some micro-batches have fewer samples and some have more, but the total number of samples trained per step stays the same as with a normal distributed sampling strategy.
+
+The sampler needs the length of every sample to sort and balance batches. By default, the [`Trainer`] scans the full dataset once at the start of training to compute these lengths. To skip this scan, precompute the lengths into a dataset column (during preprocessing, for example) and pass its name as `length_column_name` (`"length"` by default).
 
 ## NEFTune
 

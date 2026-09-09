@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -240,7 +240,7 @@ register_patch_mapping(
 )
 
 register_checkpoint_conversion_mapping(
-    model_type="llama",
+    model_type_or_class_name="llama",
     mapping=[
         WeightConverter(
             source_patterns=["q_proj", "k_proj", "v_proj"],
@@ -405,7 +405,7 @@ register_patch_mapping(
 # - Override the original conversion mapping for qwen2_moe which concatenated the experts into a single parameter format.
 # - Concatenate the q_proj, k_proj, v_proj weights/biases into a single qkv_proj weight/bias for the new fused attention module.
 register_checkpoint_conversion_mapping(
-    model_type="qwen2_moe",
+    model_type_or_class_name="qwen2_moe",
     mapping=[
         WeightConverter(
             source_patterns=["q_proj", "k_proj", "v_proj"],

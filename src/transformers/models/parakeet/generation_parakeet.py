@@ -191,11 +191,19 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
 
     def _prepare_model_inputs(self, *args, **kwargs):
         inputs, input_name, model_kwargs = super()._prepare_model_inputs(*args, **kwargs)
+        explicit = {"input_features", "attention_mask", "output_attention_mask"}
+        irrelevant_prefix = ("decoder_", "cross_attn", "use_cache", "past_key_values", "cache_params")
+        encoder_kwargs = {
+            key: value
+            for key, value in model_kwargs.items()
+            if key not in explicit and not key.startswith(irrelevant_prefix)
+        }
 
         encoder_outputs = self.get_audio_features(
             input_features=inputs,
             attention_mask=model_kwargs.get("attention_mask", None),
             output_attention_mask=True,
+            **encoder_kwargs,
         )
         model_kwargs["encoder_outputs"] = encoder_outputs
 

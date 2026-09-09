@@ -52,6 +52,7 @@ class PhimoeConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
+
     default_theta = 1000000.0
 
     vocab_size: int = 32064

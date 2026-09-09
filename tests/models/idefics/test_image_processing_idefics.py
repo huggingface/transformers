@@ -11,10 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import io
 import unittest
 
-import httpx
 import pytest
 
 from transformers.testing_utils import (
@@ -27,7 +25,11 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTester,
+    ImageProcessingTestMixin,
+    load_coco_image,
+)
 
 
 if is_torch_available():
@@ -40,7 +42,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class IdeficsImageProcessingTester:
+class IdeficsImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -70,17 +72,6 @@ class IdeficsImageProcessingTester:
 
     def expected_output_image_shape(self, images):
         return (self.num_channels, self.image_size, self.image_size)
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
 
 @require_torch
@@ -151,11 +142,7 @@ class IdeficsImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image = Image.open(
-            io.BytesIO(
-                httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
-            )
-        )
+        dummy_image = load_coco_image("000000039769.jpg")
 
         # Create processors for each backend
         encodings = {}

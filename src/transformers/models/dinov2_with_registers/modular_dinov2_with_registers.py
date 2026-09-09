@@ -21,15 +21,15 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...backbone_utils import BackboneConfigMixin, filter_output_hidden_states
+from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
+from ...modeling_outputs import BackboneOutput, BaseModelOutput, ImageClassifierOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
-from ...utils.generic import can_return_tuple
 from ..dinov2.modeling_dinov2 import (
     Dinov2Backbone,
+    Dinov2Embeddings,
     Dinov2Encoder,
     Dinov2ForImageClassification,
     Dinov2Model,
@@ -109,22 +109,14 @@ class Dinov2WithRegistersPatchEmbeddings(Dinov2PatchEmbeddings):
     pass
 
 
-class Dinov2WithRegistersEmbeddings(nn.Module):
+class Dinov2WithRegistersEmbeddings(Dinov2Embeddings):
     """Construct the CLS token, mask token, register tokens, position and patch embeddings."""
 
     def __init__(self, config: Dinov2WithRegistersConfig) -> None:
-        super().__init__()
-
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        super().__init__(config)
+        # the registers config has no `use_mask_token`; the checkpoints always carry the mask token
         self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
         self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
-        self.patch_embeddings = Dinov2WithRegistersPatchEmbeddings(config)
-        self.position_embeddings = nn.Parameter(
-            torch.randn(1, self.patch_embeddings.num_patches + 1, config.hidden_size)
-        )
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.patch_size = config.patch_size
-        self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         num_patches = embeddings.shape[1] - 1
@@ -213,34 +205,9 @@ class Dinov2WithRegistersForImageClassification(Dinov2ForImageClassification):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        outputs: BaseModelOutputWithPooling = self.dinov2_with_registers(
-            pixel_values, attention_mask=attention_mask, **kwargs
-        )
-        sequence_output = outputs.last_hidden_state
-
-        cls_token = sequence_output[:, 0]
-        # cls and register tokens should not be included in patch tokens variable
-        patch_tokens = sequence_output[:, 1 + self.config.num_register_tokens :]
-
-        linear_input = torch.cat([cls_token, patch_tokens.mean(dim=1)], dim=1)
-        logits = self.classifier(linear_input)
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(labels, logits, self.config, **kwargs)
-
-        return ImageClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+        super().forward(pixel_values, labels, attention_mask, **kwargs)
+        # Override the inherited patch slice to exclude CLS and register tokens.
+        patch_tokens = sequence_output[:, 1 + self.config.num_register_tokens :]  # noqa: F821, F841
 
 
 class Dinov2WithRegistersBackbone(Dinov2Backbone):
@@ -248,9 +215,6 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
         super().__init__(config)
         self.num_register_tokens = config.num_register_tokens
 
-    @can_return_tuple
-    @filter_output_hidden_states
-    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -283,6 +247,7 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
+        pixel_values = pixel_values.to(self.embeddings.patch_embeddings.projection.weight.dtype)
         embedding_output = self.embeddings(pixel_values)
         attention_mask = create_bidirectional_mask(
             config=self.config,
