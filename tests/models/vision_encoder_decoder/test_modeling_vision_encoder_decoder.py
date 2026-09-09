@@ -1319,7 +1319,10 @@ class DonutModelIntegrationTest(unittest.TestCase):
         # verify scores
         self.assertEqual(len(outputs.scores), 11)
         torch.testing.assert_close(
-            outputs.scores[0][0, :3], torch.tensor([5.6375, -3.5053, 13.7228], device=torch_device), rtol=1e-4, atol=1e-4
+            outputs.scores[0][0, :3],
+            torch.tensor([5.6375, -3.5053, 13.7228], device=torch_device),
+            rtol=1e-4,
+            atol=1e-4,
         )
 
     @slow
@@ -1379,7 +1382,10 @@ class DonutModelIntegrationTest(unittest.TestCase):
         # verify scores
         self.assertEqual(len(outputs.scores), 43)
         torch.testing.assert_close(
-            outputs.scores[0][0, :3], torch.tensor([-27.4535, -3.2694, -19.3709], device=torch_device), rtol=1e-4, atol=1e-4
+            outputs.scores[0][0, :3],
+            torch.tensor([-27.4535, -3.2694, -19.3709], device=torch_device),
+            rtol=1e-4,
+            atol=1e-4,
         )
 
     @slow
@@ -1438,7 +1444,10 @@ class DonutModelIntegrationTest(unittest.TestCase):
         # verify scores
         self.assertEqual(len(outputs.scores), 4)
         torch.testing.assert_close(
-            outputs.scores[0][0, :3], torch.tensor([-17.3262, -4.7116, -15.4603], device=torch_device), rtol=1e-4, atol=1e-4
+            outputs.scores[0][0, :3],
+            torch.tensor([-17.3262, -4.7116, -15.4603], device=torch_device),
+            rtol=1e-4,
+            atol=1e-4,
         )
 
 
@@ -1512,5 +1521,8 @@ class NougatModelIntegrationTest(unittest.TestCase):
         # verify scores
         self.assertEqual(len(outputs.scores), 741)
         torch.testing.assert_close(
-            outputs.scores[0][0, :3], torch.tensor([1.6253, -4.2179, 5.8532], device=torch_device), rtol=1e-4, atol=1e-4
+            outputs.scores[0][0, :3],
+            torch.tensor([1.6253, -4.2179, 5.8532], device=torch_device),
+            rtol=1e-4,
+            atol=1e-4,
         )
