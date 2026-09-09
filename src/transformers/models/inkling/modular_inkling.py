@@ -802,9 +802,7 @@ class InklingTextModel(InklingPreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
-        # The norm needs to be outside the `if` in case `input_embeds` are given explicitly
-        inputs_embeds = self.embed_norm(inputs_embeds)
+            inputs_embeds = self.embed_norm(self.embed_tokens(input_ids))
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -884,6 +882,9 @@ class InklingForCausalLM(Gemma3ForCausalLM):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "What is your favorite condiment?"
         ```"""
+        if inputs_embeds is not None:
+            inputs_embeds = self.model.embed_norm(inputs_embeds)
+
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
