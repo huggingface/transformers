@@ -500,14 +500,12 @@ class PPDocLayoutV3ModelIntegrationTest(unittest.TestCase):
         expected_labels = [6, 22, 22, 22, 21, 22, 22, 22]
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
 
-        # TODO(synthetic-assets): next layer -- these 4 rows are the first 4 of the
-        # OLD detection set; scores and labels are refreshed, so this is what remains.
         expected_slice_boxes = torch.tensor(
             [
-                [337.0705, 183.0614, 895.0403, 653.6794],
-                [337.8179, 684.5647, 868.7692, 798.1080],
-                [921.4486, 185.6825, 1475.8827, 464.3206],
-                [920.6929, 484.8696, 1479.4470, 765.1530],
+                [118.1829, 129.3592, 862.6218, 185.1460],
+                [115.5250, 223.8100, 479.4319, 261.9810],
+                [115.2896, 269.2608, 477.9529, 307.4338],
+                [116.0882, 314.4135, 358.6726, 353.0205],
             ]
         ).to(torch_device)
         torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, rtol=2e-2, atol=2e-2)

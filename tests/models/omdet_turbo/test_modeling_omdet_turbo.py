@@ -823,7 +823,7 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         expected_text_labels = [
             ["remote", "cat", "remote", "cat"],
             ["boat", "boat", "boat", "boat"],
-            ["statue", "trees", "trees", "torch", "statue", "statue"],
+            ["statue", "trees", "statue", "statue", "trees", "trees", "torch"],
         ]
         self.assertListEqual([result["text_labels"] for result in results], expected_text_labels)
 
