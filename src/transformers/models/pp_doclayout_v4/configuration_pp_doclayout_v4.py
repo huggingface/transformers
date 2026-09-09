@@ -28,10 +28,6 @@ from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-# `[center_x, center_y]` plus four `(dx, dy)` corner offsets.
-QUAD_NUM_COORDS = 10
-
-
 @auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV4_safetensors")
 @strict
 class PPDocLayoutV4Config(PreTrainedConfig):
@@ -124,7 +120,8 @@ class PPDocLayoutV4Config(PreTrainedConfig):
     model_type = "pp_doclayout_v4"
     sub_configs = {"backbone_config": AutoConfig}
 
-    layer_types = ("basic", "bottleneck")
+    # PP-DocLayoutV3 declares `d_model` and aliases `hidden_size` onto it; PP-DocLayoutV4 does the reverse so
+    # that the canonical name is the one the rest of the library expects.
     attribute_map = {
         "d_model": "hidden_size",
         "num_attention_heads": "encoder_attention_heads",
@@ -152,7 +149,6 @@ class PPDocLayoutV4Config(PreTrainedConfig):
     eval_size: list[int] | tuple[int, int] | None = None
     normalize_before: bool = False
     hidden_expansion: float = 1.0
-    hidden_size: int = 256
     label_noise_ratio: float = 0.5
     box_noise_scale: float = 1.0
     num_queries: int = 300
@@ -165,12 +161,18 @@ class PPDocLayoutV4Config(PreTrainedConfig):
     decoder_activation_function: str = "relu"
     attention_dropout: float | int = 0.0
     num_denoising: int = 100
+
+    # Not a config field: kept as a class attribute so the `__init__` code inherited from
+    # RT-DETR stays inert. Every released checkpoint takes the top-k encoder features as queries.
+    learn_initial_query: ClassVar[bool] = False
     anchor_image_size: list[int] | tuple[int, int] | None = None
     disable_custom_kernels: bool = True
     is_encoder_decoder: bool = True
-    num_coords: int = 10
     global_pointer_head_size: int = 64
     gp_dropout_value: float | int = 0.1
+
+    hidden_size: int = 256
+    num_coords: int = 10
     use_s2r: bool = True
     s2r_steps: int = 3
     s2r_damping: float = 0.5
@@ -178,9 +180,10 @@ class PPDocLayoutV4Config(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         # The anchor generator, the deformable attention reference points and the corner decode are all written
-        # against the quad parameterization, so anything else fails with a shape error deep inside the forward.
-        if self.num_coords != QUAD_NUM_COORDS:
-            raise ValueError(f"PP-DocLayoutV4 only supports `num_coords={QUAD_NUM_COORDS}`, got {self.num_coords}.")
+        # against the quad parameterization (`[center_x, center_y]` plus four `(dx, dy)` corner offsets), so
+        # anything else fails with a shape error deep inside the forward.
+        if self.num_coords != 10:
+            raise ValueError(f"PP-DocLayoutV4 only supports `num_coords=10`, got {self.num_coords}.")
 
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=self.backbone_config,
@@ -206,10 +209,6 @@ class PPDocLayoutV4Config(PreTrainedConfig):
         self.decoder_in_channels = list(self.decoder_in_channels)
         self.anchor_image_size = list(self.anchor_image_size) if self.anchor_image_size is not None else None
         super().__post_init__(**kwargs)
-
-    # Not a config field: kept as a class attribute so the `__init__` code inherited from
-    # RT-DETR stays inert. Every released checkpoint takes the top-k encoder features as queries.
-    learn_initial_query: ClassVar[bool] = False
 
 
 __all__ = ["PPDocLayoutV4Config"]

@@ -36,6 +36,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, requires_backends
 from ...utils.generic import TensorType
 from ..auto import AutoConfig
+from ..pp_doclayout_v3.configuration_pp_doclayout_v3 import PPDocLayoutV3Config
 from ..pp_doclayout_v3.image_processing_pp_doclayout_v3 import PPDocLayoutV3ImageProcessor
 from ..pp_doclayout_v3.modeling_pp_doclayout_v3 import (
     PPDocLayoutV3Decoder,
@@ -56,13 +57,10 @@ from ..rt_detr.modeling_rt_detr import (
 
 logger = logging.get_logger(__name__)
 
-# `[center_x, center_y]` plus four `(dx, dy)` corner offsets.
-QUAD_NUM_COORDS = 10
-
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV4_safetensors")
 @strict
-class PPDocLayoutV4Config(PreTrainedConfig):
+class PPDocLayoutV4Config(PPDocLayoutV3Config):
     r"""
     initializer_bias_prior_prob (`float`, *optional*):
         The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
@@ -152,63 +150,40 @@ class PPDocLayoutV4Config(PreTrainedConfig):
     model_type = "pp_doclayout_v4"
     sub_configs = {"backbone_config": AutoConfig}
 
-    layer_types = ("basic", "bottleneck")
+    # PP-DocLayoutV3 declares `d_model` and aliases `hidden_size` onto it; PP-DocLayoutV4 does the reverse so
+    # that the canonical name is the one the rest of the library expects.
     attribute_map = {
         "d_model": "hidden_size",
         "num_attention_heads": "encoder_attention_heads",
     }
 
-    initializer_range: float = 0.01
-    initializer_bias_prior_prob: float | None = None
-    layer_norm_eps: float = 1e-5
-    batch_norm_eps: float = 1e-5
-    tie_word_embeddings: bool = True
-    backbone_config: dict | PreTrainedConfig | None = None
-    freeze_backbone_batch_norms: bool = True
-    encoder_hidden_dim: int = 256
-    encoder_in_channels: list[int] | tuple[int, ...] = (512, 1024, 2048)
-    feat_strides: list[int] | tuple[int, ...] = (8, 16, 32)
-    encoder_layers: int = 1
-    encoder_ffn_dim: int = 1024
-    encoder_attention_heads: int = 8
-    dropout: float | int = 0.0
-    activation_dropout: float | int = 0.0
-    encode_proj_layers: list[int] | tuple[int, ...] = (2,)
-    positional_encoding_temperature: int = 10000
-    encoder_activation_function: str = "gelu"
-    activation_function: str = "silu"
-    eval_size: list[int] | tuple[int, int] | None = None
-    normalize_before: bool = False
-    hidden_expansion: float = 1.0
     hidden_size: int = 256
+    eval_size: list[int] | tuple[int, int] | None = None
+    anchor_image_size: list[int] | tuple[int, int] | None = None
     label_noise_ratio: float = 0.5
     box_noise_scale: float = 1.0
-    num_queries: int = 300
-    decoder_in_channels: list[int] | tuple[int, ...] = (256, 256, 256)
-    decoder_ffn_dim: int = 1024
-    num_feature_levels: int = 3
-    decoder_n_points: int = 4
-    decoder_layers: int = 6
-    decoder_attention_heads: int = 8
-    decoder_activation_function: str = "relu"
-    attention_dropout: float | int = 0.0
-    num_denoising: int = 100
-    anchor_image_size: list[int] | tuple[int, int] | None = None
-    disable_custom_kernels: bool = True
-    is_encoder_decoder: bool = True
     num_coords: int = 10
-    global_pointer_head_size: int = 64
-    gp_dropout_value: float | int = 0.1
     use_s2r: bool = True
     s2r_steps: int = 3
     s2r_damping: float = 0.5
     s2r_a_init: float = 0.0
 
+    # PP-DocLayoutV4 has no mask branch, so none of the PP-DocLayoutV3 mask prototype knobs apply.
+    mask_feature_channels = AttributeError()
+    mask_enhanced = AttributeError()
+    num_prototypes = AttributeError()
+    x4_feat_dim = AttributeError()
+    # This removes the inherited `d_model` field rather than declaring one: PP-DocLayoutV4 declares the canonical
+    # `hidden_size` above and keeps `d_model` only as an `attribute_map` alias.
+    d_model = AttributeError()  # trf-ignore: TRF023
+    layer_types = AttributeError()
+
     def __post_init__(self, **kwargs):
         # The anchor generator, the deformable attention reference points and the corner decode are all written
-        # against the quad parameterization, so anything else fails with a shape error deep inside the forward.
-        if self.num_coords != QUAD_NUM_COORDS:
-            raise ValueError(f"PP-DocLayoutV4 only supports `num_coords={QUAD_NUM_COORDS}`, got {self.num_coords}.")
+        # against the quad parameterization (`[center_x, center_y]` plus four `(dx, dy)` corner offsets), so
+        # anything else fails with a shape error deep inside the forward.
+        if self.num_coords != 10:
+            raise ValueError(f"PP-DocLayoutV4 only supports `num_coords=10`, got {self.num_coords}.")
 
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=self.backbone_config,
@@ -233,7 +208,7 @@ class PPDocLayoutV4Config(PreTrainedConfig):
         self.eval_size = list(self.eval_size) if self.eval_size is not None else None
         self.decoder_in_channels = list(self.decoder_in_channels)
         self.anchor_image_size = list(self.anchor_image_size) if self.anchor_image_size is not None else None
-        super().__post_init__(**kwargs)
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
     # Not a config field: kept as a class attribute so the `__init__` code inherited from
     # RT-DETR stays inert. Every released checkpoint takes the top-k encoder features as queries.
@@ -251,6 +226,8 @@ class PPDocLayoutV4ImageProcessor(PPDocLayoutV3ImageProcessor):
     quadrilateral per query instead of predicting a segmentation mask, and emits raw relative/successor order logits
     instead of a decoded reading order.
     """
+
+    _quad_num_coords: ClassVar[int] = 10
 
     def _preprocess(
         self,
@@ -344,8 +321,10 @@ class PPDocLayoutV4ImageProcessor(PPDocLayoutV3ImageProcessor):
             bottom-right, bottom-left order, normalized to `[0, 1]`.
         """
         num_coords = pred_boxes.shape[-1]
-        if num_coords != QUAD_NUM_COORDS:
-            raise ValueError(f"Unsupported num_coords: {num_coords}. PP-DocLayoutV4 only supports quads (10).")
+        if num_coords != self._quad_num_coords:
+            raise ValueError(
+                f"Unsupported num_coords: {num_coords}. PP-DocLayoutV4 only supports quads ({self._quad_num_coords})."
+            )
         centers = pred_boxes[..., :2].unsqueeze(-2)
         offsets = pred_boxes[..., 2:].reshape(*pred_boxes.shape[:-1], 4, 2) - 0.5
         return centers + offsets
