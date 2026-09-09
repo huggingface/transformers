@@ -38,6 +38,8 @@ from transformers.generation.continuous_batching.cache import (
     PagedAttentionCache,
     PagedAttentionMemoryHandler,
     SlidingAttentionCacheAllocator,
+    _dequantize_kv_states,
+    _quantize_kv_states,
     group_layers_by_attn_type,
 )
 from transformers.generation.continuous_batching.cache_manager import FullAttentionCacheAllocator
@@ -52,6 +54,7 @@ from transformers.generation.continuous_batching.requests import (
     get_device_and_memory_breakdown,
 )
 from transformers.integrations.eager_paged import eager_paged_attention_forward
+from transformers.integrations.flash_paged import _get_fp8_descale_kwargs
 from transformers.integrations.sdpa_paged import sdpa_attention_paged_forward
 from transformers.testing_utils import (
     backend_empty_cache,
@@ -218,6 +221,33 @@ def regular_generate(
 
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
+    def test_fp8_cache_quantize_and_dequantize(self):
+        key = torch.arange(16, dtype=torch.float32).reshape(1, 2, 2, 4) - 8
+        scale = 0.25
+        quantized = _quantize_kv_states(key, scale, torch.float8_e4m3fn, "k_cache_scale")
+        dequantized = _dequantize_kv_states(
+            quantized.reshape(2, 2, 4), scale, key.dtype, "k_cache_scale"
+        )
+        self.assertEqual(quantized.dtype, torch.float8_e4m3fn)
+        self.assertTrue(torch.allclose(dequantized, key.squeeze(0), atol=0.15))
+
+    def test_fp8_descales_are_only_forwarded_when_supported(self):
+        module = torch.nn.Module()
+        module._k_scale = 0.5
+        module._v_scale = 0.25
+
+        def supports_descales(q, k, v, k_descale=None, v_descale=None):
+            pass
+
+        def does_not_support_descales(q, k, v):
+            pass
+
+        fp8 = torch.zeros(2, 2, 4, dtype=torch.float8_e4m3fn)
+        supported = _get_fp8_descale_kwargs(module, supports_descales, fp8, fp8, {})
+        self.assertEqual(supported["k_descale"], torch.tensor(0.5))
+        self.assertEqual(supported["v_descale"], torch.tensor(0.25))
+        self.assertEqual(_get_fp8_descale_kwargs(module, does_not_support_descales, fp8, fp8, {}), {})
+
     @parameterized.expand(
         [("paged|eager", eager_paged_attention_forward), ("paged|sdpa", sdpa_attention_paged_forward)]
     )

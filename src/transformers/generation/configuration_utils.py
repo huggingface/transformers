@@ -1679,6 +1679,10 @@ class ContinuousBatchingConfig:
     Args:
         block_size (`int`, *optional*, defaults to 256):
             Size of each KV cache block in tokens.
+        cache_dtype (`str` or `torch.dtype`, *optional*):
+            Data type used to store the paged KV cache. Defaults to the model dtype. FP8 cache dtypes require per-layer
+            KV cache scales (``_k_scale`` and ``_v_scale`` for compressed-tensors checkpoints) and a FlashAttention
+            kernel that supports ``k_descale`` and ``v_descale``.
         num_blocks (`int`, *optional*):
             Number of blocks in the KV cache. Auto-inferred from GPU memory when `None`.
         max_batch_tokens (`int`, *optional*):
@@ -1751,6 +1755,9 @@ class ContinuousBatchingConfig:
 
     # Size of each KV cache block. Must be at least 4 (and for an efficient cache, it should be well above that).
     block_size: int = 256
+
+    # The dtype used to store KV states. None means the model dtype, preserving the existing behavior.
+    cache_dtype: Any = None
 
     # The number of blocks used in the KV cache and the maximum number of tokens in a batch. Once the block size is set,
     # these can be auto inferred using GPU size.

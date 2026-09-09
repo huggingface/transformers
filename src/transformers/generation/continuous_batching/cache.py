@@ -53,6 +53,64 @@ def find_head_dim(config: PreTrainedConfig) -> int:
     raise ValueError(f"head_dim or (hidden_size and num_attention_heads) could not be found in the config:\n{config}")
 
 
+def _resolve_cache_dtype(dtype: torch.dtype | str) -> torch.dtype:
+    if isinstance(dtype, str):
+        try:
+            dtype = getattr(torch, dtype)
+        except AttributeError as e:
+            raise ValueError(f"Unknown cache dtype: {dtype!r}") from e
+    if not isinstance(dtype, torch.dtype):
+        raise TypeError(f"cache_dtype must be a torch.dtype or string, got {type(dtype).__name__}")
+    return dtype
+
+
+def _is_fp8_dtype(dtype: torch.dtype) -> bool:
+    return dtype in {torch.float8_e4m3fn, torch.float8_e5m2, torch.float8_e4m3fnuz, torch.float8_e5m2fnuz}
+
+
+def _reshape_kv_scale(scale: torch.Tensor | float, states: torch.Tensor) -> torch.Tensor:
+    """Broadcast a scalar or per-KV-head scale over ``[batch, heads, sequence, head_dim]`` states."""
+    scale = torch.as_tensor(scale, device=states.device, dtype=torch.float32)
+    if scale.numel() == 1:
+        return scale.reshape(1, 1, 1, 1)
+    if scale.numel() == states.shape[1]:
+        return scale.reshape(1, states.shape[1], 1, 1)
+    raise ValueError(
+        f"KV cache scale must be a scalar or have one value per KV head ({states.shape[1]}), "
+        f"got shape {tuple(scale.shape)}"
+    )
+
+
+def _quantize_kv_states(
+    states: torch.Tensor, scale: torch.Tensor | float | None, dtype: torch.dtype, name: str
+) -> torch.Tensor:
+    if not _is_fp8_dtype(dtype):
+        return states
+    if scale is None:
+        raise ValueError(f"An FP8 paged KV cache requires {name} to be provided by the attention module.")
+    return (states.float() / _reshape_kv_scale(scale, states)).to(dtype)
+
+
+def _dequantize_kv_states(
+    states: torch.Tensor, scale: torch.Tensor | float | None, dtype: torch.dtype, name: str
+) -> torch.Tensor:
+    if not _is_fp8_dtype(states.dtype):
+        return states
+    if scale is None:
+        raise ValueError(f"An FP8 paged KV cache requires {name} to dequantize values for this attention path.")
+    scale = torch.as_tensor(scale, device=states.device, dtype=torch.float32)
+    if scale.numel() == 1:
+        scale = scale.reshape(1, 1, 1)
+    elif scale.numel() == states.shape[1]:
+        scale = scale.reshape(1, states.shape[1], 1)
+    else:
+        raise ValueError(
+            f"KV cache scale must be a scalar or have one value per KV head ({states.shape[1]}), "
+            f"got shape {tuple(scale.shape)}"
+        )
+    return (states.float() * scale).to(dtype)
+
+
 def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]], list[str]]:
     """
     Group layers depending on the attention mix, according to VLLM's hybrid allocator rules:
@@ -153,6 +211,7 @@ class PagedAttentionCache:
         distributed_helper: DistributedHelper,
         tp_plan: dict[str, Any],
         dtype: torch.dtype = torch.float16,
+        cache_dtype: torch.dtype | str | None = None,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
         only full attention layers.
@@ -163,10 +222,14 @@ class PagedAttentionCache:
             device: Device for the cache tensors
             distributed_helper: TP-aware helper. Used to dispatch attention heads and ensure coherent cache size
             tp_plan: Tensor parallelism plan
-            dtype: Data type of the activation and the cache (for now, these are the same)
+            dtype: Data type of model activations.
+            cache_dtype: Data type used to store key/value states. Defaults to dtype.
         """
         self.config = config
-        self.dtype = dtype
+        self.activation_dtype = dtype
+        self.cache_dtype = _resolve_cache_dtype(cache_dtype or dtype)
+        # Keep dtype as the cache dtype for offloading and existing callers.
+        self.dtype = self.cache_dtype
         self.device = device
 
         # Extract model dimensions
@@ -216,7 +279,8 @@ class PagedAttentionCache:
         max_batch_tokens, num_blocks = PagedAttentionMemoryHandler(
             config=config,
             continuous_batching_config=continuous_batching_config,
-            dtype=self.dtype,
+            dtype=self.activation_dtype,
+            cache_dtype=self.cache_dtype,
             group_types=group_types,
             group_size=group_size,
         ).infer_max_batch_tokens_and_num_blocks()
@@ -397,6 +461,9 @@ class PagedAttentionCache:
         layer_idx: int,
         read_index: list[torch.Tensor],  # shape [num_layer_groups, seqlen_kv + past_length]
         write_index: list[torch.Tensor],  # shape [num_layer_groups, seqlen_q]
+        key_scale: torch.Tensor | float | None = None,
+        value_scale: torch.Tensor | float | None = None,
+        dequantize: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [seqlen_kv + past_length, num_kv_heads, head_dim]
         """Update the cache with new key-value states for a specific layer, and retrieves the relevant KV states from
         the cache for attention computation. The behavior differs based on the layer's attention type:
@@ -419,18 +486,26 @@ class PagedAttentionCache:
         # Transpose the key and value states to match the cache shape, after which shape is [seqlen_kv, num_kv_heads, head_dim]
         key_states = key_states.transpose(1, 2).squeeze(0)
         value_states = value_states.transpose(1, 2).squeeze(0)
+        key_cache_states = _quantize_kv_states(
+            key_states.transpose(0, 1).unsqueeze(0), key_scale, self.cache_dtype, "k_cache_scale"
+        ).squeeze(0).transpose(0, 1)
+        value_cache_states = _quantize_kv_states(
+            value_states.transpose(0, 1).unsqueeze(0), value_scale, self.cache_dtype, "v_cache_scale"
+        ).squeeze(0).transpose(0, 1)
 
         # Case: write-only, no cache read. The input KV states already contain everything the attention needs.
         if layer_read_index.numel() == 0:
-            k_cache.index_copy_(0, layer_write_index, key_states)
-            v_cache.index_copy_(0, layer_write_index, value_states)
-            return key_states, value_states
+            k_cache.index_copy_(0, layer_write_index, key_cache_states)
+            v_cache.index_copy_(0, layer_write_index, value_cache_states)
+            if dequantize:
+                return key_states, value_states
+            return key_cache_states, value_cache_states
 
         # Case: full attention
         sliding_window = self.sliding_windows[layer_idx]
         if sliding_window == 1:
-            k_cache.index_copy_(0, layer_write_index, key_states)
-            v_cache.index_copy_(0, layer_write_index, value_states)
+            k_cache.index_copy_(0, layer_write_index, key_cache_states)
+            v_cache.index_copy_(0, layer_write_index, value_cache_states)
             key_states_with_cache = torch.index_select(k_cache, 0, layer_read_index)
             value_states_with_cache = torch.index_select(v_cache, 0, layer_read_index)
 
@@ -441,14 +516,20 @@ class PagedAttentionCache:
             # then masked_scatter_ overwrites them with the actual new key/value states.
             mask = (layer_read_index == self.sentinel_index).unsqueeze(-1).unsqueeze(-1)
             key_states_with_cache = torch.index_select(k_cache, 0, layer_read_index)
-            key_states_with_cache.masked_scatter_(mask, key_states)
+            key_states_with_cache.masked_scatter_(mask, key_cache_states)
             value_states_with_cache = torch.index_select(v_cache, 0, layer_read_index)
-            value_states_with_cache.masked_scatter_(mask, value_states)
+            value_states_with_cache.masked_scatter_(mask, value_cache_states)
             # Write new KV values to the cache (padding slots in write_index point to the trash position)
-            k_cache.index_copy_(0, layer_write_index, key_states)
-            v_cache.index_copy_(0, layer_write_index, value_states)
+            k_cache.index_copy_(0, layer_write_index, key_cache_states)
+            v_cache.index_copy_(0, layer_write_index, value_cache_states)
 
-        # Return the new KV values
+        if dequantize:
+            key_states_with_cache = _dequantize_kv_states(
+                key_states_with_cache, key_scale, key_states.dtype, "k_cache_scale"
+            )
+            value_states_with_cache = _dequantize_kv_states(
+                value_states_with_cache, value_scale, value_states.dtype, "v_cache_scale"
+            )
         return key_states_with_cache, value_states_with_cache
 
     def get_block_table_key(self, flash_attn_with_kvcache_fn: Any) -> str:
@@ -585,18 +666,22 @@ class PagedAttentionMemoryHandler:
         dtype: torch.dtype,
         group_types: list[str],
         group_size: int,
+        cache_dtype: torch.dtype | None = None,
+        activation_dtype: torch.dtype | None = None,
     ) -> None:
         """Initialize the memory handler. Args:
         - config: the model configuration
-        - continuous_batching_config: the continuous batching configuration
-        - dtype: the data type of the activation and the cache
+        - continuous_batching_config: continuous batching configuration
+        - dtype: backward-compatible alias for the activation dtype
         - group_types: the list of all attention group types, formatted as strings
         - group_size: the size (in layers) of an attention group
+        - cache_dtype: dtype used by the allocated KV cache
+        - activation_dtype: dtype used by model activations; defaults to dtype
         """
         self.config = config
         self.cb_config = continuous_batching_config
-        self.cache_dtype = dtype
-        self.activation_dtype = dtype
+        self.cache_dtype = cache_dtype or dtype
+        self.activation_dtype = activation_dtype or dtype
         self.block_size = continuous_batching_config.block_size
         self.page_size = find_head_dim(config) * find_num_kv_heads(config)
         self.num_groups = len(group_types)
@@ -634,8 +719,9 @@ class PagedAttentionMemoryHandler:
             + mem_per_q_token  # q_projection, shape [M, mem_per_q_token]
             + 2 * mem_per_k_or_v_token  # new K and V, shape [M, page_size]
         )
-        # old K and V, read from cache (worst case scenario: whole cache is read)
-        delta_n = 2 * mem_per_k_or_v_token * self.activation_dtype.itemsize
+        # FlashAttention consumes FP8 cache values directly; eager/SDPA dequantize cache reads first.
+        cache_read_dtype = self.cache_dtype if is_flash_attention_requested(self.config) else self.activation_dtype
+        delta_n = 2 * mem_per_k_or_v_token * cache_read_dtype.itemsize
         peaks["attention"] = (delta_m, delta_n, 0, 0)
 
         return peaks

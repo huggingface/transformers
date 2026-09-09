@@ -1038,6 +1038,7 @@ class ContinuousBatchingManager:
             distributed_helper=self.distributed_helper,
             tp_plan=getattr(self.model, "tp_plan", {}),
             dtype=self.model.dtype,
+            cache_dtype=self.continuous_batching_config.cache_dtype,
         )
         # Update the approximation now that we know if there is prefix sharing
         self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing

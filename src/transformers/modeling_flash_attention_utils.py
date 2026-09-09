@@ -580,12 +580,21 @@ class FlashAttentionKwargs(TypedDict, total=False):
             Maximum sequence length for query state.
         max_length_k (`int`, *optional*):
             Maximum sequence length for key state.
+        q_descale (`torch.Tensor`, *optional*):
+            Descale factor for FP8 query states.
+        k_descale (`torch.Tensor`, *optional*):
+            Descale factor for FP8 key states.
+        v_descale (`torch.Tensor`, *optional*):
+            Descale factor for FP8 value states.
     """
 
     cu_seq_lens_q: torch.LongTensor | None
     cu_seq_lens_k: torch.LongTensor | None
     max_length_q: int | None
     max_length_k: int | None
+    q_descale: torch.Tensor | None
+    k_descale: torch.Tensor | None
+    v_descale: torch.Tensor | None
 
 
 def _process_flash_attention_kwargs(
@@ -599,6 +608,9 @@ def _process_flash_attention_kwargs(
     softcap: float | None = None,
     deterministic: bool | None = None,
     s_aux: torch.Tensor | None = None,
+    q_descale: torch.Tensor | None = None,
+    k_descale: torch.Tensor | None = None,
+    v_descale: torch.Tensor | None = None,
     max_seqlen_q: int | torch.IntTensor | None = None,
     max_seqlen_k: int | torch.IntTensor | None = None,
     supports_mapping: dict[str, bool] | None = None,
@@ -631,6 +643,12 @@ def _process_flash_attention_kwargs(
             Determines if the deterministic option introduced in flash_attn>=2.4.1 is enabled.
         s_aux (`torch.Tensor`, *optional*):
             Attention sink auxiliary that adds a `bias` to the attention calculation via an additional head.
+        q_descale (`torch.Tensor`, *optional*):
+            Descale factor for FP8 query states, when supported by the selected kernel.
+        k_descale (`torch.Tensor`, *optional*):
+            Descale factor for FP8 key states, when supported by the selected kernel.
+        v_descale (`torch.Tensor`, *optional*):
+            Descale factor for FP8 value states, when supported by the selected kernel.
         max_seqlen_q (`Union[int, torch.IntTensor]`, *optional*):
             The maximum sequence length in the query tensor during a varlen forward.
         max_seqlen_k (`Union[int, torch.IntTensor]`, *optional*):
@@ -667,6 +685,10 @@ def _process_flash_attention_kwargs(
             flash_kwargs["s_aux"] = s_aux  # e.g. FA3 (vllm)
         else:
             flash_kwargs["learnable_sink"] = s_aux  # FA4
+
+    for descale_name, descale in (("q_descale", q_descale), ("k_descale", k_descale), ("v_descale", v_descale)):
+        if supports_mapping[descale_name] and descale is not None:
+            flash_kwargs[descale_name] = descale
 
     # There is a limitation of the flash attention API, as the function `flash_attn_varlen_func`
     # may require `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.

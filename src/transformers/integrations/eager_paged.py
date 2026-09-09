@@ -40,6 +40,9 @@ def eager_paged_attention_forward(
         layer_idx=module.layer_idx,
         read_index=kwargs["read_index"],
         write_index=kwargs["write_index"],
+        key_scale=getattr(module, "_k_scale", getattr(module, "k_cache_scale", None)),
+        value_scale=getattr(module, "_v_scale", getattr(module, "v_cache_scale", None)),
+        dequantize=True,
     )
     key = key.transpose(0, 1).unsqueeze(0)
     value = value.transpose(0, 1).unsqueeze(0)

@@ -1,7 +1,56 @@
+import inspect
+
 import torch
 
 from ..generation.continuous_batching import PagedAttentionCache
+from ..generation.continuous_batching.cache import _is_fp8_dtype, _quantize_kv_states
 from ..modeling_flash_attention_utils import lazy_import_paged_flash_attention
+
+
+def _get_kv_cache_scales(
+    module: torch.nn.Module, kwargs: dict
+) -> tuple[torch.Tensor | float | None, torch.Tensor | float | None]:
+    key_scale = kwargs.get(
+        "k_cache_scale",
+        kwargs.get("k_descale", getattr(module, "_k_scale", getattr(module, "k_cache_scale", None))),
+    )
+    value_scale = kwargs.get(
+        "v_cache_scale",
+        kwargs.get("v_descale", getattr(module, "_v_scale", getattr(module, "v_cache_scale", None))),
+    )
+    return key_scale, value_scale
+
+
+def _get_fp8_descale_kwargs(
+    module: torch.nn.Module,
+    flash_fn,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    kwargs: dict,
+) -> dict[str, torch.Tensor]:
+    """Return only descale kwargs supported by the selected FlashAttention kernel."""
+    if not (_is_fp8_dtype(key.dtype) or _is_fp8_dtype(value.dtype)):
+        return {}
+
+    key_scale, value_scale = _get_kv_cache_scales(module, kwargs)
+
+    def as_tensor(scale):
+        if scale is None:
+            return None
+        return scale if isinstance(scale, torch.Tensor) else torch.tensor(scale, device=key.device)
+
+    descales = {
+        "q_descale": as_tensor(kwargs.get("q_descale", getattr(module, "q_descale", None))),
+        "k_descale": as_tensor(kwargs.get("k_descale", key_scale)),
+        "v_descale": as_tensor(kwargs.get("v_descale", value_scale)),
+    }
+    parameters = inspect.signature(flash_fn).parameters
+    accepts_kwargs = any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters.values())
+    return {
+        name: scale
+        for name, scale in descales.items()
+        if scale is not None and (name in parameters or accepts_kwargs)
+    }
 
 
 def paged_attention_forward(
@@ -50,6 +99,7 @@ def paged_attention_forward(
     flash_attn_varlen_func, flash_attn_with_kvcache = lazy_import_paged_flash_attention(
         module.config._attn_implementation
     )
+    key_scale, value_scale = _get_kv_cache_scales(module, kwargs)
 
     # Retrieve the cumulative sequence lengths for the current layer
     sliding_window = (-1, -1) if not getattr(module, "sliding_window", False) else (module.sliding_window - 1, 0)
@@ -60,15 +110,19 @@ def paged_attention_forward(
 
     # If no block table is provided, use flash_attn_varlen_func with read/write indices
     if block_table is None:
-        # .update changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
+        # .update changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to
+        # [-1, num_kv_heads, head_dim]
         k, v = cache.update(
             key_states=k,
             value_states=v,
             layer_idx=module.layer_idx,
             read_index=kwargs["read_index"],
             write_index=kwargs["write_index"],
+            key_scale=key_scale,
+            value_scale=value_scale,
         )
         custom_kwargs = {"s_aux": kwargs.get("s_aux")} if "s_aux" in kwargs else {}
+        custom_kwargs.update(_get_fp8_descale_kwargs(module, flash_attn_varlen_func, k, v, kwargs))
         attn_output = flash_attn_varlen_func(
             q.transpose(1, 2).squeeze(0).contiguous(),
             k.contiguous(),
@@ -89,7 +143,18 @@ def paged_attention_forward(
     else:
         flash_kwargs = {"s_aux": kwargs["s_aux"]} if "s_aux" in kwargs else {}  # this is only available in VLLM's FA3
         attn_output = _paged_decode_forward(
-            module, q, k, v, cache, cu_seq_lens_k, sliding_window, flash_attn_with_kvcache, block_table, **flash_kwargs
+            module,
+            q,
+            k,
+            v,
+            cache,
+            cu_seq_lens_k,
+            sliding_window,
+            flash_attn_with_kvcache,
+            block_table,
+            key_scale=key_scale,
+            value_scale=value_scale,
+            **flash_kwargs,
         )
 
     if v_head_dim != head_dim:
@@ -108,6 +173,8 @@ def _paged_decode_forward(
     sliding_window: tuple[int, int],
     flash_attn_with_kvcache,
     block_table: torch.Tensor,
+    key_scale: torch.Tensor | float | None = None,
+    value_scale: torch.Tensor | float | None = None,
     **flash_kwargs,
 ) -> torch.Tensor:
     """Decode fast path using flash_attn_with_kvcache. Disabled because FA3 has issue with tracing this."""
@@ -118,6 +185,9 @@ def _paged_decode_forward(
     v_cache = cache.value_cache[layer_idx_in_group].view(
         -1, cache.block_size, cache.num_key_value_heads, cache.head_dim
     )
+    # Quantize the newly generated K/V states to the cache dtype. The decode kernel writes these values in place.
+    k = _quantize_kv_states(k, key_scale, cache.cache_dtype, "k_cache_scale")
+    v = _quantize_kv_states(v, value_scale, cache.cache_dtype, "v_cache_scale")
     # Reshape Q, K, V from [1, num_*_heads, batch_size, head_dim] to [batch_size, 1, num_*_heads, head_dim]
     q = q.permute(2, 0, 1, 3).contiguous()
     k = k.permute(2, 0, 1, 3).contiguous()
@@ -128,6 +198,15 @@ def _paged_decode_forward(
     cache_seqlens = (cu_seq_lens_k[1 : batch_size + 1] - cu_seq_lens_k[:batch_size] - 1).to(torch.int32)
     # The arg name for the block table is not the same in VLLM's kernel and Tri Dao's kernel, so we need to parse it
     flash_kwargs[cache.get_block_table_key(flash_attn_with_kvcache)] = block_table[group_idx]
+    flash_kwargs.update(
+        _get_fp8_descale_kwargs(
+            module,
+            flash_attn_with_kvcache,
+            k,
+            v,
+            {"k_cache_scale": key_scale, "v_cache_scale": value_scale},
+        )
+    )
     # Call flash_attn_with_kvcache - this updates cache in-place and computes attention
     attn_output = flash_attn_with_kvcache(
         q=q,
