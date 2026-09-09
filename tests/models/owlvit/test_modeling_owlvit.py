@@ -676,9 +676,9 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.pred_boxes.shape, torch.Size((1, num_queries, 4)))
 
         expected_slice_boxes = torch.tensor(
-            [[0.0679, 0.0422, 0.1345], [0.2067, 0.0450, 0.4139], [0.1981, 0.0417, 0.3423]]
+            [[0.0679, 0.0422, 0.1345], [0.2064, 0.0450, 0.4134], [0.1979, 0.0416, 0.3416]]
         ).to(torch_device)
-        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, rtol=1e-4, atol=1e-4)
 
         model = OwlViTForObjectDetection.from_pretrained(model_name).to(torch_device)
         query_image = prepare_img()
@@ -793,9 +793,9 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.pred_boxes.shape, torch.Size((1, num_queries, 4)))
 
         expected_slice_boxes = torch.tensor(
-            [[0.0691, 0.0445, 0.1375], [0.1591, 0.0456, 0.3189], [0.1636, 0.0423, 0.2488]]
+            [[0.0691, 0.0445, 0.1374], [0.1592, 0.0456, 0.3191], [0.1632, 0.0423, 0.2477]]
         ).to(torch_device)
-        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, rtol=1e-4, atol=1e-4)
 
         # test post-processing
         post_processed_output = processor.post_process_grounded_object_detection(outputs)
@@ -836,9 +836,9 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.target_pred_boxes.shape, torch.Size((1, num_queries, 4)))
 
         expected_slice_boxes = torch.tensor(
-            [[0.0691, 0.0445, 0.1375], [0.1591, 0.0456, 0.3189], [0.1636, 0.0423, 0.2488]]
+            [[0.0691, 0.0445, 0.1374], [0.1592, 0.0456, 0.3191], [0.1632, 0.0423, 0.2477]]
         ).to(torch_device)
-        torch.testing.assert_close(outputs.target_pred_boxes[0, :3, :3], expected_slice_boxes, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(outputs.target_pred_boxes[0, :3, :3], expected_slice_boxes, rtol=1e-4, atol=1e-4)
 
     @slow
     @require_torch_accelerator
