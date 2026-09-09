@@ -394,6 +394,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "minicpmv",
     "minimax_m2",
     "modernbert",
+    "modernbert-decoder",
     "molmo",
     "molmo2",
     "nemotron",
@@ -411,7 +412,6 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "cohere_asr",
     "camembertv2-base",
     "smolvlm",
-    "vision-encoder-decoder",
 }
 
 for model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
@@ -427,6 +427,7 @@ MODEL_IDS_TO_TOKENIZERS_BACKEND = [
     "deepseek-ai/deepseek-coder-*",
     "allenai/dolma2-tokenizer",
     "google/umt5-small",
+    "naver-clova-ix/donut-*",
     "salesforce/blip2-opt-*",
     "salesforce/blip2-flan-t5-*",
     "salesforce/instructblip-flan-t5-*",
