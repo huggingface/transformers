@@ -19,6 +19,7 @@
 # limitations under the License.
 
 from collections import defaultdict
+from typing import ClassVar
 
 import numpy as np
 import torch
@@ -30,10 +31,6 @@ from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
 from ...utils import auto_docstring, requires_backends
 from ...utils.generic import TensorType
-
-
-# `[center_x, center_y]` plus four `(dx, dy)` corner offsets.
-QUAD_NUM_COORDS = 10
 
 
 @auto_docstring
@@ -56,6 +53,8 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
     do_resize = True
     do_rescale = True
     do_normalize = True
+
+    _quad_num_coords: ClassVar[int] = 10
 
     # We require `self.resize(..., antialias=False)` to approximate the output of `cv2.resize`
     def _preprocess(
@@ -221,8 +220,10 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
             bottom-right, bottom-left order, normalized to `[0, 1]`.
         """
         num_coords = pred_boxes.shape[-1]
-        if num_coords != QUAD_NUM_COORDS:
-            raise ValueError(f"Unsupported num_coords: {num_coords}. PP-DocLayoutV4 only supports quads (10).")
+        if num_coords != self._quad_num_coords:
+            raise ValueError(
+                f"Unsupported num_coords: {num_coords}. PP-DocLayoutV4 only supports quads ({self._quad_num_coords})."
+            )
         centers = pred_boxes[..., :2].unsqueeze(-2)
         offsets = pred_boxes[..., 2:].reshape(*pred_boxes.shape[:-1], 4, 2) - 0.5
         return centers + offsets
