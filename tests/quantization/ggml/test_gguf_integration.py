@@ -18,7 +18,14 @@ import tempfile
 import unittest
 import unittest.mock
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GgufConfig, Qwen3_5ForCausalLM
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    GenerationConfig,
+    GgufConfig,
+    Qwen3_5ForCausalLM,
+)
 from transformers.testing_utils import (
     require_kernels,
     require_torch_accelerator,
@@ -33,21 +40,26 @@ if is_torch_available():
     import torch
 
 
-class GgufModelIntegrationTesterMixin:
-    """Tests every integrated architecture must pass."""
+class GgufTokenizerTesterMixin:
+    """A tokenizer built from a GGUF file's metadata is the one the reference repo ships.
 
+    Needs no model, so it also covers architectures the loading path does not support yet.
+    """
+
+    # One text per thing a conversion gets wrong on its own: the pre-tokenizer regex shows up on the
+    # digits and contractions, the prefix scheme on the whitespace runs, byte fallback on the scripts
+    # and emoji, and a stray post-processor on the special-token text.
     tokenizer_texts = (
         "The capital of France is Paris.",
         "def f(x):\n    return x ** 2\n",
         "  leading and trailing  ",
+        "a\tb\n\nc  d",
+        "I don't think it's 3.14159 or -42,000",
         "\u65e5\u672c\u8a9e \U0001f680 \u00fcn\u00efc\u00f4de",
+        "\u0391\u0392\u0393 \u0411\u0413\u0414 \u0627\u0644\u0639\u0631\u0628\u064a\u0629 \u05e2\u05d1\u05e8\u05d9\u05ea",
+        "https://example.com/a_b?c=1&d=2#e",
         "<|im_start|>user\nhi<|im_end|>",
     )
-
-    # Per-parameter relative tolerances, for an architecture whose conversion cannot be exact. Empty
-    # is the expectation: the transforms run in the float type the file stores and `Cast` rounds once,
-    # at the end, so a converted weight is bit-for-bit what a safetensors checkpoint holds.
-    inexact_params: dict[str, float] = {}
 
     chat = (
         {"role": "user", "content": "hi"},
@@ -57,14 +69,68 @@ class GgufModelIntegrationTesterMixin:
 
     @classmethod
     def setUpClass(cls):
-        # One load for the whole class: these checkpoints are several GB. No dtype is passed, so this
-        # covers `auto` resolving to the one the file was written in.
-        # The loading report comes back with it, for `test_load_accounts_for_every_key`: free here,
-        # another multi-GB load if that test asked for its own.
-        cls.model, cls.loading_info = cls.load_gguf_model(cls.gguf_file, output_loading_info=True)
-        # Built once too: a vocabulary of a few hundred thousand tokens is not free to assemble.
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.gguf_repo, gguf_file=cls.quantized_gguf_file)
         cls.reference_tokenizer = AutoTokenizer.from_pretrained(cls.reference_repo)
+
+    def test_tokenizer_matches_transformers(self):
+        from_gguf, reference = self.tokenizer, self.reference_tokenizer
+
+        # What agrees is the encoding, not the vocabulary size: a GGUF states one flat token list
+        # where the reference adds its special tokens on top of a smaller base. Without them, too --
+        # a bos is prepended per `tokenizer.ggml.add_bos_token`, which many published files omit.
+        for text in self.tokenizer_texts:
+            with self.subTest(text=text):
+                self.assertEqual(
+                    from_gguf(text, add_special_tokens=False).input_ids,
+                    reference(text, add_special_tokens=False).input_ids,
+                )
+
+    def test_special_tokens_match_transformers(self):
+        """Stated by id in the file, so only the vocabulary turns them back into strings."""
+        from_gguf, reference = self.tokenizer, self.reference_tokenizer
+
+        # Not equality with the reference's `eos_token`: llama.cpp writes the turn terminator as the
+        # eos of an instruct model, so a Gemma file names id 106 where the repo names `<eos>`. Both
+        # stop generation, so what must hold is that the file named one the model accepts.
+        accepted = {reference.eos_token}
+        try:
+            eos_ids = GenerationConfig.from_pretrained(self.reference_repo).eos_token_id
+        except OSError:
+            eos_ids = None
+        if eos_ids is not None:
+            eos_ids = [eos_ids] if isinstance(eos_ids, int) else eos_ids
+            accepted.update(reference.convert_ids_to_tokens(token_id) for token_id in eos_ids)
+        self.assertIn(from_gguf.eos_token, accepted)
+        # `bos` only where the reference has one: llama.cpp writes an id even for a tokenizer
+        # declaring none, and the encodings above prove it is never actually emitted.
+        if reference.bos_token is not None:
+            self.assertEqual(from_gguf.bos_token, reference.bos_token)
+
+    def test_chat_template_matches_transformers(self):
+        """The template rides along in the metadata, and formats a conversation the same way."""
+        if self.reference_tokenizer.chat_template is None:
+            self.skipTest("the reference repo ships no chat template")
+        self.assertEqual(
+            self.tokenizer.apply_chat_template(self.chat, tokenize=False),
+            self.reference_tokenizer.apply_chat_template(self.chat, tokenize=False),
+        )
+
+
+class GgufModelIntegrationTesterMixin(GgufTokenizerTesterMixin):
+    """Tests every integrated architecture must pass."""
+
+    # Per-parameter relative tolerances, for an architecture whose conversion cannot be exact. Empty
+    # is the expectation: the transforms run in the float type the file stores and `Cast` rounds once,
+    # at the end, so a converted weight is bit-for-bit what a safetensors checkpoint holds.
+    inexact_params: dict[str, float] = {}
+
+    @classmethod
+    def setUpClass(cls):
+        # One load for the whole class: these checkpoints are several GB. No dtype is passed, so this
+        # covers `auto` resolving to the one the file was written in. The loading report comes back
+        # with it, for `test_load_accounts_for_every_key`.
+        super().setUpClass()
+        cls.model, cls.loading_info = cls.load_gguf_model(cls.gguf_file, output_loading_info=True)
 
     @classmethod
     def tearDownClass(cls):
@@ -100,30 +166,10 @@ class GgufModelIntegrationTesterMixin:
             output = model.generate(**inputs, max_new_tokens=8, do_sample=False)
         return self.reference_tokenizer.decode(output[0, inputs.input_ids.shape[1] :])
 
-    def test_tokenizer_matches_transformers(self):
-        """A GGUF repo ships no tokenizer files either, so the one built from the metadata is the same."""
-        from_gguf, reference = self.tokenizer, AutoTokenizer.from_pretrained(self.reference_repo)
-
-        # Not the vocabulary sizes: a GGUF states one flat token list, where the reference keeps its
-        # special tokens as additions on top of a smaller base. What has to agree is what they encode to.
-        for text in self.tokenizer_texts:
-            with self.subTest(text=text):
-                self.assertEqual(from_gguf(text).input_ids, reference(text).input_ids)
-
-        # Stated by id in the file, so only the vocabulary turns them back into strings. Encodings
-        # cannot catch this: a tokenizer handed no special tokens invents a sentencepiece pair and
-        # appends it, which agrees with the reference on every text and puts two ids past the end of
-        # the embedding -- hence the bound below rather than another comparison.
-        self.assertEqual(from_gguf.eos_token, reference.eos_token)
-        self.assertEqual(from_gguf.bos_token, reference.bos_token)
-        self.assertLessEqual(len(from_gguf), self.model.get_input_embeddings().weight.shape[0])
-
-        # The template rides along in the metadata, and formats a conversation the same way.
-        self.assertIsNotNone(from_gguf.chat_template)
-        self.assertEqual(
-            from_gguf.apply_chat_template(self.chat, tokenize=False),
-            reference.apply_chat_template(self.chat, tokenize=False),
-        )
+    def test_vocabulary_fits_the_embedding(self):
+        """A tokenizer handed no special tokens invents a sentencepiece pair and appends it, which
+        agrees with the reference on every text but puts two ids past the end of the embedding."""
+        self.assertLessEqual(len(self.tokenizer), self.model.get_input_embeddings().weight.shape[0])
 
     def test_state_dict_matches_transformers(self):
         """The headline test: same values as the safetensors checkpoint, tensor by tensor."""
@@ -351,3 +397,71 @@ class Qwen35GgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
     # here is 5.178e-07 in the reference and comes back as 4.768e-07, the nearest `1 + w` can encode.
     # Nothing on load recovers it. Every other parameter matches bit for bit.
     inexact_params = {"norm.weight": 1e-6}
+
+
+class Qwen3GgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
+    gguf_repo = "unsloth/Qwen3-0.6B-GGUF"
+    quantized_gguf_file = "Qwen3-0.6B-Q8_0.gguf"
+    reference_repo = "Qwen/Qwen3-0.6B"
+
+
+@slow
+class LlamaGgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
+    gguf_repo = "unsloth/Llama-3.1-8B-Instruct-GGUF"
+    quantized_gguf_file = "Llama-3.1-8B-Instruct-Q4_K_M.gguf"
+    reference_repo = "meta-llama/Llama-3.1-8B-Instruct"
+
+
+@slow
+class Qwen25GgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
+    gguf_repo = "Qwen/Qwen2.5-7B-Instruct-GGUF"
+    quantized_gguf_file = "qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf"
+    reference_repo = "Qwen/Qwen2.5-7B-Instruct"
+
+
+@slow
+class MistralGgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
+    """Tekken: byte-level, and written as `llama` like the sentencepiece Mistrals before it."""
+
+    gguf_repo = "bartowski/Ministral-8B-Instruct-2410-GGUF"
+    quantized_gguf_file = "Ministral-8B-Instruct-2410-Q4_K_M.gguf"
+    reference_repo = "mistralai/Ministral-8B-Instruct-2410"
+
+
+@slow
+class TinyLlamaGgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
+    """The sentencepiece side of `llama`, which the Mistral case covered until it went byte-level."""
+
+    gguf_repo = "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"
+    quantized_gguf_file = "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+    reference_repo = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+
+
+@slow
+class Phi3GgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
+    gguf_repo = "bartowski/Phi-3.5-mini-instruct-GGUF"
+    quantized_gguf_file = "Phi-3.5-mini-instruct-Q4_K_M.gguf"
+    reference_repo = "microsoft/Phi-3.5-mini-instruct"
+
+
+@slow
+class T5GgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
+    gguf_repo = "Felladrin/gguf-LaMini-Flan-T5-248M"
+    quantized_gguf_file = "LaMini-Flan-T5-248M.Q8_0.gguf"
+    reference_repo = "MBZUAI/LaMini-Flan-T5-248M"
+
+
+@slow
+class Gemma4GgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
+    """`tokenizer.ggml.model = "gemma4"`: a kind of its own, and a BPE carrying its own merges."""
+
+    gguf_repo = "unsloth/gemma-4-E4B-it-GGUF"
+    quantized_gguf_file = "gemma-4-E4B-it-Q4_K_M.gguf"
+    reference_repo = "google/gemma-4-E4B-it"
+
+
+@slow
+class GemmaGgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
+    gguf_repo = "unsloth/gemma-3-1b-it-GGUF"
+    quantized_gguf_file = "gemma-3-1b-it-Q4_K_M.gguf"
+    reference_repo = "google/gemma-3-1b-it"

@@ -36,9 +36,7 @@ from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, Wo
 from transformers.utils.hub import cached_file
 
 from .convert_slow_tokenizer import SpmConverter
-from .integrations.ggml import convert_gguf_tokenizer
 from .integrations.mistral.constants import is_tekken_vocab_filename
-from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
     BatchEncoding,
@@ -393,19 +391,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             # We have a serialization from tokenizers which let us directly build the backend
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif gguf_file is not None:
-            # We need to convert a slow tokenizer to build the backend
-            from .integrations.gguf import GGUF_TOKENIZER_ARCHS, get_gguf_tokenizer, read_gguf_metadata
+            # No serialization to load: the backend is assembled from the file's metadata
+            from .integrations.gguf import convert_gguf_tokenizer, get_gguf_tokenizer
 
             gguf_path = cached_file(kwargs.get("name_or_path", ""), gguf_file, **kwargs)
-            # The fast reader materializes the vocabulary and nothing else.
-            metadata, _ = read_gguf_metadata(gguf_path)
-            if metadata["general.architecture"] in GGUF_TOKENIZER_ARCHS:
-                architecture, tokenizer_dict, tokenizer_config = get_gguf_tokenizer(gguf_path)
-            else:
-                gguf_param = load_gguf_checkpoint(gguf_path)
-                architecture = gguf_param["config"]["model_type"]
-                tokenizer_dict = gguf_param["tokenizer"]
-                tokenizer_config = gguf_param["tokenizer_config"]
+            architecture, tokenizer_dict, tokenizer_config = get_gguf_tokenizer(gguf_path)
             fast_tokenizer, additional_kwargs = convert_gguf_tokenizer(architecture, tokenizer_dict)
             kwargs.update(tokenizer_config)
             if len(additional_kwargs) > 0:
