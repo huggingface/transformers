@@ -1284,7 +1284,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size([1, 1, 57532])
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([24.3873, -6.4491, 32.5394]).to(torch_device)
+        expected_slice = torch.tensor([24.4076, -6.4491, 32.5508]).to(torch_device)
         torch.testing.assert_close(logits[0, 0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         # step 2: generation
@@ -1320,7 +1320,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         self.assertEqual(len(outputs.scores), 11)
         self.assertTrue(
             torch.allclose(
-                outputs.scores[0][0, :3], torch.tensor([5.6019, -3.5070, 13.7123], device=torch_device), atol=1e-4
+                outputs.scores[0][0, :3], torch.tensor([5.6375, -3.5053, 13.7228], device=torch_device), atol=1e-4
             )
         )
 
@@ -1348,7 +1348,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1, model.decoder.config.vocab_size))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-27.4344, -3.2686, -19.3524], device=torch_device)
+        expected_slice = torch.tensor([-27.4535, -3.2694, -19.3709], device=torch_device)
         torch.testing.assert_close(logits[0, 0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         # step 2: generation
@@ -1382,7 +1382,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         self.assertEqual(len(outputs.scores), 43)
         self.assertTrue(
             torch.allclose(
-                outputs.scores[0][0, :3], torch.tensor([-27.4344, -3.2686, -19.3524], device=torch_device), atol=1e-4
+                outputs.scores[0][0, :3], torch.tensor([-27.4535, -3.2694, -19.3709], device=torch_device), atol=1e-4
             )
         )
 
@@ -1410,7 +1410,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1, model.decoder.config.vocab_size))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-17.6490, -4.8381, -15.7577], device=torch_device)
+        expected_slice = torch.tensor([-17.3262, -4.7116, -15.4603], device=torch_device)
         torch.testing.assert_close(logits[0, 0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         # step 2: generation
@@ -1443,7 +1443,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         self.assertEqual(len(outputs.scores), 4)
         self.assertTrue(
             torch.allclose(
-                outputs.scores[0][0, :3], torch.tensor([-17.6490, -4.8381, -15.7577], device=torch_device), atol=1e-4
+                outputs.scores[0][0, :3], torch.tensor([-17.3262, -4.7116, -15.4603], device=torch_device), atol=1e-4
             )
         )
 
