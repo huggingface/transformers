@@ -1035,8 +1035,8 @@ class NopConfig(PreTrainedConfig):
         tokenizer_auto = AutoTokenizer.from_pretrained(repo_id)
         tokenizer_tok = TokenizersBackend.from_pretrained(repo_id)
 
-        auto_ids = tokenizer_auto.encode(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT)
-        tok_ids = tokenizer_tok.encode(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT)
+        auto_ids = tokenizer_auto.encode(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT, add_special_tokens=False)
+        tok_ids = tokenizer_tok.encode(TOKENIZERS_BACKEND_AUTO_MAPPING_SHARED_TEXT, add_special_tokens=False)
 
         self.assertEqual(auto_ids, tok_ids)
         self.assertEqual(
