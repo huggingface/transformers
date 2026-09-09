@@ -391,7 +391,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             # We have a serialization from tokenizers which let us directly build the backend
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif gguf_file is not None:
-            # No serialization to load: the backend is assembled from the file's metadata
             from .integrations.gguf import convert_gguf_tokenizer, get_gguf_tokenizer
 
             gguf_path = cached_file(kwargs.get("name_or_path", ""), gguf_file, **kwargs)
