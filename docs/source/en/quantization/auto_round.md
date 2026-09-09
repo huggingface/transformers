@@ -59,7 +59,7 @@ auto-round \
     --output_dir ./tmp_autoround
 ```
 
-AutoRound also offer another two recipes, `auto-round-best`, `auto-round-light`,`auto-round-opt-rtn`,`auto-round-rtn`, designed for optimal accuracy and improved speed, respectively.
+AutoRound also offer another four recipes, `auto-round-best`, `auto-round-light`,`auto-round-opt-rtn`,`auto-round-rtn`, designed for optimal accuracy and improved speed, respectively.
 For 2 bits, we recommend using `auto-round-best` with `--enable_alg_ext`.
 
 </hfoption>
@@ -79,8 +79,22 @@ auto-round \
     --target_bits 3.5 \
     --output_dir ./tmp_autoround
 ```
-
 </hfoption>
+
+<hfoption id="alg combinations">
+
+### Algorithm Combinations
+
+AutoRound supports combining multiple algorithms, such as AutoRound, AutoRound + AWQ, and AutoRound + AWQ + Hadamard (very limited support). We are currently expanding support for more algorithms. This enables further optimization of quantization results, especially for scenarios involving quantized activations.
+
+```bash
+auto-round \
+    --model Qwen/Qwen3-0.6B \
+    --algs "autoround,awq" \
+    --output_dir ./tmp_autoround
+```
+</hfoption>
+
 
 <hfoption id="quantization auto-round api">
 
