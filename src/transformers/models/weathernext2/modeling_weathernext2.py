@@ -211,19 +211,10 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Eager attention, taking whichever mask `masking_utils` built for the backend in use.
-
-    WeatherNext 2 masks by mesh adjacency rather than by sequence position, and that mask is dense
-    enough that its dtype is worth a comment: eager gets the usual additive float mask, while the
-    sdpa path gets a boolean one, which saves several gigabytes at 0.25 degrees. Both are accepted
-    here so that the two backends can be compared on the same weights.
-    """
+    """Eager attention with the additive mask prepared by `masking_utils`."""
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        if attention_mask.dtype == torch.bool:
-            attn_weights = attn_weights.masked_fill(~attention_mask, torch.finfo(attn_weights.dtype).min)
-        else:
-            attn_weights = attn_weights + attention_mask.to(attn_weights.dtype)
+        attn_weights = attn_weights + attention_mask.to(attn_weights.dtype)
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value).transpose(1, 2).contiguous()

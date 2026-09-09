@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 from parameterized import parameterized
@@ -450,6 +451,36 @@ class WeatherNext2GeometryTest(unittest.TestCase):
                 reference = prediction
             else:
                 torch.testing.assert_close(prediction, reference, atol=1e-5, rtol=1e-5)
+
+    def test_eager_receives_additive_mask(self):
+        config = self.model.config
+        inputs = {
+            "grid_features": floats_tensor(
+                [2, config.num_grid_input_channels - 3, config.grid_latitudes, config.grid_longitudes]
+            ).to(torch_device),
+            "global_features": floats_tensor([2, config.num_mesh_input_channels - 3]).to(torch_device),
+            "noise": floats_tensor([2, config.noise_channels]).to(torch_device),
+        }
+        model = (
+            WeatherNext2ForWeatherForecasting.from_pretrained(TINY_CHECKPOINT, attn_implementation="eager")
+            .to(torch_device)
+            .eval()
+        )
+        masks = []
+
+        from transformers.models.weathernext2 import modeling_weathernext2
+
+        eager_attention_forward = modeling_weathernext2.eager_attention_forward
+
+        def capture_mask(*args, **kwargs):
+            masks.append(args[4])
+            return eager_attention_forward(*args, **kwargs)
+
+        with patch.object(modeling_weathernext2, "eager_attention_forward", capture_mask), torch.no_grad():
+            model(**inputs)
+
+        self.assertTrue(masks)
+        self.assertTrue(all(mask.is_floating_point() for mask in masks))
 
     def test_the_forecast_reaches_every_parameter_that_shapes_it(self):
         """Backward through a forecast, to catch anything accidentally cut out of the graph.
