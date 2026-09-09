@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 It leverages sign gradient descent to fine-tune both rounding values and min-max clipping thresholds in just 200 steps. Designed for broad compatibility, it seamlessly supports a wide range of LLMs and is actively expanding to cover more VLMs as well.
 It also supports quantization and inference across multiple hardware platforms, including CPU, XPU, and CUDA.
 
-AutoRound also offers a variety of useful features, including automatically mixed-bit tuning and inference, mxfp4/nvfp4 datatypes, model-free quantization, support for exporting to formats like GPTQ/AWQ/GGUF/LLM-Compressor, and flexible tuning recipes.
+AutoRound also offers a variety of useful features, including automatic mixed-bit tuning and inference, support for MXFP4 and NVFP4 data types, model-free quantization, export to formats such as GPTQ, AWQ, GGUF, and LLM-Compressor, and flexible tuning recipes.
 For a comprehensive overview and the latest updates, check out the AutoRound [README](https://github.com/intel/auto-round).
 
 AutoRound was originally developed as part of the [Intel Neural Compressor](https://github.com/intel/neural-compressor), serving as a general-purpose model compression library for deep learning.
@@ -30,16 +30,13 @@ pip install auto-round
 
 ## Supported Quantization Configurations
 
-AutoRound supports several quantization configurations:
+AutoRound supports the following quantization configurations:
 
-- **Int8 Weight Only**
-- **Int7 Weight Only**
-- **Int6 Weight Only**
-- **Int5 Weight Only**
-- **Int4 Weight Only**
-- **Int3 Weight Only**
-- **Int2 Weight Only**
-- **Mixed bits Weight only**
+1. **INT2–INT8 Weight-Only**
+2. **Mixed-Bit Weight-Only**
+3. **GGUF Q\*_K**
+4. **MXFP** (limited support)
+5. **NVFP4** (limited support)
 
 ## Hardware Compatibility
 
