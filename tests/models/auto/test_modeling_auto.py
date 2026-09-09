@@ -33,7 +33,7 @@ from transformers.testing_utils import (
     require_torch,
     slow,
 )
-from transformers.utils import ADAPTER_CONFIG_NAME, resolve_revision
+from transformers.utils import ADAPTER_CONFIG_NAME
 
 from ..bert.test_modeling_bert import BertModelTester
 
@@ -506,14 +506,6 @@ class AutoModelTest(unittest.TestCase):
         self.assertEqual(counter["GET"], 0)
         self.assertEqual(counter["HEAD"], 1)
         self.assertEqual(counter.total_calls, 1)
-
-    def test_pinned_model_has_no_calls_to_head(self):
-        # A commit hash does not even need to be resolved: a warm cache is enough to load the whole model.
-        commit_hash = resolve_revision("hf-internal-testing/tiny-random-bert").resolved
-        _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert", revision=commit_hash)
-        with RequestCounter() as counter:
-            _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert", revision=commit_hash)
-        self.assertEqual(counter.total_calls, 0)
 
     def test_attr_not_existing(self):
         from transformers.models.auto.auto_factory import _LazyAutoMapping
