@@ -34,7 +34,6 @@ from ...convert_slow_tokenizer import (
 )
 from ...utils import logging
 from ...utils.logging import tqdm
-from .reader import read_gguf_metadata
 
 
 logger = logging.get_logger(__name__)
@@ -72,6 +71,10 @@ _SPECIAL_TOKENS = {
 
 def get_gguf_tokenizer(gguf_path: str) -> tuple[str, dict, dict]:
     """`(architecture, tokenizer_dict, tokenizer_config)` for the tokenizer this file describes."""
+    # Not at module scope: the reader needs torch, and `configuration_utils` reaches this file for
+    # `GGUF_TOKENIZER_MAPPING` alone, on a path that has to import without it.
+    from .reader import read_gguf_metadata
+
     # Only these two are needed in full; the reader leaves every other array as a count.
     metadata, _ = read_gguf_metadata(gguf_path, ("tokenizer.ggml.tokens", "tokenizer.ggml.merges"))
     architecture = metadata["general.architecture"]
