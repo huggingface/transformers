@@ -381,6 +381,8 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     if param.requires_grad:
                         self.assertTrue(param.grad is not None)
 
+    # Requires https://github.com/huggingface/peft/pull/3197
+    @require_peft_greater_or_equal("0.20.0")
     def test_peft_from_pretrained_restores_modules_to_save(self):
         from peft import LoraConfig
 

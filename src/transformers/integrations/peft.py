@@ -34,6 +34,7 @@ from ..utils import (
     logging,
 )
 from ..utils.hub import DownloadKwargs
+from ..utils.import_utils import is_peft_greater_or_equal
 from ..utils.loading_report import log_state_dict_report
 
 
@@ -238,6 +239,11 @@ class PeftAdapterMixin:
         for module_name, module in self.named_modules():
             if not isinstance(module, AuxiliaryTrainingWrapper):
                 continue
+
+            if not is_peft_greater_or_equal("0.20.0"):
+                # TODO: Remove this check once PEFT 0.19.1 support is dropped.
+                raise RuntimeError("peft>=0.20.0 required if modules_to_save or trainable_token_indices is specified")
+
             for source_key, target_key in module.adapter_state_dict_load_map(adapter_name).items():
                 peft_weight_conversions.append(
                     WeightRenaming(f"{module_name}.{source_key}", f"{module_name}.{target_key}")
