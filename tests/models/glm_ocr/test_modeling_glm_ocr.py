@@ -481,9 +481,11 @@ class GlmOcrIntegrationTest(unittest.TestCase):
         torch.manual_seed(42)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = "This is a Pallas cat, a small wild cat native to the mountainous regions of Central Asia."
+        EXPECTED_DECODED_TEXT = (
+            "This is a Pallas cat, a small wild cat native to the mountainous regions of Central Asia."
+        )
         self.assertEqual(
-            self.processor.decode(output[0][inputs.input_ids.shape[1]:], skip_special_tokens=True),
+            self.processor.decode(output[0][inputs.input_ids.shape[1] :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
@@ -506,7 +508,7 @@ class GlmOcrIntegrationTest(unittest.TestCase):
             "This is a Pallas cat, a small wild cat native to the mountainous regions of Central Asia.",
         ]  # fmt: skip
         self.assertEqual(
-            self.processor.batch_decode(output[:, inputs.input_ids.shape[1]:], skip_special_tokens=True),
+            self.processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
@@ -544,7 +546,7 @@ class GlmOcrIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = ["A tennis player is preparing to hit the ball on a tennis court."]  # fmt: skip
 
         self.assertEqual(
-            processor.batch_decode(output[:, inputs.input_ids.shape[1]:], skip_special_tokens=True),
+            processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
@@ -575,7 +577,7 @@ class GlmOcrIntegrationTest(unittest.TestCase):
         # fmt: on
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
 
-        decoded_text = self.processor.batch_decode(output[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+        decoded_text = self.processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
         self.assertEqual(decoded_text, EXPECTED_DECODED_TEXT)
 
     @slow
@@ -605,7 +607,7 @@ class GlmOcrIntegrationTest(unittest.TestCase):
             "I'm a humanoid robot named Ai.",
         ]  # fmt: skip
         self.assertEqual(
-            self.processor.batch_decode(output[:, inputs.input_ids.shape[1]:], skip_special_tokens=True),
+            self.processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
@@ -633,7 +635,7 @@ class GlmOcrIntegrationTest(unittest.TestCase):
             "This is cat.",
         ]  # fmt: skip
         self.assertEqual(
-            self.processor.batch_decode(output[:, inputs.input_ids.shape[1]:], skip_special_tokens=True),
+            self.processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
