@@ -270,6 +270,11 @@ def _has_valid_grouped_mm_strides(tensor: torch.Tensor) -> bool:
     return False
 
 
+def _has_valid_grouped_mm_data_ptr(tensor: torch.Tensor) -> bool:
+    """Return whether grouped_mm accepts the tensor's storage start address."""
+    return tensor.device.type == "cpu" or tensor.data_ptr() % 16 == 0
+
+
 def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.Tensor) -> bool:
     """
     Check if torch.nn.functional.grouped_mm or torch._grouped_mm can be used based on availability and compatibility with torch.compile.
@@ -284,7 +289,12 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
     Returns:
         `bool`: True if grouped_mm can be used, False otherwise.
     """
-    if not _has_valid_grouped_mm_strides(input) or not _has_valid_grouped_mm_strides(weight):
+    if (
+        not _has_valid_grouped_mm_strides(input)
+        or not _has_valid_grouped_mm_strides(weight)
+        or not _has_valid_grouped_mm_data_ptr(input)
+        or not _has_valid_grouped_mm_data_ptr(weight)
+    ):
         return False
 
     # accept_dev=True is necessary for "+cpu"/"+xpu" etc.
