@@ -671,18 +671,19 @@ class PPDocLayoutV4GlobalPointer(nn.Module):
 class PPDocLayoutV4S2RFusion(nn.Module):
     """
     Gated fusion of the successor matrix's transitive closure into the relative order logits:
-    `a * antisymmetrize(closure(successor)) + b * relative` (S2R = "Successor to Relation", from PaddlePaddle).
+    `closure_weight * antisymmetrize(closure(successor)) + relative_weight * relative` (S2R = "Successor to
+    Relation", from PaddlePaddle).
 
-    `s2r_a_init=0.0` starts the module out identical to the relative logits alone. `b` is a plain float that is
-    never learned, so checkpoints only carry `a`.
+    `s2r_a_init=0.0` starts the module out identical to the relative logits alone. `relative_weight` is a plain
+    float that is never learned, so checkpoints only carry `closure_weight` (named `a` upstream).
     """
 
     def __init__(self, config: PPDocLayoutV4Config):
         super().__init__()
         self.steps = config.s2r_steps
         self.damping = config.s2r_damping
-        self.a = nn.Parameter(torch.full((1,), config.s2r_a_init))
-        self.b = 1.0
+        self.closure_weight = nn.Parameter(torch.full((1,), config.s2r_a_init))
+        self.relative_weight = 1.0
         self.one_minus_eye = nn.Buffer(1.0 - torch.eye(config.num_queries), persistent=False)
 
     def forward(self, relative_logits: torch.Tensor, successor_logits: torch.Tensor) -> torch.Tensor:
@@ -698,7 +699,7 @@ class PPDocLayoutV4S2RFusion(nn.Module):
             power = self.damping * torch.bmm(adjacency, power)
             closure = closure + power
 
-        return self.a * (closure - closure.transpose(-2, -1)) + self.b * relative_logits
+        return self.closure_weight * (closure - closure.transpose(-2, -1)) + self.relative_weight * relative_logits
 
 
 @auto_docstring
@@ -741,7 +742,7 @@ class PPDocLayoutV4PreTrainedModel(PPDocLayoutV3PreTrainedModel):
                 init.constant_(class_embed.bias, bias)
 
         elif isinstance(module, PPDocLayoutV4S2RFusion):
-            init.constant_(module.a, self.config.s2r_a_init)
+            init.constant_(module.closure_weight, self.config.s2r_a_init)
             init.copy_(module.one_minus_eye, 1.0 - torch.eye(module.one_minus_eye.shape[0]))
 
         elif isinstance(module, PPDocLayoutV4GlobalPointer):

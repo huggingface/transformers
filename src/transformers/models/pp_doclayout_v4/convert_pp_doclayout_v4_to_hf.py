@@ -135,12 +135,11 @@ DECODER_MAPPING = [
     (r"^transformer\.query_pos_head\.", r"decoder.query_pos_head."),
     (r"^transformer\.dec_bbox_head\.", r"decoder.bbox_embed."),
     (r"^transformer\.dec_score_head\.", r"decoder.class_embed."),
-    # The ROOR rules must come before the plain relative order ones, `dec_order_head` is not a suffix of
-    # `dec_roor_order_head` but a naive substring match on the shorter name would still be wrong here.
     (r"^transformer\.dec_roor_order_head\.", r"decoder.successor_order_head."),
     (r"^transformer\.dec_roor_global_pointer\.", r"decoder.successor_global_pointer."),
     (r"^transformer\.dec_order_head\.", r"decoder.order_head."),
     (r"^transformer\.dec_global_pointer\.", r"decoder.global_pointer."),
+    (r"^transformer\.s2r_fusion\.a$", r"decoder.s2r_fusion.closure_weight"),
     (r"^transformer\.s2r_fusion\.", r"decoder.s2r_fusion."),
     (r"^transformer\.(enc_bbox_head|enc_score_head|enc_output|denoising_class_embed)\.", r"\1."),
 ]
