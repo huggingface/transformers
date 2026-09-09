@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import math
-import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -112,6 +111,7 @@ class GlmImageVisionConfig(Glm4vVisionConfig):
     out_hidden_size = AttributeError()
     rms_norm_eps = AttributeError()
     temporal_patch_size = AttributeError()
+    rope_parameters = AttributeError()
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
@@ -342,9 +342,6 @@ class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
     config: GlmImageConfig
     input_modalities = ("image", "text")
 
-    def _init_weights(self, module):
-        raise AttributeError("Normal super call")
-
 
 class GlmImageModelOutputWithPast(Glm4vModelOutputWithPast):
     pass
@@ -433,14 +430,6 @@ class GlmImageVisionModel(Glm4vVisionModel):
         del self.post_conv_layernorm
         del self.downsample
         del self.post_layernorm
-
-    def rot_pos_emb(self, grid_thw):
-        warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        return get_vision_position_ids(grid_thw, self.spatial_merge_size)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -970,7 +959,9 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return GlmImageCausalLMOutputWithPast(
             loss=loss,
