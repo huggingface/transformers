@@ -153,6 +153,7 @@ parallelism_config = ParallelismConfig(
 
 ## Next steps
 
+- Context parallelism with FSDP2 (`cp_size` on [`~accelerate.ParallelismConfig`]) is separate from Ulysses (`sp_size`). [`Trainer`] evaluation and prediction use the same context-parallel context as training.
 - The Accelerate [Sequence Parallelism](https://huggingface.co/docs/accelerate/concept_guides/sequence_parallelism) guide covers the Ulysses implementation in more depth and shows how to write a custom training loop.
 - The [DeepSpeed ALST tutorial](https://www.deepspeed.ai/tutorials/ulysses-alst-sequence-parallelism/) covers the full ALST system, including TiledMLP and activation checkpoint offloading.
 - The [parallelism methods](./perf_train_gpu_many) guide shows how to combine sequence parallelism with other strategies like ZeRO.
