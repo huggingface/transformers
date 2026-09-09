@@ -270,10 +270,9 @@ class PixioModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 264, 1280))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
-        # Re-baselined after the dinov2 refactor adopted ViT's fp32-softmax `eager_attention_forward`.
         slice_expectations = Expectations(
             {
-                ("cpu", None): [[0.7420, -1.4219, 0.1581], [0.3935, -1.4387, 0.2880], [0.2888, -1.4017, 0.3672]],
+                (None, None): [[0.7420, -1.4219, 0.1581], [0.3935, -1.4387, 0.2880], [0.2888, -1.4017, 0.3672]],
                 ("cuda", (8, 0)): [[0.7420, -1.4219, 0.1581], [0.3935, -1.4387, 0.2880], [0.2888, -1.4017, 0.3672]],
                 ("xpu", None): [[0.7420, -1.4219, 0.1581], [0.3935, -1.4387, 0.2880], [0.2888, -1.4017, 0.3672]],
             }
