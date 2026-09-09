@@ -17,18 +17,17 @@ from ..parakeet.audio_processing_parakeet import ParakeetAudioProcessor
 
 class NemotronAsrStreamingAudioProcessorMixin:
     """Parakeet's STFT + mel + preemphasis + log pipeline without its per-utterance mean/variance
-    normalization: padded frames are zeroed and the legacy keys the model consumes
-    (`input_features` / `attention_mask`) are emitted instead."""
-
-    model_input_names = ["input_features", "attention_mask"]
+    normalization: padded frames are zeroed. Output keys stay canonical (`audio_features` /
+    `audio_features_mask`); consumers still reading `input_features` or `attention_mask` get them
+    through the deprecated-key alias."""
 
     def _postprocess_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
         features = output.pop("audio_features")
         mask = output.pop("audio_features_mask", None)
         if mask is not None:
             features = features * self._astype(mask[..., None], self._dtype_name(features))
-            output["attention_mask"] = mask
-        output["input_features"] = features
+            output["audio_features_mask"] = mask
+        output["audio_features"] = features
         return output
 
 

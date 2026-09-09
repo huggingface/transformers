@@ -20,7 +20,6 @@ from ...audio_utils import _clamp_min
 
 class InklingAudioProcessorMixin:
     sampling_rate = 16000
-    model_input_names = ["input_features", "input_features_mask"]
     spectrogram_config = {
         "stft_config": {
             "n_fft": 1600,
@@ -64,15 +63,16 @@ class InklingAudioProcessorMixin:
         return int((padded_length + hop - 1) // hop)
 
     def _postprocess_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
-        # No normalization; zero padded frames and emit the legacy keys the model consumes.
-        # The mask is named `input_features_mask` so it doesn't collide with a text `attention_mask`.
+        # No normalization; just zero the padded frames. Output keys stay canonical
+        # (`audio_features` / `audio_features_mask`); consumers still reading the legacy
+        # `input_features` names get them through the deprecated-key alias.
         features = output.pop("audio_features")
         mask = output.pop("audio_features_mask", None)
         if mask is not None:
             # the mask is 0/1, so the numpy int-promotion round-trip is exact
             features = self._astype(features * mask[..., None], "float32")
-            output["input_features_mask"] = mask
-        output["input_features"] = features
+            output["audio_features_mask"] = mask
+        output["audio_features"] = features
         return output
 
 
