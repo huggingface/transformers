@@ -3046,6 +3046,35 @@ class TestAttentionImplementation(unittest.TestCase):
             )
         self.assertTrue("the package for FlashAttention2 doesn't seem to be installed." in str(cm.exception))
 
+    def test_use_gqa_in_sdpa_pre_sm80_gpu_returns_false(self):
+        """On pre-sm80 GPUs (e.g. T4/sm75), GQA should be disabled because the
+        FlashAttention kernel is unavailable and enabling GQA removes the
+        EFFICIENT_ATTENTION candidate, leaving only the slow MATH backend.
+
+        See: https://github.com/huggingface/transformers/issues/48633
+        """
+        from transformers.integrations.sdpa_attention import use_gqa_in_sdpa
+
+        key = torch.randn(1, 2, 16, 128)
+        value = torch.randn(1, 2, 16, 128)
+
+        with patch.object(torch.cuda, "is_available", return_value=True), patch.object(
+            torch.cuda, "get_device_capability", return_value=(7, 5)
+        ):
+            self.assertFalse(use_gqa_in_sdpa(None, key, value))
+
+    def test_use_gqa_in_sdpa_sm80_gpu_allows_gqa(self):
+        """On sm80+ GPUs, GQA should still be enabled per existing conditions."""
+        from transformers.integrations.sdpa_attention import use_gqa_in_sdpa
+
+        key = torch.randn(1, 2, 16, 128)
+        value = torch.randn(1, 2, 16, 128)
+
+        with patch.object(torch.cuda, "is_available", return_value=True), patch.object(
+            torch.cuda, "get_device_capability", return_value=(8, 0)
+        ):
+            self.assertTrue(use_gqa_in_sdpa(None, key, value))
+    
     @parameterized.expand(
         [
             # (key head_dim, value head_dim, use_mask, GQA kept, expected backend): GQA is kept only for matched
