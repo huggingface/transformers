@@ -1301,7 +1301,11 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         speech_ids = speech_ids.masked_fill(is_stop, decoder_fixing_codes[0])
 
         filler = torch.full((seq_len,), decoder_fixing_codes[0], device=speech_ids.device, dtype=speech_ids.dtype)
-        filler[-3:] = torch.tensor(decoder_fixing_codes[1:], device=speech_ids.device, dtype=speech_ids.dtype)
+        num_fixing_codes = min(len(decoder_fixing_codes) - 1, seq_len)
+        if num_fixing_codes > 0:
+            filler[-num_fixing_codes:] = torch.tensor(
+                decoder_fixing_codes[1:][-num_fixing_codes:], device=speech_ids.device, dtype=speech_ids.dtype
+            )
 
         col = torch.arange(seq_len, device=speech_ids.device)
         boundary = is_stop.int().argmax(1).clamp(max=max(0, seq_len - 3)).unsqueeze(1)

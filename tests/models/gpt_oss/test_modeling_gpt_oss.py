@@ -32,11 +32,15 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
+    get_accelerator_total_memory_gib,
+    get_cpu_ram_total_gib,
+    is_kernels_available,
     require_deterministic_for_xpu,
     require_kernels,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
+    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
@@ -57,6 +61,22 @@ if is_torch_available():
         NUM_GPUS = torch.xpu.device_count()
     else:
         NUM_GPUS = 0
+
+
+# Accelerator memory (in GiB, summed over every visible device) needed by the integration tests below. The
+# checkpoints ship as mxfp4, but these tests materialize bfloat16 weights -- either explicitly through
+# `dtype=torch.bfloat16`, or through `dtype="auto"` when the mxfp4 path is unavailable.
+#
+# The weight term is exact, from `modeling_utils.get_total_byte_count` on a meta-device model: 38.96 GiB for 20b and
+# 217.61 GiB for 120b. The budgets below add headroom for activations and the KV cache; training additionally keeps a
+# gradient per parameter, hence roughly twice the weights.
+#
+# These are deliberately upper bounds: on a machine where mxfp4 weights stay packed the model needs much less, so the
+# guard may skip a test that would in fact have fit. That trade is on purpose -- without the guard, loading 120b on a
+# runner that cannot hold it gets the whole CI *container* OOM-killed (host RAM), which loses the reports of every
+# other test in the job, not just this one.
+INFERENCE_MEMORY_GIB = {"20b": 48, "120b": 240}
+TRAINING_MEMORY_GIB = {"20b": 96, "120b": 480}
 
 
 class GptOssModelTester(CausalLMModelTester):
@@ -253,6 +273,38 @@ class GptOssIntegrationTest(unittest.TestCase):
         """Generate a key for the restructured integration test results."""
         return f"device={torch_device}|quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
 
+    def skip_if_kernels_are_required(self, kernels, attn_impl):
+        if (kernels or attn_impl == "kernels-community/vllm-flash-attn3") and not is_kernels_available():
+            self.skipTest("test requires the kernels library")
+
+    def skip_if_model_does_not_fit(self, model_size, budget=None):
+        """Skip unless the visible accelerators can hold `model_size`, see `INFERENCE_MEMORY_GIB` for the budgets."""
+        budget = INFERENCE_MEMORY_GIB if budget is None else budget
+        required = budget[model_size]
+        available = get_accelerator_total_memory_gib()
+        if available < required:
+            self.skipTest(
+                f"gpt-oss-{model_size} needs ~{required} GiB of accelerator memory, "
+                f"only {available:.1f} GiB is visible"
+            )
+
+    def skip_if_host_ram_cannot_hold(self, model_size):
+        """
+        Skip unless host RAM can hold `model_size`.
+
+        `distributed_worker` loads without a `device_map` and moves the model afterwards, so the whole checkpoint
+        transits through host RAM before it reaches any device -- that is the allocation that got the CI container
+        OOM-killed. `get_cpu_ram_total_gib` reports the per-runner budget in CI (see `CI_CPU_MEMORY_LIMIT_GB`), not
+        the RAM of the shared host.
+        """
+        required = INFERENCE_MEMORY_GIB[model_size]
+        available = get_cpu_ram_total_gib()
+        if available < required:
+            self.skipTest(
+                f"gpt-oss-{model_size} transits ~{required} GiB through host RAM, "
+                f"only {available:.1f} GiB is available"
+            )
+
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
 
@@ -374,6 +426,7 @@ if __name__ == "__main__":
     # Non-distributed test
     # ------------------------
     @parameterized.expand(PARAMETERS)
+    @require_kernels
     @require_deterministic_for_xpu
     def test_model_outputs(self, quantized, model, kernels, attn_impl, mode):
         if torch_device == "cpu":
@@ -384,6 +437,8 @@ if __name__ == "__main__":
 
         if torch_device == "xpu" and attn_impl == "kernels-community/vllm-flash-attn3":
             self.skipTest("flash attention 3 is not supported on XPU yet.")
+
+        self.skip_if_model_does_not_fit(model)
 
         model_id = f"openai/gpt-oss-{model}"
         output_texts = self.load_and_forward(
@@ -446,6 +501,9 @@ if __name__ == "__main__":
     # Distributed test
     # ------------------------
     @parameterized.expand(PARAMETERS)
+    # `run_distributed_test` launches `torchrun --nproc_per_node=NUM_GPUS` with `tp_size=WORLD_SIZE`: with a single
+    # device there is nothing to shard, so the full model lands on one accelerator and in host RAM.
+    @require_torch_multi_accelerator
     def test_model_outputs_distributed(self, quantized, model, kernels, attn_impl, mode):
         if torch_device == "cpu":
             self.skipTest("Skip TP on CPU until verified.")
@@ -453,6 +511,9 @@ if __name__ == "__main__":
         if torch_device == "xpu" and attn_impl == "kernels-community/vllm-flash-attn3":
             self.skipTest("flash attention 3 is not supported on XPU yet.")
 
+        self.skip_if_kernels_are_required(kernels, attn_impl)
+        self.skip_if_model_does_not_fit(model)
+        self.skip_if_host_ram_cannot_hold(model)
         self.run_distributed_test(quantized, model, kernels, attn_impl, mode)
 
     # ------------------------
@@ -471,6 +532,9 @@ if __name__ == "__main__":
 
         if quantized:
             self.skipTest("Training test for quantized models is not supported.")
+
+        self.skip_if_kernels_are_required(kernels, attn_impl)
+        self.skip_if_model_does_not_fit(model, TRAINING_MEMORY_GIB)
 
         model_id = f"openai/gpt-oss-{model}"
 
@@ -506,6 +570,8 @@ if __name__ == "__main__":
                 )
 
     def test_model_matches_original_20b(self):
+        self.skip_if_model_does_not_fit("20b")
+
         input_text = "Roses are red, violets"
 
         original_output = "Roses are red, violets are blue, I love you, and I love you too."
@@ -571,6 +637,8 @@ if __name__ == "__main__":
         self.assertTrue(original_output.startswith(decoded_string))
 
     def test_model_matches_original_120b(self):
+        self.skip_if_model_does_not_fit("120b")
+
         input_text = "Roses are red, violets"
 
         original_output = """Roses are red, violets are blue,

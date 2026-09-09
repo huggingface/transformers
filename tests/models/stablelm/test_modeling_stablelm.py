@@ -19,6 +19,7 @@ import pytest
 
 from transformers import BitsAndBytesConfig, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
@@ -61,11 +62,23 @@ class StableLmModelIntegrationTest(unittest.TestCase):
         output = model(**input_ids).logits.float()
 
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[2.7146, 2.4245, 1.5616, 1.4424, 2.6790]]).to(torch_device)
+        expectations_mean = Expectations(
+            {
+                (None, None): [[2.7146, 2.4245, 1.5616, 1.4424, 2.6790]],
+                ("cuda", 8): [[2.7304, 2.4242, 1.5718, 1.4360, 2.6792]],
+            }
+        )  # fmt: skip
+        EXPECTED_MEAN = torch.tensor(expectations_mean.get_expectation()).to(torch_device)
         torch.testing.assert_close(output.mean(dim=-1), EXPECTED_MEAN, rtol=1e-4, atol=1e-4)
 
         # Expected logits sliced from [0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([7.1030, -1.4195,  9.9206,  7.7008,  4.9891,  4.2169,  5.5426,  3.7878, 6.7593,  5.7360,  8.4691,  5.5448,  5.0544, 10.4129,  8.5573, 13.0405, 7.3265,  3.5868,  6.1106,  5.9406,  5.6376,  5.7490,  5.4850,  4.8124, 5.1991,  4.6419,  4.5719,  9.9588,  6.7222,  4.5070]).to(torch_device)  # fmt: skip
+        expectations_slice = Expectations(
+            {
+                (None, None): [7.1030, -1.4195,  9.9206,  7.7008,  4.9891,  4.2169,  5.5426,  3.7878,  6.7593,  5.7360,  8.4691,  5.5448,  5.0544, 10.4129,  8.5573, 13.0405,  7.3265,  3.5868,  6.1106,  5.9406,  5.6376,  5.7490,  5.4850,  4.8124,  5.1991,  4.6419,  4.5719,  9.9588,  6.7222,  4.5070],
+                ("cuda", 8): [7.1563, -1.4141,  9.8125,  7.7813,  4.9688,  4.3438,  5.2188,  3.3281,  6.6563,  5.9375,  8.3750,  5.3125,  4.7188, 10.2500,  8.6250, 13.0000,  7.2500,  3.4063,  5.8125,  5.6875,  5.3750,  5.4688,  5.2813,  4.5625,  4.9688,  4.4063,  4.3125, 10.0625,  6.7813,  4.5625],
+            }
+        )  # fmt: skip
+        EXPECTED_SLICE = torch.tensor(expectations_slice.get_expectation()).to(torch_device)
         torch.testing.assert_close(output[0, 0, :30], EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
 
     @slow
@@ -94,11 +107,23 @@ class StableLmModelIntegrationTest(unittest.TestCase):
         output = model(**input_ids).logits.float()
 
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-2.7196, -3.6099, -2.6877, -3.1973, -3.9344]]).to(torch_device)
+        expectations_mean = Expectations(
+            {
+                (None, None): [[-2.7196, -3.6099, -2.6877, -3.1973, -3.9344]],
+                ("cuda", 8): [[-2.7165, -3.6102, -2.6881, -3.1981, -3.9231]],
+            }
+        )  # fmt: skip
+        EXPECTED_MEAN = torch.tensor(expectations_mean.get_expectation()).to(torch_device)
         torch.testing.assert_close(output.mean(dim=-1), EXPECTED_MEAN, rtol=1e-4, atol=1e-4)
 
         # Expected logits sliced from [0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([2.8364, 5.3811, 5.1659, 7.5485, 4.3219, 6.3315, 1.3967, 6.9147, 3.9679, 6.4786, 5.9176, 3.3067, 5.2917, 0.1485, 3.9630, 7.9947,10.6727, 9.6757, 8.8772, 8.3527, 7.8445, 6.6025, 5.5786, 7.0985,6.1369, 3.4259, 1.9397, 4.6157, 4.8105, 3.1768]).to(torch_device)  # fmt: skip
+        expectations_slice = Expectations(
+            {
+                (None, None): [2.8364, 5.3811, 5.1659, 7.5485, 4.3219, 6.3315, 1.3967, 6.9147, 3.9679, 6.4786, 5.9176, 3.3067, 5.2917, 0.1485, 3.9630, 7.9947, 10.6727, 9.6757, 8.8772, 8.3527, 7.8445, 6.6025, 5.5786, 7.0985, 6.1369, 3.4259, 1.9397, 4.6157, 4.8105, 3.1768],
+                ("cuda", 8): [2.8438, 5.3750, 5.1563, 7.5625, 4.2813, 6.3125, 1.3750, 6.9063, 3.9375, 6.5000, 5.9063, 3.3125, 5.2813, 0.1240, 3.9531, 7.9688, 10.6875, 9.6875, 8.8750, 8.3750, 7.8438, 6.5938, 5.5625, 7.0938, 6.1250, 3.4219, 1.9375, 4.5938, 4.7813, 3.1719],
+            }
+        )  # fmt: skip
+        EXPECTED_SLICE = torch.tensor(expectations_slice.get_expectation()).to(torch_device)
         torch.testing.assert_close(output[0, 0, :30], EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
 
     @slow

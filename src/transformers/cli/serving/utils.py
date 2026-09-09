@@ -56,6 +56,19 @@ logger = logging.get_logger(__name__)
 X_REQUEST_ID = "x-request-id"
 
 
+def split_model_id(model_id: str) -> tuple[str, str | None]:
+    """`<repo>[@revision][:<file>.gguf]` -> the id without the file, and the file if one was named.
+
+    `<repo>:<file>.gguf` is how GGUF clients name a file inside a repository: the repository says which
+    model, the file which weights, and both are answered for rather than one of them dropped. A colon
+    that is not a `.gguf` file is left alone -- it is part of the id.
+    """
+    head, _, named = model_id.partition(":")
+    if named and not named.endswith(".gguf"):
+        return model_id, None
+    return head, named or None
+
+
 class Modality(enum.Enum):
     LLM = "LLM"
     VLM = "VLM"
@@ -656,6 +669,10 @@ class InferenceThread:
                     loop.call_soon_threadsafe(future.set_exception, e)
                 else:
                     future.set_exception(e)
+            finally:
+                # Release closure references (e.g. model captured in generate fn)
+                # before blocking on the next queue.get(), so GPU memory can be freed.
+                fn = args = kwargs = None
 
     def submit(self, fn, *args, **kwargs) -> Future:
         """Submit a callable to the inference thread. Returns a blocking Future."""
@@ -844,7 +861,7 @@ class CBGenerateManager(BaseGenerateManager):
 
     def is_alive(self) -> bool:
         """Whether the CB worker is healthy. ``True`` before ``init_cb()`` is called."""
-        return self._cb is None or self._cb.fatal_error is None
+        return self._cb is None or self._cb.background_thread_status.fatal_error is None
 
     def _check_alive(self, request_id: str) -> None:
         """Raise :class:`CBWorkerDeadError` if the CB worker has died.
@@ -852,10 +869,10 @@ class CBGenerateManager(BaseGenerateManager):
         Called at request entry to fail fast — submitting to a dead worker would otherwise
         enqueue the request into a void where it never gets processed.
         """
-        if self._cb is not None and self._cb.fatal_error is not None:
-            raise CBWorkerDeadError(
-                f"CB worker is dead and cannot accept request {request_id}: {self._cb.fatal_error}"
-            )
+        if self._cb is not None:
+            fatal_error = self._cb.background_thread_status.fatal_error
+            if fatal_error is not None:
+                raise CBWorkerDeadError(f"CB worker is dead and cannot accept request {request_id}: {fatal_error}")
 
     def generate_streaming(
         self,
@@ -955,7 +972,7 @@ class CBGenerateManager(BaseGenerateManager):
         # as requests submitted post-crash; otherwise it's a per-request failure (e.g. unsupported
         # logit-processor kwarg) and a plain RuntimeError -> 500 is appropriate.
         if result.error is not None:
-            if cb.fatal_error is not None:
+            if cb.background_thread_status.fatal_error is not None:
                 raise CBWorkerDeadError(f"CB worker died during request {request_id}: {result.error}")
             raise RuntimeError(f"CB generation failed for {request_id}: {result.error}")
         generated_ids = result.generated_tokens
@@ -1108,17 +1125,21 @@ class BaseHandler:
         """
         from fastapi import HTTPException
 
+        requested = body.get("model")
         if self.model_manager.force_model is not None:
-            requested = body.get("model")
             if requested is not None and requested != self.model_manager.force_model:
                 raise HTTPException(
                     status_code=400,
-                    detail=(f"Server is pinned to '{self.model_manager.force_model}'; requested '{requested}'."),
+                    detail=f"Server is pinned to '{self.model_manager.force_model}'; requested '{requested}'.",
                 )
-            body["model"] = self.model_manager.force_model
+            requested = self.model_manager.force_model
 
-        model_id = self.model_manager.process_model_name(body["model"])
-        model, processor = self.model_manager.load_model_and_processor(model_id)
+        # `<repo>:<file>.gguf` names both the repository and the weights to read out of it.
+        model, gguf_file = split_model_id(requested)
+        body["model"] = model
+
+        model_id = self.model_manager.process_model_name(model)
+        model, processor = self.model_manager.load_model_and_processor(model_id, gguf_file=gguf_file)
 
         return model_id, model, processor
 

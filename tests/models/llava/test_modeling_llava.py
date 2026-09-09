@@ -516,8 +516,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         prompt1 = "<image>\n<image>\nUSER: What's the difference of two images?\nASSISTANT:"
         prompt2 = "<image>\nUSER: Describe the image.\nASSISTANT:"
         prompt3 = "<image>\nUSER: Describe the image.\nASSISTANT:"
-        url1 = "https://images.unsplash.com/photo-1552053831-71594a27632d?q=80&w=3062&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-        url2 = "https://images.unsplash.com/photo-1617258683320-61900b281ced?q=80&w=3087&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+        url1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/unsplash_1552053831-71594a27632d.jpg"
+        url2 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/unsplash_1617258683320-61900b281ced.jpg"
         image1 = load_test_image(url1)
         image2 = load_test_image(url2)
 
@@ -598,7 +598,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = LlavaForConditionalGeneration.from_pretrained(model_id, dtype="float16", device_map=torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
-        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        image_file = (
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         raw_image = load_test_image(image_file)
         inputs = processor(
             text="<|im_start|>user\n<image>\nWhat are these?<|im_end|>\n<|im_start|>assistant",
@@ -622,23 +624,30 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_deterministic_for_xpu
     def test_pixtral(self):
         model_id = "mistral-community/pixtral-12b"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, dtype="float16", device_map=torch_device)
+        model = LlavaForConditionalGeneration.from_pretrained(model_id, dtype="float16", device_map="auto")
         processor = AutoProcessor.from_pretrained(model_id)
 
         IMG_URLS = [
-            load_test_image("https://picsum.photos/id/237/400/300"),
-            load_test_image("https://picsum.photos/id/231/200/300"),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_400x300.jpg"
+            ),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_231_200x300.jpg"
+            ),
         ]
         PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][/INST]"
 
-        # image = Image.open(requests.get(url, stream=True).raw)
         inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(torch_device, torch.float16)
         generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
         output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
-        # fmt: off
-        EXPECTED_GENERATION = "Describe the images.\nThe first image shows a black dog sitting on a wooden surface. The dog has a glossy coat and is looking directly at the camera with a calm expression. The wooden background appears to be made of planks, providing a rustic and warm setting for the photograph.\n\nThe second image depicts a scenic mountain landscape. The view is from a high vantage point, looking down at a rugged terrain with rocky outcrops and patches of green vegetation. The mountains in the distance are covered with snow"
-        # fmt: on
+        EXPECTED_GENERATIONS = Expectations(
+            {
+                (None, None): "Describe the images.\nThe first image shows a black dog sitting on a wooden surface. The dog has a glossy coat and is looking directly at the camera with a calm expression. The wooden background appears to be made of planks, providing a rustic and warm setting for the photograph.\n\nThe second image depicts a scenic mountain landscape. The view is from a high vantage point, looking down at a rugged terrain with rocky outcrops and patches of green vegetation. The mountains in the distance are covered with snow",
+                ("cuda", 8): "Describe the images.\nThe first image shows a black dog sitting on a wooden surface. The dog has a glossy coat and is looking directly at the camera with a calm expression. The wooden background appears to be made of planks, giving a rustic and cozy feel to the image.\n\nThe second image depicts a scenic mountain landscape. The view is from a high vantage point, looking down at a rugged terrain with rocky outcrops and patches of green vegetation. The mountains in the distance are covered with",
+            }
+        )  # fmt: skip
+        EXPECTED_GENERATION = EXPECTED_GENERATIONS.get_expectation()
         # check that both inputs are handled correctly and generate the same output
         self.assertEqual(output, EXPECTED_GENERATION)
 
@@ -655,8 +664,12 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         IMG_URLS = [
-            load_test_image("https://picsum.photos/id/237/400/300"),
-            load_test_image("https://picsum.photos/id/231/200/300"),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_400x300.jpg"
+            ),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_231_200x300.jpg"
+            ),
         ]
         PROMPT = "<s>[INST][IMG][IMG]Describe the images.[/INST]"
 
@@ -666,8 +679,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_GENERATIONS = Expectations(
             {
-                ("cuda", 7): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a black Labrador",
-                ("xpu", 3): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a black Labrador",
+                ("cuda", 8): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a puppy,",
                 ("rocm", (9, 5)): "Describe the images.The image features a dog positioned centrally, taking up a significant portion of the frame. The dog is situated against a backdrop of rugged terrain, which includes rocky cliffs and grassy slopes. The dog appears to be in a relaxed posture, possibly looking directly",
             }
         )  # fmt: skip
@@ -688,8 +700,12 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
 
         IMG_URLS = [
-            load_test_image("https://picsum.photos/id/237/400/300"),
-            load_test_image("https://picsum.photos/id/17/150/500"),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_400x300.jpg"
+            ),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_17_150x500.jpg"
+            ),
         ]
         PROMPT = [
             "<s>[INST][IMG]What breed is the dog?[/INST]",
@@ -707,6 +723,10 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
                 (None, None): [
                     "What breed is the dog?The dog in the image is a black Labrador Retriever.",
                     "What is shown in this image?The image depicts a narrow, winding dirt path surrounded by lush greenery. The path is bordered by grass and shrubs on both sides. On the left side, there are tall trees and dense foliage, while on the right side, there"
+                ],
+                ("cuda", 8): [
+                    "What breed is the dog?The dog in the image is a black Labrador Retriever.",
+                    "What is shown in this image?A narrow dirt path is surrounded by grass and trees. The path leads to a distant point, and the sky is clear and blue."
                 ],
                 ("rocm", (9, 5)): [
                     'What breed is the dog?The dog in the image is a black Labrador Retriever.',

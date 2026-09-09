@@ -108,7 +108,7 @@ class PatchTSTAttention(nn.Module):
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -147,7 +147,7 @@ class PatchTSTAttention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights, None
+        return attn_output, attn_weights
 
 
 class PatchTSTBatchNorm(nn.Module):
@@ -480,16 +480,14 @@ class PatchTSTEncoderLayer(nn.Module):
 
         if self.pre_norm:
             ## Norm and Multi-Head attention and Add residual connection
-            attn_output, attn_weights, _ = self.self_attn(
+            attn_output, attn_weights = self.self_attn(
                 hidden_states=self.norm_sublayer1(hidden_state), output_attentions=output_attentions
             )
             # Add: residual connection with residual dropout
             hidden_state = hidden_state + self.dropout_path1(attn_output)
         else:
             ## Multi-Head attention and Add residual connection and Norm - Standard Transformer from BERT
-            attn_output, attn_weights, _ = self.self_attn(
-                hidden_states=hidden_state, output_attentions=output_attentions
-            )
+            attn_output, attn_weights = self.self_attn(hidden_states=hidden_state, output_attentions=output_attentions)
             # hidden_states: [(bs*num_channels) x sequence_length x d_model]
             hidden_state = self.norm_sublayer1(hidden_state + self.dropout_path1(attn_output))
 
@@ -504,14 +502,14 @@ class PatchTSTEncoderLayer(nn.Module):
             hidden_state = hidden_state.view(batch_size * sequence_length, num_input_channels, d_model)
             if self.pre_norm:
                 ## Norm and Multi-Head attention and Add residual connection
-                attn_output, channel_attn_weights, _ = self.self_attn(
+                attn_output, channel_attn_weights = self.self_attn(
                     hidden_states=self.norm_sublayer2(hidden_state), output_attentions=output_attentions
                 )
                 # Add: residual connection with residual dropout
                 hidden_state = hidden_state + self.dropout_path2(attn_output)
             else:
                 ## Multi-Head attention and Add residual connection and Norm
-                attn_output, channel_attn_weights, _ = self.self_attn(
+                attn_output, channel_attn_weights = self.self_attn(
                     hidden_states=hidden_state, output_attentions=output_attentions
                 )
                 # hidden_states: [(bs*sequence_length) x num_channels x d_model]

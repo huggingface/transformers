@@ -58,6 +58,7 @@ class Step3p7VisionConfig(PreTrainedConfig):
     hidden_act: str = "quick_gelu"
     layer_norm_eps: float = 1e-5
     attention_dropout: float | int = 0.0
+    default_rope_type = "axial"
     # New fields
     mlp_ratio: float = 8960 / 1536
     layer_scale_init_value: float = 0.1

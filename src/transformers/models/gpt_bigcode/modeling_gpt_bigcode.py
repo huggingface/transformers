@@ -291,7 +291,7 @@ class GPTBigCodeBlock(GradientCheckpointingLayer):
         use_cache: bool | None = False,
         output_attentions: bool | None = False,
         **kwargs,
-    ) -> tuple[torch.Tensor] | tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
         attn_output, _ = self.attn(

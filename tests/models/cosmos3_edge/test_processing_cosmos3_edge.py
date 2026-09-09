@@ -26,22 +26,16 @@ from transformers import (
 )
 from transformers.testing_utils import (
     require_torch,
-    require_torchcodec,
     require_torchvision,
     require_vision,
 )
 from transformers.utils import (
-    is_torch_available,
-    is_torchcodec_available,
     is_vision_available,
 )
 from transformers.video_utils import VideoMetadata
 
-from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
+from ...test_processing_common import ProcessorTesterMixin
 
-
-if is_torch_available():
-    import torch
 
 if is_vision_available():
     from PIL import Image
@@ -54,7 +48,17 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Cosmos3EdgeProcessor
     tiny_model_id = "hf-internal-testing/tiny-processor-cosmos3-edge"
 
-    def prepare_image_inputs(self, batch_size: int | None = None, nested: bool = False):
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 2, "fps": None, "expected_dim": 0, "output_length": 240},
+            {"num_frames": None, "fps": 1, "expected_dim": 0, "output_length": 192},
+            {"do_sample_frames": False, "fps": 10, "expected_dim": 0, "output_length": 176},
+            {"do_sample_frames": False, "expected_dim": 0, "output_length": 176},
+            {"expected_dim": 0, "output_length": 176},
+        ]
+
+    def prepare_images_inputs(self, batch_size: int | None = None, nested: bool = False):
         """Create small 64x96 inputs aligned to patch_size * merge_size (32).
 
         The fixed size keeps the processor tests lightweight and valid for patch
@@ -67,7 +71,7 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return [[image] for _ in range(batch_size)]
         return [image] * batch_size
 
-    def prepare_video_inputs(self, batch_size: int | None = None):
+    def prepare_videos_inputs(self, batch_size: int | None = None):
         """Create four 64x96 frames aligned to patch_size * merge_size (32).
 
         The fixed shape keeps frame-wise packing tests lightweight and valid; it
@@ -77,212 +81,6 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if batch_size is None:
             return video
         return [video] * batch_size
-
-    @require_torch
-    def _test_apply_chat_template(
-        self,
-        modality: str,
-        batch_size: int,
-        return_tensors: str,
-        input_name: str,
-        processor_name: str,
-        input_data: list,
-    ):
-        """Adapt shared chat-template coverage to Edge's packed patch outputs."""
-        if modality == "video" and any(isinstance(item, str) for item in input_data[:batch_size]):
-            if not is_torchcodec_available():
-                self.skipTest("torchcodec is required to decode video URLs")
-
-        processor = self.get_processor()
-        if processor.chat_template is None:
-            self.skipTest("Processor has no chat template")
-        if processor_name not in self.processor_class.get_attributes():
-            self.skipTest(f"{processor_name} attribute not present in {self.processor_class}")
-
-        batch_messages = [
-            [
-                {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
-                {"role": "user", "content": [{"type": "text", "text": "Describe this."}]},
-            ]
-            for _ in range(batch_size)
-        ]
-
-        formatted_prompt = processor.apply_chat_template(batch_messages, add_generation_prompt=True, tokenize=False)
-        self.assertEqual(len(formatted_prompt), batch_size)
-
-        formatted_prompt_tokenized = processor.apply_chat_template(
-            batch_messages, add_generation_prompt=True, tokenize=True, return_tensors=return_tensors
-        )
-        tokenized_prompt = processor.tokenizer(formatted_prompt, return_tensors=return_tensors)
-        self.assertListEqual(tokenized_prompt.input_ids.tolist(), formatted_prompt_tokenized.tolist())
-
-        tokenized_prompt_max_length = processor.apply_chat_template(
-            batch_messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_tensors=return_tensors,
-            processor_kwargs={
-                "padding": "max_length",
-                "truncation": True,
-                "max_length": self.chat_template_max_length,
-            },
-        )
-        self.assertEqual(len(tokenized_prompt_max_length[0]), self.chat_template_max_length)
-
-        out_dict_text = processor.apply_chat_template(
-            batch_messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors=return_tensors,
-        )
-        self.assertTrue(all(key in out_dict_text for key in ["input_ids", "attention_mask"]))
-        self.assertEqual(len(out_dict_text["input_ids"]), batch_size)
-        self.assertEqual(len(out_dict_text["attention_mask"]), batch_size)
-
-        for index, item in enumerate(input_data[:batch_size]):
-            batch_messages[index][1]["content"] = [
-                batch_messages[index][1]["content"][0],
-                {"type": modality, "url": item},
-            ]
-
-        processor_kwargs = {"num_frames": 2, "fps": None} if modality == "video" else None
-        out_dict = processor.apply_chat_template(
-            batch_messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors=return_tensors,
-            processor_kwargs=processor_kwargs,
-        )
-        input_name = getattr(self, input_name)
-        grid_name = "video_grid_thw" if modality == "video" else "image_grid_thw"
-        expected_num_patches = int(out_dict[grid_name].prod(dim=-1).sum())
-
-        self.assertIn(input_name, out_dict)
-        self.assertEqual(len(out_dict["input_ids"]), batch_size)
-        self.assertEqual(len(out_dict["attention_mask"]), batch_size)
-        self.assertEqual(len(out_dict[input_name]), expected_num_patches)
-
-        return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
-        for value in out_dict.values():
-            self.assertIsInstance(value, return_tensor_to_type[return_tensors])
-
-        assistant_message = {
-            "role": "assistant",
-            "content": [{"type": "text", "text": "It is the sound of"}],
-        }
-        for index in range(batch_size):
-            batch_messages[index] = batch_messages[index] + [assistant_message]
-        continue_prompt = processor.apply_chat_template(batch_messages, continue_final_message=True, tokenize=False)
-        for prompt in continue_prompt:
-            self.assertTrue(prompt.endswith("It is the sound of"))
-
-    @require_torchcodec
-    def test_apply_chat_template_video_frame_sampling(self):
-        """Adapt the shared frame-sampling assertions to Edge's packed video patches."""
-        processor = self.get_processor()
-
-        if processor.chat_template is None:
-            self.skipTest("Processor has no chat template")
-
-        messages = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "video",
-                            "url": url_to_local_path(
-                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
-                            ),
-                        },
-                        {"type": "text", "text": "What is shown in this video?"},
-                    ],
-                },
-            ]
-        ]
-
-        def assert_packed_video(output, expected_num_frames):
-            self.assertIn(self.videos_input_name, output)
-            self.assertEqual(tuple(output["video_grid_thw"].shape), (1, 3))
-            self.assertEqual(output["video_grid_thw"][0, 0].item(), expected_num_frames)
-            expected_num_patches = int(output["video_grid_thw"].prod(dim=-1).sum())
-            self.assertEqual(len(output[self.videos_input_name]), expected_num_patches)
-            self.assertEqual(
-                output[self.videos_input_name].shape[-1],
-                len(processor.video_processor.image_mean) * processor.video_processor.patch_size**2,
-            )
-
-        num_frames = 3
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            processor_kwargs={"num_frames": num_frames, "fps": None, "do_sample_frames": True},
-        )
-        assert_packed_video(out_dict_with_video, expected_num_frames=num_frames)
-
-        # The fixture would yield three frames at 10 FPS, which Edge clamps to its four-frame minimum.
-        fps = 10
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            processor_kwargs={"fps": fps, "num_frames": None, "do_sample_frames": True},
-        )
-        assert_packed_video(out_dict_with_video, expected_num_frames=processor.video_processor.min_frames)
-
-        # Disabling sampling retains all eleven frames in the fixture even when an FPS is supplied.
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            processor_kwargs={"do_sample_frames": False, "fps": fps, "return_tensors": "pt"},
-        )
-        assert_packed_video(out_dict_with_video, expected_num_frames=11)
-
-        with self.assertRaises(ValueError):
-            processor.apply_chat_template(
-                messages,
-                add_generation_prompt=True,
-                tokenize=True,
-                return_dict=True,
-                processor_kwargs={"fps": fps, "num_frames": num_frames, "do_sample_frames": True},
-            )
-
-    def test_video_processor_defaults(self):
-        """Compare processor outputs while preserving Edge's timestamp metadata."""
-        video_processor = self.get_component("video_processor")
-        processor = self.processor_class(**self.prepare_components())
-        video_input = self.prepare_video_inputs()
-        video_metadata = [VideoMetadata(total_num_frames=4, fps=2, duration=2.0, frames_indices=[0, 1, 2, 3])]
-
-        video_processor_output = video_processor(
-            video_input,
-            video_metadata=video_metadata,
-            do_sample_frames=False,
-            return_metadata=True,
-            return_tensors="pt",
-        )
-        processor_output = processor(
-            videos=video_input,
-            video_metadata=video_metadata,
-            do_sample_frames=False,
-            return_metadata=True,
-            return_tensors="pt",
-        )
-
-        for key in video_processor_output:
-            if key == "video_metadata":
-                self.assertEqual(video_processor_output[key], processor_output[key])
-            else:
-                torch.testing.assert_close(video_processor_output[key], processor_output[key])
 
     def test_image_processor_uses_projector_block_major_patch_order(self):
         """Protect the checkpoint's block-major patches and HWC values within each patch."""
@@ -390,3 +188,7 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(text, [f"before{replacement}after"])
         self.assertEqual(replacement_offsets[0][0]["text"], "<|vision_start|><|video_pad|><|vision_end|>")
+
+    @unittest.skip("Model needs real tokenizer and isn't worth testing, as it's used in diffusers pipe")
+    def test_replacement_offsets(self):
+        pass

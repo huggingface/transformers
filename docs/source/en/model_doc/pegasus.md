@@ -106,10 +106,6 @@ warning: `add_tokens` does not work at the moment.
 
 [[autodoc]] PegasusTokenizer
 
-## PegasusTokenizerFast
-
-[[autodoc]] PegasusTokenizerFast
-
 ## PegasusModel
 
 [[autodoc]] PegasusModel

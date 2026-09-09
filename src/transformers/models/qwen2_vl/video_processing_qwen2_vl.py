@@ -31,9 +31,12 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, auto_docstring
+from ...utils import TensorType, auto_docstring, logging
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
+
+
+logger = logging.get_logger(__name__)
 
 
 # Copied from transformers.models.qwen2_vl.image_processing_qwen2_vl.smart_resize
@@ -84,6 +87,17 @@ class Qwen2VLVideoProcessorInitKwargs(VideosKwargs, total=False):
         The maximum number of frames that can be sampled.
     use_token_compression (`bool`, *optional*, defaults to `True`):
         Whether to compress videos when processing or not.
+    cap_pixels_per_frame (`bool`, *optional*):
+        Whether to bound a video's total pixel cost the way the reference implementation
+        (qwen-vl-utils) does: on top of the per-frame `size["longest_edge"]` cap, each frame is
+        limited to an even share of the total-video pixel budget (`max_video_tokens` tokens'
+        worth of pixels), floored at `1.05 * size["shortest_edge"]`, so densely sampled videos
+        cannot grow without bound. If unset, the current behavior (no total bound) is kept and a
+        warning is emitted: the default will change to `True` in v5.22, after which the argument
+        will be removed.
+    max_video_tokens (`int`, *optional*, defaults to 128000):
+        The model context length assumed when deriving the total-video pixel budget used by
+        `cap_pixels_per_frame` (the budget is 90% of this many tokens.
     """
 
     min_pixels: int
@@ -93,6 +107,8 @@ class Qwen2VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     merge_size: int
     min_frames: int
     max_frames: int
+    cap_pixels_per_frame: bool
+    max_video_tokens: int
 
 
 @auto_docstring
@@ -111,6 +127,8 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
     min_frames = 4
     max_frames = 768
     do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
+    cap_pixels_per_frame = None
+    max_video_tokens = 128000
     valid_kwargs = Qwen2VLVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
@@ -213,11 +231,22 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         factor: int,
+        temporal_factor: int = 2,
+        cap_pixels_per_frame: bool | None = None,
         **kwargs,
     ) -> "torch.Tensor":
         """Resize dynamically based on input video aspect ratio."""
         if not size.shortest_edge or not size.longest_edge:
             raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
+
+        max_pixels = size.longest_edge
+        if cap_pixels_per_frame:
+            # the per-frame cap (`size.longest_edge`) is bounded by an even share of the `max_video_tokens`
+            num_frames = videos.shape[1]
+            total_pixels = int(self.max_video_tokens * factor * factor * 0.9)
+            max_pixels = max(
+                min(max_pixels, total_pixels * temporal_factor // num_frames), int(size.shortest_edge * 1.05)
+            )
 
         height, width = videos.shape[-2:]
         resized_height, resized_width = smart_resize(
@@ -225,7 +254,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
             width,
             factor=factor,
             min_pixels=size.shortest_edge,
-            max_pixels=size.longest_edge,
+            max_pixels=max_pixels,
         )
         return super().resize(
             image=videos,
@@ -288,9 +317,20 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         patch_size: int | None = None,
         temporal_patch_size: int | None = None,
         merge_size: int | None = None,
+        cap_pixels_per_frame: bool | None = None,
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ):
+        if cap_pixels_per_frame is None:
+            logger.warning_once(
+                "Qwen2VL video processing does not apply the per-frame pixel cap the reference "
+                "implementation (qwen-vl-utils) applies, so some videos cost far more tokens than they "
+                "would there. In v5.22 the capped behavior will become the default and "
+                "`cap_pixels_per_frame` will be removed. Pass `cap_pixels_per_frame=True` to adopt the "
+                "reference behavior now, or `False` to keep the current behavior and silence this "
+                "warning."
+            )
+            cap_pixels_per_frame = False
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
@@ -303,6 +343,8 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                     size=size,
                     resample=resample,
                     factor=patch_size * merge_size,
+                    temporal_factor=temporal_patch_size,
+                    cap_pixels_per_frame=cap_pixels_per_frame,
                 )
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
