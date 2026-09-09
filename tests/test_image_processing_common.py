@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib
 import inspect
 import json
 import os
@@ -20,6 +21,7 @@ import tempfile
 import warnings
 from copy import deepcopy
 from typing import Any
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -38,7 +40,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import import_utils, is_torch_available, is_vision_available
 
 
 if is_torch_available():
@@ -448,6 +450,32 @@ class ImageProcessingTestMixin:
                 self.assertEqual(
                     dict1_common, dict2_common, f"Backends {backend1} and {backend2} differ in common keys"
                 )
+
+    def test_pil_can_load_without_torchvision(self):
+        """Tests that we can init/load PIL-backend processors even when no torchvision is installed."""
+
+        if "pil" not in self.image_processing_classes:
+            self.skipTest("Skipping test: no PIL backend processor found!")
+
+        image_processing_class = self.image_processing_classes["pil"]
+        test_file_path = pathlib.Path(sys.modules[self.__class__.__module__].__file__).resolve()
+        model_name = test_file_path.parent.name
+
+        # Try to init, save and load back a PIL processor in an env with no torchvision
+        with patch.dict(
+            import_utils.BACKENDS_MAPPING,
+            {"torchvision": (lambda: False, import_utils.BACKENDS_MAPPING["torchvision"][1])},
+        ):
+            module = importlib.import_module(f"transformers.models.{model_name}")
+            importlib.reload(module)
+
+            image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
+            pil_processor = image_processing_class(**image_processor_dict)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                pil_processor.save_pretrained(tmpdirname)
+                reloaded_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="pil")
+                self.assertIs(reloaded_processor.__class__, image_processing_class)
 
     def test_init_without_params(self):
         for image_processing_class in self.image_processing_classes.values():

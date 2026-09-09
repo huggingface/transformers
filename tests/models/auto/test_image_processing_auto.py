@@ -32,8 +32,6 @@ from transformers import (
     ViTImageProcessorPil,
 )
 from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_torchvision, require_vision
-from transformers.utils import import_utils
-from transformers.utils.import_utils import _LazyModule, define_import_structure
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
@@ -373,22 +371,6 @@ class AutoImageProcessorTest(unittest.TestCase):
             ):
                 with self.assertRaisesRegex(ValueError, "Missing optional dependencies: torchvision"):
                     AutoImageProcessor.from_pretrained(tmpdirname, backend="torchvision")
-
-    def test_available_without_torchvision(self):
-        """
-        `_LazyModule` resolves missing backends once, at construction, so the module has to be
-        rebuilt under the patch rather than patched after the fact.
-        """
-        auto_path = Path(transformers.models.auto.__file__).parent
-        error_message = import_utils.BACKENDS_MAPPING["torchvision"][1]
-
-        with patch.dict(import_utils.BACKENDS_MAPPING, {"torchvision": (lambda: False, error_message)}):
-            module = _LazyModule(
-                "transformers.models.auto",
-                str(auto_path / "__init__.py"),
-                define_import_structure(auto_path),
-            )
-            self.assertIs(module.AutoImageProcessor, AutoImageProcessor)
 
     def test_unrecognized_image_processor_error_when_no_backend_mapping_exists(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
