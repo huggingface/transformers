@@ -212,14 +212,14 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_multiple_images_processor_outputs(self):
         images_urls = [
-            "http://images.cocodataset.org/val2017/000000000139.jpg",
-            "http://images.cocodataset.org/val2017/000000000285.jpg",
-            "http://images.cocodataset.org/val2017/000000000632.jpg",
-            "http://images.cocodataset.org/val2017/000000000724.jpg",
-            "http://images.cocodataset.org/val2017/000000000776.jpg",
-            "http://images.cocodataset.org/val2017/000000000785.jpg",
-            "http://images.cocodataset.org/val2017/000000000802.jpg",
-            "http://images.cocodataset.org/val2017/000000000872.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000139.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000285.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000632.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000724.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000776.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000785.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000802.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000872.jpg",
         ]
 
         images = []

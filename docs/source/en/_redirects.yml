@@ -4,6 +4,7 @@ perf_infer_gpu_many: perf_infer_gpu_multi
 perf_infer_gpu_one: optimization_overview
 perf_train_cpu_many: perf_train_cpu
 quantization: quantization/overview
+gguf: quantization/gguf
 serving: serve-cli/serving
 
 # Removed in v5
@@ -14,3 +15,4 @@ performance: optimization_overview
 task_summary: pipeline_tutorial
 model_summary: index
 migration: index
+tflite: community_integrations/litert

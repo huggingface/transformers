@@ -14,42 +14,42 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Heterogeneous model configurations
+# Per-layer configurations
 
-Most model configurations in Transformers describe a homogeneous stack: each layer has the same dimensions and contains
-the same submodules. Some checkpoints do not follow this pattern. For example, a model may use a smaller MLP in one
-layer, fewer key-value heads in another layer, or omit a submodule such as attention or the MLP from selected layers.
+Some checkpoints are heterogeneous (not layer-uniform). A smaller MLP in one layer, fewer key-value heads in another, or a different
+layout on selected layers means a single global config doesn't accurately describe the stack.
 
-`per_layer_config` represents these layer-specific differences directly in the model configuration. Each entry stores
-only the attributes that differ from the global configuration. Attributes that are not overridden inherit their value
-from the global configuration.
-
-This is useful for checkpoints that remain close to an existing architecture but are no longer layer-uniform, such as
-pruned, distilled, or NAS-derived (Neural Architecture Search) models. Instead of defining a new architecture for every
-such variant, `per_layer_config` records the layer-level differences in a few lines of config, at little to no
-config-side cost.
+Use `per_layer_config` on [`~transformers.PreTrainedConfig`] to record those diffs when you're authoring or
+inspecting a config, and when model code will consume them. Each entry stores only what differs from the
+global configuration, the rest inherits.
 
 > [!NOTE]
 > Heterogeneous configurations are a power feature. If a heterogeneous layout becomes a common or prominent
 > architecture, we will strive to model it explicitly in the architecture implementation rather than rely on
 > `per_layer_config`. Prefer the explicit architecture when one exists.
 
-Examples of heterogeneous checkpoints include:
+The models below are heterogeneous checkpoints. Layers are not uniform across the stack. They use a dedicated architecture with `block_configs` and their own `model_type`, rather than `per_layer_config` on a standard architecture.
 
 | Model | Derived from |
 |---|---|
-| [`nvidia/Llama-3_3-Nemotron-Super-49B-v1_5`](https://huggingface.co/nvidia/Llama-3_3-Nemotron-Super-49B-v1_5) | [`meta-llama/Llama-3.3-70B-Instruct`](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) |
-| [`nvidia/Llama-3_1-Nemotron-Ultra-253B-v1`](https://huggingface.co/nvidia/Llama-3_1-Nemotron-Ultra-253B-v1) | [`meta-llama/Llama-3.1-405B-Instruct`](https://huggingface.co/meta-llama/Llama-3.1-405B-Instruct) |
-| [`nvidia/gpt-oss-puzzle-88B`](https://huggingface.co/nvidia/gpt-oss-puzzle-88B) | [`openai/gpt-oss-120b`](https://huggingface.co/openai/gpt-oss-120b) |
-| [`nvidia/NVIDIA-Nemotron-Labs-3-Puzzle-75B-A9B-BF16`](https://huggingface.co/nvidia/NVIDIA-Nemotron-Labs-3-Puzzle-75B-A9B-BF16) | [`nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16`](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16) |
+| [nvidia/Llama-3_3-Nemotron-Super-49B-v1_5](https://huggingface.co/nvidia/Llama-3_3-Nemotron-Super-49B-v1_5) | [meta-llama/Llama-3.3-70B-Instruct](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) |
+| [nvidia/Llama-3_1-Nemotron-Ultra-253B-v1](https://huggingface.co/nvidia/Llama-3_1-Nemotron-Ultra-253B-v1) | [meta-llama/Llama-3.1-405B-Instruct](https://huggingface.co/meta-llama/Llama-3.1-405B-Instruct) |
+| [nvidia/gpt-oss-puzzle-88B](https://huggingface.co/nvidia/gpt-oss-puzzle-88B) | [openai/gpt-oss-120b](https://huggingface.co/openai/gpt-oss-120b) |
+| [nvidia/NVIDIA-Nemotron-Labs-3-Puzzle-75B-A9B-BF16](https://huggingface.co/nvidia/NVIDIA-Nemotron-Labs-3-Puzzle-75B-A9B-BF16) | [nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16) |
 
 ## Define per-layer overrides
 
-Pass `per_layer_config` to a configuration as a mapping from layer indices to attribute overrides. Layer indices are
-zero-based. Only attributes that differ from the global configuration need to be specified.
+Pass `per_layer_config` to [`~transformers.LlamaConfig`] as a mapping from layer indices to attribute overrides. Layer
+indices are zero-based. Only attributes that differ from the global configuration need to be specified.
 
-The following example overrides four layers: layer 5 uses a smaller MLP, layer 11 uses
-fewer key-value heads, layer 23 skips the MLP, and layer 27 skips attention.
+`per_layer_config` records and resolves configuration values. It does not by itself change the modules a model creates
+or how those modules run. Applying a size override or a `skip` requires model code that reads the resolved per-layer
+configuration when constructing or running each layer. The current `LlamaModel` constructs every `LlamaDecoderLayer`
+with the global configuration, so the `skip` entries below remain configuration values rather than removing modules
+after `from_pretrained`.
+
+The following example records overrides for four layers: layer 5 uses a smaller MLP, layer 11 uses
+fewer key-value heads, and layers 23 and 27 record `skip` values for architectures that support them.
 
 ```py
 from transformers import LlamaConfig
@@ -68,17 +68,17 @@ config = LlamaConfig(
         # Use fewer key-value heads in another layer.
         11: {"num_key_value_heads": 4},
 
-        # Omit the MLP from a selected layer.
+        # Record a request to skip the MLP in architectures that support it.
         23: {"skip": ["mlp"]},
 
-        # Omit attention from a selected layer.
+        # Record a request to skip attention in architectures that support it.
         27: {"skip": ["attention"]},
     },
 )
 ```
 
-The submodules that can be skipped (for example, `"mlp"` and `"attention"`) are defined per architecture. `skip`
-accepts a list, so a layer can omit more than one submodule.
+The submodules that an architecture can skip (for example, `"mlp"` and `"attention"`) are defined per architecture.
+`skip` accepts a list, so a layer can record more than one submodule override.
 
 Accessing `config.per_layer_config[layer_idx]` returns a resolved layer configuration. The resolved configuration
 combines the global configuration with the overrides for that layer.
@@ -99,11 +99,11 @@ config.per_layer_config[5].intermediate_size
 config.per_layer_config[11].num_key_value_heads
 # 4
 
-# Layer 23 skips the MLP.
+# Layer 23 records an MLP skip.
 config.per_layer_config[23].skip
 # ["mlp"]
 
-# Layer 27 skips attention.
+# Layer 27 records an attention skip.
 config.per_layer_config[27].skip
 # ["attention"]
 ```
@@ -111,25 +111,21 @@ config.per_layer_config[27].skip
 Configurations that use `per_layer_config` support the same [`~PreTrainedConfig.save_pretrained`] and
 [`~PreTrainedConfig.from_pretrained`] round trip as other configurations.
 
-Each architecture defines in its code which attributes are used at the layer level. `per_layer_config` provides the mechanism for
-recording those layer-level differences and resolving them against the global config.
+Each architecture defines in its code which attributes it consumes at the layer level. `per_layer_config` provides the
+mechanism for recording those layer-level differences and resolving them against the global config.
 
 ## Global attribute access
 
-In a heterogeneous configuration, an attribute with per-layer overrides no longer has a single model-wide value.
-For example, `num_key_value_heads` may be `8` for most layers and `4` for selected layers, so reading
-`config.num_key_value_heads` outside a layer-specific context is not well-defined.
+An attribute with per-layer overrides does not have a single model-wide value. `num_key_value_heads` may be `8` on
+most layers and `4` on selected layers. Reading `config.num_key_value_heads` outside a layer context is ambiguous.
 
-This matters because consumers that read such an attribute globally would silently apply the wrong value to the
-overridden layers. Code that allocates a key-value cache from a global `num_key_value_heads`, for instance,
-would be incorrect for the layers that override it.
+By default that access raises `AmbiguousGlobalPerLayerAttributeError` and points you to
+`config.per_layer_config[layer_idx]`. The attribute still exists on the global config, so this is not an
+`AttributeError`. Reading that global value without a layer index is still wrong. Code that builds a key-value cache from a global
+`num_key_value_heads` would size the wrong layers incorrectly.
 
-By default, an `AmbiguousGlobalPerLayerAttributeError` will be raised for this access pattern, directing callers to use
-`config.per_layer_config[layer_idx]` instead. We raise this error instead of `AttributeError` because the attribute
-exists on the global config, but reading it there is ambiguous without layer-specific context.
-
-Set `allow_global_per_layer_attribute_access=True` only when the caller intentionally needs the global fallback value
-and can safely handle heterogeneous configurations. In that case, global access is allowed, but a warning will be emitted once.
+Set `allow_global_per_layer_attribute_access=True` only when you intentionally need the global fallback and can handle
+heterogeneous configs. Global access is then allowed. A warning is emitted once.
 
 ```py
 config = LlamaConfig(
@@ -146,13 +142,13 @@ config = LlamaConfig(
 
 config.num_key_value_heads
 # 8
-# Emits a warning_once message because num_key_value_heads has a per-layer override.
+# Emits a one-time warning because num_key_value_heads has a per-layer override.
 ```
 
 ## Serialization
 
-`per_layer_config` is serialized sparsely by default. Layers without overrides are omitted, and overridden attributes
-that match the global value are also omitted.
+`per_layer_config` serializes sparsely by default, and layers without overrides are omitted. Overridden attributes that
+match the global value are omitted too.
 
 ```py
 from transformers import LlamaConfig
@@ -174,9 +170,9 @@ config.to_dict()["per_layer_config"]
 # {"2": {"num_key_value_heads": 4}}
 ```
 
-Set `serialize_explicit_per_layer_config=True` when the serialized configuration should include every layer for the
-attributes represented in `per_layer_config`. This can make the layer layout easier to inspect, even when some values
-match the global configuration.
+Set `serialize_explicit_per_layer_config=True` to include every layer for the attributes represented in
+`per_layer_config`. That makes the layer layout easier to inspect when some values still match the global
+configuration.
 
 ```py
 explicit_config = LlamaConfig(
@@ -203,5 +199,5 @@ serialized_per_layer_config
 # }
 ```
 
-Use sparse serialization for compact configs. Use explicit serialization when readability or downstream tooling benefits
-from seeing the full per-layer layout.
+Use sparse serialization for compact configs, and explicit serialization when you need the full per-layer layout for
+readability or tooling.

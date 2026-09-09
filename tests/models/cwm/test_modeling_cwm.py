@@ -109,7 +109,7 @@ class CwmIntegrationTest(unittest.TestCase):
 
         for i, layer in enumerate(model.model.layers):
             expected_type = model.config.layer_types[i]
-            self.assertEqual(layer.attention_type, expected_type)
+            self.assertEqual(layer.self_attn.layer_type, expected_type)
             if expected_type == "sliding_attention":
                 self.assertEqual(layer.self_attn.sliding_window, model.config.sliding_window)
 
