@@ -228,6 +228,7 @@ class ImageGPTAttention(nn.Module):
                     "If class is used as cross attention, the weights `q_attn` have to be defined. "
                     "Please make sure to instantiate class with `ImageGPTAttention(..., is_cross_attention=True)`."
                 )
+            attention_mask = encoder_attention_mask
 
             if layer_past is not None and is_updated:
                 # reuse k,v, cross_attentions, and compute only q
@@ -244,7 +245,9 @@ class ImageGPTAttention(nn.Module):
             key = key.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
             value = value.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
-        if layer_past is not None:
+        if (layer_past is not None and not is_cross_attention) or (
+            layer_past is not None and is_cross_attention and not is_updated
+        ):
             # save all key/value_states to cache to be re-used for fast auto-regressive generation
             key, value = curr_past_key_values.update(key, value, self.layer_idx)
             # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
@@ -493,8 +496,12 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache:
+            if past_key_values is None:
+                past_key_values = DynamicCache(config=self.config)
+
+            if self.config.add_cross_attention and not isinstance(past_key_values, EncoderDecoderCache):
+                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache(config=self.config))
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
