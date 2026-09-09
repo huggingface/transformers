@@ -148,7 +148,7 @@ class HunYuanVLRotaryEmbedding(nn.Module):
 
         sin = self.recomposition_frequencies(sin)
         cos = self.recomposition_frequencies(cos)
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+        return cos, sin
 
     def recomposition_frequencies(self, freq):
         """
@@ -529,7 +529,10 @@ class HunYuanVLDenseV1Attention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        origin_dtype = key_states.dtype
+        query_states, key_states = apply_rotary_pos_emb(query_states.float(), key_states.float(), cos, sin)
+        query_states, key_states = query_states.to(origin_dtype), key_states.to(origin_dtype)
 
         query_states = self.query_layernorm(query_states)
         key_states = self.key_layernorm(key_states)
