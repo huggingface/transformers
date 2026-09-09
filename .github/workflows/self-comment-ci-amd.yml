@@ -408,6 +408,21 @@ jobs:
             fi
           } > comment_body.txt
 
+          # Delete previous "CI Results (AMD)" comments before posting a new one
+          existing_comment_ids=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/${github_repository}/issues/${pr_number}/comments" \
+            --paginate \
+            --jq '.[] | select(.body | startswith("## CI Results (AMD)")) | .id')
+          for comment_id in $existing_comment_ids; do
+            gh api \
+              --method DELETE \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "repos/${github_repository}/issues/comments/${comment_id}"
+          done
+
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
