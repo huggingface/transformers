@@ -713,6 +713,7 @@ class ImageFeatureExtractionTester(unittest.TestCase):
 
 @require_vision
 class LoadImageTester(unittest.TestCase):
+    @is_flaky()
     def test_load_img_url(self):
         img = load_image(INVOICE_URL)
         img_arr = np.array(img)
