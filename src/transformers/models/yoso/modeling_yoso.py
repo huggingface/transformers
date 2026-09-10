@@ -421,7 +421,6 @@ class YosoSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
 class YosoSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -449,7 +448,6 @@ class YosoAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
 class YosoIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -465,7 +463,6 @@ class YosoIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput
 class YosoOutput(nn.Module):
     def __init__(self, config):
         super().__init__()

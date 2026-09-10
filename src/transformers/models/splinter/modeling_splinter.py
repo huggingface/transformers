@@ -163,7 +163,6 @@ class SplinterSelfAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Splinter
 class SplinterSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -201,7 +200,6 @@ class SplinterAttention(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Splinter
 class SplinterIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -217,7 +215,6 @@ class SplinterIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Splinter
 class SplinterOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
