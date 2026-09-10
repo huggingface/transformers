@@ -224,6 +224,14 @@ class HfArgumentParser(ArgumentParser):
                 kwargs["default"] = field.default_factory()
             elif field.default is dataclasses.MISSING:
                 kwargs["required"] = True
+        elif isclass(origin_type) and issubclass(origin_type, dict):
+            kwargs["type"] = json.loads
+            if field.default is not dataclasses.MISSING:
+                kwargs["default"] = field.default
+            elif field.default_factory is not dataclasses.MISSING:
+                kwargs["default"] = field.default_factory()
+            else:
+                kwargs["required"] = True
         else:
             kwargs["type"] = field.type
             if field.default is not dataclasses.MISSING:

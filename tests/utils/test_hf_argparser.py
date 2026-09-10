@@ -62,6 +62,11 @@ class WithDefaultBoolExample:
     opt: bool | None = None
 
 
+@dataclass
+class DictCliExample:
+    kw: dict | None = field(default=None)
+
+
 class BasicEnum(Enum):
     titi = "titi"
     toto = "toto"
@@ -490,3 +495,13 @@ class HfArgumentParserTest(unittest.TestCase):
         parser = HfArgumentParser(TrainingArguments)
         training_args = parser.parse_args_into_dataclasses()[0]
         self.assertEqual(training_args.accelerator_config.gradient_accumulation_kwargs["num_steps"], 2)
+
+    def test_17_cli_parse_dict_field(self):
+        # Regression test for #48030: dict-typed dataclass fields were registered with `type=dict`,
+        # which makes argparse reject JSON values (e.g. '{"a": false}'). They must use `json.loads`.
+        parser = HfArgumentParser((DictCliExample,))
+        args = parser.parse_args_into_dataclasses(["--kw", '{"a": false}'])[0]
+        self.assertEqual(args.kw, {"a": False})
+
+        args = parser.parse_args_into_dataclasses(["--kw", '{"x": [1, 2]}'])[0]
+        self.assertEqual(args.kw, {"x": [1, 2]})
