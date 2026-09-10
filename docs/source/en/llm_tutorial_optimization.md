@@ -54,12 +54,12 @@ To give some examples of how much VRAM it roughly takes to load a model in bfloa
 - [**MPT-30b**](https://huggingface.co/mosaicml/mpt-30b) requires 2 \* 30 GB = **60 GB** VRAM
 - [**bigcode/starcoder**](https://huggingface.co/bigcode/starcoder) requires 2 \* 15.5 = **31 GB** VRAM
 
-As of writing this document, the largest GPU chip on the market is the A100 & H100 offering 80GB of VRAM. Most of the models listed before require more than 80GB just to be loaded and therefore necessarily require [tensor parallelism](https://huggingface.co/docs/transformers/perf_train_gpu_many#tensor-parallelism) and/or [pipeline parallelism](https://huggingface.co/docs/transformers/perf_train_gpu_many#naive-model-parallelism-vertical-and-pipeline-parallelism).
+As of writing this document, the largest GPU chip on the market is the A100 & H100 offering 80GB of VRAM. Most of the models listed before require more than 80GB just to be loaded and therefore necessarily require [tensor parallelism](./perf_train_gpu_many#tensor-parallelism) and/or [pipeline parallelism](./perf_train_gpu_many#pipeline-parallelism).
 
-🤗 Transformers now supports tensor parallelism for supported models having `base_tp_plan` in their respective config classes. Learn more about Tensor Parallelism [here](perf_train_gpu_many#tensor-parallelism). Furthermore, if you're interested in writing models in a tensor-parallelism-friendly way, feel free to have a look at [the text-generation-inference library](https://github.com/huggingface/text-generation-inference/tree/main/server/text_generation_server/models/custom_modeling).
+🤗 Transformers now supports tensor parallelism for supported models having `base_tp_plan` in their respective config classes. Learn more about Tensor Parallelism [here](./perf_train_gpu_many#tensor-parallelism). Furthermore, if you're interested in writing models in a tensor-parallelism-friendly way, feel free to have a look at [the text-generation-inference library](https://github.com/huggingface/text-generation-inference/tree/main/server/text_generation_server/models/custom_modeling).
 
 Naive pipeline parallelism is supported out of the box. For this, simply load the model with `device="auto"` which will automatically place the different layers on the available GPUs as explained [here](https://huggingface.co/docs/accelerate/v0.22.0/en/concept_guides/big_model_inference).
-Note, however that while very effective, this naive pipeline parallelism does not tackle the issues of GPU idling. For this more advanced pipeline parallelism is required as explained [here](https://huggingface.co/docs/transformers/en/perf_train_gpu_many#naive-model-parallelism-vertical-and-pipeline-parallelism).
+Note, however that while very effective, this naive pipeline parallelism does not tackle the issues of GPU idling. For this more advanced pipeline parallelism is required as explained [here](./perf_train_gpu_many#pipeline-parallelism).
 
 If you have access to an 8 x 80GB A100 node, you could load BLOOM as follows
 
@@ -79,7 +79,7 @@ In this guide, we will use [bigcode/octocoder](https://huggingface.co/bigcode/oc
 
 Since the model is loaded in bfloat16 precision, using our rule of thumb above, we would expect the memory requirement to run inference with `bigcode/octocoder` to be around 31 GB VRAM. Let's give it a try.
 
-We first load the model and tokenizer and then pass both to Transformers' [pipeline](https://huggingface.co/docs/transformers/main_classes/pipelines) object.
+We first load the model and tokenizer and then pass both to Transformers' [pipeline](./main_classes/pipelines) object.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
@@ -286,13 +286,13 @@ Overall, we saw that running OctoCoder in 8-bit precision reduced the required G
 
 4-bit quantization allows the model to be run on GPUs such as RTX3090, V100, and T4 which are quite accessible for most people.
 
-For more information on quantization and to see how one can quantize models to require even less GPU VRAM memory than 4-bit, we recommend looking into the [`GPT-QModel`](https://huggingface.co/docs/transformers/main/en/main_classes/quantization#gptqmodel) implementation.
+For more information on quantization and to see how one can quantize models to require even less GPU VRAM memory than 4-bit, we recommend looking into the [`GPT-QModel`](./quantization/gptq) implementation.
 
 > As a conclusion, it is important to remember that model quantization trades improved memory efficiency against accuracy and in some cases inference time.
 
 If GPU memory is not a constraint for your use case, there is often no need to look into quantization. However many GPUs simply can't run LLMs without quantization methods and in this case, 4-bit and 8-bit quantization schemes are extremely useful tools.
 
-For more in-detail usage information, we strongly recommend taking a look at the [Transformers Quantization Docs](https://huggingface.co/docs/transformers/main_classes/quantization#general-usage).
+For more in-detail usage information, we strongly recommend taking a look at the [Transformers Quantization Docs](./quantization/overview).
 Next, let's look into how we can improve computational and memory efficiency by using better algorithms and an improved model architecture.
 
 ## 2. Flash Attention
@@ -437,7 +437,7 @@ In conclusion, LLMs that are intended to be deployed in tasks that require handl
 
 Auto-regressive text generation with LLMs works by iteratively putting in an input sequence, sampling the next token, appending the next token to the input sequence, and continuing to do so until the LLM produces a token that signifies that the generation has finished.
 
-Please have a look at [Transformer's Generate Text Tutorial](https://huggingface.co/docs/transformers/llm_tutorial#generate-text) to get a more visual explanation of how auto-regressive generation works.
+Please have a look at [Transformer's Generate Text Tutorial](./llm_tutorial#default-generate) to get a more visual explanation of how auto-regressive generation works.
 
 Let's run a quick code snippet to show how auto-regressive works in practice. We will simply take the most likely next token via `torch.argmax`.
 
@@ -468,7 +468,7 @@ shape of input_ids torch.Size([1, 25])
 
 As we can see every time we increase the text input tokens by the just sampled token.
 
-With very few exceptions, LLMs are trained using the [causal language modeling objective](https://huggingface.co/docs/transformers/tasks/language_modeling#causal-language-modeling) and therefore mask the upper triangle matrix of the attention score - this is why in the two diagrams above the attention scores are left blank (*a.k.a* have 0 probability). For a quick recap on causal language modeling you can refer to the [*Illustrated Self Attention blog*](https://jalammar.github.io/illustrated-gpt2/#part-2-illustrated-self-attention).
+With very few exceptions, LLMs are trained using the [causal language modeling objective](./tasks/language_modeling#causal-language-modeling) and therefore mask the upper triangle matrix of the attention score - this is why in the two diagrams above the attention scores are left blank (*a.k.a* have 0 probability). For a quick recap on causal language modeling you can refer to the [*Illustrated Self Attention blog*](https://jalammar.github.io/illustrated-gpt2/#part-2-illustrated-self-attention).
 
 As a consequence, tokens *never* depend on later tokens, more specifically the $\mathbf{q}_i$ vector is never put in relation with any key, values vectors $\mathbf{k}_j, \mathbf{v}_j$ if $j > i$ . Instead $\mathbf{q}_i$ only attends to previous key-value vectors $\mathbf{k}_{m < i}, \mathbf{v}_{m < i} \text{ , for } m \in \{0, \ldots i - 1\}$. In order to reduce unnecessary computation, one can therefore cache each layer's key-value vectors for all previous timesteps.
 
@@ -518,7 +518,7 @@ Using the key-value cache has two advantages:
 - Significant increase in computational efficiency as less computations are performed compared to computing the full $\mathbf{QK}^T$ matrix. This leads to an increase in inference speed
 - The maximum required memory is not increased quadratically with the number of generated tokens, but only increases linearly.
 
-> One should *always* make use of the key-value cache as it leads to identical results and a significant speed-up for longer input sequences. Transformers has the key-value cache enabled by default when making use of the text pipeline or the [`generate` method](https://huggingface.co/docs/transformers/main_classes/text_generation). We have an entire guide dedicated to caches [here](./kv_cache).
+> One should *always* make use of the key-value cache as it leads to identical results and a significant speed-up for longer input sequences. Transformers has the key-value cache enabled by default when making use of the text pipeline or the [`generate` method](./main_classes/text_generation). We have an entire guide dedicated to caches [here](./kv_cache).
 
 <Tip warning={true}>
 

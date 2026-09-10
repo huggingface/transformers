@@ -26,7 +26,7 @@ This guide shows you how to quickly load chat models in Transformers from the co
 
 After you've [installed Transformers](./installation), you can chat with a model directly from the command line. The command below launches an interactive session with a model, with a few base commands listed at the start of the session.
 
-> For the following commands, please make sure [`transformers serve` is running](https://huggingface.co/docs/transformers/main/en/serving).
+> For the following commands, please make sure [`transformers serve` is running](./serve-cli/serving).
 
 ```bash
 transformers chat Qwen/Qwen2.5-0.5B-Instruct
@@ -52,7 +52,7 @@ The chat is implemented on top of the [AutoClass](./model_doc/auto), using tooli
 
 ## TextGenerationPipeline
 
-[`TextGenerationPipeline`] is a high-level text generation class with a "chat mode". Chat mode is enabled when a conversational model is detected and the chat prompt is [properly formatted](./llm_tutorial#wrong-prompt-format).
+[`TextGenerationPipeline`] is a high-level text generation class with a "chat mode". Chat mode is enabled when a conversational model is detected and the chat prompt is [properly formatted](./llm_tutorial#prompt-format).
 
 Chat models accept a list of messages (the chat history) as the input. Each message is a dictionary with `role` and `content` keys.
 To start the chat, add a single `user` message. You can also optionally include a `system` message to give the model directions on how to behave.
@@ -113,7 +113,7 @@ pipeline = pipeline(task="text-generation", model="meta-llama/Meta-Llama-3-8B-In
 In general, model size and performance are directly correlated. Larger models are slower in addition to requiring more memory because each active parameter must be read from memory for every generated token.
 This is a bottleneck for LLM text generation and the main options for improving generation speed are to either quantize a model or use hardware with higher memory bandwidth. Adding more compute power doesn't meaningfully help.
 
-You can also try techniques like [speculative decoding](./generation_strategies#speculative-decoding), where a smaller model generates candidate tokens that are verified by the larger model. If the candidate tokens are correct, the larger model can generate more than one token at a time. This significantly alleviates the bandwidth bottleneck and improves generation speed.
+You can also try techniques like [speculative decoding](./assisted_decoding#speculative-decoding), where a smaller model generates candidate tokens that are verified by the larger model. If the candidate tokens are correct, the larger model can generate more than one token at a time. This significantly alleviates the bandwidth bottleneck and improves generation speed.
 
 > [!TIP]
 Mixture-of-Expert (MoE) models such as [Mixtral](./model_doc/mixtral), [Qwen2MoE](./model_doc/qwen2_moe), and [GPT-OSS](./model_doc/gpt_oss) have lots of parameters, but only "activate" a small fraction of them to generate each token. As a result, MoE models generally have much lower memory bandwidth requirements and can be faster than a regular LLM of the same size. However, techniques like speculative decoding are ineffective with MoE models because more parameters become activated with each new speculated token.

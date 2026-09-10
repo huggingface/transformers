@@ -23,7 +23,7 @@ Each recipe below demonstrates a specific [`Trainer`] feature: custom loss funct
 
 ## Custom loss function
 
-Pass [`~Trainer#compute_loss_func`] to [`Trainer`] to replace the default loss function. The function runs *after* the forward pass and only defines how loss is computed from the outputs. To modify the forward pass itself, [subclass](./trainer_customize#compute_loss) [`~Trainer.compute_loss`] instead.
+Pass [`~Trainer#compute_loss_func`] to [`Trainer`] to replace the default loss function. The function runs *after* the forward pass and only defines how loss is computed from the outputs. To modify the forward pass itself, [subclass](./trainer_customize#compute-loss) [`~Trainer.compute_loss`] instead.
 
 The custom loss function must have the following signature:
 
@@ -51,7 +51,7 @@ trainer.train()
 ```
 
 > [!NOTE]
-> See the [subclassing guide](./trainer_customize#compute_loss) for more examples of overriding [`~Trainer.compute_loss`].
+> See the [subclassing guide](./trainer_customize#compute-loss) for more examples of overriding [`~Trainer.compute_loss`].
 
 ## Evaluating on start
 
