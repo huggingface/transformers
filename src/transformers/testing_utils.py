@@ -3666,6 +3666,11 @@ class MemoryCleanupMixin:
             self._check_for_memory_leak()
 
     def _callTestMethod(self, method):
+        # `_callTestMethod` is a private `unittest.TestCase` hook (3.8+). It is the only seam that wraps the test
+        # method *without* also wrapping `setUp`/`tearDown`, which matters because a model loaded in `setUp` must
+        # keep its parameters' `requires_grad`. `MemoryCleanupUnderPytestTest` in tests/utils/test_testing_utils.py
+        # is collected by pytest itself and asserts grad is really off inside a test, so this fails loudly rather
+        # than silently if the stdlib or a runner ever stops routing through the hook.
         if self.cleanup_no_grad and is_torch_available():
             with torch.no_grad():
                 return super()._callTestMethod(method)

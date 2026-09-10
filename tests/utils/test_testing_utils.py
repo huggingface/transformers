@@ -370,6 +370,32 @@ class MemoryCleanupNoGradTest(unittest.TestCase):
         self.assertTrue(seen["grad_enabled"])
 
 
+@require_torch
+class MemoryCleanupUnderPytestTest(MemoryCleanupMixin, unittest.TestCase):
+    """
+    `cleanup_no_grad` works by overriding `unittest.TestCase._callTestMethod`, a private hook.
+
+    `MemoryCleanupNoGradTest` drives an inner class through unittest's own runner; this class *is* collected and
+    run by pytest, so it is what catches pytest's unittest integration -- or the stdlib -- no longer routing
+    through that hook, instead of the no-grad behavior disappearing silently.
+    """
+
+    def test_grad_is_off_under_the_real_runner(self):
+        self.assertFalse(torch.is_grad_enabled())
+
+    def test_the_private_hook_is_still_there(self):
+        self.assertTrue(
+            hasattr(unittest.TestCase, "_callTestMethod"),
+            "`unittest.TestCase._callTestMethod` is gone; `MemoryCleanupMixin.cleanup_no_grad` needs a new seam",
+        )
+
+    def test_attributes_are_dropped_under_the_real_runner(self):
+        # `doCleanups` runs after `tearDown`, so this callback observes what the mixin actually left behind --
+        # the teardown half of the same guarantee, checked on pytest's path rather than unittest's own runner.
+        self.payload = Payload()
+        self.addCleanup(lambda: self.assertNotIn("payload", vars(self)))
+
+
 class MemoryLeakCheckTest(unittest.TestCase):
     """The leak check is opt-in: unset means never measured, `warn` reports, `error` fails."""
 
