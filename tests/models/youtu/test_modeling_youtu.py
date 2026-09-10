@@ -19,6 +19,7 @@ import pytest
 
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_deterministic_for_xpu,
     require_torch,
@@ -36,7 +37,6 @@ if is_torch_available():
     torch.set_float32_matmul_precision("highest")
 
     from transformers import (
-        Cache,
         YoutuForCausalLM,
         YoutuModel,
     )
@@ -67,23 +67,6 @@ class YoutuModelTester(CausalLMModelTester):
 class YoutuModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = YoutuModelTester
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        """Needs to be overridden as youtu-llm has special MLA cache format (though we don't really use the MLA)"""
-        self.assertIsInstance(past_key_values, Cache)
-
-        # (batch, head, seq_length, head_features)
-        expected_common_shape = (
-            batch_size,
-            getattr(config, "num_key_value_heads", config.num_attention_heads),
-            seq_length,
-        )
-        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
-        expected_value_shape = expected_common_shape + (config.v_head_dim,)
-
-        for layer in past_key_values.layers:
-            self.assertEqual(layer.keys.shape, expected_key_shape)
-            self.assertEqual(layer.values.shape, expected_value_shape)
-
     @unittest.skip(reason="SDPA can't dispatch on flash due to unsupported head dims")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
@@ -98,10 +81,18 @@ class YoutuIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_dynamic_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
-        EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love",
-        ]
+        EXPECTED_TEXT_COMPLETION = Expectations(
+            {
+                (None, None): [
+                    "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
+                    "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love",
+                ],
+                ("cuda", 8): [
+                    "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
+                    "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, fries, and even on my pizza. I also love it on my french fries. I love it on my french fries. I love it",
+                ],
+            }
+        ).get_expectation()  # fmt: skip
 
         prompts = [
             "Simply put, the theory of relativity states that ",
@@ -122,10 +113,18 @@ class YoutuIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
-        EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love",
-        ]
+        EXPECTED_TEXT_COMPLETION = Expectations(
+            {
+                (None, None): [
+                    "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
+                    "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love",
+                ],
+                ("cuda", 8): [
+                    "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
+                    "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, fries, and even on my pizza. I also love it on my french fries. I love it on my french fries. I love it",
+                ],
+            }
+        ).get_expectation()  # fmt: skip
 
         prompts = [
             "Simply put, the theory of relativity states that ",

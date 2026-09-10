@@ -55,6 +55,7 @@ from . import __version__
 from .configuration_utils import PreTrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
+from .distributed.fsdp import get_fsdp_ckpt_kwargs, update_fsdp_plugin_peft
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 from .feature_extraction_utils import FeatureExtractionMixin
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
@@ -66,7 +67,6 @@ from .integrations.deepspeed import (
     is_deepspeed_available,
     propagate_args_to_deepspeed,
 )
-from .integrations.fsdp import get_fsdp_ckpt_kwargs, update_fsdp_plugin_peft
 from .integrations.liger import apply_liger_kernel
 from .integrations.neftune import activate_neftune, deactivate_neftune
 from .integrations.peft import MIN_PEFT_VERSION
@@ -80,7 +80,8 @@ from .models.auto.modeling_auto import (
 )
 from .optimization import GreedyLR, get_scheduler
 from .processing_utils import ProcessorMixin
-from .tokenization_utils_base import PreTrainedTokenizerBase
+from .pytorch_utils import is_torch_greater_or_equal_than_2_6
+from .tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
     DefaultFlowCallback,
@@ -98,6 +99,7 @@ from .trainer_optimizer import (
     is_optimizer_factory,
 )
 from .trainer_pt_utils import (
+    BatchRebalanceSampler,
     EvalLoopContainer,
     IterableDatasetShard,
     LabelSmoother,
@@ -286,6 +288,9 @@ class Trainer:
             `torch.Generator` for the randomization that must be identical on all processes (and the Trainer will
             manually set the seed of this `generator` at each epoch) or have a `set_epoch()` method that internally
             sets the seed of the RNGs used.
+
+            If the dataset does not implement `__len__` (e.g. a streaming `IterableDataset`), `max_steps` must be set,
+            since the total number of training steps cannot be inferred.
         eval_dataset (`torch.utils.data.Dataset` | dict[str, `torch.utils.data.Dataset`] | `datasets.Dataset`, *optional*):
              The dataset to use for evaluation. If it is a [`~datasets.Dataset`], columns not accepted by the
              `model.forward()` method are automatically removed. If it is a dictionary, it will evaluate on each
@@ -514,8 +519,13 @@ class Trainer:
         # each row is never a prediction target. The valid-prediction count used by `num_items_in_batch` must therefore
         # be taken over `labels[..., 1:]`, not the full label tensor. Inspect the actual loss function via
         # LOSS_MAPPING so model-specific loss_types that route to ForCausalLMLoss (e.g. CsmForConditionalGeneration)
-        # are caught too.
-        self._loss_shifts_labels = LOSS_MAPPING.get(getattr(model_to_inspect, "loss_type", None)) is ForCausalLMLoss
+        # are caught too. Encoder-decoder models are excluded: their loss is aligned with unshifted targets (usually
+        # because they feed right-shifted `decoder_input_ids` to the decoder), so every non-`-100` label is a
+        # prediction target and the decoder-only `labels[..., 1:]` counting rule must not apply -- it would
+        # under-count and over-scale the loss.
+        self._loss_shifts_labels = LOSS_MAPPING.get(
+            getattr(model_to_inspect, "loss_type", None)
+        ) is ForCausalLMLoss and not getattr(getattr(model_to_inspect, "config", None), "is_encoder_decoder", False)
 
         if self.args.label_smoothing_factor != 0:
             if getattr(self.model.config, "problem_type", None) == "multi_label_classification":
@@ -600,6 +610,8 @@ class Trainer:
         self._train_batch_size = args.train_batch_size
         # Guards one-time LR scheduler creation in create_optimizer_and_scheduler
         self._created_lr_scheduler = False
+        # Resolved lazily at the first gradient clip; see `_has_mixed_mesh_grads`.
+        self._mixed_mesh_grads: bool | None = None
 
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
@@ -689,8 +701,9 @@ class Trainer:
             logger.info("max_steps is given, it will override any value given in num_train_epochs")
         if self.train_dataset is not None and not has_length(self.train_dataset) and args.max_steps <= 0:
             raise ValueError(
-                "The train_dataset does not implement __len__, max_steps has to be specified. "
-                "The number of steps needs to be known in advance for the learning rate scheduler."
+                "The train_dataset does not implement __len__, so the number of training steps cannot be inferred; "
+                "max_steps has to be specified. The total number of steps must be known in advance to bound the "
+                "training loop and to configure the learning rate scheduler."
             )
 
         if self.train_dataset is not None and isinstance(self.train_dataset, torch.utils.data.IterableDataset):
@@ -896,7 +909,7 @@ class Trainer:
 
         Args:
             eval_dataset (`str` or `torch.utils.data.Dataset`, *optional*):
-                If a `str`, will use `self.eval_dataset[eval_dataset]` as the evaluation dataset. If a `Dataset`, will override `self.eval_dataset` and must implement `__len__`. If it is a [`~datasets.Dataset`], columns not accepted by the `model.forward()` method are automatically removed.
+                If a `str`, will use `self.eval_dataset[eval_dataset]` as the evaluation dataset. If a `Dataset`, will override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns not accepted by the `model.forward()` method are automatically removed.
         """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
@@ -936,7 +949,7 @@ class Trainer:
         Args:
             test_dataset (`torch.utils.data.Dataset`, *optional*):
                 The test dataset to use. If it is a [`~datasets.Dataset`], columns not accepted by the
-                `model.forward()` method are automatically removed. It must implement `__len__`.
+                `model.forward()` method are automatically removed.
         """
         return self._get_dataloader(
             dataset=test_dataset,
@@ -976,29 +989,45 @@ class Trainer:
         else:
             data_collator = self._get_collator_with_removed_columns(self.data_collator, description=description)
 
-        # MPS requires forking if multiple workers are specified
-        should_fork = torch.backends.mps.is_available() and self.args.dataloader_num_workers > 1
-
         dataloader_params = {
             "batch_size": batch_size,
             "collate_fn": data_collator,
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
             "persistent_workers": self.args.dataloader_persistent_workers,
-            "multiprocessing_context": "fork" if should_fork else None,
+            "multiprocessing_context": self.args.dataloader_multiprocessing_context,
+            "prefetch_factor": self.args.dataloader_prefetch_factor,
         }
+        # `in_order` was added in torch 2.6; on older versions the loader always behaves as `in_order=True`.
+        if is_torch_greater_or_equal_than_2_6:
+            dataloader_params["in_order"] = self.args.dataloader_in_order
 
+        sampler = None
         if not isinstance(dataset, torch.utils.data.IterableDataset):
-            if sampler_fn is not None:
-                dataloader_params["sampler"] = sampler_fn(dataset)
-            dataloader_params["drop_last"] = self.args.dataloader_drop_last
-            dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
+            sampler = sampler_fn(dataset) if sampler_fn is not None else None
+            if isinstance(sampler, BatchRebalanceSampler):
+                # Pass as `batch_sampler`; it is mutually exclusive with `batch_size`/`sampler`/`drop_last`.
+                dataloader_params.pop("batch_size", None)
+                dataloader_params["batch_sampler"] = sampler
+            else:
+                if sampler is not None:
+                    dataloader_params["sampler"] = sampler
+                dataloader_params["drop_last"] = self.args.dataloader_drop_last
             if is_training:
                 dataloader_params["worker_init_fn"] = partial(
                     seed_worker, num_workers=self.args.dataloader_num_workers, rank=self.args.process_index
                 )
 
         dataloader = self.accelerator.prepare(DataLoader(dataset, **dataloader_params))
+
+        # `BatchRebalanceSampler` is already rank-aware, so the `BatchSamplerShard` wrapper
+        # added by `accelerator.prepare` would re-shard it and silently drop samples. Neutralise
+        # it by making the wrapper a passthrough (num_processes=1)
+        if isinstance(sampler, BatchRebalanceSampler):
+            prepared_bs = getattr(dataloader, "batch_sampler", None)
+            if prepared_bs is not None and getattr(prepared_bs, "batch_sampler", None) is sampler:
+                prepared_bs.num_processes = 1
+                prepared_bs.process_index = 0
 
         # Store the prepared dataloader for subsequent evaluations if using persistent workers.
         if dataloader_key is not None and self.args.dataloader_persistent_workers:
@@ -1014,6 +1043,15 @@ class Trainer:
         if train_dataset is None:
             train_dataset = self.train_dataset
         if train_dataset is None or not has_length(train_dataset):
+            if train_dataset is not None and self.args.train_sampling_strategy in (
+                "group_by_length",
+                "batch_rebalance",
+            ):
+                logger.warning(
+                    f"`train_sampling_strategy='{self.args.train_sampling_strategy}'` is ignored because the training dataset does not "
+                    "implement `__len__` (e.g. an `IterableDataset`). Examples will be consumed in the dataset's own "
+                    "order."
+                )
             return None
 
         # Build the sampler.
@@ -1034,6 +1072,42 @@ class Trainer:
                 dataset=train_dataset,
                 lengths=lengths,
                 model_input_name=model_input_name,
+            )
+        elif self.args.train_sampling_strategy == "batch_rebalance":
+            if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
+                lengths = (
+                    train_dataset[self.args.length_column_name]
+                    if self.args.length_column_name in train_dataset.column_names
+                    else None
+                )
+            else:
+                lengths = None
+            model_input_name = (
+                self.processing_class.model_input_names[0] if self.processing_class is not None else None
+            )
+            if lengths is None:
+                model_input_name = model_input_name if model_input_name is not None else "input_ids"
+                if not isinstance(train_dataset[0], (dict, BatchEncoding)) or model_input_name not in train_dataset[0]:
+                    raise ValueError(
+                        "Can only automatically infer lengths for datasets whose items are dictionaries with an "
+                        f"'{model_input_name}' key."
+                    )
+                lengths = [len(feature[model_input_name]) for feature in train_dataset]
+            elif isinstance(lengths, torch.Tensor):
+                lengths = lengths.tolist()
+
+            world_size = max(1, self.args.world_size)
+            rank = self.args.process_index if self.args.world_size > 1 else 0
+            grad_accum = self.args.gradient_accumulation_steps
+            effective_batch_size = self.args.train_batch_size * grad_accum * world_size
+
+            return BatchRebalanceSampler(
+                lengths=lengths,
+                effective_batch_size=effective_batch_size,
+                dp_size=world_size,
+                grad_accum=grad_accum,
+                rank=rank,
+                drop_last=self.args.dataloader_drop_last,
             )
         elif self.args.train_sampling_strategy == "sequential":
             return SequentialSampler(train_dataset)
@@ -1062,6 +1136,9 @@ class Trainer:
                 dataset=eval_dataset,
                 lengths=lengths,
                 model_input_name=model_input_name,
+                generator=torch.Generator().manual_seed(
+                    self.args.data_seed if self.args.data_seed is not None else self.args.seed
+                ),
             )
 
         if self.args.world_size <= 1:
@@ -1382,7 +1459,17 @@ class Trainer:
 
         # Activate gradient checkpointing if needed
         if args.gradient_checkpointing:
-            self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=args.gradient_checkpointing_kwargs)
+            # `every_n_layers` selects which layers are checkpointed and `offload` where their saved
+            # activations live; the remaining keys are forwarded to `torch.utils.checkpoint.checkpoint`, so both
+            # have to come out of the dict before that happens.
+            gc_kwargs = dict(args.gradient_checkpointing_kwargs or {})
+            every_n_layers = gc_kwargs.pop("every_n_layers", 1)
+            offload = gc_kwargs.pop("offload", False)
+            self.model.gradient_checkpointing_enable(
+                gradient_checkpointing_kwargs=gc_kwargs or None,
+                every_n_layers=every_n_layers,
+                offload=offload,
+            )
 
         # If the model uses a tokenizer, it may have a new tokens for fine-tuning purposes.
         if isinstance(self.processing_class, (PreTrainedTokenizerBase, ProcessorMixin)) and hasattr(
@@ -1550,6 +1637,12 @@ class Trainer:
             os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME)
         ):
             self.state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
+            if self.state.best_model_checkpoint is not None and not os.path.isdir(self.state.best_model_checkpoint):
+                logger.warning(
+                    f"The best checkpoint {self.state.best_model_checkpoint} recorded in the resumed state does not "
+                    "exist anymore. Ignoring it for this run."
+                )
+                self.state.best_model_checkpoint = None
             compare_trainer_and_checkpoint_args(self.args, self.state)
             self._load_callback_state()
             epochs_trained = int(self.state.global_step // num_update_steps_per_epoch)
@@ -1693,6 +1786,12 @@ class Trainer:
 
         if hasattr(train_dataloader, "set_epoch"):
             train_dataloader.set_epoch(epoch)
+        # `DataLoaderShard.set_epoch` (accelerate) does not forward to a batch sampler wrapped
+        # in `BatchSamplerShard`, so reach it explicitly.
+        shard_wrapper = getattr(train_dataloader, "batch_sampler", None)
+        underlying_sampler = getattr(shard_wrapper, "batch_sampler", None)
+        if hasattr(underlying_sampler, "set_epoch"):
+            underlying_sampler.set_epoch(epoch)
         epoch_iterator = iter(train_dataloader)
 
         # We chunkify the epoch iterator into gradient accumulation steps `n` batches
@@ -1920,6 +2019,8 @@ class Trainer:
                 and self.state.global_step % self.args.torch_empty_cache_steps == 0
             ):
                 clear_device_cache()
+                if torch.backends.mps.is_available() and hasattr(torch.mps, "clear_graph_cache"):
+                    torch.mps.clear_graph_cache()
 
             kwargs = {}
 
@@ -2007,9 +2108,9 @@ class Trainer:
                 else unwrapped_model._get_name()
             )
             if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
-                loss = self.label_smoother(outputs, labels, shift_labels=True)
+                loss = self.label_smoother(outputs, labels, shift_labels=True, num_items_in_batch=num_items_in_batch)
             else:
-                loss = self.label_smoother(outputs, labels)
+                loss = self.label_smoother(outputs, labels, num_items_in_batch=num_items_in_batch)
         else:
             if isinstance(outputs, dict) and "loss" not in outputs:
                 raise ValueError(
@@ -2514,17 +2615,68 @@ class Trainer:
         input_tokens = torch.as_tensor(input_tokens, device=self.args.device, dtype=torch.int64)
         self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
 
+    def _mixed_mesh_grad_norm(self, model, max_norm):
+        """Gradient norm (and clip) when only some parameters are sharded, as under expert parallelism.
+
+        Expert parallelism shards the expert weights and leaves everything else replicated, so
+        `model.parameters()` holds a mix of `DTensor` and plain tensors and `_foreach_norm` cannot span
+        both. Take the two groups separately: the sharded gradients contribute their local norms summed
+        across the mesh, the replicated ones are identical on every rank and are counted once.
+        """
+        from torch.distributed.tensor import DTensor
+
+        sharded, replicated = [], []
+        for param in model.parameters():
+            if param.grad is None:
+                continue
+            (sharded if isinstance(param.grad, DTensor) else replicated).append(param.grad)
+
+        device = (sharded or replicated)[0].device
+        replicated_sq = torch.zeros((), device=device, dtype=torch.float32)
+        if replicated:
+            replicated_sq = torch.linalg.vector_norm(torch.stack([g.norm(2) for g in replicated])) ** 2
+
+        sharded_sq = torch.zeros((), device=device, dtype=torch.float32)
+        if sharded:
+            local = [g.to_local() for g in sharded]
+            sharded_sq = torch.linalg.vector_norm(torch.stack([g.norm(2) for g in local])) ** 2
+            # Sum the per-shard contributions over the mesh the experts are sharded on.
+            torch.distributed.all_reduce(sharded_sq, group=sharded[0].device_mesh.get_group())
+
+        total_norm = (replicated_sq + sharded_sq).sqrt()
+        if max_norm != float("inf"):
+            clip = (max_norm / (total_norm + 1e-6)).clamp(max=1.0)
+            for g in replicated:
+                g.mul_(clip)
+            for g in sharded:
+                g.to_local().mul_(clip)
+        return total_norm
+
+    def _has_mixed_mesh_grads(self, model) -> bool:
+        # Static for the life of the run (sharding never changes after setup), so scan the
+        # parameters only on the first call.
+        if self._mixed_mesh_grads is None:
+            from .trainer_optimizer import has_mixed_dtensor
+
+            self._mixed_mesh_grads = has_mixed_dtensor(p.grad for p in model.parameters() if p.grad is not None)
+        return self._mixed_mesh_grads
+
     def _clip_grad_norm(self, model):
         """Clip gradients to max_grad_norm. Returns the pre-clip gradient norm."""
         if is_sagemaker_mp_enabled() and self.args.fp16:
             return self.optimizer.clip_master_grads(self.args.max_grad_norm)
+        if self._has_mixed_mesh_grads(model):
+            return self._mixed_mesh_grad_norm(model, self.args.max_grad_norm)
         return self.accelerator.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
 
     def _get_grad_norm(self, model, grad_norm=None):
         """Return the gradient norm as a Python float."""
         if grad_norm is None:
             # Compute norm without clipping (inf means no actual clipping happens)
-            grad_norm = self.accelerator.clip_grad_norm_(model.parameters(), float("inf"))
+            if self._has_mixed_mesh_grads(model):
+                grad_norm = self._mixed_mesh_grad_norm(model, float("inf"))
+            else:
+                grad_norm = self.accelerator.clip_grad_norm_(model.parameters(), float("inf"))
 
         if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
             if hasattr(grad_norm, "item"):
@@ -2551,8 +2703,7 @@ class Trainer:
             eval_dataset (`Dataset` | dict[str, `Dataset`], *optional*):
                 Pass a dataset if you wish to override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns
                 not accepted by the `model.forward()` method are automatically removed. If it is a dictionary, it will
-                evaluate on each dataset, prepending the dictionary key to the metric name. Datasets must implement the
-                `__len__` method.
+                evaluate on each dataset, prepending the dictionary key to the metric name.
 
                 <Tip>
 
@@ -2852,7 +3003,7 @@ class Trainer:
         Args:
             test_dataset (`Dataset`):
                 Dataset to run the predictions on. If it is an `datasets.Dataset`, columns not accepted by the
-                `model.forward()` method are automatically removed. Has to implement the method `__len__`
+                `model.forward()` method are automatically removed.
             ignore_keys (`list[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
@@ -2977,8 +3128,12 @@ class Trainer:
                     logits = smp_nested_concat(logits_mb)
             else:
                 if has_labels or loss_without_labels:
-                    with self.compute_loss_context_manager():
-                        num_items_in_batch = self._get_num_items_in_batch([inputs], self.args.device)
+                    # Count before sharding: `context_parallel` splits the buffers in place.
+                    num_items_in_batch = self._get_num_items_in_batch([inputs], self.args.device)
+                    cp_context, inputs = self._prepare_context_parallel_inputs(model, inputs)
+                    with self.compute_loss_context_manager(), cp_context():
+                        if self.args.use_liger_kernel and prediction_loss_only:
+                            inputs = {**inputs, "skip_logits": True}
                         loss, outputs = self.compute_loss(
                             model, inputs, return_outputs=True, num_items_in_batch=num_items_in_batch
                         )

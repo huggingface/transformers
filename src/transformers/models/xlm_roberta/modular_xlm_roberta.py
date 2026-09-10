@@ -313,7 +313,7 @@ class XLMRobertaForMultipleChoice(RobertaForMultipleChoice):
         super().__init__(config)
         del self.xlm_roberta
 
-        self.roberta = XLMRobertaModel(config, add_pooling_layer=False)
+        self.roberta = XLMRobertaModel(config, add_pooling_layer=True)
 
     @can_return_tuple
     @auto_docstring

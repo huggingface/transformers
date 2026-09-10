@@ -296,7 +296,7 @@ class Owlv2VisionEmbeddings(nn.Module):
         self.num_patches = (config.image_size // config.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+        self.position_ids = nn.Buffer(torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     # Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings.interpolate_pos_encoding
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
@@ -362,9 +362,7 @@ class Owlv2TextEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(config.max_position_embeddings, config.hidden_size)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
     def forward(
         self,
@@ -543,6 +541,7 @@ class Owlv2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_factor
         if isinstance(module, Owlv2TextEmbeddings):
             init.normal_(module.token_embedding.weight, mean=0.0, std=factor * 0.02)
@@ -577,13 +576,6 @@ class Owlv2PreTrainedModel(PreTrainedModel):
             init.constant_(module.logit_scale, self.config.logit_scale_init_value)
         elif isinstance(module, Owlv2ForObjectDetection):
             init.copy_(module.box_bias, module.compute_box_bias(module.num_patches_height, module.num_patches_width))
-        if isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=factor)
-            if module.bias is not None:
-                init.zeros_(module.bias)
 
 
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTEncoder with OwlViT->Owlv2
@@ -1091,8 +1083,8 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         self.config = config
         self.num_patches_height = self.config.vision_config.image_size // self.config.vision_config.patch_size
         self.num_patches_width = self.config.vision_config.image_size // self.config.vision_config.patch_size
-        self.register_buffer(
-            "box_bias", self.compute_box_bias(self.num_patches_height, self.num_patches_width), persistent=False
+        self.box_bias = nn.Buffer(
+            self.compute_box_bias(self.num_patches_height, self.num_patches_width), persistent=False
         )
 
         # Initialize weights and apply final processing

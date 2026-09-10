@@ -393,8 +393,8 @@ class LogBinomialSoftmax(nn.Module):
         super().__init__()
         self.k = n_classes
         self.act = act
-        self.register_buffer("k_idx", torch.arange(0, n_classes).view(1, -1, 1, 1), persistent=False)
-        self.register_buffer("k_minus_1", torch.tensor([self.k - 1]).view(1, -1, 1, 1), persistent=False)
+        self.k_idx = nn.Buffer(torch.arange(0, n_classes).view(1, -1, 1, 1), persistent=False)
+        self.k_minus_1 = nn.Buffer(torch.tensor([self.k - 1]).view(1, -1, 1, 1), persistent=False)
 
     def forward(self, probabilities, temperature=1.0, eps=1e-4):
         """Compute the log binomial distribution for probabilities.
@@ -414,8 +414,8 @@ class LogBinomialSoftmax(nn.Module):
         if probabilities.ndim == 3:
             probabilities = probabilities.unsqueeze(1)  # make it (batch_size, num_channels, height, width)
 
-        one_minus_probabilities = torch.clamp(1 - probabilities, eps, 1)
-        probabilities = torch.clamp(probabilities, eps, 1)
+        one_minus_probabilities = (1 - probabilities).clamp(min=eps, max=1.0)
+        probabilities = probabilities.clamp(min=eps, max=1.0)
         y = (
             log_binom(self.k_minus_1, self.k_idx)
             + self.k_idx * torch.log(probabilities)
@@ -914,7 +914,7 @@ class ZoeDepthPatchTransformerEncoder(nn.Module):
         """
         position = torch.arange(0, sequence_length, dtype=dtype, device=device).unsqueeze(1)
         index = torch.arange(0, embedding_dim, 2, dtype=dtype, device=device).unsqueeze(0)
-        div_term = torch.exp(index * (-torch.log(torch.tensor(10000.0, device=device)) / embedding_dim))
+        div_term = torch.exp(index * (-torch.log(torch.full((), 10000.0, device=device)) / embedding_dim))
         pos_encoding = position * div_term
         pos_encoding = torch.cat([torch.sin(pos_encoding), torch.cos(pos_encoding)], dim=1)
         pos_encoding = pos_encoding.unsqueeze(dim=0).repeat(batch_size, 1, 1)

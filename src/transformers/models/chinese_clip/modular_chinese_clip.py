@@ -22,6 +22,7 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
 )
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
@@ -211,6 +212,7 @@ class ChineseCLIPPreTrainedModel(CLIPPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        PreTrainedModel._init_weights(self, module)
         factor = self.config.initializer_factor
         if isinstance(module, ChineseCLIPVisionEmbeddings):
             init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
@@ -247,14 +249,6 @@ class ChineseCLIPPreTrainedModel(CLIPPreTrainedModel):
                 module.visual_projection.weight,
                 std=module.vision_embed_dim**-0.5 * factor,
             )
-
-        if isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=factor)
-            if module.bias is not None:
-                init.zeros_(module.bias)
 
 
 class ChineseCLIPTextEncoder(AlignTextEncoder):

@@ -15,7 +15,6 @@
 """LG AI Research EXAONE Lab"""
 
 import torch
-import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
@@ -25,8 +24,8 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ..deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3Experts,
     DeepseekV3MoE,
-    DeepseekV3NaiveMoe,
     DeepseekV3TopkRouter,
 )
 from ..exaone4.configuration_exaone4 import Exaone4Config
@@ -80,6 +79,13 @@ class ExaoneMoeConfig(Exaone4Config):
     >>> configuration = model.config
     ```"""
 
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
+
     vocab_size: int = 102400
     hidden_size: int = 4096
     intermediate_size: int = 16384
@@ -130,15 +136,13 @@ class ExaoneMoeMLP(Qwen2MoeMLP):
 
 class ExaoneMoeTopkRouter(DeepseekV3TopkRouter):
     def __init__(self, config):
-        nn.Module.__init__()
-        self.config = config
-        self.weight = nn.Parameter(torch.empty((config.num_experts, config.hidden_size)))
-        self.register_buffer("e_score_correction_bias", torch.zeros(config.num_experts))
+        super().__init__(self, config)
+        self.num_experts = config.num_experts
 
 
-class ExaoneMoeExperts(DeepseekV3NaiveMoe):
+class ExaoneMoeExperts(DeepseekV3Experts):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__(self, config)
         self.num_experts = config.num_experts
 
 
@@ -149,7 +153,6 @@ class ExaoneMoeSparseMoEBlock(DeepseekV3MoE):
         self.shared_experts = ExaoneMoeMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.num_shared_experts
         )
-        self.n_routed_experts = config.num_experts
 
 
 class ExaoneMoeDecoderLayer(OlmoeDecoderLayer):

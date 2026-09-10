@@ -85,6 +85,8 @@ class Kosmos2ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Kosmos2Processor(ProcessorMixin):
+    valid_processor_kwargs = Kosmos2ProcessorKwargs
+
     def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024, *kwargs):
         r"""
         num_patch_index_tokens (`int`, *optional*, defaults to 1024):

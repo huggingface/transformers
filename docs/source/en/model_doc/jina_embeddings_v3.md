@@ -5,7 +5,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
-⚠️  Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️  Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 -->
 *This model was published in HF papers on 2024-09-16 and contributed to Hugging Face Transformers on 2026-03-19.*
@@ -77,7 +77,7 @@ print(f"Features shape: {last_hidden_states.shape}")
 
 ## Task-Specific LoRA Adapters
 
-A key feature of `JinaEmbeddingsV3` is it's LoRA adapters, which allow you to tailor the output embeddings to specific useful use cases without the overhead of loading entirely different models.
+A key feature of `JinaEmbeddingsV3` is its LoRA adapters, which allow you to tailor the output embeddings to specific useful use cases without the overhead of loading entirely different models.
 
 The following tasks are supported:
 

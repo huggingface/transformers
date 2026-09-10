@@ -20,7 +20,7 @@ and don't require downloading real datasets.
 Supports --do_train (default) and --do_eval via TrainingArguments.
 
 32 training samples are created; with per_device_train_batch_size=4
-and 2 GPUs this gives 4 steps per epoch.
+and 2 GPUs this gives 4 steps per epoch. Pass --padding do_not_pad for variable-length data.
 """
 
 import json
@@ -39,6 +39,7 @@ from transformers import (
 
 
 DTYPE_MAP = {"fp32": torch.float32, "bf16": torch.bfloat16, "fp16": torch.float16}
+PADDING_CHOICES = ("max_length", "do_not_pad")
 
 
 def _pop_custom_arg(name):
@@ -60,6 +61,11 @@ def main():
     model_dtype = _pop_custom_arg("--model_dtype")
     attn_impl = _pop_custom_arg("--attn_implementation")
     pad_to_multiple_of = _pop_custom_arg("--pad_to_multiple_of")
+    # "max_length" (default) pads samples to max_length; "do_not_pad" gives variable-length
+    # training data.
+    padding = _pop_custom_arg("--padding") or "max_length"
+    if padding not in PADDING_CHOICES:
+        raise ValueError(f"--padding must be one of {PADDING_CHOICES}, got {padding!r}")
 
     parser = HfArgumentParser((TrainingArguments,))
     (training_args,) = parser.parse_args_into_dataclasses()
@@ -88,6 +94,7 @@ def main():
 
     # Synthetic dataset — 32 samples of tokenized text
     # With per_device_train_batch_size=4 and 2 GPUs this gives 4 steps per epoch.
+    # The four texts tokenize to 51, 61, 61 and 81 tokens.
     texts = [
         "The quick brown fox jumps over the lazy dog. " * 5,
         "A journey of a thousand miles begins with a single step. " * 5,
@@ -98,9 +105,9 @@ def main():
     train_dataset = None
     eval_dataset = None
     if training_args.do_train:
-        train_dataset = [tokenizer(text, max_length=128, truncation=True, padding="max_length") for text in texts]
+        train_dataset = [tokenizer(text, max_length=128, truncation=True, padding=padding) for text in texts]
     if training_args.do_eval:
-        eval_dataset = [tokenizer(text, max_length=128, truncation=True, padding="max_length") for text in texts[:8]]
+        eval_dataset = [tokenizer(text, max_length=128, truncation=True, padding=padding) for text in texts[:8]]
 
     collator_kwargs = {}
     if pad_to_multiple_of:

@@ -16,6 +16,8 @@ from ..gemma4_assistant.modeling_gemma4_assistant import Gemma4AssistantForCausa
 
 
 class Gemma4UnifiedAssistantForCausalLM(Gemma4AssistantForCausalLM):
+    _fsdp_plan = AttributeError()
+
     def forward(**super_kwargs):
         r"""
         shared_kv_states (`dict[str, torch.Tensor` of shape `(batch_size, 1, q_len, kv_len)`, *optional*):

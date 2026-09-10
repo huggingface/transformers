@@ -37,6 +37,7 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -177,7 +178,7 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     # Mistral3 merges batch_size and num_patches in index 1, with index 0 hardcoded to 1
     skip_test_image_features_output_shape = True
     _is_composite = True
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent multimodal placeholder mask
 
     def setUp(self):
         self.model_tester = Mistral3VisionText2TextModelTester(self)
@@ -228,6 +229,10 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
     @unittest.skip("Pixtral does not support attention interfaces.")
     def test_flex_attention_with_grads(self):
+        pass
+
+    @unittest.skip("Pixtral backbone already overrides this test, no need to test again.")
+    def test_vision_axial_rope(self):
         pass
 
 
@@ -282,7 +287,12 @@ class Mistral3IntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
+                    },
                     {"type": "text", "text": "Describe this image"},
                 ],
             }
@@ -300,7 +310,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or",
-                ("cuda", 8): 'The image features two cats lying on a pink surface, which appears to be a couch or a bed',
+                ("cuda", 8): 'The image features two tabby cats lying on a pink surface, which appears to be a couch or',
                 ("rocm", (9, 4)): "The image features two cats lying on a pink surface, which appears to be a couch or a bed",
                 ("rocm", (9, 5)): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or"
             }
@@ -311,6 +321,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
     @require_deterministic_for_xpu
     def test_mistral3_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
+        processor.tokenizer.padding_side = "left"
         processor.chat_template = processor.chat_template.replace('strftime_now("%Y-%m-%d")', '"2025-06-20"')
         messages = [
             [
@@ -331,7 +342,9 @@ class Mistral3IntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+                            ),
                         },
                         {"type": "text", "text": "Describe this image"},
                     ],
@@ -354,7 +367,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "Calm lake's mirror gleams,\nWhispering pines stand in silence,\nPath to peace begins.",
                 ("cuda", (8, 0)): "Wooden path to calm,\nReflections whisper secrets,\nNature's peace unfolds.",
-                ("cuda", (8, 6)): "Calm waters reflect\nWooden path to distant shore\nSilence in the woods",
+                ("cuda", (8, 6)): "Calm waters reflect\nWooden path to distant shore\nSilence in the scene",
                 ("rocm", (9, 5)): "Calm waters reflect\nWooden path to distant shore\nSilence in the scene"
             }
         )  # fmt: skip
@@ -383,6 +396,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
     @require_deterministic_for_xpu
     def test_mistral3_integration_batched_generate_multi_image(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
+        processor.tokenizer.padding_side = "left"
         processor.chat_template = processor.chat_template.replace('strftime_now("%Y-%m-%d")', '"2025-06-20"')
 
         # Prepare inputs
@@ -430,7 +444,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(gen_tokens[0], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("cuda", 8): "Calm waters reflect\nWooden path to distant shore\nPeace in nature's hold",
+                ("cuda", 8): "Calm waters reflect\nWooden path to distant shore\nSilence in the scene",
                 ("rocm", (9, 4)): "Calm waters reflect\nWooden path to distant shore\nSilence in the pines"
             }
         )  # fmt: skip

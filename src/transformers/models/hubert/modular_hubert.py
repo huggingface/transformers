@@ -22,6 +22,7 @@ from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
+from ...utils.output_capturing import OutputRecorder
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Encoder,
     Wav2Vec2EncoderStableLayerNorm,
@@ -132,22 +133,16 @@ class HubertPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+    _can_record_outputs = {
+        "hidden_states": [HubertEncoderLayer, HubertEncoderLayerStableLayerNorm],  # noqa: F821
+        "attentions": OutputRecorder(HubertAttention, index=1, layer_name="encoder"),  # noqa: F821
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm1d)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
-        elif isinstance(module, nn.Conv1d):
+        super()._init_weights(module)
+        if isinstance(module, nn.Conv1d):
             if is_deepspeed_zero3_enabled():
                 import deepspeed
 

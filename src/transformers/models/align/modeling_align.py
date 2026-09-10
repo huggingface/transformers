@@ -359,7 +359,7 @@ class AlignVisionFinalBlockLayer(nn.Module):
 
 class AlignVisionBlock(nn.Module):
     r"""
-    This corresponds to the block module of original the EfficientNet vision encoder implementation.
+    This corresponds to the block module of the original EfficientNet vision encoder implementation.
 
     Args:
         config ([`AlignVisionConfig`]):
@@ -515,12 +515,8 @@ class AlignTextEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
-        self.register_buffer(
-            "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
+        self.token_type_ids = nn.Buffer(torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False)
 
     def forward(
         self,
@@ -791,27 +787,11 @@ class AlignPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, AlignModel):
+        super()._init_weights(module)
+        if isinstance(module, AlignModel):
             init.xavier_uniform_(module.text_projection.weight)
             init.zeros_(module.text_projection.bias)
             init.constant_(module.temperature, self.config.temperature_init_value)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-        if isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, AlignTextEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
             init.zeros_(module.token_type_ids)

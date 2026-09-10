@@ -17,7 +17,6 @@ import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
-from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -26,7 +25,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3NaiveMoe
+from ...utils.output_capturing import OutputRecorder
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Experts
 from ..glm4.modeling_glm4 import Glm4Attention
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
@@ -41,6 +41,7 @@ from ..glm4v.configuration_glm4v import Glm4vConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
     Glm4vTextModel,
+    Glm4vTextRotaryEmbedding,
     Glm4vVisionModel,
     Glm4vVisionRotaryEmbedding,
 )
@@ -99,15 +100,16 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     ignore_keys_at_rope_validation = {"mrope_section"}
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+    }
 
     vocab_size: int = 151424
     max_position_embeddings: int = 65536
     attention_bias: bool = True
     router_aux_loss_coef: float = 0.0001
     use_qk_norm = AttributeError()
-
-    def __post_init__(self, **kwargs):
-        super().__post_init__(self, **kwargs)
+    num_mtp_layers = AttributeError()
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5V")
@@ -138,6 +140,15 @@ class Glm4vMoeConfig(Glm4vConfig):
 
     image_token_id: int = 151363
     video_token_id: int = 151364
+
+
+class Glm4vMoeTextRotaryEmbedding(Glm4vTextRotaryEmbedding):
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq = torch.cat([m[i % 3] for i, m in enumerate(freq.split(self.mrope_section, dim=-1))], dim=-1)
+        return torch.cat([freq, freq], dim=-1)
 
 
 class Glm4vMoeTextAttention(Glm4Attention):
@@ -195,7 +206,7 @@ class Glm4vMoeTextTopkRouter(Glm4MoeTopkRouter, nn.Module):
         super().__init__(config)
 
 
-class Glm4vMoeTextNaiveMoe(DeepseekV3NaiveMoe):
+class Glm4vMoeTextExperts(DeepseekV3Experts):
     pass
 
 
@@ -203,7 +214,7 @@ class Glm4vMoeTextMoE(Glm4MoeMoE):
     def __init__(self, config: Glm4vMoeTextConfig):
         super().__init__(config)
         self.config = config
-        self.experts = Glm4vMoeTextNaiveMoe(config)
+        self.experts = Glm4vMoeTextExperts(config)
         self.gate = Glm4vMoeTextTopkRouter(config)
         self.shared_experts = Glm4vMoeTextMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
@@ -227,12 +238,6 @@ class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _can_record_outputs = {}
 
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, Glm4vMoeVisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
-
 
 class Glm4vMoeCausalLMOutputWithPast(Qwen3VLMoeCausalLMOutputWithPast):
     pass
@@ -252,7 +257,7 @@ class Glm4vMoeTextModel(Glm4vTextModel):
     _can_record_outputs = {
         "hidden_states": Glm4vMoeTextDecoderLayer,
         "attentions": Glm4vMoeTextAttention,
-        "router_logits": Glm4vMoeTextTopkRouter,
+        "router_logits": OutputRecorder(Glm4vMoeTextTopkRouter, index=0),
     }
 
     def forward(
@@ -383,7 +388,9 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         aux_loss = None
         if kwargs.get("output_router_logits", False):

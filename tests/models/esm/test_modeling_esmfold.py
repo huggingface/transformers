@@ -170,7 +170,7 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     all_model_classes = (EsmForProteinFolding,) if is_torch_available() else ()
     pipeline_model_mapping = {} if is_torch_available() else {}
     test_sequence_classification_problem_types = False
-    test_torch_exportable = False
+    test_torch_exportable = False  # unhashable SymInt inside ESMFold fold module
 
     def setUp(self):
         self.model_tester = EsmFoldModelTester(self)
@@ -241,10 +241,6 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             super().test_reverse_loading_mapping()
         finally:
             self.model_tester.get_config = original
-
-    @unittest.skip(reason="ESMFold doesn't support data parallel.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
 
 
 @require_torch

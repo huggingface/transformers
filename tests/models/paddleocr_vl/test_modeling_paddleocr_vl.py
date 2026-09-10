@@ -72,7 +72,6 @@ class PaddleOCRVLVisionText2TextModelTester:
             "image_token_id": 100295,
             "intermediate_size": 32,
             "max_position_embeddings": 512,
-            "model_type": "paddleocr_vl",
             "num_attention_heads": 4,
             "num_hidden_layers": 2,
             "num_key_value_heads": 2,
@@ -90,7 +89,6 @@ class PaddleOCRVLVisionText2TextModelTester:
             "hidden_size": 144,
             "intermediate_size": 32,
             "layer_norm_eps": 1e-06,
-            "model_type": "paddleocr_vl",
             "num_attention_heads": 4,
             "num_channels": 3,
             "num_hidden_layers": 2,
@@ -294,10 +292,6 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     @unittest.skip(reason="PaddleOCRVL does not support.")
     def test_generate_compile_model_forward_fullgraph(self):
-        pass
-
-    @unittest.skip(reason="PaddleOCRVL does not support.")
-    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     @pytest.mark.generate

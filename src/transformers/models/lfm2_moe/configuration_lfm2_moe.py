@@ -48,6 +48,12 @@ class Lfm2MoeConfig(PreTrainedConfig):
 
     model_type = "lfm2_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_ep_plan = {
+        "layers.*.feed_forward.gate": "ep_router",
+        "layers.*.feed_forward.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.feed_forward.experts.down_proj": "grouped_gemm",
+        "layers.*.feed_forward.experts": "moe_tp_experts",
+    }
     default_theta = 1000000.0
 
     vocab_size: int = 65536

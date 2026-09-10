@@ -494,8 +494,7 @@ class MMGroundingDinoPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.init_std
-
+        super()._init_weights(module)
         if isinstance(module, MMGroundingDinoLearnedPositionEmbedding):
             init.uniform_(module.row_embeddings.weight)
             init.uniform_(module.column_embeddings.weight)
@@ -537,18 +536,6 @@ class MMGroundingDinoPreTrainedModel(PreTrainedModel):
         elif isinstance(module, MMGroundingDinoFusionLayer):
             init.constant_(module.vision_param, 1e-4)
             init.constant_(module.text_param, 1e-4)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, MMGroundingDinoMLPPredictionHead):
             init.constant_(module.layers[-1].weight, 0)
             init.constant_(module.layers[-1].bias, 0)
@@ -570,16 +557,16 @@ class MMGroundingDinoFrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
 
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
+    Copy-paste from torchvision.misc.ops with added eps before rsqrt, without which any other models than
     torchvision.models.resnet[18,34,50,101] produce nans.
     """
 
     def __init__(self, n):
         super().__init__()
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
+        self.weight = nn.Buffer(torch.ones(n))
+        self.bias = nn.Buffer(torch.zeros(n))
+        self.running_mean = nn.Buffer(torch.zeros(n))
+        self.running_var = nn.Buffer(torch.ones(n))
 
     def _load_from_state_dict(
         self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
@@ -1112,8 +1099,8 @@ class MMGroundingDinoEncoder(MMGroundingDinoPreTrainedModel):
         reference_points_list = []
         for level, (height, width) in enumerate(spatial_shapes_list):
             ref_y, ref_x = torch.meshgrid(
-                torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
-                torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
+                torch.linspace(0.5, height - 0.5, height, dtype=valid_ratios.dtype, device=device),
+                torch.linspace(0.5, width - 0.5, width, dtype=valid_ratios.dtype, device=device),
                 indexing="ij",
             )
             # TODO: valid_ratios could be useless here. check https://github.com/fundamentalvision/Deformable-DETR/issues/36
@@ -1759,7 +1746,7 @@ def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTen
     indices = torch.arange(seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
 
     # Previous special token: cummax of special token indices
-    prev_special = torch.where(special_mask, indices, torch.tensor(-1, device=device))
+    prev_special = torch.where(special_mask, indices, torch.full((), -1, device=device))
     prev_special = torch.cummax(prev_special, dim=1)[0]
 
     # Next special token: flip, cummin, flip back
@@ -1852,14 +1839,14 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         for name, param in self.backbone.conv_encoder.model.named_parameters():
             param.requires_grad_(True)
 
-    def get_valid_ratio(self, mask):
+    def get_valid_ratio(self, mask, dtype=torch.float32):
         """Get the valid ratio of all feature maps."""
 
         _, height, width = mask.shape
-        valid_height = torch.sum(mask[:, :, 0], 1)
-        valid_width = torch.sum(mask[:, 0, :], 1)
-        valid_ratio_height = valid_height.float() / height
-        valid_ratio_width = valid_width.float() / width
+        valid_height = torch.sum(mask[:, :, 0], 1, dtype=dtype)
+        valid_width = torch.sum(mask[:, 0, :], 1, dtype=dtype)
+        valid_ratio_height = valid_height / height
+        valid_ratio_width = valid_width / width
         valid_ratio = torch.stack([valid_ratio_width, valid_ratio_height], -1)
         return valid_ratio
 
@@ -1888,8 +1875,8 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
             valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
             grid_y, grid_x = torch.meshgrid(
-                torch.linspace(0, height - 1, height, dtype=torch.float32, device=enc_output.device),
-                torch.linspace(0, width - 1, width, dtype=torch.float32, device=enc_output.device),
+                torch.linspace(0, height - 1, height, dtype=enc_output.dtype, device=enc_output.device),
+                torch.linspace(0, width - 1, width, dtype=enc_output.dtype, device=enc_output.device),
                 indexing="ij",
             )
             grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)
@@ -2057,8 +2044,7 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
         spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
-        valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
-        valid_ratios = valid_ratios.float()
+        valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
 
         # Fourth, sent source_flatten + mask_flatten + lvl_pos_embed_flatten (backbone + proj layer output) through encoder
         # Also provide spatial_shapes, level_start_index and valid_ratios

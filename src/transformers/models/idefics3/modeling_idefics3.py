@@ -417,7 +417,7 @@ class Idefics3PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Idefics3VisionAttention", "Idefics3DecoderLayer"]
+    _no_split_modules = ["Idefics3VisionAttention"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -547,7 +547,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
@@ -639,9 +639,13 @@ class Idefics3Model(Idefics3PreTrainedModel):
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
             Mask to avoid performing attention on padding pixel indices.
         image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The hidden states of the image encoder after modality projection.
+            The hidden states of the image encoder after modality projection. Pass this instead of `pixel_values`
+            to reuse a previous call's vision-tower output and skip recomputing it (e.g. across turns in a
+            conversation). Do not pass both at once: clear `pixel_values` from the inputs first, or a `ValueError`
+            is raised.
         """
 
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         if self.training and self.text_model.gradient_checkpointing and use_cache:
             logger.warning_once(
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -664,7 +668,10 @@ class Idefics3Model(Idefics3PreTrainedModel):
 
         # START VISUAL INPUTS INTEGRATION
         if pixel_values is not None and image_hidden_states is not None:
-            raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
+            raise ValueError(
+                "You cannot specify both pixel_values and image_hidden_states at the same time. To reuse a "
+                "previous call's image_hidden_states, remove pixel_values from the inputs instead of passing both."
+            )
         elif pixel_values is not None:
             image_hidden_states = self.get_image_features(
                 pixel_values, pixel_attention_mask, return_dict=True
@@ -858,44 +865,6 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-
-    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.prepare_inputs_for_generation
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        pixel_attention_mask=None,
-        image_hidden_states=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        use_cache=False,
-        **kwargs,
-    ):
-        # Overwritten -- there are mutually exclusive inputs (if the logic to make `image_hidden_states` take
-        # precedence is moved to the model, we can remove this fn)
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            pixel_values=pixel_values,
-            pixel_attention_mask=pixel_attention_mask,
-            image_hidden_states=image_hidden_states,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            use_cache=use_cache,
-            **kwargs,
-        )
-
-        if image_hidden_states is not None or (use_cache and not is_first_iteration):
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_attention_mask"] = None
-
-        return model_inputs
 
 
 __all__ = ["Idefics3ForConditionalGeneration", "Idefics3PreTrainedModel", "Idefics3Model", "Idefics3VisionTransformer"]

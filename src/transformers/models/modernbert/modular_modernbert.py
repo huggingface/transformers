@@ -15,7 +15,7 @@
 
 import math
 from collections.abc import Callable
-from typing import Literal, Optional
+from typing import Literal
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -25,7 +25,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
-from ...integrations import use_kernel_func_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -233,19 +233,15 @@ class ModernBertMLP(nn.Module):
 
 class ModernBertRotaryEmbedding(Gemma3RotaryEmbedding):
     def __init__(self, config: ModernBertConfig, device=None):
-        super().__init__(config, device)
+        super().__init__(config)
 
-    @staticmethod
     def compute_default_rope_parameters(
-        config: ModernBertConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-        layer_type: str | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        return super().compute_default_rope_parameters(config, device, seq_len, layer_type)
+        config: ModernBertConfig, device=None, layer_type: str | None = None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        return super().compute_default_rope_parameters(config, layer_type)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -404,6 +400,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
         cutoff_factor = self.config.initializer_cutoff_factor
         if cutoff_factor is None:
             cutoff_factor = 3
@@ -450,10 +447,6 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             ),
         ):
             init_weight(module.classifier, stds["final_out"])
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            if module.bias is not None:
-                init.zeros_(module.bias)
         elif isinstance(module, ModernBertRotaryEmbedding):
             for layer_type in module.layer_types:
                 rope_init_fn = module.compute_default_rope_parameters
@@ -882,7 +875,7 @@ class ModernBertForMultipleChoice(ModernBertPreTrainedModel):
                 cls_mask = attention_mask.argmax(dim=-1).to(last_hidden_state.device)
             # if no pad, <cls> is the first token
             else:
-                cls_mask = torch.tensor(0, dtype=torch.long, device=last_hidden_state.device)
+                cls_mask = torch.full((), 0, dtype=torch.long, device=last_hidden_state.device)
             # extract the <cls> token for the logits
             last_hidden_state = last_hidden_state[indices_0, cls_mask]
 

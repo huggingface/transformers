@@ -28,7 +28,6 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import is_flash_attention_requested
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
     DeepseekV3ForCausalLM,
@@ -36,10 +35,10 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Model,
     DeepseekV3RMSNorm,
     DeepseekV3RotaryEmbedding,
-    DeepseekV3TopkRouter,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
+from ..mixtral.modeling_mixtral import MixtralTopKRouter
 from .configuration_longcat_flash import LongcatFlashConfig
 
 
@@ -54,28 +53,18 @@ class LongcatFlashRotaryEmbedding(DeepseekV3RotaryEmbedding):
     pass
 
 
-# TODO remap config key ffn_hidden_size -> intermediate_size
 class LongcatFlashMLP(DeepseekV3MLP):
-    def __init__(self, config, hidden_size=None, intermediate_size=None):
-        super().__init__(config)
-        self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
-        self.intermediate_size = config.ffn_hidden_size if intermediate_size is None else intermediate_size
+    pass
 
 
-# TODO remap config key moe_topk -> num_experts_per_tok
-class LongcatFlashTopkRouter(DeepseekV3TopkRouter):
+class LongcatFlashTopkRouter(MixtralTopKRouter):
     def __init__(self, config):
         super().__init__(config)
-        del self.n_group
-        del self.topk_group
-        del self.weight
-        del self.norm_topk_prob
-
-        self.top_k = config.moe_topk
+        del self.weight  # longcat routes through `classifier` (an nn.Linear) instead of a weight Parameter
         self.n_routed_experts = config.n_routed_experts + (config.zero_expert_num or 0)
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
         self.router_bias = getattr(config, "router_bias", False)
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.n_routed_experts))
         self.classifier = nn.Linear(config.hidden_size, self.n_routed_experts, bias=self.router_bias)
 
     @torch.no_grad()
@@ -85,7 +74,7 @@ class LongcatFlashTopkRouter(DeepseekV3TopkRouter):
         return topk_indices
 
     def forward(self, hidden_states):
-        hidden_states = hidden_states.view(-1, self.config.hidden_size)
+        hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.classifier.weight.type(torch.float32))
         scores = router_logits.softmax(dim=-1)
         topk_indices = self.get_topk_indices(scores)
@@ -166,8 +155,9 @@ class LongcatFlashMoE(nn.Module):
 
 
 class LongcatFlashMLA(DeepseekV3Attention):
-    def __init__(self, config, layer_idx: int):
+    def __init__(self, config: LongcatFlashConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.qk_head_dim = config.qk_head_dim  # qk_head_dim is a settable attribute in LongcatFlashConfig
 
         self.mla_scale_q_lora = (config.hidden_size / self.q_lora_rank) ** 0.5
         self.mla_scale_kv_lora = (config.hidden_size / self.kv_lora_rank) ** 0.5
@@ -182,38 +172,34 @@ class LongcatFlashMLA(DeepseekV3Attention):
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
-        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
         # we always do a lora for queries as well
         q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
         q_states = q_states.view(query_shape).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_pass = self.kv_a_layernorm(k_pass)
+        kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        k_pass = self.kv_a_layernorm(kv_pass)
 
         # apply LoRA scaling
         q_pass = q_pass * self.mla_scale_q_lora
         q_rot = q_rot * self.mla_scale_q_lora
         k_pass = k_pass * self.mla_scale_kv_lora
 
-        k_pass = self.kv_b_proj(k_pass).view(key_shape).transpose(1, 2)
-        k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-
+        # Both latents are viewed as single-head, 4D tensors so all cache layers handle them correctly
+        k_pass = k_pass.view(batch_size, 1, seq_length, self.kv_lora_rank)
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
-        k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
+
+        # Cache read / write is performed while the latent KV is still compressed
+        if past_key_values is not None:
+            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
-        key_states = torch.cat((k_pass, k_rot), dim=-1)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
-        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
-            value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
+        key_states, value_states = self.expand_kv(k_pass, k_rot)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -229,9 +215,6 @@ class LongcatFlashMLA(DeepseekV3Attention):
             scaling=self.scaling,
             **kwargs,
         )
-
-        if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
-            attn_output = attn_output[:, :, :, : self.v_head_dim]
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -353,7 +336,7 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
 
 
 class LongcatFlashModel(DeepseekV3Model):
-    def __init__(self, config):
+    def __init__(self, config: LongcatFlashConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
             [LongcatFlashDecoderLayer(config, layer_idx) for layer_idx in range(config.num_layers)]
