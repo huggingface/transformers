@@ -291,6 +291,35 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @require_torch
+    def test_cross_attention_masking(self):
+        # regression test to ensure text tokens before <|image|> don't leak cross-attention via the residual stream
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+        model = MllamaForConditionalGeneration(config).to(torch_device)
+        model.eval()
+
+        # image token is at index 1, let's mask out cross attention for index 0
+        cross_attention_mask = inputs["cross_attention_mask"]
+        cross_attention_mask[:, :1, :, :] = 0
+        inputs["cross_attention_mask"] = cross_attention_mask
+
+        with torch.no_grad():
+            outputs_with_image = model(**inputs)
+
+        # zero out the pixel values to see if the first token is affected
+        inputs_no_image = inputs.copy()
+        inputs_no_image["pixel_values"] = torch.zeros_like(inputs["pixel_values"])
+
+        with torch.no_grad():
+            outputs_no_image = model(**inputs_no_image)
+
+        # the first token shouldn't have seen the image, so logits should match exactly
+        logits_with_image = outputs_with_image.logits[:, :1, :]
+        logits_no_image = outputs_no_image.logits[:, :1, :]
+
+        torch.testing.assert_close(logits_with_image, logits_no_image, rtol=1e-5, atol=1e-5)
+
     def test_resize_embeddings_results_in_successful_loss(self):
         # resizing embeddings should result in successful loss computation
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
