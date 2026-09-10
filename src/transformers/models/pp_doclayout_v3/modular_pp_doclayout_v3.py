@@ -43,7 +43,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
-from ...utils.generic import TensorType, can_return_tuple, merge_with_config_defaults
+from ...utils.generic import TensorType, can_return_tuple
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
 from ..resnet.modeling_resnet import ResNetConvLayer
@@ -868,7 +868,6 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
         self.num_queries = config.num_queries
 
     @auto_docstring
-    @merge_with_config_defaults
     @capture_outputs
     def forward(
         self,

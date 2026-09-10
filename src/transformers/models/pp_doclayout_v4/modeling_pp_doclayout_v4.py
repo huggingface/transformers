@@ -1081,7 +1081,6 @@ class PPDocLayoutV4Decoder(PPDocLayoutV4PreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    @merge_with_config_defaults
     @capture_outputs
     def forward(
         self,
