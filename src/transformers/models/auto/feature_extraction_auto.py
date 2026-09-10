@@ -67,9 +67,14 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ),
         ("glmasr", {"torch": "WhisperAudioProcessor", "numpy": "WhisperAudioProcessorNumpy"}),
         ("granite_speech", {"torch": "GraniteSpeechAudioProcessor", "numpy": "GraniteSpeechAudioProcessorNumpy"}),
-        # TODO(audio-processor): granite_speech5 still has no AudioProcessor; single-key legacy entry.
-        ("granite_speech5_ctc", {"torch": "GraniteSpeech5FeatureExtractor"}),
-        ("granite_speech5_encoder", {"torch": "GraniteSpeech5FeatureExtractor"}),
+        (
+            "granite_speech5_ctc",
+            {"torch": "GraniteSpeech5AudioProcessor", "numpy": "GraniteSpeech5AudioProcessorNumpy"},
+        ),
+        (
+            "granite_speech5_encoder",
+            {"torch": "GraniteSpeech5AudioProcessor", "numpy": "GraniteSpeech5AudioProcessorNumpy"},
+        ),
         ("granite_speech_plus", {"torch": "GraniteSpeechAudioProcessor", "numpy": "GraniteSpeechAudioProcessorNumpy"}),
         ("higgs_audio_v2_tokenizer", {"torch": "DacAudioProcessor", "numpy": "DacAudioProcessorNumpy"}),
         ("hubert", {"torch": "Wav2Vec2AudioProcessor", "numpy": "Wav2Vec2AudioProcessorNumpy"}),
