@@ -17,7 +17,6 @@ Tests for auto_docstring decorator and check_auto_docstrings function.
 
 import importlib
 import os
-import statistics
 import sys
 import tempfile
 import textwrap
@@ -781,23 +780,38 @@ class TestAutoDocstringPerformance:
     call looks cheap.  These tests assert an upper bound to catch regressions.
     """
 
-    # Upper bound (%) of total import time that auto_docstring overhead may take.
-    # Relative metric; robust across CI vs local. Catches serious regressions.
-    AUTO_DOCSTRING_COST_PCT_UPPER_BOUND = 80.0
+    # Upper bound (seconds) of CPU time that auto_docstring may add per imported
+    # module. Measured with `time.process_time()` so co-tenant scheduling noise
+    # (the test runs under `pytest-xdist -n 8`) and filesystem I/O do not affect
+    # the result, making the bound portable across machines. The measured cost is
+    # a few ms per module, so this budget leaves generous headroom (~16x) to stay
+    # robust to hardware differences while still catching serious regressions.
+    AUTO_DOCSTRING_COST_PER_MODULE_UPPER_BOUND = 0.1
 
     def test_auto_docstring_import_time_upper_bound(self):
         """
-        Asserts that auto_docstring overhead stays below a percentage of total
-        import time.
+        Asserts that auto_docstring overhead stays below an absolute per-module
+        CPU-time budget.
 
         Method
         ------
         1. Collect ``modeling_*.py``, ``image_processing_*.py``, ``processing_*.py``
            under ``transformers/models``, then sample every 10th for speed.
         2. Warmup: import the sampled modules once so Python's bytecode cache is hot.
-        3. Measure WITH auto_docstring: clear cache, re-import, median over 5 runs.
-        4. Measure WITHOUT auto_docstring: noop-patch, clear cache, re-import, median.
-        5. cost_pct = (real - noop) / real * 100; assert cost_pct < upper bound.
+        3. Measure WITH auto_docstring: clear cache, re-import, min over 10 runs.
+        4. Measure WITHOUT auto_docstring: noop-patch, clear cache, re-import, min.
+        5. per_module_cost = (min_real - min_noop) / num_modules;
+           assert per_module_cost < upper bound.
+
+        Notes
+        -----
+        - ``time.process_time()`` measures CPU time only, so co-tenant scheduling
+          noise cannot inflate it.
+        - ``min()`` is the standard estimator for timing benchmarks: it is the
+          sample least contaminated by unrelated system activity.
+        - An absolute per-module budget avoids the ratio of two wall-clock timings,
+          whose run-to-run noise exceeded the percentage margin it was asked to
+          resolve (see GH issue #48145).
         """
         if "transformers.utils" not in sys.modules:
             importlib.import_module("transformers.utils")
@@ -827,32 +841,32 @@ class TestAutoDocstringPerformance:
 
         # With auto_docstring (real)
         times_real: list[float] = []
-        for _ in range(5):
+        for _ in range(10):
             _clear()
-            t0 = time.perf_counter()
+            t0 = time.process_time()
             _import_all()
-            times_real.append(time.perf_counter() - t0)
+            times_real.append(time.process_time() - t0)
 
         # Without auto_docstring (noop patch)
         _orig = _utils_module.auto_docstring
         _noop = lambda x=None, **kw: (lambda f: f) if x is None else x  # noqa: E731
         times_noop: list[float] = []
-        for _ in range(5):
+        for _ in range(10):
             _utils_module.auto_docstring = _noop
             try:
                 _clear()
-                t0 = time.perf_counter()
+                t0 = time.process_time()
                 _import_all()
-                times_noop.append(time.perf_counter() - t0)
+                times_noop.append(time.process_time() - t0)
             finally:
                 _utils_module.auto_docstring = _orig
 
-        median_real = statistics.median(times_real)
-        median_noop = statistics.median(times_noop)
-        cost_pct = (median_real - median_noop) / median_real * 100 if median_real > 0 else 0.0
-        print(f"Cost percentage: {cost_pct:.1f}%")
-        assert cost_pct < self.AUTO_DOCSTRING_COST_PCT_UPPER_BOUND, (
-            f"auto_docstring cost {cost_pct:.1f}% of import time exceeds upper bound "
-            f"{self.AUTO_DOCSTRING_COST_PCT_UPPER_BOUND}% "
-            f"({len(model_modules)} of {len(all_modules)} modules)"
+        min_real = min(times_real)
+        min_noop = min(times_noop)
+        per_module_cost = (min_real - min_noop) / len(model_modules) if model_modules else 0.0
+        print(f"Per-module auto_docstring cost: {per_module_cost * 1000:.2f} ms")
+        assert per_module_cost < self.AUTO_DOCSTRING_COST_PER_MODULE_UPPER_BOUND, (
+            f"auto_docstring cost {per_module_cost * 1000:.1f} ms/module exceeds upper bound "
+            f"{self.AUTO_DOCSTRING_COST_PER_MODULE_UPPER_BOUND * 1000:.0f} ms/module "
+            f"({len(model_modules)} of {len(all_modules)} modules sampled)"
         )
