@@ -75,12 +75,13 @@ def _prepare_cross_attention_mask(
 def _has_cached_cross_attention_states(past_key_values: Cache | None, layer_idx: int) -> bool:
     """
     Whether the cross-attention layer `layer_idx` already holds the projected vision states. Not written as
-    `get_seq_length(layer_idx) > 0` because compileable layers store their length as a 0-dim tensor, which would make
-    this a data-dependent branch; `is_initialized` is a python `bool` known at trace time.
+    `get_seq_length(layer_idx) > 0`, which is a 0-dim tensor on compileable layers, i.e. a data-dependent branch.
     """
     if past_key_values is None or layer_idx >= len(past_key_values.layers):
         return False
-    return past_key_values.layers[layer_idx].is_initialized
+    layer = past_key_values.layers[layer_idx]
+    # `Cache.early_initialization` marks a layer as initialized while it is still empty, hence the second check.
+    return layer.is_initialized and layer.keys.numel() > 0
 
 
 def _prepare_aspect_ratio_attention_mask(
@@ -445,14 +446,12 @@ class MllamaTextCrossAttention(nn.Module):
                 # if we have a new image + new tokens, we only computed key_states on that new image
                 # we still update the cross key states, past_image, new_image. And use it!
                 key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-        elif _has_cached_cross_attention_states(past_key_values, self.layer_idx):
+        else:
+            # `MllamaTextModel` skips this layer entirely when there is nothing cached, so assume the cache exists
+            # and let it fail loudly otherwise.
             key_states, value_states = (
                 past_key_values.layers[self.layer_idx].keys,
                 past_key_values.layers[self.layer_idx].values,
-            )
-        else:
-            raise ValueError(
-                "Cross attention layer can't find neither `cross_attn_states` nor cached values for key/values!"
             )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -1543,6 +1542,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
     def prepare_inputs_for_generation(
         self,
         input_ids=None,
+        next_sequence_length=None,
         inputs_embeds=None,
         attention_mask=None,
         position_ids=None,
@@ -1560,6 +1560,7 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
 
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
+            next_sequence_length=next_sequence_length,
             past_key_values=past_key_values,
             use_cache=use_cache,
             inputs_embeds=inputs_embeds,
@@ -1581,16 +1582,12 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
             model_inputs["aspect_ratio_ids"] = None
             model_inputs["aspect_ratio_mask"] = None
 
-        # `cross_attention_mask` gains a row per decoded token, so slice it down to the tokens being processed to keep
-        # the input shape constant, otherwise `torch.compile` recompiles at every step. The `clone` gives the slice a
-        # consistent stride, which dynamo also guards on.
-        if model_inputs.get("cross_attention_mask") is not None:
-            input_tensor = model_inputs.get("inputs_embeds")
-            input_tensor = model_inputs["input_ids"] if input_tensor is None else input_tensor
-            sequence_length = input_tensor.shape[1]
-            model_inputs["cross_attention_mask"] = model_inputs["cross_attention_mask"][:, -sequence_length:].clone(
-                memory_format=torch.contiguous_format
-            )
+        # `cross_attention_mask` gains a row per decoded token: slice it down to the tokens being processed, otherwise
+        # dynamo recompiles at every step. The `clone` gives the slice a consistent stride, which it also guards on.
+        if next_sequence_length is not None and model_inputs.get("cross_attention_mask") is not None:
+            model_inputs["cross_attention_mask"] = model_inputs["cross_attention_mask"][
+                :, -next_sequence_length:
+            ].clone(memory_format=torch.contiguous_format)
 
         return model_inputs
 
