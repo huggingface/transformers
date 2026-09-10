@@ -20,6 +20,7 @@ import re
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -512,14 +513,26 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         input_features = input_dict["input_features"]
 
-        output = model.generate(
-            input_features,
-            num_beams=3,
-            num_return_sequences=3,
-            return_dict_in_generate=True,
-            output_scores=True,
-            length_penalty=0.0,
-        )
+        ancestry = []
+        stack_split_outputs = model._stack_split_outputs
+
+        def capture_ancestry(seek_outputs, *args, **kwargs):
+            ancestry.extend(output["beam_indices"] for output in seek_outputs)
+            return stack_split_outputs(seek_outputs, *args, **kwargs)
+
+        with patch.object(model, "_stack_split_outputs", capture_ancestry):
+            output = model.generate(
+                input_features,
+                num_beams=3,
+                num_return_sequences=3,
+                return_dict_in_generate=True,
+                output_scores=True,
+                length_penalty=0.0,
+            )
+
+        # a run whose ancestry never leaves beam 0 gathers in bounds either way, so it would
+        # pass on unpatched code too
+        self.assertTrue(any((indices > 0).any() for indices in ancestry))
 
         transition_scores = model.compute_transition_scores(output.sequences, output.scores, output.beam_indices)
 
