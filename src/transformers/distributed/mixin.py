@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
-from .configuration_utils import DistributedConfig
+from .configuration_utils import EXPERTS_DISPATCH_STRATEGIES, DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
@@ -202,7 +202,7 @@ class DistributedMixin:
             # sees unaccounted ranks and falls back to DDP, which rejects the DTensor parameters.
             model._tp_size = distributed_config.tp_size
             model._fsdp_size = distributed_config.fsdp_size
-            model._expert_parallel_dispatch = distributed_config.expert_parallel_dispatch
+            model._expert_parallel_dispatch = distributed_config.dispatches_tokens
 
             # Both may apply: the tensor/expert parallel plan shards across `tp` first, then FSDP2
             # shards every parameter (the `tp`-sharded ones included) across `fsdp`.
@@ -210,7 +210,7 @@ class DistributedMixin:
                 tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
                 if isinstance(distributed_config.tp_plan, dict):
                     model.tp_plan = distributed_config.tp_plan
-                if distributed_config.expert_parallel_dispatch:
+                if distributed_config.dispatches_tokens:
                     # Every rank trains on its own part of the batch, so only the experts can be sharded across the
                     # group: the experts get the dispatch style, the router keeps its global ids and scores, and
                     # whatever else the plan shards stays replicated, data-parallel like the rest of the trunk.
@@ -222,18 +222,20 @@ class DistributedMixin:
                     )
                     if replicated:
                         logger.warning(
-                            "`expert_parallel_dispatch=True` shards only the experts, so these expert parallel plan "
+                            f"`experts_dispatch={distributed_config.experts_dispatch!r}` shards only the experts, "
+                            "so these expert parallel plan "
                             f"entries are ignored and their modules stay replicated: {replicated}."
                         )
                     # `tp_plan` reads `_ep_plan` under expert parallelism, so that is the plan to rewrite.
+                    dispatch_style = EXPERTS_DISPATCH_STRATEGIES[distributed_config.experts_dispatch]
                     model._ep_plan = {
-                        name: "ep_dispatch_experts" if style == "moe_tp_experts" else style
+                        name: dispatch_style if style == "moe_tp_experts" else style
                         for name, style in model.tp_plan.items()
                         if style in kept
                     }
                 model = apply_tensor_parallelism(model, tp_mesh)
 
-            if distributed_config.expert_parallel_dispatch:
+            if distributed_config.dispatches_tokens:
                 # Every expert-parallel rank trains on its own part of the batch, so the parameters outside the
                 # experts are data-parallel across the whole mesh: FSDP2 shards them across all of it and owns
                 # their gradient reduction. The experts stay sharded across `tp` and, if any, across `fsdp`.
@@ -307,7 +309,7 @@ class DistributedMixin:
         if distributed_config is None:
             return state_dict
 
-        if distributed_config.fsdp_size > 1 or distributed_config.expert_parallel_dispatch:
+        if distributed_config.fsdp_size > 1 or distributed_config.dispatches_tokens:
             # Also covers the 2-D (fsdp, tp) mesh and token dispatch: every parameter is FSDP-managed, and
             # the full state dict is only materialized on rank 0.
             if not _is_torch_distributed_initialized():

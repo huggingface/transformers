@@ -622,15 +622,16 @@ class Trainer:
         self._expert_parallel_dispatch = getattr(model, "_expert_parallel_dispatch", False)
         if self._expert_parallel_dispatch and args.train_sampling_strategy != "random":
             raise ValueError(
-                "`expert_parallel_dispatch=True` splits the batches across every rank with a `DistributedSampler`, "
-                f"which `train_sampling_strategy='{args.train_sampling_strategy}'` does not go through."
+                "`experts_dispatch` other than 'all-reduce' splits the batches across every rank with a "
+                f"`DistributedSampler`, which `train_sampling_strategy='{args.train_sampling_strategy}'` does not "
+                "go through."
             )
         if self._expert_parallel_dispatch and (
             self.accelerator.dispatch_batches or (train_dataset is not None and not has_length(train_dataset))
         ):
             raise ValueError(
-                "`expert_parallel_dispatch=True` splits the batches across every rank with a `DistributedSampler`, "
-                "which needs a sized training dataset and `dispatch_batches=False`."
+                "`experts_dispatch` other than 'all-reduce' splits the batches across every rank with a "
+                "`DistributedSampler`, which needs a sized training dataset and `dispatch_batches=False`."
             )
         if (
             getattr(model, "_device_mesh", None) is not None

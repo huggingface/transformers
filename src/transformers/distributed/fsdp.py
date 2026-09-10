@@ -212,7 +212,7 @@ def apply_fully_sharded_data_parallelism(
     adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, model)
     reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
 
-    if distributed_config is not None and distributed_config.expert_parallel_dispatch:
+    if distributed_config is not None and distributed_config.dispatches_tokens:
         if not is_torch_greater_or_equal("2.7"):
             raise OSError("Expert-parallel token dispatch requires `torch>=2.7`.")
         # The DTensor parameters are the expert-parallel experts: `maybe_distribute_model` rewrote the expert
