@@ -50,7 +50,6 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/scratch"
           docker run --rm \
             --device=/dev/kfd --device=/dev/dri \
-            --group-add video --group-add render \
             --security-opt seccomp=unconfined \
             -v "${RUNNER_TEMP}/scratch:/scratch" \
             transformers-gfx1151:ci \
@@ -81,7 +80,6 @@ jobs:
         run: |
           docker run --rm \
             --device=/dev/kfd --device=/dev/dri \
-            --group-add video --group-add render \
             --security-opt seccomp=unconfined \
             -v "${RUNNER_TEMP}/scratch:/scratch" \
             transformers-gfx1151:ci \
