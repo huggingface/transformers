@@ -1027,7 +1027,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **lm_kwargs
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
         return Gemma3CausalLMOutputWithPast(
