@@ -35,7 +35,7 @@ from huggingface_hub import is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
 
-from .audio_utils import AudioInput, load_audio, make_list_of_audio
+from .audio_utils import AudioInput, SpectrogramConfig, load_audio, make_list_of_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, ImageInput, is_vision_available, make_flat_list_of_images
@@ -67,6 +67,7 @@ from .utils.chat_template_utils import _get_template_variables, render_jinja_tem
 from .utils.type_validators import (
     device_validator,
     image_size_validator,
+    padding_side_validator,
     padding_validator,
     positive_any_number,
     positive_int,
@@ -130,9 +131,9 @@ MODALITY_TO_BASE_CLASS_MAPPING = {
         "HiggsAudioV2TokenizerModel",
         "DacModel",
     ),  # TODO: @eustlb, to be replaced with PreTrainedAudioTokenizerBase
-    "audio_processor": "FeatureExtractionMixin",
+    "audio_processor": ("FeatureExtractionMixin", "TorchAudioBackend", "NumpyAudioBackend"),
     "tokenizer": ("PreTrainedTokenizerBase", "MistralCommonBackend"),
-    "feature_extractor": "FeatureExtractionMixin",
+    "feature_extractor": ("FeatureExtractionMixin", "TorchAudioBackend", "NumpyAudioBackend"),
     "image_processor": "ImageProcessingMixin",
     "video_processor": "BaseVideoProcessor",
 }
@@ -385,15 +386,32 @@ class VideosKwargs(TypedDict, total=False):
 
 class AudioKwargs(TypedDict, total=False):
     """
-    Keyword arguments for audio processing.
+    Keyword arguments for audio processing. For extended documentation, check the appropriate AudioProcessor
+    class methods and docstrings.
+
+    Note on `sampling_rate`: a model's native sampling rate is a processor *identity* attribute, set once at
+    init time as `sampling_rate` (e.g. `WhisperAudioProcessor.sampling_rate == 16000`). The per-call
+    `sampling_rate` keyword below reuses the same name as the *caller's assertion* of the rate at which the
+    provided arrays were actually sampled; it never modifies the processor's own `sampling_rate`. A mismatch
+    resamples the input to the native rate. It describes a passed array only: audio referenced by URL or path
+    is always decoded at the native rate, so a `sampling_rate` given alongside such input is ignored with a
+    warning.
 
     Attributes:
         sampling_rate (`int`, *optional*):
-            The sampling rate at which the `raw_speech` input was sampled.
-        raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
-            The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-            values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
-            stereo, i.e. single float per timestep.
+            The sampling rate at which the provided audio arrays were sampled, asserted by the caller. If it
+            differs from the model's native `sampling_rate`, the audio is resampled to the native rate.
+        spectrogram_config (`dict` or [`~audio_utils.SpectrogramConfig`], *optional*):
+            Per-call override of the spectrogram extraction parameters (STFT, mel filterbank, log scaling).
+            A plain dict is coerced to [`~audio_utils.SpectrogramConfig`].
+        do_extract_spectrogram (`bool`, *optional*):
+            Whether to extract spectrogram features from the audio (otherwise padded raw waveforms are returned).
+        do_batch_spectrogram (`bool`, *optional*):
+            Whether to extract the spectrogram on the padded batch at once (`True`) or per waveform with
+            feature-level padding (`False`).
+        add_channel_dim (`bool`, *optional*):
+            Whether to insert a channel axis into the batched waveform, giving `(batch, channels, samples)`.
+            Config only — not accepted by `__call__`; see `per_call_kwargs`.
         padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding
             index) among:
@@ -409,29 +427,45 @@ class AudioKwargs(TypedDict, total=False):
             Activates truncation to cut input sequences longer than *max_length* to *max_length*.
         pad_to_multiple_of (`int`, *optional*):
             If set, will pad the sequence to a multiple of the provided value.
-        return_attention_mask (`bool`, *optional*):
-            Whether or not [`~ASTFeatureExtractor.__call__`] should return `attention_mask`.
-        device (`str` or `torch.device`, *optional*):
-            The device to compute the audio features on (e.g. "cpu", "cuda"), only relevant for feature
-            extractors that compute them with torch.
+        padding_side (`str`, *optional*):
+            Side the padding is added on, `"left"` or `"right"`.
+        padding_value (`float`, *optional*):
+            Value used to fill the padded positions.
+        return_padding_mask (`bool`, *optional*):
+            Whether the processor should return a padding mask alongside its output. The mask accompanies
+            whichever output family the processor emits: `audio_features_mask`, `audio_values_mask` or
+            `audio_input_ids_mask`.
+        dither (`float`, *optional*):
+            Amount of dithering noise added to the waveform before feature extraction. `0.0` disables it.
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
             - `'np'`: Return NumPy `np.ndarray` objects.
+        device (`str`, *optional*):
+            The device to use for processing (e.g. "cpu", "cuda"), only relevant for the torch backend.
         load_audio_backend (`str`, *optional*):
             Backend used by [`~audio_utils.load_audio`] to decode/resample audio referenced by URL/path
             in `apply_chat_template`. One of `"auto"`, `"torchcodec"`, `"librosa"`, `"torchaudio"`.
     """
 
     sampling_rate: Annotated[int | None, positive_int()]
-    raw_speech: Union["np.ndarray", list[float], list["np.ndarray"], list[list[float]]] | None
+    spectrogram_config: dict | SpectrogramConfig | None
+    do_extract_spectrogram: bool | None
+    do_batch_spectrogram: bool | None
+    # TODO: remove `add_channel_dim` — from here and from `BaseAudioProcessor.per_call_kwargs`'s exclusion —
+    # once the six codec models that set it (dia, dac, encodec, xcodec2, vibevoice_acoustic_tokenizer,
+    # kyutai_speech_to_text) align their modeling with the library's batch layout.
+    add_channel_dim: bool | None
     padding: Annotated[bool | str | PaddingStrategy | None, padding_validator()]
     max_length: Annotated[int | None, positive_int()]
     truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator()]
     pad_to_multiple_of: Annotated[int | None, positive_int()]
-    return_attention_mask: bool | None
-    device: Annotated[Union[str, "torch.device"] | None, device_validator()]
+    padding_side: Annotated[str | None, padding_side_validator()]
+    padding_value: float | int | None
+    return_padding_mask: bool | None
+    dither: Annotated[float | int | None, positive_any_number()]
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
+    device: Annotated[Union[str, "torch.device"] | None, device_validator()]
     load_audio_backend: str | None
 
 
@@ -735,8 +769,10 @@ class ProcessorMixin(PushToHubMixin):
             text = list(text).copy()
 
         if audio is not None and self._audio_processor is not None:
-            sampling_rate = kwargs.get("sampling_rate", self._audio_processor.sampling_rate)
-            audio = self._audio_processor.fetch_audio(audio, sampling_rate=sampling_rate)
+            # Always decode at the processor's own rate: `sampling_rate` describes arrays the caller passes,
+            # not a decode target. Honouring it here produced audio at the wrong rate, which the audio
+            # processor then reported as the caller's mistake.
+            audio = self._audio_processor.fetch_audio(audio)
             audio = make_list_of_audio(audio)
 
         if images is not None and hasattr(self, "image_processor"):
