@@ -180,15 +180,6 @@ class OmniASREncoderConfig(PreTrainedConfig):
         embeddings layer.
     num_conv_pos_embedding_groups (`int`, *optional*, defaults to 16):
         Number of groups of the 1D convolutional positional embeddings layer.
-    hidden_dropout (`float`, *optional*, defaults to 0.1):
-        The dropout probability for all fully connected layers in the encoder.
-    layerdrop (`float`, *optional*, defaults to 0.1):
-        The LayerDrop probability. See the [LayerDrop paper](https://huggingface.co/papers/1909.11556) for more
-        details.
-    feat_proj_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout probability for the output of the feature encoder.
-    activation_dropout (`float`, *optional*, defaults to 0.1):
-        The dropout ratio for activations inside the feed-forward layer.
 
     Example:
 
@@ -221,7 +212,6 @@ class OmniASREncoderConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     hidden_dropout: float | int = 0.1
     layerdrop: float | int = 0.1
-    feat_proj_dropout: float | int = 0.0
     activation_dropout: float | int = 0.1
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-5
@@ -327,9 +317,6 @@ class OmniASRConfig(PreTrainedConfig):
     language_token_id (`int`, *optional*, defaults to 10288):
         Id of the LID marker token (`<extra_id_0>`), which opens the language slot of the decoder context. Read by
         [`OmniASRProcessor`] when it builds the prompt.
-    audio_token_id (`int`, *optional*, defaults to 10289):
-        Id of the placeholder token (`<extra_id_1>`) that stands for one speech encoder frame in `input_ids`. Every
-        occurrence is replaced by the projected audio embedding of that frame.
     language_embedding_token_id (`int`, *optional*, defaults to 10290):
         Id of the placeholder token (`<extra_id_2>`) that stands for the language embedding in `input_ids`. It is
         replaced by the row of the language embedding table that `language_ids` selects.

@@ -81,11 +81,11 @@ from transformers import (
     LlamaConfig,
     OmniASRConfig,
     OmniASRCTCConfig,
+    OmniASREncoder,
     OmniASREncoderConfig,
     OmniASRFeatureExtractor,
     OmniASRForConditionalGeneration,
     OmniASRForCTC,
-    OmniASREncoder,
     logging,
 )
 from transformers.models.omniasr.processing_omniasr import OmniASRProcessor
@@ -109,11 +109,14 @@ def get_encoder_convert_list(target_attr="encoder"):
     # AudioFlamingo3 and Qwen3ASR), so there is no `feature_extractor` / `feature_projection` / `encoder` nesting.
     prefix = f"{target_attr}." if target_attr else ""
     return [
+        # Must come first: the frontend norm below renames *to* `{prefix}layer_norm`, so this pattern would
+        # match it a second time and collapse both norms onto `{prefix}final_layer_norm`.
+        ("encoder.layer_norm", f"{prefix}final_layer_norm"),
         # convolutional feature encoder
         ("encoder_frontend.feature_extractor.layers", f"{prefix}conv_layers"),
-        # feature projection
-        ("encoder_frontend.post_extract_layer_norm", f"{prefix}feature_layer_norm"),
-        ("encoder_frontend.model_dim_proj", f"{prefix}feature_projection"),
+        # projection to the transformer's hidden size
+        ("encoder_frontend.post_extract_layer_norm", f"{prefix}layer_norm"),
+        ("encoder_frontend.model_dim_proj", f"{prefix}projection"),
         # transformer encoder
         ("encoder_frontend.pos_encoder.conv", f"{prefix}pos_conv_embed.conv"),
         ("encoder.layers", f"{prefix}layers"),
@@ -124,7 +127,6 @@ def get_encoder_convert_list(target_attr="encoder"):
         ("ffn_layer_norm", "final_layer_norm"),
         ("ffn.inner_proj", "feed_forward.intermediate_dense"),
         ("ffn.output_proj", "feed_forward.output_dense"),
-        ("encoder.layer_norm", f"{prefix}layer_norm"),
     ]
 
 
@@ -160,6 +162,35 @@ LLM model also has:
 """
 
 
+def _rename_keys(state_dict, convert_list, applies, verbose=False):
+    """
+    Apply `convert_list` to the keys of `state_dict`, returning a new dict.
+
+    A new dict rather than an in-place rename because a rename can be a *swap*: for `OmniASRForCTC` the frontend
+    norm becomes `encoder.layer_norm` while the old `encoder.layer_norm` becomes `encoder.final_layer_norm`.
+    Renaming in place would make the first write land on a key the loop has not visited yet, silently clobbering
+    one tensor and dropping the other. The collision check makes any such future clash fail loudly.
+    """
+    renamed = {}
+    sources = {}
+    for key, value in state_dict.items():
+        new_key = key
+        if applies(key):
+            for old_layer_name, new_layer_name in convert_list:
+                if old_layer_name in new_key:
+                    if verbose:
+                        print("Converting key:", new_key, " to ", new_key.replace(old_layer_name, new_layer_name))
+                    new_key = new_key.replace(old_layer_name, new_layer_name)
+        if new_key in renamed:
+            raise ValueError(
+                f"Key collision while renaming: both `{sources[new_key]}` and `{key}` map to `{new_key}`. "
+                "Check the ordering of the rename patterns."
+            )
+        renamed[new_key] = value
+        sources[new_key] = key
+    return renamed
+
+
 def _convert_model(original_model, hf_model, encoder_convert_list, decoder_convert_list=None, verbose=False):
     """
     ValueError: 1 extra keys found: {'lang_embeddings.weight'}
@@ -170,28 +201,21 @@ def _convert_model(original_model, hf_model, encoder_convert_list, decoder_conve
     print("Number of keys in HF model       : ", len(hf_model.state_dict()))
 
     # Convert encoder keys
-    for k, v in list(state_dict.items()):
-        new_key = k
-        for old_layer_name, new_layer_name in encoder_convert_list:
-            if "encoder." in k or "encoder_frontend." in k:
-                if old_layer_name in new_key:
-                    if verbose:
-                        print("Converting key:", new_key, " to ", new_key.replace(old_layer_name, new_layer_name))
-                    new_key = new_key.replace(old_layer_name, new_layer_name)
-        state_dict[new_key] = state_dict.pop(k)
+    state_dict = _rename_keys(
+        state_dict,
+        encoder_convert_list,
+        applies=lambda k: "encoder." in k or "encoder_frontend." in k,
+        verbose=verbose,
+    )
 
     # Convert decoder keys
     if decoder_convert_list is not None:
-        for k, v in list(state_dict.items()):
-            new_key = k
-            for old_layer_name, new_layer_name in decoder_convert_list:
-                if "encoder." in k or "encoder_frontend." in k:
-                    continue
-                if old_layer_name in new_key:
-                    if verbose:
-                        print("Converting key:", new_key, " to ", new_key.replace(old_layer_name, new_layer_name))
-                    new_key = new_key.replace(old_layer_name, new_layer_name)
-            state_dict[new_key] = state_dict.pop(k)
+        state_dict = _rename_keys(
+            state_dict,
+            decoder_convert_list,
+            applies=lambda k: not ("encoder." in k or "encoder_frontend." in k),
+            verbose=verbose,
+        )
 
         # Rearrange Q/K projection weights for RoPE compatibility (interleaved -> half-split)
         # Based on convert_pe_audio_video_to_hf.py and convert_perception_lm_weights_to_hf.py
