@@ -35,7 +35,6 @@ from .utils import (
     is_numpy_array,
     is_soundfile_available,
     is_torch_tensor,
-    is_torchaudio_available,
     is_torchcodec_available,
     requires_backends,
 )
@@ -53,9 +52,6 @@ if is_librosa_available():
 
     # TODO: @eustlb, we actually don't need librosa but soxr is installed with librosa
     import soxr
-
-if is_torchaudio_available():
-    import torchaudio
 
 if is_torchcodec_available():
     TORCHCODEC_VERSION = version.parse(importlib.metadata.version("torchcodec"))
@@ -211,9 +207,7 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
             The timeout value in seconds for the URL request.
         backend (`str`, *optional*, defaults to `"auto"`):
             Decoding backend: `"auto"` uses torchcodec when available (>=0.3.0) and falls back to
-            librosa; `"torchcodec"`, `"librosa"` or `"torchaudio"` force that backend (and error if it
-            is missing). `"torchaudio"` decodes with `torchaudio.load` and resamples with
-            `torchaudio.functional.resample` (matches serving stacks such as sglang bit-for-bit).
+            librosa; `"torchcodec"` or `"librosa"` force that backend (and error if it is missing).
 
     Returns:
         `np.ndarray`: A numpy array representing the audio.
@@ -226,16 +220,25 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
             "a local file path, or a base64-encoded string (optionally wrapped as a `data:...` URI)."
         )
 
+    if backend == "torchaudio":
+        warnings.warn(
+            '`backend="torchaudio"` is deprecated and will be removed in the future: `torchaudio.load` '
+            "is deprecated upstream and delegates to torchcodec since torchaudio 2.9. Falling back to "
+            '`backend="auto"`; use `backend="torchcodec"` or `backend="librosa"` instead.',
+            FutureWarning,
+        )
+        backend = "auto"
+
     # torchcodec handles audio/video; librosa only plain audio. `backend` lets callers pin one.
     if backend == "auto":
         resolved_backend = (
             "torchcodec" if is_torchcodec_available() and version.parse("0.3.0") <= TORCHCODEC_VERSION else "librosa"
         )
-    elif backend in ("torchcodec", "librosa", "torchaudio"):
+    elif backend in ("torchcodec", "librosa"):
         resolved_backend = backend
     else:
-        raise ValueError(f"Unknown backend {backend!r}; expected 'auto', 'torchcodec', 'librosa', or 'torchaudio'.")
-    # soundfile-based backends (librosa / torchaudio) cannot decode the video-ish formats below.
+        raise ValueError(f"Unknown backend {backend!r}; expected 'auto', 'torchcodec', or 'librosa'.")
+    # librosa cannot decode the video-ish formats below.
     use_torchcodec = resolved_backend == "torchcodec"
 
     # 1. Identify the format from the source string (extension / `data:` media type), without fetching.
@@ -265,15 +268,6 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
 
         # `num_channels=1` matches what most models expect and librosa's default.
         return AudioDecoder(source, sample_rate=sampling_rate, num_channels=1).get_all_samples().data[0].numpy()
-
-    if resolved_backend == "torchaudio":
-        requires_backends(load_audio, ["torchaudio"])
-        waveform, src_sampling_rate = torchaudio.load(BytesIO(source) if isinstance(source, bytes) else source)
-        waveform = waveform.mean(dim=0)  # to mono
-
-        if src_sampling_rate != sampling_rate:
-            waveform = torchaudio.functional.resample(waveform, orig_freq=src_sampling_rate, new_freq=sampling_rate)
-        return waveform.numpy().astype(np.float32)
 
     requires_backends(load_audio, ["librosa"])
     return librosa.load(BytesIO(source) if isinstance(source, bytes) else source, sr=sampling_rate)[0]
