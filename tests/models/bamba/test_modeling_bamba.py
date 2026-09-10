@@ -33,9 +33,9 @@ from transformers.testing_utils import (
     get_device_properties,
     require_deterministic_for_xpu,
     require_flash_attn,
-    require_kernels,
     require_torch,
     require_torch_accelerator,
+    scoped_kernels,
     slow,
     torch_device,
 )
@@ -274,6 +274,10 @@ class BambaModelTester:
         model.to(device)
         model.eval()
 
+        # Enable kernels path
+        if device != "cpu":
+            model.use_kernels = True
+
         input_ids = input_ids[:1].to(device)
         prefill_len = input_ids.shape[1] // 2 + 1
         prompt = input_ids[:, :prefill_len]
@@ -351,7 +355,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device="cpu")
 
     @require_torch_accelerator
-    @require_kernels
+    @scoped_kernels
     def test_mamba2_chunked_prefill_torch_device(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device=torch_device)

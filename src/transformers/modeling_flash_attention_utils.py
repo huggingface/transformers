@@ -70,6 +70,14 @@ FLASH_ATTN_KERNEL_FALLBACK = {
     "flash_attention_4": "kernels-community/flash-attn4",
 }
 
+FLASH_ATTN_KERNEL_VERSIONS = {
+    "kernels-community/flash-attn2": 3,
+    "kernels-community/flash-attn3": 1,
+    "kernels-community/vllm-flash-attn3": 1,
+    "kernels-community/aiter-flash-attn": 1,
+    "kernels-community/flash-attn4": 0,
+    "kernels-community/metal-flash-sdpa": 1,
+}
 
 # Meta information on each mainline FA compatibility:
 #   1. The import structure and availability

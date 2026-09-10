@@ -206,6 +206,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
             "test_beam",
             "test_sample_generate",
             "test_greedy_generate",
+            "test_kernels_greedy_generate",
             "test_generate_continue_from_past_key_values",
             "test_generate_from_random_inputs_embeds",
             "test_generate_from_inputs_embeds",
