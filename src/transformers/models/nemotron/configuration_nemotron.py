@@ -66,6 +66,8 @@ class NemotronConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         self.head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
         super().__post_init__(**kwargs)
 

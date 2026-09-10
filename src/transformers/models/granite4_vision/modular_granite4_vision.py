@@ -128,7 +128,7 @@ class Granite4VisionConfig(LlavaNextConfig):
     multimodal_projector_bias = AttributeError()
     projector_hidden_act = AttributeError()
 
-    downsample_rate: str | None = None
+    downsample_rate: str | None = "1/2"
     deepstack_layer_map: list | None = None
     spatial_vision_layer: int = -1
     spatial_target_layers: list | None = None
@@ -142,8 +142,10 @@ class Granite4VisionConfig(LlavaNextConfig):
             else [[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]
         )
 
-        if self.deepstack_layer_map is not None:
-            self.deepstack_layer_map = [(int(v), int(l)) for v, l in self.deepstack_layer_map]
+        # `deepstack` feature injection is optional; default to disabled (no extra projectors).
+        self.deepstack_layer_map = (
+            [(int(v), int(l)) for v, l in self.deepstack_layer_map] if self.deepstack_layer_map is not None else []
+        )
 
         if self.spatial_target_layers is None:
             self.spatial_target_layers = [12, 15, 18, 21]
@@ -158,7 +160,7 @@ class Granite4VisionConfig(LlavaNextConfig):
             self.text_config["model_type"] = self.text_config.get("model_type", "granite4_vision_text")
             self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
         elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["llama"]()
+            self.text_config = CONFIG_MAPPING["granite4_vision_text"]()
 
         if isinstance(self.qformer_config, dict):
             model_type = self.qformer_config.get("model_type", "blip_2_qformer")

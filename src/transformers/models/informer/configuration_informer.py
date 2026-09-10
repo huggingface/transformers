@@ -95,7 +95,7 @@ class InformerConfig(PreTrainedConfig):
         "initializer_range": "init_std",
     }
 
-    prediction_length: int | None = None
+    prediction_length: int = 1
     context_length: int | None = None
     distribution_output: str = "student_t"
     loss: str = "nll"
