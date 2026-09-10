@@ -18,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import ClassVar
-
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
@@ -155,10 +153,6 @@ class PPDocLayoutV4Config(PreTrainedConfig):
     decoder_activation_function: str = "relu"
     attention_dropout: float | int = 0.0
     num_denoising: int = 100
-
-    # Not a config field: kept as a class attribute so the `__init__` code inherited from
-    # RT-DETR stays inert. Every released checkpoint takes the top-k encoder features as queries.
-    learn_initial_query: ClassVar[bool] = False
     anchor_image_size: list[int] | tuple[int, int] | None = None
     disable_custom_kernels: bool = True
     is_encoder_decoder: bool = True

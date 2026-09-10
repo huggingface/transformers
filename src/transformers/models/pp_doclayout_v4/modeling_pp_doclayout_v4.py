@@ -209,6 +209,101 @@ class PPDocLayoutV4MultiscaleDeformableAttention(nn.Module):
         return output, attention_weights
 
 
+class PPDocLayoutV4FrozenBatchNorm2d(nn.Module):
+    """
+    BatchNorm2d where the batch statistics and the affine parameters are fixed.
+
+    Copy-paste from torchvision.misc.ops with added eps before rsqrt, without which any other models than
+    torchvision.models.resnet[18,34,50,101] produce nans.
+    """
+
+    def __init__(self, n):
+        super().__init__()
+        self.weight = nn.Buffer(torch.ones(n))
+        self.bias = nn.Buffer(torch.zeros(n))
+        self.running_mean = nn.Buffer(torch.zeros(n))
+        self.running_var = nn.Buffer(torch.ones(n))
+
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+    ):
+        num_batches_tracked_key = prefix + "num_batches_tracked"
+        if num_batches_tracked_key in state_dict:
+            del state_dict[num_batches_tracked_key]
+
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
+
+    def forward(self, x):
+        # move reshapes to the beginning
+        # to make it user-friendly
+        weight = self.weight.reshape(1, -1, 1, 1)
+        bias = self.bias.reshape(1, -1, 1, 1)
+        running_var = self.running_var.reshape(1, -1, 1, 1)
+        running_mean = self.running_mean.reshape(1, -1, 1, 1)
+        epsilon = 1e-5
+        scale = weight * (running_var + epsilon).rsqrt()
+        bias = bias - running_mean * scale
+        return x * scale + bias
+
+
+def replace_batch_norm(model):
+    r"""
+    Recursively replace all `torch.nn.BatchNorm2d` with `PPDocLayoutV4FrozenBatchNorm2d`.
+
+    Args:
+        model (torch.nn.Module):
+            input model
+    """
+    for name, module in model.named_children():
+        if isinstance(module, nn.BatchNorm2d):
+            new_module = PPDocLayoutV4FrozenBatchNorm2d(module.num_features)
+
+            if module.weight.device != torch.device("meta"):
+                new_module.weight.copy_(module.weight)
+                new_module.bias.copy_(module.bias)
+                new_module.running_mean.copy_(module.running_mean)
+                new_module.running_var.copy_(module.running_var)
+
+            model._modules[name] = new_module
+
+        if len(list(module.children())) > 0:
+            replace_batch_norm(module)
+
+
+class PPDocLayoutV4ConvEncoder(nn.Module):
+    """
+    Convolutional backbone using the modeling_pp_doclayout_v4_resnet.py.
+
+    nn.BatchNorm2d layers are replaced by PPDocLayoutV4FrozenBatchNorm2d as defined above.
+    https://github.com/lyuwenyu/RT-DETR/blob/main/PPDocLayoutV4_pytorch/src/nn/backbone/presnet.py#L142
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        backbone = load_backbone(config)
+
+        if config.freeze_backbone_batch_norms:
+            # replace batch norm by frozen batch norm
+            with torch.no_grad():
+                replace_batch_norm(backbone)
+        self.model = backbone
+        self.intermediate_channel_sizes = self.model.channels
+
+    def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
+        # send pixel_values through the model to get list of feature maps
+        features = self.model(pixel_values).feature_maps
+
+        out = []
+        for feature_map in features:
+            # downsample pixel_mask to match shape of corresponding feature_map
+            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
+            out.append((feature_map, mask))
+        return out
+
+
 class PPDocLayoutV4MLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
@@ -1224,101 +1319,6 @@ class PPDocLayoutV4ModelOutput(ModelOutput):
     successor_order_logits: torch.FloatTensor | None = None
 
 
-class PPDocLayoutV4FrozenBatchNorm2d(nn.Module):
-    """
-    BatchNorm2d where the batch statistics and the affine parameters are fixed.
-
-    Copy-paste from torchvision.misc.ops with added eps before rsqrt, without which any other models than
-    torchvision.models.resnet[18,34,50,101] produce nans.
-    """
-
-    def __init__(self, n):
-        super().__init__()
-        self.weight = nn.Buffer(torch.ones(n))
-        self.bias = nn.Buffer(torch.zeros(n))
-        self.running_mean = nn.Buffer(torch.zeros(n))
-        self.running_var = nn.Buffer(torch.ones(n))
-
-    def _load_from_state_dict(
-        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-    ):
-        num_batches_tracked_key = prefix + "num_batches_tracked"
-        if num_batches_tracked_key in state_dict:
-            del state_dict[num_batches_tracked_key]
-
-        super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-        )
-
-    def forward(self, x):
-        # move reshapes to the beginning
-        # to make it user-friendly
-        weight = self.weight.reshape(1, -1, 1, 1)
-        bias = self.bias.reshape(1, -1, 1, 1)
-        running_var = self.running_var.reshape(1, -1, 1, 1)
-        running_mean = self.running_mean.reshape(1, -1, 1, 1)
-        epsilon = 1e-5
-        scale = weight * (running_var + epsilon).rsqrt()
-        bias = bias - running_mean * scale
-        return x * scale + bias
-
-
-def replace_batch_norm(model):
-    r"""
-    Recursively replace all `torch.nn.BatchNorm2d` with `PPDocLayoutV4FrozenBatchNorm2d`.
-
-    Args:
-        model (torch.nn.Module):
-            input model
-    """
-    for name, module in model.named_children():
-        if isinstance(module, nn.BatchNorm2d):
-            new_module = PPDocLayoutV4FrozenBatchNorm2d(module.num_features)
-
-            if module.weight.device != torch.device("meta"):
-                new_module.weight.copy_(module.weight)
-                new_module.bias.copy_(module.bias)
-                new_module.running_mean.copy_(module.running_mean)
-                new_module.running_var.copy_(module.running_var)
-
-            model._modules[name] = new_module
-
-        if len(list(module.children())) > 0:
-            replace_batch_norm(module)
-
-
-class PPDocLayoutV4ConvEncoder(nn.Module):
-    """
-    Convolutional backbone using the modeling_pp_doclayout_v4_resnet.py.
-
-    nn.BatchNorm2d layers are replaced by PPDocLayoutV4FrozenBatchNorm2d as defined above.
-    https://github.com/lyuwenyu/RT-DETR/blob/main/PPDocLayoutV4_pytorch/src/nn/backbone/presnet.py#L142
-    """
-
-    def __init__(self, config):
-        super().__init__()
-
-        backbone = load_backbone(config)
-
-        if config.freeze_backbone_batch_norms:
-            # replace batch norm by frozen batch norm
-            with torch.no_grad():
-                replace_batch_norm(backbone)
-        self.model = backbone
-        self.intermediate_channel_sizes = self.model.channels
-
-    def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
-        # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values).feature_maps
-
-        out = []
-        for feature_map in features:
-            # downsample pixel_mask to match shape of corresponding feature_map
-            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
-            out.append((feature_map, mask))
-        return out
-
-
 @auto_docstring(
     custom_intro="""
     PP-DocLayoutV4 Model (consisting of a backbone and encoder-decoder) outputting raw hidden states without any head on top.
@@ -1329,6 +1329,8 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
     _tied_weights_keys = {}
 
     def __init__(self, config: PPDocLayoutV4Config):
+        # Spelled out rather than reusing the [`PPDocLayoutV3Model`] body, which branches on
+        # `config.learn_initial_query` -- a field PP-DocLayoutV4 does not define.
         super().__init__(config)
 
         # Create backbone
@@ -1336,16 +1338,17 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
         intermediate_channel_sizes = self.backbone.intermediate_channel_sizes
 
         # Create encoder input projection layers
-        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/PPDocLayoutV4_pytorch/src/zoo/PPDocLayoutV4/hybrid_encoder.py#L212
+        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/hybrid_encoder.py#L212
         num_backbone_outs = len(intermediate_channel_sizes)
 
         # The backbone emits exactly the three levels the encoder consumes, so unlike PP-DocLayoutV3 there is no
-        # leading projection to drop here.
+        # leading projection to drop here. The `nn.Sequential` shape is what names the released weights
+        # `encoder_input_proj.<level>.0`/`.1`, so it is kept as inherited from the RT-DETR lineage.
         encoder_input_proj_list = []
         for i in range(num_backbone_outs):
             in_channels = intermediate_channel_sizes[i]
             encoder_input_proj_list.append(
-                nn.Sequential(
+                nn.Sequential(  # trf-ignore: TRF036
                     nn.Conv2d(in_channels, config.encoder_hidden_dim, kernel_size=1, bias=False),
                     nn.BatchNorm2d(config.encoder_hidden_dim),
                 )
@@ -1355,18 +1358,8 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
         # Create encoder
         self.encoder = PPDocLayoutV4HybridEncoder(config)
 
-        # denoising part
-        if config.num_denoising > 0:
-            self.denoising_class_embed = nn.Embedding(
-                config.num_labels + 1, config.d_model, padding_idx=config.num_labels
-            )
-
-        # decoder embedding
-        if config.learn_initial_query:
-            self.weight_embedding = nn.Embedding(config.num_queries, config.d_model)
-
         # encoder head
-        self.enc_output = nn.Sequential(
+        self.enc_output = nn.Sequential(  # trf-ignore: TRF036
             nn.Linear(config.d_model, config.d_model),
             nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
         )
@@ -1377,24 +1370,26 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
         )
 
         # init encoder output anchors and valid_mask
+        # CODEPATH: PP-DocLayoutV4_safetensors leaves `anchor_image_size` unset and generates the anchors from the
+        # feature map shapes on every forward; this branch only runs for configs that pin the eval resolution.
         if config.anchor_image_size:
             self.anchors, self.valid_mask = self.generate_anchors(dtype=self.dtype)
 
         # Create decoder input projection layers
-        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/PPDocLayoutV4_pytorch/src/zoo/PPDocLayoutV4/PPDocLayoutV4_decoder.py#L412
+        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L412
         num_backbone_outs = len(config.decoder_in_channels)
         decoder_input_proj_list = []
         for i in range(num_backbone_outs):
             in_channels = config.decoder_in_channels[i]
             decoder_input_proj_list.append(
-                nn.Sequential(
+                nn.Sequential(  # trf-ignore: TRF036
                     nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False),
                     nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
                 )
             )
         for _ in range(config.num_feature_levels - num_backbone_outs):
             decoder_input_proj_list.append(
-                nn.Sequential(
+                nn.Sequential(  # trf-ignore: TRF036
                     nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1, bias=False),
                     nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
                 )
@@ -1402,9 +1397,11 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
             in_channels = config.d_model
         self.decoder_input_proj = nn.ModuleList(decoder_input_proj_list)
 
+        # [`PPDocLayoutV3Model`] keeps its reading order heads at the model level and passes them into the decoder
+        # `forward`. PP-DocLayoutV4 instead owns them on the decoder, next to the other prediction heads.
         self.decoder = PPDocLayoutV4Decoder(config)
 
-        # No extra "no object" row, unlike the `num_labels + 1` embedding of PP-DocLayoutV3.
+        # denoising part. No extra "no object" row, unlike the `num_labels + 1` embedding of PP-DocLayoutV3.
         self.denoising_class_embed = (
             # CODEPATH: PP-DocLayoutV4_safetensors trains with denoising; the `None` branch is only for configs
             # that disable it.
