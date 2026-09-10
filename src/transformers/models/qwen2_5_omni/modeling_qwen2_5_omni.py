@@ -1356,6 +1356,8 @@ class Qwen2_5OmniRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
+    @torch.no_grad()
+    @dynamic_rope_update
     def forward(self, x, position_ids):
         # In contrast to other models, Qwen2_5Omni has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
@@ -1932,7 +1934,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         >>>         {'role': 'system', 'content': 'You are a helpful voice chat bot, and please respond to me in a casual conversation manner using random voice.'},
         >>>         {"role": "user", "content": [
         >>>             {"type": "image", "image_url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
-        >>>             {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"},
+        >>>             {"type": "audio", "audio_url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"},
         >>>         ]},
         >>> ]
 
@@ -2016,7 +2018,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         loss = None
         if labels is not None:
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.get_text_config().vocab_size
+                logits=logits, labels=labels, vocab_size=self.config.get_text_config().vocab_size, **kwargs
             )
 
         return Qwen2_5OmniThinkerCausalLMOutputWithPast(
@@ -2307,7 +2309,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B")
 
         >>> prompt = "<|audio_bos|><|AUDIO|><|audio_eos|>Generate the caption in English:"
-        >>> url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"
         >>> audio, _ = librosa.load(BytesIO(urlopen(url).read()), sr=self.processor.feature_extractor.sampling_rate)
 
         >>> inputs = processor(text=prompt, audio=audio, return_tensors="pt")

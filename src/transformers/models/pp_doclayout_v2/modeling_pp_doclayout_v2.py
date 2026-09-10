@@ -2404,7 +2404,7 @@ class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):
         >>> from io import BytesIO
         >>> import torch
 
-        >>> url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_layout_demo.jpg"
         >>> with httpx.stream("GET", url) as response:
         ...     image = Image.open(BytesIO(response.read()))
 
