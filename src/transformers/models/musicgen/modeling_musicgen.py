@@ -786,7 +786,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
             if attention_mask is not None:
                 attention_mask = attention_mask.repeat((2, 1))
 
-        if past_key_values is not None and past_key_values.get_seq_length() > 0:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
         return {
