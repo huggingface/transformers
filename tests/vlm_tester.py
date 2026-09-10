@@ -116,6 +116,9 @@ class VLMModelTester(MultiModalModelTester):
 
     def get_vision_config(self):
         kwargs = self._collect_kwargs(self.vision_config_args, self.vision_config_class)
+        # do not use the same rope config as LM backbone, vision will always use axial rope (i hope)
+        if "rope_parameters" in kwargs:
+            kwargs["rope_parameters"] = {"rope_type": "axial", "rope_theta": 10_000}
         return self.vision_config_class(**kwargs)
 
 
