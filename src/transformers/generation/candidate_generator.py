@@ -1744,7 +1744,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
             if self.do_sample:
                 probs = nn.functional.softmax(candidate_logits, dim=-1, dtype=torch.float32)
                 # Multinomial only works on 2d matrices, and assisted decoding restrict to batch size == 1 anyway
-                candidate_ids = torch.multinomial(probs.squeeze(0), num_samples=1)
+                candidate_ids = torch.multinomial(probs.squeeze(0), num_samples=1).squeeze(1)[None, :]
             else:
                 candidate_ids = candidate_logits.argmax(dim=-1)
             candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
