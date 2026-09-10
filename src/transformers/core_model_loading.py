@@ -1730,12 +1730,12 @@ def convert_and_load_state_dict_in_model(
             # 4. Handle DTensor sharding or device_map placement
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
             sharding_op = None
-            if is_dtensor(empty_param):
+            # A RoPE permutation moves elements across the sharded dim, so this rank's slice of the source is not the
+            # slice of the converted tensor: those are converted in full and sharded afterwards, and never get an op.
+            if is_dtensor(empty_param) and not shards_after_conversion(
+                mapping, empty_param.placements, empty_param.ndim
+            ):
                 sharding_op = DtensorShardOperation(empty_param)
-            # A transpose or a RoPE permutation moves elements across the sharded dim, so this rank's slice of the
-            # source is not the slice of the converted tensor: those are converted in full and sharded afterwards.
-            if sharding_op is not None and shards_after_conversion(mapping, empty_param.placements, empty_param.ndim):
-                sharding_op = None
 
             # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
             # directly on the device, as it will completely blow up the memory during the ops memory spike. So defer to "cpu", then
