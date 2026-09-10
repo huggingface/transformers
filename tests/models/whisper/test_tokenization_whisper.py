@@ -317,6 +317,13 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         )
         self.assertEqual(decoded_output_diacritics, expected_output_diacritics)
 
+    def test_english_spelling_normalizer_survives_save_pretrained(self):
+        # `setUpClass` saved the hub tokenizer to `tmpdirname`, which `get_tokenizer` reloads.
+        tokenizer = self.get_tokenizer()
+
+        self.assertEqual(tokenizer.english_spelling_normalizer, self.tokenizers[0].english_spelling_normalizer)
+        self.assertEqual(tokenizer.normalize("colour"), "color")
+
     def test_decode_asr_with_word_level_timestamps(self):
         # fmt: off
         model_outputs = [
