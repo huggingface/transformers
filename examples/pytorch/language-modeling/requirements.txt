@@ -5,3 +5,4 @@ sentencepiece != 0.1.92
 protobuf
 evaluate
 scikit-learn
+flash-linear-attention==0.5.2  # perf campaign: Triton chunk_gated_delta_rule for Qwen3.5 linear-attention layers
