@@ -166,6 +166,13 @@ class BitNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_use_sub_norms_false(self):
+        config = self.model_tester.get_config()
+        config.use_sub_norms = False
+        model = BitNetModel(config=config)
+        self.assertIsInstance(model.layers[0].mlp.ffn_sub_norm, torch.nn.Identity)
+        self.assertIsInstance(model.layers[0].self_attn.attn_sub_norm, torch.nn.Identity)
+
 
 @require_torch
 class BitNetIntegrationTest(unittest.TestCase):
