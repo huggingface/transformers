@@ -65,9 +65,14 @@ class MossTranscribeDiarizeModelTester(ALMModelTester):
     def _prepare_modality_inputs(self, input_ids, config):
         num_audio_tokens = torch.full((self.batch_size,), 4, dtype=torch.long, device=torch_device)
         input_ids = self.place_audio_tokens(input_ids, config, num_audio_tokens)
+        # 64 input frames -> 32 post-conv -> 16 post-pool -> 4 merged tokens (merge_size=4), matching
+        # `Qwen2AudioEncoder._get_feat_extract_output_lengths` + merge trim in `get_audio_features`.
+        valid_mel_frames = 64
+        input_features_mask = torch.zeros(self.batch_size, self.feat_seq_length, dtype=torch.long, device=torch_device)
+        input_features_mask[:, :valid_mel_frames] = 1
         modality_inputs = {
             "input_features": self.create_audio_features(),
-            "audio_feature_lengths": num_audio_tokens,
+            "input_features_mask": input_features_mask,
             "audio_chunk_mapping": torch.arange(self.batch_size, device=torch_device),
         }
         return input_ids, modality_inputs
@@ -99,7 +104,7 @@ class MossTranscribeDiarizeForConditionalGenerationModelTest(ALMModelTest, unitt
         pass
 
     @unittest.skip(
-        reason="MossTranscribeDiarize uses audio_feature_lengths and audio_chunk_mapping instead of audio masks."
+        reason="MossTranscribeDiarize uses input_features_mask and audio_chunk_mapping instead of audio masks."
     )
     def test_mismatching_num_audio_tokens(self):
         pass
