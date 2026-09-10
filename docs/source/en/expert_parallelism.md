@@ -55,6 +55,9 @@ torchrun --nproc-per-node 8 your_script.py
 Expert parallelism only shards the experts. Everything else (attention, embeddings, norms) and its optimizer state is replicated on every expert-parallel rank, which is what limits the model size you can train. Set `fsdp_size` together with `tp_size` to add [FSDP2](./fsdp) on a second mesh dimension.
 
 ```py
+from transformers import AutoModelForCausalLM
+from transformers.distributed import DistributedConfig
+
 distributed_config = DistributedConfig(
     tp_size=4,  # expert parallel size
     fsdp_size=2,  # data parallel shards
