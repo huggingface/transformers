@@ -44,7 +44,6 @@ from transformers.core_model_loading import (
     convert_and_load_state_dict_in_model,
     rename_source_key,
     revert_weight_conversion,
-    shards_after_conversion,
     spawn_materialize,
 )
 from transformers.modeling_utils import LoadStateDictConfig
@@ -345,15 +344,16 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         permute = WeightConverter("q.weight", "q.weight", operations=[PermuteForRope()])
         experts = WeightConverter("w13", "gate_up", operations=[Transpose(1, 2, check_dims=True)])
         merge = WeightConverter(["w1", "w3"], "gate_up", operations=[MergeModulelist(dim=0), Concatenate(dim=1)])
-        self.assertFalse(shards_after_conversion(transpose, [Shard(0)], ndim=2))
-        self.assertFalse(shards_after_conversion(transpose, [Replicate(), Shard(1)], ndim=2))
-        self.assertFalse(shards_after_conversion(transpose, [Replicate()], ndim=2))
-        self.assertTrue(shards_after_conversion(permute, [Shard(0)], ndim=2))
-        self.assertFalse(shards_after_conversion(permute, [Shard(1)], ndim=2))
+        self.assertFalse(transpose.shards_after_conversion([Shard(0)], ndim=2))
+        self.assertFalse(transpose.shards_after_conversion([Replicate(), Shard(1)], ndim=2))
+        self.assertFalse(transpose.shards_after_conversion([Replicate()], ndim=2))
+        self.assertTrue(permute.shards_after_conversion([Shard(0)], ndim=2))
+        self.assertFalse(permute.shards_after_conversion([Shard(1)], ndim=2))
         # Qwen3-VL-MoE transposes the two inner dims of the experts, which expert parallelism shards on dim 0
-        self.assertFalse(shards_after_conversion(experts, [Shard(0)], ndim=3))
-        self.assertFalse(shards_after_conversion(experts, [Shard(0), Shard(2)], ndim=3))
-        self.assertFalse(shards_after_conversion(merge, [Shard(0)], ndim=3))
+        self.assertFalse(experts.shards_after_conversion([Shard(0)], ndim=3))
+        self.assertFalse(experts.shards_after_conversion([Shard(0), Shard(2)], ndim=3))
+        self.assertFalse(merge.shards_after_conversion([Shard(0)], ndim=3))
+        self.assertFalse(WeightRenaming("q.weight", "q.weight").shards_after_conversion([Shard(0)], ndim=2))
 
     def test_moe_and_qkv_conversion(self):
         model = DummyRoot(PreTrainedConfig())

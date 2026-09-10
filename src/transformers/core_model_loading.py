@@ -97,6 +97,11 @@ class ConversionOps(ABC):
     def reverse_op(self) -> ConversionOps:
         raise NotImplementedError
 
+    def shards_after_conversion(self, placements, ndim: int) -> bool:
+        """Whether this op forces a DTensor parameter with these `placements` to be converted in full, before this
+        rank's shard is taken. An op that maps every target element to one source element keeps shard-on-read."""
+        return False
+
 
 class _IdentityOp(ConversionOps):
     """Pass-through reverse op for dequantize operations.
@@ -436,6 +441,11 @@ class PermuteForRope(ConversionOps):
         self.subconfig_key = subconfig_key
         self.inverse = inverse
         self.permute_layer_names = permute_layer_names
+
+    def shards_after_conversion(self, placements, ndim: int) -> bool:
+        # `_apply` interleaves rows and reads the head size off `tensor.shape[0]`, so on a shard it permutes with the
+        # local row count and silently produces the wrong weights.
+        return 0 in {placement.dim % ndim for placement in placements if placement.is_shard()}
 
     def _apply(self, tensor: torch.Tensor) -> torch.Tensor:
         dim0 = tensor.shape[0]
@@ -988,6 +998,11 @@ class WeightTransform:
         """
         return self._was_used
 
+    def shards_after_conversion(self, placements, ndim: int) -> bool:
+        """Whether a DTensor parameter with these `placements` has to be converted in full before this rank's shard is
+        taken. A rename moves no elements, so its shard is a slice of the source and shard-on-read applies."""
+        return False
+
 
 class WeightRenaming(WeightTransform):
     # Special case of WeightTransform that only renames keys without any conversion.
@@ -1172,6 +1187,9 @@ class WeightConverter(WeightTransform):
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
 
+    def shards_after_conversion(self, placements, ndim: int) -> bool:
+        return any(op.shards_after_conversion(placements, ndim) for op in self.operations)
+
     def convert(
         self,
         layer_name: str,
@@ -1267,20 +1285,6 @@ def spawn_materialize(
         # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
         # memory during Conversion
         return _job
-
-
-def shards_after_conversion(mapping: WeightRenaming | WeightConverter, placements, ndim: int) -> bool:
-    """Whether a DTensor parameter with these `placements` has to be converted in full before this rank's shard is
-    taken.
-
-    `PermuteForRope` interleaves rows and reads the head size off `tensor.shape[0]`, so on a shard it permutes with
-    the local row count and silently produces the wrong weights. A transpose is not handled here: it only moves axes
-    around, so the target shard maps to a source slice and shard-on-read still applies (#48373).
-    """
-    if not isinstance(mapping, WeightConverter):
-        return False
-    shard_dims = {placement.dim % ndim for placement in placements if placement.is_shard()}
-    return any(isinstance(op, PermuteForRope) for op in mapping.operations) and 0 in shard_dims
 
 
 def dot_natural_key(s: str):
@@ -1732,8 +1736,8 @@ def convert_and_load_state_dict_in_model(
             sharding_op = None
             # A RoPE permutation moves elements across the sharded dim, so this rank's slice of the source is not the
             # slice of the converted tensor: those are converted in full and sharded afterwards, and never get an op.
-            if is_dtensor(empty_param) and not shards_after_conversion(
-                mapping, empty_param.placements, empty_param.ndim
+            if is_dtensor(empty_param) and not mapping.shards_after_conversion(
+                empty_param.placements, empty_param.ndim
             ):
                 sharding_op = DtensorShardOperation(empty_param)
 
@@ -1779,8 +1783,8 @@ def convert_and_load_state_dict_in_model(
                 for target_name, param in realized_value.items():
                     param = param[0] if isinstance(param, list) else param
                     empty_param = meta_model_state_dict.get(target_name)
-                    if is_dtensor(empty_param) and shards_after_conversion(
-                        mapping, empty_param.placements, empty_param.ndim
+                    if is_dtensor(empty_param) and mapping.shards_after_conversion(
+                        empty_param.placements, empty_param.ndim
                     ):
                         param = DtensorShardOperation(empty_param).shard_tensor(param)
                     param_device = get_device(device_map, target_name)
