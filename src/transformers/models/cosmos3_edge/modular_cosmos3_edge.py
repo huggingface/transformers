@@ -44,7 +44,6 @@ from ...utils import (
 from ...utils.generic import (
     get_max_seqlen,
     is_flash_attention_requested,
-    maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
@@ -60,7 +59,6 @@ from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaModel,
     LlamaRMSNorm,
-    LlamaRotaryEmbedding,
     eager_attention_forward,
 )
 from ..qwen2_vl.modeling_qwen2_vl import (
@@ -69,6 +67,7 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLPreTrainedModel,
 )
 from ..qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeVisionPatchMerger
+from ..qwen3_vl.modeling_qwen3_vl import Qwen3VLTextRotaryEmbedding
 from ..qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ..siglip2.modeling_siglip2 import (
@@ -212,41 +211,8 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
             raise TypeError("`vision_config` must be a `Cosmos3EdgeVisionConfig` or a dictionary.")
 
 
-class Cosmos3EdgeTextRotaryEmbedding(LlamaRotaryEmbedding):
-    """Interleaved M-RoPE used for Cosmos3 Edge text and visual tokens."""
-
-    def compute_default_rope_parameters(
-        config: Cosmos3EdgeTextConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
-        """Construct an axis-aware inverse-frequency matrix for interleaved temporal, height, and width RoPE."""
-        base = config.rope_parameters["rope_theta"]
-        dim = config.head_dim
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-
-        indices = torch.arange(inv_freq.shape[0])
-        mrope_section = config.rope_parameters["mrope_section"]
-        height_mask = (indices % 3 == 1) & (indices < mrope_section[1] * 3)
-        width_mask = (indices % 3 == 2) & (indices < mrope_section[2] * 3)
-        temporal_mask = ~(height_mask | width_mask)
-        inv_freq = torch.stack(
-            (
-                inv_freq * temporal_mask,
-                inv_freq * height_mask,
-                inv_freq * width_mask,
-            )
-        )
-        return inv_freq.to(device), 1.0
-
-    @torch.no_grad()
-    def forward(self, x, position_ids):
-        position_ids = position_ids.permute(1, 2, 0).float()
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = position_ids.float() @ self.inv_freq.float().to(x.device)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+class Cosmos3EdgeTextRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
+    pass
 
 
 class Cosmos3EdgeTextAttention(LlamaAttention):

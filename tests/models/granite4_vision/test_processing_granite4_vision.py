@@ -29,9 +29,9 @@ class Granite4VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "ibm-granite/granite-vision-4.1-4b"
     tiny_model_id = "hf-internal-testing/tiny-processor-granite4_vision"
     # Image token expansion with downsample_rate="1/2" produces more tokens than the defaults
-    image_text_kwargs_max_length = 300
-    image_text_kwargs_override_max_length = 280
-    image_unstructured_max_length = 260
+    images_text_kwargs_max_length = 300
+    images_text_kwargs_override_max_length = 280
+    images_unstructured_max_length = 260
 
     @classmethod
     def _setup_image_processor(cls):

@@ -157,6 +157,26 @@ args = TrainingArguments(
 )
 ```
 
+## Group samples by length
+
+Use `train_sampling_strategy="group_by_length"` to batch examples with similar lengths and reduce padding. When you
+don't provide precomputed lengths, [`Trainer`] infers them from the first model input in each dataset item. This also
+works when processor-based multimodal datasets return [`BatchFeature`] objects, because they are mapping-like feature
+containers.
+
+```py
+from transformers import TrainingArguments
+
+training_args = TrainingArguments(
+    output_dir="qwen3-vl-finetuned",
+    train_sampling_strategy="group_by_length",
+)
+```
+
+If a [`~datasets.Dataset`] already has a precomputed length column, [`Trainer`] uses that column instead. The default
+column name is `length`. Set `length_column_name` when your dataset uses another name. This strategy requires a
+dataset with a known length and is ignored for [`~datasets.IterableDataset`].
+
 ## Batch rebalance sampling
 
 On variable-length datasets, imbalance within a micro-batch and across devices causes devices to waste time on padding and to idle at gradient synchronization steps.

@@ -90,12 +90,6 @@ class GradientCheckpointingLayer(nn.Module):
 
             if not self._can_checkpoint_with_cache:
                 # different names for the same thing in different layers
-                # TODO cyril: this one without `S` can be removed after deprecation cycle
-                if "past_key_value" in kwargs and kwargs["past_key_value"] is not None:
-                    kwargs["past_key_value"] = None
-                    message += " `past_key_value=None`,"
-                    do_warn = True
-
                 if "past_key_values" in kwargs and kwargs["past_key_values"] is not None:
                     kwargs["past_key_values"] = None
                     message += " `past_key_values=None`,"

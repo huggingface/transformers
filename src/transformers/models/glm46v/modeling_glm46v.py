@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import itertools
 from dataclasses import dataclass
 from itertools import accumulate
@@ -567,7 +566,9 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return Glm46VCausalLMOutputWithPast(
             loss=loss,
