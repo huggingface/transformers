@@ -378,7 +378,9 @@ class AyaVisionIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": url_to_local_path("https://llava-vl.github.io/static/images/view.jpg"),
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+                            ),
                         },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
@@ -409,9 +411,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Wooden bridge stretches\nInto still waters, mountains gleam\nPeaceful forest scene",
-                # 4-bit
-                ("cuda", 8): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
+                (None, None): "Pine trees stand tall,\nMountain peaks touch the sky blue,\nPeaceful lake reflects.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -455,7 +455,9 @@ class AyaVisionIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": url_to_local_path("https://llava-vl.github.io/static/images/view.jpg"),
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+                            ),
                         },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
@@ -468,13 +470,13 @@ class AyaVisionIntegrationTest(unittest.TestCase):
                         {
                             "type": "image",
                             "url": url_to_local_path(
-                                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
                             ),
                         },
                         {
                             "type": "image",
                             "url": url_to_local_path(
-                                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg"
                             ),
                         },
                         {
@@ -495,8 +497,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.",
-                ("cuda", 8): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
+                (None, None): "Pine trees stand tall,\nMountain peaks touch the sky blue,\nPeaceful lake reflects.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -511,8 +512,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ",
-                ("cuda", 8): 'The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ',
+                (None, None): 'The first image showcases the Statue of Liberty, a renowned monument located on Liberty Island in New York Harbor. Standing tall on',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
