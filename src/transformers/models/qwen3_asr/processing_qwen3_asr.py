@@ -338,7 +338,7 @@ class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
             "sampling_rate": 16000,
             "padding": True,
             "truncation": False,
-            "return_attention_mask": True,
+            "return_padding_mask": True,
             "n_window": 50,  # should match config.n_window
         },
         "common_kwargs": {"return_tensors": "pt"},

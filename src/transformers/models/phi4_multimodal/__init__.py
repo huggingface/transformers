@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .audio_processing_numpy_phi4_multimodal import *
     from .configuration_phi4_multimodal import *
     from .feature_extraction_phi4_multimodal import *
     from .image_processing_phi4_multimodal import *

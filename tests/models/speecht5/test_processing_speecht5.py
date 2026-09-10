@@ -25,7 +25,7 @@ from transformers.testing_utils import get_tests_dir, require_speech, require_to
 if is_speech_available() and is_torch_available():
     from transformers import SpeechT5FeatureExtractor, SpeechT5Processor
 
-    from .test_feature_extraction_speecht5 import floats_list
+    from ...test_processing_common import floats_list
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_bpe_char.model")

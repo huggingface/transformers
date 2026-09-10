@@ -255,7 +255,7 @@ class CsmProcessor(ProcessorMixin):
         data.update(encoding)
 
         if audio is not None:
-            audio_kwargs.pop("return_attention_mask", None)  # not supported by the feature extractor
+            audio_kwargs.pop("return_padding_mask", None)  # not supported by the feature extractor
 
             concatenated_audio, input_values_cutoffs = [], []
             offset = 0
