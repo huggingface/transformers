@@ -718,6 +718,79 @@ for (int64_t position = prompt_len; position < max_cache_len; ++position) {
 
 </details>
 
+## Quantization
+
+Every export config accepts a `quantizer`. Set it to any PT2E
+[`Quantizer`](https://docs.pytorch.org/ao/main/pt2e_quantization/index.html) and the exporter runs post-training quantization on
+the traced graph (`prepare_pt2e` → calibrate → `convert_pt2e`) before the program is returned or
+lowered. Quantization happens on the graph rather than the modeling code, so a single `quantizer` works
+across every backend and architecture without per-model handling.
+
+Quantize through [`~HfExporter.export_for_generation`], which exports the decomposed generation components. Their attention mask is a precomputed graph input, which keeps PT2E away from the in-graph mask construction that trips its `make_fx` retrace on a full model forward.
+
+```python
+from transformers import LlamaForCausalLM
+from transformers.exporters import DynamoExporter, DynamoConfig
+from torchao.quantization.pt2e.quantizer.x86_inductor_quantizer import (
+    X86InductorQuantizer,
+    get_default_x86_inductor_quantization_config,
+)
+
+model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-3.2-1B").eval()
+inputs = ...  # forward kwargs
+
+quantizer = X86InductorQuantizer().set_global(get_default_x86_inductor_quantization_config())
+config = DynamoConfig(dynamic=True, quantizer=quantizer, calibration_dataset=[inputs])
+exported = DynamoExporter().export(model, inputs, config)  # quantize/dequantize ops folded into the graph
+```
+
+### Choosing a quantizer
+
+Each target runtime expects its own quantizer. Whichever you pass, the quantized graph is portable from there. It runs on inductor as int8, translates to ONNX `QuantizeLinear`/`DequantizeLinear` (per-channel included), or lowers to an ExecuTorch `.pte`.
+
+| Where you'll run | Quantizer to pass | Import from |
+| --- | --- | --- |
+| PyTorch inductor, or ONNX Runtime (QDQ) | `X86InductorQuantizer` | `torchao.quantization.pt2e.quantizer.x86_inductor_quantizer` |
+| ExecuTorch XNNPACK backend | `XNNPACKQuantizer` | `executorch.backends.xnnpack.quantizer.xnnpack_quantizer` |
+| ExecuTorch QNN backend (Qualcomm SoC accelerators; HTP today) | `QnnQuantizer` | `executorch.backends.qualcomm.quantizer.quantizer` |
+
+### Calibration
+
+`calibration_dataset` is an iterable of forward-kwarg dicts run through the prepared graph to gather
+observer statistics — a plain list, or a `DataLoader` whose batches collate to forward kwargs.
+Omit it and the exporter falls back to a single pass over the export's own sample
+inputs, with a warning (one sample can skew the observed ranges).
+
+For generative models, set `calibration_dataset` on the config you pass to [`~HfExporter.export_for_generation`] and give it generate-style kwargs. Each sample runs through a short `generate`, and every component (`prefill`, `decode`, the encoders) is calibrated on the activations captured for it.
+
+### A different recipe per component
+
+Pass a `{component: config}` dict (instead of a single config) to
+[`~HfExporter.export_for_generation`], and each component is quantized on its own terms. The common
+multimodal case is static int8 on the vision tower, dynamic int8 on the language decoder, and a
+full-precision `lm_head`:
+
+```python
+def x86(dynamic):  # same quantizer family, static (per-channel) vs dynamic int8
+    return X86InductorQuantizer().set_global(get_default_x86_inductor_quantization_config(is_dynamic=dynamic))
+
+config = {
+    "image_encoder": DynamoConfig(dynamic=True, quantizer=x86(dynamic=False)),         # static int8
+    "multi_modal_projector": DynamoConfig(dynamic=True, quantizer=x86(dynamic=False)),
+    "language_model": DynamoConfig(dynamic=True, quantizer=x86(dynamic=True)),          # dynamic int8
+    "decode": DynamoConfig(dynamic=True, quantizer=x86(dynamic=True)),
+    "lm_head": DynamoConfig(dynamic=True),                                              # no quantizer → fp32
+}
+components = DynamoExporter().export_for_generation(model, inputs, config, multi_token_decode=True)
+```
+
+The dict must name every component [`~exporters.utils.decompose_for_generation`] produces; a component
+whose config sets no `quantizer` is left in full precision.
+
+> [!NOTE]
+> Quantization always runs on these decomposed components, whose attention mask is a precomputed input.
+> That keeps PT2E away from in-graph mask construction, which otherwise trips its `make_fx` retrace.
+
 ## Limitations and workarounds
 
 `torch.export`, `torch.onnx.export`, and ExecuTorch each have rough edges around specific
