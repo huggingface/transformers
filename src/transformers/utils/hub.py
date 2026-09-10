@@ -508,9 +508,13 @@ def cached_files(
         if isinstance(e, GatedRepoError):
             if not _raise_exceptions_for_gated_repo:
                 return None
-            raise OSError(
+            # Keep the precise `GatedRepoError` class rather than flattening it into a plain `OSError`: it is itself an
+            # `OSError` subclass, so `except OSError` callers are unaffected, and callers (as well as CI log triage)
+            # can tell a missing permission apart from any other hub failure without matching on the message.
+            raise GatedRepoError(
                 "You are trying to access a gated repo.\nMake sure to have access to it at "
-                f"https://huggingface.co/{path_or_repo_id}.\n{str(e)}"
+                f"https://huggingface.co/{path_or_repo_id}.\n{str(e)}",
+                response=e.response,
             ) from e
         elif isinstance(e, LocalEntryNotFoundError):
             if not _raise_exceptions_for_connection_errors:
@@ -625,10 +629,13 @@ def has_file(
         return True
     except GatedRepoError as e:
         logger.error(e)
-        raise OSError(
+        # See the note in `cached_files`: `GatedRepoError` is an `OSError` subclass, so raising it instead of a plain
+        # `OSError` keeps callers working while preserving what actually went wrong.
+        raise GatedRepoError(
             f"{path_or_repo} is a gated repository. Make sure to request access at "
             f"https://huggingface.co/{path_or_repo} and pass a token having permission to this repo either by "
-            "logging in with `hf auth login` or by passing `token=<your_token>`."
+            "logging in with `hf auth login` or by passing `token=<your_token>`.",
+            response=e.response,
         ) from e
     except RepositoryNotFoundError as e:
         logger.error(e)
