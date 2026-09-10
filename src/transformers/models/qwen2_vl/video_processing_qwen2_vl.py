@@ -218,9 +218,9 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
             )
 
         if num_frames is not None:
-            indices = torch.arange(0, total_num_frames, total_num_frames / num_frames, dtype=int)
+            indices = torch.arange(0, total_num_frames, total_num_frames / num_frames).int()
         else:
-            indices = torch.arange(0, total_num_frames, dtype=int)
+            indices = torch.arange(0, total_num_frames).int()
         return indices
 
     def resize(

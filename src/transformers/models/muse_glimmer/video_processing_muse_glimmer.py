@@ -222,7 +222,7 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
         num_frames = min(int(total_num_frames * fps / metadata.fps), num_frames, total_num_frames)
         num_frames = max(temporal_patch_size, (num_frames // temporal_patch_size) * temporal_patch_size)
         num_frames = min(num_frames, total_num_frames)
-        indices = torch.linspace(0, total_num_frames - 1, num_frames, dtype=int)
+        indices = torch.linspace(0, total_num_frames - 1, num_frames).long()
         return indices
 
     def _preprocess(
