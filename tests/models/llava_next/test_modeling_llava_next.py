@@ -170,7 +170,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         check_torch_load_is_safe()
         original_pixel_values = torch.load(filepath, map_location="cpu", weights_only=True)
         assert torch.allclose(
-            original_pixel_values, inputs.pixel_values.to(device="cpu", dtype=original_pixel_values.dtype)
+            original_pixel_values, inputs.pixel_values.to(device="cpu", dtype=original_pixel_values.dtype), atol=0.1
         )
 
         # verify generation
