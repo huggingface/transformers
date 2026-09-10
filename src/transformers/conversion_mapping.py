@@ -102,6 +102,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "granitemoeshared": "granitemoe",
     "granitemoehybrid": "granitemoe",
     "gemma3n_text": "qwen3_5_text",
+    "glm5_next_text": "glm5_next",
     "qwen3_5_moe_text": "qwen3_5_text",
     "llava_next_video": "llava_next",
     "llava_onevision": "llava_next",
