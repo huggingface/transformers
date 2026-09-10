@@ -28,11 +28,10 @@ For basic kernels (stateless `forward` replacements with no parameter changes), 
 Any kernel that carries its own parameters follows a two-class pattern.
 
 - `KernelName`: contains only the `forward` pass. The `kernels` library uses this class to kernelize the model because it does not allow stateful kernel classes.
-- `KernelNameLayout`: an `nn.Module` that holds the parameters and monkey-patches the original module before the checkpoint is loaded. At runtime, `kernelize` replaces its `forward` with the `forward` from `KernelName`'. You do not need to define `forward`. Transformers injects one automatically with the same signature as `KernelName.forward`.
+- `KernelNameLayout`: an `nn.Module` that holds the parameters and monkey-patches the original module before the checkpoint is loaded. At runtime, `kernelize` replaces its `forward` with the `forward` from `KernelName`. You do not need to define `forward`. Transformers injects one automatically with the same signature as `KernelName.forward`.
 
 > [!IMPORTANT]
-
-The naming convention is strict. The layout class must be named `{KernelName}Layout` and defined in the same module as `KernelName`.
+> The naming convention is strict. The layout class must be named `{KernelName}Layout` and defined in the same module as `KernelName`.
 
 ## Parameter transformation
 
