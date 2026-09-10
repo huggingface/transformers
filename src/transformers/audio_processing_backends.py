@@ -94,10 +94,19 @@ class NumpyAudioBackend(BaseAudioProcessor):
 
     def _create_stft_window(self, win_length, stft_cfg, audio):
         if stft_cfg.window_fn == "hann_window_f32":
-            # fixed USM float32 periodic Hann (bit-exact with the legacy Gemma extractors);
-            # ignores `periodic`/`window_dtype`/`wkwargs`
+            # fixed USM float32 periodic Hann (bit-exact with the legacy Gemma3n extractor, which
+            # builds it inline from a float32 arange -- under numpy scalar promotion the whole
+            # cosine is then evaluated in single precision); ignores
+            # `periodic`/`window_dtype`/`wkwargs`
             arange = np.arange(win_length, dtype=np.float32)
             return (0.5 * (1 - np.cos(2 * np.pi * arange / win_length))).astype(np.float32)
+        if stft_cfg.window_fn == "hann_window_f64_as_f32":
+            # Periodic Hann evaluated in float64 and stored as float32 -- what the shared
+            # `window_function` util produces for a legacy extractor that does
+            # `window_function(n).astype(np.float32)` (Gemma4). Distinct from
+            # `hann_window_f32`, which evaluates the cosine itself in float32; the two differ
+            # by ~2.4e-07 and that is enough to break bit-exact parity.
+            return np.hanning(win_length + 1)[:-1].astype(np.float32)
         N = win_length + 1 if stft_cfg.periodic else win_length
         fac = np.linspace(-np.pi, np.pi, N)
         name = stft_cfg.window_fn
@@ -392,6 +401,12 @@ class TorchAudioBackend(BaseAudioProcessor):
             # ignores `periodic`/`window_dtype`/`wkwargs`
             arange = np.arange(win_length, dtype=np.float32)
             window = torch.from_numpy((0.5 * (1 - np.cos(2 * np.pi * arange / win_length))).astype(np.float32))
+            return window.to(device=audio.device)
+        if name == "hann_window_f64_as_f32":
+            # See the numpy leaf: periodic Hann evaluated in float64, stored as float32, matching
+            # `window_function(n).astype(np.float32)`. Built through numpy so both backends'
+            # windows stay bit-identical.
+            window = torch.from_numpy(np.hanning(win_length + 1)[:-1].astype(np.float32))
             return window.to(device=audio.device)
         if name in ("hann", "hann_window"):
             window = torch.hann_window(win_length, periodic=stft_cfg.periodic, **wkwargs)

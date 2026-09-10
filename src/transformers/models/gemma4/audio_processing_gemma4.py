@@ -28,11 +28,16 @@ class Gemma4AudioProcessorMixin:
             "n_fft": 512,
             "win_length": 320,
             "hop_length": 160,
-            "window_fn": "hann_window_f32",
+            # Gemma4's legacy extractor uses `window_function(...).astype(np.float32)` -- float64
+            # cosine, stored as float32. Gemma3n instead builds the window inline from a float32
+            # arange, which is what `hann_window_f32` reproduces; the two differ by 2.4e-07.
+            "window_fn": "hann_window_f64_as_f32",
             "power": 1.0,
             "center": "left",
             "frame_extension": 1,
-            "fft_dtype": "native",
+            # `np.fft.rfft` always promotes to complex128 regardless of float32 input, so the
+            # legacy magnitudes are float64. "native" left the FFT in complex64.
+            "fft_dtype": "float64",
         },
         "mel_scale_config": {
             "n_mels": 128,
