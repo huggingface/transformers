@@ -41,7 +41,7 @@ Use this pattern when the kernel expects weights under different names or in a d
 The `KernelNameLayout` class has the same `__init__` signature as the module it replaces and declares a `conversion_mapping` class attribute that tells Transformers how to remap checkpoint keys to the new parameter names (see [Dynamic weight loading](../weightconverter) for more details).
 
 ```python
-# kernel.py
+# layers.py
 try:
     from transformers import Concatenate, WeightConverter
     from transformers.conversion_mapping import WeightRenaming
@@ -71,14 +71,14 @@ class CustomRMSNorm(nn.Module):
 ```
 
 ```python
-# layers.py
-from .kernel import CustomRMSNorm
+# __init__.py
+from . import layers
 ```
 
 > [!NOTE]
-> The `kernels` library discovers kernel classes through a `layers` module (either `layers.py` or `layers/__init__.py`). Define the kernel classes in a separate file (e.g. `kernel.py`) and re-export them from `layers.py`. Transformers resolves the `Layout` class by looking in the module where `CustomRMSNorm` was defined (via `__module__`), so `CustomRMSNormLayout` does not need to be re-exported.
+> The `kernels` library discovers kernel classes through a `layers` module (either `layers.py` or `layers/__init__.py`). Define both the kernel and layout classes directly in `layers.py`, and expose the `layers` module from the package's `__init__.py`. Transformers finds `CustomRMSNormLayout` in the same module as `CustomRMSNorm`.
 >
-> The Transformers-specific imports (`WeightConverter`, `Concatenate`, `WeightRenaming`) belong in `kernel.py` and must be guarded since kernel repos do not depend on Transformers.
+> The Transformers-specific imports (`WeightConverter`, `Concatenate`, `WeightRenaming`) belong in `layers.py` and must be guarded since kernel repos do not depend on Transformers.
 
 Load this kernel by passing the repo and class name to [`KernelConfig`]. The key is the original module class name from the model. The value points to the `KernelName` class (not the `Layout`) in the repo.
 
@@ -105,7 +105,7 @@ When the model loads, Transformers:
 Use this pattern when a kernel replaces multiple adjacent modules with a single fused implementation. Because the fused module combines parameters from several original modules, the `KernelNameLayout.__init__` receives the instantiated child modules rather than their constructor arguments.
 
 ```python
-# kernel.py
+# layers.py
 try:
     from transformers import Concatenate, WeightConverter
     from transformers.conversion_mapping import WeightRenaming
@@ -152,8 +152,8 @@ class RMSNormMLP(nn.Module):
 ```
 
 ```python
-# layers.py
-from .kernel import RMSNormMLP
+# __init__.py
+from . import layers
 ```
 
 To fuse modules, pass a tuple of `(class_name, path_pattern)` pairs as the key in `KernelConfig` instead of a plain string. All patterns must share the same parent module (Transformers fuses the children in that parent). The `*` wildcard matches any single path segment.
