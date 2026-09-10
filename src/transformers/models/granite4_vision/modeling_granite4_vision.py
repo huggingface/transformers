@@ -1115,7 +1115,7 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Granite4VisionForConditionalGeneration
 
