@@ -37,7 +37,7 @@ from .utils import (
     copy_func,
     is_torch_available,
     is_torchcodec_available,
-    is_torchvision_available,
+    is_torchvision_v2_available,
     is_vision_available,
     logging,
     safe_load_json_file,
@@ -61,14 +61,14 @@ from .video_utils import (
 )
 
 
-if is_vision_available():
-    from .image_utils import PILImageResampling
-
 if is_torch_available():
     import torch
 
-if is_torchvision_available():
+if is_torchvision_v2_available():
     import torchvision.transforms.v2.functional as tvF
+
+if is_vision_available():
+    from .image_utils import PILImageResampling
 
 logger = logging.get_logger(__name__)
 

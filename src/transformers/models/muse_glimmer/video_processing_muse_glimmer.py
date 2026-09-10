@@ -21,7 +21,6 @@
 import itertools
 import math
 
-import numpy as np
 import torch
 from torchvision.transforms.v2 import functional as tvF
 
@@ -208,7 +207,7 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
                 Target frames to sample per second. Defaults to `self.fps`.
 
         Returns:
-            np.ndarray: Indices to sample video frames.
+            torch.Tensor: Indices to sample video frames.
         """
         fps = fps if fps is not None else self.fps
         num_frames = num_frames if num_frames is not None else self.num_frames
@@ -223,7 +222,7 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
         num_frames = min(int(total_num_frames * fps / metadata.fps), num_frames, total_num_frames)
         num_frames = max(temporal_patch_size, (num_frames // temporal_patch_size) * temporal_patch_size)
         num_frames = min(num_frames, total_num_frames)
-        indices = np.linspace(0, total_num_frames - 1, num_frames, dtype=int)
+        indices = torch.linspace(0, total_num_frames - 1, num_frames, dtype=int)
         return indices
 
     def _preprocess(
