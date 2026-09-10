@@ -1988,6 +1988,7 @@ class ProcessorMixin(PushToHubMixin):
         continue_final_message: bool | str = False,
         return_assistant_tokens_mask: bool = False,
         tokenize: bool = False,
+        sanitize_special_tokens: bool = False,
         return_tensors: str | TensorType | None = None,
         return_dict: bool = False,
         load_audio_from_video: bool = False,
@@ -2173,6 +2174,13 @@ class ProcessorMixin(PushToHubMixin):
                 # So we'll make a batched list of images and let the processor handle it
                 batch_images.append(images)
                 batch_videos.append(videos)
+
+        if sanitize_special_tokens:
+            # Named explicitly rather than left to `**kwargs`: an unknown kwarg would silently become a
+            # template variable, and a security flag that quietly does nothing is worse than one that fails
+            raise NotImplementedError(
+                "`sanitize_special_tokens` is not supported for processors yet, only for tokenizers."
+            )
 
         # `kwargs` overwrite special tokens if both are present
         template_kwargs = {**self.tokenizer.special_tokens_map, **kwargs}
