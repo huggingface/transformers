@@ -284,9 +284,9 @@ class PeftAdapterMixin:
         # TP-sharded too; no per-module PEFT marker is needed to detect this.
         has_tp_adapters = has_tp_adapters or bool(getattr(self, "_tp_plan", None))
 
-        if has_tp_adapters and not is_peft_greater_or_equal("0.20.1", accept_dev=True):
+        if has_tp_adapters and not is_peft_greater_or_equal("0.21.0"):
             raise ValueError(
-                "Loading a tensor-parallel PEFT adapter requires peft >= 0.20.1, please upgrade your peft "
+                "Loading a tensor-parallel PEFT adapter requires peft >= 0.21.0, please upgrade your peft "
                 "installation."
             )
 
