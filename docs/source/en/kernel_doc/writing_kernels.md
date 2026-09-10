@@ -78,7 +78,7 @@ from . import layers
 > [!NOTE]
 > The `kernels` library discovers kernel classes through a `layers` module (either `layers.py` or `layers/__init__.py`). Define both the kernel and layout classes directly in `layers.py`, and expose the `layers` module from the package's `__init__.py`. Transformers finds `CustomRMSNormLayout` in the same module as `CustomRMSNorm`.
 >
-> The Transformers-specific imports (`WeightConverter`, `Concatenate`, `WeightRenaming`) belong in `layers.py` and must be guarded since kernel repos do not depend on Transformers.
+> Guard the Transformers-specific imports (`WeightConverter`, `Concatenate`, `WeightRenaming`) in `layers.py` so the kernel can also be imported in environments where Transformers is not installed.
 
 Load this kernel by passing the repo and class name to [`KernelConfig`]. The key is the original module class name from the model. The value points to the `KernelName` class (not the `Layout`) in the repo.
 
