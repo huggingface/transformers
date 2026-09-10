@@ -87,14 +87,8 @@ def _start_serve(**kwargs) -> tuple["Serve", int]:
 
 
 class ServeIntegrationTestCase(MemoryCleanupMixin, unittest.TestCase):
-    """Base class for the tests that need a live `transformers serve` instance.
-
-    One server is started per class and killed with it. `MemoryCleanupMixin` then drops `cls.serve`/`cls.client`
-    and flushes the device cache, so this class's model is really gone before the next one loads its own --
-    sequential large loads with nothing released in between are what used to OOM this file.
-
-    Override `serve_kwargs` to change how the server is started.
-    """
+    """One live `transformers serve` per class, killed and released with it. Override `serve_kwargs` to start it
+    differently."""
 
     @classmethod
     def serve_kwargs(cls) -> dict:
@@ -109,8 +103,7 @@ class ServeIntegrationTestCase(MemoryCleanupMixin, unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        # `kill_server()` calls `delete_model()`, which already runs gc + a cache flush; the mixin's teardown then
-        # drops the class attributes still pointing at the server and flushes again.
+        # `kill_server()` already flushes; the mixin then drops the attributes still pointing at it.
         cls.serve.kill_server()
         super().tearDownClass()
 

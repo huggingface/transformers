@@ -93,10 +93,8 @@ class MiniMaxM2ModelTest(CausalLMModelTest, unittest.TestCase):
 @slow
 @require_torch
 class MiniMaxM2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
-    # some memory allocated in the cache, which means some object is not being released properly. This causes some
-    # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
-    # Investigate the root cause.
+    # TODO (joao): compilation with `cache_implementation="static"` leaves memory allocated in the cache -- some
+    # object is not released. Root cause unknown.
 
     @require_torch_accelerator
     def test_small_model_logits_batched(self):

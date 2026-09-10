@@ -155,7 +155,7 @@ class Ernie4_5_MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        # `MemoryCleanupMixin.tearDownClass` drops this again, so the model is released with the class.
+        # Dropped again by the mixin's `tearDownClass`.
         cls.model = None
 
     @classmethod

@@ -42,7 +42,7 @@ GIB = 1024**3
 
 
 class Payload:
-    """Stand-in for a model: cheap to build, and its lifetime is observable through a `weakref`."""
+    """Stand-in for a model, with a lifetime observable through a `weakref`."""
 
 
 class GetCiCpuMemoryBudgetTest(unittest.TestCase):
@@ -196,10 +196,7 @@ def _run_inner_test_class(cls):
 
 
 class MemoryCleanupMixinTest(unittest.TestCase):
-    """
-    The mixin exists to stop one test's leftovers from OOM-ing the next one, so what matters is that the references
-    are really gone afterwards -- not merely that `cleanup()` was called.
-    """
+    """What matters is that the references are really gone, not that `cleanup()` was called."""
 
     def test_instance_attributes_are_dropped_after_the_test(self):
         seen = {}
@@ -212,8 +209,7 @@ class MemoryCleanupMixinTest(unittest.TestCase):
 
         result = _run_inner_test_class(Inner)
         self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
-        # The test instance is still alive (unittest and pytest both keep it), which is exactly why the attribute
-        # has to go: `gc.collect()` cannot free a model that something still points at.
+        # The instance is still alive, which is why the attribute has to go.
         self.assertNotIn("payload", vars(seen["case"]))
         gc.collect()
         self.assertIsNone(seen["ref"](), "the object the test parked on `self` was not released")
@@ -323,7 +319,7 @@ class MemoryCleanupMixinTest(unittest.TestCase):
 
         result = _run_inner_test_class(Inner)
         self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
-        # `setUp` runs after the snapshot is taken, so whatever it loads is dropped with the rest.
+        # `setUp` runs after the snapshot, so what it loads is dropped too.
         self.assertNotIn("fixture", vars(seen["case"]))
 
     def test_a_setup_that_skips_super_disables_dropping_rather_than_exploding(self):
@@ -372,13 +368,8 @@ class MemoryCleanupNoGradTest(unittest.TestCase):
 
 @require_torch
 class MemoryCleanupUnderPytestTest(MemoryCleanupMixin, unittest.TestCase):
-    """
-    `cleanup_no_grad` works by overriding `unittest.TestCase._callTestMethod`, a private hook.
-
-    `MemoryCleanupNoGradTest` drives an inner class through unittest's own runner; this class *is* collected and
-    run by pytest, so it is what catches pytest's unittest integration -- or the stdlib -- no longer routing
-    through that hook, instead of the no-grad behavior disappearing silently.
-    """
+    """Guards the private `_callTestMethod` hook. Unlike the tests above, this class is collected and run by
+    pytest itself, so it catches a runner that stops routing through the hook."""
 
     def test_grad_is_off_under_the_real_runner(self):
         self.assertFalse(torch.is_grad_enabled())
@@ -390,14 +381,13 @@ class MemoryCleanupUnderPytestTest(MemoryCleanupMixin, unittest.TestCase):
         )
 
     def test_attributes_are_dropped_under_the_real_runner(self):
-        # `doCleanups` runs after `tearDown`, so this callback observes what the mixin actually left behind --
-        # the teardown half of the same guarantee, checked on pytest's path rather than unittest's own runner.
+        # `doCleanups` runs after `tearDown`, so this sees what the mixin left behind.
         self.payload = Payload()
         self.addCleanup(lambda: self.assertNotIn("payload", vars(self)))
 
 
 class MemoryLeakCheckTest(unittest.TestCase):
-    """The leak check is opt-in: unset means never measured, `warn` reports, `error` fails."""
+    """Opt-in: unset means never measured, `warn` reports, `error` fails."""
 
     MIB = 1024**2
 
@@ -430,8 +420,7 @@ class MemoryLeakCheckTest(unittest.TestCase):
         messages = [str(w.message) for w in caught if "MiB allocated" in str(w.message)]
         self.assertEqual(len(messages), 1, caught)
         self.assertIn("512.0 MiB", messages[0])
-        # The CPU figure is a delta against the baseline taken in `setUp`, not the process's whole RSS -- a no-op
-        # test cannot have moved it by more than a few MiB.
+        # The CPU figure is a delta, not the whole RSS.
         rss_delta = float(re.search(r"CPU RSS ([-+][\d.]+) MiB", messages[0]).group(1))
         self.assertLess(abs(rss_delta), 100, messages[0])
 

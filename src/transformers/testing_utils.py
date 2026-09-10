@@ -3546,11 +3546,10 @@ def cleanup(device: str, gc_collect=False):
     torch.compiler.reset()
 
 
-# Attributes `unittest` may create on a test instance *after* `setUp` has run, which
-# `MemoryCleanupMixin` must not delete.
+# Attributes `unittest` may add after `setUp` ran, so not the test's own.
 _UNITTEST_INTERNAL_ATTRS = frozenset({"_outcome", "_subtest", "_cleanups", "_type_equality_funcs"})
 
-# Bookkeeping `MemoryCleanupMixin` puts on the test class / instance itself.
+# `MemoryCleanupMixin`'s own bookkeeping.
 _MEMORY_CLEANUP_ATTRS = frozenset(
     {
         "_memory_cleanup_class_attrs",
@@ -3562,10 +3561,7 @@ _MEMORY_CLEANUP_ATTRS = frozenset(
 
 
 def _memory_leak_settings() -> tuple[float | None, str]:
-    """Read the opt-in leak-check configuration from the environment.
-
-    Returns `(threshold_mib, mode)`; `threshold_mib` is `None` when the check is off.
-    """
+    """Return `(threshold_mib, mode)` from the environment; `threshold_mib` is `None` when the check is off."""
     raw = os.environ.get("TRANSFORMERS_TEST_MEMORY_LEAK_MIB", "").strip()
     if not raw:
         return None, "warn"
@@ -3583,20 +3579,14 @@ def _memory_leak_settings() -> tuple[float | None, str]:
 
 class MemoryCleanupMixin:
     """
-    Mixin that makes a test class give back the memory it takes, so that a leak in one test cannot OOM the next one.
+    Frees the memory a test class allocates, so one test's leftovers cannot OOM the next.
 
-    Most of our integration-test OOMs come from the same three causes, and this mixin addresses all of them:
+    - Runs [`cleanup`] before and after every test.
+    - Deletes attributes the test added to `self` and to the class, `@cached_property` caches included: pytest keeps
+      test instances alive for the whole session, so `gc.collect()` cannot free what they still reference.
+    - Runs test methods under `torch.no_grad()`.
 
-    1. **No teardown at all.** The mixin runs [`cleanup`] (`gc.collect()` + `empty_cache()` + `torch.compiler.reset()`)
-       both before and after every test, so a test never inherits the previous one's leftovers.
-    2. **The model outlives the test.** `pytest` keeps test instances alive for the whole session, so a model parked
-       on `self` (directly, or via a `@cached_property`) pins its device memory until the run ends -- `gc.collect()`
-       cannot help while a live reference exists. The mixin deletes every attribute the test added to `self`, and
-       every attribute added to the class (`cls.model = ...` in `setUpClass`), before flushing the cache.
-    3. **Autograd graphs.** A forward pass outside `torch.no_grad()` keeps activations alive. Test methods run under
-       `torch.no_grad()` by default; classes that train must set `cleanup_no_grad = False`.
-
-    Put the mixin first in the bases so its `setUp`/`tearDown` wrap the rest of the MRO:
+    Put it first in the bases. [`MemoryCleanupTestCase`] pairs it with [`TestCasePlus`].
 
     ```python
     class MyModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
@@ -3604,20 +3594,12 @@ class MemoryCleanupMixin:
             self.model = AutoModelForCausalLM.from_pretrained(...).to(torch_device)  # dropped in tearDown
     ```
 
-    [`MemoryCleanupTestCase`] is the ready-made combination of this mixin with [`TestCasePlus`].
+    Knobs: `cleanup_gc_collect`, `cleanup_no_grad` (off for training tests), `cleanup_drop_attributes`,
+    `cleanup_keep_attributes`. Override `setUp`/`tearDown`/`setUpClass`/`tearDownClass` only with a `super()` call:
+    the attribute snapshot is taken there, and dropping is skipped without it.
 
-    Class-level knobs:
-
-    - `cleanup_gc_collect` (`True`): run a full `gc.collect()`. Reference cycles -- a model captured by a closure or
-      held by a traceback -- are the common case, and `empty_cache()` alone cannot free those.
-    - `cleanup_no_grad` (`True`): run each test method under `torch.no_grad()`. Set to `False` to train or call
-      `backward()`.
-    - `cleanup_drop_attributes` (`True`): delete instance and class attributes added after setup.
-    - `cleanup_keep_attributes` (`()`): names that survive the above, for state a test class shares between tests.
-
-    Leak checking is opt-in and off by default, because collecting frees the very memory a leak reproducer needs.
-    Set `TRANSFORMERS_TEST_MEMORY_LEAK_MIB=<n>` to report any test that leaves more than `<n>` MiB allocated on the
-    device, and `TRANSFORMERS_TEST_MEMORY_LEAK_MODE=error` to turn those reports into failures.
+    Leak check, off by default since collecting frees what a reproducer needs: `TRANSFORMERS_TEST_MEMORY_LEAK_MIB=<n>`
+    reports tests leaving more than `<n>` MiB on the device, `TRANSFORMERS_TEST_MEMORY_LEAK_MODE=error` fails them.
     """
 
     cleanup_gc_collect: bool = True
@@ -3628,8 +3610,7 @@ class MemoryCleanupMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        # Snapshot before assigning, so the sentinel itself is treated as pre-existing.
-        snapshot = set(vars(cls))
+        snapshot = set(vars(cls))  # taken before assigning, so the sentinel counts as pre-existing
         cls._memory_cleanup_class_attrs = snapshot
 
     @classmethod
@@ -3638,7 +3619,7 @@ class MemoryCleanupMixin:
             super().tearDownClass()
         finally:
             if cls.cleanup_drop_attributes:
-                # `setUpClass` may have parked a model on the class; nothing else will ever drop it.
+                # `setUpClass` may have parked a model on the class; nothing else drops it.
                 _drop_new_attributes(
                     cls, getattr(cls, "_memory_cleanup_class_attrs", None), cls.cleanup_keep_attributes
                 )
@@ -3646,8 +3627,7 @@ class MemoryCleanupMixin:
 
     def setUp(self):
         super().setUp()
-        # Start from a clean slate: a previous test in another class may have left memory behind.
-        _run_cleanup(self.cleanup_gc_collect)
+        _run_cleanup(self.cleanup_gc_collect)  # a previous class may have left memory behind
         self._memory_cleanup_instance_attrs = set(vars(self))
         self._memory_cleanup_baseline = _device_memory_allocated()
         self._memory_cleanup_rss_baseline = _process_rss()
@@ -3666,11 +3646,8 @@ class MemoryCleanupMixin:
             self._check_for_memory_leak()
 
     def _callTestMethod(self, method):
-        # `_callTestMethod` is a private `unittest.TestCase` hook (3.8+). It is the only seam that wraps the test
-        # method *without* also wrapping `setUp`/`tearDown`, which matters because a model loaded in `setUp` must
-        # keep its parameters' `requires_grad`. `MemoryCleanupUnderPytestTest` in tests/utils/test_testing_utils.py
-        # is collected by pytest itself and asserts grad is really off inside a test, so this fails loudly rather
-        # than silently if the stdlib or a runner ever stops routing through the hook.
+        # Private hook, but the only seam wrapping the test method without `setUp`, where a loaded model must keep
+        # its `requires_grad`. `MemoryCleanupUnderPytestTest` fails if a runner stops routing through it.
         if self.cleanup_no_grad and is_torch_available():
             with torch.no_grad():
                 return super()._callTestMethod(method)
@@ -3690,8 +3667,8 @@ class MemoryCleanupMixin:
             f"{self.id()} left {leaked_mib:.1f} MiB allocated on {torch_device} after teardown "
             f"(threshold {threshold_mib:.1f} MiB, peak during the test {peak_mib:.1f} MiB, "
             f"CPU RSS {rss_delta_mib:+.1f} MiB). "
-            "Something still holds a reference to a device tensor -- check for models stored on `self`/the class, "
-            "captured by a closure, or kept alive by a `@cached_property`."
+            "Something still references a device tensor: a model on `self`/the class, captured by a closure, or "
+            "held by a `@cached_property`."
         )
         if mode == "error":
             raise AssertionError(message)
@@ -3699,11 +3676,7 @@ class MemoryCleanupMixin:
 
 
 class MemoryCleanupTestCase(MemoryCleanupMixin, TestCasePlus):
-    """
-    [`TestCasePlus`] (auto-removed temporary dirs, resolved repo paths, `accelerate` state reset) plus
-    [`MemoryCleanupMixin`] (device memory released after every test). Use it as the base class for integration tests
-    that load real checkpoints.
-    """
+    """[`TestCasePlus`] plus [`MemoryCleanupMixin`], for integration tests that load real checkpoints."""
 
 
 def _run_cleanup(gc_collect: bool) -> None:
