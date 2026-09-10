@@ -183,6 +183,8 @@
     title: (번역중) FBGEMM
   - local: in_translation
     title: (번역중) Fine-grained FP8
+  - local: quantization/fp_quant
+    title: FP-Quant
   - local: gguf
     title: GGUF 파일들과의 상호 운용성
   - local: quantization/gptq
