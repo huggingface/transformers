@@ -199,7 +199,7 @@ def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any]):
 # Each `@register_patch("dynamo", *dotted_paths)` decorator targets one or
 # more `Class.method` paths and wraps a `factory(original) -> replacement`.
 # Multiple paths share the same factory when the same method shape needs to be
-# swapped across several classes (e.g. `_reshaped_vision_attention_forward`
+# swapped across several classes (e.g. `_varlen_vision_attention_forward`
 # applied to every chunked-vision attention class — see the long list below).
 
 
@@ -250,25 +250,19 @@ def _patch_is_kernels_available(_original):
 
 
 # --- Chunked vision/audio attention ─────────────────────────────────────────
-# Sub-encoders that pack multiple variable-length sequences into one flat tensor
-# with `cu_seqlens` markers fall back to `split → per-segment SDPA → cat` in the
-# unpatched forward, which is a Python loop that `torch.export` can't trace.
-# `_reshaped_vision_attention_forward` replaces that loop with a reshape into a
-# per-segment batch followed by a single SDPA call. It handles the layout
-# differences across encoders (combined `qkv` vs separate `q/k/v` vs separate
-# `q_proj/k_proj/v_proj`, asymmetric `q_dim/kv_dim` split, `(cos, sin)` vs single
-# rotary tensor vs none, `.proj` vs `.out_proj`, NaViT `(1, T, D)` packing,
-# tuple vs single return). The `returns_tuple` flag is bound once per class at
-# install time by inspecting the original `forward`'s source.
+# Encoders that pack variable-length sequences into one flat tensor with `cu_seqlens` markers do
+# `split → per-segment SDPA → cat` — a Python loop `torch.export` can't trace.
+# `_varlen_vision_attention_forward` replaces it with a single `torch.nn.attention.varlen` call keyed
+# on `cu_seqlens`, which is natively variable-length (ragged windows, heterogeneous grids) and traces
+# to one `_varlen_attn` op. It absorbs the per-encoder layout differences (qkv packing, rotary
+# convention, projection names, return shape); `returns_tuple` is resolved once per class at install
+# time from the original `forward`'s source.
 #
-# NOTE: this whole stack of patches becomes unnecessary once transformers adopts a
-# proper varlen-attention op (e.g. PyTorch's `torch._nested.scaled_dot_product_attention`
-# or a Flex-Attention varlen kernel) — the modeling forwards can then express the
-# segmented attention directly with `cu_seqlens` and trace through `torch.export`
-# without this reshape-into-batch workaround. Drop this section when that lands.
+# torch.export/Dynamo runs `_varlen_attn` directly (CUDA flash kernel); ONNX and ExecuTorch lower it
+# to a `cu_seqlens`-built masked SDPA. A backend with no lowering errors on the op.
 
 
-def _reshaped_vision_attention_forward(
+def _varlen_vision_attention_forward(
     self,
     hidden_states: torch.Tensor,
     cu_seqlens: torch.Tensor,
@@ -277,8 +271,8 @@ def _reshaped_vision_attention_forward(
     returns_tuple: bool = False,
     **kwargs,
 ):
-    """Export-safe chunked vision/audio attention: reshape segments into a batch dim,
-    apply rotary if provided, run one SDPA call, project, and re-emit in the original layout."""
+    """Export-safe chunked vision/audio attention: apply rotary if provided, run one varlen attention over
+    the packed sequence (segments delimited by `cu_seqlens`), project, and re-emit in the original layout."""
 
     # Normalise NaViT-style `(1, T, D)` packing (minicpmv4_6) to the flat `(T, D)` layout
     # the rest of this wrapper assumes. The leading dim is always 1 — multi-image batches
@@ -291,15 +285,6 @@ def _reshaped_vision_attention_forward(
     torch_compilable_check(
         seq_length != 0,
         "Chunked vision attention received an empty input.",
-    )
-    num_segments = cu_seqlens.shape[0] - 1
-    # The reshape-into-batch below needs equal-length segments.
-    segment_lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-    torch_compilable_check(
-        (segment_lengths == segment_lengths[0]).all(),
-        "Chunked vision attention requires uniform segment lengths during export. "
-        "Ensure all images have the same resolution (use do_resize=True in the processor) "
-        "or pad inputs to a common size.",
     )
 
     if hasattr(self, "qkv"):
@@ -339,30 +324,37 @@ def _reshaped_vision_attention_forward(
             query_states = apply_rotary_pos_emb_vision(query_states.unsqueeze(0), position_embeddings).squeeze(0)
             key_states = apply_rotary_pos_emb_vision(key_states.unsqueeze(0), position_embeddings).squeeze(0)
 
-    seg_len = seq_length // num_segments
+    # `cu_seqlens` delimits the packed segments (per-image for full attention, per-window for window
+    # attention), so one varlen attention over the flat `(seq, heads, dim)` sequence natively handles
+    # ragged windows and heterogeneous grids. `max_q`/`max_k` only need an upper bound, and `seq_length`
+    # (a shape symint) is one, so there's no data-dependent `.max()`. The op traces to Dynamo as a single
+    # `_varlen_attn` node; ONNX / ExecuTorch lower it via their own translations (a `cu_seqlens`-built
+    # masked SDPA), or a backend without one errors on the op. The flash kernel behind the op needs
+    # head_dim % 8 == 0, so for smaller head dims we emit that same masked SDPA directly instead.
+    enable_gqa = getattr(self, "num_key_value_heads", self.num_heads) != self.num_heads
+    if query_states.shape[-1] % 8 == 0:
+        # Fast path: CUDA flash varlen kernel — but it requires head_dim % 8 == 0.
+        from torch.nn.attention.varlen import varlen_attn
 
-    # (seq, heads, dim) → (n_seg, seg_len, heads, dim) → (n_seg, heads, seg_len, dim)
-    def _to_batched(t):
-        return t.unflatten(0, (num_segments, seg_len)).transpose(1, 2)
-
-    query_states = _to_batched(query_states)
-    key_states = _to_batched(key_states)
-    value_states = _to_batched(value_states)
-
-    torch_compilable_check(query_states.shape[0] != 0, "Reshaped chunked-vision attention got zero batch.")
-    torch_compilable_check(query_states.shape[2] != 0, "Reshaped chunked-vision attention got zero seq.")
-    attn_output = torch.nn.functional.scaled_dot_product_attention(
-        query_states,
-        key_states,
-        value_states,
-        is_causal=False,
-        scale=self.scaling,
-        dropout_p=0.0 if not self.training else self.attention_dropout,
-        enable_gqa=getattr(self, "num_key_value_heads", self.num_heads) != self.num_heads,
-    )
-
-    # (n_seg, heads, seg_len, dim) → (n_seg, seg_len, heads, dim) → (seq, heads*dim).
-    attn_output = attn_output.transpose(1, 2).reshape(seq_length, -1)
+        cu = cu_seqlens.to(torch.int32)
+        attn_output = varlen_attn(
+            query_states,
+            key_states,
+            value_states,
+            cu,
+            cu,
+            seq_length,
+            seq_length,
+            scale=self.scaling,
+            enable_gqa=enable_gqa,
+        )
+    else:
+        # Head dims not a multiple of 8 can't use the flash kernel; run the same block-diagonal masked
+        # SDPA the op lowers to on the other backends (device/dtype-agnostic, fully exportable).
+        attn_output = varlen_attn_masked_sdpa(
+            query_states, key_states, value_states, cu_seqlens, scale=self.scaling, enable_gqa=enable_gqa
+        )
+    attn_output = attn_output.reshape(seq_length, -1)
     out_proj = self.proj if hasattr(self, "proj") else self.out_proj
     attn_output = out_proj(attn_output)
 
@@ -372,8 +364,9 @@ def _reshaped_vision_attention_forward(
     return (attn_output, None) if returns_tuple else attn_output
 
 
-@register_patch(
-    "dynamo",
+# Vision/audio attention forwards swapped for the varlen op by `_patch_chunked_vision_attention`. Named
+# so `needs_half_precision_export` can tell which models exercise the (bf16-only) varlen flash path.
+_VARLEN_ATTENTION_PATHS = (
     # Combined `qkv` + `(cos, sin)` rotary + `.proj`
     "transformers.models.qwen2_vl.modeling_qwen2_vl.VisionAttention.forward",
     "transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.Qwen2_5_VLVisionAttention.forward",
@@ -405,15 +398,75 @@ def _reshaped_vision_attention_forward(
     "transformers.models.qwen3_omni_moe.modeling_qwen3_omni_moe.Qwen3OmniMoeAudioAttention.forward",
     "transformers.models.qwen3_asr.modeling_qwen3_asr.Qwen3ASRAudioAttention.forward",
 )
+
+
+@register_patch("dynamo", *_VARLEN_ATTENTION_PATHS)
 def _patch_chunked_vision_attention(original):
     """Bind `returns_tuple` once per class by inspecting the original forward's source."""
     src = inspect.getsource(original)
     returns_tuple = "return attn_output, attn_weight" in src or "return attn_output, None" in src
 
     def forward(self, *args, **kwargs):
-        return _reshaped_vision_attention_forward(self, *args, returns_tuple=returns_tuple, **kwargs)
+        return _varlen_vision_attention_forward(self, *args, returns_tuple=returns_tuple, **kwargs)
 
     return forward
+
+
+def varlen_attn_masked_sdpa(
+    query,
+    key,
+    value,
+    cu_seq_q,
+    cu_seq_k=None,
+    max_q=None,
+    max_k=None,
+    is_causal=False,
+    scale=None,
+    window_size=None,
+    enable_gqa=False,
+    seqused_k=None,
+    block_table=None,
+    num_splits=None,
+):
+    """Block-diagonal masked SDPA over the packed `(total, heads, dim)` sequence (`cu_seq_q` marks the
+    segment boundaries) — the device/dtype-agnostic, exportable equivalent of `torch_attn::_varlen_attn`.
+    Returns the attention output `(total, heads, dim)`."""
+    positions = torch.arange(query.shape[0], device=query.device)
+    segment_id = (positions[:, None] >= cu_seq_q[1:][None, :]).sum(-1)
+    block_mask = (segment_id[:, None] == segment_id[None, :])[None, None]
+    q, k, v = (tensor.transpose(0, 1)[None] for tensor in (query, key, value))
+    out = torch.nn.functional.scaled_dot_product_attention(
+        q, k, v, attn_mask=block_mask, scale=scale, enable_gqa=enable_gqa
+    )
+    return out[0].transpose(0, 1)
+
+
+# Make `torch_attn::_varlen_attn` (emitted by `_varlen_vision_attention_forward`) usable off the CUDA flash
+# path via `varlen_attn_masked_sdpa`. If torch ships the op it has only a CUDA/flash kernel, so add the
+# missing CPU kernel (CUDA keeps flash; ExecuTorch/ONNX inject the masked-SDPA lowering via their patches).
+# On older torch that lacks the op, define it and register the masked SDPA as `CompositeImplicitAutograd` —
+# a single implementation that both runs and decomposes on every backend.
+if is_torch_available():
+
+    def _varlen_attn_op_kernel(*args, **kwargs):
+        # The op's schema returns `(output, softmax_lse, rng_state)`; we only produce the output, so pad
+        # with empty aux stubs (unused unless `return_aux` is requested).
+        out = varlen_attn_masked_sdpa(*args, **kwargs)
+        return out, out.new_empty(0), out.new_empty(0)
+
+    try:
+        import torch.nn.attention.varlen  # noqa: F401  # registers `torch_attn::_varlen_attn`
+
+        torch.library.register_kernel("torch_attn::_varlen_attn", "cpu", _varlen_attn_op_kernel)
+    except ImportError:
+        torch.library.define(
+            "torch_attn::_varlen_attn",
+            "(Tensor query, Tensor key, Tensor value, Tensor cu_seq_q, Tensor? cu_seq_k, SymInt max_q, "
+            "SymInt max_k, bool is_causal=False, float? scale=None, SymInt[]? window_size=None, "
+            "bool enable_gqa=False, Tensor? seqused_k=None, Tensor? block_table=None, "
+            "SymInt? num_splits=None) -> (Tensor, Tensor, Tensor)",
+        )
+        torch.library.register_kernel("torch_attn::_varlen_attn", "CompositeImplicitAutograd", _varlen_attn_op_kernel)
 
 
 # ── Stage 3: Pytree registration ─────────────────────────────────────────────
