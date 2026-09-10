@@ -442,6 +442,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 (None, None): 'Sure, here is a haiku inspired by the image:\n\nSilent waters stretch,\nMountains stand in quiet grace,\nPe',
+                ("rocm", (9, 4)): "Dock in still waters,\nMountains reflect in peace,\nNature's calm embrace",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

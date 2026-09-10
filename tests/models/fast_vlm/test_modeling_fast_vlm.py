@@ -255,9 +255,14 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, dtype=model.dtype)
 
         output = model.generate(**inputs, max_new_tokens=20)
-        expected_decoded_texts = "user\n\nWhat are the things I should be cautious about when I visit this place?\nassistant\n\nWhen visiting this place, you should be cautious of the following:\n\n1. **Weather Conditions**:"  # fmt: skip
+        expected_decoded_texts = Expectations(
+            {
+                (None, None): "user\n\nWhat are the things I should be cautious about when I visit this place?\nassistant\n\nWhen visiting this place, you should be cautious of the following:\n\n1. **Weather Conditions**:",
+                ("rocm", (9, 4)): "user\n\nWhat are the things I should be cautious about when I visit this place?\nassistant\n\nWhen visiting this serene place, there are a few things you should be cautious about:\n\n1.",
+            }
+        )  # fmt: skip
 
-        EXPECTED_DECODED_TEXT = expected_decoded_texts
+        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),

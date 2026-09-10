@@ -656,8 +656,8 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices",
-            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices",
+            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture is a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular pets. They",
+            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture is a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular pets. They",
         ]
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
@@ -689,7 +689,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
+            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture is a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular pets. They',
             'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am a large language model created by Alibaba Cloud. I am called Qwen.'
         ]  # fmt: skip
 

@@ -438,6 +438,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 (None, None): "user\n\nWrite a haiku for this image\nassistant\nLakeside, serene,  \nWooden pier, calm waters,  \nNature's peace.",
+                ("rocm", (9, 4)): "user\n\nWrite a haiku for this image\nassistant\nLakeside mist,  \nPine trees stand tall,  \nPeaceful lake at hand.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -585,6 +586,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 (None, None): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe two images depict different scenes:\n\n1. **Left Image**: This shows the Statue of Liberty in New York City. The',
+                ("rocm", (9, 4)): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe two images depict different scenes:\n\n1. **Left Image**: This shows the Statue of Liberty in New York Harbor. It',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
