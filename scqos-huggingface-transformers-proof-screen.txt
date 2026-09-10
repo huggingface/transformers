@@ -1,0 +1,42 @@
+================================================================================
+SUPREME COMPUTATION / SCQOS — HUGGING FACE TRANSFORMERS LIVE AWS PROOF
+================================================================================
+STATUS: PASS
+
+TARGET: huggingface/transformers
+MODEL:  google-bert/bert-base-uncased
+TRANSFORMERS REVISION:
+  9d13f8cf6e22f9cac94601eee286e768cc77cf46
+MODEL WEIGHTS SHA256:
+  68d45e234eb4a928074dfd868cead0219ab85354cc53d20e772753c6bb9169d3
+
+QUALIFICATION N
+  transition: 9dc93e28-c699-5593-b684-38849c1f4c4f
+  decision:   PERMIT
+  permit:     b6e34c5e-d21a-5c2f-9887-15718facb974
+
+ADVERSARIAL CHANGE AFTER QUALIFICATION
+  tokenizer_config.model_max_length: 512 -> 513
+  mutated transition: 53e700a6-a625-55bc-b783-bb242bf8d91d
+  old PERMIT reuse:  BLOCKED by live AWS DynamoDB conditional boundary
+  decision:          HOLD
+  failed: Time, Continuity, Genesis, Boundary, Reference, Causality
+
+REQUALIFICATION N+1
+  transition: 27bddaa9-5e82-54f9-bf7f-ca6cf4ea3d9a
+  decision:   PERMIT_N+1
+  permit:     65e038ee-c191-56ff-80fc-a73c959cc5ea
+
+AWS DURABLE EVIDENCE
+  S3 bucket:  scqos-governance-evidence-us-east-1
+  S3 version: Rdbo0bBBDtKPQJgl4j2eWOfhcnpf9nSO
+  S3 SHA256:  99a997329568dee3f3d6fea2aa7df572e34ba38a2da7604ce8adfed5d94f8825
+  DynamoDB receipts: 2
+
+PROVED:
+  Change one frozen transition component after qualification -> old PERMIT cannot execute.
+  Requalification produces a new transition identity and a new PERMIT.
+  PERMIT_N+1 != resurrection of PERMIT_N.
+
+Nothing Executes Until It Proves Itself.
+================================================================================
