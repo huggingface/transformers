@@ -540,7 +540,10 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
             init_model_dir,
             torch_dtype=dtype,
             distributed_config=DistributedConfig(
-                tp_size=2, fsdp_size=dp, enable_expert_parallel=True, expert_parallel_dispatch=dispatch
+                tp_size=2,
+                fsdp_size=dp,
+                enable_expert_parallel=True,
+                experts_dispatch="all-to-all" if dispatch else "all-reduce",
             ),
         )
         assert model.tp_size == 2 and model.fsdp_size == dp

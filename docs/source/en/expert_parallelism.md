@@ -52,7 +52,7 @@ torchrun --nproc-per-node 8 your_script.py
 
 ## Token dispatch
 
-By default, every expert parallel rank runs the whole batch, keeps only the experts it owns, and all-reduces expert outputs after every MoE layer. Dense layers then do `tp_size` times the same work, and the all-reduce moves full activations. Set `expert_parallel_dispatch=True` to send each token to the rank that owns its experts. Each rank trains on its own batch shard, and a lot less data is required to travel between GPUs/nodes during large-scale training.
+By default, every expert parallel rank runs the whole batch, keeps only the experts it owns, and all-reduces expert outputs after every MoE layer. Dense layers then do `tp_size` times the same work, and the all-reduce moves full activations. Set `experts_dispatch="all-to-all"` to send each token to the rank that owns its experts. Each rank trains on its own batch shard, and a lot less data is required to travel between GPUs/nodes during large-scale training.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -61,7 +61,7 @@ from transformers.distributed import DistributedConfig
 distributed_config = DistributedConfig(
     tp_size=8,
     enable_expert_parallel=True,
-    expert_parallel_dispatch=True,
+    experts_dispatch="all-to-all",
 )
 ```
 
@@ -90,7 +90,7 @@ distributed_config = DistributedConfig(
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B", distributed_config=distributed_config)
 ```
 
-The model is loaded on a 2D `(fsdp, tp)` device mesh, and `tp_size * fsdp_size` must equal the number of processes. The expert parallel plan shards the experts across `tp`, then FSDP2 shards every parameter, experts included, across `fsdp` and owns their gradient reduction. Each `fsdp` rank trains on its own part of the batch. With `expert_parallel_dispatch=True` the non-expert parameters are data-parallel across the whole mesh rather than replicated across `tp`, so FSDP2 shards them across `fsdp` and `tp` together.
+The model is loaded on a 2D `(fsdp, tp)` device mesh, and `tp_size * fsdp_size` must equal the number of processes. The expert parallel plan shards the experts across `tp`, then FSDP2 shards every parameter, experts included, across `fsdp` and owns their gradient reduction. Each `fsdp` rank trains on its own part of the batch. With `experts_dispatch="all-to-all"` the non-expert parameters are data-parallel across the whole mesh rather than replicated across `tp`, so FSDP2 shards them across `fsdp` and `tp` together.
 
 Load the model as usual, then train with [`Trainer`]. It takes the gradient norm across both meshes and gives each mesh its own optimizer param group. [`~Trainer.save_model`] gathers sharded weights into a regular checkpoint. This requires `accelerate>=1.12` so the `Trainer` can mirror `tp_size` and `fsdp_size` into [`~Accelerate.ParallelismConfig`].
 
