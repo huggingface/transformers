@@ -269,7 +269,7 @@ def sliding_window_mask_function(sliding_window: tuple[int, int]) -> Callable:
 
         dist = q_idx - kv_idx
         left_mask = (dist >= 0) & (dist < left_window_size)
-        right_mask = (dist < 0) & (-dist < right_window_size)
+        right_mask = (dist < 0) & (-dist <= right_window_size)
         return left_mask | right_mask
 
     return inner_mask
