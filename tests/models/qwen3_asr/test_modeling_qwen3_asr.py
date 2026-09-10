@@ -281,11 +281,6 @@ class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
 
     @slow
     def test_fixture_timestamps_batched(self):
-        # TODO(synthetic-assets): NOT a refresh job. Entry 1's `text` is an *input* to the
-        # aligner, still holding the old clip's transcript, so this aligns 13 chars against
-        # audio saying something else (hence 0.0 != 0.4). Fix the transcript first (the true
-        # one is in dummy-audio-samples/provenance.jsonl), then measure; the entry count
-        # changes too. assertAlmostEqual is uninstrumented, so no round can report these.
         path = self.fixtures_path / "expected_timestamps_batched.json"
         with open(path, "r", encoding="utf-8") as f:
             expected_batch = json.load(f)

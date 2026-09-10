@@ -92,72 +92,102 @@
   },
   {
     "language": "Chinese",
-    "text": "甚至出现交易几乎停滞的情况。",
+    "text": "你好，世界！人工智能正在改变我们的生活方式。",
     "time_stamps": [
       {
-        "text": "甚",
-        "start_time": 0.4,
-        "end_time": 0.72
+        "text": "你",
+        "start_time": 0.0,
+        "end_time": 0.08
       },
       {
-        "text": "至",
-        "start_time": 0.72,
-        "end_time": 0.96
+        "text": "好",
+        "start_time": 0.08,
+        "end_time": 0.32
       },
       {
-        "text": "出",
-        "start_time": 0.96,
-        "end_time": 1.12
+        "text": "世",
+        "start_time": 0.32,
+        "end_time": 0.48
       },
       {
-        "text": "现",
-        "start_time": 1.12,
-        "end_time": 1.52
+        "text": "界",
+        "start_time": 0.48,
+        "end_time": 0.8
       },
       {
-        "text": "交",
-        "start_time": 1.52,
-        "end_time": 1.76
+        "text": "人",
+        "start_time": 1.04,
+        "end_time": 1.28
       },
       {
-        "text": "易",
-        "start_time": 1.76,
-        "end_time": 2.0
+        "text": "工",
+        "start_time": 1.28,
+        "end_time": 1.44
       },
       {
-        "text": "几",
-        "start_time": 2.0,
+        "text": "智",
+        "start_time": 1.44,
+        "end_time": 1.6
+      },
+      {
+        "text": "能",
+        "start_time": 1.6,
+        "end_time": 1.92
+      },
+      {
+        "text": "正",
+        "start_time": 1.92,
+        "end_time": 2.08
+      },
+      {
+        "text": "在",
+        "start_time": 2.08,
         "end_time": 2.24
       },
       {
-        "text": "乎",
+        "text": "改",
         "start_time": 2.24,
         "end_time": 2.48
       },
       {
-        "text": "停",
+        "text": "变",
         "start_time": 2.48,
         "end_time": 2.72
       },
       {
-        "text": "滞",
+        "text": "我",
         "start_time": 2.72,
-        "end_time": 2.88
+        "end_time": 2.8
+      },
+      {
+        "text": "们",
+        "start_time": 2.8,
+        "end_time": 2.96
       },
       {
         "text": "的",
-        "start_time": 2.88,
+        "start_time": 2.96,
         "end_time": 3.04
       },
       {
-        "text": "情",
+        "text": "生",
         "start_time": 3.04,
-        "end_time": 3.36
+        "end_time": 3.28
       },
       {
-        "text": "况",
-        "start_time": 3.36,
+        "text": "活",
+        "start_time": 3.28,
+        "end_time": 3.44
+      },
+      {
+        "text": "方",
+        "start_time": 3.44,
         "end_time": 3.68
+      },
+      {
+        "text": "式",
+        "start_time": 3.68,
+        "end_time": 3.92
       }
     ]
   }
