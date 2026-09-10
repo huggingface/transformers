@@ -48,7 +48,9 @@ jobs:
       - name: Smoke-test torch + Flash-Attention on the GPU
         run: |
           mkdir -p "${RUNNER_TEMP}/scratch"
-          docker run --rm \
+          # -i is REQUIRED: without it docker does not attach stdin, so the
+          # heredoc never reaches `python3 -` and the test silently no-ops.
+          docker run --rm -i \
             --device=/dev/kfd --device=/dev/dri \
             --security-opt seccomp=unconfined \
             -v "${RUNNER_TEMP}/scratch:/scratch" \
@@ -83,4 +85,4 @@ jobs:
             --security-opt seccomp=unconfined \
             -v "${RUNNER_TEMP}/scratch:/scratch" \
             transformers-gfx1151:ci \
-            bash -c "cd /transformers && python3 -m pytest -q tests/utils/test_modeling_utils.py -x || true"
+            bash -c "cd /transformers && python3 -m pytest -q tests/utils/test_modeling_utils.py -x"
