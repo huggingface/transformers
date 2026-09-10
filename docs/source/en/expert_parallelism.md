@@ -65,7 +65,7 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B", distributed_c
 
 The model is loaded on a 2-D `(fsdp, tp)` device mesh, and `tp_size * fsdp_size` must equal the number of processes. The expert parallel plan shards the experts across `tp`, then FSDP2 shards every parameter, experts included, across `fsdp` and owns their gradient reduction. Each `fsdp` rank trains on its own part of the batch. Nothing else changes: train with the [`Trainer`] as usual (it computes the gradient norm across the two meshes and gives each mesh its own optimizer param group), and [`~Trainer.save_model`] gathers the sharded weights and writes a regular checkpoint.
 
-On 8 GPUs, full fine-tuning of Qwen3-30B-A3B in bf16 at sequence length 2048:
+The table below compares EP-only training with 2D EP+FSDP2 on 8xH100 GPUs. The workload is full fine-tuning of Qwen3-30B-A3B in bf16 at sequence length 2048. More FSDP shards cut peak memory, and tokens/s drop some because FSDP2 all-gathers and reduce-scatters the experts across `fsdp`.
 
 | configuration | tokens/s/GPU | peak memory/GPU |
 |---|---|---|
