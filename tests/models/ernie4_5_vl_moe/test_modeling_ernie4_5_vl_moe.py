@@ -15,6 +15,8 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from transformers import (
     AutoModelForImageTextToText,
     AutoProcessor,
@@ -295,6 +297,15 @@ class Ernie4_5_VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
             "video_grid_thw": video_grid_thw,
         }
         return config, inputs_dict
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("Model cannot scale due to pre-rotations when computing freqs")
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
+
+    @unittest.skip("Model cannot scale due to pre-rotations when computing freqs")
+    def test_model_rope_scaling_frequencies(self):
+        pass
 
 
 @slow
