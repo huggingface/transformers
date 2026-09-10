@@ -348,7 +348,7 @@ For more details, see [Pipelines for inference](https://huggingface.co/docs/tran
 
 Parallelism technique in which the model is split up vertically (layer-level) across multiple GPUs, so that only one or
 several layers of the model are placed on a single GPU. Each GPU processes in parallel different stages of the pipeline
-and working on a small chunk of the batch. Learn more about how PipelineParallel works [here](perf_train_gpu_many#from-naive-model-parallelism-to-pipeline-parallelism).
+and working on a small chunk of the batch. Inference uses `pp_size` on [`~distributed.DistributedConfig`]. See [DistributedConfig](./distributed_config).
 
 ### pixel values
 

@@ -156,7 +156,8 @@ This backend requires:
 - A `torch.distributed` process group for the expert-parallel group, which the tensor-parallel wrapping supplies automatically.
 
 ```py
-import os
+from transformers import AutoModelForCausalLM
+from transformers.distributed import DistributedConfig
 
 from transformers import AutoModelForCausalLM, DistributedConfig
 

@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 Accelerate wraps the model in the appropriate distributed wrapper, moves it to the correct device, and creates a compatible optimizer. During training, Accelerate uses its own [`~accelerate.Accelerator.backward`] method to handle gradient scaling for mixed precision. [`Trainer`] calls the appropriate Accelerate APIs and delegates all distributed mechanics to Accelerate.
 
-Configure Accelerate for [`Trainer`] with either an Accelerate config file or [`TrainingArguments`].
+Configure Accelerate for [`Trainer`] with either an Accelerate config file or [`TrainingArguments`]. To shard a model at load time for a custom training loop or inference instead, use [DistributedConfig](./distributed_config). See [Choosing a strategy](./distributed_overview#two-ways-to-shard) for how the two paths differ.
 
 ## Accelerate config file
 
@@ -36,12 +36,14 @@ fsdp_config:
   fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
   fsdp_cpu_ram_efficient_loading: true
   fsdp_activation_checkpointing: false
-  fsdp_state_dict_type: SHARDED_STATE_DICT
+  fsdp_state_dict_type: FULL_STATE_DICT
   fsdp_transformer_layer_cls_to_wrap: LlamaDecoderLayer
 mixed_precision: bf16
 num_machines: 1
 num_processes: 4
 ```
+
+The FSDP keys carry an `fsdp_` prefix, which Transformers strips before reading them. The same settings passed through [`~TrainingArguments#fsdp_config`] use the bare names, so `fsdp_version` here is `version` there. See [FSDP2](./fsdp#configure-fsdp) for what each key does.
 
 Run [accelerate launch](https://huggingface.co/docs/accelerate/en/package_reference/cli#accelerate-launch) with a [`Trainer`]-based script, and Accelerate reads the config file to set up training. The [`~TrainingArguments#fsdp_config`] and [`~TrainingArguments#deepspeed`] args are unnecessary because the Accelerate config file covers the same settings.
 
@@ -70,7 +72,7 @@ Pass a backend-specific config to [`TrainingArguments`]. The [`~Trainer.create_a
 <hfoptions id="backend">
 <hfoption id="FSDP">
 
-Pass a JSON config file or dict to [`~TrainingArguments.fsdp_config`]. See [FSDP](./fsdp) for a full guide and config reference.
+Pass a JSON config file or dict to [`~TrainingArguments#fsdp_config`]. See [FSDP2](./fsdp) for a full guide and config reference.
 
 ```py
 from transformers import TrainingArguments
@@ -85,7 +87,7 @@ TrainingArguments(
 </hfoption>
 <hfoption id="DeepSpeed">
 
-Pass a JSON config file or dict to [`~TrainingArguments.deepspeed`]. See [DeepSpeed](./deepspeed) for a full guide and config reference.
+Pass a JSON config file or dict to [`~TrainingArguments#deepspeed`]. See [DeepSpeed ZeRO](./deepspeed) for a full guide and config reference.
 
 ```py
 from transformers import TrainingArguments
@@ -119,5 +121,5 @@ TrainingArguments(
 ## Next steps
 
 - See [DDP](./ddp) for data-parallel training when your model fits on one GPU.
-- See [FSDP](./fsdp) for sharding parameters, gradients, and optimizer states across GPUs.
-- See [DeepSpeed](./deepspeed) for ZeRO optimization and offloading.
+- See [FSDP2](./fsdp) for sharding parameters, gradients, and optimizer states across GPUs.
+- See [DeepSpeed ZeRO](./deepspeed) for ZeRO optimization and offloading.

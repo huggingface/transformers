@@ -13,112 +13,181 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Parallelism methods
+# N-D parallelism
 
-Multi-GPU setups are effective for accelerating training and fitting large models in memory that otherwise wouldn't fit on a single GPU. It relies on parallelizing the workload across GPUs. There are several types of parallelism such as data parallelism, tensor parallelism, pipeline parallelism, and model parallelism. Each type of parallelism splits the workload differently, whether it's the data or the model.
+N-D parallelism combines multiple parallelism strategies across a mesh of N devices. GPUs are organized into a mesh where each axis corresponds to a parallelism dimension (data, tensor, sequence, etc.). Each GPU in the mesh handles its slice of the work along each dimension.
 
-This guide will discuss the various parallelism methods, combining them, and choosing an appropriate strategy for your setup. For more details about distributed training, refer to the [Accelerate](https://hf.co/docs/accelerate/index) documentation.
+The 3D parallelism diagram below (DP x TP x SP) uses 8 GPUs. Two DP groups process different mini-batches. Within each group, each model replica is split across 2 GPUs at the tensor level, and each sequence is split across 2 GPUs. GPUs exchange partial results with collectives like all-reduce or all-gather.
 
-For a comprehensive guide on scaling large language models, check out the [Ultrascale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook), which provides detailed strategies and best practices for training at scale.
+```text
+         ◄──────────── data parallel (DP=2) ─────────────►
+                 same weights · different data
 
-## Scalability strategy
+              replica 0             replica 1
+           ┌─────────┬─────────┐  ┌─────────┬─────────┐
+seq[0:S/2] │ ▓▓▓▓▓▓▓ │ ▓▓▓▓▓▓▓ │  │ ▓▓▓▓▓▓▓ │ ▓▓▓▓▓▓▓ │ ─┐
+           │  GPU 0  │  GPU 1  │  │  GPU 4  │  GPU 5  │  │
+           ├─────────┼─────────┤  ├─────────┼─────────┤  │ SP=2
+seq[S/2:S] │ ░░░░░░░ │ ░░░░░░░ │  │ ░░░░░░░ │ ░░░░░░░ │  │
+           │  GPU 2  │  GPU 3  │  │  GPU 6  │  GPU 7  │ ─┘
+           └─────────┴─────────┘  └─────────┴─────────┘
+                └─ TP=2 ─┘              └─ TP=2 ─┘
 
-Use the [Model Memory Calculator](https://huggingface.co/spaces/hf-accelerate/model-memory-usage) to calculate how much memory a model requires. Then refer to the table below to select a strategy based on your setup.
+```
 
-| setup | scenario | strategy |
-|---|---|---|
-| single node/multi-GPU | fits on single GPU | DistributedDataParallel or ZeRO |
-|  | doesn't fit on single GPU | PipelineParallel, ZeRO or TensorParallel |
-|  | largest model layer doesn't fit | TensorParallel or ZeRO |
-| multi-node/multi-GPU | fast inter-node connectivity (NVLink or NVSwitch) | ZeRO or 3D parallelism (PipelineParallel, TensorParallel, DataParallel) |
-|  | slow inter-node connectivity | ZeRO or 3D parallelism (PipelineParallel, TensorParallel, DataParallel) |
+## Composing strategies
 
-## Data parallelism
+Stack strategies when one doesn't solve your bottleneck on its own. Each one you add costs more collective communication, so reach for a second or third only after the first is exhausted. See [Choosing a strategy](./distributed_overview) to work out which one you need first.
 
-Data parallelism evenly distributes data across multiple GPUs. Each GPU holds a copy of the model and concurrently processes their portion of the data. At the end, the results from each GPU are synchronized and combined.
+The examples below run on 8 GPUs and show three combinations worth knowing. Each is configured through [`Trainer`], which is the path that supports stacking today.
 
-Data parallelism significantly reduces training time by processing data in parallel, and it is scalable to the number of GPUs available. However, synchronizing results from each GPU can add overhead.
+<hfoptions id="parallelism-combo">
+<hfoption id="TP + SP (large layers and long sequences)">
 
-There are two types of data parallelism, DataParallel (DP) and DistributedDataParallel (DDP).
+TP splits each layer across GPUs within a node while SP splits the sequence across GPUs. Use this combination when a model's layers are too large for a single GPU *and* sequences are too long to fit in memory. Don't use it if layers already fit on one GPU because the additional collective communication from both TP and SP adds overhead.
 
-### DataParallel
+```py
+from accelerate.utils import DeepSpeedSequenceParallelConfig, ParallelismConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
+from transformers.distributed import DistributedConfig
 
-[DataParallel](https://pytorch.org/docs/stable/generated/torch.nn.DataParallel.html) supports distributed training on a *single machine* with multiple GPUs.
+model_id = "MiniMaxAI/MiniMax-M2"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-1. The default GPU, `GPU 0`, reads a batch of data and sends a mini batch of it to the other GPUs.
-2. An up-to-date model is replicated from `GPU 0` to the other GPUs.
-3. A `forward` pass is performed on each GPU and their outputs are sent to `GPU 0` to compute the loss.
-4. The loss is distributed from `GPU 0` to the other GPUs for the `backward` pass.
-5. The gradients from each GPU are sent back to `GPU 0` and averaged.
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    distributed_config=DistributedConfig(tp_size=2),
+    dtype="auto",
+)
 
-### DistributedDataParallel
+# Trainer auto-detects tp_size from the model.
+# 8 GPUs: tp=2 (from model) * sp=2 * dp_replicate=2 = 8
+parallelism_config = ParallelismConfig(
+    sp_backend="deepspeed",
+    sp_size=2,
+    dp_replicate_size=2,
+    sp_handler=DeepSpeedSequenceParallelConfig(
+        sp_seq_length_is_variable=True,
+        sp_attn_implementation="flash_attention_2",
+    ),
+)
 
-[DistributedDataParallel](https://pytorch.org/docs/main/notes/ddp.html) supports distributed training across *multiple machines* with multiple GPUs.
+training_args = TrainingArguments(
+    output_dir="./output",
+    deepspeed="ds_config.json",
+    parallelism_config=parallelism_config,
+    per_device_train_batch_size=1,
+)
 
-1. The main process replicates the model from the default GPU, `GPU 0`, to each GPU.
-2. Each GPU directly processes a mini batch of data.
-3. The local gradients are averaged across all GPUs during the `backward` pass.
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    processing_class=tokenizer,
+    train_dataset=train_dataset,
+)
+trainer.train()
+```
 
-DDP is recommended because it reduces communication overhead between GPUs, efficiently utilizes each GPU, and scales to more than one machine.
+```shell
+torchrun --nproc-per-node 8 train.py
+```
 
-### ZeRO data parallelism
+</hfoption>
+<hfoption id="TP + FSDP (large layers across nodes)">
 
-[Zero Redundancy Optimizer](https://www.deepspeed.ai/tutorials/zero/) is a more memory efficient type of data parallelism. It significantly improves memory efficiency by partitioning parameters, gradients, and optimizer states across data parallel processes to reduce memory usage. There are three ZeRO stages:
+TP splits layers across GPUs within a node and FSDP `full_shard` shards parameters, gradients, and optimizer states across the remaining GPUs (equivalent to ZeRO-3). Use this combination when a single layer doesn't fit on one GPU and you need to scale across multiple nodes. Don't use it if layers fit on one GPU because FSDP alone has lower communication overhead and is simpler to configure.
 
-- Stage 1 partitions the optimizer states
-- Stage 2 partitions the optimizer and gradient states
-- Stage 3 partitions the optimizer, gradient, and parameters
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
+from transformers.distributed import DistributedConfig
 
-<div class="flex justify-center">
-     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-zero.png"/>
-</div>
+model_id = "MiniMaxAI/MiniMax-M2"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-## Model parallelism
+# Trainer auto-detects tp_size from the model.
+# 8 GPUs: tp=2 (from model) * dp_shard=4
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    distributed_config=DistributedConfig(tp_size=2),
+    dtype="auto",
+)
 
-Model parallelism distributes a model across multiple GPUs. There are several ways to split a model, but the typical method distributes the model layers across GPUs. On the `forward` pass, the first GPU processes a batch of data and passes it to the next group of layers on the next GPU. For the `backward` pass, the data is sent backward from the final layer to the first layer.
+training_args = TrainingArguments(
+    output_dir="./output",
+    fsdp=True,
+    fsdp_config={"version": 2},
+    per_device_train_batch_size=1,
+    bf16=True,
+)
 
-Model parallelism is a useful strategy for training models that are too large to fit into the memory of a single GPU. However, GPU utilization is unbalanced because only one GPU is active at a time. Passing results between GPUs also adds communication overhead and it can be a bottleneck.
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    processing_class=tokenizer,
+    train_dataset=train_dataset,
+)
+trainer.train()
+```
 
-## Pipeline parallelism
+```shell
+torchrun --nproc-per-node 8 train.py
+```
 
-Pipeline parallelism is conceptually very similar to model parallelism, but it's more efficient because it reduces the amount of idle GPU time. Instead of waiting for each GPU to finish processing a batch of data, pipeline parallelism creates *micro-batches* of data. As soon as one micro-batch is finished, it is passed to the next GPU. This way, each GPU can concurrently process part of the data without waiting for the other GPU to completely finish processing a mini batch of data.
+</hfoption>
+<hfoption id="DP + SP (long sequences)">
 
-Pipeline parallelism shares the same advantages as model parallelism, but it optimizes GPU utilization and reduces idle time. But pipeline parallelism can be more complex because models may need to be rewritten as a sequence of [nn.Sequential](https://pytorch.org/docs/stable/generated/torch.nn.Sequential.html) modules and it also isn't possible to completely reduce idle time because the last `forward` pass must also wait for the `backward` pass to finish.
+DP replicates the model across GPUs to process different mini-batches and SP splits long sequences. Use this combination when each layer fits on a single GPU but sequences are too long. TP is not required. Don't use it if sequences fit in memory with standard DP because SP adds communication overhead for sequence chunk exchanges.
 
-## Tensor parallelism
+```py
+from accelerate.utils import DeepSpeedSequenceParallelConfig, ParallelismConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
 
-Tensor parallelism distributes large tensor computations across multiple GPUs. The tensors are sliced horizontally or vertically and each slice is processed by a separate GPU. Each GPU performs its calculations on its tensor slice and the results are synchronized at the end to reconstruct the final result.
+model_id = "MiniMaxAI/MiniMax-M2"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-Tensor parallelism is effective for training large models that don't fit into the memory of a single GPU. It is also faster and more efficient because each GPU can process its tensor slice in parallel, and it can be combined with other parallelism methods. Like other parallelism methods though, tensor parallelism adds communication overhead between GPUs.
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    dtype="auto",
+)
 
-Refer to the [Tensor parallelism](./perf_infer_gpu_multi) guide to learn how to use it for inference.
+# 8 GPUs: dp_replicate=2 * dp_shard=1 * sp=4 = 8
+parallelism_config = ParallelismConfig(
+    sp_backend="deepspeed",
+    sp_size=4,
+    dp_replicate_size=2,
+    sp_handler=DeepSpeedSequenceParallelConfig(
+        sp_seq_length_is_variable=True,
+        sp_attn_implementation="flash_attention_2",
+    ),
+)
 
-## Hybrid parallelism
+training_args = TrainingArguments(
+    output_dir="./output",
+    deepspeed="ds_config.json",
+    parallelism_config=parallelism_config,
+    per_device_train_batch_size=1,
+    bf16=True,
+)
 
-Parallelism methods can be combined to achieve even greater memory savings and more efficiently train models with billions of parameters.
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    processing_class=tokenizer,
+    train_dataset=train_dataset,
+)
+trainer.train()
+```
 
-### Data parallelism and pipeline parallelism
+```shell
+torchrun --nproc-per-node 8 train.py
+```
 
-Data and pipeline parallelism distributes the data across GPUs and divides each mini batch of data into micro-batches to achieve pipeline parallelism.
+</hfoption>
+</hfoptions>
 
-Each data parallel rank treats the process as if there were only one GPU instead of two, but GPUs 0 and 1 can offload micro-batches of data to GPUs 2 and 3 and reduce idle time.
+## Next steps
 
-This approach optimizes parallel data processing by reducing idle GPU utilization.
-
-<div class="flex justify-center">
-     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-zero-dp-pp.png"/>
-</div>
-
-### ZeRO data parallelism, pipeline parallelism, and model parallelism (3D parallelism)
-
-Data, pipeline and model parallelism combine to form [3D parallelism](https://www.microsoft.com/en-us/research/blog/deepspeed-extreme-scale-model-training-for-everyone/) to optimize memory and compute efficiency.
-
-Memory efficiency is achieved by splitting the model across GPUs and also dividing it into stages to create a pipeline. This allows GPUs to work in parallel on micro-batches of data, reducing the memory usage of the model, optimizer, and activations.
-
-Compute efficiency is enabled by ZeRO data parallelism where each GPU only stores a slice of the model, optimizer, and activations. This allows higher communication bandwidth between data parallel nodes because communication can occur independently or in parallel with the other pipeline stages.
-
-This approach is scalable to extremely large models with trillions of parameters.
-
-<div class="flex justify-center">
-     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-deepspeed-3d.png"/>
-</div>
+- See [Choosing a strategy](./distributed_overview) if you aren't sure which strategies you need.
+- See [Ulysses sequence parallelism](./deepspeed_alst) for the sequence parallel fields used above.
+- See [Debugging](./debugging) for diagnosing mesh and communication errors.
+- Read the [5D Parallelism in a Nutshell](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=5d_parallelism_in_a_nutshell) chapter from The Ultra-Scale Playbook for more details about how the different parallelism strategies interact with each other.

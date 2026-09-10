@@ -223,6 +223,8 @@
     title: Performance
   - isExpanded: false
     sections:
+    - local: distributed_overview
+      title: Choosing a strategy
     - local: accelerator_selection
       title: Accelerator selection
     - local: accelerate
@@ -236,11 +238,13 @@
     - local: deepspeed_alst
       title: Ulysses sequence parallelism
     - local: tensor_parallelism
-      title: Tensor parallelism for training
+      title: Tensor parallelism
+    - local: perf_train_gpu_many
+      title: N-D parallelism
+    - local: distributed_config
+      title: DistributedConfig
     - local: debugging
       title: Debugging
-    - local: perf_train_gpu_many
-      title: Parallelism methods
     title: Distributed training
   - isExpanded: false
     sections:
@@ -502,6 +506,8 @@
       title: Trainer
     - local: main_classes/deepspeed
       title: DeepSpeed
+    - local: main_classes/distributed
+      title: Distributed
     - local: main_classes/executorch
       title: ExecuTorch
     - local: main_classes/feature_extractor
