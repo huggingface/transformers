@@ -19,7 +19,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_flava import *
-    from .feature_extraction_flava import *
     from .image_processing_flava import *
     from .image_processing_pil_flava import *
     from .modeling_flava import *

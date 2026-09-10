@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .configuration_bert import *
     from .modeling_bert import *
     from .tokenization_bert import *
+    from .tokenization_bert_legacy import *
 else:
     import sys
 

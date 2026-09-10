@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from .configuration_gemma import *
     from .modeling_gemma import *
     from .tokenization_gemma import *
-    from .tokenization_gemma_fast import *
 else:
     import sys
 

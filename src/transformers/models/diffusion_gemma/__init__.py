@@ -19,6 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_diffusion_gemma import *
+    from .generation_diffusion_gemma import *
     from .modeling_diffusion_gemma import *
 else:
     import sys

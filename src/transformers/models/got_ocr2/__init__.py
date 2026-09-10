@@ -23,8 +23,6 @@ if TYPE_CHECKING:
     from .image_processing_pil_got_ocr2 import *
     from .modeling_got_ocr2 import *
     from .processing_got_ocr2 import *
-
-
 else:
     import sys
 

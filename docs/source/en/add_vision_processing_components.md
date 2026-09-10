@@ -166,7 +166,11 @@ Save the video processor with the checkpoint by instantiating it in the conversi
 
 ## Register the classes
 
-Expose the processing classes from the model package `__init__.py`. Follow the lazy import pattern used by nearby models and guard imports with the same optional dependencies required by each backend.
+Add the new classes to `__all__` at the bottom of the file, then regenerate `__init__.py` with:
+
+```bash
+python utils/check_inits.py --fix_and_overwrite
+```
 
 Map the new classes to the model config so the `Auto` classes can load them. The generated auto mapping file has a warning at the top. Do not edit it by hand. Add or update the model config, then run:
 

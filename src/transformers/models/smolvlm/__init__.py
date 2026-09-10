@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from .image_processing_smolvlm import *
     from .modeling_smolvlm import *
     from .processing_smolvlm import *
+    from .video_processing_smolvlm import *
 else:
     import sys
 
