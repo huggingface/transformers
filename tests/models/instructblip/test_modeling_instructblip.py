@@ -818,7 +818,6 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         self.assertEqual(generated_text, expected_text)
 
     def test_inference_flant5_xl(self):
-        # TODO(synthetic-assets): re-record after the lavis_confusing_pictures.jpg regeneration (2026-09-07).
         processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-flan-t5-xl")
         model = InstructBlipForConditionalGeneration.from_pretrained(
             "Salesforce/instructblip-flan-t5-xl",
@@ -856,7 +855,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
 
         expected_text = Expectations(
             {
-                (None, None): 'The image is unusual in that it features a yellow, blue, and red square with a crossed-out line in the middle of it. The square is placed on a white background, which makes it appear as if it is sitting on top of a gray background. The square is placed in the middle of the image, which makes it appear as if it is sitting on top of a grey background. The square is placed in the middle of the image, which makes it appear as if it is sitting on top of a grey background. The square is placed in the middle of the image, which makes it appear as if it is sitting on top of a grey background. The square is placed in the middle of the image, which makes it appear as if it is sitting on top of a grey background. The square is placed in the middle of the image, which makes it appear as if it is sitting on top',
+                (None, None): 'The unusual image depicts a man standing on top of a taxicab in the middle of a city street. The man is carrying a large toolbox, suggesting that he may be working on a construction project or repairing a vehicle. The image also features a yellow taxicab with a sign that reads "Taxi" in the upper-right corner of the image. The sign indicates that the person is a taxi driver, which may indicate that the person is a construction worker.',
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(generated_text, expected_text)
