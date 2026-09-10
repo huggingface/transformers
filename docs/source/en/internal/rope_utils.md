@@ -77,6 +77,27 @@ config.rope_parameters = {
 }
 ```
 
+## Multimodal RoPE (M-RoPE)
+
+Vision-language models that need to encode more than one positional axis per token — for example a temporal position plus a height and width grid position for image/video patches — use a variant of RoPE where the frequency bands are partitioned across axes, instead of a single set of frequencies driven by one 1D sequence position.
+
+For standard RoPE, all `head_dim // 2` frequency bands are indexed by the same position id. For this multimodal variant, those bands are split into contiguous chunks (one chunk per positional axis), each chunk is computed against a different axis's position id (e.g. temporal, height, width), and the chunks are recombined into a single set of `cos`/`sin` values applied across the full head dimension.
+
+This partitioning is controlled by an extra `mrope_section` key inside `rope_parameters`: a list of ints giving the size of each chunk, in axis order, that sums to `head_dim // 2`. It's used together with the `"default"` `rope_type` — there's no dedicated `rope_type` string for this variant yet.
+
+```python
+from transformers import Qwen2VLConfig
+
+config = Qwen2VLConfig()
+config.text_config.rope_parameters = {
+    "rope_type": "default",
+    "rope_theta": 1000000.0,
+    "mrope_section": [16, 24, 24],  # temporal, height, width frequency band sizes
+}
+```
+
+Model families that use this mechanism include `qwen2_vl`, `qwen2_5_vl`, `qwen3_vl`, `qwen3_vl_moe`, `qwen3_5`, `qwen3_5_moe`, `qwen2_5_omni`, `qwen3_omni_moe`, `qwen4_exp`, `glm4v`, `glm4v_moe`, `glm_image`, `glm_ocr`, `hunyuan_vl`, `cohere_compass`, `cosmos3_edge`, `ernie4_5_vl_moe`, `neomme`, and `paddleocr_vl`.
+
 ## Utilities
 
 [[autodoc]] RopeParameters
