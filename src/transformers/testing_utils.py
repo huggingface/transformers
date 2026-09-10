@@ -36,6 +36,7 @@ import time
 import traceback
 import types
 import unittest
+import warnings
 from collections import UserDict, defaultdict
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from contextlib import contextmanager
@@ -3543,6 +3544,199 @@ def cleanup(device: str, gc_collect=False):
         gc.collect()
     backend_empty_cache(device)
     torch.compiler.reset()
+
+
+# Attributes `unittest` may create on a test instance *after* `setUp` has run, which
+# `MemoryCleanupMixin` must not delete.
+_UNITTEST_INTERNAL_ATTRS = frozenset({"_outcome", "_subtest", "_cleanups", "_type_equality_funcs"})
+
+# Bookkeeping `MemoryCleanupMixin` puts on the test class / instance itself.
+_MEMORY_CLEANUP_ATTRS = frozenset(
+    {
+        "_memory_cleanup_class_attrs",
+        "_memory_cleanup_instance_attrs",
+        "_memory_cleanup_baseline",
+        "_memory_cleanup_rss_baseline",
+    }
+)
+
+
+def _memory_leak_settings() -> tuple[float | None, str]:
+    """Read the opt-in leak-check configuration from the environment.
+
+    Returns `(threshold_mib, mode)`; `threshold_mib` is `None` when the check is off.
+    """
+    raw = os.environ.get("TRANSFORMERS_TEST_MEMORY_LEAK_MIB", "").strip()
+    if not raw:
+        return None, "warn"
+    try:
+        threshold = float(raw)
+    except ValueError:
+        raise ValueError(
+            f"`TRANSFORMERS_TEST_MEMORY_LEAK_MIB` must be a number of MiB, got {raw!r}. Unset it to disable the check."
+        )
+    mode = os.environ.get("TRANSFORMERS_TEST_MEMORY_LEAK_MODE", "warn").strip().lower()
+    if mode not in ("warn", "error"):
+        raise ValueError(f"`TRANSFORMERS_TEST_MEMORY_LEAK_MODE` must be 'warn' or 'error', got {mode!r}.")
+    return threshold, mode
+
+
+class MemoryCleanupMixin:
+    """
+    Mixin that makes a test class give back the memory it takes, so that a leak in one test cannot OOM the next one.
+
+    Most of our integration-test OOMs come from the same three causes, and this mixin addresses all of them:
+
+    1. **No teardown at all.** The mixin runs [`cleanup`] (`gc.collect()` + `empty_cache()` + `torch.compiler.reset()`)
+       both before and after every test, so a test never inherits the previous one's leftovers.
+    2. **The model outlives the test.** `pytest` keeps test instances alive for the whole session, so a model parked
+       on `self` (directly, or via a `@cached_property`) pins its device memory until the run ends -- `gc.collect()`
+       cannot help while a live reference exists. The mixin deletes every attribute the test added to `self`, and
+       every attribute added to the class (`cls.model = ...` in `setUpClass`), before flushing the cache.
+    3. **Autograd graphs.** A forward pass outside `torch.no_grad()` keeps activations alive. Test methods run under
+       `torch.no_grad()` by default; classes that train must set `cleanup_no_grad = False`.
+
+    Put the mixin first in the bases so its `setUp`/`tearDown` wrap the rest of the MRO:
+
+    ```python
+    class MyModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+        def test_generation(self):
+            self.model = AutoModelForCausalLM.from_pretrained(...).to(torch_device)  # dropped in tearDown
+    ```
+
+    [`MemoryCleanupTestCase`] is the ready-made combination of this mixin with [`TestCasePlus`].
+
+    Class-level knobs:
+
+    - `cleanup_gc_collect` (`True`): run a full `gc.collect()`. Reference cycles -- a model captured by a closure or
+      held by a traceback -- are the common case, and `empty_cache()` alone cannot free those.
+    - `cleanup_no_grad` (`True`): run each test method under `torch.no_grad()`. Set to `False` to train or call
+      `backward()`.
+    - `cleanup_drop_attributes` (`True`): delete instance and class attributes added after setup.
+    - `cleanup_keep_attributes` (`()`): names that survive the above, for state a test class shares between tests.
+
+    Leak checking is opt-in and off by default, because collecting frees the very memory a leak reproducer needs.
+    Set `TRANSFORMERS_TEST_MEMORY_LEAK_MIB=<n>` to report any test that leaves more than `<n>` MiB allocated on the
+    device, and `TRANSFORMERS_TEST_MEMORY_LEAK_MODE=error` to turn those reports into failures.
+    """
+
+    cleanup_gc_collect: bool = True
+    cleanup_no_grad: bool = True
+    cleanup_drop_attributes: bool = True
+    cleanup_keep_attributes: tuple[str, ...] = ()
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # Snapshot before assigning, so the sentinel itself is treated as pre-existing.
+        snapshot = set(vars(cls))
+        cls._memory_cleanup_class_attrs = snapshot
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            super().tearDownClass()
+        finally:
+            if cls.cleanup_drop_attributes:
+                # `setUpClass` may have parked a model on the class; nothing else will ever drop it.
+                _drop_new_attributes(
+                    cls, getattr(cls, "_memory_cleanup_class_attrs", None), cls.cleanup_keep_attributes
+                )
+            _run_cleanup(cls.cleanup_gc_collect)
+
+    def setUp(self):
+        super().setUp()
+        # Start from a clean slate: a previous test in another class may have left memory behind.
+        _run_cleanup(self.cleanup_gc_collect)
+        self._memory_cleanup_instance_attrs = set(vars(self))
+        self._memory_cleanup_baseline = _device_memory_allocated()
+        self._memory_cleanup_rss_baseline = _process_rss()
+        if is_torch_available():
+            backend_reset_peak_memory_stats(torch_device)
+
+    def tearDown(self):
+        try:
+            super().tearDown()
+        finally:
+            if self.cleanup_drop_attributes:
+                _drop_new_attributes(
+                    self, getattr(self, "_memory_cleanup_instance_attrs", None), self.cleanup_keep_attributes
+                )
+            _run_cleanup(self.cleanup_gc_collect)
+            self._check_for_memory_leak()
+
+    def _callTestMethod(self, method):
+        if self.cleanup_no_grad and is_torch_available():
+            with torch.no_grad():
+                return super()._callTestMethod(method)
+        return super()._callTestMethod(method)
+
+    def _check_for_memory_leak(self):
+        threshold_mib, mode = _memory_leak_settings()
+        if threshold_mib is None:
+            return
+        baseline = getattr(self, "_memory_cleanup_baseline", 0)
+        leaked_mib = (_device_memory_allocated() - baseline) / 1024**2
+        rss_delta_mib = (_process_rss() - getattr(self, "_memory_cleanup_rss_baseline", 0)) / 1024**2
+        if leaked_mib <= threshold_mib:
+            return
+        peak_mib = backend_max_memory_allocated(torch_device) / 1024**2 if is_torch_available() else 0
+        message = (
+            f"{self.id()} left {leaked_mib:.1f} MiB allocated on {torch_device} after teardown "
+            f"(threshold {threshold_mib:.1f} MiB, peak during the test {peak_mib:.1f} MiB, "
+            f"CPU RSS {rss_delta_mib:+.1f} MiB). "
+            "Something still holds a reference to a device tensor -- check for models stored on `self`/the class, "
+            "captured by a closure, or kept alive by a `@cached_property`."
+        )
+        if mode == "error":
+            raise AssertionError(message)
+        warnings.warn(message, stacklevel=2)
+
+
+class MemoryCleanupTestCase(MemoryCleanupMixin, TestCasePlus):
+    """
+    [`TestCasePlus`] (auto-removed temporary dirs, resolved repo paths, `accelerate` state reset) plus
+    [`MemoryCleanupMixin`] (device memory released after every test). Use it as the base class for integration tests
+    that load real checkpoints.
+    """
+
+
+def _run_cleanup(gc_collect: bool) -> None:
+    """`cleanup(torch_device, ...)`, but a no-op instead of a skip when torch is missing."""
+    if is_torch_available():
+        cleanup(torch_device, gc_collect=gc_collect)
+
+
+def _device_memory_allocated() -> int:
+    """Bytes currently allocated on `torch_device`; `0` on backends that do not report it (including CPU)."""
+    if not is_torch_available():
+        return 0
+    return backend_memory_allocated(torch_device) or 0
+
+
+def _process_rss() -> int:
+    """Resident set size of this process in bytes; `0` when `psutil` is not installed."""
+    if not is_psutil_available():
+        return 0
+    import psutil
+
+    return psutil.Process(os.getpid()).memory_info().rss
+
+
+def _drop_new_attributes(obj: Any, known: set[str] | None, keep: Iterable[str]) -> None:
+    """Delete the attributes `obj` gained since `known` was snapshotted, so their referents can be collected."""
+    if known is None:
+        # `setUp`/`setUpClass` was overridden without calling `super()`; there is no baseline to diff against.
+        return
+    protected = known | _UNITTEST_INTERNAL_ATTRS | _MEMORY_CLEANUP_ATTRS | set(keep)
+    for name in list(vars(obj)):
+        if name in protected:
+            continue
+        try:
+            delattr(obj, name)
+        except AttributeError:
+            # Read-only or already gone (e.g. a slot, or a descriptor on a parent class).
+            pass
 
 
 # Type definition of key used in `Expectations` class.

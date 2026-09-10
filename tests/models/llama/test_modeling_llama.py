@@ -21,7 +21,7 @@ from transformers import AutoTokenizer, StaticCache, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
+    MemoryCleanupMixin,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -63,16 +63,11 @@ class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch_accelerator
 @slow
-class LlamaIntegrationTest(unittest.TestCase):
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
-        # some memory allocated in the cache, which means some object is not being released properly. This causes some
-        # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
-        # Investigate the root cause.
-        cleanup(torch_device, gc_collect=True)
+class LlamaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
+    # some memory allocated in the cache, which means some object is not being released properly. This causes some
+    # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
+    # Investigate the root cause.
 
     def test_llama_3_1_hard(self):
         """
@@ -332,12 +327,9 @@ class LlamaIntegrationTest(unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-class Mask4DTestHard(unittest.TestCase):
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
+class Mask4DTestHard(MemoryCleanupMixin, unittest.TestCase):
     def setUp(self):
-        cleanup(torch_device, gc_collect=True)
+        super().setUp()
         model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         self.model_dtype = torch.float32
         self.tokenizer = LlamaTokenizer.from_pretrained(model_name)

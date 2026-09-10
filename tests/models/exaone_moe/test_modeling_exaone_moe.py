@@ -23,11 +23,10 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
+    MemoryCleanupMixin,
     require_flash_attn,
     require_torch,
     slow,
-    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -59,23 +58,14 @@ class ExaoneMoeModelTest(CausalLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch
-class ExaoneMoeIntegrationTest(unittest.TestCase):
+class ExaoneMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     TEST_MODEL_ID = "hf-internal-testing/EXAONE-MoE-Dummy-7B-A1B"
 
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
+        # `MemoryCleanupMixin.tearDownClass` drops this again, so the model is released with the class.
         cls.model = None
-
-    @classmethod
-    def tearDownClass(cls):
-        del cls.model
-        cleanup(torch_device, gc_collect=True)
-
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     @classmethod
     def get_model(cls):

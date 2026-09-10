@@ -314,20 +314,14 @@ Mixin tests use tiny configs with random weights to verify model behavior quickl
 
 ### Writing integration tests
 
-Place integration tests in a separate test class and mark them with `@slow`. Each test downloads real weights, runs inference, and checks outputs against expected values. Call `cleanup(torch_device, gc_collect=False)` in `setUp` and `tearDown` to avoid memory residuals.
+Place integration tests in a separate test class, mark them with `@slow`, and mix in `MemoryCleanupMixin`. Each test downloads real weights, runs inference, and checks outputs against expected values.
 
 ```py
 import torch
 from transformers import AutoTokenizer
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import MemoryCleanupMixin, require_torch, slow, torch_device
 
-class MyModelIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        cleanup(torch_device, gc_collect=False)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=False)
-
+class MyModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @slow
     @require_torch
     def test_inference(self):
@@ -335,8 +329,7 @@ class MyModelIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("myorg/mymodel-base")
         inputs = tokenizer("Hello, world", return_tensors="pt").to(torch_device)
 
-        with torch.no_grad():
-            outputs = model(**inputs)
+        outputs = model(**inputs)
 
         # check against expected values
         expected_slice = torch.tensor([[-0.1234, 0.5678, -0.9012]])
@@ -344,6 +337,20 @@ class MyModelIntegrationTest(unittest.TestCase):
 ```
 
 Mark any test with `@slow` if it downloads weights, loads a large dataset, or takes more than a few seconds. The [pull request CI](./pr_checks) skips slow tests, but the nightly schedule runs them.
+
+#### Releasing memory between tests
+
+Integration tests load real checkpoints, so a test that keeps a reference to its model can OOM whatever runs after it. `MemoryCleanupMixin` handles that for the whole class:
+
+- it runs `cleanup(torch_device, gc_collect=True)` before and after every test, so a test never inherits the previous one's leftovers;
+- it deletes the attributes a test added to `self` (including `@cached_property` caches) and to the class (`cls.model = ...` in `setUpClass`), because `pytest` keeps test instances alive for the whole session and `gc.collect()` cannot free anything a live reference still points at;
+- it runs test methods under `torch.no_grad()`, so a forward pass does not retain activations.
+
+Classes that train or call `backward()` set `cleanup_no_grad = False`. Use `cleanup_keep_attributes = ("tokenizer",)` for state that should survive teardown, and `cleanup_drop_attributes = False` to keep everything. If you override `setUp`, `tearDown`, `setUpClass` or `tearDownClass`, call `super()` — the mixin diffs the attributes against a snapshot it takes there, and skips dropping when the snapshot is missing.
+
+[`MemoryCleanupTestCase`] combines the mixin with [`TestCasePlus`], for tests that also want auto-removed temporary dirs.
+
+To find a leaking test, set `TRANSFORMERS_TEST_MEMORY_LEAK_MIB` to a budget in MiB; any test that leaves more than that allocated on the device is reported with its peak usage. Add `TRANSFORMERS_TEST_MEMORY_LEAK_MODE=error` to fail instead of warn. The check is off by default because the collection it does frees the very memory a leak reproducer needs.
 
 #### Generation integration tests
 

@@ -21,7 +21,7 @@ import pytest
 from transformers import BitsAndBytesConfig, is_torch_available
 from transformers.models.ernie4_5_moe.modeling_ernie4_5_moe import load_balancing_loss_func
 from transformers.testing_utils import (
-    cleanup,
+    MemoryCleanupMixin,
     is_flaky,
     require_bitsandbytes,
     require_flash_attn,
@@ -151,21 +151,12 @@ class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch
-class Ernie4_5_MoeIntegrationTest(unittest.TestCase):
+class Ernie4_5_MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
+        # `MemoryCleanupMixin.tearDownClass` drops this again, so the model is released with the class.
         cls.model = None
-
-    @classmethod
-    def tearDownClass(cls):
-        del cls.model
-        cleanup(torch_device, gc_collect=True)
-
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     @classmethod
     def get_large_model(cls):

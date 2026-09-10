@@ -18,7 +18,7 @@ from parameterized import parameterized
 from transformers import AutoModel, AutoTokenizer, is_torch_available
 from transformers.models.jina_embeddings_v3 import JinaEmbeddingsV3Config
 from transformers.testing_utils import (
-    cleanup,
+    MemoryCleanupMixin,
     require_torch,
     slow,
     torch_device,
@@ -284,15 +284,9 @@ class JinaEmbeddingsV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 
 
 @require_torch
-class JinaEmbeddingsV3ModelIntegrationTest(unittest.TestCase):
+class JinaEmbeddingsV3ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "jinaai/jina-embeddings-v3-hf"
     prompt = "Jina Embeddings V3 is great for semantic search."
-
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     def _prepare_inputs(self):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)

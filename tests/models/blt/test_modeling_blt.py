@@ -21,7 +21,7 @@ from parameterized import parameterized
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
+    MemoryCleanupMixin,
     require_torch,
     require_torch_accelerator,
     require_torch_bf16,
@@ -276,16 +276,11 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
-class BltIntegrationTest(unittest.TestCase):
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
-        # some memory allocated in the cache, which means some object is not being released properly. This causes some
-        # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
-        # Investigate the root cause.
-        cleanup(torch_device, gc_collect=True)
+class BltIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
+    # some memory allocated in the cache, which means some object is not being released properly. This causes some
+    # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
+    # Investigate the root cause.
 
     @slow
     def test_model(self):
