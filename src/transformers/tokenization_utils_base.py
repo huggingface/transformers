@@ -1776,9 +1776,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         else:
             init_kwargs = init_configuration
 
-        if resolved_vocab_files.get("tokenizer_file", None) is not None:
-            init_kwargs.pop("add_bos_token", None)
-            init_kwargs.pop("add_eos_token", None)
+        # `add_bos_token` / `add_eos_token` from the tokenizer config are kept here on purpose.
+        # Classes that rebuild their backend tokenizer (e.g. GPTNeoXTokenizer) use them to fix up
+        # the post-processor serialized in `tokenizer.json`: a declared flag takes precedence over
+        # the matching serialized side, while undeclared sides keep the serialized behavior.
+        # Stripping them here silently broke checkpoints whose flags disagree with their serialized
+        # post-processor (e.g. allenai/OLMo-7B-hf), which is what #47988 addressed on the class side.
 
         # If independent chat template file(s) exist, they take priority over template entries in the tokenizer config
         chat_templates = {}

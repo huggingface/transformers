@@ -17,6 +17,7 @@ see tokenization_utils.py
 """
 
 import copy
+import inspect
 import json
 import os
 from collections import defaultdict
@@ -85,6 +86,37 @@ VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE, "vocab_file": TIKTOKEN_VO
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
+def _extract_template_sides(tokenizer_json):
+    """
+    Return the special tokens a serialized ``TemplateProcessing`` post-processor prepends and
+    appends, as ``{"prefix": token, "suffix": token}``, or ``None`` when it is not a
+    ``TemplateProcessing`` or its template does not cleanly split into prefix/suffix sides.
+    """
+    post_processor = tokenizer_json.get("post_processor")
+    if not isinstance(post_processor, dict) or post_processor.get("type") != "TemplateProcessing":
+        return None
+
+    def template_sides(side):
+        template = post_processor.get(side)
+        if not isinstance(template, list) or not template:
+            return (None, None)
+        first = template[0] if isinstance(template[0], dict) else None
+        last = template[-1] if len(template) > 1 and isinstance(template[-1], dict) else None
+        prefix = next(iter(first.values())).get("id") if first is not None and "SpecialToken" in first else None
+        suffix = next(iter(last.values())).get("id") if last is not None and "SpecialToken" in last else None
+        return (prefix, suffix)
+
+    sides = {}
+    for position, index in (("prefix", 0), ("suffix", 1)):
+        candidates = {info[index] for info in map(template_sides, ("single", "pair")) if info[index] is not None}
+        if len(candidates) > 1:
+            # single and pair templates disagree on this side: fall back to a full rebuild
+            return None
+        if candidates:
+            sides[position] = candidates.pop()
+    return sides or None
+
+
 class TokenizersBackend(PreTrainedTokenizerBase):
     """
     Base class for all fast tokenizers (wrapping HuggingFace tokenizers library).
@@ -117,6 +149,20 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             and os.path.isfile(fast_tokenizer_file)
             and (cls is TokenizersBackend or "__init__" not in cls.__dict__ or trust_remote_code)
         ):
+            # When flags are declared, update_post_processor reconciles against the serialized
+            # template: carry its sides so undeclared sides keep the serialized behavior. Only
+            # pass them when __init__ tolerates extra kwargs (remote-code classes may be rigid).
+            if "add_bos_token" in local_kwargs or "add_eos_token" in local_kwargs:
+                try:
+                    with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:
+                        serialized_pp_sides = _extract_template_sides(json.load(tokenizer_handle))
+                except (OSError, json.JSONDecodeError):
+                    serialized_pp_sides = None
+                accepts_extra_kwargs = any(
+                    param.kind is param.VAR_KEYWORD for param in inspect.signature(cls.__init__).parameters.values()
+                )
+                if serialized_pp_sides and accepts_extra_kwargs:
+                    local_kwargs["_serialized_pp_sides"] = serialized_pp_sides
             local_kwargs["tokenizer_object"] = TokenizerFast.from_file(fast_tokenizer_file)
             return local_kwargs
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
@@ -124,6 +170,13 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             # from the file so the reconstructed tokenizer matches the tokenizer.json
             with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:
                 tokenizer_json = json.load(tokenizer_handle)
+
+            # Classes with a custom __init__ rebuild their backend tokenizer, so the serialized
+            # post-processor only survives through this kwarg. Carry which sides it adds so
+            # update_post_processor can keep the ones the add_bos/eos flags do not declare.
+            serialized_pp_sides = _extract_template_sides(tokenizer_json)
+            if serialized_pp_sides:
+                local_kwargs["_serialized_pp_sides"] = serialized_pp_sides
 
             # Build a minimal tokenizer (empty vocab/merges) to cheaply extract post_processor,
             # padding and truncation as Rust objects — avoids parsing the full vocab via from_file.
@@ -464,8 +517,13 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         explicit_bos_eos_in_kwargs = "add_bos_token" in kwargs or "add_eos_token" in kwargs
         self._add_bos_token = kwargs.get("add_bos_token", False)
         self._add_eos_token = kwargs.get("add_eos_token", False)
+        # Whether each flag was explicitly provided (from tokenizer_config.json or by the caller).
+        # Undeclared sides leave a serialized post-processor untouched in update_post_processor.
+        self._add_bos_token_declared = "add_bos_token" in kwargs
+        self._add_eos_token_declared = "add_eos_token" in kwargs
         if post_processor := kwargs.pop("post_processor", None):  # most reliable way to get the post-processor
             self._tokenizer.post_processor = post_processor
+        self._serialized_pp_sides = kwargs.pop("_serialized_pp_sides", None)
         self._should_update_post_processor = explicit_bos_eos_in_kwargs or self._tokenizer.post_processor is None
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
@@ -648,14 +706,32 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if eos is None and self.add_eos_token:
             self.add_eos_token = False
 
-        single = f"{(bos + ':0 ') if self.add_bos_token else ''}$A:0{(' ' + eos + ':0') if self.add_eos_token else ''}"
-        pair = f"{single}{(' ' + bos + ':1') if self.add_bos_token else ''} $B:1{(' ' + eos + ':1') if self.add_eos_token else ''}"
+        # Each side defaults to the add_bos_token/add_eos_token settings. When the backend
+        # tokenizer was rebuilt from a tokenizer.json (classes with a custom __init__, e.g.
+        # GPTNeoXTokenizer), a side not covered by an explicitly-declared flag keeps the behavior
+        # of the serialized post-processor instead (e.g. the [CLS]/[SEP] template of
+        # blab-jhu/test-32m-dec next to its add_bos_token: true). Idempotent: this method runs
+        # again from _post_init and from the property setters.
+        add_bos, bos_side, bos_side_id = self.add_bos_token, bos, bos_token_id
+        add_eos, eos_side, eos_side_id = self.add_eos_token, eos, eos_token_id
+        serialized_sides = self._serialized_pp_sides or {}
+        if not self._add_bos_token_declared:
+            serialized_prefix = serialized_sides.get("prefix")
+            if serialized_prefix is not None:
+                add_bos, bos_side, bos_side_id = True, serialized_prefix, self.convert_tokens_to_ids(serialized_prefix)
+        if not self._add_eos_token_declared:
+            serialized_suffix = serialized_sides.get("suffix")
+            if serialized_suffix is not None:
+                add_eos, eos_side, eos_side_id = True, serialized_suffix, self.convert_tokens_to_ids(serialized_suffix)
+
+        single = f"{(bos_side + ':0 ') if add_bos else ''}$A:0{(' ' + eos_side + ':0') if add_eos else ''}"
+        pair = f"{single}{(' ' + bos_side + ':1') if add_bos else ''} $B:1{(' ' + eos_side + ':1') if add_eos else ''}"
 
         special_tokens = []
-        if self.add_bos_token:
-            special_tokens.append((bos, bos_token_id))
-        if self.add_eos_token:
-            special_tokens.append((eos, eos_token_id))
+        if add_bos:
+            special_tokens.append((bos_side, bos_side_id))
+        if add_eos:
+            special_tokens.append((eos_side, eos_side_id))
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=single, pair=pair, special_tokens=special_tokens
         )
@@ -671,11 +747,13 @@ class TokenizersBackend(PreTrainedTokenizerBase):
     @add_eos_token.setter
     def add_eos_token(self, value):
         object.__setattr__(self, "_add_eos_token", value)
+        self._add_eos_token_declared = True
         self.update_post_processor()
 
     @add_bos_token.setter
     def add_bos_token(self, value):
         object.__setattr__(self, "_add_bos_token", value)
+        self._add_bos_token_declared = True
         self.update_post_processor()
 
     def _post_init(self):
