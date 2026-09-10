@@ -134,11 +134,14 @@ class EsmForProteinFoldingOutput(ModelOutput):
     max_predicted_aligned_error: torch.FloatTensor | None = None
 
 
-def is_fp16_enabled(device_type):
+def is_fp16_enabled(device_type, tensor):
     # Autocast world
     autocast_dtype = torch.get_autocast_dtype(device_type)
     fp16_enabled = autocast_dtype == torch.float16
     fp16_enabled = fp16_enabled and torch.is_autocast_enabled(device_type)
+
+    # Explicit cast world
+    fp16_enabled = fp16_enabled or tensor.dtype == torch.float16
 
     return fp16_enabled
 
@@ -861,14 +864,24 @@ class EsmFoldTriangleMultiplicativeUpdate(nn.Module):
         b = b * self.linear_b_p(z)
 
         device_type = a.device.type if a.device.type != "mps" else "cpu"
-        if is_fp16_enabled(device_type):
+        if is_fp16_enabled(device_type, a):
             with maybe_autocast(device_type=device_type, enabled=False):
                 x = self._combine_projections(a.float(), b.float())
+
+                # Use fp32 for layer norm to avoid fp16 overflow
+                x = torch.nn.functional.layer_norm(
+                    x,
+                    self.layer_norm_out.normalized_shape,
+                    self.layer_norm_out.weight.float(),
+                    self.layer_norm_out.bias.float(),
+                    self.layer_norm_out.eps,
+                )
+            x = x.to(a.dtype)
         else:
             x = self._combine_projections(a, b)
+            x = self.layer_norm_out(x)
 
         del a, b
-        x = self.layer_norm_out(x)
         x = self.linear_z(x)
         g = self.sigmoid(self.linear_g(z))
         x = x * g
@@ -1484,7 +1497,7 @@ class EsmFoldInvariantPointAttention(nn.Module):
 
         # [*, H, N_res, N_res]
         device_type = q.device.type if q.device.type != "mps" else "cpu"
-        if is_fp16_enabled(device_type):
+        if is_fp16_enabled(device_type, q):
             with maybe_autocast(device_type=device_type, enabled=False):
                 a = torch.matmul(
                     permute_final_dims(q.float(), (1, 0, 2)),  # [*, H, N_res, C_hidden]
