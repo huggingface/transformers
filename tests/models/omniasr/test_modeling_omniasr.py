@@ -309,8 +309,9 @@ class OmniASRForCTCIntegrationTest(unittest.TestCase):
 
         inputs = self.processor(samples)
         inputs.to(model.device, dtype=self.dtype)
+        encoder_lengths = model._get_subsampling_output_length(inputs["attention_mask"].sum(-1))
+
         predicted_ids = model.generate(**inputs)
-        encoder_lengths = model._get_feat_extract_output_lengths(inputs["attention_mask"].sum(-1))
         for idx, length in enumerate(encoder_lengths.tolist()):
             torch.testing.assert_close(predicted_ids[idx, :length].cpu(), EXPECTED_TOKEN_IDS[idx, :length])
         predicted_transcripts = self.processor.decode(predicted_ids, skip_special_tokens=True)

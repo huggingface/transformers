@@ -19,8 +19,6 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import CompileConfig
-from ...integrations.deepspeed import is_deepspeed_zero3_enabled
-from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
@@ -51,7 +49,7 @@ from ..wav2vec2.modeling_wav2vec2 import (
 from .configuration_omniasr import OmniASRConfig, OmniASRCTCConfig, OmniASREncoderConfig
 
 
-# NOTE: Different from Wav2Vec2PositionalConvEmbedding: no weight norm and has residual
+# NOTE: Simplified version of Wav2Vec2PositionalConvEmbedding
 class OmniASRPositionalConvEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -65,14 +63,12 @@ class OmniASRPositionalConvEmbedding(nn.Module):
         self.activation = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states):
-        residual = hidden_states
-        hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = self.conv(hidden_states)
+        position_embeddings = hidden_states.transpose(1, 2)
+        position_embeddings = self.conv(position_embeddings)
         # Instead of `Wav2Vec2SamePadLayer`, in-line removal of padding
-        hidden_states = hidden_states[:, :, :-1]
-        hidden_states = self.activation(hidden_states)
-        hidden_states = hidden_states.transpose(1, 2)
-        return hidden_states + residual
+        position_embeddings = position_embeddings[:, :, :-1]
+        position_embeddings = self.activation(position_embeddings)
+        return position_embeddings.transpose(1, 2)
 
 
 class OmniASRAttention(Wav2Vec2Attention):
@@ -113,24 +109,39 @@ class OmniASRLayerNormConvLayer(Wav2Vec2LayerNormConvLayer):
         self.activation = ACT2FN[config.hidden_act]
 
 
+# NOTE: similar to `ParakeetEncoderSubsamplingConv2D` but for 1D, and a replacement for `Wav2Vec2FeatureEncoder` and `Wav2Vec2FeatureProjection`
+class OmniASRSubsamplingConv1D(nn.Module):
+    def __init__(self, config: OmniASREncoderConfig):
+        super().__init__()
+        self.conv_layers = nn.ModuleList(
+            [OmniASRLayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
+        )
+        self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
+        self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
+
+    def forward(self, input_values: torch.Tensor) -> torch.Tensor:
+        hidden_states = input_values[:, None]
+
+        for conv_layer in self.conv_layers:
+            hidden_states = conv_layer(hidden_states)
+        hidden_states = hidden_states.transpose(1, 2)
+
+        hidden_states = self.layer_norm(hidden_states)
+        return self.projection(hidden_states)
+
+
 @auto_docstring
 class OmniASRPreTrainedModel(ParakeetPreTrainedModel):
     main_input_name = "input_values"
     _supports_flash_attn = True
-    # Declared by `OmniASREncoder`; composite models pick them up from their audio tower.
     _no_split_modules = None
     _can_record_outputs = None
 
     def _init_weights(self, module):
         raise AttributeError("Normal super call")
 
-    def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
-        raise AttributeError("Parakeet's conv subsampling helper, which OmniASR does not have.")
-
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int) -> torch.LongTensor | int:
-        """
-        Computes the output length of the convolutional layers
-        """
+    def _get_subsampling_output_length(self, input_lengths: torch.LongTensor | int) -> torch.LongTensor | int:
+        """Computes the output length of the convolutional layers."""
 
         def _conv_out_length(input_length, kernel_size, stride):
             return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
@@ -141,17 +152,6 @@ class OmniASRPreTrainedModel(ParakeetPreTrainedModel):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
 
         return input_lengths
-
-    def _get_output_attention_mask(self, attention_mask: torch.Tensor, target_length: int | None = None):
-        """
-        Convert the input attention mask to its subsampled form. `target_length` sets the desired output length, useful
-        when the attention mask length differs from `sum(-1).max()` (i.e., when the longest sequence in the batch is padded)
-        """
-        output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
-        # Use target_length if provided, otherwise use max length in batch
-        max_length = target_length if target_length is not None else output_lengths.max()
-        attention_mask = torch.arange(max_length, device=attention_mask.device) < output_lengths[:, None]
-        return attention_mask
 
 
 class OmniASREncoderModelOutput(ParakeetEncoderModelOutput):
@@ -179,24 +179,16 @@ class OmniASREncoder(OmniASRPreTrainedModel):
     def __init__(self, config: OmniASREncoderConfig):
         super().__init__(config)
 
-        # Convolutional feature encoder. OmniASR always layer-norms the convolutions
-        # (`feature_extractor_layer_norm_convs=True` upstream), so there is no group-norm variant.
-        self.conv_layers = nn.ModuleList(
-            [OmniASRLayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
-        )
+        self.gradient_checkpointing = False
 
-        # Projection from the convolutional feature dimension to the transformer's
-        self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
-        self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
+        self.hidden_dropout = config.hidden_dropout
+        self.layerdrop = config.layerdrop
 
-        # Transformer encoder
-        self.pos_conv_embed = OmniASRPositionalConvEmbedding(config)
+        self.subsampling = OmniASRSubsamplingConv1D(config)
+        self.encode_positions = OmniASRPositionalConvEmbedding(config)
         self.layers = nn.ModuleList([OmniASREncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.hidden_dropout = config.hidden_dropout
 
-        self.gradient_checkpointing = False
-        # Initialize weights and apply final processing
         self.post_init()
 
     @auto_docstring
@@ -212,28 +204,15 @@ class OmniASREncoder(OmniASRPreTrainedModel):
         r"""
         output_attention_mask (`bool`, *optional*, defaults to `True`):
             Whether to return the subsampled attention mask. Only effective when `attention_mask` is provided.
-
-        Encode raw audio into hidden states with the convolutional feature encoder followed by the transformer encoder.
         """
-        hidden_states = input_values[:, None]
-
-        for conv_layer in self.conv_layers:
-            hidden_states = conv_layer(hidden_states)
-        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = self.subsampling(input_values)
 
         output_mask = None
         if attention_mask is not None:
-            # compute reduced attention_mask corresponding to feature vectors
             output_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
             attention_mask = output_mask
-
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.projection(hidden_states)
-
-        if attention_mask is not None:
             # make sure padded tokens output 0
-            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            hidden_states[~expand_attention_mask] = 0
+            hidden_states = hidden_states.masked_fill(~output_mask[..., None], 0.0)
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
@@ -241,18 +220,19 @@ class OmniASREncoder(OmniASRPreTrainedModel):
             attention_mask=attention_mask,
         )
 
-        # NOTE (ebezzam): no residual and layer norm here (wrt Wav2Vec2Encoder)
-        hidden_states = self.pos_conv_embed(hidden_states)
-        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
+        position_embeddings = self.encode_positions(hidden_states)
+        hidden_states = hidden_states + position_embeddings
 
-        for layer in self.layers:
+        for encoder_layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            dropout_probability = torch.rand([])
+            to_drop = False
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:  # skip the layer
+                    to_drop = True
 
-            skip_the_layer = self.training and dropout_probability < self.config.layerdrop
-            if not skip_the_layer or synced_gpus:
-                # under fsdp or deepspeed zero3 all gpus must run in sync
-                hidden_states = layer(hidden_states, attention_mask=attention_mask, **kwargs)
+            if not to_drop:
+                hidden_states = encoder_layer(hidden_states, attention_mask=attention_mask, **kwargs)
 
         # NOTE (ebezzam): layer norm applied after the layers (wrt Wav2Vec2Encoder, which applies it before)
         hidden_states = self.final_layer_norm(hidden_states)
@@ -260,7 +240,7 @@ class OmniASREncoder(OmniASRPreTrainedModel):
 
         return OmniASREncoderModelOutput(
             last_hidden_state=hidden_states,
-            attention_mask=output_mask.int() if output_mask is not None and output_attention_mask else None,
+            attention_mask=output_mask.int() if output_attention_mask and output_mask is not None else None,
         )
 
 

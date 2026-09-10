@@ -109,16 +109,11 @@ def get_encoder_convert_list(target_attr="encoder"):
     # AudioFlamingo3 and Qwen3ASR), so there is no `feature_extractor` / `feature_projection` / `encoder` nesting.
     prefix = f"{target_attr}." if target_attr else ""
     return [
-        # Must come first: the frontend norm below renames *to* `{prefix}layer_norm`, so this pattern would
-        # match it a second time and collapse both norms onto `{prefix}final_layer_norm`.
         ("encoder.layer_norm", f"{prefix}final_layer_norm"),
-        # convolutional feature encoder
-        ("encoder_frontend.feature_extractor.layers", f"{prefix}conv_layers"),
-        # projection to the transformer's hidden size
-        ("encoder_frontend.post_extract_layer_norm", f"{prefix}layer_norm"),
-        ("encoder_frontend.model_dim_proj", f"{prefix}projection"),
-        # transformer encoder
-        ("encoder_frontend.pos_encoder.conv", f"{prefix}pos_conv_embed.conv"),
+        ("encoder_frontend.feature_extractor.layers", f"{prefix}subsampling.conv_layers"),
+        ("encoder_frontend.post_extract_layer_norm", f"{prefix}subsampling.layer_norm"),
+        ("encoder_frontend.model_dim_proj", f"{prefix}subsampling.projection"),
+        ("encoder_frontend.pos_encoder.conv", f"{prefix}encode_positions.conv"),
         ("encoder.layers", f"{prefix}layers"),
         # Order matters: specific patterns before general ones
         ("self_attn_layer_norm", "layer_norm"),
@@ -166,10 +161,9 @@ def _rename_keys(state_dict, convert_list, applies, verbose=False):
     """
     Apply `convert_list` to the keys of `state_dict`, returning a new dict.
 
-    A new dict rather than an in-place rename because a rename can be a *swap*: for `OmniASRForCTC` the frontend
-    norm becomes `encoder.layer_norm` while the old `encoder.layer_norm` becomes `encoder.final_layer_norm`.
-    Renaming in place would make the first write land on a key the loop has not visited yet, silently clobbering
-    one tensor and dropping the other. The collision check makes any such future clash fail loudly.
+    A new dict rather than an in-place rename because a rename can be a *swap*: renaming in place would make a
+    write land on a key the loop has not visited yet, silently clobbering one tensor and dropping the other. The
+    collision check makes any such clash fail loudly.
     """
     renamed = {}
     sources = {}
@@ -284,9 +278,9 @@ def param_count(model):
 def _get_pos_conv(hf_model):
     """Locate the positional convolution, whichever OmniASR class wraps the speech encoder."""
     for name, module in hf_model.named_modules():
-        if name.endswith("pos_conv_embed"):
+        if name.endswith("encode_positions"):
             return module.conv
-    raise ValueError(f"Could not find `pos_conv_embed` in {hf_model.__class__.__name__}.")
+    raise ValueError(f"Could not find `encode_positions` in {hf_model.__class__.__name__}.")
 
 
 def apply_weight_norm(hf_model):
