@@ -59,6 +59,11 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("data2vec-audio", {"torch": "Wav2Vec2AudioProcessor", "numpy": "Wav2Vec2AudioProcessorNumpy"}),
         ("dia", {"torch": "DiaAudioProcessor", "numpy": "DiaAudioProcessorNumpy"}),
         ("encodec", {"torch": "EncodecAudioProcessor", "numpy": "EncodecAudioProcessorNumpy"}),
+        ("fun_asr_nano", {"torch": "FunAsrNanoAudioProcessor", "numpy": "FunAsrNanoAudioProcessorNumpy"}),
+        (
+            "fun_asr_nano_encoder",
+            {"torch": "FunAsrNanoAudioProcessor", "numpy": "FunAsrNanoAudioProcessorNumpy"},
+        ),
         ("gemma3n", {"torch": "Gemma3nAudioProcessor", "numpy": "Gemma3nAudioProcessorNumpy"}),
         ("gemma4", {"torch": "Gemma4AudioProcessor", "numpy": "Gemma4AudioProcessorNumpy"}),
         (
