@@ -2136,7 +2136,8 @@ class GenerationMixin(ContinuousMixin):
                     "cache, please open an issue and tag @zucchini-nlp."
                 )
 
-            cache_config = generation_config.cache_config if generation_config.cache_config is not None else {}
+            # Copied, as `generate` may be called several times with the same `cache_config`, whose keys are consumed
+            cache_config = dict(generation_config.cache_config) if generation_config.cache_config is not None else {}
             cache_config.setdefault("config", self.config.get_text_config(decoder=True))
             backend = cache_config.pop("backend", "quanto")
             model_kwargs[cache_name] = QuantizedCache(backend=backend, **cache_config)

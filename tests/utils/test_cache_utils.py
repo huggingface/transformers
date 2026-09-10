@@ -324,6 +324,36 @@ class CacheIntegrationTest(unittest.TestCase):
 
         # Check that something is actually quantized
 
+    def test_quantized_cache_config_is_not_mutated(self):
+        """
+        Tests that `generate` does not consume the entries of the `cache_config` it is given, which would silently
+        change the cache of any subsequent call sharing that dict.
+        """
+        if not is_optimum_quanto_available():
+            self.skipTest("Quanto is not available")
+
+        # `QuantizedCache` only supports full attention, so the sliding window of the shared model is unset here
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-LlamaForCausalLM", device_map="auto"
+        )
+        inputs = self.tokenizer(["The cat"], return_tensors="pt").to(model.device)
+        cache_config = {"backend": "quanto", "nbits": 4, "q_group_size": 16, "residual_length": 4}
+        expected_cache_config = cache_config.copy()
+
+        for _ in range(2):
+            gen_out = model.generate(
+                **inputs,
+                do_sample=False,
+                max_new_tokens=3,
+                return_dict_in_generate=True,
+                cache_implementation="quantized",
+                cache_config=cache_config,
+                disable_compile=True,
+            )
+            self.assertIsInstance(gen_out.past_key_values, QuantizedCache)
+            self.assertEqual(len(gen_out.past_key_values.layers), model.config.num_hidden_layers)
+            self.assertEqual(cache_config, expected_cache_config)
+
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_extra_left_padding(self, cache_implementation):
         """Tests that adding extra left-padding does not affect the generation with the cache"""
