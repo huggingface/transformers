@@ -3,7 +3,6 @@ name: Anti-Slop
 permissions:
   contents: read
   issues: read
-  pull-requests: write
 
 on:
   pull_request_target:
@@ -12,6 +11,8 @@ on:
 jobs:
   anti-slop:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     steps:
       - uses: peakoss/anti-slop@57858eead489d08b255fab2af45a506c2ca6eab2 # v0.3.0
         with:
