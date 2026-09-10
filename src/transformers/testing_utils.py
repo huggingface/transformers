@@ -4117,7 +4117,9 @@ def _patch_with_call_info(module_or_class, attr_name, _parse_call_info_func, tar
 
             # This is specific
             info = _parse_call_info_func(orig_method, args, kwargs, call_argument_expressions, target_args)
-            info = _prepare_debugging_info(test_info, info)
+            # An empty `info` means the call site's expressions could not be matched to this call
+            # (a delegated call, see `_parse_call_info`): don't append a record with no values.
+            info = _prepare_debugging_info(test_info, info) if info else ""
 
             # If the test is running in a CI environment (e.g. not a manual run), let's raise and fail the test, so it
             # behaves as usual.
@@ -4170,6 +4172,15 @@ def _parse_call_info(func, args, kwargs, call_argument_expressions, target_args)
         # (This part is very unlikely what a user would be interest to know)
         call_argument_expressions["positional_args"] = ["self"] + call_argument_expressions["positional_args"]
 
+    # The expressions are parsed from the *source line of the call site*, so they only describe this
+    # call if the counts line up. They do not when a patched method is reached by delegation from
+    # another one: `assertListEqual(a, b)` calls `assertSequenceEqual(a, b, msg, seq_type=list)`, so
+    # `args` gains entries the caller's source line never mentioned. Indexing anyway raised
+    # `IndexError` and took the test down with it; indexing "safely" would be worse, silently
+    # attributing the wrong expression to a value. Report nothing instead.
+    if len(args) != len(call_argument_expressions["positional_args"]):
+        return ""
+
     param_position_mapping = {param_name: idx for idx, param_name in enumerate(signature_names)}
 
     arg_info = {}
@@ -4215,6 +4226,9 @@ def patch_testing_methods_to_collect_info():
     _patch_with_call_info(unittest.case.TestCase, "assertListEqual", _parse_call_info, target_args=("list1", "list2"))
     _patch_with_call_info(
         unittest.case.TestCase, "assertTupleEqual", _parse_call_info, target_args=("tuple1", "tuple2")
+    )
+    _patch_with_call_info(
+        unittest.case.TestCase, "assertSequenceEqual", _parse_call_info, target_args=("seq1", "seq2")
     )
     _patch_with_call_info(unittest.case.TestCase, "assertSetEqual", _parse_call_info, target_args=("set1", "set1"))
     _patch_with_call_info(unittest.case.TestCase, "assertDictEqual", _parse_call_info, target_args=("d1", "d2"))
@@ -4267,6 +4281,12 @@ def _format_tensor(t, indent_level=0, sci_mode=None):
 
         # We work directly with the string representation instead the tensor itself
         t_str = str(t)
+
+        # A non-default dtype is repr'd as a trailing kwarg, e.g.
+        # `tensor([83, 362], dtype=torch.int16)`. It is not part of the value, and
+        # stripping only `tensor(` / `)` leaves it stranded inside the literal,
+        # which then does not parse (integer tensors hit this).
+        t_str = re.sub(r",\s*dtype=torch\.\w+", "", t_str)
 
         # remove `tensor( ... )` so keep only the content
         t_str = t_str.replace("tensor(", "").replace(")", "")
@@ -4323,6 +4343,11 @@ def _quote_string(s):
 
     We choice double quotes over single quote despite `str(s)` would give `'abc'` instead of `"abc"`.
     """
+    # Backslashes first: escaping the quotes below adds none, but a backslash
+    # already in `s` would otherwise escape whatever follows it -- a value ending
+    # in one swallows the closing quote and the literal no longer parses.
+    s = s.replace("\\", "\\\\")
+
     has_single_quote = "'" in s
     has_double_quote = '"' in s
 
@@ -4482,10 +4507,14 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
             else:
                 groups.append(buf)
 
+        # a 1-element tuple needs its trailing comma or the value changes type:
+        # `(5)` parses back as the int 5, not as `(5,)`
+        trailing = "," if isinstance(obj, tuple) and len(obj) == 1 else ""
+
         output = f"{' ' * 4 * indent}{p1}\n"
         element_strings = [f"{' ' * (4 * (indent + 1))}" + ", ".join(buf) for buf in groups]
         output += ",\n".join(element_strings)
-        output += f"\n{' ' * 4 * indent}{p2}"
+        output += f"{trailing}\n{' ' * 4 * indent}{p2}"
 
         # if all elements are in one-line
         no_new_line_in_elements = all("\n" not in x for x in element_strings)
@@ -4496,7 +4525,7 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
         # will be `True`.
         if could_use_one_line:
             one_line_form = ", ".join([x.lstrip() for x in element_strings])
-            one_line_form = f"{p1}{one_line_form}{p2}"
+            one_line_form = f"{p1}{one_line_form}{trailing}{p2}"
 
             if mode == "one-line":
                 return output
@@ -4522,10 +4551,17 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
                             return False
 
                         # only one element that is iterable, but not the same type as `obj` --> no one line repr.
-                        if type(obj) is not type(obj[0]):
+                        # (`obj[0]` on a dict is a *key* lookup, not positional: use its single value)
+                        only_element = next(iter(obj.values())) if type(obj) is dict else obj[0]
+                        if type(obj) is not type(only_element):
                             return False
 
                         # one-line repr. if possible, without width limit
+                        return no_new_line_in_elements
+
+                    # empty container: nothing to inspect, and `element_types[0]`
+                    # below would raise IndexError
+                    if not element_types:
                         return no_new_line_in_elements
 
                     # all elements are of simple types, but more than one type --> no one line repr.
@@ -4550,6 +4586,9 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
             # width condition combined with specific mode conditions
             if use_one_line_repr(obj):
                 output = f"{' ' * 4 * indent}{one_line_form}"
+    else:
+        # anything else (e.g. `torch.Size`, `numpy` scalars): fall back to `repr`, which stays copy-pastable
+        output = repr(obj)
 
     cache[(id(obj), indent, mode, prefix)] = output
 

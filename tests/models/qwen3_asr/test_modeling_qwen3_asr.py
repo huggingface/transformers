@@ -187,7 +187,7 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "audio",
-                            "path": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav",
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/mandarin_voxcpm_zh.wav",
                         },
                     ],
                 }
@@ -288,7 +288,7 @@ class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
         model = self._load_aligner()
         audio_urls = [
             "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav",
-            "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav",
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/mandarin_voxcpm_zh.wav",
         ]
 
         batch_timestamps = self._run_alignment(
@@ -298,13 +298,13 @@ class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
             language=[e["language"] for e in expected_batch],
         )
 
+        # Compare each sample's timestamps as one list rather than element by element: `zip` would
+        # silently truncate a short prediction, and an element-wise `assertAlmostEqual` reports a
+        # bare "0.24 != 0.32" naming neither the sample nor the word it belongs to.
+        def as_grid(time_stamps):
+            # Alignments land on the feature extractor's frame grid, so 2 decimals is exact.
+            return [(t["text"], round(t["start_time"], 2), round(t["end_time"], 2)) for t in time_stamps]
+
         self.assertEqual(len(batch_timestamps), len(expected_batch))
         for sample_idx, (pred_ts, exp) in enumerate(zip(batch_timestamps, expected_batch)):
-            self.assertEqual(
-                len(pred_ts),
-                len(exp["time_stamps"]),
-                f"Sample {sample_idx}: expected {len(exp['time_stamps'])} timestamps, got {len(pred_ts)}",
-            )
-            for pred, exp_ts in zip(pred_ts, exp["time_stamps"]):
-                self.assertAlmostEqual(pred["start_time"], exp_ts["start_time"])
-                self.assertAlmostEqual(pred["end_time"], exp_ts["end_time"])
+            self.assertEqual(as_grid(pred_ts), as_grid(exp["time_stamps"]), f"Sample {sample_idx}")
