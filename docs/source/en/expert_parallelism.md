@@ -75,9 +75,12 @@ For the rest of the model:
 - Training needs a sized (map-style_ dataset, `dispatch_batches=False`, and `train_sampling_strategy="random"`. Iterable datasets and other sampling strategies are rejected.
 ## Combining with FSDP2
 
-Expert parallelism only shards the experts. Everything else (attention, embeddings, norms) and its optimizer state is replicated on every expert-parallel rank, which is what limits the model size you can train. Set `fsdp_size` together with `tp_size` to add [FSDP2](./fsdp) on a second mesh dimension.
+Expert parallelism only shards the experts. Everything else (attention, embeddings, norms) and its optimizer state is replicated on every expert-parallel rank, which limits how large a model you can train. Add [FSDP2](./fsdp) on a second mesh dimension with `fsdp_size`, and keep using `tp_size` for the expert parallel width (`tp_size` is the EP size).
 
 ```py
+from transformers import AutoModelForCausalLM
+from transformers.distributed import DistributedConfig
+
 distributed_config = DistributedConfig(
     tp_size=4,  # expert parallel size
     fsdp_size=2,  # data parallel shards
@@ -86,9 +89,11 @@ distributed_config = DistributedConfig(
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B", distributed_config=distributed_config)
 ```
 
-The model is loaded on a 2-D `(fsdp, tp)` device mesh, and `tp_size * fsdp_size` must equal the number of processes. The expert parallel plan shards the experts across `tp`, then FSDP2 shards every parameter, experts included, across `fsdp` and owns their gradient reduction. Each `fsdp` rank trains on its own part of the batch. Nothing else changes: train with the [`Trainer`] as usual (it computes the gradient norm across the two meshes and gives each mesh its own optimizer param group), and [`~Trainer.save_model`] gathers the sharded weights and writes a regular checkpoint.
+The model is loaded on a 2D `(fsdp, tp)` device mesh, and `tp_size * fsdp_size` must equal the number of processes. The expert parallel plan shards the experts across `tp`, then FSDP2 shards every parameter, experts included, across `fsdp` and owns their gradient reduction. Each `fsdp` rank trains on its own part of the batch.
 
-On 8 GPUs, full fine-tuning of Qwen3-30B-A3B in bf16 at sequence length 2048:
+Load the model as usual, then train with [`Trainer`]. It takes the gradient norm across both meshes and gives each mesh its own optimizer param group. [`~Trainer.save_model`] gathers sharded weights into a regular checkpoint. This requires `accelerate>=1.12` so the `Trainer` can mirror `tp_size` and `fsdp_size` into [`~Accelerate.ParallelismConfig`].
+
+The table below compares EP-only training with 2D EP+FSDP2 on 8xH100 GPUs. The workload is full fine-tuning of Qwen3-30B-A3B in bf16 at sequence length 2048. More FSDP shards cut peak memory, and tokens/s drop some because FSDP2 all-gathers and reduce-scatters the experts across `fsdp`.
 
 | configuration | tokens/s/GPU | peak memory/GPU |
 |---|---|---|
