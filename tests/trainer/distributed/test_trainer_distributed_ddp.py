@@ -20,6 +20,7 @@ import json
 import os
 import re
 
+import torch
 from parameterized import parameterized
 
 from transformers.testing_utils import (
@@ -99,6 +100,22 @@ class DDPCommandsMixin:
 @slow
 @require_torch_multi_accelerator
 class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
+    def test_moe_aux_loss_averaging(self):
+        output_dir = self.get_auto_remove_tmp_dir()
+        script = os.path.join(SCRIPTS_DIR, "moe_aux_loss.py")
+        results = []
+        for num_processes in (1, 2):
+            run_dir = os.path.join(output_dir, str(num_processes))
+            cmd = self.get_torchrun_cmd(script, ["--output_dir", run_dir], num_processes=num_processes)
+            execute_subprocess_async(cmd, env=self.get_env())
+            results.append(torch.load(os.path.join(run_dir, "result.pt"), weights_only=True))
+
+        torch.testing.assert_close(results[0]["loss"], results[1]["loss"])
+        self.assertEqual(results[0]["gradients"].keys(), results[1]["gradients"].keys())
+        for name, gradient in results[0]["gradients"].items():
+            with self.subTest(parameter=name):
+                torch.testing.assert_close(gradient, results[1]["gradients"][name], atol=1e-6, rtol=1e-4)
+
     # -----------------------------------------------------------------------
     # accelerate launch tests
     # -----------------------------------------------------------------------

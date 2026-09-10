@@ -2130,7 +2130,24 @@ class Trainer:
             loss_scale = self.accelerator.num_processes
             if (pc := getattr(self.accelerator, "parallelism_config", None)) is not None:
                 loss_scale //= pc.tp_size
-            loss *= loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
+            loss_scale = loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
+            loss *= loss_scale
+
+            if loss_scale != 1 and self.compute_loss_func is None and labels is None:
+                unwrapped_model = self.accelerator.unwrap_model(model)
+                router_aux_loss_coef = getattr(unwrapped_model, "router_aux_loss_coef", 0.0)
+                if router_aux_loss_coef:
+                    if isinstance(outputs, dict):
+                        aux_loss = outputs.get("aux_loss")
+                    else:
+                        output_router_logits = inputs.get("output_router_logits")
+                        if output_router_logits is None:
+                            output_router_logits = unwrapped_model.config.output_router_logits
+                        aux_loss = outputs[1] if output_router_logits else None
+                    if aux_loss is not None:
+                        # The model's router loss is a local mean, not divided by
+                        # num_items_in_batch. DDP already averages it across ranks.
+                        loss -= (loss_scale - 1) * router_aux_loss_coef * aux_loss.to(loss.device)
 
         return (loss, outputs) if return_outputs else loss
 
