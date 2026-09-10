@@ -1084,11 +1084,11 @@ diff = '''
 [rules.TRF053]
 description = "No manual label shifting in modeling code; self.loss_function owns it."
 default_enabled = true
-# No `cutoff_date`: 37 findings over 15 pre-existing models that slice `shift_logits` / `shift_labels` by
+# No `cutoff_date`: 37 findings over 16 pre-existing models that slice `shift_logits` / `shift_labels` by
 # hand, 12 of them in legacy `modeling_*.py` and 3 modular (csm, gemma3, modernbert_decoder). Each move to
 # `self.loss_function` has to be checked against that model's own loss -- encoder-decoder models pass
 # already-shifted labels -- so they go one model per PR.
-allowlist_models = ["blip_2", "clvp", "csm", "gemma3", "git", "gpt2", "granite_speech", "imagegpt", "llama4", "mamba", "modernbert_decoder", "moshi", "openai", "qwen2_audio", "xlstm"]
+allowlist_models = ["blip", "blip_2", "clvp", "csm", "gemma3", "git", "gpt2", "granite_speech", "imagegpt", "llama4", "mamba", "modernbert_decoder", "moshi", "openai", "qwen2_audio", "xlstm"]
 
 [rules.TRF053.explanation]
 what_it_does = "In modeling_*.py and modular_*.py, flags assignments that build shift_logits/shift_labels (and shifted_ variants) by slicing, as in labels[..., 1:]. Receiving already-shifted labels (shift_labels = kwargs.pop(\"shift_labels\", labels)) is the correct idiom and is not flagged."

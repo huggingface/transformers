@@ -19,7 +19,7 @@
     - local: custom_models
       title: Customizing models
     - local: heterogeneous_configurations
-      title: Heterogeneous configurations
+      title: Per-layer configurations
     - local: how_to_hack_models
       title: Customizing model components
     - local: monkey_patching
@@ -653,6 +653,8 @@
         title: FNet
       - local: model_doc/fsmt
         title: FSMT
+      - local: model_doc/fun_asr_nano
+        title: Fun-ASR-Nano
       - local: model_doc/funnel
         title: Funnel Transformer
       - local: model_doc/fuyu
