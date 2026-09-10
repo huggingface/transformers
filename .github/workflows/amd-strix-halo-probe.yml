@@ -1,19 +1,17 @@
-# Connectivity probe for the AMD Ryzen "Strix Halo" DevLab Dispatch ephemeral
-# runner pool (Radeon 8060S / gfx1151, plus an NPU on every machine).
+# AMD Ryzen "Strix Halo" (gfx1151) CI on the DevLab Dispatch ephemeral pool.
 #
-# This is deliberately the smallest thing that proves the route works. It is
-# dispatch-only: nothing here fires on push or pull_request, so it cannot run
-# on untrusted code and costs nothing until someone asks for it. Once we have
-# confirmed jobs land on the pool, real test jobs can be added alongside this
-# one (see the commented `test-strix-halo` sketch at the bottom).
+# This file keeps its name on purpose: the pool's runner group allows this
+# workflow path, so we iterate here rather than adding new workflow files.
+#
+# It builds the gfx1151 CI image ON a pool runner and smoke-tests torch +
+# Flash-Attention inside it -- the "does the Dockerfile build and run on the
+# real hardware" check. It builds at job time on purpose; once it's green we
+# move image building to the nightly build-docker-images flow (built once,
+# pushed, cached) like the MI300 image, and test jobs just pull it.
 name: AMD Strix Halo probe
 
 on:
   workflow_dispatch:
-  # Lets us exercise the pool on a branch without merging to `main`: push to a
-  # branch named `run_amd_strix_halo*` on huggingface/transformers and this runs.
-  # (Same convention the AMD scheduled-CI callers use.) The glob never matches
-  # `main`, so carrying this trigger into `main` later is harmless.
   push:
     branches:
       - run_amd_strix_halo*
@@ -22,68 +20,69 @@ permissions:
   contents: read
 
 jobs:
-  probe:
-    name: Hello from the DevLab pool
-    # `devlab-dispatch` is the opt-in token that reaches the AMD Ryzen pool. A
-    # fresh ephemeral runner is built for this job alone and destroyed when it
-    # finishes, so nothing persists between runs. `strix-halo` narrows which
-    # machine answers; the orchestrator picks whichever such machine is free.
-    # (Runners register into the `amd-devlab-dispatch` runner group on the pool
-    # side, which grants this repo and any workflow, so labels now gate cleanly.)
+  build-and-test:
+    name: Build gfx1151 image, smoke-test torch + FA
+    # `devlab-dispatch` reaches the AMD Ryzen pool; `strix-halo` narrows to the
+    # Strix Halo machines. A fresh ephemeral runner is built per job.
     runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
-    timeout-minutes: 15
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
-      - name: Report the machine
+      - name: Report the machine + container runtime
         run: |
-          echo "runner   : ${RUNNER_NAME:-unknown}"
-          echo "kernel   : $(uname -srm)"
-          echo "distro   : $(. /etc/os-release && echo "$PRETTY_NAME")"
-          echo "cpu      : $(grep -m1 '^model name' /proc/cpuinfo | cut -d: -f2- | xargs)"
-          echo "cores    : $(nproc)"
-          echo "memory   : $(free -h | awk '/^Mem:/ {print $2}')"
-          echo "disk free: $(df -h . | awk 'NR==2 {print $4}')"
-
-      - name: Report the AMD stack
-        # Informational only. A missing tool prints a line and does not fail the
-        # job -- the point of this run is the route, not the toolchain.
-        run: |
+          echo "runner : ${RUNNER_NAME:-unknown}"
+          echo "kernel : $(uname -srm)"
+          echo "disk   : $(df -h . | awk 'NR==2 {print $4" free"}')"
           command -v rocminfo >/dev/null && rocminfo | grep -m1 'Marketing Name' || echo "rocminfo : not installed"
-          command -v amd-smi >/dev/null && amd-smi list || echo "amd-smi  : not installed"
-          command -v xrt-smi >/dev/null && xrt-smi examine | head -20 || echo "xrt-smi  : not installed"
-          command -v python3 >/dev/null && python3 -VV || echo "python3  : not installed"
+          command -v docker >/dev/null && docker version || echo "docker : not available"
+          command -v podman >/dev/null && podman version || echo "podman : not available"
 
-      - name: Report the Torch stack
-        # Also informational -- confirms whether a usable PyTorch/ROCm runtime is
-        # present on the bare pool before we commit to a container-based job.
+      - name: Build the gfx1151 image
         run: |
-          python3 - <<'PY' || echo "torch    : not importable on the bare runner"
+          docker build \
+            -f docker/transformers-pytorch-amd-gpu-gfx1151/Dockerfile \
+            -t transformers-gfx1151:ci \
+            docker/transformers-pytorch-amd-gpu-gfx1151
+
+      - name: Smoke-test torch + Flash-Attention on the GPU
+        run: |
+          mkdir -p "${RUNNER_TEMP}/scratch"
+          docker run --rm \
+            --device=/dev/kfd --device=/dev/dri \
+            --group-add video --group-add render \
+            --security-opt seccomp=unconfined \
+            -v "${RUNNER_TEMP}/scratch:/scratch" \
+            transformers-gfx1151:ci \
+            python3 - <<'PY'
           import torch
           print("torch      :", torch.__version__)
-          print("hip        :", getattr(torch.version, "hip", None))
-          print("cuda avail :", torch.cuda.is_available())
-          if torch.cuda.is_available():
-              print("device     :", torch.cuda.get_device_name(0))
+          print("torch.hip  :", torch.version.hip)
+          assert torch.cuda.is_available(), "no ROCm GPU visible inside the container"
+          print("device     :", torch.cuda.get_device_name(0))
+
+          # A real GPU op -- proves the gfx1151 kernels are actually there.
+          x = torch.randn(2048, 2048, device="cuda", dtype=torch.float16)
+          torch.cuda.synchronize()
+          print("matmul sum :", float((x @ x).sum()))
+
+          import flash_attn
+          from flash_attn import flash_attn_func
+          print("flash_attn :", flash_attn.__version__)
+          q = torch.randn(1, 256, 8, 64, device="cuda", dtype=torch.float16)
+          out = flash_attn_func(q, q, q)
+          torch.cuda.synchronize()
+          print("FA out     :", tuple(out.shape))
+          print("ALL GOOD")
           PY
 
-      - name: Done
-        run: echo "Job ran on the DevLab Dispatch pool (AMD Strix Halo)."
-
-# --- Next step, once the probe above is confirmed green -------------------------
-#
-# Add a real test job alongside the probe with `continue-on-error: true` so runs
-# can be compared before cutting over, as recommended by the AMD DevLab team:
-#
-#   test-strix-halo:
-#     name: Transformers smoke tests (Strix Halo)
-#     runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
-#     continue-on-error: true
-#     timeout-minutes: 60
-#     steps:
-#       - uses: actions/checkout@v4
-#       - name: Install and run a small test slice
-#         run: |
-#           python3 -m pip install --upgrade pip
-#           python3 -m pip install -e ".[testing]"
-#           python3 -m pytest -v tests/utils/test_modeling_utils.py
+      - name: Run a tiny transformers test slice (optional signal)
+        continue-on-error: true
+        run: |
+          docker run --rm \
+            --device=/dev/kfd --device=/dev/dri \
+            --group-add video --group-add render \
+            --security-opt seccomp=unconfined \
+            -v "${RUNNER_TEMP}/scratch:/scratch" \
+            transformers-gfx1151:ci \
+            bash -c "cd /transformers && python3 -m pytest -q tests/utils/test_modeling_utils.py -x || true"
