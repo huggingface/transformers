@@ -673,7 +673,7 @@ class TensorParallelTesterMixin(ABC):
 
     @parameterized.expand(
         [(tie, impl, False) for tie, impl in product([False, True], ["eager", "grouped_mm", "batched_mm"])]
-        # Token dispatch is orthogonal to the implementation, so it only adds the one combination #48518 covered.
+        # Token dispatch is orthogonal to the implementation, so it adds the one combination on its own.
         + [(False, "eager", True)]
     )
     @is_tensor_parallel_test
