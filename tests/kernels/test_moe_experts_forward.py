@@ -38,7 +38,10 @@ TOP_K_WEIGHTS = [[0.7, 0.0], [0.4, 0.6], [0.0, 0.9]]
 class BatchedMmExpertsForwardTest(unittest.TestCase):
     def setUp(self):
         torch.manual_seed(0)
-        self.experts = make_experts(num_experts=NUM_EXPERTS, hidden=8, inter=16, weight_dtype=torch.float32)
+        # The sentinel slots only exist under expert parallelism, which is also what gates the handling.
+        self.experts = make_experts(
+            num_experts=NUM_EXPERTS, hidden=8, inter=16, weight_dtype=torch.float32, is_expert_parallel=True
+        )
         self.hidden_states = torch.randn(3, 8, device=torch_device)
         self.top_k_index = torch.tensor(TOP_K_INDEX, device=torch_device)
 
