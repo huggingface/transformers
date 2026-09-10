@@ -60,10 +60,6 @@ class PPDocLayoutV4Config(PreTrainedConfig):
     hidden_size (`int`, *optional*, defaults to 256):
         Dimension of the decoder layers, excluding the hybrid encoder. Also readable as `d_model`, the name used by
         the RT-DETR lineage this model descends from.
-    label_noise_ratio (`float`, *optional*, defaults to 0.5):
-        The fraction of denoising labels to which random noise should be added.
-    box_noise_scale (`float`, *optional*, defaults to 1.0):
-        Scale or magnitude of noise to be added to the bounding boxes.
     num_queries (`int`, *optional*, defaults to 300):
         Number of object queries.
     decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
@@ -149,8 +145,6 @@ class PPDocLayoutV4Config(PreTrainedConfig):
     eval_size: list[int] | tuple[int, int] | None = None
     normalize_before: bool = False
     hidden_expansion: float = 1.0
-    label_noise_ratio: float = 0.5
-    box_noise_scale: float = 1.0
     num_queries: int = 300
     decoder_in_channels: list[int] | tuple[int, ...] = (256, 256, 256)
     decoder_ffn_dim: int = 1024

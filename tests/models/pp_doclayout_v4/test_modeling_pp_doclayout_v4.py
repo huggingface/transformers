@@ -112,7 +112,6 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     pipeline_model_mapping = {"object-detection": PPDocLayoutV4ForObjectDetection} if is_torch_available() else {}
     is_encoder_decoder = True
 
-    test_missing_keys = False
     test_torch_exportable = True
     test_resize_embeddings = False
 
@@ -225,7 +224,7 @@ class PPDocLayoutV4ModelIntegrationTest(unittest.TestCase):
         expected_shape_logits = torch.Size((1, 300, self.model.config.num_labels))
         logits_expectations = Expectations(
             {
-                (None, None): [
+                ("cuda", None): [
                     [-3.5623, -4.5347, -5.0415],
                     [-3.7752, -3.6966, -4.4212],
                     [-4.4829, -4.3740, -4.5478],
@@ -239,7 +238,7 @@ class PPDocLayoutV4ModelIntegrationTest(unittest.TestCase):
         expected_shape_boxes = torch.Size((1, 300, self.model.config.num_coords))
         boxes_expectations = Expectations(
             {
-                (None, None): [
+                ("cuda", None): [
                     [0.3719, 0.1785, 0.3313],
                     [0.7257, 0.4412, 0.3301],
                     [0.7253, 0.2664, 0.3306],
@@ -255,7 +254,7 @@ class PPDocLayoutV4ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.successor_order_logits.shape, expected_shape_order_logits)
         relative_order_expectations = Expectations(
             {
-                (None, None): [
+                ("cuda", None): [
                     [0.0000, 42.6447, 46.4521],
                     [-42.6447, 0.0000, -28.6615],
                     [-46.4521, 28.6615, 0.0000],
@@ -274,7 +273,7 @@ class PPDocLayoutV4ModelIntegrationTest(unittest.TestCase):
 
         scores_expectations = Expectations(
             {
-                (None, None): [
+                ("cuda", None): [
                     0.9885,
                     0.9781,
                     0.9938,
@@ -302,7 +301,7 @@ class PPDocLayoutV4ModelIntegrationTest(unittest.TestCase):
 
         slice_boxes_expectations = Expectations(
             {
-                (None, None): [
+                ("cuda", None): [
                     [336.0739, 182.0364, 894.1705, 652.6191],
                     [336.4460, 681.8829, 868.7751, 796.9087],
                     [334.0145, 840.8432, 889.1123, 1452.2927],
@@ -316,7 +315,7 @@ class PPDocLayoutV4ModelIntegrationTest(unittest.TestCase):
         # Unlike PP-DocLayoutV3 the polygon is always the four regressed corners, in TL, TR, BR, BL order.
         polygon_points_expectations = Expectations(
             {
-                (None, None): [
+                ("cuda", None): [
                     [336.0739, 182.0364],
                     [893.9496, 182.2223],
                     [894.1705, 652.5367],
