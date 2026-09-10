@@ -18,13 +18,14 @@ import unittest
 from transformers import AutoTokenizer, is_torch_available, set_seed
 from transformers.testing_utils import (
     Expectations,
-    MemoryCleanupMixin,
     is_flaky,
     require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
 )
+
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -93,9 +94,6 @@ class MiniMaxM2ModelTest(CausalLMModelTest, unittest.TestCase):
 @slow
 @require_torch
 class MiniMaxM2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    # TODO (joao): compilation with `cache_implementation="static"` leaves memory allocated in the cache -- some
-    # object is not released. Root cause unknown.
-
     @require_torch_accelerator
     def test_small_model_logits_batched(self):
         model_id = "hf-internal-testing/MiniMax-M2-Small"

@@ -22,7 +22,6 @@ from parameterized import parameterized
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, FineGrainedFP8Config, OPTForCausalLM
 from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.testing_utils import (
-    MemoryCleanupMixin,
     get_device_properties,
     require_accelerate,
     require_torch_accelerator,
@@ -33,6 +32,8 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import is_torch_available
+
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():

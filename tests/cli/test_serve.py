@@ -43,7 +43,6 @@ from transformers.cli.serving.utils import (
     response_events_to_chunks,
 )
 from transformers.testing_utils import (
-    MemoryCleanupMixin,
     require_librosa,
     require_multipart,
     require_serve,
@@ -54,6 +53,8 @@ from transformers.testing_utils import (
 )
 from transformers.utils.chat_parsing import ResponseParser
 from transformers.utils.import_utils import is_serve_available
+
+from ..test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_serve_available():

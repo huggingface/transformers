@@ -21,7 +21,6 @@ import pytest
 from transformers import BitsAndBytesConfig, is_torch_available
 from transformers.models.ernie4_5_moe.modeling_ernie4_5_moe import load_balancing_loss_func
 from transformers.testing_utils import (
-    MemoryCleanupMixin,
     is_flaky,
     require_bitsandbytes,
     require_flash_attn,
@@ -32,6 +31,8 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.trainer_utils import set_seed
+
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():

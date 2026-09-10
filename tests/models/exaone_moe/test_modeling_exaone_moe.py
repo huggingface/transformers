@@ -23,13 +23,13 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
-    MemoryCleanupMixin,
     require_flash_attn,
     require_torch,
     slow,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():

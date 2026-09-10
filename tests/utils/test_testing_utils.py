@@ -24,14 +24,15 @@ from unittest.mock import patch
 
 from transformers import testing_utils
 from transformers.testing_utils import (
-    MemoryCleanupMixin,
-    MemoryCleanupTestCase,
     cap_psutil_cpu_memory,
     get_ci_cpu_memory_budget_gib,
     get_cpu_ram_total_gib,
     require_torch,
 )
 from transformers.utils import is_torch_available
+
+from .. import test_memory_cleanup_mixin
+from ..test_memory_cleanup_mixin import MemoryCleanupMixin, MemoryCleanupTestCase, with_grad, with_no_grad
 
 
 if is_torch_available():
@@ -262,35 +263,25 @@ class MemoryCleanupMixinTest(unittest.TestCase):
         self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
         self.assertEqual(Inner.checkpoint, "hf-internal-testing/tiny-random-gpt2")
 
-    def test_cleanup_keep_attributes_survives(self):
+    def test_setupclass_needs_no_particular_super_ordering(self):
         seen = {}
 
         class Inner(MemoryCleanupMixin, unittest.TestCase):
-            cleanup_keep_attributes = ("tokenizer",)
+            @classmethod
+            def setUpClass(cls):
+                cls.shared_model = Payload()
+                seen["ref"] = weakref.ref(cls.shared_model)
+                super().setUpClass()  # called last on purpose
 
-            def test_keeps_it(self):
-                self.tokenizer = Payload()
-                self.model = Payload()
-                seen["case"] = self
-
-        result = _run_inner_test_class(Inner)
-        self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
-        self.assertIn("tokenizer", vars(seen["case"]))
-        self.assertNotIn("model", vars(seen["case"]))
-
-    def test_dropping_can_be_turned_off(self):
-        seen = {}
-
-        class Inner(MemoryCleanupMixin, unittest.TestCase):
-            cleanup_drop_attributes = False
-
-            def test_keeps_everything(self):
-                self.model = Payload()
-                seen["case"] = self
+            def test_uses_the_class_attribute(self):
+                self.assertIsNotNone(self.shared_model)
 
         result = _run_inner_test_class(Inner)
         self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
-        self.assertIn("model", vars(seen["case"]))
+        # The snapshot is taken at class creation, so `setUpClass` cannot accidentally protect what it assigns.
+        self.assertNotIn("shared_model", vars(Inner))
+        gc.collect()
+        self.assertIsNone(seen["ref"]())
 
     def test_teardown_still_runs_when_the_test_fails(self):
         seen = {}
@@ -322,19 +313,17 @@ class MemoryCleanupMixinTest(unittest.TestCase):
         # `setUp` runs after the snapshot, so what it loads is dropped too.
         self.assertNotIn("fixture", vars(seen["case"]))
 
-    def test_a_setup_that_skips_super_disables_dropping_rather_than_exploding(self):
-        seen = {}
-
+    def test_a_setup_that_skips_super_is_an_error(self):
         class Inner(MemoryCleanupMixin, unittest.TestCase):
             def setUp(self):  # deliberately does not call super()
                 self.fixture = Payload()
 
             def test_runs(self):
-                seen["case"] = self
+                pass
 
         result = _run_inner_test_class(Inner)
-        self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
-        self.assertIn("fixture", vars(seen["case"]))
+        self.assertEqual(len(result.errors), 1)
+        self.assertIn("must call super().setUp()", str(result.errors[0][1]))
 
 
 @require_torch
@@ -364,6 +353,27 @@ class MemoryCleanupNoGradTest(unittest.TestCase):
         result = _run_inner_test_class(Inner)
         self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
         self.assertTrue(seen["grad_enabled"])
+
+    def test_the_decorators_override_the_class_default(self):
+        seen = {}
+
+        class Inner(MemoryCleanupMixin, unittest.TestCase):
+            @with_grad
+            def test_opts_into_grad(self):
+                seen["on_a_no_grad_class"] = torch.is_grad_enabled()
+
+        class InnerTraining(MemoryCleanupMixin, unittest.TestCase):
+            cleanup_no_grad = False
+
+            @with_no_grad
+            def test_opts_out_of_grad(self):
+                seen["on_a_grad_class"] = torch.is_grad_enabled()
+
+        for cls in (Inner, InnerTraining):
+            result = _run_inner_test_class(cls)
+            self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+        self.assertTrue(seen["on_a_no_grad_class"])
+        self.assertFalse(seen["on_a_grad_class"])
 
 
 @require_torch
@@ -399,7 +409,9 @@ class MemoryLeakCheckTest(unittest.TestCase):
             def test_noop(self):
                 pass
 
-        with patch.object(testing_utils, "_device_memory_allocated", side_effect=lambda: next(allocations)):
+        with patch.object(
+            test_memory_cleanup_mixin, "_device_memory_allocated", side_effect=lambda: next(allocations)
+        ):
             return _run_inner_test_class(Inner)
 
     def test_off_by_default(self):
@@ -441,13 +453,13 @@ class MemoryLeakCheckTest(unittest.TestCase):
     def test_rejects_a_malformed_threshold(self):
         with patch.dict("os.environ", {"TRANSFORMERS_TEST_MEMORY_LEAK_MIB": "lots"}):
             with self.assertRaises(ValueError):
-                testing_utils._memory_leak_settings()
+                test_memory_cleanup_mixin._memory_leak_settings()
 
     def test_rejects_an_unknown_mode(self):
         env = {"TRANSFORMERS_TEST_MEMORY_LEAK_MIB": "10", "TRANSFORMERS_TEST_MEMORY_LEAK_MODE": "explode"}
         with patch.dict("os.environ", env):
             with self.assertRaises(ValueError):
-                testing_utils._memory_leak_settings()
+                test_memory_cleanup_mixin._memory_leak_settings()
 
 
 class MemoryCleanupTestCaseTest(unittest.TestCase):

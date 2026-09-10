@@ -15,11 +15,12 @@
 import unittest
 
 from transformers.testing_utils import (
-    MemoryCleanupMixin,
     is_torch_available,
     require_torch,
     torch_device,
 )
+
+from ..test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():

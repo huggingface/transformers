@@ -21,7 +21,6 @@ from transformers import AutoTokenizer, StaticCache, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     Expectations,
-    MemoryCleanupMixin,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -30,6 +29,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -64,9 +64,6 @@ class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 @slow
 class LlamaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    # TODO (joao): compilation with `cache_implementation="static"` leaves memory allocated in the cache -- some
-    # object is not released. Root cause unknown.
-
     def test_llama_3_1_hard(self):
         """
         An integration test for llama 3.1. It tests against a long output to ensure the subtle numerical differences

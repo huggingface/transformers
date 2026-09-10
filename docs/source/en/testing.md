@@ -340,17 +340,19 @@ Mark any test with `@slow` if it downloads weights, loads a large dataset, or ta
 
 #### Releasing memory between tests
 
-Integration tests load real checkpoints, so a test that keeps a reference to its model can OOM whatever runs after it. `MemoryCleanupMixin` handles that for the whole class:
+Integration tests load real checkpoints, so a test that keeps a reference to its model can OOM whatever runs after it. `MemoryCleanupMixin`, in `tests/test_memory_cleanup_mixin.py`, handles that for the whole class:
 
-- it runs `cleanup(torch_device, gc_collect=True)` before and after every test, so a test never inherits the previous one's leftovers;
-- it deletes the attributes a test added to `self` (including `@cached_property` caches) and to the class (`cls.model = ...` in `setUpClass`), because `pytest` keeps test instances alive for the whole session and `gc.collect()` cannot free anything a live reference still points at;
-- it runs test methods under `torch.no_grad()`, so a forward pass does not retain activations.
+- Runs `cleanup(torch_device, gc_collect=True)` before and after every test so leftovers do not carry over.
+- Deletes attributes the test added on `self` (including `@cached_property` caches) and on the class (for example `cls.model = ...` in `setUpClass`). Pytest keeps test instances alive for the session, so `gc.collect()` cannot free objects those references still hold.
+- Runs test methods under `torch.no_grad()` so a forward pass does not retain activations.
 
-Classes that train or call `backward()` set `cleanup_no_grad = False`. Use `cleanup_keep_attributes = ("tokenizer",)` for state that should survive teardown, and `cleanup_drop_attributes = False` to keep everything. If you override `setUp`, `tearDown`, `setUpClass` or `tearDownClass`, call `super()` — the mixin diffs the attributes against a snapshot it takes there, and skips dropping when the snapshot is missing.
+Classes that train or call `backward()` set `cleanup_no_grad = False`. A class that mixes both puts `@with_grad` or `@with_no_grad` on the individual test methods instead.
 
-[`MemoryCleanupTestCase`] combines the mixin with [`TestCasePlus`], for tests that also want auto-removed temporary dirs.
+Attributes assigned in the class body are kept, and everything added later is dropped. If you override `setUp`, call `super().setUp()`: the mixin snapshots the instance attributes there and errors out without it.
 
-To find a leaking test, set `TRANSFORMERS_TEST_MEMORY_LEAK_MIB` to a budget in MiB; any test that leaves more than that allocated on the device is reported with its peak usage. Add `TRANSFORMERS_TEST_MEMORY_LEAK_MODE=error` to fail instead of warn. The check is off by default because the collection it does frees the very memory a leak reproducer needs.
+`MemoryCleanupTestCase` combines the mixin with `TestCasePlus`, for tests that also want auto-removed temporary dirs.
+
+To find a leaking test, set `TRANSFORMERS_TEST_MEMORY_LEAK_MIB` to a budget in MiB; any test that leaves more than that allocated on the device is reported with its peak usage. Add `TRANSFORMERS_TEST_MEMORY_LEAK_MODE=error` to fail instead of warn. The check is off by default and you should turn it on when looking for leftovers. The mixin's usual teardown already runs `gc.collect`, which can clear the allocation you'd want to inspect while reproducing a leak.
 
 #### Generation integration tests
 

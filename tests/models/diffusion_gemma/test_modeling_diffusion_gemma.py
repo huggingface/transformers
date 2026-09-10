@@ -22,7 +22,6 @@ from transformers.testing_utils import (
     CaptureLogger,
     CaptureStdout,
     Expectations,
-    MemoryCleanupMixin,
     require_deterministic_for_xpu,
     require_torch,
     slow,
@@ -31,6 +30,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 

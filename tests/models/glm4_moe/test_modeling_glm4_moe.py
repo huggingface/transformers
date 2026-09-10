@@ -20,7 +20,6 @@ import torch
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
-    MemoryCleanupMixin,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -28,6 +27,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():

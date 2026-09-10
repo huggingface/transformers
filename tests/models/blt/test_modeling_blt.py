@@ -21,7 +21,6 @@ from parameterized import parameterized
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    MemoryCleanupMixin,
     require_torch,
     require_torch_accelerator,
     require_torch_bf16,
@@ -30,6 +29,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     _test_eager_matches_sdpa_inference,
@@ -277,9 +277,6 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch_accelerator
 class BltIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    # TODO (joao): compilation with `cache_implementation="static"` leaves memory allocated in the cache -- some
-    # object is not released. Root cause unknown.
-
     @slow
     def test_model(self):
         NUM_TOKENS_TO_GENERATE = 200
