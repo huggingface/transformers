@@ -30,7 +30,7 @@ from transformers.testing_utils import require_librosa, require_torch
 from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin
 
 
-_CHECKPOINT = "OpenMOSS-Team/MOSS-Transcribe-Diarize"
+_CHECKPOINT = "itazap/MOSS-Transcribe-Diarize-HF"
 
 
 class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
@@ -81,12 +81,17 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
     @require_torch
     def test_chat_template(self):
         processor = AutoProcessor.from_pretrained(self.tmpdirname, trust_remote_code=True)
+        default_transcription_prompt = (
+            "请将音频转写为文本，每一段需以起始时间戳和说话人编号"
+            "（[S01]、[S02]、[S03]…）开头，正文为对应的语音内容，"
+            "并在段末标注结束时间戳，以清晰标明该段语音范围。"
+        )
         expected_prompt = (
             "<|im_start|>system\n"
             "You are a helpful assistant.<|im_end|>\n"
             "<|im_start|>user\n"
             "<|audio_start|><|audio_pad|><|audio_end|>\n"
-            "<|im_end|>\n"
+            f"{default_transcription_prompt}<|im_end|>\n"
             "<|im_start|>assistant\n"
         )
         messages = [
@@ -114,12 +119,12 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
 
         outputs = processor(text=text, audio=audio)
 
-        for key in ("input_ids", "attention_mask", "input_features", "audio_feature_lengths", "audio_chunk_mapping"):
+        for key in ("input_ids", "attention_mask", "input_features", "input_features_mask", "audio_chunk_mapping"):
             self.assertIn(key, outputs)
         self.assertEqual(outputs["input_ids"].shape[0], 2)
         self.assertEqual(outputs["input_features"].shape[0], 2)
         self.assertEqual(outputs["audio_chunk_mapping"].tolist(), [0, 1])
-        self.assertEqual(outputs["audio_feature_lengths"].tolist(), [1, 1])
+        self.assertEqual(outputs["input_features_mask"].shape[0], 2)
 
     @require_torch
     def test_apply_chat_template_matches_processor_call(self):
@@ -144,7 +149,7 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
         )
         manual_outputs = processor(text=formatted_prompt, audio=[audio])
 
-        for key in ("input_ids", "attention_mask", "input_features", "audio_feature_lengths", "audio_chunk_mapping"):
+        for key in ("input_ids", "attention_mask", "input_features", "input_features_mask", "audio_chunk_mapping"):
             self.assertIn(key, template_outputs)
             self.assertTrue(template_outputs[key].equal(manual_outputs[key]))
 
@@ -194,7 +199,7 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
             add_generation_prompt=True,
         )
 
-        for key in ("input_ids", "attention_mask", "input_features", "audio_feature_lengths", "audio_chunk_mapping"):
+        for key in ("input_ids", "attention_mask", "input_features", "input_features_mask", "audio_chunk_mapping"):
             self.assertIn(key, helper_outputs)
             self.assertTrue(helper_outputs[key].equal(manual_outputs[key]))
 
@@ -205,7 +210,7 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
         audio_url = MODALITY_INPUT_DATA["audio"][0]
         outputs = processor.apply_transcription_request(audio=audio_url)
 
-        for key in ("input_ids", "attention_mask", "input_features", "audio_feature_lengths", "audio_chunk_mapping"):
+        for key in ("input_ids", "attention_mask", "input_features", "input_features_mask", "audio_chunk_mapping"):
             self.assertIn(key, outputs)
         self.assertEqual(outputs["input_ids"].shape[0], 1)
 
