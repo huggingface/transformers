@@ -32,6 +32,19 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
+
+# perf: fused Triton RMSNorm kernels from flash-linear-attention, when the package is installed. The reference
+# forward below runs 6 unfused fp32 element-wise passes (plus ~10 in backward) per norm; the fused kernel does one.
+try:
+    from fla.modules.fused_norm_gate import rms_norm_gated as _fla_rms_norm_gated
+    from fla.modules.layernorm import rms_norm as _fla_rms_norm
+except Exception:  # fla missing or broken: keep the reference path
+    _fla_rms_norm = None
+    _fla_rms_norm_gated = None
+
+
+def _use_fla_norm(x: torch.Tensor) -> bool:
+    return _fla_rms_norm is not None and x.is_cuda and not is_torchdynamo_exporting()
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -221,6 +234,11 @@ class Qwen3_5RMSNormGated(nn.Module):
         self.activation = "silu"
 
     def forward(self, hidden_states: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+        if _use_fla_norm(hidden_states):
+            # fused: fp32 rms-norm, * weight, * silu(gate), cast back; one Triton kernel each way
+            return _fla_rms_norm_gated(
+                hidden_states, gate, self.weight, None, activation="swish", eps=self.variance_epsilon
+            )
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -846,6 +864,9 @@ class Qwen3_5RMSNorm(nn.Module):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
 
     def forward(self, x):
+        if _use_fla_norm(x):
+            # fused: fp32 rms-norm * (1 + weight), cast back to x.dtype; one Triton kernel each way
+            return _fla_rms_norm(x, 1.0 + self.weight, None, eps=self.eps)
         output = self._norm(x.float())
         # Llama does x.to(float16) * w whilst Qwen3_5 is (x * w).to(float16)
         # See https://github.com/huggingface/transformers/pull/29402
