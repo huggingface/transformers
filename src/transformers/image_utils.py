@@ -27,7 +27,9 @@ from .utils import (
     is_numpy_array,
     is_torch_available,
     is_torch_tensor,
+    is_torchcodec_available,
     is_torchvision_available,
+    is_torchvision_lesser_or_equal,
     is_vision_available,
     logging,
     requires_backends,
@@ -50,8 +52,8 @@ if is_vision_available():
 
     PILImageResampling = PIL.Image.Resampling
 
+
 if is_torchvision_available():
-    from torchvision.io import ImageReadMode, decode_image
     from torchvision.transforms import InterpolationMode
     from torchvision.transforms.functional import pil_to_tensor
 
@@ -530,6 +532,18 @@ def load_image_as_tensor(
         `torch.Tensor`: A `[C, H, W]` uint8 tensor in RGB channel order.
     """
     import torch
+
+    if is_torchvision_lesser_or_equal("0.26.0"):
+        if is_torchcodec_available():
+            # Fallback to torchcodec for decoding
+            from torchcodec.decoders import ImageReadMode, decode_image
+        else:
+            raise ImportError(
+                "Image decoding requires either `torchvision<=0.26.0` or `torchcodec` installed ."
+                "None are found in teh environment, cannot decode the image. "
+            )
+    else:
+        from torchvision.io import ImageReadMode, decode_image
 
     if isinstance(image, str):
         if image.startswith("http://") or image.startswith("https://"):
