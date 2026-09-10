@@ -209,7 +209,11 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = ViTModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ViTConfig, has_text_modality=False, hidden_size=32)
 
+    def test_foo(self):
+        assert 1 == 3
+
     def test_config(self):
+        assert 1 == 2
         self.config_tester.run_common_tests()
 
     @unittest.skip(reason="ViT does not use inputs_embeds")
