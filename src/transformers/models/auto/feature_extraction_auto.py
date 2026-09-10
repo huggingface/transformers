@@ -96,6 +96,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ),
         ("parakeet_ctc", {"torch": "ParakeetAudioProcessor", "numpy": "ParakeetAudioProcessorNumpy"}),
         ("parakeet_encoder", {"torch": "ParakeetAudioProcessor", "numpy": "ParakeetAudioProcessorNumpy"}),
+        ("neucodec", {"torch": "NeuCodecAudioProcessor", "numpy": "NeuCodecAudioProcessorNumpy"}),
         ("parakeet_rnnt", {"torch": "ParakeetAudioProcessor", "numpy": "ParakeetAudioProcessorNumpy"}),
         ("parakeet_tdt", {"torch": "ParakeetAudioProcessor", "numpy": "ParakeetAudioProcessorNumpy"}),
         ("pe_audio", {"torch": "PeAudioAudioProcessor", "numpy": "PeAudioAudioProcessorNumpy"}),
