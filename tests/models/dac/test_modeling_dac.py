@@ -29,6 +29,7 @@ from transformers.testing_utils import (
     is_torch_available,
     require_deterministic_for_xpu,
     require_torch,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -313,7 +314,7 @@ with open(FIXTURES_DIR / "expected_integration_batch.json") as f:
 
 
 @slow
-@require_torch
+@require_torch_accelerator
 class DacIntegrationTest(unittest.TestCase):
     @parameterized.expand([(model_name,) for model_name in EXPECTED_INTEGRATION.keys()])
     @require_deterministic_for_xpu
