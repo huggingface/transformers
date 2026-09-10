@@ -243,7 +243,7 @@ def parse_google_format_docstring(docstring: str) -> tuple[str | None, dict | No
     return description, args_dict, returns
 
 
-def get_json_schema(func: Callable) -> dict:
+def get_json_schema(func: Callable, style: str = "openai") -> dict:
     """
     This function generates a JSON schema for a given function, based on its docstring and type hints. This is
     mostly used for passing lists of tools to a chat template. The JSON schema contains the name and description of
@@ -257,9 +257,14 @@ def get_json_schema(func: Callable) -> dict:
 
     Args:
         func: The function to generate a JSON schema for.
+        style: The style of the JSON schema to generate. Can be "openai" (default) or "anthropic".
+            - "openai": Returns schema wrapped in {"type": "function", "function": {...}} format
+            - "anthropic": Returns schema in {"name": "...", "description": "...", "input_schema": {...}} format
 
     Returns:
-        A dictionary containing the JSON schema for the function.
+        A dictionary containing the JSON schema for the function. The format depends on the style parameter:
+        - For "openai" style: {"type": "function", "function": {"name": "...", "description": "...", "parameters": {...}}}
+        - For "anthropic" style: {"name": "...", "description": "...", "input_schema": {...}}
 
     Examples:
     ```python
@@ -375,10 +380,15 @@ def get_json_schema(func: Callable) -> dict:
             desc = enum_choices.string[: enum_choices.start()].strip()
         schema["description"] = desc
 
-    output = {"name": func_name, "description": main_doc, "parameters": json_schema}
-    if return_dict is not None:
-        output["return"] = return_dict
-    return {"type": "function", "function": output}
+    if style == "anthropic":
+        # Anthropic style uses 'input_schema' instead of 'parameters' and doesn't wrap in "function" key
+        return {"name": func_name, "description": main_doc, "input_schema": json_schema}
+    else:
+        # OpenAI style
+        output = {"name": func_name, "description": main_doc, "parameters": json_schema}
+        if return_dict is not None:
+            output["return"] = return_dict
+        return {"type": "function", "function": output}
 
 
 @lru_cache
