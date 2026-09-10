@@ -189,19 +189,17 @@ class OmniASREncoderConfig(PreTrainedConfig):
         The dropout probability for the output of the feature encoder.
     activation_dropout (`float`, *optional*, defaults to 0.1):
         The dropout ratio for activations inside the feed-forward layer.
-    feat_extract_activation (`str`, *optional*, defaults to `"gelu"`):
-        The non-linear activation function in the 1D convolutional layers of the feature encoder.
 
     Example:
 
     ```python
-    >>> from transformers import OmniASREncoderConfig, OmniASRSpeechEncoder
+    >>> from transformers import OmniASREncoderConfig, OmniASREncoder
 
     >>> # Initializing an OmniASR encoder configuration
     >>> configuration = OmniASREncoderConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = OmniASRSpeechEncoder(configuration)
+    >>> model = OmniASREncoder(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -226,7 +224,6 @@ class OmniASREncoderConfig(PreTrainedConfig):
     feat_proj_dropout: float | int = 0.0
     activation_dropout: float | int = 0.1
     initializer_range: float = 0.02
-    feat_extract_activation: str = "gelu"
     layer_norm_eps: float = 1e-5
     hidden_act: str = "gelu"
 
@@ -325,12 +322,17 @@ class OmniASRConfig(PreTrainedConfig):
         https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/model.py#L1024
     num_language_embeddings (`int`, *optional*, defaults to 1694):
         Number of language embeddings in the language embedding table.
-    num_special_tokens (`int`, *optional*, defaults to 1):
-        Number of special tokens in the vocabulary.
     language_embedding_probability (`float`, *optional*, defaults to 0.5):
         Probability of using the language embedding during training.
-    language_token_id (`int`, *optional*, defaults to 9218):
-        The id of the language token.
+    language_token_id (`int`, *optional*, defaults to 10288):
+        Id of the LID marker token (`<extra_id_0>`), which opens the language slot of the decoder context. Read by
+        [`OmniASRProcessor`] when it builds the prompt.
+    audio_token_id (`int`, *optional*, defaults to 10289):
+        Id of the placeholder token (`<extra_id_1>`) that stands for one speech encoder frame in `input_ids`. Every
+        occurrence is replaced by the projected audio embedding of that frame.
+    language_embedding_token_id (`int`, *optional*, defaults to 10290):
+        Id of the placeholder token (`<extra_id_2>`) that stands for the language embedding in `input_ids`. It is
+        replaced by the row of the language embedding table that `language_ids` selects.
 
     Example:
 
@@ -352,7 +354,8 @@ class OmniASRConfig(PreTrainedConfig):
     sub_configs = {"audio_config": OmniASREncoderConfig, "text_config": AutoConfig}
 
     _default_text_config_kwargs = {
-        "vocab_size": 10288,
+        # 10288 tokenizer tokens + the LID marker and the two placeholders below
+        "vocab_size": 10291,
         "hidden_size": 4096,
         "num_hidden_layers": 12,
         "num_key_value_heads": 8,
@@ -365,9 +368,10 @@ class OmniASRConfig(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     encoder_stacking: int = 1
     num_language_embeddings: int = 1694
-    num_special_tokens: int = 1
     language_embedding_probability: float | int = 0.5
-    language_token_id: int = 9218
+    language_token_id: int = 10288
+    audio_token_id: int = 10289
+    language_embedding_token_id: int = 10290
     bos_token_id: int | None = 0
     pad_token_id: int | None = 1
     eos_token_id: int | None = 2

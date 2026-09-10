@@ -48,7 +48,19 @@ class OmniASRProcessorKwargs(ProcessingKwargs, total=False):
 class OmniASRProcessor(ProcessorMixin):
     valid_processor_kwargs = OmniASRProcessorKwargs
 
-    def __init__(self, feature_extractor, tokenizer, language_mapping=None, group_tokens=None):
+    def __init__(
+        self,
+        feature_extractor,
+        tokenizer,
+        language_mapping=None,
+        group_tokens=None,
+        audio_token_id=None,
+        language_token_id=None,
+        language_embedding_token_id=None,
+        bos_token_id=None,
+        conv_kernel=None,
+        conv_stride=None,
+    ):
         r"""
         language_mapping (`dict[str, int]`, *optional*):
             Mapping from a language code (e.g. `"eng_Latn"`) to its index in the model's language embedding table.
@@ -58,6 +70,26 @@ class OmniASRProcessor(ProcessorMixin):
             Whether [`~OmniASRProcessor.decode`] collapses runs of identical tokens. This is what CTC decoding
             requires, and what the autoregressive LLM variant must not do. Defaults to `True` for the CTC variant
             and `False` for the LLM variant.
+        audio_token_id (`int`, *optional*):
+            Id of the placeholder token that stands for one speech encoder frame in `input_ids`, i.e.
+            [`OmniASRConfig.audio_token_id`]. Only the LLM variant is prompted with the audio, so only its
+            checkpoints carry the ids and the convolution geometry below.
+        language_token_id (`int`, *optional*):
+            Id of the LID marker token that opens the language slot of the prompt, i.e.
+            [`OmniASRConfig.language_token_id`].
+        language_embedding_token_id (`int`, *optional*):
+            Id of the placeholder token that stands for the language embedding in `input_ids`, i.e.
+            [`OmniASRConfig.language_embedding_token_id`].
+        bos_token_id (`int`, *optional*):
+            Id of the token that closes the prompt, and from which the transcription is decoded. Defaults to the
+            tokenizer's `bos_token_id`.
+        conv_kernel (`list[int]`, *optional*):
+            Kernel size of each convolution of the speech encoder's feature encoder, i.e.
+            [`OmniASREncoderConfig.conv_kernel`]. Needed to count the frames an audio input is subsampled to, and
+            therefore how many audio placeholders its prompt holds.
+        conv_stride (`list[int]`, *optional*):
+            Stride of each convolution of the speech encoder's feature encoder, i.e.
+            [`OmniASREncoderConfig.conv_stride`].
         """
         super().__init__(feature_extractor, tokenizer)
         self.language_mapping = language_mapping
@@ -65,6 +97,13 @@ class OmniASRProcessor(ProcessorMixin):
             # Checkpoints converted before `group_tokens` was explicit are recognised by carrying a mapping.
             group_tokens = language_mapping is None
         self.group_tokens = group_tokens
+        self.audio_token_id = audio_token_id
+        self.language_token_id = language_token_id
+        self.language_embedding_token_id = language_embedding_token_id
+        self.bos_token_id = bos_token_id if bos_token_id is not None else tokenizer.bos_token_id
+        # Lists rather than tuples, so that saving and reloading the processor round-trips to an equal object.
+        self.conv_kernel = list(conv_kernel) if conv_kernel is not None else None
+        self.conv_stride = list(conv_stride) if conv_stride is not None else None
 
     @auto_docstring
     def __call__(
@@ -96,8 +135,9 @@ class OmniASRProcessor(ProcessorMixin):
                 The sampling rate of the audio input. Will warn if not provided.
 
         Returns:
-            [`BatchFeature`]: A dictionary-like object with `input_values` and optionally
-            `attention_mask`, `language_ids`, and `labels`.
+            [`BatchFeature`]: For the CTC variant, `input_values` and its `attention_mask`. For the LLM variant, the
+            decoder prompt as `input_ids` and its `attention_mask`, alongside `input_values`, `padding_mask` (the
+            mask over the raw samples) and `language_ids`. `labels` is added whenever `text` is given.
         """
         audio = make_list_of_audio(audio)
 
@@ -120,7 +160,16 @@ class OmniASRProcessor(ProcessorMixin):
 
         # Only the LLM variant is language-conditioned, and only its checkpoints ship a mapping.
         if self.language_mapping is not None:
+            # The speech encoder gets its own mask over the raw samples, named `padding_mask` as in every other
+            # model that takes `input_values`, so that `attention_mask` is free to cover the decoder prompt.
+            padding_mask = inputs.pop("attention_mask", None)
+            if padding_mask is not None:
+                audio_lengths = padding_mask.sum(-1)
+                inputs["padding_mask"] = padding_mask
+            else:
+                audio_lengths = torch.full((len(audio),), inputs["input_values"].shape[-1], dtype=torch.long)
             inputs["language_ids"] = self._resolve_language_ids(language, len(audio))
+            inputs["input_ids"], inputs["attention_mask"] = self._build_prompt(audio_lengths)
         elif language != LANGUAGE_AGNOSTIC:
             logger.warning_once(
                 f"`language={language!r}` is ignored: this processor has no `language_mapping`, so the model it "
@@ -169,11 +218,64 @@ class OmniASRProcessor(ProcessorMixin):
                 )
         return torch.tensor(language_ids, dtype=torch.long)
 
+    def _get_num_audio_tokens(self, audio_lengths: "torch.Tensor") -> "torch.Tensor":
+        """
+        Number of speech encoder frames each audio length is subsampled to, i.e. how many audio placeholders its
+        prompt holds. Mirrors `OmniASRPreTrainedModel._get_feat_extract_output_lengths`.
+        """
+        for kernel, stride in zip(self.conv_kernel, self.conv_stride):
+            audio_lengths = torch.div(audio_lengths - kernel, stride, rounding_mode="floor") + 1
+        return audio_lengths
+
+    def _build_prompt(self, audio_lengths: "torch.Tensor") -> tuple["torch.LongTensor", "torch.LongTensor"]:
+        """
+        Build the decoder prompt `audio | lid_marker | language | bos` of each audio input, as `input_ids` holding
+        one audio placeholder per speech encoder frame.
+
+        The prompts are left-padded, so that every sequence ends with `bos` -- decoding continues from there for the
+        whole batch -- and the distance between the audio and the markers does not depend on how much the batch was
+        padded. The [original implementation](https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/model.py#L1051)
+        instead packs the markers directly after each sample's own last frame, and tracks the lengths alongside.
+        """
+        missing = [
+            name
+            for name, value in [
+                ("audio_token_id", self.audio_token_id),
+                ("language_token_id", self.language_token_id),
+                ("language_embedding_token_id", self.language_embedding_token_id),
+                ("bos_token_id", self.bos_token_id),
+                ("conv_kernel", self.conv_kernel),
+                ("conv_stride", self.conv_stride),
+            ]
+            if value is None
+        ]
+        if missing:
+            raise ValueError(
+                f"{self.__class__.__name__} cannot build the decoder prompt without {missing}, which are saved "
+                "alongside the LLM variant's checkpoints. A checkpoint converted before the prompt was built here "
+                "has to be converted again."
+            )
+
+        markers = [self.language_token_id, self.language_embedding_token_id, self.bos_token_id]
+        num_audio_tokens = self._get_num_audio_tokens(audio_lengths).tolist()
+        max_length = max(num_audio_tokens) + len(markers)
+
+        input_ids = torch.full((len(num_audio_tokens), max_length), self.tokenizer.pad_token_id, dtype=torch.long)
+        attention_mask = torch.zeros((len(num_audio_tokens), max_length), dtype=torch.long)
+        for idx, num_frames in enumerate(num_audio_tokens):
+            prompt = [self.audio_token_id] * num_frames + markers
+            input_ids[idx, max_length - len(prompt) :] = torch.tensor(prompt, dtype=torch.long)
+            attention_mask[idx, max_length - len(prompt) :] = 1
+
+        return input_ids, attention_mask
+
     @property
     def model_input_names(self):
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        language_input_names = ["language_ids"] if self.language_mapping is not None else []
-        return feature_extractor_input_names + language_input_names + ["labels"]
+        if self.language_mapping is None:
+            # CTC variant: the audio is the whole input, and `attention_mask` masks its padding.
+            return self.feature_extractor.model_input_names + ["labels"]
+        # LLM variant: the audio fills the placeholders of a decoder prompt, so it carries its own mask.
+        return ["input_values", "padding_mask", "input_ids", "attention_mask", "language_ids", "labels"]
 
 
 __all__ = ["OmniASRProcessor"]

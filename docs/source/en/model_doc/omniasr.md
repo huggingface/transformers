@@ -143,6 +143,8 @@ inputs = processor(
 )
 inputs.to(model.device, dtype=model.dtype)
 generated_ids = model.generate(**inputs, max_new_tokens=256)
+# the audio is prompted as placeholder tokens in `input_ids`, which `generate` returns back before the transcription
+generated_ids = generated_ids[:, inputs["input_ids"].shape[1] :]
 transcription = processor.decode(generated_ids, skip_special_tokens=True)
 print(transcription)
 ```

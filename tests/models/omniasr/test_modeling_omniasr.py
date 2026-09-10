@@ -12,12 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import json
 import unittest
 from pathlib import Path
 
-from transformers import is_datasets_available, is_torch_available
+from transformers import (
+    AutoProcessor,
+    LlamaConfig,
+    OmniASRConfig,
+    OmniASRCTCConfig,
+    OmniASREncoderConfig,
+    OmniASRForConditionalGeneration,
+    OmniASRForCTC,
+    OmniASRModel,
+    is_datasets_available,
+    is_torch_available,
+)
 from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+
+from ...alm_tester import ALMModelTest, ALMModelTester
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, random_attention_mask
 
 
 if is_datasets_available():
@@ -26,11 +42,207 @@ if is_datasets_available():
 if is_torch_available():
     import torch
 
-    from transformers import (
-        AutoProcessor,
-        OmniASRForConditionalGeneration,
-        OmniASRForCTC,
+
+class OmniASRModelTester(ALMModelTester):
+    config_class = OmniASRConfig
+    base_model_class = OmniASRModel
+    conditional_generation_class = OmniASRForConditionalGeneration
+    text_config_class = LlamaConfig
+    audio_config_class = OmniASREncoderConfig
+    audio_mask_key = "padding_mask"
+
+    def __init__(self, parent, **kwargs):
+        # seq_length 20 = BOS + 12 audio placeholders + 1 language placeholder + 6 text, which keeps the tail of
+        # each sequence text-only (the resize_token_embeddings test overwrites column -2).
+        kwargs.setdefault("seq_length", 20)
+        # 80 raw samples through the two convolutions below -> 12 encoder frames.
+        kwargs.setdefault("feat_seq_length", 80)
+        kwargs.setdefault("conv_dim", [16, 16])
+        kwargs.setdefault("conv_kernel", [5, 3])
+        kwargs.setdefault("conv_stride", [3, 2])
+        kwargs.setdefault("num_conv_pos_embeddings", 8)
+        kwargs.setdefault("num_conv_pos_embedding_groups", 2)
+        # Low placeholder ids on purpose: `test_resize_tokens_embeddings` clamps `input_ids` from above, which
+        # would wipe out placeholders sitting at the end of the table (where the real checkpoints keep them).
+        kwargs.setdefault("audio_token_id", 0)
+        kwargs.setdefault("language_embedding_token_id", 3)
+        kwargs.setdefault("language_token_id", 4)
+        kwargs.setdefault("num_language_embeddings", 4)
+        # Keeps a training-mode forward deterministic: no language dropout, and no layer dropped by the encoder.
+        kwargs.setdefault("language_embedding_probability", 0.0)
+        kwargs.setdefault("layerdrop", 0.0)
+        # Llama needs head_dim
+        kwargs.setdefault("head_dim", 8)
+        super().__init__(parent, **kwargs)
+
+    @property
+    def _special_token_ids(self):
+        # The LID marker is an ordinary token as far as the model is concerned -- only the processor writes it --
+        # so only the language placeholder has to be kept out of the random text.
+        return super()._special_token_ids | {self.language_embedding_token_id}
+
+    def create_audio_features(self):
+        # OmniASR is fed the raw waveform, not mel features.
+        return floats_tensor([self.batch_size, self.feat_seq_length])
+
+    def get_audio_feature_key(self):
+        return "input_values"
+
+    def get_audio_embeds_mask(self, audio_mask):
+        # Mirrors `OmniASRPreTrainedModel._get_feat_extract_output_lengths`.
+        lengths = audio_mask.sum(-1)
+        for kernel, stride in zip(self.conv_kernel, self.conv_stride):
+            lengths = torch.div(lengths - kernel, stride, rounding_mode="floor") + 1
+        positions = torch.arange(int(lengths.max()), device=audio_mask.device)[None, :]
+        return (positions < lengths[:, None]).long()
+
+    def place_audio_tokens(self, input_ids, config, num_audio_tokens):
+        """Place the audio placeholders after BOS, then the single language placeholder right behind them.
+
+        OmniASR's prompt is `audio | lid_marker | language | bos`, so every sequence carries exactly one language
+        placeholder, which the row of the language embedding table is scattered over.
+        """
+        input_ids = super().place_audio_tokens(input_ids, config, num_audio_tokens)
+        for i in range(input_ids.shape[0]):
+            n = num_audio_tokens[i].item() if isinstance(num_audio_tokens, torch.Tensor) else num_audio_tokens
+            if 2 + int(n) > self.seq_length:
+                raise ValueError(
+                    f"Cannot place {int(n)} audio placeholders and a language placeholder after BOS in a sequence "
+                    f"of length {self.seq_length}. Please raise `seq_length`."
+                )
+            input_ids[i, 1 + int(n)] = self.language_embedding_token_id
+        return input_ids
+
+
+@require_torch
+class OmniASRForConditionalGenerationModelTest(ALMModelTest, unittest.TestCase):
+    model_tester_class = OmniASRModelTester
+
+    @unittest.skip(
+        reason="Like other audio LMs (Voxtral, Qwen3 ASR) inputs_embeds corresponding to audio tokens are replaced when input values are provided."
     )
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
+    def test_mismatching_num_audio_tokens(self):
+        """Same as the shared test, minus its multi-audio case.
+
+        OmniASR transcribes one audio per prompt: `audio | lid_marker | language | bos` holds exactly one language
+        placeholder, so duplicating the prompt along the sequence dim -- what the shared test does to build a
+        multi-audio prompt -- asks for two language embeddings per sample and cannot succeed. The mismatch checks
+        themselves do apply and are kept.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        audio_feature_key = self.model_tester.get_audio_feature_key()
+        audio_mask_key = self.model_tester.audio_mask_key
+
+        # The batch index `create_audio_mask` pinned to full length is guaranteed to carry audio tokens, so
+        # duplicating it reliably moves the audio-token total.
+        dup = int((input_dict["input_ids"] == self.model_tester.audio_token_id).sum(-1).argmax().item())
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            _ = model(**copy.deepcopy(input_dict))  # successful forward with no modifications
+
+            # Test 1: remove one audio but leave the audio tokens in the text
+            curr_input_dict = copy.deepcopy(input_dict)
+            for key in (audio_feature_key, audio_mask_key):
+                curr_input_dict[key] = curr_input_dict[key][-1:, ...]
+            with self.assertRaises(ValueError):
+                _ = model(**curr_input_dict)
+
+            # Test 2: add one audio but leave the audio tokens in the text
+            curr_input_dict = copy.deepcopy(input_dict)
+            for key in (audio_feature_key, audio_mask_key):
+                curr_input_dict[key] = torch.cat([curr_input_dict[key], curr_input_dict[key][dup : dup + 1]], dim=0)
+            with self.assertRaises(ValueError):
+                _ = model(**curr_input_dict)
+
+            # Test 3: duplicate the text along the seq dim so each prompt has twice as many audio tokens, while
+            # leaving the audio features unchanged
+            curr_input_dict = copy.deepcopy(input_dict)
+            for key in ("input_ids", "attention_mask"):
+                curr_input_dict[key] = torch.cat([curr_input_dict[key], curr_input_dict[key]], dim=1)
+            with self.assertRaises(ValueError):
+                _ = model(**curr_input_dict)
+
+
+class OmniASRForCTCModelTester:
+    def __init__(self, parent, batch_size=3, num_samples=80, vocab_size=32, pad_token_id=0, is_training=False):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.num_samples = num_samples
+        self.vocab_size = vocab_size
+        self.pad_token_id = pad_token_id
+        self.is_training = is_training
+
+        # 80 raw samples through the two convolutions below -> 12 encoder frames.
+        self.conv_dim = [16, 16]
+        self.conv_kernel = [5, 3]
+        self.conv_stride = [3, 2]
+        self.output_seq_length = 12
+        self.seq_length = self.output_seq_length
+        self.hidden_size = 32
+        self.num_hidden_layers = 2
+        self.num_attention_heads = 2
+
+    def get_config(self):
+        return OmniASRCTCConfig(
+            encoder_config=OmniASREncoderConfig(
+                hidden_size=self.hidden_size,
+                conv_dim=self.conv_dim,
+                conv_kernel=self.conv_kernel,
+                conv_stride=self.conv_stride,
+                num_attention_heads=self.num_attention_heads,
+                num_hidden_layers=self.num_hidden_layers,
+                intermediate_size=32,
+                num_conv_pos_embeddings=8,
+                num_conv_pos_embedding_groups=2,
+                layerdrop=0.0,
+            ),
+            vocab_size=self.vocab_size,
+            pad_token_id=self.pad_token_id,
+        )
+
+    def prepare_config_and_inputs(self):
+        input_values = floats_tensor([self.batch_size, self.num_samples])
+        attention_mask = random_attention_mask([self.batch_size, self.num_samples])
+        return self.get_config(), input_values, attention_mask
+
+    def prepare_config_and_inputs_for_common(self):
+        config, input_values, attention_mask = self.prepare_config_and_inputs()
+        return config, {"input_values": input_values, "attention_mask": attention_mask}
+
+    def create_and_check_model(self, config, input_values, attention_mask):
+        model = OmniASRForCTC(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(input_values, attention_mask=attention_mask)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.output_seq_length, self.vocab_size))
+
+
+@require_torch
+class OmniASRForCTCModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (OmniASRForCTC,) if is_torch_available() else ()
+    all_generative_model_classes = ()  # OmniASRForCTC has a custom `generate`
+    _is_composite = True
+    test_resize_embeddings = False
+
+    def setUp(self):
+        self.model_tester = OmniASRForCTCModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=OmniASRCTCConfig)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        self.model_tester.create_and_check_model(*self.model_tester.prepare_config_and_inputs())
+
+    @unittest.skip(reason="OmniASRForCTC is an encoder with a CTC head: it takes the waveform, not inputs_embeds.")
+    def test_model_get_set_embeddings(self):
+        pass
 
 
 @require_torch
@@ -160,6 +372,8 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
                 **inputs,
                 max_new_tokens=256,
             )
+        # the audio prompt is part of `input_ids`, so `generate` returns it back before the transcription
+        generated_ids = generated_ids[:, inputs["input_ids"].shape[1] :]
 
         torch.testing.assert_close(generated_ids.cpu(), EXPECTED_TOKEN_IDS)
         predicted_transcripts = self.processor.decode(generated_ids, skip_special_tokens=True)
@@ -195,6 +409,8 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
                 **inputs,
                 max_new_tokens=256,
             )
+        # the audio prompt is part of `input_ids`, so `generate` returns it back before the transcription
+        generated_ids = generated_ids[:, inputs["input_ids"].shape[1] :]
 
         # The audio context is left-padded, so each sample decodes exactly as it would on its own. Compare each
         # hypothesis over its own length; what follows it is padding.
@@ -228,7 +444,9 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
             )
             inputs.to(model.device, dtype=self.dtype)
             with torch.no_grad():
-                return model.generate(**inputs, max_new_tokens=200)
+                generated_ids = model.generate(**inputs, max_new_tokens=200)
+            # the audio prompt is part of `input_ids`, so `generate` returns it back before the transcription
+            return generated_ids[:, inputs["input_ids"].shape[1] :]
 
         alone = generate([shortest])[0].cpu()
         batched = generate([shortest, longest])[0].cpu()
