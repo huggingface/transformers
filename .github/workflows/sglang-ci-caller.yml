@@ -87,3 +87,130 @@ jobs:
           name: sglang-compatibility-results
           path: reports/
           if-no-files-found: ignore
+
+  sglang-inference:
+    name: SGLang integration (${{ matrix.suite }})
+    # Match vLLM's nightly/manual model coverage on trusted refs.
+    if: >-
+      github.repository == 'huggingface/transformers' &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push')
+    # Same 128 GiB CPU workers and writable model cache as vllm-ci-caller.yml.
+    runs-on:
+      group: aws-m8i-8xl-cache
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: model-loading
+            tests: >-
+              test/registered/model_loading/test_external_models.py
+              test/registered/model_loading/test_weight_loader_v2_e2e.py
+          - suite: transformers-backend
+            tests: >-
+              test/registered/e2e/models/test_transformers_backend_eval.py
+              test/registered/e2e/models/test_transformers_models.py::TestTransformersFallbackEngine::test_ci_models
+          - suite: processors-and-mappings
+            tests: >-
+              test/registered/unit/utils/test_hf_transformers.py
+              test/registered/unit/utils/test_patch_tokenizer.py
+              test/registered/unit/model_loader/test_transformers_fallback.py
+          - suite: chat
+            tests: >-
+              test/registered/openai_server/basic/test_openai_server.py::TestOpenAIServer::test_chat_completion
+              test/registered/openai_server/basic/test_openai_server.py::TestOpenAIServer::test_chat_completion_stream
+          - suite: vision-language
+            tests: test/registered/vlm/test_vlm_input_format.py::TestQwenVLUnderstandsImage
+          - suite: audio
+            tests: >-
+              test/registered/openai_server/basic/test_serving_transcription.py::TestServingTranscription::test_basic_transcription
+              test/registered/openai_server/basic/test_serving_transcription.py::TestServingTranscription::test_transcription_content_quality
+    container:
+      # v0.5.19-xeon supplies the Intel CPU build environment and runtime dependencies.
+      image: lmsysorg/sglang@sha256:dec15decb555242b67471b984e51bd44e3faa44fc5c2b5258d46e5fa926e7cde
+      options: --shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}/sglang
+    env:
+      HF_HOME: /mnt/cache
+      # The upstream chat/backend comparisons use gated Llama checkpoints.
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      SGLANG_USE_CPU_ENGINE: "1"
+      SGLANG_IS_IN_CI: "true"
+      PYTHONPATH: ${{ github.workspace }}/sglang/python
+      VIRTUAL_ENV: /opt/.venv
+      CMAKE_BUILD_PARALLEL_LEVEL: "8"
+      REPORT_DIR: ${{ github.workspace }}/reports
+      TRANSFORMERS_SOURCE: ${{ github.workspace }}/transformers
+      TEST_TARGETS: ${{ matrix.tests }}
+
+    steps:
+      - name: Checkout Transformers under test
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+          path: transformers
+
+      - name: Checkout canonical SGLang tests and runtime
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: sgl-project/sglang
+          ref: 55b4f4f19506c5571d7c4b04b1b47e85790b6db3  # Includes the HF loading contract tests.
+          persist-credentials: false
+          path: sglang
+
+      - name: Build matching SGLang CPU runtime and install candidate Transformers
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ffmpeg
+          uv pip install --python /opt/.venv/bin/python setuptools setuptools-scm wheel scikit-build-core ninja cmake
+          uv pip install --python /opt/.venv/bin/python pytest pytest-asyncio accelerate expecttest parameterized sentence-transformers
+          # Keep the image's PyTorch; compile this revision's CPU kernels against it.
+          cp python/pyproject_cpu.toml python/pyproject.toml
+          SGLANG_BUILD_RUST_EXTS=none uv pip install --python /opt/.venv/bin/python --no-deps --no-build-isolation -e ./python
+          cp python/sglang/kernels/aot/pyproject_cpu.toml python/sglang/kernels/aot/pyproject.toml
+          uv pip install --python /opt/.venv/bin/python --no-deps --no-build-isolation ./python/sglang/kernels/aot
+          uv pip install --python /opt/.venv/bin/python --no-deps torchcodec==0.12.0
+          # Install the candidate last so the SGLang release pin cannot replace it.
+          uv pip install --python /opt/.venv/bin/python -e "${TRANSFORMERS_SOURCE}"
+
+      - name: Verify CPU environment and record revisions
+        run: |
+          mkdir -p "${REPORT_DIR}"
+          lscpu | tee "${REPORT_DIR}/cpu.txt"
+          free -h | tee "${REPORT_DIR}/memory.txt"
+          git rev-parse HEAD | tee "${REPORT_DIR}/sglang-commit.txt"
+          test "$(git rev-parse HEAD)" = 55b4f4f19506c5571d7c4b04b1b47e85790b6db3
+          git -C "${TRANSFORMERS_SOURCE}" rev-parse HEAD | tee "${REPORT_DIR}/transformers-commit.txt"
+          uv pip freeze --python /opt/.venv/bin/python > "${REPORT_DIR}/packages.txt"
+          python3 - <<'PYCODE'
+          import os
+          from pathlib import Path
+
+          import sglang
+          import transformers
+          from sglang.srt.utils import cpu_has_amx_support
+
+          print(f"SGLang: {sglang.__file__}")
+          print(f"Transformers {transformers.__version__}: {transformers.__file__}")
+          assert cpu_has_amx_support(), "Intel AMX hardware and SGLang CPU kernels are required"
+          assert Path(sglang.__file__).resolve().is_relative_to(Path.cwd() / "python/sglang")
+          expected = Path(os.environ["TRANSFORMERS_SOURCE"]) / "src/transformers"
+          assert Path(transformers.__file__).resolve().is_relative_to(expected)
+          PYCODE
+
+      - name: Run canonical SGLang integration tests
+        run: |
+          read -r -a targets <<< "${TEST_TARGETS}"
+          python3 -m pytest -v "${targets[@]}" --junitxml="${REPORT_DIR}/results.xml"
+
+      - name: Upload integration test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: sglang-${{ matrix.suite }}-results
+          path: reports/
+          if-no-files-found: ignore
