@@ -35,6 +35,17 @@ def _is_fp8_scheme(scheme) -> bool:
     return weights is not None and weights.type == "float" and weights.num_bits == 8
 
 
+def _has_weight_global_scale(scheme) -> bool:
+    """Whether a scheme stores a per-tensor ``weight_global_scale`` next to the group scales.
+
+    ``tensor_group`` strategies (NVFP4) scale the group scales by a per-tensor global scale so
+    they fit the FP8 range, and compressed-tensors registers ``weight_global_scale`` only for
+    that strategy. Dequantization needs it: without it the group scales are off by that factor.
+    """
+    weights = scheme.weights
+    return weights is not None and weights.strategy == "tensor_group"
+
+
 class CompressedTensorsHfQuantizer(HfQuantizer):
     """
     Quantizer for the compressed_tensors package. Loads and restores models to
@@ -209,7 +220,14 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                 else:
                     packed_weight = [p + "_packed$" for p in weight_sources]
                     shape_sources = [p + "_shape$" for p in weight_sources]
-                    new_sources = packed_weight + scale_sources + shape_sources + other
+                    # NVFP4 stores a per-tensor global scale beside the group scales. It has no
+                    # other source, and its absence is not an error downstream -- the compressor
+                    # reads it with `.get(..., None)` and dequantizes without it -- so leaving it
+                    # out returns experts scaled by a wrong constant, silently.
+                    global_scale_sources = (
+                        [p + "_global_scale$" for p in weight_sources] if _has_weight_global_scale(scheme) else []
+                    )
+                    new_sources = packed_weight + scale_sources + shape_sources + global_scale_sources + other
                 new_ops = [DecompressExperts(self, scheme=scheme)] + list(conv.operations)
                 conv = WeightConverter(
                     source_patterns=new_sources,
