@@ -656,7 +656,7 @@ def deepgemm_bf16_experts_forward(
         self.num_experts,
         deepgemm.m_alignment,
         is_sm100(),
-        is_expert_parallel=self.is_expert_parallel,
+        is_expert_parallel=self._is_expert_parallel,
     )
 
     weight_up = self.gate_up_proj if self.has_gate else self.up_proj
@@ -748,7 +748,7 @@ def deepgemm_fp8_fp4_experts_forward(
         self.num_experts,
         deepgemm.m_alignment,
         is_sm100(),
-        is_expert_parallel=self.is_expert_parallel,
+        is_expert_parallel=self._is_expert_parallel,
     )
     sf_recipe = (1, 1, cast_kwargs["gran_k"]) if cast_kwargs.get("use_packed_ue8m0") else None
 

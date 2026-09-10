@@ -67,7 +67,7 @@ def _build_experts(
         has_gate=has_gate,
         has_bias=has_bias,
         is_transposed=is_transposed,
-        is_expert_parallel=is_expert_parallel,
+        _is_expert_parallel=is_expert_parallel,
         act_fn=act_fn,
         _apply_gate=apply_gate,
         down_proj=weight(hidden, inter),

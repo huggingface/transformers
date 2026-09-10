@@ -463,7 +463,7 @@ def fp8_batched_mm_experts_forward(
     # EP sentinel handling: leave `expert_ids` unclamped — the batched kernel early-returns on
     # `expert_id >= NUM_EXPERTS`, leaving sentinel output rows uninitialized. The post-mask below
     # zeroes them before the per-token reduction so `uninit * 0 = NaN` can't poison the sum.
-    sentinel_mask = (expert_ids >= self.num_experts).unsqueeze(-1) if self.is_expert_parallel else None
+    sentinel_mask = (expert_ids >= self.num_experts).unsqueeze(-1) if self._is_expert_parallel else None
 
     weight_up = self.gate_up_proj if self.has_gate else self.up_proj
     weight_scale_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
@@ -552,7 +552,7 @@ def fp8_grouped_mm_experts_forward(
     # valid rows, so sentinel-tail `proj_out` rows are uninit; without the post-mask below,
     # `proj_out[sentinel] * 0 = NaN * 0 = NaN` would poison the per-token reduction. FP8
     # quantized weights are inference-only, so no bwd pre-mask is needed.
-    sentinel_mask = (expert_ids_g >= self.num_experts).unsqueeze(-1) if self.is_expert_parallel else None
+    sentinel_mask = (expert_ids_g >= self.num_experts).unsqueeze(-1) if self._is_expert_parallel else None
 
     weight_up = self.gate_up_proj if self.has_gate else self.up_proj
     weight_scale_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv

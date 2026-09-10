@@ -125,7 +125,7 @@ def batched_mm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
-    if self.is_expert_parallel:
+    if self._is_expert_parallel:
         # Clamp EP sentinels so `gate_up_proj[expert_ids]` stays in-bounds. Routing weights are already
         # zero at sentinel slots (RouterParallel masks them at dispatch), so the weighted mul drops
         # those contributions — we pay the wasted GEMM compute because batched_mm has no offset to skip.
@@ -419,7 +419,7 @@ def grouped_mm_experts_forward(
     # sentinel positions falls in rows the kernel skips, so harmless). Safe to mutate now —
     # nothing downstream needs the sentinel info from `expert_ids_g` itself.
     sentinel_mask = None
-    if self.is_expert_parallel:
+    if self._is_expert_parallel:
         sentinel_mask = (expert_ids_g >= self.num_experts).unsqueeze(-1)
         expert_ids_g.clamp_(max=self.num_experts - 1)
 
@@ -572,7 +572,7 @@ def use_experts_implementation(
             self.has_bias = has_bias
             self.is_transposed = is_transposed
             self.is_concatenated = is_concatenated
-            self.is_expert_parallel = False
+            self._is_expert_parallel = False
 
         @wraps(original_forward)
         def forward(self, *args, **kwargs):
