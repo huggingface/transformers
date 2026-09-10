@@ -281,9 +281,6 @@ class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
 
     @slow
     def test_fixture_timestamps_batched(self):
-        # TODO(synthetic-assets): sample 1's timestamps were measured off-CI and one boundary
-        # disagrees with the GPUs by two frames (0.32 vs 0.24). CUDA and ROCm agree with each
-        # other, so one recording from a round settles it for both.
         path = self.fixtures_path / "expected_timestamps_batched.json"
         with open(path, "r", encoding="utf-8") as f:
             expected_batch = json.load(f)

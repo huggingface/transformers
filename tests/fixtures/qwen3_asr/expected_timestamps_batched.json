@@ -102,17 +102,17 @@
       {
         "text": "好",
         "start_time": 0.08,
-        "end_time": 0.32
+        "end_time": 0.24
       },
       {
         "text": "世",
-        "start_time": 0.32,
+        "start_time": 0.24,
         "end_time": 0.48
       },
       {
         "text": "界",
         "start_time": 0.48,
-        "end_time": 0.8
+        "end_time": 0.72
       },
       {
         "text": "人",
@@ -127,11 +127,11 @@
       {
         "text": "智",
         "start_time": 1.44,
-        "end_time": 1.6
+        "end_time": 1.68
       },
       {
         "text": "能",
-        "start_time": 1.6,
+        "start_time": 1.68,
         "end_time": 1.92
       },
       {
@@ -152,41 +152,41 @@
       {
         "text": "变",
         "start_time": 2.48,
-        "end_time": 2.72
+        "end_time": 2.64
       },
       {
         "text": "我",
-        "start_time": 2.72,
-        "end_time": 2.8
+        "start_time": 2.64,
+        "end_time": 2.64
       },
       {
         "text": "们",
         "start_time": 2.8,
-        "end_time": 2.96
+        "end_time": 2.88
       },
       {
         "text": "的",
-        "start_time": 2.96,
+        "start_time": 2.88,
         "end_time": 3.04
       },
       {
         "text": "生",
         "start_time": 3.04,
-        "end_time": 3.28
+        "end_time": 3.2
       },
       {
         "text": "活",
-        "start_time": 3.28,
-        "end_time": 3.44
+        "start_time": 3.2,
+        "end_time": 3.36
       },
       {
         "text": "方",
-        "start_time": 3.44,
-        "end_time": 3.68
+        "start_time": 3.36,
+        "end_time": 3.6
       },
       {
         "text": "式",
-        "start_time": 3.68,
+        "start_time": 3.6,
         "end_time": 3.92
       }
     ]
