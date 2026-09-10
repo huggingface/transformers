@@ -369,6 +369,9 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         output = output[:, inputs["input_ids"].shape[1] :]
         response = self.processor.batch_decode(output, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
+        # TODO(synthetic-assets): stale — azure_slide_1..4 were regenerated on 2026-09-10. They had
+        # been 0.994-0.997 correlated (one code path, only the header title varied) while this test
+        # shows them as four distinct slides; each is now a different layout of the same deck.
         EXPECTED_RESPONSE = "This presentation introduces the concept of cloud computing, focusing on Microsoft Azure, a leading cloud platform. It"
 
         self.assertEqual(response, EXPECTED_RESPONSE)
