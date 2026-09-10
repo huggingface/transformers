@@ -89,7 +89,9 @@ class DtensorShardOperation:
         local_shape, offsets = compute_local_shape_and_global_offset(param.shape, self.device_mesh, self.placements)
         # Axis-0 range owned by this rank (used to filter per-expert pieces)
         # [_axis0_offset, _axis0_offset + _axis0_local_size)
-        self._axis0_offset = offsets[0]
+        # A rank outside this parameter's mesh owns none of it: torch returns `((0,), ())` there, so
+        # there is no offset to read, and the zero local size below is what marks it as owning nothing.
+        self._axis0_offset = offsets[0] if offsets else 0
         self._axis0_local_size = local_shape[0]
 
     def shard_tensor(
