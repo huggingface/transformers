@@ -90,10 +90,6 @@ class PPDocLayoutV4Config(PPDocLayoutV3Config):
     hidden_size (`int`, *optional*, defaults to 256):
         Dimension of the decoder layers, excluding the hybrid encoder. Also readable as `d_model`, the name used by
         the RT-DETR lineage this model descends from.
-    label_noise_ratio (`float`, *optional*, defaults to 0.5):
-        The fraction of denoising labels to which random noise should be added.
-    box_noise_scale (`float`, *optional*, defaults to 1.0):
-        Scale or magnitude of noise to be added to the bounding boxes.
     num_queries (`int`, *optional*, defaults to 300):
         Number of object queries.
     decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
@@ -160,8 +156,6 @@ class PPDocLayoutV4Config(PPDocLayoutV3Config):
     hidden_size: int = 256
     eval_size: list[int] | tuple[int, int] | None = None
     anchor_image_size: list[int] | tuple[int, int] | None = None
-    label_noise_ratio: float = 0.5
-    box_noise_scale: float = 1.0
     num_coords: int = 10
     use_s2r: bool = True
     s2r_steps: int = 3
@@ -173,6 +167,8 @@ class PPDocLayoutV4Config(PPDocLayoutV3Config):
     mask_enhanced = AttributeError()
     num_prototypes = AttributeError()
     x4_feat_dim = AttributeError()
+    label_noise_ratio = AttributeError()
+    box_noise_scale = AttributeError()
     # This removes the inherited `d_model` field rather than declaring one: PP-DocLayoutV4 declares the canonical
     # `hidden_size` above and keeps `d_model` only as an `attribute_map` alias.
     d_model = AttributeError()  # trf-ignore: TRF023
