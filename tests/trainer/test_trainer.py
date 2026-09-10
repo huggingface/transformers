@@ -223,6 +223,7 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         gas_batch_size,
         gas_steps,
         loss_tolerance,
+        grad_norm_tolerance=0.1,
         model_accepts_loss_kwargs=True,
         compute_loss_func=None,
         label_smoothing_factor=0.0,
@@ -267,7 +268,10 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         for step, (base_gn, gas_gn) in enumerate(zip(base_grad_norms, gas_grad_norms)):
             ratio = gas_gn / base_gn if base_gn > 0 else float("inf")
             self.assertAlmostEqual(
-                ratio, 1.0, delta=0.1, msg=f"Step {step}: grad_norm ratio {ratio:.2f} — GAS leak suspected"
+                ratio,
+                1.0,
+                delta=grad_norm_tolerance,
+                msg=f"Step {step}: grad_norm ratio {ratio:.2f} — GAS leak suspected",
             )
         loss_diff = [abs(b - g) for b, g in zip(base_callback.losses, gas_callback.losses)]
         self.assertLess(max(loss_diff), loss_tolerance, f"Loss difference {max(loss_diff)} exceeds {loss_tolerance}")
@@ -288,13 +292,17 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         itself. Grad norms and losses must still match between a large-batch
         baseline and an equivalent GAS run.
         """
-        # Looser tolerance: without num_items_in_batch each micro-batch is independently
-        # mean-reduced, so losses won't match as tightly.
+        # Looser tolerances: without num_items_in_batch each micro-batch is independently
+        # mean-reduced over its own valid label count, so regrouping the same samples into
+        # smaller micro-batches shifts both the loss and the grad norm. `DataParallel` splits
+        # every micro-batch again across replicas, which regroups them more finely still and
+        # pushes the grad norm ratio to ~1.11. A real GAS leak shows a ratio near `gas_steps`.
         self._check_gradient_accumulation(
             base_batch_size=8,
             gas_batch_size=4,
             gas_steps=2,
             loss_tolerance=0.1,
+            grad_norm_tolerance=0.2,
             model_accepts_loss_kwargs=False,
         )
 
