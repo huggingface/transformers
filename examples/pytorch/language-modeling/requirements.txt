@@ -6,3 +6,4 @@ protobuf
 evaluate
 scikit-learn
 flash-linear-attention==0.5.2  # perf campaign: Triton chunk_gated_delta_rule for Qwen3.5 linear-attention layers
+causal-conv1d==1.7.0  # perf campaign: fused causal depthwise conv + silu for Qwen3.5 linear-attention layers (built from source against CUDA 12.8; no wheel for torch 2.11)
