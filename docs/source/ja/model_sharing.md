@@ -92,7 +92,7 @@ TensorFlowからPyTorchにチェックポイントを変換するには、`from_
 >>> pt_model.save_pretrained("path/to/awesome-name-you-picked")
 ```
 
-## Push a model during traning
+## Push a model during training
 
 <Youtube id="Z1-XMy-GNLQ"/>
 
@@ -201,7 +201,6 @@ Hugging Faceプロフィールに移動すると、新しく作成したモデ�
 * モデルリポジトリ内の**Edit model card**ボタンをクリックする。
 
 モデルカードに含めるべき情報の例については、DistilBert [モデルカード](https://huggingface.co/distilbert/distilbert-base-uncased)をご覧ください。`README.md`ファイルで制御できる他のオプション、例えばモデルの炭素フットプリントやウィジェットの例などについての詳細は、[こちらのドキュメンテーション](https://huggingface.co/docs/hub/models-cards)を参照してください。
-
 
 
 

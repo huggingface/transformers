@@ -430,6 +430,7 @@ class ZambaMambaMixer(nn.Module):
         self.act = ACT2FN[config.hidden_mamba_act]
 
         self.use_fast_kernels = config.use_mamba_kernels
+        self.use_associative_scan = config.use_associative_scan
 
         # projection of the input hidden states
         self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=self.use_bias)
@@ -580,7 +581,7 @@ class ZambaMambaMixer(nn.Module):
                     return_last_state=output_final_state,
                     # Old model: only when user request it explicitly
                     use_mambapy=False,
-                    use_associative_scan=False,
+                    use_associative_scan=self.use_associative_scan,
                 )
 
                 if output_final_state:
