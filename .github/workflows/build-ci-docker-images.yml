@@ -38,7 +38,7 @@ jobs:
         env:
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
-              if echo "$COMMIT_MESSAGE" | grep -q '\[build-ci-image\]'; then
+              if printf '%s' "$COMMIT_MESSAGE" | grep -q '\[build-ci-image\]'; then
                   echo "TAG=huggingface/transformers-${{ matrix.file }}:dev" >> "$GITHUB_ENV"
                   echo "setting it to DEV!"
               else
