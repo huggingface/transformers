@@ -42,11 +42,9 @@ if _staging_mode is not None:
 
 URLS_FOR_TESTING_DATA = [
     # Synthetic, CC0 fixtures generated for the test suite: no third-party licensed media.
-    # NOTE: audio/glass_breaking.mp3 is deliberately absent: `url_to_local_path` keys on the
-    # basename and `dummy-audio-samples` ships a *different* glass_breaking.mp3. Prefetching
-    # both would make one silently shadow the other, so that one is fetched at test time.
     # Source generators live in the dataset repo; see its README.
     "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/mandarin_voxcpm_zh.wav",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3",
     "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mr_quiller.flac",
     "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/throat_clearing.wav",
     "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/voice_sample.wav",
@@ -109,7 +107,6 @@ URLS_FOR_TESTING_DATA = [
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/coco_annotations.txt",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/coco_panoptic_annotations.txt",
-    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/coco_panoptic/000000039769.png",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000139.jpg",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000285.jpg",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000632.jpg",
@@ -131,7 +128,6 @@ URLS_FOR_TESTING_DATA = [
     "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/en-Alice_woman.wav",
     "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/en-Carter_man.wav",
     "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/en-Frank_man.wav",
-    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass_breaking.mp3",
     "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav",
     "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/macron.wav",
     "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama2.mp3",
@@ -166,19 +162,11 @@ URLS_FOR_TESTING_DATA = [
 # `url_to_local_path` and `download_test_file` both key on the URL basename, so two prefetched URLs
 # sharing one basename make whichever is downloaded first silently shadow the other. Fail loudly
 # instead: a shadowed fixture shows up as a baffling assertion error much later.
-KNOWN_BASENAME_COLLISIONS = {
-    # Pre-existing: same COCO id under `coco_panoptic/` and `val2017/`.
-    "000000039769.png",
-}
-
-
 def _check_basename_collisions(urls):
     seen = {}
     collisions = {}
     for url in urls:
         basename = url.split("/")[-1]
-        if basename in KNOWN_BASENAME_COLLISIONS:
-            continue
         if basename in seen and seen[basename] != url:
             collisions.setdefault(basename, {seen[basename]}).add(url)
         seen[basename] = url
@@ -194,17 +182,6 @@ def _check_basename_collisions(urls):
 
 
 _check_basename_collisions(URLS_FOR_TESTING_DATA)
-
-
-SYNTHETIC_ASSETS_REPO_ID = "hf-internal-testing/transformers-synthetic-assets"
-
-
-def get_synthetic_asset_url(filename):
-    return f"https://huggingface.co/datasets/{SYNTHETIC_ASSETS_REPO_ID}/resolve/main/{filename}"
-
-
-def get_synthetic_asset_path(filename):
-    return hf_hub_download(repo_id=SYNTHETIC_ASSETS_REPO_ID, filename=filename, repo_type="dataset")
 
 
 def url_to_local_path(url, return_url_if_not_found=True):
