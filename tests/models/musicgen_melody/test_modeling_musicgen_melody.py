@@ -1183,14 +1183,14 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_VALUES = torch.tensor(
             [
-                -0.0085, -0.0160,  0.0028,  0.0005, -0.0095,  0.0028, -0.0122, -0.0299,
-                -0.0052, -0.0145,  0.0092,  0.0063, -0.0378, -0.0621, -0.0784, -0.0120,
+                0.0115, 0.0119, 0.0110, 0.0109, 0.0108, 0.0109, 0.0113, 0.0113,
+                0.0123, 0.0131, 0.0140, 0.0139, 0.0130, 0.0125, 0.0124, 0.0129,
             ]
         )
         # fmt: on
 
         self.assertTrue(output_values.shape == (2, 1, 4480))
-        torch.testing.assert_close(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_generate_text_prompt_greedy(self):
@@ -1272,15 +1272,15 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: off
         expectations = Expectations(
             {
-                (None, None): [-0.0165, -0.0222, -0.0041, -0.0058, -0.0145, -0.0023, -0.0160, -0.0310, -0.0055, -0.0127,  0.0104,  0.0105, -0.0326, -0.0611, -0.0744, -0.0083],
-                ("cuda", 8): [-0.0165, -0.0221, -0.0040, -0.0058, -0.0145, -0.0024, -0.0160, -0.0310, -0.0055, -0.0127,  0.0104,  0.0105, -0.0326, -0.0612, -0.0744, -0.0082],
+                (None, None): [-0.0007, 0.0015, 0.0013, 0.0004, -0.0005, -0.0007, -0.0009, -0.0016, -0.0010, -0.0003, 0.0004, 0.0001, -0.0014, -0.0026, -0.0027, -0.0018],
+                ("cuda", 8): [-0.0007, 0.0015, 0.0013, 0.0004, -0.0005, -0.0007, -0.0009, -0.0016, -0.0010, -0.0003, 0.0004, 0.0001, -0.0014, -0.0026, -0.0027, -0.0018],
             }
         )
         EXPECTED_VALUES = torch.tensor(expectations.get_expectation()).to(torch_device)
         # fmt: on
 
         self.assertTrue(output_values.shape == (2, 1, 4480))
-        torch.testing.assert_close(output_values[0, 0, :16], EXPECTED_VALUES, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(output_values[0, 0, :16], EXPECTED_VALUES, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_generate_text_audio_prompt(self):

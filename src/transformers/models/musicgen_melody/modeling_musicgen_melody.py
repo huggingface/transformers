@@ -792,7 +792,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
                     encoder_attention_mask, torch.zeros_like(encoder_attention_mask), dim=0
                 )
 
-        if past_key_values is not None:
+        if past_key_values is not None and past_key_values.get_seq_length() > 0:
             input_ids = input_ids[:, -1:]
 
             # we only want to use conditional signal in the 1st generation step but keeping the attention mask
@@ -1592,7 +1592,10 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
             decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
             # we only want to use conditional signal in the 1st generation step but keeping the attention mask
-            encoder_hidden_states = None
+            # Only drop encoder_hidden_states once the cache is non-empty (i.e., after the first step).
+            # An empty pre-created cache (seq_len=0) at step 0 must not suppress conditioning.
+            if past_length > 0:
+                encoder_hidden_states = None
             # we also have to update the attention mask
 
         return {
