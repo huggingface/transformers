@@ -241,11 +241,6 @@ class ModernBertDecoderAttention(nn.Module):
         self.attention_dropout = self.config.attention_dropout
         self.is_causal = True
 
-        if config.hidden_size % config.num_attention_heads != 0:
-            raise ValueError(
-                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention heads ({config.num_attention_heads})"
-            )
-
         # NOTE: this is different than ModernBERT (separated QKV) so be sure to adapt to this
         self.q_proj = nn.Linear(self.config.hidden_size, self.all_head_size, bias=self.config.attention_bias)
         self.k_proj = nn.Linear(self.config.hidden_size, self.all_head_size, bias=self.config.attention_bias)
