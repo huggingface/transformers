@@ -467,15 +467,30 @@ class ImageProcessingTestMixin:
             {"torchvision": (lambda: False, import_utils.BACKENDS_MAPPING["torchvision"][1])},
         ):
             module = importlib.import_module(f"transformers.models.{model_name}")
-            importlib.reload(module)
 
-            image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
-            pil_processor = image_processing_class(**image_processor_dict)
+            module_name = f"transformers.models.{model_name}.image_processing_pil_{model_name}"
+            module = importlib.import_module(module_name)
 
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                pil_processor.save_pretrained(tmpdirname)
-                reloaded_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="pil")
-                self.assertIs(reloaded_processor.__class__, image_processing_class)
+            # Restore the real module state afterwards to not drag patches module into other tests
+            self.addCleanup(importlib.reload, module)
+
+            with patch.dict(
+                import_utils.BACKENDS_MAPPING,
+                {"torchvision": (lambda: False, import_utils.BACKENDS_MAPPING["torchvision"][1])},
+            ):
+                importlib.reload(module)
+                image_processing_class = getattr(module, image_processing_class.__name__)
+
+                image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
+                pil_processor = image_processing_class(**image_processor_dict)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    pil_processor.save_pretrained(tmpdirname)
+                    reloaded_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="pil")
+
+                    # importlib.reload() creates a new class object, so we can't checl `isinstance`
+                    self.assertEqual(reloaded_processor.__class__.__name__, image_processing_class.__name__)
+                    self.assertEqual(reloaded_processor.__class__.__module__, image_processing_class.__module__)
 
     def test_init_without_params(self):
         for image_processing_class in self.image_processing_classes.values():
