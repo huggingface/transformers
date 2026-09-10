@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from tokenizers import Tokenizer, decoders, pre_tokenizers
+from tokenizers import Regex, Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
 
-from ...tokenization_utils_base import _get_prepend_scheme
+from ...tokenization_utils_base import PREFIX_SPACE_PATTERN, _get_prepend_scheme
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
@@ -128,7 +128,7 @@ class LlamaTokenizer(TokenizersBackend):
         ]
 
         if self.add_prefix_space:
-            sequence += [decoders.Strip(content=" ", left=1)]
+            sequence += [decoders.Replace(Regex(PREFIX_SPACE_PATTERN), "")]
 
         self._tokenizer.decoder = decoders.Sequence(sequence)
         self.use_default_system_prompt = use_default_system_prompt
