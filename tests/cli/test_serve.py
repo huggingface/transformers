@@ -1556,7 +1556,7 @@ class TestLoadModel(unittest.TestCase):
 
 
 # Real image URL for VLM tests (person + dog on a beach)
-_DOG_IMAGE_URL = "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg"
+_DOG_IMAGE_URL = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen2_vl_demo_small.jpg"
 
 
 @slow

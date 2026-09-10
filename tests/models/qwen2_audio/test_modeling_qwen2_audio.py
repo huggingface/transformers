@@ -172,7 +172,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/1272-128104-0000.flac",
+                        "audio_url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mr_quiller.flac",
                     },
                     {"type": "text", "text": "What does the person say?"},
                 ],
@@ -206,7 +206,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXT = [
             "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat's that sound?\nassistant\nIt is the sound of glass shattering.\nuser\nAudio 2: \nWhat can you hear?\nassistant\ncough and throat clearing.",
-            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat does the person say?\nassistant\nThe original content of this audio is: 'Mister Quiller is the apostle of the middle classes and we are glad to welcome his gospel.'",
+            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat does the person say?\nassistant\nThe person says, 'Kids are talking by the door'.",
         ]
 
         self.assertEqual(

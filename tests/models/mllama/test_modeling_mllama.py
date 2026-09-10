@@ -470,7 +470,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
 
         prompt = "<|image|>If I had to write a haiku for this one"
-        url = "https://llava-vl.github.io/static/images/view.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
         image = load_test_image(url)
 
         inputs = processor(text=prompt, images=image, return_tensors="pt").to(torch_device)
@@ -500,9 +500,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         expected_outputs = Expectations(
                 {
-                    ("xpu", 3): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 8): 'If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.',
+                    (None, None): 'If I had to write a haiku for this one, it would be: "I\'m not a fan of the dock, but I\'m a fan of the lake".\\',
                 }
             )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -566,7 +564,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
 
         prompt = "<|image|>If I had to write a haiku for this one"
-        url = "https://llava-vl.github.io/static/images/view.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
         image = load_test_image(url)
 
         inputs = processor(text=prompt, images=image, return_tensors="pt").to(torch_device)
@@ -584,9 +582,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         actual_logits = output.logits[0, -1, :5].cpu()
         expected_logits_all = Expectations(
             {
-                ("xpu", 3): torch.tensor([9.1562, 8.9141, 5.0664, 1.6855, 3.2324], dtype=actual_logits.dtype),
-                ("cuda", 7): torch.tensor([9.0781, 8.8750, 5.0781, 1.6221, 3.2207], dtype=actual_logits.dtype),
-                ("cuda", 8): torch.tensor([9.0703, 8.8750, 5.0781, 1.6279, 3.2207], dtype=actual_logits.dtype),
+                (None, None): torch.tensor([6.9375, 4.4688, 3.4531, 0.1973, 1.9766], dtype=actual_logits.dtype),
             }
         )
 
@@ -609,7 +605,9 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "<|image|>If I had to write a haiku for this one",
             "<|image|>This image shows",
         ]
-        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
         image2 = load_test_image(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )
@@ -630,10 +628,8 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         expected_outputs = Expectations(
                 {
-                    ("xpu", 3): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 8): 'If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.',
-                 }
+                    (None, None): 'If I had to write a haiku for this one, it would be: "I\'m not a fan of the dock, but I\'m a fan of the lake".\\',
+                }
             )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
@@ -667,7 +663,9 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(self.instruct_model_checkpoint)
 
         # Prepare inputs
-        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
         image2 = load_test_image(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )
