@@ -13,9 +13,10 @@
 # limitations under the License.
 """Tests for the built-in experts implementations in `integrations/moe.py`.
 
-Expert parallelism gives each rank only its own experts. The router keeps the global routing shape and
-marks the slots this rank does not own with a sentinel expert id and a zero routing weight. An experts
-forward has to keep those slots out of both the output and the gradient.
+Expert parallelism leaves each rank only its own experts, and the router marks the slots it does not own
+with a sentinel expert id and a zero routing weight. `batched_mm_experts_forward` clamps those slots into
+a real expert to keep the weight gather in bounds, so they have to be kept out of the output and of the
+gradient explicitly.
 """
 
 import unittest
@@ -45,23 +46,21 @@ class BatchedMmExpertsForwardTest(unittest.TestCase):
         return torch.tensor(TOP_K_WEIGHTS, device=torch_device, dtype=torch.float32, requires_grad=requires_grad)
 
     def test_sentinel_slots_get_no_routing_weight_gradient(self):
-        """A sentinel slot is clamped into a real expert to keep the weight gather in bounds, so its expert output
-        is not zero. Only the zero routing weight keeps it out of the output, and multiplying by zero does not stop
-        the gradient reaching the other side of that product, so the router would be handed a gradient for slots
-        this rank never routed."""
         top_k_weights = self._weights(requires_grad=True)
         out = batched_mm_experts_forward(self.experts, self.hidden_states, self.top_k_index, top_k_weights)
         out.sum().backward()
 
+        # The clamp leaves a sentinel slot a real expert output, so only the zero weight keeps it out of the
+        # forward, and multiplying by zero does not stop the gradient reaching the weight on the other side.
         sentinel = self.top_k_index >= NUM_EXPERTS
         self.assertTrue(torch.all(top_k_weights.grad[sentinel] == 0))
         # The routed slots must still get one, or the assert above would pass on an all-zero gradient.
         self.assertTrue(torch.all(top_k_weights.grad[~sentinel] != 0))
 
     def test_sentinel_slots_do_not_reach_the_output(self):
-        """Which expert a sentinel slot is clamped into cannot matter, so pointing it at a different one leaves the
-        output untouched."""
         out = batched_mm_experts_forward(self.experts, self.hidden_states, self.top_k_index, self._weights())
+
+        # Which expert a sentinel slot is clamped into cannot matter, so moving it leaves the output alone.
         moved = self.top_k_index.masked_fill(self.top_k_index >= NUM_EXPERTS, NUM_EXPERTS + 1)
         out_moved = batched_mm_experts_forward(self.experts, self.hidden_states, moved, self._weights())
         torch.testing.assert_close(out, out_moved)
