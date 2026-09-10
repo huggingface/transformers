@@ -216,6 +216,24 @@ class GPTNeoXModelJapaneseTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         config, input_ids, input_mask, token_labels = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(config, input_ids, input_mask)
 
+    def test_model_with_partial_rotary(self):
+        """Regression test for #48630: GPTNeoXJapanese must handle rotary_pct != 1.0."""
+        config = GPTNeoXJapaneseConfig(
+            vocab_size=99,
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            intermediate_multiple_size=2,
+            max_position_embeddings=64,
+            rotary_pct=0.5,
+        )
+        model = GPTNeoXJapaneseModel(config).to(torch_device)
+        model.eval()
+        input_ids = torch.tensor([[1, 2, 3, 4, 5, 6]], device=torch_device)
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids)
+            self.assertEqual(outputs.last_hidden_state.shape, (1, 6, config.hidden_size))
+
     def test_model_as_decoder(self):
         config, input_ids, input_mask, token_labels = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_model_as_decoder(config, input_ids, input_mask)
