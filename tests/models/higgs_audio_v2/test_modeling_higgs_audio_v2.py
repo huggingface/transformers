@@ -355,6 +355,20 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
             # Assert the last tokens are actually the same (except for the natural fluctuation due to order of FP ops)
             torch.testing.assert_close(all_logits[:, -1:, :], last_token_logits, rtol=1e-5, atol=1e-5)
 
+    def test_forward_with_audio_labels(self):
+        """The audio loss must be computed reflecting the `num_codebooks` in the config."""
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = HiggsAudioV2ForConditionalGeneration(config).to(torch_device).eval()
+
+        # `audio_labels` has the same shape as `audio_input_ids`: (batch, audio_seq_len, num_codebooks)
+        inputs["audio_labels"] = ids_tensor(list(inputs["audio_input_ids"].shape), self.model_tester.codebook_size)
+
+        outputs = model(**inputs)
+
+        self.assertIsNotNone(outputs.loss)
+        self.assertEqual(outputs.loss.shape, torch.Size([]))
+        self.assertTrue(torch.isfinite(outputs.loss))
+
     @pytest.mark.generate
     def test_generate_continue_from_past_key_values(self):
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
