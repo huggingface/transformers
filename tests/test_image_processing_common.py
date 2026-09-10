@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib
 import inspect
 import json
 import os
@@ -19,6 +20,7 @@ import sys
 import tempfile
 import warnings
 from typing import Any
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -36,7 +38,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import import_utils, is_torch_available, is_vision_available
 
 from .test_preprocessing_common import PreprocessingTesterMixin
 
