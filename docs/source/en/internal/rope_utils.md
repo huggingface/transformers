@@ -77,13 +77,16 @@ config.rope_parameters = {
 }
 ```
 
-## Multimodal RoPE (M-RoPE)
+## MRoPE (Multi-dimensional/Axial RoPE)
 
-Vision-language models that need to encode more than one positional axis per token — for example a temporal position plus a height and width grid position for image/video patches — use a variant of RoPE where the frequency bands are partitioned across axes, instead of a single set of frequencies driven by one 1D sequence position.
+MRoPE splits the head dimension into separate chunks, each handling a different positional axis. It could be sequence position, height, width, and time (for video).
+Then rotary positional encoding is applied independently to each chunk, and the results are concatenated back together into the final embedding.
+The `mrope_section` parameter decides how much of the vector is allocated to each axis.
 
-For standard RoPE, all `head_dim // 2` frequency bands are indexed by the same position id. For this multimodal variant, those bands are split into contiguous chunks (one chunk per positional axis), each chunk is computed against a different axis's position id (e.g. temporal, height, width), and the chunks are recombined into a single set of `cos`/`sin` values applied across the full head dimension.
-
-This partitioning is controlled by an extra `mrope_section` key inside `rope_parameters`: a list of ints giving the size of each chunk, in axis order, that sums to `head_dim // 2`. It's used together with the `"default"` `rope_type` — there's no dedicated `rope_type` string for this variant yet.
+For example, Qwen2-VL uses `mrope_section = [16, 24, 24]`.
+Of the 64 available units (`head_dim // 2`), 16 are used to encode temporal position (which frame), 24 encode height position (which row),
+and 24 encode width position (which column). Each chunk gets rotary positional encoding applied independently,
+and the three are concatenated back together into the final embedding.
 
 ```python
 from transformers import Qwen2VLConfig
@@ -96,7 +99,12 @@ config.text_config.rope_parameters = {
 }
 ```
 
-Model families that use this mechanism include `qwen2_vl`, `qwen2_5_vl`, `qwen3_vl`, `qwen3_vl_moe`, `qwen3_5`, `qwen3_5_moe`, `qwen2_5_omni`, `qwen3_omni_moe`, `qwen4_exp`, `glm4v`, `glm4v_moe`, `glm_image`, `glm_ocr`, `hunyuan_vl`, `cohere_compass`, `cosmos3_edge`, `ernie4_5_vl_moe`, `neomme`, and `paddleocr_vl`.
+Note: `rope_type: "mrope"` is not currently a registered rope type.
+Setting it has no effect and is silently treated the same as `"default"`, where no error or warning is raised.
+`mrope_section` still works as described above regardless of `rope_type`. It's read directly by each model's `RotaryEmbedding` class rather than
+validated through `ROPE_INIT_FUNCTIONS`.
+
+Models currently using this mechanism: Qwen2-VL, Qwen2.5-VL, Qwen2.5-Omni, Qwen3-VL, Qwen3-VL-MoE, Qwen3.5, Qwen3.5-MoE, Qwen3-Omni-MoE, Qwen4-Exp, GLM-4V, GLM-4V-MoE, GLM-Image, GLM-OCR, HunYuan-VL, Cohere Compass, Cosmos3-Edge, Ernie4.5-VL-MoE, NeoMME, PaddleOCR-VL.
 
 ## Utilities
 
