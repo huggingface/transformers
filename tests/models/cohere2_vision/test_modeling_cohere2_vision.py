@@ -329,7 +329,9 @@ class Cohere2IntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": url_to_local_path("https://llava-vl.github.io/static/images/view.jpg"),
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+                            ),
                         },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
@@ -360,8 +362,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): 'Dock stretches to calm',
-                ("cuda", 8): 'Dock stretches to calm',
+                (None, None): 'Dock meets silent lake',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -403,7 +404,9 @@ class Cohere2IntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": url_to_local_path("https://llava-vl.github.io/static/images/view.jpg"),
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+                            ),
                         },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
@@ -416,13 +419,13 @@ class Cohere2IntegrationTest(unittest.TestCase):
                         {
                             "type": "image",
                             "url": url_to_local_path(
-                                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
                             ),
                         },
                         {
                             "type": "image",
                             "url": url_to_local_path(
-                                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg"
                             ),
                         },
                         {

@@ -190,6 +190,7 @@ class DistributedMixin:
         if device_mesh is not None:
             model.config.distributed_config = distributed_config
             model._device_mesh = device_mesh
+            model._tp_size = distributed_config.tp_size
 
             if distributed_config.tp_size > 1:
                 tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh

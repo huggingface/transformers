@@ -66,7 +66,7 @@ messages = [
         {
             "role": "user",
             "content": [
-                {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                {"type": "image", "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"},
                 {"type": "text", "text": "What does the image show?"}
             ]
         }
@@ -91,7 +91,7 @@ model = MllamaForConditionalGeneration.from_pretrained(model_id, device_map="aut
 processor = AutoProcessor.from_pretrained(model_id)
 
 prompt = "<|image|>If I had to write a haiku for this one"
-url = "https://llava-vl.github.io/static/images/view.jpg"
+url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
 raw_image = Image.open(requests.get(url, stream=True).raw)
 
 inputs = processor(text=prompt, images=raw_image, return_tensors="pt").to(model.device)
