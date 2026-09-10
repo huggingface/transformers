@@ -463,7 +463,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
         >>> model = PPFormulaNetForConditionalGeneration.from_pretrained(model_path, device_map="auto")
         >>> processor = AutoProcessor.from_pretrained(model_path)
 
-        >>> image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_formula_rec_001.png"
+        >>> image_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_formula_rec_001.png"
         >>> image = Image.open(BytesIO(httpx.get(image_url).content)).convert("RGB")
         >>> inputs = processor(images=image, return_tensors="pt").to(model.device)
         >>> outputs = model(**inputs)
