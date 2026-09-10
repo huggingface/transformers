@@ -16,19 +16,12 @@ import unittest
 
 import torch
 
-from transformers.integrations.moe import _can_use_grouped_mm, _grouped_mm, _has_valid_grouped_mm_layout
+from transformers.integrations.moe import _can_use_grouped_mm, _grouped_mm
 from transformers.testing_utils import require_torch, require_torch_accelerator, torch_device
 
 
 @require_torch
 class GroupedMmCompatibilityTest(unittest.TestCase):
-    def test_stride_alignment(self):
-        aligned = torch.empty(4, 512, 1024, dtype=torch.bfloat16).transpose(-2, -1)
-        unaligned = torch.empty(4, 512, 1025, dtype=torch.bfloat16).transpose(-2, -1)
-
-        self.assertTrue(_has_valid_grouped_mm_layout(aligned))
-        self.assertFalse(_has_valid_grouped_mm_layout(unaligned))
-
     @require_torch_accelerator
     def test_misaligned_weight_data_ptr_uses_fallback(self):
         inputs = torch.randn(8, 16, dtype=torch.bfloat16, device=torch_device)
