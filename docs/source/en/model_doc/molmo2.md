@@ -48,7 +48,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="image-text-to-text",
     model="allenai/Molmo2-8B",
-    device=0,
+    device_map="auto",
     torch_dtype="auto",
 )
 

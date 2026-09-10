@@ -266,7 +266,7 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         text = self.prepare_text_inputs(modalities=["image"])
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         inputs_dict = {"text": text, "images": image_input}
         inputs = processor(**inputs_dict, return_tensors="pt")
 

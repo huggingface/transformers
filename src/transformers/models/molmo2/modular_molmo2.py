@@ -257,6 +257,7 @@ class Molmo2TextConfig(PreTrainedConfig):
 
     @property
     def rope_theta(self) -> float:
+        # vLLM reads `rope_theta` then assigns it back; raising keeps it out of `to_dict()`.
         rope_parameters = self.rope_parameters or {}
         if "rope_theta" not in rope_parameters:
             raise AttributeError("rope_theta")
@@ -1170,10 +1171,9 @@ class Molmo2VisionAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.is_causal = False
 
-        input_dim = config.hidden_size if input_dim is None else input_dim
-        self.q_proj = nn.Linear(input_dim, self.num_heads * self.head_dim)
-        self.k_proj = nn.Linear(input_dim, self.num_key_value_heads * self.head_dim)
-        self.v_proj = nn.Linear(input_dim, self.num_key_value_heads * self.head_dim)
+        self.q_proj = nn.Linear(input_dim or config.hidden_size, self.num_heads * self.head_dim)
+        self.k_proj = nn.Linear(input_dim or config.hidden_size, self.num_key_value_heads * self.head_dim)
+        self.v_proj = nn.Linear(input_dim or config.hidden_size, self.num_key_value_heads * self.head_dim)
         self.out_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size)
 
     def forward(
@@ -1478,8 +1478,7 @@ class Molmo2DecoderLayer(Phi3DecoderLayer):
         use_cache: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        # `norm_after` selects post-norm (normalize each sublayer's *output*) over the default
-        # pre-norm (normalize each sublayer's *input*) -- a config flag instead of a subclass.
+        # `norm_after=True` normalizes each sublayer's output (post-norm) instead of its input (pre-norm)
         residual = hidden_states
         if not self.norm_after:
             hidden_states = self.attn_norm(hidden_states)

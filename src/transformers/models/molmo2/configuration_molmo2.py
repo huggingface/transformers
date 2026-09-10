@@ -193,6 +193,7 @@ class Molmo2TextConfig(PreTrainedConfig):
 
     @property
     def rope_theta(self) -> float:
+        # vLLM reads `rope_theta` then assigns it back; raising keeps it out of `to_dict()`.
         rope_parameters = self.rope_parameters or {}
         if "rope_theta" not in rope_parameters:
             raise AttributeError("rope_theta")
