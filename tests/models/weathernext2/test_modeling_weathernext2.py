@@ -176,6 +176,8 @@ class WeatherNext2ModelTester:
 @require_torch
 class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (WeatherNext2Model, WeatherNext2ForWeatherForecasting) if is_torch_available() else ()
+    # Weather generation advances physical states rather than token IDs, so the language-generation tests do not apply.
+    all_generative_model_classes = ()
     additional_model_inputs = ["global_features", "noise"]
 
     test_resize_embeddings = False
@@ -274,6 +276,57 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
                 if name in extractor.static_variables:
                     continue
                 np.testing.assert_allclose(values[0], state[name][member], rtol=1e-4, atol=1e-4)
+
+    def test_generate_matches_manual_rollout(self):
+        config = self.model_tester.get_config()
+        extractor = self.model_tester.get_feature_extractor()
+        model = WeatherNext2ForWeatherForecasting(config).to(torch_device).eval()
+        state = self.model_tester.prepare_state(extractor, batch_size=2)
+        valid_time = np.full(2, np.datetime64("2024-10-07T06:00:00").astype("datetime64[s]").astype(np.int64))
+        noise = torch.randn(2, 2, config.noise_channels, device=torch_device)
+
+        generated = model.generate(
+            state=state,
+            feature_extractor=extractor,
+            seconds_since_epoch=valid_time,
+            num_steps=2,
+            noise=noise,
+        )
+
+        manual_state = state
+        manual_time = valid_time
+        manual_forecasts = []
+        for step in range(2):
+            inputs = extractor(manual_state, seconds_since_epoch=manual_time).to(torch_device)
+            with torch.no_grad():
+                prediction = model(**inputs, noise=noise[step]).prediction
+            forecast = extractor.postprocess(prediction, manual_state)
+            manual_forecasts.append(forecast)
+            manual_state = extractor.advance_state(manual_state, forecast, manual_time)
+            manual_time = manual_time + extractor.time_step_hours * 3600
+
+        np.testing.assert_array_equal(generated.valid_time, manual_time)
+        for generated_step, manual_step in zip(generated.forecasts, manual_forecasts):
+            for name in extractor.target_variables:
+                torch.testing.assert_close(generated_step[name], manual_step[name])
+        for name in extractor.input_variables:
+            np.testing.assert_allclose(generated.state[name], manual_state[name], rtol=1e-5, atol=1e-5)
+
+    def test_generate_validates_noise_shape(self):
+        config = self.model_tester.get_config()
+        extractor = self.model_tester.get_feature_extractor()
+        model = WeatherNext2ForWeatherForecasting(config)
+        state = self.model_tester.prepare_state(extractor, batch_size=2)
+        valid_time = np.zeros(2, dtype=np.int64)
+
+        with self.assertRaisesRegex(ValueError, "noise.*expected"):
+            model.generate(
+                state=state,
+                feature_extractor=extractor,
+                seconds_since_epoch=valid_time,
+                num_steps=2,
+                noise=torch.zeros(2, config.noise_channels),
+            )
 
     def test_channel_layout_matches_projection_shapes(self):
         config = self.model_tester.get_config()

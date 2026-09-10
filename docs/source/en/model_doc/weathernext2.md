@@ -170,25 +170,26 @@ Each 6-hour step draws fresh noise. [`~WeatherNext2FeatureExtractor.advance_stat
 it drops the oldest frame, appends the forecast, recomputes the clock variables, and discards the targets that are not
 also inputs (precipitation and the cyclone diagnostics).
 
-[`WeatherNext2FeatureExtractor`] hands back whatever array type it was given, so moving the state onto the accelerator
-once keeps the whole loop there and avoids a host transfer per step.
+[`~WeatherNext2GenerationMixin.generate`] owns the complete rollout: it prepares each step, runs the model,
+postprocesses the prediction and advances the conditioning state. Moving the state onto the accelerator once keeps the
+whole rollout there and avoids a host transfer per step.
 
 ```python
 state = {name: torch.as_tensor(values).to(model.device) for name, values in state.items()}
 
-step_seconds = processor.time_step_hours * 3600
-for step in range(1, 21):  # 5 days
-    inputs = processor(state, seconds_since_epoch=valid_time)
-    with torch.no_grad():
-        outputs = model(**inputs)
-    forecast = processor.postprocess(outputs.prediction, state)
-    # `valid_time` is the time this forecast is valid at, so it stamps the frame being appended.
-    # Only then does it move on to the step after.
-    state = processor.advance_state(state, forecast, valid_time)
-    valid_time = valid_time + step_seconds
+outputs = model.generate(
+    state=state,
+    feature_extractor=processor,
+    seconds_since_epoch=valid_time,
+    num_steps=20,  # 5 days
+)
+frames = outputs.forecasts
+state = outputs.state
 ```
 
-Passing numpy arrays instead works exactly the same way and returns numpy, at the cost of two transfers per step.
+`seconds_since_epoch` is the valid time of the first generated forecast. Every step draws fresh noise; pass an explicit
+tensor shaped `(num_steps, batch_size, noise_channels)` through `noise=` for a reproducible rollout. Passing numpy state
+arrays works as well, at the cost of transfers between the host and model device.
 
 ### Tropical cyclones
 
@@ -315,6 +316,15 @@ Against the reference JAX implementation both agree to within 1e-4 relative on e
     - postprocess
     - advance_state
     - compute_forcings
+
+## WeatherNext2GenerationMixin
+
+[[autodoc]] WeatherNext2GenerationMixin
+    - generate
+
+## WeatherNext2GenerationOutput
+
+[[autodoc]] WeatherNext2GenerationOutput
 
 ## WeatherNext2Model
 

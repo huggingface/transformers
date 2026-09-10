@@ -56,6 +56,7 @@ from .configuration_weathernext2 import (
     NUM_NODE_SPATIAL_FEATURES,
     WeatherNext2Config,
 )
+from .generation_weathernext2 import WeatherNext2GenerationMixin
 
 
 class WeatherNext2MLP(CLIPMLP):
@@ -496,9 +497,11 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
 
         The mesh, the two bipartite graphs and the banded attention mask are not learned: they follow
         from the mesh refinement level and the grid, and deriving them is slow and pulls in libraries
-        the forward pass has no other use for. So every checkpoint carries them, and loading is the
-        only way they are ever filled. Allocating them here needs only the two sizes the config
-        records, which are the ones that cannot be derived in closed form.
+        the forward pass has no other use for. A few grid points lie exactly on a shared triangle
+        edge, so reconstructing the graph can also choose a different adjacent face as numerical
+        dependencies change. Every checkpoint therefore carries the exact conversion-time geometry.
+        Allocating it here needs only the two sizes the config records, which are the ones that cannot
+        be derived in closed form.
         """
         config = self.config
         edges = config.num_grid_to_mesh_edges
@@ -654,7 +657,7 @@ class WeatherNext2ForecastHead(nn.Module):
 @auto_docstring(
     custom_intro="WeatherNext 2 with its forecasting head: advances the global atmospheric state by one time step."
 )
-class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel):
+class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel, WeatherNext2GenerationMixin):
     def __init__(self, config: WeatherNext2Config):
         super().__init__(config)
         self.model = WeatherNext2Model(config)
