@@ -129,6 +129,7 @@ def batched_mm_experts_forward(
     # zero at sentinel slots (RouterParallel masks them at dispatch), so the weighted mul drops
     # those contributions — we pay the wasted GEMM compute because batched_mm has no offset to skip.
     # Out-of-place to avoid mutating the caller's routing tensor (a contiguous `reshape(-1)` aliases it).
+    sentinel_mask = expert_ids >= self.num_experts
     expert_ids = expert_ids.clamp(0, self.num_experts - 1)
 
     # Select gate_up or just up projection weights and biases
@@ -162,6 +163,8 @@ def batched_mm_experts_forward(
     )  # (S, hidden_dim)
 
     # Apply routing weights
+    # Zero weights already drop these from the output; the mask keeps them out of the router gradient.
+    sample_weights = sample_weights.masked_fill(sentinel_mask, 0.0)
     weighted_out = proj_out * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
