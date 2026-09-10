@@ -128,21 +128,22 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
     def get_audio_features(
         self,
         input_features: torch.Tensor,
-        audio_feature_lengths: torch.LongTensor,
+        input_features_mask: torch.Tensor,
         audio_chunk_mapping: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        audio_feature_lengths (`torch.LongTensor` of shape `(num_chunks,)`):
-            Number of output tokens per chunked log-mel feature row in `input_features`.
+        input_features_mask (`torch.Tensor` of shape `(num_chunks, feature_sequence_length)`):
+            Mask to avoid performing attention on padded feature indices, one row per chunked log-mel feature row
+            in `input_features`.
         audio_chunk_mapping (`torch.LongTensor` of shape `(num_chunks,)`):
             Index of the source audio sample for each row in `input_features`.
         """
         num_chunks = input_features.shape[0]
-        if audio_feature_lengths.numel() != num_chunks:
+        if input_features_mask.shape[0] != num_chunks:
             raise ValueError(
-                "`audio_feature_lengths` must contain one length per `input_features` chunk: "
-                f"got {audio_feature_lengths.numel()} lengths for {num_chunks} chunks."
+                "`input_features_mask` must contain one row per `input_features` chunk: "
+                f"got {input_features_mask.shape[0]} rows for {num_chunks} chunks."
             )
         if audio_chunk_mapping.numel() != num_chunks:
             raise ValueError(
@@ -153,13 +154,14 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
         audio_outputs = self.audio_tower(input_features, return_dict=True, **kwargs)
         whisper_features = audio_outputs.last_hidden_state
         device = whisper_features.device
-        audio_feature_lengths = audio_feature_lengths.to(device=device)
         audio_chunk_mapping = audio_chunk_mapping.to(device=device)
 
-        # Lengths are post-merge token counts; recover Whisper frames before merge + projection.
+        # Per-chunk valid lengths from the audio tower, grouped by sample before merge & trimming
+        # so leftover frames at a chunk boundary can still complete a merge group.
         merge_size = self.config.audio_merge_size
-        encoder_lengths = audio_feature_lengths * merge_size
-        valid_mask = torch.arange(whisper_features.shape[1], device=device)[None, :] < encoder_lengths[:, None]
+        input_lengths = input_features_mask.sum(-1).to(device=device)
+        _, post_lengths = self.audio_tower._get_feat_extract_output_lengths(input_lengths)
+        valid_mask = torch.arange(whisper_features.shape[1], device=device)[None, :] < post_lengths[:, None]
 
         if num_chunks == 0:
             audio_outputs.pooler_output = whisper_features.new_zeros(0, self.config.text_config.hidden_size)
@@ -224,18 +226,19 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         input_features: torch.FloatTensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        audio_feature_lengths: torch.LongTensor | None = None,
         audio_chunk_mapping: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MossTranscribeDiarizeModelOutputWithPast:
         r"""
-        audio_feature_lengths (`torch.LongTensor` of shape `(num_chunks,)`, *optional*):
-            Number of output tokens per chunked log-mel feature row in `input_features`.
+        input_features_mask (`torch.Tensor` of shape `(num_chunks, feature_sequence_length)`, *optional*):
+            Mask to avoid performing attention on padded feature indices, one row per chunked log-mel feature row
+            in `input_features`.
         audio_chunk_mapping (`torch.LongTensor` of shape `(num_chunks,)`, *optional*):
             Index of the source audio sample for each row in `input_features`.
         """
@@ -244,13 +247,13 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
 
         audio_embeds = None
         if input_features is not None and input_ids is not None:
-            if audio_feature_lengths is None or audio_chunk_mapping is None:
+            if input_features_mask is None or audio_chunk_mapping is None:
                 raise ValueError(
-                    "`audio_feature_lengths` and `audio_chunk_mapping` must be provided with `input_features`."
+                    "`input_features_mask` and `audio_chunk_mapping` must be provided with `input_features`."
                 )
             audio_embeds = self.get_audio_features(
                 input_features=input_features,
-                audio_feature_lengths=audio_feature_lengths,
+                input_features_mask=input_features_mask,
                 audio_chunk_mapping=audio_chunk_mapping,
             ).pooler_output
             special_audio_mask = self.get_placeholder_mask(
@@ -310,15 +313,13 @@ class MossTranscribeDiarizeForConditionalGeneration(MossTranscribeDiarizePreTrai
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        audio_feature_lengths: torch.LongTensor | None = None,
         audio_chunk_mapping: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MossTranscribeDiarizeCausalLMOutputWithPast:
         r"""
-        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
-            Unused. MOSS reassembles chunked audio via `audio_feature_lengths` and `audio_chunk_mapping` instead.
-        audio_feature_lengths (`torch.LongTensor` of shape `(num_chunks,)`, *optional*):
-            Number of output tokens per chunked log-mel feature row in `input_features`.
+        input_features_mask (`torch.Tensor` of shape `(num_chunks, feature_sequence_length)`, *optional*):
+            Mask to avoid performing attention on padded feature indices, one row per chunked log-mel feature row
+            in `input_features`.
         audio_chunk_mapping (`torch.LongTensor` of shape `(num_chunks,)`, *optional*):
             Index of the source audio sample for each row in `input_features`.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -340,12 +341,12 @@ class MossTranscribeDiarizeForConditionalGeneration(MossTranscribeDiarizePreTrai
         outputs = self.model(
             input_ids=input_ids,
             input_features=input_features,
+            input_features_mask=input_features_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            audio_feature_lengths=audio_feature_lengths,
             audio_chunk_mapping=audio_chunk_mapping,
             **kwargs,
         )
