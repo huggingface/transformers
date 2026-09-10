@@ -859,6 +859,17 @@ def _preprocess_mask_arguments(
             position_ids = position_ids.expand(batch_size, -1)
         packed_sequence_mask = find_packed_sequence_indices(position_ids)
 
+    # `generate` has already worked out that there is no padding in this mask, and only appends ones to it.
+    # `_ignore_causal_mask_sdpa` would reach the same conclusion below, but it reads the mask on the host to do so,
+    # once per forward. Dropping the mask here reaches it for free, and leaves sdpa to fall back on `is_causal`.
+    if (
+        attention_mask is not None
+        and not getattr(attention_mask, "_has_padding", True)
+        and attention_mask.shape[-1] == kv_length
+        and ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation] is sdpa_mask
+    ):
+        attention_mask = None
+
     return False, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset
 
 
