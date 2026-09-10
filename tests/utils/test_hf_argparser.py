@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import argparse
+import dataclasses
 import json
 import os
 import sys
@@ -22,7 +23,7 @@ from argparse import Namespace
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Literal, Union, get_args, get_origin
+from typing import Literal, Optional, Union, get_args, get_origin
 from unittest.mock import patch
 
 import yaml
@@ -490,3 +491,37 @@ class HfArgumentParserTest(unittest.TestCase):
         parser = HfArgumentParser(TrainingArguments)
         training_args = parser.parse_args_into_dataclasses()[0]
         self.assertEqual(training_args.accelerator_config.gradient_accumulation_kwargs["num_steps"], 2)
+
+    def test_does_not_mutate_dataclass_annotation_types(self):
+        # Creating a parser must not leak the unwrapped type back into the user's dataclass.
+        # Previously, `_parse_dataclass_field` re-assigned `field.type` when unwrapping
+        # `Union`/`Optional` annotations (e.g. `Optional[int]` -> `int`), permanently
+        # corrupting the dataclass's typing annotations for any other consumer.
+        @dataclass
+        class AnnotatedContainer:
+            optional_int: Optional[int] = None
+            optional_list: Optional[list[str]] = field(default_factory=list)
+            optional_bool: Optional[bool] = None
+
+        for f in dataclasses.fields(AnnotatedContainer):
+            self.assertIn(
+                type(None),
+                get_args(f.type),
+                f"Field `{f.name}` should keep its Optional annotation after parser creation",
+            )
+
+        parser = HfArgumentParser(AnnotatedContainer)
+
+        for f in dataclasses.fields(AnnotatedContainer):
+            self.assertIn(
+                type(None),
+                get_args(f.type),
+                f"Field `{f.name}` annotation was mutated by HfArgumentParser creation",
+            )
+
+        # Parsing should still behave correctly.
+        parsed = parser.parse_args_into_dataclasses(["--optional_int", "7", "--optional_list", "a", "b"])[0]
+        self.assertEqual(parsed.optional_int, 7)
+        self.assertEqual(parsed.optional_list, ["a", "b"])
+        self.assertIsNone(parsed.optional_bool)
+        self.assertIn(type(None), get_args(dataclasses.fields(AnnotatedContainer)[0].type))
