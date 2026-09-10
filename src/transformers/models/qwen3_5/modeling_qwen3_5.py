@@ -865,8 +865,9 @@ class Qwen3_5RMSNorm(nn.Module):
 
     def forward(self, x):
         if _use_fla_norm(x):
-            # fused: fp32 rms-norm * (1 + weight), cast back to x.dtype; one Triton kernel each way
-            return _fla_rms_norm(x, 1.0 + self.weight, None, eps=self.eps)
+            # fused: fp32 rms-norm * (1 + weight), cast back to x.dtype; one Triton kernel each way.
+            # The add is done in fp32 like the reference: in bf16 it would round every channel scale by up to 0.4%.
+            return _fla_rms_norm(x, 1.0 + self.weight.float(), None, eps=self.eps)
         output = self._norm(x.float())
         # Llama does x.to(float16) * w whilst Qwen3_5 is (x * w).to(float16)
         # See https://github.com/huggingface/transformers/pull/29402
