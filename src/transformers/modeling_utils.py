@@ -27,7 +27,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial, wraps
-from itertools import chain, cycle
+from itertools import cycle
 from threading import Thread
 from typing import TYPE_CHECKING, Any, TypeVar, get_type_hints, overload
 from zipfile import is_zipfile
@@ -4767,14 +4767,6 @@ class PreTrainedModel(
                 except AttributeError:
                     pass  # may happen when handling pre-quantized weights
             self._is_hf_initialized = True
-
-        if self._device_mesh is not None:
-            # Empty local shards have nothing to initialize; without the mark, running _init_weights on them issues collectives the other ranks never join (hang)
-            from torch.distributed.tensor import DTensor
-
-            for param_or_buffer in chain(self.parameters(), self.buffers()):
-                if isinstance(param_or_buffer, DTensor) and param_or_buffer._local_tensor.numel() == 0:
-                    param_or_buffer._is_hf_initialized = True
 
         # This will only initialize submodules that are not marked as initialized by the line above.
         if is_deepspeed_zero3_enabled() and not is_quantized:

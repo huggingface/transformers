@@ -976,10 +976,6 @@ class WeightTransform:
             # Add them to the new dictionary
             collected_tensors[key] = tensors
 
-        if any(len(tensors) == 0 for tensors in collected_tensors.values()):
-            # Uneven FSDP sharding left this rank an empty shard: nothing to load, and its pre-sharded empty local tensor is already correct
-            raise SkipParameters()
-
         return collected_tensors
 
     def was_used(self) -> bool:
@@ -1188,7 +1184,14 @@ class WeightConverter(WeightTransform):
         # attribute during the whole process
         collected_tensors = self.materialize_tensors()
 
-        for op in self.operations:
+        # Uneven sharding can leave this rank no rows at all. There is nothing for the operations to
+        # merge or permute, and `torch.stack([])` would raise, so pass the targets straight through:
+        # the parameter is not missing, and `set_param_for_module` marks it loaded.
+        empty_shard = any(len(tensors) == 0 for tensors in collected_tensors.values())
+        if empty_shard:
+            collected_tensors = {target: torch.empty(0) for target in self.target_patterns}
+
+        for op in [] if empty_shard else self.operations:
             with log_conversion_errors(layer_name, loading_info, (len(collected_tensors), layer_name), op):
                 collected_tensors = op.convert(
                     collected_tensors,
@@ -1360,6 +1363,14 @@ def set_param_for_module(
         return
 
     ref = getattr(module_obj, param_name)
+    if is_dtensor(ref) and ref._local_tensor.numel() == 0:
+        # Uneven sharding left this rank an empty local shard. Its pre-sharded tensor is already
+        # correct, but it still has to count as loaded: otherwise `_init_weights` re-initializes it,
+        # and the first DTensor RNG op is a collective the fully loaded ranks never join.
+        loading_info.missing_keys.discard(target_name)
+        ref._is_hf_initialized = True
+        return
+
     if ref is None:
         loading_info.unexpected_keys.add(target_name)
     else:
