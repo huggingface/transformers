@@ -419,10 +419,10 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
 
     # Multi-image example
     prompt = "I used to know a lot about constellations when I was younger, but as I grew older, I forgot most of what I knew. These are the only two constellations that I really remember now.<image><image>I would like for you to tell me about 3 more constellations and give me a little bit of history about the constellation."
-    url = "https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg"
+    url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg"
     with httpx.stream("GET", url) as response:
         image_1 = Image.open(BytesIO(response.read()))
-    url = "https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg"
+    url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/orion.jpg"
     with httpx.stream("GET", url) as response:
         image_2 = Image.open(BytesIO(response.read()))
 
