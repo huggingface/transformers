@@ -19,9 +19,9 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
-from ..auto import AutoConfig
+from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -109,13 +109,15 @@ class Florence2Config(PreTrainedConfig):
     ```"""
 
     model_type = "florence2"
-    sub_configs = {
-        "text_config": AutoConfig,
-        "vision_config": Florence2VisionConfig,
-    }
     sub_configs_defaults = {
-        "vision_config": {"model_type": "florence_vision"},
-        "text_config": {"model_type": "bart"},
+        "vision_config": SubConfigSpec(
+            config_class=Florence2VisionConfig,
+            model_type="florence_vision",
+        ),
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="bart",
+        ),
     }
 
     text_config: dict | PreTrainedConfig | None = None

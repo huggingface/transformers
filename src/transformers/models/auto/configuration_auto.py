@@ -290,14 +290,6 @@ class AutoConfig:
         )
 
     @classmethod
-    def resolve_config_class(cls, model_type: str) -> type[PreTrainedConfig]:
-        if model_type in CONFIG_MAPPING:
-            return CONFIG_MAPPING[model_type]
-        raise ValueError(
-            f"Unrecognized model identifier: {model_type}. Should contain one of {', '.join(CONFIG_MAPPING.keys())}"
-        )
-
-    @classmethod
     def for_model(cls, model_type: str, *args, **kwargs) -> PreTrainedConfig:
         if model_type in CONFIG_MAPPING:
             config_class = CONFIG_MAPPING[model_type]

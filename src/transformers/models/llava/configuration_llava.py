@@ -16,9 +16,9 @@ from typing import Literal
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import AutoConfig
+from ..auto.configuration_auto import AutoConfig
 
 
 @auto_docstring(checkpoint="llava-hf/llava-1.5-7b-hf")
@@ -50,20 +50,26 @@ class LlavaConfig(PreTrainedConfig):
     attribute_map = {
         "image_token_id": "image_token_index",
     }
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+
     sub_configs_defaults = {
-        "vision_config": {
-            "model_type": "clip_vision_model",
-            "intermediate_size": 4096,
-            "hidden_size": 1024,
-            "patch_size": 14,
-            "image_size": 336,
-            "num_hidden_layers": 24,
-            "num_attention_heads": 16,
-            "vocab_size": 32000,
-            "projection_dim": 768,
-        },
-        "text_config": {"model_type": "llama"},
+        "vision_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="clip_vision_model",
+            init_kwargs={
+                "intermediate_size": 4096,
+                "hidden_size": 1024,
+                "patch_size": 14,
+                "image_size": 336,
+                "num_hidden_layers": 24,
+                "num_attention_heads": 16,
+                "vocab_size": 32000,
+                "projection_dim": 768,
+            },
+        ),
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="llama",
+        ),
     }
 
     vision_config: dict | PreTrainedConfig | None = None
