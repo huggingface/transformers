@@ -137,6 +137,7 @@ def test_flash_attn_3_available_with_package():
     [(2, False, False), (2, True, False), (2, True, True), (3, False, False), (3, True, False), (3, True, True)]
 )
 def test_flash_attn_cuda_kernels_fallback(fa_version: int, kernels_available: bool, download_fails: bool):
+    from transformers.integrations.hub_kernels import get_attn_kernel_version
     from transformers.modeling_flash_attention_utils import FLASH_ATTN_KERNEL_FALLBACK
 
     # Test is expected to pass only if the kernels library is available and the kernel download does not fail
@@ -167,8 +168,8 @@ def test_flash_attn_cuda_kernels_fallback(fa_version: int, kernels_available: bo
 
         # Check the number of calls to get_kernel
         if kernels_available:
-            key = f"flash_attention_{fa_version}"
-            get_kernel.assert_called_once_with(FLASH_ATTN_KERNEL_FALLBACK[key], version=1)
+            repo_id = FLASH_ATTN_KERNEL_FALLBACK[f"flash_attention_{fa_version}"]
+            get_kernel.assert_called_once_with(repo_id, version=get_attn_kernel_version(repo_id))
         else:
             get_kernel.assert_not_called()
 
@@ -211,8 +212,15 @@ def test_broken_torchaudio_does_not_break_import():
     # Importing loss_rnnt (and thus transformers) must succeed regardless of torchaudio's state, and must
     # not have imported torchaudio at module scope.
     from transformers.loss import loss_rnnt
+    from transformers.utils import import_utils
 
     assert not hasattr(loss_rnnt, "torchaudio"), "torchaudio must be imported lazily, not at module scope"
+
+    # ``rnnt_loss`` is guarded by ``@requires(backends=("torchaudio",))``, which resolves availability
+    # through ``BACKENDS_MAPPING`` at call time, so that is what has to be patched here.
+    def patch_torchaudio_available(available: bool):
+        error_message = import_utils.BACKENDS_MAPPING["torchaudio"][1]
+        return patch.dict(import_utils.BACKENDS_MAPPING, {"torchaudio": (lambda: available, error_message)})
 
     def _call_rnnt_loss():
         loss_rnnt.rnnt_loss(
@@ -237,7 +245,7 @@ def test_broken_torchaudio_does_not_break_import():
             del sys.modules[name]
 
     with (
-        patch.object(loss_rnnt, "is_torchaudio_available", return_value=True),
+        patch_torchaudio_available(True),
         patch.object(builtins, "__import__", failing_import),
     ):
         try:
@@ -248,7 +256,7 @@ def test_broken_torchaudio_does_not_break_import():
             raise AssertionError("rnnt_loss must surface the torchaudio OSError at call time")
 
     # torchaudio genuinely absent: rnnt_loss raises a clean ImportError.
-    with patch.object(loss_rnnt, "is_torchaudio_available", return_value=False):
+    with patch_torchaudio_available(False):
         try:
             _call_rnnt_loss()
         except ImportError:

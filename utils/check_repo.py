@@ -91,6 +91,7 @@ PRIVATE_MODELS = [
     "Qwen3VLMoeVisionModel",
     "Qwen3_5VisionModel",
     "Qwen3_5MoeVisionModel",
+    "Qwen4ExpVisionModel",  # Building part of Qwen4ExpModel and tested through its multimodal forward.
     "SwitchTransformersStack",
     "SiglipTextTransformer",
     "Siglip2TextTransformer",
@@ -265,6 +266,8 @@ IGNORE_NON_TESTED = (
         "Glm4vMoeTextModel",  # Building part of bigger (tested) model
         "GlmImageTextModel",  # Building part of bigger (tested) model
         "GlmOcrTextModel",  # Building part of bigger (tested) model
+        "Glm5NextTextModel",  # Building part of bigger (tested) model
+        "Glm5NextVisionModel",  # Building part of bigger (tested) model
         "Qwen2VLTextModel",  # Building part of bigger (tested) model
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
         "MiniCPMV4_6Model",  # Building part of bigger (tested) model. Tested implicitly through MiniCPMV4_6ForConditionalGeneration.
@@ -288,6 +291,7 @@ IGNORE_NON_TESTED = (
         "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "BltGlobalTransformer",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
+        "VibeVoiceModel",  # Building part of bigger (tested) model. Tested implicitly through VibeVoiceForConditionalGeneration
         "HiggsAudioV2Model",  # Building part of bigger (tested) model. Tested implicitly through HiggsAudioV2ForConditionalGenerationIntegrationTest.
         "Ernie4_5_VLMoeTextModel",  # Building part of bigger (tested) model
         "Ernie4_5_VL_MoeForConditionalGeneration",  # BC alias
@@ -322,6 +326,7 @@ IGNORE_NON_TESTED = (
 # trigger the common tests.
 TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/decision_transformer/test_modeling_decision_transformer.py",
+    "models/esmfold2/test_modeling_esmfold2.py",
     "models/camembert/test_modeling_camembert.py",
     "models/mbart/test_modeling_mbart.py",
     "models/mt5/test_modeling_mt5.py",
@@ -369,6 +374,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "BlipVisionModel",
         "BlipTextLMHeadModel",
         "BlipTextModel",
+        "NeoMMEForRetrieval",
         "BrosSpadeEEForTokenClassification",
         "BrosSpadeELForTokenClassification",
         "Swin2SRForImageSuperResolution",
@@ -379,6 +385,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "CLIPSegVisionModel",
         "CLIPSegTextModel",
         "EsmForProteinFolding",
+        "EsmFold2Model",
         "GPTSanJapaneseModel",
         "TimeSeriesTransformerForPrediction",
         "InformerForPrediction",
@@ -560,6 +567,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "InklingTextModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingAudioModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingVisionModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
+        "VibeVoiceModel",  # Building part of a bigger model
     ]
 )
 
@@ -588,6 +596,7 @@ DOC_MODEL_NAMES_NOT_IN_AUTO = {
     "phobert",
     "herbert",
     "lasr",
+    "granite_speech5",
     "mluke",
     "xlsr_wav2vec2",
     "xls_r",

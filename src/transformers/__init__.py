@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "5.16.0.dev0"
+__version__ = "5.17.0.dev0"
 
 import importlib
 import sys
@@ -104,7 +104,7 @@ _import_structure = {
     "debug_utils": [],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
-    "distributed": [],
+    "distributed": ["DistributedConfig"],
     "dynamic_module_utils": [],
     "exporters": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
@@ -263,6 +263,7 @@ _import_structure = {
         "FourOverSixConfig",
         "FPQuantConfig",
         "GemmaQuantizationConfig",
+        "GgufConfig",
         "GPTQConfig",
         "HiggsConfig",
         "HqqConfig",
@@ -556,6 +557,7 @@ if TYPE_CHECKING:
     from .data.datasets import GlueDataTrainingArguments as GlueDataTrainingArguments
     from .data.datasets import SquadDataset as SquadDataset
     from .data.datasets import SquadDataTrainingArguments as SquadDataTrainingArguments
+    from .distributed import DistributedConfig as DistributedConfig
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor as SequenceFeatureExtractor
 
     # Feature Extractor
@@ -792,6 +794,7 @@ if TYPE_CHECKING:
     from .utils.quantization_config import FourOverSixConfig as FourOverSixConfig
     from .utils.quantization_config import FPQuantConfig as FPQuantConfig
     from .utils.quantization_config import GemmaQuantizationConfig as GemmaQuantizationConfig
+    from .utils.quantization_config import GgufConfig as GgufConfig
     from .utils.quantization_config import GPTQConfig as GPTQConfig
     from .utils.quantization_config import HiggsConfig as HiggsConfig
     from .utils.quantization_config import HqqConfig as HqqConfig

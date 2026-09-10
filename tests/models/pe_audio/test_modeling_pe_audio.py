@@ -343,7 +343,9 @@ class PeAudioIntegrationTest(unittest.TestCase):
     def test_inference(self):
         checkpoint_name = "/raid/eustache/sam-audio/pe-av-small"
         descriptions = ["glass breaking", "somebody speaking"]
-        audio_file = "https://huggingface.co/datasets/eustlb/dummy-audio-samples-higgs/resolve/main/glass_breaking.mp3"
+        audio_file = (
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass_breaking.mp3"
+        )
 
         # processor = PeAudioProcessor.from_pretrained(checkpoint_name)
         model = PeAudioModel.from_pretrained(checkpoint_name, dtype=self.dtype, device_map=torch_device)
@@ -362,7 +364,9 @@ class PeAudioIntegrationTest(unittest.TestCase):
     def test_inference_frame_level(self):
         checkpoint_name = "/raid/eustache/sam-audio/pe-a-frame-small"
         descriptions = ["glass breaking", "somebody speaking"]
-        audio_file = "https://huggingface.co/datasets/eustlb/dummy-audio-samples-higgs/resolve/main/glass_breaking.mp3"
+        audio_file = (
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass_breaking.mp3"
+        )
 
         # processor = PeAudioProcessor.from_pretrained(checkpoint_name)
         model = PeAudioFrameLevelModel.from_pretrained(checkpoint_name, dtype=self.dtype, device_map=torch_device)
