@@ -364,6 +364,7 @@ except OptionalDependencyNotAvailable:
 
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
+    _import_structure["audio_processing_backends"] = ["NumpyAudioBackend", "NumpyBackend", "TorchAudioBackend", "TorchBackend"]
     _import_structure["activations"] = []
     _import_structure["backbone_utils"] = ["BackboneConfigMixin", "BackboneMixin"]
     _import_structure["cache_utils"] = [
@@ -492,6 +493,10 @@ else:
 if TYPE_CHECKING:
     # All modeling imports
     # Models
+    from .audio_processing_backends import NumpyAudioBackend as NumpyAudioBackend
+    from .audio_processing_backends import NumpyBackend as NumpyBackend
+    from .audio_processing_backends import TorchAudioBackend as TorchAudioBackend
+    from .audio_processing_backends import TorchBackend as TorchBackend
     from .backbone_utils import BackboneConfigMixin, BackboneMixin
     from .cache_utils import Cache as Cache
     from .cache_utils import DynamicCache as DynamicCache
