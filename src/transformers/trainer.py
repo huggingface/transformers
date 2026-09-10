@@ -49,6 +49,7 @@ import torch.distributed as dist
 from huggingface_hub import CommitInfo, ModelCard
 from packaging import version
 from torch import nn
+from torch.distributed.tensor import DTensor
 from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
 
 from . import __version__
@@ -1240,20 +1241,21 @@ class Trainer:
 
         if self.optimizer is None:
             decay_parameters = self.get_decay_parameter_names(opt_model)
-            optimizer_grouped_parameters = [
-                {
-                    "params": [
-                        p for n, p in opt_model.named_parameters() if (n in decay_parameters and p.requires_grad)
-                    ],
-                    "weight_decay": self.args.weight_decay,
-                },
-                {
-                    "params": [
-                        p for n, p in opt_model.named_parameters() if (n not in decay_parameters and p.requires_grad)
-                    ],
-                    "weight_decay": 0.0,
-                },
-            ]
+            optimizer_grouped_parameters = []
+            for in_decay, weight_decay in ((True, self.args.weight_decay), (False, 0.0)):
+                params = [
+                    p
+                    for n, p in opt_model.named_parameters()
+                    if p.requires_grad and (n in decay_parameters) == in_decay
+                ]
+                # Fused/foreach optimizers batch every param of a group into a single op call, which
+                # errors out if the group mixes DTensor and plain Tensor params.
+                # Split each group by type so every batched call stays homogeneous.
+                dtensor_params = [p for p in params if isinstance(p, DTensor)]
+                plain_params = [p for p in params if not isinstance(p, DTensor)]
+                for group_params in (dtensor_params, plain_params):
+                    if group_params:
+                        optimizer_grouped_parameters.append({"params": group_params, "weight_decay": weight_decay})
 
             if self.optimizer_cls_and_kwargs is not None:
                 optimizer_cls, optimizer_kwargs = self.optimizer_cls_and_kwargs
@@ -1678,9 +1680,11 @@ class Trainer:
         # wrapped (e.g. in DataParallel) on subsequent `train()` calls and avoid double wrapping.
         model = self._wrap_model(self.model_wrapped)
 
+        is_natively_fsdp_sharded = getattr(model, "_is_fsdp_managed_module", False)
+
         # If the model is wrapped, don't use `accelerator.prepare`
         # this is for unhandled cases in accelerate such as FSDP-XLA, SageMaker MP/DP, DataParallel
-        use_accelerator_prepare = model is self.model
+        use_accelerator_prepare = model is self.model and not is_natively_fsdp_sharded
 
         # prepare using `accelerator` prepare
         if use_accelerator_prepare:
@@ -3978,6 +3982,19 @@ class Trainer:
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
 
+        elif getattr(self.model.config, "distributed_config", None) is not None:
+            os.makedirs(output_dir, exist_ok=True)
+            self.model.save_pretrained(output_dir)
+            if self.args.should_save:
+                if self.processing_class is not None:
+                    self.processing_class.save_pretrained(output_dir)
+                elif (
+                    self.data_collator is not None
+                    and hasattr(self.data_collator, "tokenizer")
+                    and self.data_collator.tokenizer is not None
+                ):
+                    self.data_collator.tokenizer.save_pretrained(output_dir)
+                torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
         elif self.args.should_save:
             self._save(output_dir)
 
