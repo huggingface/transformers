@@ -32,23 +32,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
-
-# perf: fused Triton RMSNorm kernels from flash-linear-attention, when the package is installed. The reference
-# forward below runs 6 unfused fp32 element-wise passes (plus ~10 in backward) per norm; the fused kernel does one.
-try:
-    from fla.modules.fused_norm_gate import rms_norm_gated as _fla_rms_norm_gated
-    from fla.modules.layernorm import rms_norm as _fla_rms_norm
-except Exception:  # fla missing or broken: keep the reference path
-    _fla_rms_norm = None
-    _fla_rms_norm_gated = None
-
-
-# perf: fla's chunk_gated_delta_rule handles grouped value heads (HV > H) itself, see Qwen3_5GatedDeltaNet.forward
-_FLA_GDN_GVA = _fla_rms_norm is not None
-
-
-def _use_fla_norm(x: torch.Tensor) -> bool:
-    return _fla_rms_norm is not None and x.is_cuda and not is_torchdynamo_exporting()
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -70,6 +53,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    is_flash_linear_attention_available,
     is_torchdynamo_exporting,
     torch_compilable_check,
 )
@@ -226,32 +210,6 @@ class Qwen3_5TextRotaryEmbedding(nn.Module):
             idx = slice(offset, length, 3)
             freqs_thw[..., idx] = freq[dim, ..., idx]
         return torch.cat((freqs_thw, freqs_thw), dim=-1)
-
-
-# NOTE: the FLA package does not re-cast to `input_dtype` in its implementation, maybe we should do the same
-@use_kernel_forward_from_hub("RMSNormGated")
-class Qwen3_5RMSNormGated(nn.Module):
-    def __init__(self, hidden_size: int, eps: float = 1e-6, **kwargs) -> None:
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-        self.activation = "silu"
-
-    def forward(self, hidden_states: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
-        if _use_fla_norm(hidden_states):
-            # fused: fp32 rms-norm, * weight, * silu(gate), cast back; one Triton kernel each way
-            return _fla_rms_norm_gated(
-                hidden_states, gate, self.weight, None, activation="swish", eps=self.variance_epsilon
-            )
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        # Norm before gate
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        hidden_states = self.weight * hidden_states.to(input_dtype)
-        hidden_states = hidden_states * ACT2FN[self.activation](gate.to(torch.float32))
-
-        return hidden_states.to(input_dtype)
 
 
 def apply_mask_to_padding_states(hidden_states, attention_mask):
@@ -640,7 +598,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         # perf: fla's chunk kernel applies grouped value attention itself when num_v_heads > num_k_heads
         # (`HV % H == 0`), so the query/key repeat (and its backward reduction) is only needed on the torch path.
         fla_gva = (
-            _FLA_GDN_GVA  # flash-linear-attention importable: the chunk kernel below resolves to fla
+            is_flash_linear_attention_available()  # the chunk kernel below resolves to fla
             and query.is_cuda
             and not is_torchdynamo_exporting()
             and not (use_precomputed_states and seq_len == 1)
@@ -865,6 +823,40 @@ class Qwen3_5MLP(nn.Module):
         return down_proj
 
 
+def _use_fla_norm(x: torch.Tensor) -> bool:
+    # perf: fused Triton RMSNorm kernels from flash-linear-attention, when the package is installed. The reference
+    # forwards run 6 unfused fp32 element-wise passes (plus ~10 in backward) per norm; the fused kernel does one.
+    return is_flash_linear_attention_available() and x.is_cuda and not is_torchdynamo_exporting()
+
+
+# NOTE: the FLA package does not re-cast to `input_dtype` in its implementation, maybe we should do the same
+@use_kernel_forward_from_hub("RMSNormGated")
+class Qwen3_5RMSNormGated(nn.Module):
+    def __init__(self, hidden_size: int, eps: float = 1e-6, **kwargs) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+        self.activation = "silu"
+
+    def forward(self, hidden_states: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+        if _use_fla_norm(hidden_states):
+            # fused: fp32 rms-norm, * weight, * silu(gate), cast back; one Triton kernel each way
+            from fla.modules.fused_norm_gate import rms_norm_gated
+
+            return rms_norm_gated(
+                hidden_states, gate, self.weight, None, activation="swish", eps=self.variance_epsilon
+            )
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        # Norm before gate
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = self.weight * hidden_states.to(input_dtype)
+        hidden_states = hidden_states * ACT2FN[self.activation](gate.to(torch.float32))
+
+        return hidden_states.to(input_dtype)
+
+
 @use_kernel_forward_from_hub("RMSNormZeroCentered")
 class Qwen3_5RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
@@ -879,7 +871,9 @@ class Qwen3_5RMSNorm(nn.Module):
         if _use_fla_norm(x):
             # fused: fp32 rms-norm * (1 + weight), cast back to x.dtype; one Triton kernel each way.
             # The add is done in fp32 like the reference: in bf16 it would round every channel scale by up to 0.4%.
-            return _fla_rms_norm(x, 1.0 + self.weight.float(), None, eps=self.eps)
+            from fla.modules.layernorm import rms_norm
+
+            return rms_norm(x, 1.0 + self.weight.float(), None, eps=self.eps)
         output = self._norm(x.float())
         # Llama does x.to(float16) * w whilst Qwen3_5 is (x * w).to(float16)
         # See https://github.com/huggingface/transformers/pull/29402
