@@ -1,0 +1,89 @@
+name: SGLang Integration Tests
+
+on:
+  pull_request:
+  merge_group:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+  push:
+    branches:
+      - sgl-tests
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sglang:
+    name: SGLang Transformers loader compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SGLANG_USE_CPU_ENGINE: "1"
+      HF_HUB_OFFLINE: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      PYTHONPATH: ${{ github.workspace }}/sglang/python
+
+    steps:
+      - name: Checkout Transformers under test
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+          path: transformers
+
+      - name: Checkout SGLang
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: sgl-project/sglang
+          # Includes sgl-project/sglang#38336. Keep code and tests at the same
+          # revision so unrelated SGLang changes do not break Transformers PRs.
+          ref: 55b4f4f19506c5571d7c4b04b1b47e85790b6db3
+          persist-credentials: false
+          path: sglang
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Install CPU test dependencies
+        run: |
+          python -m pip install torch==2.13.0 torchvision==0.28.0 --index-url https://download.pytorch.org/whl/cpu
+          # Import SGLang from source: its full install pulls in CUDA packages
+          # and pins Transformers/tokenizers to releases instead of this checkout.
+          python -m pip install -e ./transformers pytest triton \
+            aiohttp dill fastapi ipython msgspec orjson psutil pybase64 pyzmq requests sentencepiece
+
+      - name: Record revisions and verify Transformers source
+        run: |
+          mkdir -p reports
+          git -C transformers rev-parse HEAD | tee reports/transformers-commit.txt
+          git -C sglang rev-parse HEAD | tee reports/sglang-commit.txt
+          python -m pip freeze > reports/packages.txt
+          python - <<'PY'
+          from pathlib import Path
+          import transformers
+
+          source = Path(transformers.__file__).resolve()
+          expected = Path("transformers/src/transformers").resolve()
+          print(f"Transformers {transformers.__version__}: {source}")
+          assert source.is_relative_to(expected), f"Expected Transformers from {expected}, got {source}"
+          PY
+
+      - name: Test SGLang Transformers loaders
+        working-directory: sglang
+        run: |
+          python -m pytest -v test/registered/unit/utils/test_hf_transformers_loading.py \
+            --junitxml=../reports/sglang.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: sglang-compatibility-results
+          path: reports/
+          if-no-files-found: ignore
