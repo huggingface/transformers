@@ -16,29 +16,18 @@ import unittest
 
 import torch
 
-from transformers.integrations.moe import (
-    _can_use_grouped_mm,
-    _grouped_mm,
-    _has_valid_grouped_mm_data_ptr,
-    _has_valid_grouped_mm_strides,
-)
+from transformers.integrations.moe import _can_use_grouped_mm, _grouped_mm, _has_valid_grouped_mm_layout
 from transformers.testing_utils import require_torch, require_torch_accelerator, torch_device
 
 
 @require_torch
 class GroupedMmCompatibilityTest(unittest.TestCase):
-    def test_rejects_unaligned_transposed_weight_stride(self):
-        inputs = torch.empty(8, 1025, dtype=torch.bfloat16)
-        weights = torch.empty(4, 512, 1025, dtype=torch.bfloat16).transpose(-2, -1)
-        offsets = torch.tensor([2, 4, 6, 8], dtype=torch.int32)
+    def test_stride_alignment(self):
+        aligned = torch.empty(4, 512, 1024, dtype=torch.bfloat16).transpose(-2, -1)
+        unaligned = torch.empty(4, 512, 1025, dtype=torch.bfloat16).transpose(-2, -1)
 
-        self.assertFalse(_has_valid_grouped_mm_strides(weights))
-        self.assertFalse(_can_use_grouped_mm(inputs, weights, offsets))
-
-    def test_accepts_aligned_transposed_weight_stride(self):
-        weights = torch.empty(4, 512, 1024, dtype=torch.bfloat16).transpose(-2, -1)
-
-        self.assertTrue(_has_valid_grouped_mm_strides(weights))
+        self.assertTrue(_has_valid_grouped_mm_layout(aligned))
+        self.assertFalse(_has_valid_grouped_mm_layout(unaligned))
 
     @require_torch_accelerator
     def test_misaligned_weight_data_ptr_uses_fallback(self):
@@ -49,7 +38,6 @@ class GroupedMmCompatibilityTest(unittest.TestCase):
 
         self.assertEqual(weights.stride(), (256, 16, 1))
         self.assertNotEqual(weights.data_ptr() % 16, 0)
-        self.assertFalse(_has_valid_grouped_mm_data_ptr(weights))
         self.assertFalse(_can_use_grouped_mm(inputs, weights, offsets))
 
         result = _grouped_mm(inputs, weights, offsets)

@@ -257,22 +257,14 @@ if is_torch_available():
     )
 
 
-def _has_valid_grouped_mm_strides(tensor: torch.Tensor) -> bool:
-    """Return whether the last two tensor dimensions satisfy grouped_mm's 16-byte stride requirements."""
-    strides = tensor.stride()
-    sizes = tensor.size()
+def _has_valid_grouped_mm_layout(tensor: torch.Tensor) -> bool:
+    """Check grouped_mm's 16-byte stride and non-CPU pointer alignment requirements."""
+    strides, sizes = tensor.stride(), tensor.size()
     alignment = 16 // tensor.element_size()
-
-    if strides[-2] == 1 and strides[-1] >= max(1, sizes[-2]):
-        return strides[-1] % alignment == 0
-    if strides[-1] == 1 and strides[-2] >= max(1, sizes[-1]):
-        return strides[-2] % alignment == 0
-    return False
-
-
-def _has_valid_grouped_mm_data_ptr(tensor: torch.Tensor) -> bool:
-    """Return whether grouped_mm accepts the tensor's storage start address."""
-    return tensor.device.type == "cpu" or tensor.data_ptr() % 16 == 0
+    stride_ok = (strides[-2] == 1 and strides[-1] >= max(1, sizes[-2]) and strides[-1] % alignment == 0) or (
+        strides[-1] == 1 and strides[-2] >= max(1, sizes[-1]) and strides[-2] % alignment == 0
+    )
+    return stride_ok and (tensor.device.type == "cpu" or tensor.data_ptr() % 16 == 0)
 
 
 def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.Tensor) -> bool:
@@ -289,12 +281,7 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
     Returns:
         `bool`: True if grouped_mm can be used, False otherwise.
     """
-    if (
-        not _has_valid_grouped_mm_strides(input)
-        or not _has_valid_grouped_mm_strides(weight)
-        or not _has_valid_grouped_mm_data_ptr(input)
-        or not _has_valid_grouped_mm_data_ptr(weight)
-    ):
+    if not all(_has_valid_grouped_mm_layout(tensor) for tensor in (input, weight)):
         return False
 
     # accept_dev=True is necessary for "+cpu"/"+xpu" etc.
