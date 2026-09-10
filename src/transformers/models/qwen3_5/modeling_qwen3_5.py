@@ -43,6 +43,10 @@ except Exception:  # fla missing or broken: keep the reference path
     _fla_rms_norm_gated = None
 
 
+# perf: fla's chunk_gated_delta_rule handles grouped value heads (HV > H) itself, see Qwen3_5GatedDeltaNet.forward
+_FLA_GDN_GVA = _fla_rms_norm is not None
+
+
 def _use_fla_norm(x: torch.Tensor) -> bool:
     return _fla_rms_norm is not None and x.is_cuda and not is_torchdynamo_exporting()
 from ...integrations.accelerate import force_accelerate_hooks
@@ -633,7 +637,15 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         beta = b.sigmoid()
         # If the model is loaded in fp16, without the .float() here, A might be -inf
         g = -self.A_log.float().exp() * F.softplus(a.float() + self.dt_bias)
-        if self.num_v_heads // self.num_k_heads > 1:
+        # perf: fla's chunk kernel applies grouped value attention itself when num_v_heads > num_k_heads
+        # (`HV % H == 0`), so the query/key repeat (and its backward reduction) is only needed on the torch path.
+        fla_gva = (
+            _FLA_GDN_GVA  # flash-linear-attention importable: the chunk kernel below resolves to fla
+            and query.is_cuda
+            and not is_torchdynamo_exporting()
+            and not (use_precomputed_states and seq_len == 1)
+        )
+        if self.num_v_heads // self.num_k_heads > 1 and not fla_gva:
             query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
             key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 

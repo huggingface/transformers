@@ -1841,18 +1841,17 @@ class Trainer:
                 with sync_context():
                     tr_loss_step = self.training_step(model, inputs, num_items_in_batch)
 
-                if (
-                    self.args.logging_nan_inf_filter
-                    and not is_torch_xla_available()
-                    and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step))
-                ):
-                    # if loss is nan or inf simply add the average of previous logged losses
-                    self._tr_loss += self._tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
+                if self._tr_loss.device != tr_loss_step.device:
+                    raise ValueError(
+                        f"Calculated loss must be on the original device: {self._tr_loss.device} but device in use is {tr_loss_step.device}"
+                    )
+                if self.args.logging_nan_inf_filter and not is_torch_xla_available():
+                    # if loss is nan or inf simply add the average of previous logged losses. Done on the device
+                    # (perf): `torch.isnan(...) or ...` forced a host sync right after backward, which left the GPU
+                    # idle for every CPU-bound launch in grad clipping and the optimizer step that followed.
+                    fallback = self._tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
+                    self._tr_loss += torch.where(torch.isfinite(tr_loss_step), tr_loss_step, fallback)
                 else:
-                    if self._tr_loss.device != tr_loss_step.device:
-                        raise ValueError(
-                            f"Calculated loss must be on the original device: {self._tr_loss.device} but device in use is {tr_loss_step.device}"
-                        )
                     self._tr_loss += tr_loss_step
 
                 self.current_flos += float(self.floating_point_ops(inputs))
@@ -2667,7 +2666,47 @@ class Trainer:
             return self.optimizer.clip_master_grads(self.args.max_grad_norm)
         if self._has_mixed_mesh_grads(model):
             return self._mixed_mesh_grad_norm(model, self.args.max_grad_norm)
+        if self.is_fsdp_enabled and getattr(self.accelerator, "is_fsdp2", False):
+            grad_norm = self._fsdp2_local_clip_grad_norm(model, self.args.max_grad_norm)
+            if grad_norm is not None:
+                return grad_norm
         return self.accelerator.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
+
+    def _fsdp2_local_clip_grad_norm(self, model, max_norm: float):
+        """Grad clipping for FSDP2 (every grad a `Shard` DTensor on one 1-D mesh) without DTensor dispatch.
+
+        `torch.nn.utils.clip_grad_norm_` on DTensor grads runs the foreach norm, the stack and the final norm
+        through DTensor's Python sharding propagation, which leaves the GPU idle for several ms per step. The
+        math is the same here: per-shard foreach norms, one all-reduce of the sum of squares, one foreach scale
+        on the local shards (in place, so the DTensor grads see it). Returns None when the layout is anything
+        else, and the caller falls back to accelerate.
+        """
+        from torch.distributed.tensor import DTensor
+
+        grads = [p.grad for p in model.parameters() if p.grad is not None]
+        if not grads or not all(isinstance(g, DTensor) for g in grads):
+            return None
+        mesh = grads[0].device_mesh
+        if mesh.ndim != 1 or any(g.device_mesh != mesh for g in grads):
+            return None
+        if any(not pl.is_shard() for g in grads for pl in g.placements):
+            return None
+        device = grads[0].device
+        locals_by_dtype: dict[torch.dtype, list[torch.Tensor]] = {}
+        for g in grads:
+            t = g._local_tensor
+            if t.numel() > 0:
+                locals_by_dtype.setdefault(t.dtype, []).append(t)
+        total_sq = torch.zeros((), device=device, dtype=torch.float32)
+        for tensors in locals_by_dtype.values():
+            norms = torch._foreach_norm(tensors, 2.0)
+            total_sq = total_sq + torch.stack(norms).float().square().sum()
+        dist.all_reduce(total_sq, op=dist.ReduceOp.SUM, group=mesh.get_group())
+        total_norm = total_sq.sqrt()
+        clip_coef = torch.clamp(float(max_norm) / (total_norm + 1e-6), max=1.0)
+        for tensors in locals_by_dtype.values():
+            torch._foreach_mul_(tensors, clip_coef.to(tensors[0].dtype))
+        return total_norm
 
     def _get_grad_norm(self, model, grad_norm=None):
         """Return the gradient norm as a Python float."""
