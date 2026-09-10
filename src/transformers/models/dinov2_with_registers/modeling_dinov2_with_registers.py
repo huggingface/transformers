@@ -174,7 +174,7 @@ def eager_attention_forward(
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    # the original Dinov2WithRegisters runs the softmax in the input dtype, ViT upcasts to float32
+    # softmax in the input dtype as in the reference implementation; ViT upcasts to float32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 

@@ -302,16 +302,12 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("radio_model.model.patch_generator.pos_embed", "embeddings.position_embedding"),
             WeightRenaming("radio_model.model.patch_generator.cls_token.token", "embeddings.cls_register_token"),
             WeightRenaming("radio_model.model.blocks", "encoder.layer"),
-            WeightRenaming("attn.proj", "attention.output.dense"),
+            WeightRenaming("attn.proj", "attention.o_proj"),
             WeightRenaming("radio_model.input_conditioner", "input_conditioner"),
             WeightRenaming("radio_model.summary_idxs", "summary_idxs"),
             WeightConverter(
                 source_patterns="attn.qkv",
-                target_patterns=[
-                    "attention.attention.query",
-                    "attention.attention.key",
-                    "attention.attention.value",
-                ],
+                target_patterns=["attention.q_proj", "attention.k_proj", "attention.v_proj"],
                 operations=[Chunk(dim=0)],
             ),
         ],
@@ -1667,29 +1663,30 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"pos_embed", "embeddings.position_embeddings"),
             WeightRenaming(r"norm\.", "layernorm."),
             WeightRenaming(r"blocks\.", r"encoder.layer."),
-            WeightRenaming(r"\.attn\.proj\.", ".attention.output.dense."),
+            WeightRenaming(r"\.attn\.proj\.", ".attention.o_proj."),
             WeightRenaming(r"\.ls1\.gamma", ".layer_scale1.lambda1"),
             WeightRenaming(r"\.ls2\.gamma", ".layer_scale2.lambda1"),
             WeightRenaming(r"\.mlp\.c_fc\.", ".mlp.fc1."),  # if config.use_swiglu_ffn=False
             WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.fc2."),  # if config.use_swiglu_ffn=False
-            WeightRenaming(r"\.mlp\.w12\.", ".mlp.weights_in."),  # if config.use_swiglu_ffn=True
-            WeightRenaming(r"\.mlp\.w3\.", ".mlp.weights_out."),  # if config.use_swiglu_ffn=True
+            WeightRenaming(r"\.mlp\.w3\.", ".mlp.down_proj."),  # if config.use_swiglu_ffn=True
+            WeightConverter(
+                source_patterns=r"\.mlp\.w12\.weight",  # if config.use_swiglu_ffn=True
+                target_patterns=[".mlp.gate_proj.weight", ".mlp.up_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=r"\.mlp\.w12\.bias",  # if config.use_swiglu_ffn=True
+                target_patterns=[".mlp.gate_proj.bias", ".mlp.up_proj.bias"],
+                operations=[Chunk(dim=0)],
+            ),
             WeightConverter(
                 source_patterns=r"\.attn\.qkv\.weight",
-                target_patterns=[
-                    ".attention.attention.query.weight",
-                    ".attention.attention.key.weight",
-                    ".attention.attention.value.weight",
-                ],
+                target_patterns=[".attention.q_proj.weight", ".attention.k_proj.weight", ".attention.v_proj.weight"],
                 operations=[Chunk(dim=0)],
             ),
             WeightConverter(
                 source_patterns=r"\.attn\.qkv\.bias",
-                target_patterns=[
-                    ".attention.attention.query.bias",
-                    ".attention.attention.key.bias",
-                    ".attention.attention.value.bias",
-                ],
+                target_patterns=[".attention.q_proj.bias", ".attention.k_proj.bias", ".attention.v_proj.bias"],
                 operations=[Chunk(dim=0)],
             ),
         ],

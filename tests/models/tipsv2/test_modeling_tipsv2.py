@@ -187,14 +187,14 @@ class Tipsv2VisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=False):
         # Depending on config.use_swiglu_ffn, module names are different. They are mlp.fc1/mlp.fc2 in one case and
-        # mlp.weights_in/mlp.weights_out in the other. This results in only one of the two weight conversions matching
-        # for each model type, resulting in the test failing as it expects all weight converters to match. This doesn't
-        # affect the model's ability to load and save weights correctly.
+        # mlp.gate_proj/mlp.up_proj/mlp.down_proj in the other. This results in only one of the two weight conversions
+        # matching for each model type, resulting in the test failing as it expects all weight converters to match.
+        # This doesn't affect the model's ability to load and save weights correctly.
         # Because we only use config.use_swiglu_ffn=False in the tests, we patch get_model_conversion_mapping to drop
-        # the swiglu-only FFN renamings.
+        # the swiglu-only FFN conversions.
 
         def get_model_conversion_mapping_without_swiglu_ffn(*args, **kwargs):
-            dropped_targets = {".mlp.weights_in.", ".mlp.weights_out."}
+            dropped_targets = {".mlp.gate_proj.weight", ".mlp.gate_proj.bias", ".mlp.down_proj."}
             return [
                 conversion
                 for conversion in get_model_conversion_mapping(*args, **kwargs)
