@@ -153,9 +153,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=100)
-        # TODO(synthetic-assets): stale — the input checks above used to abort this test before it
-        # reached generation, so no round has ever measured this value on the synthetic image.
-        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays values for multiple quantitative variables represented on axes starting from the same point. This particular radar chart is showing the performance of various models or systems across different metrics or datasets.\n\nThe chart is divided into several sections, each representing a different model or dataset. The axes represent different metrics or datasets, such as "MMM-Vet," "MMM-Bench," "L'
+        EXPECTED_DECODED_TEXT = "[INST]  \nWhat is shown in this image? [/INST] The image shows a stylized graphic with a hexagonal shape at its center, outlined in yellow. The hexagon is set against a dark background with a grid-like pattern. The overall design has a modern and abstract aesthetic. "
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),

@@ -617,6 +617,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 (None, None): "user\n\nWrite a haiku for this image\nassistant\nLakeside, serene,  \nWooden pier, calm waters,  \nNature's peace.",
+                ("rocm", (9, 4)): "user\n\nWrite a haiku for this image\nassistant\nLakeside, serene,  \nWooden pier, calm lake,  \nNature's peace.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

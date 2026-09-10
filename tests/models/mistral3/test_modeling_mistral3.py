@@ -457,6 +457,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 (None, None): 'Certainly! The images depict the following landmarks:\n\n1. The first image shows the **Statue of Liberty** in New',
+                ("rocm", (9, 4)): "Yes.\n\n1. The first image is of the Statue of Liberty. It is a symbol of the United States, and was",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

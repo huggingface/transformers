@@ -281,6 +281,9 @@ class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
 
     @slow
     def test_fixture_timestamps_batched(self):
+        # TODO(synthetic-assets): sample 1's timestamps were measured off-CI and one boundary
+        # disagrees with the GPUs by two frames (0.32 vs 0.24). CUDA and ROCm agree with each
+        # other, so one recording from a round settles it for both.
         path = self.fixtures_path / "expected_timestamps_batched.json"
         with open(path, "r", encoding="utf-8") as f:
             expected_batch = json.load(f)
@@ -298,13 +301,13 @@ class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
             language=[e["language"] for e in expected_batch],
         )
 
+        # Compare each sample's timestamps as one list rather than element by element: `zip` would
+        # silently truncate a short prediction, and an element-wise `assertAlmostEqual` reports a
+        # bare "0.24 != 0.32" naming neither the sample nor the word it belongs to.
+        def as_grid(time_stamps):
+            # Alignments land on the feature extractor's frame grid, so 2 decimals is exact.
+            return [(t["text"], round(t["start_time"], 2), round(t["end_time"], 2)) for t in time_stamps]
+
         self.assertEqual(len(batch_timestamps), len(expected_batch))
         for sample_idx, (pred_ts, exp) in enumerate(zip(batch_timestamps, expected_batch)):
-            self.assertEqual(
-                len(pred_ts),
-                len(exp["time_stamps"]),
-                f"Sample {sample_idx}: expected {len(exp['time_stamps'])} timestamps, got {len(pred_ts)}",
-            )
-            for pred, exp_ts in zip(pred_ts, exp["time_stamps"]):
-                self.assertAlmostEqual(pred["start_time"], exp_ts["start_time"])
-                self.assertAlmostEqual(pred["end_time"], exp_ts["end_time"])
+            self.assertEqual(as_grid(pred_ts), as_grid(exp["time_stamps"]), f"Sample {sample_idx}")
