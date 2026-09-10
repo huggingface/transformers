@@ -649,9 +649,9 @@ class GreedyLR:
             Number of epochs to wait before resuming normal operation after LR has been reduced.
         warmup (`int`, *optional*, defaults to 0):
             Number of epochs to wait before resuming normal operation after LR has been increased.
-        min_lr (`float` or `list[float]`, *optional*, defaults to 0.001):
+        min_lr (`float` or `list[float]`, *optional*, defaults to 1e-7):
             A lower bound on the learning rate.
-        max_lr (`float` or `list[float]`, *optional*, defaults to 1.0):
+        max_lr (`float` or `list[float]`, *optional*, defaults to 1e-4):
             An upper bound on the learning rate.
         eps (`float`, *optional*, defaults to 1e-08):
             Minimal decay applied to lr.
@@ -685,8 +685,8 @@ class GreedyLR:
         threshold_mode: str = "abs",
         cooldown: int = 0,
         warmup: int = 0,
-        min_lr: float | list[float] = 1e-3,
-        max_lr: float | list[float] = 1.0,
+        min_lr: float | list[float] = 1e-7,
+        max_lr: float | list[float] = 1e-4,
         eps: float = 1e-8,
         verbose: bool = False,
         smooth: bool = False,
