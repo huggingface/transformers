@@ -77,11 +77,9 @@ config.rope_parameters = {
 }
 ```
 
-## MRoPE (Multi-dimensional/Axial RoPE)
+## MRoPE
 
-MRoPE splits the head dimension into separate chunks, each handling a different positional axis. It could be sequence position, height, width, and time (for video).
-Then rotary positional encoding is applied independently to each chunk, and the results are concatenated back together into the final embedding.
-The `mrope_section` parameter decides how much of the vector is allocated to each axis.
+MRoPE splits the RoPE frequency vector (`head_dim // 2` units) into chunks, one per positional axis. For Qwen2-VL-style models, those axes are temporal, height, and width. Each chunk gets its own rotary frequencies from that axis's position ids. The chunks are concatenated back into one embedding.
 
 For example, Qwen2-VL uses `mrope_section = [16, 24, 24]`.
 Of the 64 available units (`head_dim // 2`), 16 are used to encode temporal position (which frame), 24 encode height position (which row),
@@ -99,12 +97,10 @@ config.text_config.rope_parameters = {
 }
 ```
 
-Note: `rope_type: "mrope"` is not currently a registered rope type.
-Setting it has no effect and is silently treated the same as `"default"`, where no error or warning is raised.
-`mrope_section` still works as described above regardless of `rope_type`. It's read directly by each model's `RotaryEmbedding` class rather than
-validated through `ROPE_INIT_FUNCTIONS`.
+> [!NOTE]
+> MRoPE is not a registered `rope_type` in `ROPE_INIT_FUNCTIONS`. Set `rope_type` to `"default"` (or the model's usual type) and put multimodal layout in `mrope_section`. Qwen2VL and Qwen2.5-VL still accept legacy `"mrope"` and remaps it to `"default"` for backward compatibility. On other models, `"mrope"` is not remapped and can warn at config validation or fail when RoPE is initialized.
 
-Models currently using this mechanism: Qwen2-VL, Qwen2.5-VL, Qwen2.5-Omni, Qwen3-VL, Qwen3-VL-MoE, Qwen3.5, Qwen3.5-MoE, Qwen3-Omni-MoE, Qwen4-Exp, GLM-4V, GLM-4V-MoE, GLM-Image, GLM-OCR, HunYuan-VL, Cohere Compass, Cosmos3-Edge, Ernie4.5-VL-MoE, NeoMME, PaddleOCR-VL.
+This is used by several VL families (Qwen2-VL, GLM-4V). Check the `mrope_section` in the text config to see if a model uses it.
 
 ## Utilities
 
