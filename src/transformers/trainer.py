@@ -611,6 +611,8 @@ class Trainer:
         self._train_batch_size = args.train_batch_size
         # Guards one-time LR scheduler creation in create_optimizer_and_scheduler
         self._created_lr_scheduler = False
+        # Resolved lazily at the first gradient clip; see `_has_mixed_mesh_grads`.
+        self._mixed_mesh_grads: bool | None = None
 
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
@@ -2614,46 +2616,67 @@ class Trainer:
         input_tokens = torch.as_tensor(input_tokens, device=self.args.device, dtype=torch.int64)
         self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
 
-    @contextlib.contextmanager
-    def _uniform_grad_types(self, model):
-        """Present every gradient as the same kind of tensor, for the duration of the block.
+    def _mixed_mesh_grad_norm(self, model, max_norm):
+        """Gradient norm (and clip) when only some parameters are sharded, as under expert parallelism.
 
-        A tensor parallel model holds both kinds: the planned weights are `DTensor`s and everything else, the norms
-        among them, stays a plain tensor. Any op over all of them at once, such as the norm gradient clipping needs,
-        raises on the mix. The plain gradients are the same on every rank, so wrapping them as replicated `DTensor`s
-        makes the set uniform without changing any value; the wrappers share their storage, so clipping in place
-        reaches the real gradients.
+        Expert parallelism shards the expert weights and leaves everything else replicated, so
+        `model.parameters()` holds a mix of `DTensor` and plain tensors and `_foreach_norm` cannot span
+        both. Take the two groups separately: the sharded gradients contribute their local norms summed
+        across the mesh, the replicated ones are identical on every rank and are counted once.
         """
-        mesh = next(
-            (param.device_mesh for param in model.parameters() if is_dtensor(param) and param.grad is not None), None
-        )
-        if mesh is None:
-            yield
-            return
+        from torch.distributed.tensor import DTensor
 
-        from torch.distributed.tensor import DTensor, Replicate
+        sharded, replicated = [], []
+        for param in model.parameters():
+            if param.grad is None:
+                continue
+            (sharded if isinstance(param.grad, DTensor) else replicated).append(param.grad)
 
-        wrapped = [param for param in model.parameters() if param.grad is not None and not is_dtensor(param.grad)]
-        for param in wrapped:
-            param.grad = DTensor.from_local(param.grad, mesh, [Replicate()], run_check=False)
-        try:
-            yield
-        finally:
-            for param in wrapped:
-                param.grad = param.grad.to_local()
+        device = (sharded or replicated)[0].device
+        replicated_sq = torch.zeros((), device=device, dtype=torch.float32)
+        if replicated:
+            replicated_sq = torch.linalg.vector_norm(torch.stack([g.norm(2) for g in replicated])) ** 2
+
+        sharded_sq = torch.zeros((), device=device, dtype=torch.float32)
+        if sharded:
+            local = [g.to_local() for g in sharded]
+            sharded_sq = torch.linalg.vector_norm(torch.stack([g.norm(2) for g in local])) ** 2
+            # Sum the per-shard contributions over the mesh the experts are sharded on.
+            torch.distributed.all_reduce(sharded_sq, group=sharded[0].device_mesh.get_group())
+
+        total_norm = (replicated_sq + sharded_sq).sqrt()
+        if max_norm != float("inf"):
+            clip = (max_norm / (total_norm + 1e-6)).clamp(max=1.0)
+            for g in replicated:
+                g.mul_(clip)
+            for g in sharded:
+                g.to_local().mul_(clip)
+        return total_norm
+
+    def _has_mixed_mesh_grads(self, model) -> bool:
+        # Static for the life of the run (sharding never changes after setup), so scan the
+        # parameters only on the first call.
+        if self._mixed_mesh_grads is None:
+            from .trainer_optimizer import has_mixed_dtensor
+
+            self._mixed_mesh_grads = has_mixed_dtensor(p.grad for p in model.parameters() if p.grad is not None)
+        return self._mixed_mesh_grads
 
     def _clip_grad_norm(self, model):
         """Clip gradients to max_grad_norm. Returns the pre-clip gradient norm."""
         if is_sagemaker_mp_enabled() and self.args.fp16:
             return self.optimizer.clip_master_grads(self.args.max_grad_norm)
-        with self._uniform_grad_types(model):
-            return self.accelerator.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
+        if self._has_mixed_mesh_grads(model):
+            return self._mixed_mesh_grad_norm(model, self.args.max_grad_norm)
+        return self.accelerator.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
 
     def _get_grad_norm(self, model, grad_norm=None):
         """Return the gradient norm as a Python float."""
         if grad_norm is None:
             # Compute norm without clipping (inf means no actual clipping happens)
-            with self._uniform_grad_types(model):
+            if self._has_mixed_mesh_grads(model):
+                grad_norm = self._mixed_mesh_grad_norm(model, float("inf"))
+            else:
                 grad_norm = self.accelerator.clip_grad_norm_(model.parameters(), float("inf"))
 
         if self.accelerator.distributed_type == DistributedType.DEEPSPEED:

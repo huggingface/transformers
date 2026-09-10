@@ -49,8 +49,8 @@ if is_torch_available():
     import torch
 
 
-# Used to be https://aria-vl.github.io/static/images/view.jpg but it was removed, llava-vl has the same image
-IMAGE_OF_VIEW_URL = "https://llava-vl.github.io/static/images/view.jpg"
+# Synthetic stand-in for the view image the aria-vl/llava-vl demos used.
+IMAGE_OF_VIEW_URL = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
 
 
 class AriaVisionText2TextModelTester:

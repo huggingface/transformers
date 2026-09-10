@@ -113,7 +113,11 @@ class ZayaConfig(PreTrainedConfig):
         super().__post_init__(**kwargs, ignore_keys_at_rope_validation={"hybrid", "hybrid_sliding"})
 
     def convert_rope_params_to_dict(self, **kwargs):
-        # No legacy flat RoPE format is supported here; conversion writes the nested ZAYA layer-type format directly.
+        # config on the hub has nested rope dict AND also a `rope_type` key
+        # This will raise an error in further validation, and should be fixed on the hub
+        # Workaround until PR merged (Zyphra/ZAYA1-8B/discussions/19)
+        if self.rope_parameters.get("rope_type") is not None:
+            del self.rope_parameters["rope_type"]
         return kwargs
 
     def validate_architecture(self):
