@@ -1519,10 +1519,6 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             - 0 for tokens that are **not masked**.
 
             You can only uses one of `input_mask` and `attention_mask`.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         use_mems (`bool`, *optional*):
             Whether to use memory states to speed up sequential decoding. If set to `True`, the model will use the hidden
             states from previous forward passes to compute attention, which can significantly improve performance for
