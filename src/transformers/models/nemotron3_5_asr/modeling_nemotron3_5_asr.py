@@ -308,7 +308,7 @@ class Nemotron3_5AsrForRNNT(Nemotron3_5AsrPreTrainedModel, Nemotron3_5AsrGenerat
         >>> model = Nemotron3_5AsrForRNNT.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 
         >>> inputs = processor(ds[0]["audio"]["array"], language="en-US")
         >>> outputs = model(**inputs)

@@ -16,14 +16,14 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import SeamlessM4TFeatureExtractor, SeamlessM4TProcessor
+from transformers import SeamlessM4tAudioProcessor, SeamlessM4TProcessor
 from transformers.models.seamless_m4t import (
     SeamlessM4TTokenizer,
     SeamlessM4TTokenizerFast,
 )
 from transformers.testing_utils import require_torch
 
-from .test_feature_extraction_seamless_m4t import floats_list
+from ...test_processing_common import floats_list
 
 
 @require_torch
@@ -35,17 +35,17 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
     def get_tokenizer(self, **kwargs):
         return SeamlessM4TTokenizer.from_pretrained(self.checkpoint, **kwargs)
 
-    def get_feature_extractor(self, **kwargs):
-        return SeamlessM4TFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
+    def get_audio_processor(self, **kwargs):
+        return SeamlessM4tAudioProcessor.from_pretrained(self.checkpoint, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
 
-        processor = SeamlessM4TProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = SeamlessM4TProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         processor.save_pretrained(self.tmpdirname)
         processor = SeamlessM4TProcessor.from_pretrained(self.tmpdirname)
@@ -54,19 +54,19 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
         tokenizer_instance = isinstance(processor.tokenizer, (SeamlessM4TTokenizerFast, SeamlessM4TTokenizer))
         self.assertTrue(tokenizer_instance)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, SeamlessM4TFeatureExtractor)
+        self.assertEqual(processor.audio_processor.to_json_string(), audio_processor.to_json_string())
+        self.assertIsInstance(processor.audio_processor, SeamlessM4tAudioProcessor)
 
-    # Copied from test.models.whisper.test_processing_whisper.WhisperProcessorTest.test_feature_extractor with Whisper->SeamlessM4T
-    def test_feature_extractor(self):
-        feature_extractor = self.get_feature_extractor()
+    # Copied from test.models.whisper.test_processing_whisper.WhisperProcessorTest.test_audio_processor with Whisper->SeamlessM4T
+    def test_audio_processor(self):
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = SeamlessM4TProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = SeamlessM4TProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         raw_speech = floats_list((3, 1000))
 
-        input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
+        input_feat_extract = audio_processor(raw_speech, return_tensors="np")
         input_processor = processor(audio=raw_speech, return_tensors="np")
 
         for key in input_feat_extract:
@@ -74,10 +74,10 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
 
     # Copied from test.models.whisper.test_processing_whisper.WhisperProcessorTest.test_tokenizer with Whisper->SeamlessM4T
     def test_tokenizer(self):
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = SeamlessM4TProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = SeamlessM4TProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         input_str = "This is a test string"
 
@@ -90,10 +90,10 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
 
     # Copied from test.models.whisper.test_processing_whisper.WhisperProcessorTest.test_tokenizer_decode with Whisper->SeamlessM4T
     def test_tokenizer_decode(self):
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = SeamlessM4TProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = SeamlessM4TProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 

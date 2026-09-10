@@ -53,7 +53,7 @@ class Gemma4Processor(ProcessorMixin):
 
     def __init__(
         self,
-        feature_extractor,
+        audio_processor,
         image_processor,
         tokenizer,
         video_processor,
@@ -99,7 +99,7 @@ class Gemma4Processor(ProcessorMixin):
         self.eoa_token = getattr(tokenizer, "eoa_token", None)
 
         super().__init__(
-            feature_extractor=feature_extractor,
+            audio_processor=audio_processor,
             image_processor=image_processor,
             tokenizer=tokenizer,
             video_processor=video_processor,
@@ -249,7 +249,7 @@ class Gemma4Processor(ProcessorMixin):
         if audio_lengths is not None:
             # Dynamically compute per-audio token counts from sample lengths.
             # audio_lengths are in number of samples; assume default sampling rate.
-            sampling_rate = getattr(self.feature_extractor, "sampling_rate", 16_000)
+            sampling_rate = getattr(self.audio_processor, "sampling_rate", 16_000)
             num_audio_tokens = [
                 self._compute_audio_num_tokens(np.zeros(length), sampling_rate) for length in audio_lengths
             ]
@@ -275,9 +275,9 @@ class Gemma4Processor(ProcessorMixin):
         num_samples = len(audio_waveform)
 
         # Step 1: mel frames (matches feature_extraction_gemma4.py)
-        frame_size_for_unfold = self.feature_extractor.frame_length + 1
-        pad_left = self.feature_extractor.frame_length // 2  # semicausal time padding
-        num_mel_frames = (num_samples + pad_left - frame_size_for_unfold) // self.feature_extractor.hop_length + 1
+        frame_size_for_unfold = self.audio_processor.frame_length + 1
+        pad_left = self.audio_processor.frame_length // 2  # semicausal time padding
+        num_mel_frames = (num_samples + pad_left - frame_size_for_unfold) // self.audio_processor.hop_length + 1
         if num_mel_frames <= 0:
             return 0
 

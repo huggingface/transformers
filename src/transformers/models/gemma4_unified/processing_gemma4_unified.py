@@ -79,7 +79,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
 
     def __init__(
         self,
-        feature_extractor,
+        audio_processor,
         image_processor,
         tokenizer,
         video_processor,
@@ -125,7 +125,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
         self.eoa_token = getattr(tokenizer, "eoa_token", None)
 
         super().__init__(
-            feature_extractor=feature_extractor,
+            audio_processor=audio_processor,
             image_processor=image_processor,
             tokenizer=tokenizer,
             video_processor=video_processor,
@@ -273,7 +273,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
         if audio_lengths is not None:
             # Dynamically compute per-audio token counts from sample lengths.
             # audio_lengths are in number of samples; assume default sampling rate.
-            sampling_rate = getattr(self.feature_extractor, "sampling_rate", 16_000)
+            sampling_rate = getattr(self.audio_processor, "sampling_rate", 16_000)
             num_audio_tokens = [
                 self._compute_audio_num_tokens(np.zeros(length), sampling_rate) for length in audio_lengths
             ]
@@ -300,7 +300,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
             The number of audio soft tokens to insert as placeholders.
         """
         num_samples = len(audio_waveform)
-        audio_samples_per_token = getattr(self.feature_extractor, "audio_samples_per_token", 640)
+        audio_samples_per_token = getattr(self.audio_processor, "audio_samples_per_token", 640)
         return math.ceil(num_samples / audio_samples_per_token)
 
     @property

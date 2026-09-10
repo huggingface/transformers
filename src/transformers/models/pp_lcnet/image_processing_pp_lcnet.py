@@ -42,7 +42,7 @@ class PPLCNetImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     resize_short: int
-    size_divisor: int
+    size_divisor: int | None
 
 
 @auto_docstring

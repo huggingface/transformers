@@ -93,7 +93,7 @@ class OneFormerImageProcessorKwargs(ImagesKwargs, total=False):
     num_text: int | None
     num_labels: int | None
     ignore_index: int | None
-    do_reduce_labels: bool
+    do_reduce_labels: bool | None
 
 
 # Adapted from transformers.models.oneformer.image_processing_oneformer.binary_mask_to_rle

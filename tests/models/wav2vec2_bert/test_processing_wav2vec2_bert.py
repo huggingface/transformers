@@ -19,8 +19,7 @@ import unittest
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
 from transformers.models.wav2vec2_bert import Wav2Vec2BertProcessor
 
-from ...test_processing_common import ProcessorTesterMixin
-from ..wav2vec2.test_feature_extraction_wav2vec2 import floats_list
+from ...test_processing_common import ProcessorTesterMixin, floats_list
 
 
 class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
@@ -28,17 +27,17 @@ class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     text_input_name = "labels"
 
     @classmethod
-    def _setup_feature_extractor(cls):
-        feature_extractor_class = cls._get_component_class_from_processor("feature_extractor")
+    def _setup_audio_processor(cls):
+        audio_processor_class = cls._get_component_class_from_processor("audio_processor")
 
-        feature_extractor_map = {
+        audio_processor_map = {
             "feature_size": 80,
             "padding_value": 0.0,
             "sampling_rate": 16000,
             "return_attention_mask": False,
             "do_normalize": True,
         }
-        return feature_extractor_class(**feature_extractor_map)
+        return audio_processor_class(**audio_processor_map)
 
     @classmethod
     def _setup_tokenizer(cls):
@@ -64,12 +63,12 @@ class Wav2Vec2BertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_overlapping_text_audio_kwargs_handling(self):
         pass
 
-    def test_feature_extractor(self):
-        feature_extractor = self.get_component("feature_extractor")
+    def test_audio_processor(self):
+        audio_processor = self.get_component("audio_processor")
         processor = self.get_processor()
         raw_speech = floats_list((3, 1000))
 
-        input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
+        input_feat_extract = audio_processor(raw_speech, return_tensors="np")
         input_processor = processor(raw_speech, return_tensors="np")
 
         for key in input_feat_extract:

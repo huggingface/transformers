@@ -51,8 +51,8 @@ class PaddleOCRVLImageProcessorKwargs(ImagesKwargs, total=False):
         The max pixels of the image to resize the image.
     """
 
-    min_pixels: int
-    max_pixels: int
+    min_pixels: int | None
+    max_pixels: int | None
     patch_size: int
     temporal_patch_size: int
     merge_size: int

@@ -347,7 +347,7 @@ aligner_model = AutoModelForTokenClassification.from_pretrained(
 )
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=parakeet_processor.feature_extractor.sampling_rate))
+ds = ds.cast_column("audio", Audio(sampling_rate=parakeet_processor.audio_processor.sampling_rate))
 audio_arrays = [ds[i]["audio"]["array"] for i in range(3)]
 sr = ds[0]["audio"]["sampling_rate"]
 

@@ -1994,6 +1994,26 @@ class ModelArgs:
         "shape": "of shape `(batch_size, sequence_length)`",
     }
 
+    # Canonical name for the raw-waveform input; `input_values` is its deprecated alias.
+    audio_values = {
+        "description": """
+    Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+    into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
+    (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
+    To prepare the array into `audio_values`, the [`AutoProcessor`] should be used for padding and conversion
+    into a tensor of type `torch.FloatTensor`. See [`{processor_class}.__call__`] for details.
+    """,
+        "shape": "of shape `(batch_size, sequence_length)`",
+    }
+
+    audio_values_mask = {
+        "description": """
+    Mask to avoid performing attention on padding sample indices. Mask values in `[0, 1]`: 1 for samples that are
+    **not masked**, 0 for samples that are **masked**.
+    """,
+        "shape": "of shape `(batch_size, sequence_length)`",
+    }
+
     attention_mask = {
         "description": """
     Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -2282,6 +2302,24 @@ class ModelArgs:
     [`{feature_extractor_class}`] for processing audios).
     """,
         "shape": "of shape `(batch_size, sequence_length, feature_dim)`",
+    }
+
+    # Canonical name for the extracted-feature input; `input_features` is its deprecated alias.
+    audio_features = {
+        "description": """
+    The tensors corresponding to the input audio features. Audio features can be obtained using
+    [`{audio_processor_class}`]. See [`{audio_processor_class}.__call__`] for details ([`{processor_class}`] uses
+    [`{audio_processor_class}`] for processing audios).
+    """,
+        "shape": "of shape `(batch_size, sequence_length, feature_dim)`",
+    }
+
+    audio_features_mask = {
+        "description": """
+    Mask to avoid performing attention on padding frame indices. Mask values in `[0, 1]`: 1 for frames that are
+    **not masked**, 0 for frames that are **masked**.
+    """,
+        "shape": "of shape `(batch_size, sequence_length)`",
     }
 
 
@@ -2973,9 +3011,14 @@ def format_args_docstring(docstring: str, model_name: str) -> str:
     placeholders_dict = get_placeholders_dict(placeholders, model_name)
     # replace the placeholders in the docstring with the values from the placeholders_dict
     for placeholder, value in placeholders_dict.items():
-        if isinstance(value, dict) and placeholder == "image_processor_class":
-            value = value.get("torchvision", value.get("pil", None))
-        if placeholder is not None:
+        # Backend-keyed mapping values: image processors use {"torchvision": ..., "pil": ...};
+        # audio processors use {"torch": ..., "numpy": ...}. Resolve to the default backend's class.
+        if isinstance(value, dict):
+            if placeholder == "image_processor_class":
+                value = value.get("torchvision", value.get("pil"))
+            else:
+                value = value.get("torch", next(iter(value.values()), None))
+        if isinstance(value, str):
             docstring = docstring.replace(f"{{{placeholder}}}", value)
     return docstring
 

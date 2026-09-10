@@ -40,21 +40,21 @@ class VibeVoiceAsrProcessorKwargs(ProcessingKwargs, total=False):
             "pad_to_multiple_of": 3200,  # tokenizer hop length
         },
         "common_kwargs": {
-            "return_attention_mask": True,
+            "return_padding_mask": True,
         },
     }
 
 
 class VibeVoiceAsrProcessor(ProcessorMixin):
     r"""
-    Constructs a VibeVoice ASR processor which wraps [`VibeVoiceAcousticTokenizerFeatureExtractor`] and
+    Constructs a VibeVoice ASR processor which wraps [`VibevoiceAcousticTokenizerAudioProcessor`] and
     [`Qwen2TokenizerFast`] into a single processor that inherits both the audio feature extraction and
     tokenizer functionalities.
 
     See the [`~VibeVoiceAsrProcessor.__call__`] for more information.
 
     Args:
-        feature_extractor (`VibeVoiceAcousticTokenizerFeatureExtractor`):
+        audio_processor (`VibevoiceAcousticTokenizerAudioProcessor`):
             The feature extractor for audio processing.
         tokenizer (`Qwen2TokenizerFast`):
             The tokenizer for text processing.
@@ -71,12 +71,11 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
     """
 
     valid_processor_kwargs = VibeVoiceAsrProcessorKwargs
-    feature_extractor_class = "VibeVoiceAcousticTokenizerFeatureExtractor"
     tokenizer_class = "Qwen2TokenizerFast"
 
     def __init__(
         self,
-        feature_extractor,
+        audio_processor,
         tokenizer,
         chat_template=None,
         audio_token="<|box_start|>",
@@ -91,7 +90,7 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
         self.audio_eos_token = audio_eos_token
         self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(audio_eos_token)
         self.audio_duration_token = audio_duration_token
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(audio_processor, tokenizer, chat_template=chat_template)
 
     @auto_docstring
     def __call__(
@@ -120,7 +119,7 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
             self.validate_inputs(text=text, audio=audio, **kwargs)
 
             # Replace audio duration placeholders in text
-            audio_durations = iter([len(el) / self.feature_extractor.sampling_rate for el in audio])
+            audio_durations = iter([len(el) / self.audio_processor.sampling_rate for el in audio])
             audio_duration_pattern = re.compile(re.escape(self.audio_duration_token))
             for i in range(len(text)):
                 text[i] = audio_duration_pattern.sub(lambda _: f"{next(audio_durations):.2f}", text[i])
@@ -160,7 +159,7 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
                     raise ValueError(f"Audio should be mono, got shape: {example.shape}")
 
     def _process_audio(self, audio: AudioInput, **kwargs):
-        audio_inputs = self.feature_extractor(audio, **kwargs)
+        audio_inputs = self.audio_processor(audio, **kwargs)
         audio_lengths = audio_inputs["padding_mask"].sum(dim=-1).cpu().numpy()
         audio_inputs["num_audio_tokens"] = np.ceil(audio_lengths / kwargs["pad_to_multiple_of"]).astype(int).tolist()
 

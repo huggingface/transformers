@@ -391,7 +391,7 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             ]
             self.assertEqual(aspect_ratio_mask, expected_aspect_ratio_mask)
 
-    def test_fast_image_processor_explicit_none_preserved(self):
+    def test_explicit_none_preserved(self):
         """Test that explicitly setting an attribute to None is preserved through save/load."""
         # Test with torchvision backend (equivalent to fast processor)
         if "torchvision" not in self.image_processing_classes:

@@ -48,36 +48,36 @@ class VoxtralRealtimeProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 @requires(backends=("mistral-common",))
 class VoxtralRealtimeProcessor(ProcessorMixin):
-    def __init__(self, feature_extractor, tokenizer):
+    def __init__(self, audio_processor, tokenizer):
         if not isinstance(tokenizer, MistralCommonBackend):
             raise ValueError("`tokenizer` must be a `MistralCommonBackend` tokenizer.")
 
-        super().__init__(feature_extractor, tokenizer)
+        super().__init__(audio_processor, tokenizer)
 
-        if feature_extractor.win_length != self.mistral_common_audio_config.encoding_config.window_size:
+        if audio_processor.win_length != self.mistral_common_audio_config.encoding_config.window_size:
             raise ValueError(
-                f"feature_extractor.win_length ({feature_extractor.win_length}) "
+                f"audio_processor.win_length ({audio_processor.win_length}) "
                 f"and tokenizer.tokenizer.instruct_tokenizer.audio_encoder.audio_config.window_size "
                 f"({self.mistral_common_audio_config.encoding_config.window_size}) must be equal"
             )
 
-        if feature_extractor.hop_length != self.mistral_common_audio_config.encoding_config.hop_length:
+        if audio_processor.hop_length != self.mistral_common_audio_config.encoding_config.hop_length:
             raise ValueError(
-                f"feature_extractor.hop_length ({feature_extractor.hop_length}) "
+                f"audio_processor.hop_length ({audio_processor.hop_length}) "
                 f"and tokenizer.tokenizer.instruct_tokenizer.audio_encoder.audio_config.hop_length "
                 f"({self.mistral_common_audio_config.encoding_config.hop_length}) must be equal"
             )
 
-        if feature_extractor.feature_size != self.mistral_common_audio_config.encoding_config.num_mel_bins:
+        if audio_processor.feature_size != self.mistral_common_audio_config.encoding_config.num_mel_bins:
             raise ValueError(
-                f"feature_extractor.feature_size ({feature_extractor.feature_size}) "
+                f"audio_processor.feature_size ({audio_processor.feature_size}) "
                 f"and tokenizer.tokenizer.instruct_tokenizer.audio_encoder.audio_config.num_mel_bins "
                 f"({self.mistral_common_audio_config.encoding_config.num_mel_bins}) must be equal"
             )
 
-        if feature_extractor.sampling_rate != self.mistral_common_audio_config.sampling_rate:
+        if audio_processor.sampling_rate != self.mistral_common_audio_config.sampling_rate:
             raise ValueError(
-                f"feature_extractor.sampling_rate ({feature_extractor.sampling_rate}) "
+                f"audio_processor.sampling_rate ({audio_processor.sampling_rate}) "
                 f"and tokenizer.tokenizer.instruct_tokenizer.audio_encoder.audio_config.sampling_rate "
                 f"({self.mistral_common_audio_config.sampling_rate}) must be equal"
             )
@@ -119,13 +119,13 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
         num_prefill_mel_frames = self.num_mel_frames_first_audio_chunk
         num_prefill_audio_samples = (
             num_prefill_mel_frames - 1
-        ) * self.feature_extractor.hop_length + self.feature_extractor.win_length // 2
+        ) * self.audio_processor.hop_length + self.audio_processor.win_length // 2
 
         return num_prefill_audio_samples
 
     @property
     def num_samples_per_audio_chunk(self) -> int:
-        return self.audio_length_per_tok * self.feature_extractor.hop_length + self.feature_extractor.win_length
+        return self.audio_length_per_tok * self.audio_processor.hop_length + self.audio_processor.win_length
 
     def __call__(
         self,
@@ -202,7 +202,7 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
             audio_arrays = audio
             text_encoding = {}
 
-        audio_encoding = self.feature_extractor(
+        audio_encoding = self.audio_processor(
             audio_arrays,
             center=is_first_audio_chunk,
             **output_kwargs["audio_kwargs"],

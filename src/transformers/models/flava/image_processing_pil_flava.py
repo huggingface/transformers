@@ -127,22 +127,22 @@ class FlavaImageProcessorKwargs(ImagesKwargs, total=False):
     input_size_patches: int
     total_mask_patches: int
     mask_group_min_patches: int
-    mask_group_max_patches: int
+    mask_group_max_patches: int | None
     mask_group_min_aspect_ratio: float
-    mask_group_max_aspect_ratio: float
+    mask_group_max_aspect_ratio: float | None
     # Codebook related params
     return_codebook_pixels: bool
     codebook_do_resize: bool
-    codebook_size: dict[str, int]
+    codebook_size: dict[str, int] | SizeDict
     codebook_resample: int
     codebook_do_center_crop: bool
-    codebook_crop_size: dict[str, int]
+    codebook_crop_size: dict[str, int] | SizeDict
     codebook_do_rescale: bool
     codebook_rescale_factor: int | float
     codebook_do_map_pixels: bool
     codebook_do_normalize: bool
-    codebook_image_mean: float | Iterable[float]
-    codebook_image_std: float | Iterable[float]
+    codebook_image_mean: float | list[float] | tuple[float, ...]
+    codebook_image_std: float | list[float] | tuple[float, ...]
 
 
 # Adapted from transformers.models.flava.image_processing_flava.FlavaMaskingGenerator

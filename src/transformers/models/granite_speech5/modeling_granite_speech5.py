@@ -417,7 +417,7 @@ class GraniteSpeech5Encoder(GraniteSpeech5PreTrainedModel):
         >>> encoder = GraniteSpeech5Encoder.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 
         >>> inputs = processor(ds[0]["audio"]["array"])
         >>> encoder_outputs = encoder(**inputs)
@@ -529,7 +529,7 @@ class GraniteSpeech5ForCTC(GraniteSpeech5PreTrainedModel, GenerationMixin):
         >>> model = GraniteSpeech5ForCTC.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 
         >>> inputs = processor(ds[0]["audio"]["array"], text=ds[0]["text"])
         >>> outputs = model(**inputs)
@@ -602,7 +602,7 @@ class GraniteSpeech5ForCTC(GraniteSpeech5PreTrainedModel, GenerationMixin):
         >>> model = GraniteSpeech5ForCTC.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 
         >>> inputs = processor(ds[0]["audio"]["array"])
         >>> predicted_ids = model.generate(**inputs)

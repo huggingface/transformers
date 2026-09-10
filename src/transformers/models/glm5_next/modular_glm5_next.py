@@ -1783,8 +1783,8 @@ class Glm5NextImageProcessorKwargs(GlmgaImageProcessorKwargs, total=False):
         Maximum number of tokens per image.
     """
 
-    min_image_tokens: int
-    max_image_tokens: int
+    min_image_tokens: int | None
+    max_image_tokens: int | None
 
 
 class Glm5NextImageProcessor(GlmgaImageProcessor):
@@ -2112,8 +2112,8 @@ class Glm5NextVideoProcessorInitKwargs(GlmgaVideoProcessorInitKwargs, total=Fals
         Maximum number of tokens per image.
     """
 
-    min_image_tokens: int
-    max_image_tokens: int
+    min_image_tokens: int | None
+    max_image_tokens: int | None
 
 
 class Glm5NextVideoProcessor(GlmgaVideoProcessor):

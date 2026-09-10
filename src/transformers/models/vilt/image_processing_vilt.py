@@ -45,7 +45,7 @@ class ViltImageProcessorKwargs(ImagesKwargs, total=False):
         is set to `True`.
     """
 
-    size_divisor: int
+    size_divisor: int | None
 
 
 @auto_docstring

@@ -36,13 +36,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    is_torchdynamo_compiling,
-    logging,
-)
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
@@ -950,7 +944,7 @@ class NemotronAsrStreamingEncoder(NemotronAsrStreamingPreTrainedModel):
         >>> encoder = NemotronAsrStreamingEncoder.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 
         >>> inputs = processor(ds[0]["audio"]["array"])
         >>> encoder_outputs = encoder(**inputs)
@@ -1205,7 +1199,7 @@ class NemotronAsrStreamingForRNNT(NemotronAsrStreamingPreTrainedModel, NemotronA
         >>> model = NemotronAsrStreamingForRNNT.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 
         >>> inputs = processor(ds[0]["audio"]["array"])
         >>> outputs = model(**inputs)

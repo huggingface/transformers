@@ -122,7 +122,7 @@ class MuseGlimmerImageProcessorKwargs(Glm4vImageProcessorKwargs):
         The maximum number of merged image tokens produced for one image.
     """
 
-    max_image_tokens: int
+    max_image_tokens: int | None
 
 
 class MuseGlimmerImageProcessor(Glm4vImageProcessor):
@@ -299,9 +299,9 @@ class MuseGlimmerVideoProcessorInitKwargs(VideosKwargs, total=False):
     """
 
     patch_size: int
-    temporal_patch_size: int
-    max_video_frame_tokens: int
-    merge_size: int
+    temporal_patch_size: int | None
+    max_video_frame_tokens: int | None
+    merge_size: int | None
 
 
 @auto_docstring

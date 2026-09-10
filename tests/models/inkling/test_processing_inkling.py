@@ -55,10 +55,10 @@ class InklingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.image_token = processor.image_token
 
     @classmethod
-    def _setup_feature_extractor(cls):
-        feature_extractor_class = cls._get_component_class_from_processor("feature_extractor")
-        gemma4_feature_extractor_kwargs = {}
-        return feature_extractor_class(**gemma4_feature_extractor_kwargs)
+    def _setup_audio_processor(cls):
+        audio_processor_class = cls._get_component_class_from_processor("audio_processor")
+        gemma4_audio_processor_kwargs = {}
+        return audio_processor_class(**gemma4_audio_processor_kwargs)
 
     @classmethod
     def _setup_image_processor(cls):
@@ -171,7 +171,7 @@ class InklingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # params are derived from the feature extractor's sampling_rate and, because of
         # integer rounding, are not rate-invariant -- so pin a 16 kHz feature extractor
         # here instead of depending on (and asserting) the class default.
-        processor.feature_extractor = type(processor.feature_extractor)(sampling_rate=16000)
+        processor.audio_processor = type(processor.audio_processor)(sampling_rate=16000)
 
         # {num_samples (at 16 kHz): expected_audio_tokens}. Some samples diverge from the naive
         # ceil(duration_ms / 40ms) shortcut for each length -- it disagrees with the real
@@ -194,7 +194,7 @@ class InklingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if return_tensors == "np":
             self.skipTest("Inkling audio quantization requires PyTorch tensors")
         self._test_apply_chat_template(
-            "audio", batch_size, return_tensors, "audio_input_name", "feature_extractor", MODALITY_INPUT_DATA["audio"]
+            "audio", batch_size, return_tensors, "audio_input_name", "audio_processor", MODALITY_INPUT_DATA["audio"]
         )
 
     @unittest.skip("The test fixture passes image_seq_length, which is not an InklingProcessor attribute")

@@ -120,8 +120,8 @@ def input_features_generator():
     yield first_chunk_inputs.input_features
 
     mel_frame_idx = processor.num_mel_frames_first_audio_chunk
-    hop_length = processor.feature_extractor.hop_length
-    win_length = processor.feature_extractor.win_length
+    hop_length = processor.audio_processor.hop_length
+    win_length = processor.audio_processor.win_length
 
     start_idx = mel_frame_idx * hop_length - win_length // 2
     end_idx = start_idx + processor.num_samples_per_audio_chunk

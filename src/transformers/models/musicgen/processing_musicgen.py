@@ -25,8 +25,8 @@ from ...utils import auto_docstring, to_numpy
 
 @auto_docstring
 class MusicgenProcessor(ProcessorMixin):
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
+    def __init__(self, audio_processor, tokenizer):
+        super().__init__(audio_processor, tokenizer)
 
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         return self.tokenizer.get_decoder_prompt_ids(task=task, language=language, no_timestamps=no_timestamps)
@@ -70,14 +70,12 @@ class MusicgenProcessor(ProcessorMixin):
         # match the sequence length of the padding mask to the generated audio arrays by padding with the **non-padding**
         # token (so that the generated audio values are **not** treated as padded tokens)
         difference = seq_len - padding_mask.shape[-1]
-        padding_value = 1 - self.feature_extractor.padding_value
+        padding_value = 1 - self.audio_processor.padding_value
         padding_mask = np.pad(padding_mask, ((0, 0), (0, difference)), "constant", constant_values=padding_value)
 
         audio_values = audio_values.tolist()
         for i in range(bsz):
-            sliced_audio = np.asarray(audio_values[i])[
-                padding_mask[i][None, :] != self.feature_extractor.padding_value
-            ]
+            sliced_audio = np.asarray(audio_values[i])[padding_mask[i][None, :] != self.audio_processor.padding_value]
             audio_values[i] = sliced_audio.reshape(channels, -1)
 
         return audio_values

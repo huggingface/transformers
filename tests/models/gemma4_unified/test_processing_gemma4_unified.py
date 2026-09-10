@@ -54,10 +54,10 @@ class Gemma4UnifiedProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return video_processor_class(**gemma4_video_processor_kwargs)
 
     @classmethod
-    def _setup_feature_extractor(cls):
-        feature_extractor_class = cls._get_component_class_from_processor("feature_extractor")
-        gemma4_feature_extractor_kwargs = {}
-        return feature_extractor_class(**gemma4_feature_extractor_kwargs)
+    def _setup_audio_processor(cls):
+        audio_processor_class = cls._get_component_class_from_processor("audio_processor")
+        gemma4_audio_processor_kwargs = {}
+        return audio_processor_class(**gemma4_audio_processor_kwargs)
 
     @classmethod
     def _setup_image_processor(cls):
@@ -128,13 +128,13 @@ class Gemma4UnifiedProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return images
 
     def test_text_with_image_tokens(self):
-        feature_extractor = self.get_component("feature_extractor")
+        audio_processor = self.get_component("audio_processor")
         image_processor = self.get_component("image_processor")
         video_processor = self.get_component("video_processor")
         tokenizer = self.get_component("tokenizer")
 
         processor = self.processor_class(
-            feature_extractor=feature_extractor,
+            audio_processor=audio_processor,
             tokenizer=tokenizer,
             image_processor=image_processor,
             video_processor=video_processor,

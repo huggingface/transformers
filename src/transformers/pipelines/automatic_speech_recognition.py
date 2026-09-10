@@ -102,7 +102,7 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, 
             chunk,
             sampling_rate=feature_extractor.sampling_rate,
             return_tensors="pt",
-            return_attention_mask=True,
+            return_padding_mask=True,
         )
         if dtype is not None:
             processed = processed.to(dtype=dtype)
@@ -489,7 +489,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     truncation=False,
                     padding="longest",
                     return_tensors="pt",
-                    return_attention_mask=True,
+                    return_padding_mask=True,
                 )
             else:
                 if self.type == "seq2seq_whisper" and stride is None:
@@ -497,14 +497,14 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                         inputs,
                         sampling_rate=self.feature_extractor.sampling_rate,
                         return_tensors="pt",
-                        return_attention_mask=True,
+                        return_padding_mask=True,
                     )
                 else:
                     processed = self.feature_extractor(
                         inputs,
                         sampling_rate=self.feature_extractor.sampling_rate,
                         return_tensors="pt",
-                        return_attention_mask=True,
+                        return_padding_mask=True,
                     )
             if self.dtype is not None:
                 processed = processed.to(dtype=self.dtype)

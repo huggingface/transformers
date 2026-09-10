@@ -46,7 +46,7 @@ class BeitImageProcessorKwargs(ImagesKwargs, total=False):
         ADE20k). The background label will be replaced by 255.
     """
 
-    do_reduce_labels: bool
+    do_reduce_labels: bool | None
 
 
 @auto_docstring

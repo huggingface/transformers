@@ -1,0 +1,122 @@
+# Copyright 2025 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import torch
+
+from ...audio_processing_backends import TorchAudioBackend
+from ...processing_utils import AudioKwargs
+
+
+class Phi4MultimodalAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    audio_compression_rate (`int`, *optional*, defaults to 8):
+        Factor by which the audio encoder compresses the mel frames.
+    audio_downsample_rate (`int`, *optional*, defaults to 1):
+        Factor by which the audio projector downsamples the encoder output.
+    audio_feat_stride (`int`, *optional*, defaults to 1):
+        Stride applied to the extracted audio features.
+    """
+
+    audio_compression_rate: int
+    audio_downsample_rate: int
+    audio_feat_stride: int
+
+
+class Phi4MultimodalAudioProcessorMixin:
+    sampling_rate = 16000
+    extra_model_input_names = ["audio_embed_sizes"]
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 512,
+            "win_length": 400,
+            "hop_length": 160,
+            "window_fn": "hamming_window",
+            "periodic": False,
+            "center": False,
+            "power": 2.0,
+            "window_dtype": "float64",
+        },
+        "preemphasis": 0.97,
+        "mel_scale_config": {
+            "n_mels": 80,
+            "f_min": 0,
+            "f_max": 7690,
+            "mel_scale": "kaldi",
+            "triangularize_in_mel_space": True,
+            "matmul_order": "features_first",
+            "computation_dtype": "float64",
+        },
+        "mel_floor": 1.0,
+        "log_mode": "log",
+    }
+
+    audio_compression_rate = 8
+    audio_downsample_rate = 1
+    audio_feat_stride = 1
+    valid_kwargs = Phi4MultimodalAudioProcessorKwargs
+
+    def _compute_audio_embed_size(self, audio_frames):
+        integer = audio_frames // self.audio_compression_rate
+        result = integer + (audio_frames % self.audio_compression_rate > 0)
+
+        integer = result // self.audio_downsample_rate
+        return integer + (result % self.audio_downsample_rate > 0)
+
+    def _postprocess_output(self, output, **kwargs):
+        feature_lengths = output["audio_features_mask"].sum(-1) * self.audio_feat_stride
+        output["audio_embed_sizes"] = self._compute_audio_embed_size(feature_lengths)
+        return output
+
+
+class Phi4MultimodalAudioProcessor(Phi4MultimodalAudioProcessorMixin, TorchAudioBackend):
+    def _apply_frame_processing(self, frames, *, spectrogram_config, audio_ranges=None, **kwargs):
+        # Mask frames that overlap the boundary between real audio and padding
+        stft_cfg = spectrogram_config.stft_config
+        win_length = stft_cfg.win_length or stft_cfg.n_fft
+        hop_length = stft_cfg.hop_length or win_length // 2
+        batch_size = frames.shape[0]
+
+        if audio_ranges is not None and batch_size > 1:
+            audio_lengths_t = torch.tensor([end - start for start, end in audio_ranges])
+            to_mask_idxs = torch.arange(batch_size)[audio_lengths_t != audio_lengths_t.max()]
+            if to_mask_idxs.numel() > 0:
+                frames = frames.clone()
+                down = (audio_lengths_t[to_mask_idxs] - win_length) // hop_length + 1
+                up = audio_lengths_t[to_mask_idxs] // hop_length - 1
+                offset = down.min()
+                max_idx = up.max()
+
+                mask_range = torch.arange(max_idx - offset).expand(to_mask_idxs.shape[0], -1)
+                mask = ((down - offset).unsqueeze(1) <= mask_range) & (mask_range < (up - offset).unsqueeze(1))
+                mask = mask.unsqueeze(-1).expand(-1, -1, win_length)
+
+                masked_frames = frames[to_mask_idxs, offset:max_idx].masked_fill_(mask, 0)
+                frames[to_mask_idxs, offset:max_idx] = masked_frames
+
+        frames_prev = torch.roll(frames, 1, dims=-1)
+        frames_prev[..., 0] = frames_prev[..., 1]
+        return (frames - spectrogram_config.preemphasis * frames_prev) * 32768
+
+    def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
+        frames = frames * window
+        if frame_length < n_fft:
+            frames = torch.nn.functional.pad(frames, (0, n_fft - frame_length))
+        # Cast to complex64 before abs() to match the FE's precision path
+        spec = torch.fft.rfft(frames, n=n_fft).to(torch.complex64)
+        if stft_cfg.normalized:
+            spec = spec / window.pow(2.0).sum().sqrt()
+        return spec.transpose(-2, -1)
+
+
+__all__ = ["Phi4MultimodalAudioProcessor"]

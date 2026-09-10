@@ -43,7 +43,7 @@ class MusicFlamingoProcessorKwargs(ProcessingKwargs, total=False):
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
-            "return_attention_mask": True,
+            "return_padding_mask": True,
             "padding": "max_length",
         },
         "common_kwargs": {
@@ -60,7 +60,7 @@ class MusicFlamingoProcessor(ProcessorMixin):
 
     def __init__(
         self,
-        feature_extractor,
+        audio_processor,
         tokenizer,
         chat_template=None,
         audio_token="<sound>",
@@ -81,7 +81,7 @@ class MusicFlamingoProcessor(ProcessorMixin):
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
         self.max_audio_len = max_audio_len
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(audio_processor, tokenizer, chat_template=chat_template)
         self.audio_bos_token = audio_bos_token
         self.audio_eos_token = audio_eos_token
         self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(audio_bos_token)
@@ -137,8 +137,8 @@ class MusicFlamingoProcessor(ProcessorMixin):
 
     def _process_audio(self, audio: AudioInput, **kwargs):
         # Determine number of chunks per sample, and flatten
-        window_size = int(kwargs["sampling_rate"] * self.feature_extractor.chunk_length)
-        max_windows = int(self.max_audio_len // self.feature_extractor.chunk_length)
+        window_size = int(kwargs["sampling_rate"] * self.audio_processor.chunk_length)
+        max_windows = int(self.max_audio_len // self.audio_processor.chunk_length)
 
         per_sample_windows: list[int] = []
         flat_chunks: list[np.ndarray] = []
@@ -158,8 +158,8 @@ class MusicFlamingoProcessor(ProcessorMixin):
                 end = min((i + 1) * window_size, time_cap)
                 flat_chunks.append(audio_el[start:end])
 
-        audio = self.feature_extractor.fetch_audio(audio)
-        audio_inputs = self.feature_extractor(flat_chunks, **kwargs)
+        audio = self.audio_processor.fetch_audio(audio)
+        audio_inputs = self.audio_processor(flat_chunks, **kwargs)
         audio_inputs["input_features_mask"] = audio_inputs.pop("attention_mask")
 
         # AudioFlamingo doesn't have its own feature extractor and crops audio into

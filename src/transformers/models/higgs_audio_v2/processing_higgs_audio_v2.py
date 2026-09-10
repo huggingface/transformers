@@ -58,7 +58,7 @@ class HiggsAudioV2Processor(ProcessorMixin):
     See [`~HiggsAudioV2Processor.__call__`] and [`~HiggsAudioV2Processor.decode`] for more information.
 
     Args:
-        feature_extractor (`DacFeatureExtractor`):
+        audio_processor (`DacFeatureExtractor`):
             An instance of [`DacFeatureExtractor`]. The feature extractor is a required input.
         tokenizer (`AutoTokenizer`):
             An instance of [`AutoTokenizer`]. The tokenizer is a required input.
@@ -80,13 +80,12 @@ class HiggsAudioV2Processor(ProcessorMixin):
             The ID for the end-of-stream token in audio sequences.
     """
 
-    feature_extractor_class = "DacFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
     audio_tokenizer_class = "HiggsAudioV2TokenizerModel"
 
     def __init__(
         self,
-        feature_extractor,
+        audio_processor,
         tokenizer,
         audio_tokenizer,
         chat_template=None,
@@ -111,7 +110,7 @@ class HiggsAudioV2Processor(ProcessorMixin):
         self.audio_stream_eos_id = audio_stream_eos_id
 
         super().__init__(
-            feature_extractor,
+            audio_processor,
             tokenizer,
             audio_tokenizer=audio_tokenizer,
             chat_template=chat_template,
@@ -172,7 +171,7 @@ class HiggsAudioV2Processor(ProcessorMixin):
             audio_input_ids_list = []
             for audio_el in audio:
                 # TODO: @eustlb, this should be batched !!!
-                audio_inputs = self.feature_extractor(audio_el, **audio_kwargs)
+                audio_inputs = self.audio_processor(audio_el, **audio_kwargs)
 
                 # TODO: @eustlb, padding_mask should be supported...
                 audio_inputs.pop("padding_mask", None)

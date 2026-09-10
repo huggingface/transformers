@@ -338,7 +338,7 @@ class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
             "sampling_rate": 16000,
             "padding": True,
             "truncation": False,
-            "return_attention_mask": True,
+            "return_padding_mask": True,
             "n_window": 50,  # should match config.n_window
         },
         "common_kwargs": {"return_tensors": "pt"},
@@ -351,7 +351,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
 
     def __init__(
         self,
-        feature_extractor=None,
+        audio_processor=None,
         tokenizer=None,
         chat_template=None,
         timestamp_segment_time: float = 80,
@@ -360,7 +360,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
         timestamp_segment_time (`float`, *optional*):
             Milliseconds per timestamp class. Defaults to 80 ms.
         """
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(audio_processor, tokenizer, chat_template=chat_template)
         self.timestamp_segment_time = timestamp_segment_time
         self.audio_token = self.tokenizer.audio_token
         self.audio_token_id = self.tokenizer.convert_tokens_to_ids(self.audio_token)
@@ -424,7 +424,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
 
     def _process_audio(self, audio: AudioInput, **kwargs):
         n_window = kwargs.get("n_window", 50)
-        audio_inputs = self.feature_extractor(audio, **kwargs)
+        audio_inputs = self.audio_processor(audio, **kwargs)
         audio_inputs["input_features_mask"] = audio_inputs.pop("attention_mask")
 
         audio_lengths = self._get_audio_token_length(audio_inputs["input_features_mask"].sum(-1), n_window)
@@ -768,8 +768,8 @@ class Qwen3ASRProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["input_features_mask"]))
+        audio_processor_input_names = self.audio_processor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + audio_processor_input_names + ["input_features_mask"]))
 
     @property
     def audio_token_ids(self):

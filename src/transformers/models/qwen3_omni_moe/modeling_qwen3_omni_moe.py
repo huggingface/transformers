@@ -2095,7 +2095,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         >>> ]
 
         >>> text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
-        >>> audios = [ librosa.load(BytesIO(urlopen( conversations[1]['content'][1]['audio_url'] ).read()), sr=self.processor.feature_extractor.sampling_rate) ]
+        >>> audios = [ librosa.load(BytesIO(urlopen( conversations[1]['content'][1]['audio_url'] ).read()), sr=self.processor.audio_processor.sampling_rate) ]
         >>> images, videos = process_vision_info(conversations)
         >>> inputs = processor(text=text, audio=audios, images=images, videos=videos, return_tensors="pt", padding=True)
 

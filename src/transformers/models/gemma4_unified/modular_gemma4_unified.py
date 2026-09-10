@@ -364,7 +364,7 @@ class Gemma4UnifiedProcessor(Gemma4Processor):
             The number of audio soft tokens to insert as placeholders.
         """
         num_samples = len(audio_waveform)
-        audio_samples_per_token = getattr(self.feature_extractor, "audio_samples_per_token", 640)
+        audio_samples_per_token = getattr(self.audio_processor, "audio_samples_per_token", 640)
         return math.ceil(num_samples / audio_samples_per_token)
 
 

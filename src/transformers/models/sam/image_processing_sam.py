@@ -53,8 +53,8 @@ class SamImageProcessorKwargs(ImagesKwargs, total=False):
         map size provided for preprocessing.
     """
 
-    mask_size: dict[str, int]
-    mask_pad_size: dict[str, int]
+    mask_size: dict[str, int] | SizeDict
+    mask_pad_size: dict[str, int] | SizeDict
 
 
 @auto_docstring

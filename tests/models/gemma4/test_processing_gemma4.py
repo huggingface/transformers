@@ -54,10 +54,10 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return video_processor_class(**gemma4_video_processor_kwargs)
 
     @classmethod
-    def _setup_feature_extractor(cls):
-        feature_extractor_class = cls._get_component_class_from_processor("feature_extractor")
-        gemma4_feature_extractor_kwargs = {}
-        return feature_extractor_class(**gemma4_feature_extractor_kwargs)
+    def _setup_audio_processor(cls):
+        audio_processor_class = cls._get_component_class_from_processor("audio_processor")
+        gemma4_audio_processor_kwargs = {}
+        return audio_processor_class(**gemma4_audio_processor_kwargs)
 
     @classmethod
     def _setup_image_processor(cls):
@@ -129,13 +129,13 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return images
 
     def test_text_with_image_tokens(self):
-        feature_extractor = self.get_component("feature_extractor")
+        audio_processor = self.get_component("audio_processor")
         image_processor = self.get_component("image_processor")
         video_processor = self.get_component("video_processor")
         tokenizer = self.get_component("tokenizer")
 
         processor = self.processor_class(
-            feature_extractor=feature_extractor,
+            audio_processor=audio_processor,
             tokenizer=tokenizer,
             image_processor=image_processor,
             video_processor=video_processor,
@@ -224,7 +224,7 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # params are derived from the feature extractor's sampling_rate and, because of
         # integer rounding, are not rate-invariant -- so pin a 16 kHz feature extractor
         # here instead of depending on (and asserting) the class default.
-        processor.feature_extractor = type(processor.feature_extractor)(sampling_rate=16000)
+        processor.audio_processor = type(processor.audio_processor)(sampling_rate=16000)
 
         # {num_samples (at 16 kHz): expected_audio_tokens}. Some samples diverge from the naive
         # ceil(duration_ms / 40ms) shortcut for each length -- it disagrees with the real

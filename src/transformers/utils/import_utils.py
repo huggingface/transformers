@@ -1563,6 +1563,12 @@ def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION) -> bool:
 
 @lru_cache
 @_make_compile_constant
+def is_soxr_available() -> bool:
+    return _is_package_available("soxr")[0]
+
+
+@lru_cache
+@_make_compile_constant
 def is_speech_available() -> bool:
     # For now this depends on torchaudio but the exact dependency might evolve in the future.
     return is_torchaudio_available()
@@ -2104,8 +2110,16 @@ Please note that you may need to restart your runtime after installation.
 
 # docstyle-ignore
 TORCHAUDIO_IMPORT_ERROR = """
-{0} requires the torchaudio library but it was not found in your environment. Please install it and restart your
-runtime.
+{0} requires the torchaudio library but it was not found in your environment. You can install it with pip:
+`pip install transformers[audio]`
+Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
+SOXR_IMPORT_ERROR = """
+{0} requires the soxr library but it was not found in your environment. You can install it with pip:
+`pip install transformers[audio]`
+Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
@@ -2313,6 +2327,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
+        ("soxr", (is_soxr_available, SOXR_IMPORT_ERROR)),
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
         ("torchaudio", (is_torchaudio_available, TORCHAUDIO_IMPORT_ERROR)),

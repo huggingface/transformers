@@ -163,7 +163,7 @@ class TextToAudioPipeline(Pipeline):
             new_kwargs = {
                 "max_length": max_length,
                 "add_special_tokens": False,
-                "return_attention_mask": True,
+                "return_padding_mask": True,
                 "return_token_type_ids": False,
             }
 

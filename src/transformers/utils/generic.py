@@ -31,7 +31,7 @@ from contextlib import AbstractContextManager, ExitStack, nullcontext
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import TYPE_CHECKING, Any, TypedDict, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, TypedDict, TypeVar
 
 import numpy as np
 
@@ -44,6 +44,67 @@ if TYPE_CHECKING:
     from torch import nn
 
     from ..configuration_utils import PreTrainedConfig
+
+
+class DataclassDict:
+    """Dictionary access and serialization for dataclasses, omitting fields whose value is `None`.
+
+    Iteration yields `(key, value)` pairs for `dict(config)`, rather than mapping keys. Subclasses
+    should use `@dataclass(eq=False)` to inherit dictionary-aware equality. Mutation and hashing
+    are left to subclasses. Declare nested config types in `_nested_config_types` for `from_dict`.
+    """
+
+    _nested_config_types: ClassVar[dict[str, type[DataclassDict]]] = {}
+
+    def __getitem__(self, key):
+        if key in {f.name for f in fields(self)}:
+            return getattr(self, key)
+        raise KeyError(f"Key {key} not found in {type(self).__name__}.")
+
+    def get(self, key, default=None):
+        return self[key] if key in self else default  # noqa: SIM401
+
+    def __contains__(self, key):
+        return key in {f.name for f in fields(self)} and getattr(self, key) is not None
+
+    def __iter__(self):
+        for f in fields(self):
+            value = getattr(self, f.name)
+            if value is not None:
+                yield f.name, value.to_dict() if isinstance(value, DataclassDict) else value
+
+    def __eq__(self, other):
+        if isinstance(other, dict):
+            return dict(self) == other
+        if type(self) is type(other):
+            return tuple(getattr(self, f.name) for f in fields(self)) == tuple(
+                getattr(other, f.name) for f in fields(other)
+            )
+        return NotImplemented
+
+    def to_dict(self) -> dict:
+        return dict(self)
+
+    @classmethod
+    def from_dict(cls, config: dict):
+        config = dict(config)
+        for key, nested_type in cls._nested_config_types.items():
+            if isinstance(config.get(key), dict):
+                config[key] = nested_type.from_dict(config[key])
+        return cls(**config)
+
+    def __or__(self, other):
+        if isinstance(other, dict) or type(other) is type(self):
+            # Keep typed nested values intact; union replaces whole fields, without a deep merge.
+            merged = {f.name: getattr(self, f.name) for f in fields(self) if getattr(self, f.name) is not None}
+            merged.update(dict(other))
+            return type(self).from_dict(merged)
+        return NotImplemented
+
+    def __ror__(self, other):
+        if isinstance(other, dict):
+            return other | dict(self)
+        return NotImplemented
 
 
 # Generic class or function

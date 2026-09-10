@@ -363,7 +363,10 @@ class ProcessorTesterMixin:
             else:
                 component_class = component_class[0] if component_class[0] is not None else component_class[1]
         elif isinstance(component_class, dict):
-            if not use_fast:
+            if mapping_name in {"audio_processor", "feature_extractor"}:
+                backend = "torch" if use_fast else "numpy"
+                component_class = component_class.get(backend) or next(iter(component_class.values()))
+            elif not use_fast:
                 component_class = component_class["pil"]
             else:
                 component_class = (
@@ -1439,7 +1442,7 @@ class ProcessorTesterMixin:
 
         if (
             "feature_extractor" not in self.processor_class.get_attributes()
-            or "audio_processor" not in self.processor_class.get_attributes()
+            and "audio_processor" not in self.processor_class.get_attributes()
         ):
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
 

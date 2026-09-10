@@ -49,7 +49,7 @@ if requirements_available:
     import pretty_midi
 
     from transformers import (
-        Pop2PianoFeatureExtractor,
+        Pop2PianoAudioProcessor,
         Pop2PianoForConditionalGeneration,
         Pop2PianoProcessor,
         Pop2PianoTokenizer,
@@ -66,17 +66,17 @@ class Pop2PianoProcessorTest(unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
 
-        feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
+        audio_processor = Pop2PianoAudioProcessor.from_pretrained("sweetcocoa/pop2piano")
         tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
-        processor = Pop2PianoProcessor(feature_extractor, tokenizer)
+        processor = Pop2PianoProcessor(audio_processor, tokenizer)
 
         processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return Pop2PianoTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
-    def get_feature_extractor(self, **kwargs):
-        return Pop2PianoFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
+    def get_audio_processor(self, **kwargs):
+        return Pop2PianoAudioProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     @classmethod
     def tearDownClass(cls):
@@ -86,7 +86,7 @@ class Pop2PianoProcessorTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             processor = Pop2PianoProcessor(
                 tokenizer=self.get_tokenizer(),
-                feature_extractor=self.get_feature_extractor(),
+                audio_processor=self.get_audio_processor(),
             )
             processor.save_pretrained(tmpdir)
 
@@ -96,7 +96,7 @@ class Pop2PianoProcessorTest(unittest.TestCase):
                 pad_token="0",
                 bos_token="2",
             )
-            feature_extractor_add_kwargs = self.get_feature_extractor()
+            audio_processor_add_kwargs = self.get_audio_processor()
 
             processor = Pop2PianoProcessor.from_pretrained(
                 tmpdir,
@@ -109,8 +109,8 @@ class Pop2PianoProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, Pop2PianoTokenizer)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, Pop2PianoFeatureExtractor)
+        self.assertEqual(processor.audio_processor.to_json_string(), audio_processor_add_kwargs.to_json_string())
+        self.assertIsInstance(processor.audio_processor, Pop2PianoAudioProcessor)
 
     def get_inputs(self):
         """get inputs for both feature extractor and tokenizer"""
@@ -119,7 +119,7 @@ class Pop2PianoProcessorTest(unittest.TestCase):
         input_speech = [x["array"] for x in speech_samples][0]
         sampling_rate = [x["sampling_rate"] for x in speech_samples][0]
 
-        feature_extractor_outputs = self.get_feature_extractor()(
+        feature_extractor_outputs = self.get_audio_processor()(
             audio=input_speech, sampling_rate=sampling_rate, return_tensors="pt"
         )
         model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
@@ -139,18 +139,18 @@ class Pop2PianoProcessorTest(unittest.TestCase):
 
         return input_speech, sampling_rate, token_ids, dummy_notes
 
-    def test_feature_extractor(self):
-        feature_extractor = self.get_feature_extractor()
+    def test_audio_processor(self):
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
 
         processor = Pop2PianoProcessor(
             tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
+            audio_processor=audio_processor,
         )
 
         input_speech, sampling_rate, _, _ = self.get_inputs()
 
-        feature_extractor_outputs = feature_extractor(
+        feature_extractor_outputs = audio_processor(
             audio=input_speech, sampling_rate=sampling_rate, return_tensors="np"
         )
         processor_outputs = processor(audio=input_speech, sampling_rate=sampling_rate, return_tensors="np")
@@ -159,16 +159,16 @@ class Pop2PianoProcessorTest(unittest.TestCase):
             self.assertTrue(np.allclose(feature_extractor_outputs[key], processor_outputs[key], atol=1e-4))
 
     def test_processor_batch_decode(self):
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
 
         processor = Pop2PianoProcessor(
             tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
+            audio_processor=audio_processor,
         )
 
         audio, sampling_rate, token_ids, _ = self.get_inputs()
-        feature_extractor_output = feature_extractor(audio=audio, sampling_rate=sampling_rate, return_tensors="pt")
+        feature_extractor_output = audio_processor(audio=audio, sampling_rate=sampling_rate, return_tensors="pt")
 
         encoded_processor = processor.batch_decode(
             token_ids=token_ids,
@@ -202,12 +202,12 @@ class Pop2PianoProcessorTest(unittest.TestCase):
         self.assertListEqual(encoded_processor_velocity, encoded_tokenizer_velocity)
 
     def test_tokenizer_call(self):
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
 
         processor = Pop2PianoProcessor(
             tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
+            audio_processor=audio_processor,
         )
 
         _, _, _, notes = self.get_inputs()
@@ -219,12 +219,12 @@ class Pop2PianoProcessorTest(unittest.TestCase):
         self.assertTrue(isinstance(encoded_processor, BatchEncoding))
 
     def test_processor(self):
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
 
         processor = Pop2PianoProcessor(
             tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
+            audio_processor=audio_processor,
         )
 
         audio, sampling_rate, _, notes = self.get_inputs()

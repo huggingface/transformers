@@ -2634,7 +2634,7 @@ class Qwen3OmniMoeProcessorKwargs(Qwen2_5OmniProcessorKwargs):
             "sampling_rate": 16000,
             "padding": True,
             "truncation": False,
-            "return_attention_mask": True,
+            "return_padding_mask": True,
         },
     }
 
@@ -2743,7 +2743,7 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
         n_window = output_kwargs["audio_kwargs"].pop("n_window", 50)
 
         if audio is not None:
-            audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+            audio_inputs = self.audio_processor(audio, **output_kwargs["audio_kwargs"])
             audio_inputs["feature_attention_mask"] = audio_inputs.pop(
                 "attention_mask"
             )  # rename feature_attention_mask to prevent conflicts later on

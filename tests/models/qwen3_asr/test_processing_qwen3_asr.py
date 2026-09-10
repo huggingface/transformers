@@ -21,7 +21,7 @@ from transformers import (
     AutoProcessor,
     AutoTokenizer,
     Qwen2TokenizerFast,
-    Qwen3ASRFeatureExtractor,
+    Qwen3ASRAudioProcessor,
 )
 from transformers.models.qwen3_asr.processing_qwen3_asr import Qwen3ASRProcessor
 from transformers.testing_utils import require_torch
@@ -43,17 +43,17 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_save_load_pretrained_default(self):
         tokenizer = AutoTokenizer.from_pretrained(self.tmpdirname)
         processor = Qwen3ASRProcessor.from_pretrained(self.tmpdirname)
-        feature_extractor = processor.feature_extractor
+        audio_processor = processor.audio_processor
 
-        processor = Qwen3ASRProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = Qwen3ASRProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             processor.save_pretrained(tmpdir)
             reloaded = Qwen3ASRProcessor.from_pretrained(tmpdir)
 
         self.assertEqual(reloaded.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertEqual(reloaded.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(reloaded.feature_extractor, Qwen3ASRFeatureExtractor)
+        self.assertEqual(reloaded.audio_processor.to_json_string(), audio_processor.to_json_string())
+        self.assertIsInstance(reloaded.audio_processor, Qwen3ASRAudioProcessor)
         self.assertIsInstance(reloaded.tokenizer, Qwen2TokenizerFast)
 
     @require_torch

@@ -18,10 +18,10 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import ClvpFeatureExtractor, ClvpProcessor, ClvpTokenizer
+from transformers import ClvpAudioProcessor, ClvpProcessor, ClvpTokenizer
 from transformers.testing_utils import require_torch
 
-from .test_feature_extraction_clvp import floats_list
+from ...test_processing_common import floats_list
 
 
 @require_torch
@@ -39,16 +39,16 @@ class ClvpProcessorTest(unittest.TestCase):
     def get_tokenizer(self, **kwargs):
         return ClvpTokenizer.from_pretrained(self.checkpoint, **kwargs)
 
-    # Copied from transformers.tests.models.whisper.test_processing_whisper.WhisperProcessorTest.get_feature_extractor with Whisper->Clvp
-    def get_feature_extractor(self, **kwargs):
-        return ClvpFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
+    # Copied from transformers.tests.models.whisper.test_processing_whisper.WhisperProcessorTest.get_audio_processor with Whisper->Clvp
+    def get_audio_processor(self, **kwargs):
+        return ClvpAudioProcessor.from_pretrained(self.checkpoint, **kwargs)
 
     # Copied from transformers.tests.models.whisper.test_processing_whisper.WhisperProcessorTest.test_save_load_pretrained_default with Whisper->Clvp
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
 
-        processor = ClvpProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClvpProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         processor.save_pretrained(self.tmpdirname)
         processor = ClvpProcessor.from_pretrained(self.tmpdirname)
@@ -56,19 +56,19 @@ class ClvpProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertIsInstance(processor.tokenizer, ClvpTokenizer)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, ClvpFeatureExtractor)
+        self.assertEqual(processor.audio_processor.to_json_string(), audio_processor.to_json_string())
+        self.assertIsInstance(processor.audio_processor, ClvpAudioProcessor)
 
-    # Copied from transformers.tests.models.whisper.test_processing_whisper.WhisperProcessorTest.test_feature_extractor with Whisper->Clvp,processor(raw_speech->processor(raw_speech=raw_speech
-    def test_feature_extractor(self):
-        feature_extractor = self.get_feature_extractor()
+    # Copied from transformers.tests.models.whisper.test_processing_whisper.WhisperProcessorTest.test_audio_processor with Whisper->Clvp,processor(raw_speech->processor(raw_speech=raw_speech
+    def test_audio_processor(self):
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = ClvpProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClvpProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         raw_speech = floats_list((3, 1000))
 
-        input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
+        input_feat_extract = audio_processor(raw_speech, return_tensors="np")
         input_processor = processor(raw_speech=raw_speech, return_tensors="np")
 
         for key in input_feat_extract:
@@ -76,10 +76,10 @@ class ClvpProcessorTest(unittest.TestCase):
 
     # Copied from transformers.tests.models.whisper.test_processing_whisper.WhisperProcessorTest.test_tokenizer with Whisper->Clvp
     def test_tokenizer(self):
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = ClvpProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClvpProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         input_str = "This is a test string"
 
@@ -92,10 +92,10 @@ class ClvpProcessorTest(unittest.TestCase):
 
     # Copied from transformers.tests.models.whisper.test_processing_whisper.WhisperProcessorTest.test_tokenizer_decode with Whisper->Clvp
     def test_tokenizer_decode(self):
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = ClvpProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClvpProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -105,11 +105,11 @@ class ClvpProcessorTest(unittest.TestCase):
         self.assertListEqual(decoded_tok, decoded_processor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = ClvpProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = ClvpProcessor(tokenizer=self.get_tokenizer(), audio_processor=self.get_audio_processor())
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(pad_token="(PAD)")
-        feature_extractor_add_kwargs = self.get_feature_extractor(sampling_rate=16000)
+        audio_processor_add_kwargs = self.get_audio_processor(sampling_rate=16000)
 
         processor = ClvpProcessor.from_pretrained(
             self.tmpdirname,
@@ -120,16 +120,16 @@ class ClvpProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, ClvpTokenizer)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, ClvpFeatureExtractor)
+        self.assertEqual(processor.audio_processor.to_json_string(), audio_processor_add_kwargs.to_json_string())
+        self.assertIsInstance(processor.audio_processor, ClvpAudioProcessor)
 
     def test_text_and_audio_attention_mask(self):
         # When both `text` and `audio` are passed, the CLVP model consumes the *text* attention mask.
         # Ensure the audio feature extractor's (much longer) attention mask does not override the text one
         # in the merged output. Regression test for the merged-output attention mask collision.
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
-        processor = ClvpProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClvpProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         raw_speech = floats_list((3, 1000))
         input_str = "This is a test string"
@@ -145,9 +145,9 @@ class ClvpProcessorTest(unittest.TestCase):
     def test_text_and_audio_flat_kwargs(self):
         # Flat (backward-compatible) kwargs must still be forwarded to the tokenizer when both `text` and
         # `audio` are passed. Regression test ensuring the audio-mask handling does not discard flat kwargs.
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
-        processor = ClvpProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClvpProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         raw_speech = floats_list((3, 1000))
         input_str = "This is a test string"

@@ -13,19 +13,13 @@
 # limitations under the License.
 
 import inspect
-import json
-import os
-import tempfile
 import warnings
-from copy import deepcopy
 
 import numpy as np
 import pytest
 
 from transformers import AutoVideoProcessor
 from transformers.testing_utils import (
-    check_json_file_has_correct_format,
-    require_torch,
     require_torch_accelerator,
     require_vision,
     slow,
@@ -33,6 +27,8 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 from transformers.video_utils import VideoMetadata
+
+from .test_preprocessing_common import PreprocessingTesterMixin
 
 
 if is_torch_available():
@@ -95,11 +91,43 @@ def prepare_video_inputs(
     return video_inputs
 
 
-class VideoProcessingTestMixin:
+class VideoProcessingTestMixin(PreprocessingTesterMixin):
     test_cast_dtype = None
     fast_video_processing_class = None
     video_processor_list = None
     input_name = "pixel_values_videos"
+
+    # ── `PreprocessingTesterMixin` surface ────────────────────────────────
+
+    def test_explicit_none_kwarg_falls_back_to_default(self):
+        # `BaseVideoProcessor.preprocess` keeps its own `kwargs.setdefault(...)` loop, and video's
+        # kwarg surface uses `None` as a real value: `fps`, `num_frames` and `sample_indices_fn`
+        # are mutually exclusive, so resolving an omitted one to the instance value makes the call
+        # raise. The `None`-means-unset contract therefore holds for image and audio only, and
+        # aligning video needs its sampling arguments redesigned first.
+        self.skipTest("video uses `None` as a load-bearing value for frame-sampling kwargs")
+
+    @property
+    def processing_classes(self) -> dict:
+        return {"torchvision": cls for cls in [self.fast_video_processing_class] if cls is not None}
+
+    @property
+    def processor_dict(self) -> dict:
+        return self.video_processor_dict
+
+    @property
+    def auto_class(self):
+        return AutoVideoProcessor
+
+    def _load_with_auto(self, tmpdirname, backend_name):
+        # `AutoVideoProcessor` selects with `use_fast`, not `backend=`.
+        use_fast = self.fast_video_processing_class.__name__.endswith("Fast")
+        return AutoVideoProcessor.from_pretrained(tmpdirname, use_fast=use_fast)
+
+    def _prepare_inputs(self):
+        # Per-model testers wrap the module-level `prepare_video_inputs` with differing
+        # signatures, so pass nothing beyond what all of them accept.
+        return self.video_processor_tester.prepare_video_inputs(equal_resolution=False)
 
     def setUp(self):
         video_processor_list = []
@@ -109,24 +137,6 @@ class VideoProcessingTestMixin:
 
         self.video_processor_list = video_processor_list
 
-    def test_video_processor_to_json_string(self):
-        for video_processing_class in self.video_processor_list:
-            video_processor = video_processing_class(**self.video_processor_dict)
-            obj = json.loads(video_processor.to_json_string())
-            for key, value in self.video_processor_dict.items():
-                self.assertEqual(obj[key], value)
-
-    def test_video_processor_to_json_file(self):
-        for video_processing_class in self.video_processor_list:
-            video_processor_first = video_processing_class(**self.video_processor_dict)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                json_file_path = os.path.join(tmpdirname, "video_processor.json")
-                video_processor_first.to_json_file(json_file_path)
-                video_processor_second = video_processing_class.from_json_file(json_file_path)
-
-            self.assertEqual(video_processor_second.to_dict(), video_processor_first.to_dict())
-
     def test_video_processor_from_dict_with_kwargs(self):
         video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict)
         self.assertEqual(video_processor.size, {"shortest_edge": 20})
@@ -135,64 +145,6 @@ class VideoProcessingTestMixin:
         video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict, size=42, crop_size=84)
         self.assertEqual(video_processor.size, {"shortest_edge": 42})
         self.assertEqual(video_processor.crop_size, {"height": 84, "width": 84})
-
-    def test_video_processor_from_and_save_pretrained(self):
-        for video_processing_class in self.video_processor_list:
-            video_processor_first = video_processing_class(**self.video_processor_dict)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                saved_file = video_processor_first.save_pretrained(tmpdirname)[0]
-                check_json_file_has_correct_format(saved_file)
-                video_processor_second = video_processing_class.from_pretrained(tmpdirname)
-
-            self.assertEqual(video_processor_second.to_dict(), video_processor_first.to_dict())
-
-    def test_video_processor_save_load_with_autovideoprocessor(self):
-        for video_processing_class in self.video_processor_list:
-            video_processor_first = video_processing_class(**self.video_processor_dict)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                saved_file = video_processor_first.save_pretrained(tmpdirname)[0]
-                check_json_file_has_correct_format(saved_file)
-
-                use_fast = video_processing_class.__name__.endswith("Fast")
-                video_processor_second = AutoVideoProcessor.from_pretrained(tmpdirname, use_fast=use_fast)
-
-            self.assertEqual(video_processor_second.to_dict(), video_processor_first.to_dict())
-
-    def test_init_without_params(self):
-        for video_processing_class in self.video_processor_list:
-            video_processor = video_processing_class()
-            self.assertIsNotNone(video_processor)
-
-    def test_video_processor_explicit_none_preserved(self):
-        """Test that explicitly setting an attribute to None is preserved through save/load."""
-
-        # Find an attribute with a non-None class default to test explicit None override
-        test_attr = None
-        for attr in ["do_resize", "do_rescale", "do_normalize"]:
-            if getattr(self.fast_video_processing_class, attr, None) is not None:
-                test_attr = attr
-                break
-
-        if test_attr is None:
-            self.skipTest("Could not find a suitable attribute to test")
-
-        # Create processor with explicit None (override the attribute)
-        kwargs = self.video_processor_dict.copy()
-        kwargs[test_attr] = None
-        video_processor = self.fast_video_processing_class(**kwargs)
-
-        # Verify it's in to_dict() as None (not filtered out)
-        self.assertIn(test_attr, video_processor.to_dict())
-        self.assertIsNone(video_processor.to_dict()[test_attr])
-
-        # Verify explicit None survives save/load cycle
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            video_processor.save_pretrained(tmpdirname)
-            reloaded = self.fast_video_processing_class.from_pretrained(tmpdirname)
-
-        self.assertIsNone(getattr(reloaded, test_attr), f"Explicit None for {test_attr} was lost after reload")
 
     @slow
     @require_torch_accelerator
@@ -215,44 +167,6 @@ class VideoProcessingTestMixin:
         torch.testing.assert_close(
             output_eager[self.input_name], output_compiled[self.input_name], rtol=1e-4, atol=1e-4
         )
-
-    @require_torch
-    @require_vision
-    def test_cast_dtype_device(self):
-        for video_processing_class in self.video_processor_list:
-            if self.test_cast_dtype is not None:
-                # Initialize video_processor
-                video_processor = video_processing_class(**self.video_processor_dict)
-
-                # create random PyTorch tensors
-                video_inputs = self.video_processor_tester.prepare_video_inputs(
-                    equal_resolution=False, return_tensors="torch"
-                )
-
-                encoding = video_processor(video_inputs, return_tensors="pt")
-
-                self.assertEqual(encoding[self.input_name].device, torch.device("cpu"))
-                self.assertEqual(encoding[self.input_name].dtype, torch.float32)
-
-                encoding = video_processor(video_inputs, return_tensors="pt").to(torch.float16)
-                self.assertEqual(encoding[self.input_name].device, torch.device("cpu"))
-                self.assertEqual(encoding[self.input_name].dtype, torch.float16)
-
-                encoding = video_processor(video_inputs, return_tensors="pt").to("cpu", torch.bfloat16)
-                self.assertEqual(encoding[self.input_name].device, torch.device("cpu"))
-                self.assertEqual(encoding[self.input_name].dtype, torch.bfloat16)
-
-                with self.assertRaises(TypeError):
-                    _ = video_processor(video_inputs, return_tensors="pt").to(torch.bfloat16, "cpu")
-
-                # Try with text + video feature
-                encoding = video_processor(video_inputs, return_tensors="pt")
-                encoding.update({"input_ids": torch.LongTensor([[1, 2, 3], [4, 5, 6]])})
-                encoding = encoding.to(torch.float16)
-
-                self.assertEqual(encoding[self.input_name].device, torch.device("cpu"))
-                self.assertEqual(encoding[self.input_name].dtype, torch.float16)
-                self.assertEqual(encoding.input_ids.dtype, torch.long)
 
     def test_call_pil(self):
         for video_processing_class in self.video_processor_list:
@@ -484,40 +398,3 @@ class VideoProcessingTestMixin:
 
         if not is_tested:
             self.skipTest(reason="No validation found for `preprocess` method")
-
-    def test_override_instance_attributes_does_not_affect_other_instances(self):
-        if self.fast_video_processing_class is None:
-            self.skipTest(
-                "Only testing fast video processor, as most slow processors break this test and are to be deprecated"
-            )
-
-        video_processing_class = self.fast_video_processing_class
-        video_processor_1 = video_processing_class()
-        video_processor_2 = video_processing_class()
-        if not (hasattr(video_processor_1, "size") and isinstance(video_processor_1.size, dict)) or not (
-            hasattr(video_processor_1, "image_mean") and isinstance(video_processor_1.image_mean, list)
-        ):
-            self.skipTest(
-                reason="Skipping test as the image processor does not have dict size or list image_mean attributes"
-            )
-
-        original_size_2 = deepcopy(video_processor_2.size)
-        for key in video_processor_1.size:
-            video_processor_1.size[key] = -1
-        modified_copied_size_1 = deepcopy(video_processor_1.size)
-
-        original_image_mean_2 = deepcopy(video_processor_2.image_mean)
-        video_processor_1.image_mean[0] = -1
-        modified_copied_image_mean_1 = deepcopy(video_processor_1.image_mean)
-
-        # check that the original attributes of the second instance are not affected
-        self.assertEqual(video_processor_2.size, original_size_2)
-        self.assertEqual(video_processor_2.image_mean, original_image_mean_2)
-
-        for key in video_processor_2.size:
-            video_processor_2.size[key] = -2
-        video_processor_2.image_mean[0] = -2
-
-        # check that the modified attributes of the first instance are not affected by the second instance
-        self.assertEqual(video_processor_1.size, modified_copied_size_1)
-        self.assertEqual(video_processor_1.image_mean, modified_copied_image_mean_1)

@@ -32,7 +32,7 @@ class Gemma3nProcessorKwargs(ProcessingKwargs, total=False):
 class Gemma3nProcessor(ProcessorMixin):
     def __init__(
         self,
-        feature_extractor,
+        audio_processor,
         image_processor,
         tokenizer,
         chat_template=None,
@@ -61,7 +61,7 @@ class Gemma3nProcessor(ProcessorMixin):
         self.full_image_sequence = f"\n\n{tokenizer.boi_token}{image_tokens_expanded}{tokenizer.eoi_token}\n\n"
 
         super().__init__(
-            feature_extractor=feature_extractor,
+            audio_processor=audio_processor,
             image_processor=image_processor,
             tokenizer=tokenizer,
             chat_template=chat_template,
@@ -91,7 +91,7 @@ class Gemma3nProcessor(ProcessorMixin):
             raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
         if audio is not None:
-            audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+            audio_inputs = self.audio_processor(audio, **output_kwargs["audio_kwargs"])
 
             if not text:
                 text = [self.audio_token for _ in audio]
@@ -137,7 +137,7 @@ class Gemma3nProcessor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names + ["token_type_ids"]
         image_processor_input_names = self.image_processor.model_input_names
-        audio_processor_input_names = self.feature_extractor.model_input_names
+        audio_processor_input_names = self.audio_processor.model_input_names
         image_processor_input_names = [name for name in image_processor_input_names if name != "num_crops"]
         return list(tokenizer_input_names + image_processor_input_names + audio_processor_input_names)
 

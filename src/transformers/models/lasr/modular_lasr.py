@@ -153,7 +153,7 @@ class LasrProcessorKwargs(ProcessingKwargs, total=False):
         "audio_kwargs": {
             "sampling_rate": 16000,
             "padding": "longest",
-            "return_attention_mask": True,
+            "return_padding_mask": True,
         },
         "text_kwargs": {
             "padding": True,
@@ -168,8 +168,8 @@ class LasrProcessorKwargs(ProcessingKwargs, total=False):
 class LasrProcessor(ProcessorMixin):
     valid_processor_kwargs = LasrProcessorKwargs
 
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
+    def __init__(self, audio_processor, tokenizer):
+        super().__init__(audio_processor, tokenizer)
 
     @auto_docstring
     def __call__(
@@ -196,10 +196,9 @@ class LasrProcessor(ProcessorMixin):
             logger.warning_once(
                 f"You've provided audio without specifying the sampling rate. It will be assumed to be {output_kwargs['audio_kwargs']['sampling_rate']}, which can result in silent errors."
             )
-        elif sampling_rate != output_kwargs["audio_kwargs"]["sampling_rate"]:
-            raise ValueError(
-                f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({output_kwargs['audio_kwargs']['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
-            )
+        else:
+            # Forward the caller's assertion; the audio processor resamples if it differs from its own rate.
+            output_kwargs["audio_kwargs"]["sampling_rate"] = sampling_rate
 
         model_inputs = super().__call__(audio=audio, text=text, **output_kwargs)
         if text is not None:
@@ -209,8 +208,8 @@ class LasrProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return feature_extractor_input_names + ["labels"]
+        audio_processor_input_names = self.audio_processor.model_input_names
+        return audio_processor_input_names + ["labels"]
 
 
 @auto_docstring(checkpoint="google/medasr")
@@ -510,7 +509,7 @@ class LasrEncoder(LasrPreTrainedModel):
         >>> encoder = ParakeetEncoder.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 
         >>> inputs = processor(ds[0]["audio"]["array"])
         >>> encoder_outputs = encoder(**inputs)
@@ -577,7 +576,7 @@ class LasrForCTC(ParakeetForCTC):
         >>> model = LasrForCTC.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 
         >>> inputs = processor(ds[0]["audio"]["array"], text=ds[0]["text"])
         >>> predicted_ids = model.generate(**inputs)

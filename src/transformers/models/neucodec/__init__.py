@@ -18,6 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .audio_processing_neucodec import *
+    from .audio_processing_numpy_neucodec import *
     from .configuration_neucodec import *
     from .feature_extraction_neucodec import *
     from .modeling_neucodec import *

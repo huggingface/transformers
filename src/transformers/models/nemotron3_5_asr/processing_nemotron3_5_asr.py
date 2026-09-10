@@ -40,7 +40,7 @@ class Nemotron3_5AsrProcessorKwargs(ProcessingKwargs, total=False):
         "audio_kwargs": {
             "sampling_rate": 16000,
             "padding": "longest",
-            "return_attention_mask": True,
+            "return_padding_mask": True,
             "subsampling_factor": 8,
         },
         "text_kwargs": {
@@ -187,7 +187,7 @@ DEFAULT_PROMPT_DICTIONARY = {
 class Nemotron3_5AsrProcessor(ProcessorMixin):
     def __init__(
         self,
-        feature_extractor,
+        audio_processor,
         tokenizer,
         blank_token="<blank>",
         decoder_type=None,
@@ -230,7 +230,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
         )
         self.blank_token = blank_token
         self.blank_token_id = tokenizer.convert_tokens_to_ids(blank_token)
-        super().__init__(feature_extractor, tokenizer)
+        super().__init__(audio_processor, tokenizer)
 
     @auto_docstring
     def __call__(
@@ -283,16 +283,13 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
                 f"You've provided audio without specifying the sampling rate. It will be assumed to be "
                 f"{output_kwargs['audio_kwargs']['sampling_rate']}, which can result in silent errors."
             )
-        elif sampling_rate != output_kwargs["audio_kwargs"]["sampling_rate"]:
-            raise ValueError(
-                f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the "
-                f"processor ({output_kwargs['audio_kwargs']['sampling_rate']}). Please resample the audio to "
-                f"the expected sampling rate."
-            )
+        else:
+            # Forward the caller's assertion; the audio processor resamples if it differs from its own rate.
+            output_kwargs["audio_kwargs"]["sampling_rate"] = sampling_rate
 
         if audio is not None:
             # `center=True` for the first/offline chunk, `center=False` for subsequent streaming chunks.
-            inputs = self.feature_extractor(audio, center=bool(is_first_audio_chunk), **output_kwargs["audio_kwargs"])
+            inputs = self.audio_processor(audio, center=bool(is_first_audio_chunk), **output_kwargs["audio_kwargs"])
         if text is not None:
             encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
@@ -314,8 +311,8 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return feature_extractor_input_names + ["labels", "decoder_input_ids", "prompt_ids"]
+        audio_processor_input_names = self.audio_processor.model_input_names
+        return audio_processor_input_names + ["labels", "decoder_input_ids", "prompt_ids"]
 
     def batch_decode(self, *args, **kwargs):
         # RNN-T keeps repeated tokens (each is a separate emission), so consecutive identical tokens are not merged.
@@ -341,8 +338,8 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
                 tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             )
             frame_rate = (
-                self.feature_extractor.hop_length
-                / self.feature_extractor.sampling_rate
+                self.audio_processor.hop_length
+                / self.audio_processor.sampling_rate
                 * output_kwargs["audio_kwargs"]["subsampling_factor"]
             )
             # Filter padding/blank tokens and decode per sequence to keep track of token-level timestamps
@@ -410,9 +407,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
     @property
     def _encoder_frame_ms(self) -> float:
         """Duration in milliseconds of one subsampled encoder frame (`subsampling_factor * hop_length / sampling_rate`)."""
-        return (
-            self._subsampling_factor * self.feature_extractor.hop_length / self.feature_extractor.sampling_rate * 1000
-        )
+        return self._subsampling_factor * self.audio_processor.hop_length / self.audio_processor.sampling_rate * 1000
 
     @property
     def streaming_latency_ms(self) -> int:
@@ -458,7 +453,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
         """
         return (
             self.num_mel_frames_first_audio_chunk - 1
-        ) * self.feature_extractor.hop_length + self.feature_extractor.win_length // 2
+        ) * self.audio_processor.hop_length + self.audio_processor.win_length // 2
 
     @property
     def num_samples_per_audio_chunk(self) -> int:
@@ -466,9 +461,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
         Number of raw audio samples to feed the processor (with `is_first_audio_chunk=False`, i.e. `center=False`)
         so it returns exactly `num_mel_frames_per_audio_chunk` frames.
         """
-        return (
-            self.num_mel_frames_per_audio_chunk * self.feature_extractor.hop_length + self.feature_extractor.win_length
-        )
+        return self.num_mel_frames_per_audio_chunk * self.audio_processor.hop_length + self.audio_processor.win_length
 
     def _resolve_prompt_ids(self, language: "str | list[str]", batch_size: int) -> "torch.LongTensor":
         if isinstance(language, str):

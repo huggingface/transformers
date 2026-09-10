@@ -36,7 +36,7 @@ class BridgeTowerImageProcessorKwargs(ImagesKwargs, total=False):
         The size by which to make sure both the height and width can be divided.
     """
 
-    size_divisor: int
+    size_divisor: int | None
 
 
 # adapted from transformers.models.bridgetower.image_processing_bridgetower.get_resize_output_image_size

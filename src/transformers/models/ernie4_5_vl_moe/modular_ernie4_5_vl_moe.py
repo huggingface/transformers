@@ -1184,8 +1184,8 @@ class Ernie4_5_VLMoeImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     patch_size: int
-    temporal_patch_size: int
-    merge_size: int
+    temporal_patch_size: int | None
+    merge_size: int | None
 
 
 class Ernie4_5_VLMoeImageProcessorPil(Qwen2VLImageProcessorPil):

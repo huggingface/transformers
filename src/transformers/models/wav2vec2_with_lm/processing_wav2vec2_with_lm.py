@@ -35,7 +35,7 @@ logger = logging.get_logger(__name__)
 if TYPE_CHECKING:
     from pyctcdecode import BeamSearchDecoderCTC
 
-    from ...feature_extraction_utils import FeatureExtractionMixin
+    from ...audio_processing_base import AudioProcessingMixin
     from ...tokenization_python import PreTrainedTokenizerBase
 
 
@@ -69,7 +69,7 @@ class Wav2Vec2DecoderWithLMOutput(ModelOutput):
 class Wav2Vec2ProcessorWithLM(ProcessorMixin):
     def __init__(
         self,
-        feature_extractor: "FeatureExtractionMixin",
+        audio_processor: "AudioProcessingMixin",
         tokenizer: "PreTrainedTokenizerBase",
         decoder: "BeamSearchDecoderCTC",
     ):
@@ -79,13 +79,20 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         """
         from pyctcdecode import BeamSearchDecoderCTC
 
-        super().__init__(feature_extractor, tokenizer)
+        super().__init__(audio_processor, tokenizer)
         if not isinstance(decoder, BeamSearchDecoderCTC):
             raise TypeError(f"`decoder` has to be of type {BeamSearchDecoderCTC.__class__}, but is {type(decoder)}")
 
-        if feature_extractor.__class__.__name__ not in ["Wav2Vec2FeatureExtractor", "SeamlessM4TFeatureExtractor"]:
+        if audio_processor.__class__.__name__ not in [
+            "Wav2Vec2FeatureExtractor",
+            "SeamlessM4TFeatureExtractor",
+            "Wav2Vec2AudioProcessor",
+            "Wav2Vec2AudioProcessorNumpy",
+            "SeamlessM4tAudioProcessor",
+            "SeamlessM4tAudioProcessorNumpy",
+        ]:
             raise ValueError(
-                f"`feature_extractor` has to be of type `Wav2Vec2FeatureExtractor` or `SeamlessM4TFeatureExtractor`, but is {type(feature_extractor)}"
+                f"`audio_processor` must be a Wav2Vec2 or SeamlessM4T audio processor, but is {type(audio_processor)}"
             )
 
         # make sure that decoder's alphabet and tokenizer's vocab match in content
@@ -123,7 +130,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
             pretrained_model_name_or_path (`str` or `os.PathLike`):
                 This can be either:
 
-                - a string, the *model id* of a pretrained feature_extractor hosted inside a model repo on
+                - a string, the *model id* of a pretrained audio_processor hosted inside a model repo on
                   huggingface.co.
                 - a path to a *directory* containing a feature extractor file saved using the
                   [`~SequenceFeatureExtractor.save_pretrained`] method, e.g., `./my_model_directory/`.
@@ -136,7 +143,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         requires_backends(cls, "pyctcdecode")
         from pyctcdecode import BeamSearchDecoderCTC
 
-        feature_extractor, tokenizer = super()._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
+        audio_processor, tokenizer = super()._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         if os.path.isdir(pretrained_model_name_or_path) or os.path.isfile(pretrained_model_name_or_path):
             unigram_encoding = kwargs.get("unigram_encoding", "utf-8")
@@ -172,7 +179,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
                 f"Make sure to include {missing_decoder_tokens} in the decoder's alphabet."
             )
 
-        return cls(feature_extractor=feature_extractor, tokenizer=tokenizer, decoder=decoder)
+        return cls(audio_processor=audio_processor, tokenizer=tokenizer, decoder=decoder)
 
     @staticmethod
     def _set_language_model_attribute(decoder: "BeamSearchDecoderCTC", attribute: str, value: float):
@@ -218,7 +225,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
 
         if audio is not None:
-            inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
+            inputs = self.audio_processor(audio, *args, sampling_rate=sampling_rate, **kwargs)
         if text is not None:
             encodings = self.tokenizer(text, **kwargs)
 
@@ -245,7 +252,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
             args = args[1:]
 
         if input_features is not None:
-            input_features = self.feature_extractor.pad(input_features, *args, **kwargs)
+            input_features = self.audio_processor.pad(input_features, *args, **kwargs)
         if labels is not None:
             labels = self.tokenizer.pad(labels, **kwargs)
 
@@ -527,7 +534,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         >>> # retrieve word stamps (analogous commands for `output_char_offsets`)
         >>> outputs = processor.decode(logits, output_word_offsets=True)
         >>> # compute `time_offset` in seconds as product of downsampling ratio and sampling_rate
-        >>> time_offset = model.config.inputs_to_logits_ratio / processor.feature_extractor.sampling_rate
+        >>> time_offset = model.config.inputs_to_logits_ratio / processor.audio_processor.sampling_rate
 
         >>> word_offsets = [
         ...     {

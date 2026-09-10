@@ -42,7 +42,7 @@ class PPOCRV6SmallRecImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     max_image_width: int
-    character_list: str
+    character_list: list[str] | str
 
 
 @auto_docstring

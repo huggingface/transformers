@@ -26,8 +26,8 @@ class Wav2Vec2BertProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Wav2Vec2BertProcessor(ProcessorMixin):
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
+    def __init__(self, audio_processor, tokenizer):
+        super().__init__(audio_processor, tokenizer)
 
     @auto_docstring
     def __call__(
@@ -55,7 +55,7 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
         )
 
         if audio is not None:
-            inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+            inputs = self.audio_processor(audio, **output_kwargs["audio_kwargs"])
         if text is not None:
             encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
@@ -77,7 +77,7 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
             raise ValueError("You need to specify either an `input_features` or `labels` input to pad.")
 
         if input_features is not None:
-            input_features = self.feature_extractor.pad(input_features, **kwargs)
+            input_features = self.audio_processor.pad(input_features, **kwargs)
         if labels is not None:
             labels = self.tokenizer.pad(labels, **kwargs)
 
@@ -92,8 +92,8 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         # The processor doesn't return text ids and the model seems to not need them
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return feature_extractor_input_names + ["labels"]
+        audio_processor_input_names = self.audio_processor.model_input_names
+        return audio_processor_input_names + ["labels"]
 
 
 __all__ = ["Wav2Vec2BertProcessor"]

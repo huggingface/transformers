@@ -70,12 +70,12 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
     @classmethod
-    def _setup_feature_extractor(cls):
-        feature_extractor_class = cls._get_component_class_from_processor("feature_extractor")
+    def _setup_audio_processor(cls):
+        audio_processor_class = cls._get_component_class_from_processor("audio_processor")
         # chunk_length=30s instead of the default 300s reduces input_features from
         # (batch, 128, 30000) to (batch, 128, 3000), cutting the audio call's peak
         # memory from ~178 MB to ~20 MB per test.
-        return feature_extractor_class.from_pretrained(cls.tiny_model_id, chunk_length=30)
+        return audio_processor_class.from_pretrained(cls.tiny_model_id, chunk_length=30)
 
     @property
     def video_sampling_expectations(self):
@@ -181,8 +181,8 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ):
             self.skipTest(f"{self.processor_class} does not support video inputs")
 
-        if "feature_extractor" not in self.processor_class.get_attributes():
-            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
+        if "audio_processor" not in self.processor_class.get_attributes():
+            self.skipTest(f"audio_processor attribute not present in {self.processor_class}")
 
         video_file_path = hf_hub_download(
             repo_id="hf-internal-testing/test-videos", filename="sample_demo_1_320x240.mp4", repo_type="dataset"
