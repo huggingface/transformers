@@ -490,3 +490,43 @@ class HfArgumentParserTest(unittest.TestCase):
         parser = HfArgumentParser(TrainingArguments)
         training_args = parser.parse_args_into_dataclasses()[0]
         self.assertEqual(training_args.accelerator_config.gradient_accumulation_kwargs["num_steps"], 2)
+
+    def test_17_with_tuple_and_set(self):
+        @dataclass
+        class ContainerExample:
+            fixed_tuple: tuple[int, int] = (1, 2)
+            var_tuple: tuple[str, ...] = ("a", "b")
+            tag_set: set[str] = field(default_factory=lambda: {"default_tag"})
+            int_set: set[int] = field(default_factory=set)
+
+        parser = HfArgumentParser(ContainerExample)
+
+        # Default parsing
+        args = parser.parse_args([])
+        self.assertEqual(args, Namespace(fixed_tuple=(1, 2), var_tuple=("a", "b"), tag_set={"default_tag"}, int_set=set()))
+        container_ex = parser.parse_args_into_dataclasses([])[0]
+        self.assertEqual(container_ex.fixed_tuple, (1, 2))
+        self.assertEqual(container_ex.var_tuple, ("a", "b"))
+        self.assertEqual(container_ex.tag_set, {"default_tag"})
+        self.assertEqual(container_ex.int_set, set())
+
+        # CLI inputs
+        cli_args = "--fixed_tuple 10 20 --var_tuple x y z --tag_set tag1 tag2 --int_set 1 2 3".split()
+        container_ex = parser.parse_args_into_dataclasses(cli_args)[0]
+        self.assertEqual(container_ex.fixed_tuple, (10, 20))
+        self.assertEqual(container_ex.var_tuple, ("x", "y", "z"))
+        self.assertEqual(container_ex.tag_set, {"tag1", "tag2"})
+        self.assertEqual(container_ex.int_set, {1, 2, 3})
+
+        # Dict parsing
+        dict_args = {
+            "fixed_tuple": [3, 4],
+            "var_tuple": ["hello"],
+            "tag_set": ["foo", "bar"],
+            "int_set": [42],
+        }
+        container_ex = parser.parse_dict(dict_args)[0]
+        self.assertEqual(container_ex.fixed_tuple, (3, 4))
+        self.assertEqual(container_ex.var_tuple, ("hello",))
+        self.assertEqual(container_ex.tag_set, {"foo", "bar"})
+        self.assertEqual(container_ex.int_set, {42})
