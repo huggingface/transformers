@@ -1,0 +1,67 @@
+# Copyright 2026 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Tests for the built-in experts implementations in `integrations/moe.py`.
+
+Expert parallelism gives each rank only its own experts. The router keeps the global routing shape and
+marks the slots this rank does not own with a sentinel expert id and a zero routing weight. An experts
+forward has to keep those slots out of both the output and the gradient.
+"""
+
+import unittest
+
+import torch
+from test_utils import make_experts
+
+from transformers.integrations.moe import batched_mm_experts_forward
+from transformers.testing_utils import require_torch, torch_device
+
+
+NUM_EXPERTS = 4
+# Slots (0, 1) and (2, 0) are sentinels: expert id `NUM_EXPERTS`, routing weight 0.
+TOP_K_INDEX = [[0, NUM_EXPERTS], [1, 2], [NUM_EXPERTS, 3]]
+TOP_K_WEIGHTS = [[0.7, 0.0], [0.4, 0.6], [0.0, 0.9]]
+
+
+@require_torch
+class BatchedMmExpertsForwardTest(unittest.TestCase):
+    def setUp(self):
+        torch.manual_seed(0)
+        self.experts = make_experts(num_experts=NUM_EXPERTS, hidden=8, inter=16, weight_dtype=torch.float32)
+        self.hidden_states = torch.randn(3, 8, device=torch_device)
+        self.top_k_index = torch.tensor(TOP_K_INDEX, device=torch_device)
+
+    def _weights(self, requires_grad=False):
+        return torch.tensor(TOP_K_WEIGHTS, device=torch_device, dtype=torch.float32, requires_grad=requires_grad)
+
+    def test_sentinel_slots_get_no_routing_weight_gradient(self):
+        """A sentinel slot is clamped into a real expert to keep the weight gather in bounds, so its expert output
+        is not zero. Only the zero routing weight keeps it out of the output, and multiplying by zero does not stop
+        the gradient reaching the other side of that product, so the router would be handed a gradient for slots
+        this rank never routed."""
+        top_k_weights = self._weights(requires_grad=True)
+        out = batched_mm_experts_forward(self.experts, self.hidden_states, self.top_k_index, top_k_weights)
+        out.sum().backward()
+
+        sentinel = self.top_k_index >= NUM_EXPERTS
+        self.assertTrue(torch.all(top_k_weights.grad[sentinel] == 0))
+        # The routed slots must still get one, or the assert above would pass on an all-zero gradient.
+        self.assertTrue(torch.all(top_k_weights.grad[~sentinel] != 0))
+
+    def test_sentinel_slots_do_not_reach_the_output(self):
+        """Which expert a sentinel slot is clamped into cannot matter, so pointing it at a different one leaves the
+        output untouched."""
+        out = batched_mm_experts_forward(self.experts, self.hidden_states, self.top_k_index, self._weights())
+        moved = self.top_k_index.masked_fill(self.top_k_index >= NUM_EXPERTS, NUM_EXPERTS + 1)
+        out_moved = batched_mm_experts_forward(self.experts, self.hidden_states, moved, self._weights())
+        torch.testing.assert_close(out, out_moved)
