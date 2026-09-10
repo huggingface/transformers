@@ -543,7 +543,7 @@ class MoEParamShard(TensorParallelLayer):
                 )
             module.num_experts = global_num_experts // expert_parallel_size
             # The experts forward masks sentinel rows only when its experts are actually split.
-            module.is_expert_parallel = True
+            module._is_expert_parallel = True
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, mesh, [self.placement], src_data_rank=None),
             requires_grad=meta.requires_grad,
