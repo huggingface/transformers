@@ -701,11 +701,9 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
         self.processor = AutoProcessor.from_pretrained(
             "Qwen/Qwen3-Omni-30B-A3B-Instruct", min_pixels=28 * 28, max_pixels=56 * 56
         )
-        self.audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
-        self.audio_url_additional = (
-            "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
-        )
-        self.image_url = "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg"
+        self.audio_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"
+        self.audio_url_additional = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/throat_clearing.wav"
+        self.image_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen2_vl_demo_small.jpg"
         self.messages = [
             {
                 "role": "user",
@@ -762,12 +760,12 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
         expected_pixel_slice = torch.tensor(
             [
-                [0.5234, 0.6016, 0.6562],
-                [0.9297, 0.9375, 0.9453],
-                [0.4902, 0.5078, 0.4902],
-                [0.8438, 0.8438, 0.8359],
-                [0.9688, 0.9688, 0.9688],
-                [0.9609, 0.9531, 0.9531],
+                [0.3652, 0.3730, 0.3730],
+                [-0.6719, -0.6250, -0.6719],
+                [0.6953, 0.6641, 0.6328],
+                [-0.3809, 0.6719, 0.7031],
+                [-0.6406, -0.1533, 0.8359],
+                [0.7031, 0.7109, 0.7188],
             ],
             dtype=torch.bfloat16,
             device="cpu",
@@ -782,9 +780,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
         )
 
         EXPECTED_DECODED_TEXT = Expectations({
-            ("cuda", (8, 6)): "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information provided:\n\nThe sound you are hearing is the distinct, high-p",
-            ("xpu", 5): "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n",
-            ("rocm", (9, 4)): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
+            (None, None): "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n",
         }).get_expectation()  # fmt: skip
 
         decoded_text = self.processor.decode(output[0], skip_special_tokens=True)
@@ -808,18 +804,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                ("cuda", 8): [
-                    "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information provided:\n\nThe sound you hear is the distinct, high-pitched",
-                    "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information provided:\n\nThe sound you hear is the distinct, high-pitched",
-                ],
-                ("rocm", (9, 4)): [
-                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
-                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
-                ],
-                ("xpu", 5): [
-                    "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n",
-                    "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n",
-                ],
+                (None, None): ["user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n", "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n"],
             }
         ).get_expectation()  # fmt: skip
 
@@ -863,7 +848,10 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
             **inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False, thinker_max_new_tokens=20
         )
 
-        EXPECTED_DECODED_TEXT = "user\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.\nuser\nHow about this one?\nassistant\nThe sound is a person coughing."
+        EXPECTED_DECODED_TEXT = Expectations({
+            (None, None): "user\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.\nuser\nHow about this one?\nassistant\nThe sound is a heartbeat.",
+            ("rocm", (9, 4)): "user\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.\nuser\nHow about this one?\nassistant\nThe sound is a heartbeat, and the dog is a Labrador Retriever.",
+        }).get_expectation()  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -873,7 +861,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_w_audio(self):
         model = self.get_model()
-        audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/guess_age_gender.wav"
+        audio_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/voice_sample.wav"
 
         messages = [
             {
@@ -907,8 +895,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                ("cuda", 8): "system\nYou are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.\nuser\n\nassistant\nYes, I can analyze audio inputs to understand spoken content, and I can also process and respond to",
-                ("xpu", 5): "system\nYou are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.\nuser\n\nassistant\nYes, I can analyze audio inputs to understand spoken content, and I can also make educated guesses about",
+                (None, None): 'system\nYou are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.\nuser\n\nassistant\nHello, I am Qwen-Omni, a multimodal large-scale language model developed by Alibaba',
             }
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()

@@ -250,14 +250,19 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         prompt = "user\n<image>\nWhat are the things I should be cautious about when I visit this place?\nassistant"
-        image_file = "https://llava-vl.github.io/static/images/view.jpg"
+        image_file = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
         raw_image = load_test_image(image_file)
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, dtype=model.dtype)
 
         output = model.generate(**inputs, max_new_tokens=20)
-        expected_decoded_texts = "user\n\nWhat are the things I should be cautious about when I visit this place?\nassistant\n\nWhen visiting this place, there are a few things you should be cautious about:\n\n1. **"  # fmt: skip
+        expected_decoded_texts = Expectations(
+            {
+                (None, None): "user\n\nWhat are the things I should be cautious about when I visit this place?\nassistant\n\nWhen visiting this place, you should be cautious of the following:\n\n1. **Weather Conditions**:",
+                ("rocm", (9, 4)): "user\n\nWhat are the things I should be cautious about when I visit this place?\nassistant\n\nWhen visiting this serene place, there are a few things you should be cautious about:\n\n1.",
+            }
+        )  # fmt: skip
 
-        EXPECTED_DECODED_TEXT = expected_decoded_texts
+        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -275,7 +280,9 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
             "user\n<image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant",
             "user\n<image>\nWhat is this?\nassistant",
         ]
-        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
         image2 = load_coco_image("000000039769.jpg")
 
         self.processor.tokenizer.padding_side = "left"
@@ -289,11 +296,11 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 (None, None): [
-                    "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene place, it's essential to be mindful of the following:\n\n1. **",
+                    "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene lake and mountain area, it's essential to be mindful of the following:\n\n",
                     "user\n\nWhat is this?\nassistant\n\nThe image depicts two cats, one of which is a tabby, lying on a pink surface",
                 ],
                 ("xpu", None): [
-                    "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene place, it's essential to be mindful of the following:\n\n1. **",
+                    "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene lake and mountain area, it's essential to be mindful of the following:\n\n",
                     "user\n\nWhat is this?\nassistant\n\nThe image depicts two cats, one of which is a kitten, resting on a pink surface.",
                 ],
             }

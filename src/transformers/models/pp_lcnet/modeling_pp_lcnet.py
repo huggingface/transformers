@@ -344,7 +344,7 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
         >>> model = AutoModelForImageClassification.from_pretrained(model_path)
         >>> image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-        >>> url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_img_rot180_demo.jpg"
         >>> with httpx.stream("GET", url) as response:
         ...     image = Image.open(BytesIO(response.read()))
 
