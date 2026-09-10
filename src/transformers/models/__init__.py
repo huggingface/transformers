@@ -67,6 +67,7 @@ if TYPE_CHECKING:
     from .canary import *
     from .canine import *
     from .chameleon import *
+    from .chatterbox import *
     from .chinese_clip import *
     from .chmv2 import *
     from .clap import *
