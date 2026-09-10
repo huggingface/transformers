@@ -383,6 +383,7 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = "video"
     supports_gradient_checkpointing = True
+    _keys_to_ignore_on_load_missing = [r"attention\.attention\.key\.bias"]
     _no_split_modules = ["VideoMAEEmbeddings", "VideoMAELayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
