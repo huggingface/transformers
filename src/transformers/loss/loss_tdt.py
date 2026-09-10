@@ -80,7 +80,9 @@ def tdt_loss(
     blank_log_probs = token_log_probs[:, :, :, blank_token_id]
 
     if max_u > 1:
-        targets_expanded = targets.unsqueeze(1).expand(-1, max_t, -1)  # (batch, T, U_labels)
+        # torch.gather only accepts an int64 index before torch 2.8, and targets can
+        # legitimately arrive as int32 from a caller of tdt_loss.
+        targets_expanded = targets.long().unsqueeze(1).expand(-1, max_t, -1)  # (batch, T, U_labels)
         label_log_probs = torch.gather(
             token_log_probs[:, :, : max_u - 1, :],  # (batch, T, U-1, vocab)
             dim=3,
@@ -183,7 +185,7 @@ def ParakeetForTDTLoss(
     return tdt_loss(
         token_logits=token_logits,
         duration_logits=duration_logits,
-        targets=labels.to(device).int(),
+        targets=labels.to(device),
         logit_lengths=logit_lengths.to(device).int(),
         target_lengths=label_lengths.to(device).int(),
         blank_token_id=blank_token_id,
