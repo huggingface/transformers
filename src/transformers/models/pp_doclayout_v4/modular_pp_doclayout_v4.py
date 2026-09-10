@@ -1215,10 +1215,8 @@ class PPDocLayoutV4ForObjectDetection(PPDocLayoutV3ForObjectDetection, PPDocLayo
         super().__init__(config)
 
         self.model = PPDocLayoutV4Model(config)
-        # `PPDocLayoutV4Model` owns the denoising embedding and only builds it when `config.num_denoising > 0`, so the
-        # unconditional one [`PPDocLayoutV3ForObjectDetection`] adds here has to go.
+        # `PPDocLayoutV4Model` already set this up, so drop V3's unconditional override.
         del self.model.denoising_class_embed
-        self.post_init()
 
     def forward(
         self,

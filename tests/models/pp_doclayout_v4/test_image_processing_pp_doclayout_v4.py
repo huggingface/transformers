@@ -18,14 +18,14 @@ from types import SimpleNamespace
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, require_vision
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_torch_available():
     import torch
 
 
-class PPDocLayoutV4ImageProcessingTester:
+class PPDocLayoutV4ImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -59,20 +59,6 @@ class PPDocLayoutV4ImageProcessingTester:
             "image_mean": self.image_mean,
             "image_std": self.image_std,
         }
-
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
 
 # `[center_x, center_y, dx1, dy1, ..., dx4, dy4]`, offsets are shifted by +0.5
