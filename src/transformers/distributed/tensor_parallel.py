@@ -350,7 +350,10 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
         def _all_reduce_grads(mod, grad_input, grad_output):
             for param in mod.parameters(recurse=False):
                 if param.grad is not None:
-                    dist.all_reduce(param.grad, group=mesh.get_group())
+                    # The parameter is replicated, so a caller is free to hold it as a replicated DTensor, whose
+                    # local tensor is the whole gradient: summing that in place is the same collective.
+                    grad = param.grad.to_local() if isinstance(param.grad, DTensor) else param.grad
+                    dist.all_reduce(grad, group=mesh.get_group())
 
         module.register_full_backward_hook(_all_reduce_grads)
         return module
@@ -834,17 +837,21 @@ def gather_state_dict_for_save(
     _tp_plan: dict[str, str],
     _device_mesh,
     _tp_size: int,
+    keep: bool = True,
 ) -> dict[str, torch.Tensor]:
     """Gather TP-sharded ``DTensor`` parameters to full CPU tensors for checkpoint saving.
 
-    Every rank must call this function so ``DTensor.full_tensor()`` collectives complete.
+    Every rank must call this function so ``DTensor.full_tensor()`` collectives complete. Only the rank
+    that writes the checkpoint keeps what comes back: a rank that is only here for the collective would
+    otherwise hold a whole copy of the model in host memory, once per rank of the mesh.
     """
     gathered = {}
     for key, tensor in state_dict.items():
         if isinstance(tensor, torch.Tensor):
             if isinstance(tensor, DTensor):
                 tensor = tensor.full_tensor()
-            gathered[key] = tensor.detach().cpu().contiguous()
-        else:
+            if keep:
+                gathered[key] = tensor.detach().cpu().contiguous()
+        elif keep:
             gathered[key] = tensor
     return gathered
