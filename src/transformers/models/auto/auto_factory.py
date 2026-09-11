@@ -68,7 +68,7 @@ FROM_CONFIG_DOCSTRING = """
                 The model class to instantiate is selected based on the configuration class:
 
                 List options
-           attn_implementation (`str`, *optional*):
+            attn_implementation (`str`, *optional*):
                 The attention implementation to use in the model (if relevant). Can be any of
                     - `"eager"` (manual implementation of the attention)
                     - `"sdpa"` (using [`F.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html))
