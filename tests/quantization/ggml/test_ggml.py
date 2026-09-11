@@ -1061,13 +1061,10 @@ class GgufModelTests(unittest.TestCase):
 
     def test_deci_architecture_mapping(self):
         """Test that Deci architectures are mapped to GGUFLlamaConverter."""
-        from transformers.integrations.ggml import GGUF_TO_FAST_CONVERTERS, GGUFLlamaConverter
+        from transformers.integrations.gguf.gguf_tokenizer_mapping import GGUFLlamaConverter, _select_converter
 
-        self.assertIn("deci", GGUF_TO_FAST_CONVERTERS)
-        self.assertIn("decilm", GGUF_TO_FAST_CONVERTERS)
-
-        self.assertEqual(GGUF_TO_FAST_CONVERTERS["deci"], GGUFLlamaConverter)
-        self.assertEqual(GGUF_TO_FAST_CONVERTERS["decilm"], GGUFLlamaConverter)
+        self.assertEqual(_select_converter("deci", "llama"), GGUFLlamaConverter)
+        self.assertEqual(_select_converter("decilm", "llama"), GGUFLlamaConverter)
 
     @unittest.skipUnless(is_gguf_available("0.16.0"), "test requires gguf version >= 0.16.0")
     def test_qwen3_q8_0(self):
