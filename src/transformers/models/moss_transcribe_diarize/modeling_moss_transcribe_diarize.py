@@ -129,48 +129,42 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
-        audio_chunk_mapping: torch.LongTensor,
+        padding_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         input_features_mask (`torch.Tensor` of shape `(num_chunks, feature_sequence_length)`):
             Mask to avoid performing attention on padded feature indices, one row per chunked log-mel feature row
             in `input_features`.
-        audio_chunk_mapping (`torch.LongTensor` of shape `(num_chunks,)`):
-            Index of the source audio sample for each row in `input_features`.
+        padding_mask (`torch.Tensor` of shape `(batch_size, max_audio_length)`):
+            Mask marking valid (non-padded) raw-audio samples for each input audio, before Whisper windowing, one
+            row per audio sample (as opposed to `input_features_mask`, one row per chunk). Used together with
+            `config.audio_chunk_size` to recover which chunk rows of `input_features` belong to which audio
+            sample, since a sample whose length is an exact window multiple can't be told apart from
+            `input_features_mask` alone.
         """
-        num_chunks = input_features.shape[0]
-        if input_features_mask.shape[0] != num_chunks:
-            raise ValueError(
-                "`input_features_mask` must contain one row per `input_features` chunk: "
-                f"got {input_features_mask.shape[0]} rows for {num_chunks} chunks."
-            )
-        if audio_chunk_mapping.numel() != num_chunks:
-            raise ValueError(
-                "`audio_chunk_mapping` must contain one sample index per `input_features` chunk: "
-                f"got {audio_chunk_mapping.numel()} indices for {num_chunks} chunks."
-            )
-
         audio_outputs = self.audio_tower(input_features, return_dict=True, **kwargs)
-        whisper_features = audio_outputs.last_hidden_state
-        device = whisper_features.device
-        audio_chunk_mapping = audio_chunk_mapping.to(device=device)
+        audio_embeds = audio_outputs.last_hidden_state
+        device = audio_embeds.device
+
+        audio_lengths = padding_mask.sum(-1).to(device=device)
+        per_sample_windows = (audio_lengths + self.config.audio_chunk_size - 1) // self.config.audio_chunk_size
+        per_sample_windows = per_sample_windows.clamp(min=1)
+        audio_chunk_mapping = torch.repeat_interleave(
+            torch.arange(padding_mask.shape[0], device=device), per_sample_windows
+        )
 
         # Per-chunk valid lengths from the audio tower, grouped by sample before merge & trimming
         # so leftover frames at a chunk boundary can still complete a merge group.
         merge_size = self.config.audio_merge_size
         input_lengths = input_features_mask.sum(-1).to(device=device)
         _, post_lengths = self.audio_tower._get_feat_extract_output_lengths(input_lengths)
-        valid_mask = torch.arange(whisper_features.shape[1], device=device)[None, :] < post_lengths[:, None]
-
-        if num_chunks == 0:
-            audio_outputs.pooler_output = whisper_features.new_zeros(0, self.config.text_config.hidden_size)
-            return audio_outputs
+        valid_mask = torch.arange(audio_embeds.shape[1], device=device)[None, :] < post_lengths[:, None]
 
         _, chunk_counts = torch.unique_consecutive(audio_chunk_mapping, return_counts=True)
         chunk_starts = torch.nn.functional.pad(chunk_counts.cumsum(0)[:-1], (1, 0), value=0)
         split_indices = chunk_starts[1:].long().cpu()
-        chunk_groups = torch.tensor_split(whisper_features, split_indices, dim=0)
+        chunk_groups = torch.tensor_split(audio_embeds, split_indices, dim=0)
         valid_mask_groups = torch.tensor_split(valid_mask, split_indices, dim=0)
 
         projected = []
@@ -178,7 +172,7 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
             flat_features = sample_features[sample_valid_mask]
             if flat_features.numel() == 0:
                 continue
-            sample_features = flat_features.unsqueeze(0).to(whisper_features.dtype)
+            sample_features = flat_features.unsqueeze(0).to(audio_embeds.dtype)
             seq_len = sample_features.shape[1]
             trimmed_seq_len = (seq_len // merge_size) * merge_size
             if trimmed_seq_len == 0:
@@ -192,7 +186,7 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
         audio_outputs.pooler_output = (
             torch.cat(projected, dim=0)
             if projected
-            else whisper_features.new_zeros(0, self.config.text_config.hidden_size)
+            else audio_embeds.new_zeros(0, self.config.text_config.hidden_size)
         )
         return audio_outputs
 
@@ -232,29 +226,29 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        audio_chunk_mapping: torch.LongTensor | None = None,
+        padding_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MossTranscribeDiarizeModelOutputWithPast:
         r"""
         input_features_mask (`torch.Tensor` of shape `(num_chunks, feature_sequence_length)`, *optional*):
             Mask to avoid performing attention on padded feature indices, one row per chunked log-mel feature row
             in `input_features`.
-        audio_chunk_mapping (`torch.LongTensor` of shape `(num_chunks,)`, *optional*):
-            Index of the source audio sample for each row in `input_features`.
+        padding_mask (`torch.Tensor` of shape `(batch_size, max_audio_length)`, *optional*):
+            Mask marking valid (non-padded) raw-audio samples for each input audio, before Whisper windowing, one
+            row per audio sample. Used together with `config.audio_chunk_size` to recover which chunk rows of
+            `input_features` belong to which audio sample.
         """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         audio_embeds = None
         if input_features is not None and input_ids is not None:
-            if input_features_mask is None or audio_chunk_mapping is None:
-                raise ValueError(
-                    "`input_features_mask` and `audio_chunk_mapping` must be provided with `input_features`."
-                )
+            if input_features_mask is None or padding_mask is None:
+                raise ValueError("`input_features_mask` and `padding_mask` must be provided with `input_features`.")
             audio_embeds = self.get_audio_features(
                 input_features=input_features,
                 input_features_mask=input_features_mask,
-                audio_chunk_mapping=audio_chunk_mapping,
+                padding_mask=padding_mask,
             ).pooler_output
             special_audio_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
@@ -313,15 +307,17 @@ class MossTranscribeDiarizeForConditionalGeneration(MossTranscribeDiarizePreTrai
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        audio_chunk_mapping: torch.LongTensor | None = None,
+        padding_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MossTranscribeDiarizeCausalLMOutputWithPast:
         r"""
         input_features_mask (`torch.Tensor` of shape `(num_chunks, feature_sequence_length)`, *optional*):
             Mask to avoid performing attention on padded feature indices, one row per chunked log-mel feature row
             in `input_features`.
-        audio_chunk_mapping (`torch.LongTensor` of shape `(num_chunks,)`, *optional*):
-            Index of the source audio sample for each row in `input_features`.
+        padding_mask (`torch.Tensor` of shape `(batch_size, max_audio_length)`, *optional*):
+            Mask marking valid (non-padded) raw-audio samples for each input audio, before Whisper windowing, one
+            row per audio sample. Used together with `config.audio_chunk_size` to recover which chunk rows of
+            `input_features` belong to which audio sample.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss.
 
@@ -347,7 +343,7 @@ class MossTranscribeDiarizeForConditionalGeneration(MossTranscribeDiarizePreTrai
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            audio_chunk_mapping=audio_chunk_mapping,
+            padding_mask=padding_mask,
             **kwargs,
         )
 
