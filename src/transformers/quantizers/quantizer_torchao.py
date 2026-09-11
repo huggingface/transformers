@@ -124,27 +124,69 @@ class TorchAoHfQuantizer(HfQuantizer):
         if not should_convert_module(param_name, self.modules_to_not_convert):
             return False
 
-        # we only quantize the weight of nn.Linear and nn.Embedding
+        # Ask the backend for per-parameter eligibility before materialization.
+        # This keeps parameter targeting logic in torchao rather than duplicating
+        # model-structure assumptions here.
         module, tensor_name = get_module_from_name(model, param_name)
+
+        # Keep explicit embedding opt-in behavior in Transformers.
+        if (
+            self.quantization_config.include_input_output_embeddings
+            and isinstance(module, torch.nn.Embedding)
+            and tensor_name == "weight"
+        ):
+            return True
+
+        # Legacy FqnToConfig path keeps exact match precedence semantics.
+        from torchao.quantization import FqnToConfig, fqn_matches_fqn_config
+
+        try:
+            from torchao.quantization import config_targets_parameter
+        except ImportError:
+            config_targets_parameter = None
+
+        quant_type = self.quantization_config.quant_type
+        if not isinstance(quant_type, FqnToConfig) and config_targets_parameter is not None:
+            module_fqn, _, _ = param_name.rpartition(".")
+            return config_targets_parameter(module, module_fqn, tensor_name, quant_type)
+
+        # we only quantize the weight of nn.Linear and nn.Embedding
         _QUANTIZABLE = [torch.nn.Linear]
         if self.quantization_config.include_input_output_embeddings:
             _QUANTIZABLE.append(torch.nn.Embedding)
 
-        from torchao.quantization import FqnToConfig, fqn_matches_fqn_config
-
-        if isinstance(self.quantization_config.quant_type, FqnToConfig):
+        if isinstance(quant_type, FqnToConfig):
             module_fqn, _ = param_name.rsplit(".", 1)
             if (
-                fqn_matches_fqn_config(module_fqn, self.quantization_config.quant_type)
-                or fqn_matches_fqn_config(param_name, self.quantization_config.quant_type)
-                or (
-                    "_default" in self.quantization_config.quant_type.fqn_to_config
-                    and isinstance(module, tuple(_QUANTIZABLE))
-                )
+                fqn_matches_fqn_config(module_fqn, quant_type)
+                or fqn_matches_fqn_config(param_name, quant_type)
+                or ("_default" in quant_type.fqn_to_config and isinstance(module, tuple(_QUANTIZABLE)))
             ):
                 return True
 
         return isinstance(module, tuple(_QUANTIZABLE)) and tensor_name == "weight"
+
+    def get_param_materialization_device(
+        self,
+        model: "PreTrainedModel",
+        param_name: str,
+        target_device,
+        target_dtype: "torch.dtype | None" = None,
+        needs_quantization: bool = False,
+    ):
+        if not needs_quantization or self.pre_quantized:
+            return target_device
+
+        try:
+            from torchao.quantization import config_prefers_cpu_checkpoint_staging
+        except ImportError:
+            return target_device
+
+        config = self.quantization_config.get_apply_tensor_subclass()
+        if config_prefers_cpu_checkpoint_staging(config):
+            return "cpu"
+
+        return target_device
 
     def is_serializable(self) -> bool:
         return True
