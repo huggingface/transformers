@@ -3710,6 +3710,14 @@ class Expectations(UserDict[PackedDeviceProperties, Any]):
         return f"{self.data}"
 
 
+def get_json_expectation(expectations: dict[str, Any]) -> Any:
+    """
+    Same as `Expectations.get_expectation`, for expectations stored in a JSON fixture. JSON only allows string keys, so
+    they are written as their `Expectations` counterpart repr, e.g. `"(None, None)"` or `"('xpu', 5)"`.
+    """
+    return Expectations({ast.literal_eval(key): value for key, value in expectations.items()}).get_expectation()
+
+
 def patch_torch_compile_force_graph():
     """
     Patch `torch.compile` to always use `fullgraph=True`.
