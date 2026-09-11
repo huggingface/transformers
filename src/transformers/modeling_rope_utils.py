@@ -683,9 +683,14 @@ class RopeParameters(TypedDict):
             the model's `default_theta` (typically 10000.0) is used.
         rope_type (`str`, *optional*, defaults to "default"):
             The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-            'llama3'], with 'default' being the original RoPE implementation.
+            'llama3', 'proportional'], with 'default' being the original RoPE implementation.
         partial_rotary_factor (`float`, *optional*):
             The percentage of the query and key head embedding on which RoPE will be applied.
+        mrope_section (`list[int]`, *optional*):
+            Multidimensional / axial RoPE section sizes (typically time, height, width). Not a `rope_type`; used by
+            vision-language models together with a normal rope type such as `"default"`. See the rope utilities docs.
+        mrope_interleaved (`bool`, *optional*):
+            When set by a multimodal model, controls whether MRoPE axis frequencies are interleaved.
         factor (`float`, *optional*):
             Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
             most scaling types, a `factor` of x will enable the model to handle sequences of length x *
@@ -720,6 +725,8 @@ class RopeParameters(TypedDict):
     rope_theta: float | None
     rope_type: str | None
     partial_rotary_factor: float | None
+    mrope_section: list[int] | None
+    mrope_interleaved: bool | None
     factor: float | None
     original_max_position_embeddings: int | None
     attention_factor: float | None

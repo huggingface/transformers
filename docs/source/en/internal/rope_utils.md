@@ -33,6 +33,35 @@ The Transformers library provides a flexible and extensible implementation of va
 | `"yarn"` | YaRN scaling variant providing smoother extrapolation and stability. |
 | `"longrope"` | [LongRoPE](https://github.com/microsoft/LongRoPE) scaling as in Phi-2 model series. |
 | `"llama3"` | RoPE scaling as in Llama3.1. |
+| `"proportional"` | Frequency base scaled by sequence length relative to the original max position. |
+
+These `rope_type` values map to callables in `[`~modeling_rope_utils.ROPE_INIT_FUNCTIONS`]` (except `"default"`, which uses the model’s default inverse-frequency computation).
+
+## Multidimensional RoPE (MRoPE)
+
+MRoPE (also called axial RoPE) is used by many vision-language models so that a token can carry **independent** rotary positions along several axes — typically temporal, height, and width — instead of a single 1D sequence index. See [Qwen2-VL](https://arxiv.org/abs/2405.14599) for the formulation popularized in open VLMs.
+
+In Transformers, MRoPE is **not** a separate `rope_type` in `ROPE_INIT_FUNCTIONS`. Models keep a normal scaling type (usually `"default"`) and add multimodal keys on `rope_parameters`:
+
+| Key | Meaning |
+|-----|---------|
+| `mrope_section` | List of positive ints that partition half of the rotary head dimension (`head_dim // 2`) into one slice per axis. Length is usually `3` (time / height / width). The sum of the sections must match `head_dim // 2` (or the partial-rotary width when `partial_rotary_factor` is set). |
+| `mrope_interleaved` | Optional bool. When true, some models interleave axis frequencies instead of concatenating contiguous sections. |
+
+VL configs list these keys in `ignore_keys_at_rope_validation` so rope validation does not reject them as unknown fields for the chosen `rope_type`.
+
+Example (shape matches Qwen2-VL-style defaults):
+
+```python
+config.rope_parameters = {
+    "rope_type": "default",
+    "mrope_section": [16, 24, 24],  # time, height, width — sums to head_dim // 2
+}
+```
+
+At runtime the model builds per-axis cos/sin from multi-axis `position_ids`, then recomposes them with `mrope_section` before applying rotary embeddings to queries and keys. Families that use this pattern include Qwen2-VL / Qwen2.5-VL / Qwen3-VL, HunYuan-VL, GLM-V, and related multimodal variants.
+
+Prefer documenting and configuring MRoPE through `mrope_section` (and `mrope_interleaved` when present). Do not invent a new `"mrope"` / `"axial"` `rope_type` unless upstream registers it in `ROPE_INIT_FUNCTIONS`.
 
 ## Configuration in Model Configs
 
