@@ -19,13 +19,37 @@ a real expert to keep the weight gather in bounds, so they have to be kept out o
 gradient explicitly.
 """
 
+import types
 import unittest
 
 import torch
-from test_utils import make_experts
 
+from transformers.activations import ACT2FN
 from transformers.integrations.moe import batched_mm_experts_forward
 from transformers.testing_utils import require_torch, torch_device
+
+
+def make_experts(num_experts, hidden, inter, is_expert_parallel):
+    """The attributes `batched_mm_experts_forward` reads off an experts module, with real weights."""
+    act_fn = ACT2FN["silu"]
+
+    def apply_gate(gate_up):
+        gate, up = gate_up.chunk(2, dim=-1)
+        return act_fn(gate) * up
+
+    return types.SimpleNamespace(
+        num_experts=num_experts,
+        has_gate=True,
+        has_bias=False,
+        is_transposed=False,
+        act_fn=act_fn,
+        _apply_gate=apply_gate,
+        gate_up_proj=torch.randn(num_experts, 2 * inter, hidden, device=torch_device),
+        gate_up_proj_bias=None,
+        down_proj=torch.randn(num_experts, hidden, inter, device=torch_device),
+        down_proj_bias=None,
+        _is_expert_parallel=is_expert_parallel,
+    )
 
 
 NUM_EXPERTS = 4
@@ -39,9 +63,7 @@ class BatchedMmExpertsForwardTest(unittest.TestCase):
     def setUp(self):
         torch.manual_seed(0)
         # The sentinel slots only exist under expert parallelism, which is also what gates the handling.
-        self.experts = make_experts(
-            num_experts=NUM_EXPERTS, hidden=8, inter=16, weight_dtype=torch.float32, is_expert_parallel=True
-        )
+        self.experts = make_experts(num_experts=NUM_EXPERTS, hidden=8, inter=16, is_expert_parallel=True)
         self.hidden_states = torch.randn(3, 8, device=torch_device)
         self.top_k_index = torch.tensor(TOP_K_INDEX, device=torch_device)
 
