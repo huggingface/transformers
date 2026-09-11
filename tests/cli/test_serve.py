@@ -54,6 +54,8 @@ from transformers.testing_utils import (
 from transformers.utils.chat_parsing import ResponseParser
 from transformers.utils.import_utils import is_serve_available
 
+from ..test_memory_cleanup_mixin import MemoryCleanupMixin
+
 
 if is_serve_available():
     from fastapi import HTTPException
@@ -83,6 +85,28 @@ def _start_serve(**kwargs) -> tuple["Serve", int]:
             pass
         time.sleep(1)
     raise RuntimeError(f"Server on port {port} did not become healthy in time")
+
+
+class ServeIntegrationTestCase(MemoryCleanupMixin, unittest.TestCase):
+    """One live `transformers serve` per class, killed and released with it. Override `serve_kwargs` to start it
+    differently."""
+
+    @classmethod
+    def serve_kwargs(cls) -> dict:
+        return {}
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.serve, port = _start_serve(**cls.serve_kwargs())
+        cls.base_url = f"http://localhost:{port}"
+        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
+
+    @classmethod
+    def tearDownClass(cls):
+        # `kill_server()` already flushes; the mixin then drops the attributes still pointing at it.
+        cls.serve.kill_server()
+        super().tearDownClass()
 
 
 @require_serve
@@ -593,20 +617,10 @@ class TestAppRoutes(unittest.TestCase):
 
 @slow
 @require_serve
-class TestChatCompletion(unittest.TestCase):
+class TestChatCompletion(ServeIntegrationTestCase):
     """Integration tests for /v1/chat/completions with a real model."""
 
     MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
-
-    @classmethod
-    def setUpClass(cls):
-        cls.serve, port = _start_serve()
-        cls.base_url = f"http://localhost:{port}"
-        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.serve.kill_server()
 
     def test_non_streaming(self):
         resp = self.client.chat.completions.create(
@@ -790,7 +804,7 @@ class TestChatCompletion(unittest.TestCase):
 
 @slow
 @require_serve
-class TestCompletion(unittest.TestCase):
+class TestCompletion(ServeIntegrationTestCase):
     """Integration tests for /v1/completions with a real model.
 
     Covers sequential and continuous-batching generation, both streaming and
@@ -799,16 +813,6 @@ class TestCompletion(unittest.TestCase):
     """
 
     MODEL = "Qwen/Qwen2.5-0.5B"
-
-    @classmethod
-    def setUpClass(cls):
-        cls.serve, port = _start_serve()
-        cls.base_url = f"http://localhost:{port}"
-        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.serve.kill_server()
 
     # ----- non-streaming -----
 
@@ -1135,20 +1139,10 @@ class TestResponseSSEFormat(unittest.TestCase):
 
 @slow
 @require_serve
-class TestResponsesIntegration(unittest.TestCase):
+class TestResponsesIntegration(ServeIntegrationTestCase):
     """Integration tests for /v1/responses with a real model."""
 
     MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
-
-    @classmethod
-    def setUpClass(cls):
-        cls.serve, port = _start_serve()
-        cls.base_url = f"http://localhost:{port}"
-        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.serve.kill_server()
 
     def test_streaming(self):
         events = list(
@@ -1298,21 +1292,13 @@ def _parse_sse_events(response):
 
 @slow
 @require_serve
-class TestLoadModel(unittest.TestCase):
+class TestLoadModel(ServeIntegrationTestCase):
     """Integration tests for POST /load_model SSE endpoint."""
 
     MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
 
-    @classmethod
-    def setUpClass(cls):
-        cls.serve, port = _start_serve()
-        cls.base_url = f"http://localhost:{port}"
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.serve.kill_server()
-
     def setUp(self):
+        super().setUp()
         # Clear model cache so each test starts fresh
         self.serve.reset_loaded_models()
 
@@ -1542,26 +1528,16 @@ class TestLoadModel(unittest.TestCase):
 
 
 # Real image URL for VLM tests (person + dog on a beach)
-_DOG_IMAGE_URL = "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg"
+_DOG_IMAGE_URL = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen2_vl_demo_small.jpg"
 
 
 @slow
 @require_vision
 @require_serve
-class TestVLM(unittest.TestCase):
+class TestVLM(ServeIntegrationTestCase):
     """Integration tests for VLM (vision-language model) support. Requires torchvision."""
 
     MODEL = "HuggingFaceTB/SmolVLM-256M-Instruct"
-
-    @classmethod
-    def setUpClass(cls):
-        cls.serve, port = _start_serve()
-        cls.base_url = f"http://localhost:{port}"
-        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.serve.kill_server()
 
     def test_chat_completion_with_image(self):
         """Chat completions should accept image_url content and produce a meaningful response."""
@@ -1612,20 +1588,10 @@ _VIDEO_URL = "https://huggingface.co/datasets/hf-internal-testing/fixtures_video
 
 @slow
 @require_serve
-class TestMultimodalLM(unittest.TestCase):
+class TestMultimodalLM(ServeIntegrationTestCase):
     """Integration tests for multimodal (audio, video) chat completions with Gemma 4."""
 
     MODEL = "google/gemma-4-E2B-it"
-
-    @classmethod
-    def setUpClass(cls):
-        cls.serve, port = _start_serve()
-        cls.base_url = f"http://localhost:{port}"
-        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.serve.kill_server()
 
     def _get_audio_messages(self):
         import base64
@@ -1978,16 +1944,6 @@ class _TestToolCallBase:
 
     MODEL: str
 
-    @classmethod
-    def setUpClass(cls):
-        cls.serve, port = _start_serve()
-        cls.base_url = f"http://localhost:{port}"
-        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.serve.kill_server()
-
     def _get_tool_def(self):
         return {
             "function": {
@@ -2327,7 +2283,7 @@ class _TestToolCallBase:
 @slow
 @require_serve
 @require_torch_accelerator
-class TestToolCallQwen(_TestToolCallBase, unittest.TestCase):
+class TestToolCallQwen(_TestToolCallBase, ServeIntegrationTestCase):
     """Tool call tests with Qwen (fallback config, no response_schema)."""
 
     MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
@@ -2336,7 +2292,7 @@ class TestToolCallQwen(_TestToolCallBase, unittest.TestCase):
 @slow
 @require_serve
 @require_torch_accelerator
-class TestToolCallQwen3_5(_TestToolCallBase, unittest.TestCase):
+class TestToolCallQwen3_5(_TestToolCallBase, ServeIntegrationTestCase):
     """Tool call tests with Qwen 3.5 (fallback template, <function=...><parameter=...> markup)."""
 
     MODEL = "Qwen/Qwen3.5-0.8B"
@@ -2345,7 +2301,7 @@ class TestToolCallQwen3_5(_TestToolCallBase, unittest.TestCase):
 @slow
 @require_serve
 @require_torch_accelerator
-class TestToolCallGemma(_TestToolCallBase, unittest.TestCase):
+class TestToolCallGemma(_TestToolCallBase, ServeIntegrationTestCase):
     """Tool call tests with Gemma 4 (response_schema + stc/etc special tokens)."""
 
     MODEL = "google/gemma-4-E2B-it"
@@ -2361,16 +2317,6 @@ class _TestReasoningBase:
     USER_PROMPT = "What is 17 * 23? Think briefly, then answer in one sentence."
     EXPECTED_ANSWER = "391"
     MAX_TOKENS = 512
-
-    @classmethod
-    def setUpClass(cls):
-        cls.serve, port = _start_serve()
-        cls.base_url = f"http://localhost:{port}"
-        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.serve.kill_server()
 
     @staticmethod
     def _reasoning_field(obj):
@@ -2568,7 +2514,7 @@ class _TestReasoningBase:
 @slow
 @require_serve
 @require_torch_accelerator
-class TestReasoningQwen(_TestReasoningBase, unittest.TestCase):
+class TestReasoningQwen(_TestReasoningBase, ServeIntegrationTestCase):
     """Reasoning tests with Qwen3 (inline <think>...</think> tags)."""
 
     MODEL = "Qwen/Qwen3-1.7B"
@@ -2577,36 +2523,25 @@ class TestReasoningQwen(_TestReasoningBase, unittest.TestCase):
 @slow
 @require_serve
 @require_torch_accelerator
-class TestReasoningGemma(_TestReasoningBase, unittest.TestCase):
+class TestReasoningGemma(_TestReasoningBase, ServeIntegrationTestCase):
     """Reasoning tests with Gemma 4 (response_schema-based thinking channel)."""
 
     MODEL = "google/gemma-4-E2B-it"
 
     @classmethod
-    def setUpClass(cls):
+    def serve_kwargs(cls) -> dict:
         # Gemma 4's chat template gates thinking on `enable_thinking`; default is "false".
-        cls.serve, port = _start_serve(reasoning="on")
-        cls.base_url = f"http://localhost:{port}"
-        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
+        return {"reasoning": "on"}
 
 
 @slow
 @require_librosa
 @require_multipart
 @require_serve
-class TestTranscription(unittest.TestCase):
+class TestTranscription(ServeIntegrationTestCase):
     """Integration tests for POST /v1/audio/transcriptions with whisper-tiny."""
 
     MODEL = "openai/whisper-tiny"
-
-    @classmethod
-    def setUpClass(cls):
-        cls.serve, port = _start_serve()
-        cls.base_url = f"http://localhost:{port}"
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.serve.kill_server()
 
     @classmethod
     def _get_audio_bytes(cls):
@@ -2683,26 +2618,20 @@ class TestTranscription(unittest.TestCase):
 @slow
 @require_serve
 @require_torch_accelerator
-class TestContinuousBatchingChatCompletion(unittest.TestCase):
+class TestContinuousBatchingChatCompletion(ServeIntegrationTestCase):
     """Integration tests for /v1/chat/completions with continuous batching."""
 
     MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
 
     @classmethod
-    def setUpClass(cls):
-        cls.serve, port = _start_serve(
-            force_model=cls.MODEL,
-            device="cuda:0",
-            continuous_batching=True,
-            attn_implementation="sdpa",
-            default_seed=42,
-        )
-        cls.base_url = f"http://localhost:{port}"
-        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.serve.kill_server()
+    def serve_kwargs(cls) -> dict:
+        return {
+            "force_model": cls.MODEL,
+            "device": "cuda:0",
+            "continuous_batching": True,
+            "attn_implementation": "sdpa",
+            "default_seed": 42,
+        }
 
     def test_streaming(self):
         """Streaming chat completion with CB produces text."""
@@ -2811,26 +2740,20 @@ class TestContinuousBatchingChatCompletion(unittest.TestCase):
 @slow
 @require_serve
 @require_torch_accelerator
-class TestContinuousBatchingResponses(unittest.TestCase):
+class TestContinuousBatchingResponses(ServeIntegrationTestCase):
     """Integration tests for /v1/responses with continuous batching."""
 
     MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
 
     @classmethod
-    def setUpClass(cls):
-        cls.serve, port = _start_serve(
-            force_model=cls.MODEL,
-            device="cuda:0",
-            continuous_batching=True,
-            attn_implementation="sdpa",
-            default_seed=42,
-        )
-        cls.base_url = f"http://localhost:{port}"
-        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.serve.kill_server()
+    def serve_kwargs(cls) -> dict:
+        return {
+            "force_model": cls.MODEL,
+            "device": "cuda:0",
+            "continuous_batching": True,
+            "attn_implementation": "sdpa",
+            "default_seed": 42,
+        }
 
     def test_streaming(self):
         """Streaming response with CB produces text."""

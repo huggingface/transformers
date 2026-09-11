@@ -26,6 +26,7 @@ import torch
 from huggingface_hub import snapshot_download
 from parameterized import parameterized
 
+from tests.test_memory_cleanup_mixin import MemoryCleanupTestCase
 from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig
 from transformers.integrations.hub_kernels import (
     _HUB_KERNEL_MAPPING,
@@ -40,7 +41,6 @@ from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 from transformers.monkey_patching import clear_patch_mapping, get_patch_mapping, register_patch_mapping
 from transformers.testing_utils import (
     TestCasePlus,
-    cleanup,
     require_kernels,
     require_rocm,
     require_torch_accelerator,
@@ -59,9 +59,10 @@ if is_kernels_available():
 
 @require_kernels
 @slow
-class TestHubKernels(TestCasePlus):
+class TestHubKernels(MemoryCleanupTestCase):
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
         cls.model_id = "unsloth/Llama-3.2-1B-Instruct"
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_id)
         cls.model_kernelized = AutoModelForCausalLM.from_pretrained(
@@ -74,28 +75,16 @@ class TestHubKernels(TestCasePlus):
 
     @classmethod
     def tearDownClass(cls):
-        for attr in [
-            "model_kernelized",
-            "model_not_kernelized",
-            "tokenizer",
-        ]:
-            if hasattr(cls, attr):
-                try:
-                    delattr(cls, attr)
-                except Exception as e:
-                    print(f"Could not delete attribute {attr}: {e}")
-
-        # Clear any temporary kernel module cache entries populated by tests
-        try:
-            keys_to_remove = [
-                k for k, v in list(_KERNEL_MODULE_MAPPING.items()) if v is None or isinstance(v, types.ModuleType)
-            ]
-            for k in keys_to_remove:
-                _KERNEL_MODULE_MAPPING.pop(k, None)
-        except Exception as e:
-            print(f"Could not clear kernel module cache: {e}")
+        # Clear any temporary kernel module cache entries populated by tests; the mixin drops the two models.
+        keys_to_remove = [
+            k for k, v in list(_KERNEL_MODULE_MAPPING.items()) if v is None or isinstance(v, types.ModuleType)
+        ]
+        for k in keys_to_remove:
+            _KERNEL_MODULE_MAPPING.pop(k, None)
+        super().tearDownClass()
 
     def setUp(self):
+        super().setUp()
         self._pre_test_patch_mapping = get_patch_mapping()
 
     def tearDown(self):
@@ -103,8 +92,7 @@ class TestHubKernels(TestCasePlus):
         clear_patch_mapping()
         if self._pre_test_patch_mapping:
             register_patch_mapping(self._pre_test_patch_mapping)
-        # Free accelerator memory/cache and trigger GC
-        cleanup(torch_device, gc_collect=True)
+        super().tearDown()
 
     @require_torch_accelerator
     def test_forward(self):
@@ -802,24 +790,12 @@ class TestAttentionKernelRegistration(TestCasePlus):
 
 
 @require_kernels
-class TestUseKernelsLifecycle(TestCasePlus):
+class TestUseKernelsLifecycle(MemoryCleanupTestCase):
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
         cls.model_id = "unsloth/Llama-3.2-1B-Instruct"
         cls.model = AutoModelForCausalLM.from_pretrained(cls.model_id, use_kernels=False, device_map=torch_device)
-
-    @classmethod
-    def tearDownClass(cls):
-        # Delete large objects to drop references early
-        if hasattr(cls, "model"):
-            try:
-                del cls.model
-            except Exception as e:
-                print(f"Could not delete model: {e}")
-
-    def tearDown(self):
-        # Free accelerator memory/cache and trigger GC
-        cleanup(torch_device, gc_collect=True)
 
     def test_setting_use_kernels_twice_does_not_rekernelize(self):
         with (

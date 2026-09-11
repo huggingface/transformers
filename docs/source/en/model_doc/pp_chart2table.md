@@ -48,7 +48,7 @@ conversation = [
         "content": [
             {
                 "type": "image",
-                "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png",
+                "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_chart_parsing_02.png",
             },
         ],
     },
@@ -79,7 +79,7 @@ conversation = [
         "content": [
             {
                 "type": "image",
-                "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png",
+                "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_chart_parsing_02.png",
             },
         ],
     },
@@ -123,7 +123,7 @@ conversation = [
         "content": [
             {
                 "type": "image",
-                "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png",
+                "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_chart_parsing_02.png",
             },
         ],
     },
@@ -154,7 +154,7 @@ conversation = [
         "content": [
             {
                 "type": "image",
-                "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png",
+                "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_chart_parsing_02.png",
             },
         ],
     },

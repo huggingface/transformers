@@ -102,6 +102,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "granitemoeshared": "granitemoe",
     "granitemoehybrid": "granitemoe",
     "gemma3n_text": "qwen3_5_text",
+    "glm5_next_text": "glm5_next",
     "qwen3_5_moe_text": "qwen3_5_text",
     "llava_next_video": "llava_next",
     "llava_onevision": "llava_next",
@@ -159,6 +160,23 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.mlp\.engine\.shared_gate", ".mlp.shared_expert.gate_proj"),
             WeightRenaming(r"\.mlp\.engine\.shared_up", ".mlp.shared_expert.up_proj"),
             WeightRenaming(r"\.mlp\.engine\.shared_down", ".mlp.shared_expert.down_proj"),
+        ],
+        "hy_v4": [
+            # General HC prefix which is dropped
+            WeightRenaming(r"\.hc_pre\.hc_", ".hc_"),
+            # Attn gating + sinks
+            WeightRenaming(r"\.learnable_sink_param$", ".sinks"),
+            WeightRenaming(r"\.linear_gate", ".gate_proj"),
+            # Follow DSv4 HC standards
+            WeightRenaming(r"\.hc_attn_layer\.hc_fn", ".attn_hc.fn"),
+            WeightRenaming(r"\.hc_attn_layer\.hc_base", ".attn_hc.base"),
+            WeightRenaming(r"\.hc_attn_layer\.hc_scale", ".attn_hc.scale"),
+            WeightRenaming(r"\.hc_mlp_layer\.hc_fn", ".ffn_hc.fn"),
+            WeightRenaming(r"\.hc_mlp_layer\.hc_base", ".ffn_hc.base"),
+            WeightRenaming(r"\.hc_mlp_layer\.hc_scale", ".ffn_hc.scale"),
+            WeightRenaming(r"\.hc_head_fn", ".hc_fn"),
+            WeightRenaming(r"\.hc_head_base", ".hc_base"),
+            WeightRenaming(r"\.hc_head_scale", ".hc_scale"),
         ],
         # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
         # blocks. The visual/projector tensors already use their native module names and intentionally need no mapping.
@@ -975,6 +993,9 @@ def _build_checkpoint_conversion_mapping():
         ],
         "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
         "dinov3_vit": [WeightRenaming(r"(?<!model\.)layer.", r"model.layer.")],
+        "yolos": [
+            WeightRenaming(r"encoder.mid_position_embeddings", r"encoder.interpolation.mid_position_embeddings")
+        ],
         "timesfm2_5": [
             WeightRenaming("ff0", "fc1"),
             WeightRenaming("ff1", "fc2"),
@@ -1315,6 +1336,11 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="feed_forward.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
+        ],
+        "hyperclovax_vision_v2": [
+            WeightRenaming(r"^model.language_model.lm_head", r"lm_head"),
+            WeightRenaming(r"^model.vision_projector", r"model.projector"),
+            PrefixChange(prefix_to_remove="model", model_prefix="model.language_model"),
         ],
         "nomic_bert": [
             WeightRenaming(r"encoder.layers", r"layers"),
@@ -1848,6 +1874,41 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(source_patterns=r"\.input_proj\.", target_patterns=r".eh_proj."),
         WeightRenaming(source_patterns=r"^chain_norm\.", target_patterns=r"shared_post_norm."),
         WeightRenaming(source_patterns=r"layers\.(\d+)\.transformer_block\.", target_patterns=r"layers.\1.mtp_block."),
+    ]
+
+    mapping["kimi_linear"] = [
+        # Forget gate weights are attached to the forget gate module instead of the attention
+        WeightRenaming(source_patterns=r"self_attn\.f_a_proj\.", target_patterns=r"self_attn.forget_gate.f_a_proj."),
+        WeightRenaming(source_patterns=r"self_attn\.f_b_proj\.", target_patterns=r"self_attn.forget_gate.f_b_proj."),
+        WeightRenaming(source_patterns=r"self_attn\.dt_bias", target_patterns=r"self_attn.forget_gate.dt_bias"),
+        WeightRenaming(source_patterns=r"self_attn\.A_log", target_patterns=r"self_attn.forget_gate.A_log"),
+        # Conv weights are stacked before runtime
+        WeightConverter(
+            source_patterns=[
+                "self_attn.q_conv1d.weight",
+                "self_attn.k_conv1d.weight",
+                "self_attn.v_conv1d.weight",
+            ],
+            target_patterns="self_attn.conv1d.weight",
+            operations=[Concatenate(dim=0)],
+        ),
+        # Rename MoEs so they have the same prefix as the MLPs
+        WeightRenaming(source_patterns=r"\.block_sparse_moe\.", target_patterns=r"\.mlp\."),
+        # Concatenate w1 (gate) and w3 (up) weights into a single weight and merge across experts
+        WeightConverter(
+            source_patterns=[
+                r"\.experts.*.w1.weight",
+                r"\.experts.*.w3.weight",
+            ],
+            target_patterns=r"\.experts.gate_up_proj",
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+        ),
+        # Merge w2 (down) weights across experts
+        WeightConverter(
+            source_patterns=r"\.experts.*.w2.weight",
+            target_patterns=r"\.experts.down_proj",
+            operations=[MergeModulelist(dim=0)],
+        ),
     ]
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
