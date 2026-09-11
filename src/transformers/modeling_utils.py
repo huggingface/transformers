@@ -4371,7 +4371,7 @@ class PreTrainedModel(
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
         expected_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys
 
-        prefetch_checkpoint_shards(checkpoint_files)
+        prefetch_checkpoint_shards(checkpoint_files, model.state_dict())
 
         if logger.level >= logging.WARNING:
             verify_tp_plan(expected_keys, getattr(model, "_tp_plan", None))
