@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import copy
+import os
 import tempfile
 import unittest
 
@@ -84,7 +85,9 @@ class DeepseekV41ModelTester(CausalLMModelTester):
         self.hc_sinkhorn_iters = 3
         self.hc_eps = 1.0e-6
         self.index_n_heads = 2
-        self.index_head_dim = 16
+        # 32 keeps the indexer head dim divisible by the QAT fp4 block size, so the
+        # tests exercise the reference's quantized indexer path.
+        self.index_head_dim = 32
         self.index_topk = 2
         self.candidate_topk_blocks = 4
         self.candidate_block_size = 4
@@ -313,6 +316,215 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertTrue(torch.equal(layer.compressed_kv["compressor"], before.flip(0)))
         self.assertTrue(torch.equal(layer.compressed_kv["indexer"], kv[:, :, :3].flip(0)))
         self.assertEqual(layer.buffer_kv["compressor"].shape[0], 2)
+
+    def test_beam_reorder_follows_engram_history(self):
+        """The engram n-gram history lives on the model, not the cache: beam search
+        must permute it together with the cache (found by the cross-engine audit —
+        the CSA-layer reorder tests ran with engram disabled and missed it)."""
+        from transformers.models.deepseek_v41.modeling_deepseek_v41 import build_compressed_token_map
+
+        tokenizer = tiny_word_tokenizer()
+        config = self.model_tester.get_config()
+        config.engram_layer_ids = [1, 2]
+        config.engram_num_embeddings = [700, 700]
+        config.engram_vocab_size = 64
+        config.engram_n_heads = 2
+        config.engram_head_dim = 16
+        config.engram_pad_id = 8
+        _, compressed_vocab = build_compressed_token_map(tokenizer)
+        config.engram_compressed_vocab_size = compressed_vocab
+        # `generate` samples over the full vocab; the hash state's token map only
+        # covers the tokenizer, so keep the two aligned in this test.
+        config.vocab_size = len(tokenizer)
+
+        model = self.model_tester.causal_lm_class(config).eval()
+        model.model.bind_tokenizer(tokenizer)
+        inputs = torch.randint(0, len(tokenizer), (2, 9))
+        with torch.no_grad():
+            out = model(inputs, use_cache=True)
+        history = model.model.engram_hash_state.history.clone()
+        self.assertEqual(history.shape[0], 2)
+
+        model._reorder_cache(out.past_key_values, torch.tensor([1, 0]))
+
+        self.assertTrue(torch.equal(model.model.engram_hash_state.history, history.flip(0)))
+
+        # End to end: beam search with engram layers enabled must run and stay
+        # deterministic across two runs with the same seed.
+        torch.manual_seed(0)
+        beams1 = model.generate(inputs, max_new_tokens=4, num_beams=2, do_sample=False)
+        torch.manual_seed(0)
+        beams2 = model.generate(inputs, max_new_tokens=4, num_beams=2, do_sample=False)
+        self.assertTrue(torch.equal(beams1, beams2))
+
+    def test_fp8_native_checkpoint_load(self):
+        """Load a native-format quantized checkpoint replicating the released layout:
+        fp8 e4m3 weights + ue8m0 block scales for attention/shared experts/engram.wkv,
+        PACKED FP4 routed experts (e2m1 nibbles in int8, per-row 16-channel ue8m0
+        scales), fp8 engram tables, BF16 compressor/indexer/embed, F32 mHC params.
+        Found by the cross-engine audit: the `wo_a` grouped projection and the engram
+        tables must survive the load, and the fp4 experts must unpack exactly."""
+        from safetensors.torch import save_file
+
+        from transformers.models.deepseek_v41 import DeepseekV41Config
+        from transformers.models.deepseek_v41.modeling_deepseek_v41 import build_compressed_token_map
+
+        def quantize_fp8(weight, block=32):
+            out_dim, in_dim = weight.shape
+            blocks = weight.float().view(out_dim // block, block, in_dim // block, block)
+            amax = blocks.abs().amax(dim=(1, 3)).clamp_min(1e-4)
+            scale = torch.exp2(torch.ceil(torch.log2(amax / 448.0)))  # ue8m0: powers of two
+            q = (blocks / scale.unsqueeze(1).unsqueeze(3)).clamp(-448, 448)
+            deq = q.to(torch.float8_e4m3fn).float() * scale.unsqueeze(1).unsqueeze(3)
+            return (
+                q.reshape(out_dim, in_dim).to(torch.float8_e4m3fn),
+                scale.to(torch.float8_e8m0fnu),  # [out_blocks, in_blocks] like the release
+                deq.reshape(out_dim, in_dim),
+            )
+
+        tokenizer = tiny_word_tokenizer()
+        _, compressed_vocab = build_compressed_token_map(tokenizer)
+        config = self.model_tester.get_config()
+        config.engram_layer_ids = [1]
+        config.engram_num_embeddings = [700]
+        config.engram_vocab_size = 64
+        config.engram_n_heads = 2
+        config.engram_head_dim = 64  # divisible by the engram table's 32-channel groups
+        config.engram_pad_id = 8
+        config.engram_compressed_vocab_size = compressed_vocab
+
+        model = self.model_tester.causal_lm_class(config).to(torch.bfloat16).eval()
+        model.model.bind_tokenizer(tokenizer)
+        native, dequantized = {}, {}
+        for name, param in model.named_parameters():
+            native_name = name
+            for a, b in [
+                ("model.layers.", "layers."),
+                ("model.embed.", "embed."),
+                ("model.norm.", "norm."),
+                ("lm_head.", "head."),
+            ]:
+                native_name = native_name.replace(a, b)
+            # the released checkpoint's quantized set: attention projections (incl.
+            # the grouped wo_a), indexer.wq_b, engram.wkv and the SHARED experts are
+            # fp8-block; the ROUTED experts are packed fp4 (e2m1 nibbles in an int8
+            # container, one ue8m0 scale per row per 16 channels). Compressor,
+            # indexer.wk/weights_proj, gate, embed and head stay bf16/f32.
+            is_fp8 = (
+                param.ndim == 2
+                and any(
+                    name.endswith(f".{suffix}")
+                    for suffix in (
+                        "attn.wq_a.weight",
+                        "attn.wq_b.weight",
+                        "attn.wkv.weight",
+                        "attn.wo_a.weight",
+                        "attn.wo_b.weight",
+                        "indexer.wq_b.weight",
+                        "engram.wkv.weight",
+                        "w1.weight",
+                        "w2.weight",
+                        "w3.weight",
+                    )
+                )
+                and ".experts." not in name
+            )
+            if name.endswith("engram.embed.weight"):
+                rows, dim = param.shape
+                blocks = param.float().view(rows, dim // 32, 32)
+                amax = blocks.abs().amax(-1).clamp_min(1e-4)
+                scale = torch.exp2(torch.ceil(torch.log2(amax / 448.0)))
+                q = (blocks / scale.unsqueeze(-1)).clamp(-448, 448)
+                native["layers.1.engram.embed.weight"] = q.reshape(rows, dim).to(torch.float8_e4m3fn)
+                native["layers.1.engram.embed.scale"] = scale.to(torch.float8_e8m0fnu)
+                dequantized[name] = (
+                    (q.to(torch.float8_e4m3fn).float() * scale.unsqueeze(-1)).reshape(rows, dim).to(torch.bfloat16)
+                )
+            elif ".experts." in name and param.ndim == 2:
+                # routed experts: packed fp4 like the release — two e2m1 nibbles per
+                # int8 byte (even index in the low nibble), [rows, in/16] ue8m0 scales
+                out_dim, in_dim = param.shape
+                groups = param.float().view(out_dim, in_dim // 16, 16)
+                amax = groups.abs().amax(-1).clamp_min(1e-4)
+                scale = torch.exp2(torch.ceil(torch.log2(amax / 6.0)))
+                q = (groups / scale.unsqueeze(-1)).clamp(-6, 6)
+                grid = torch.tensor([0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0])
+                codes = torch.bucketize(q.abs(), torch.tensor([0.25, 0.75, 1.25, 1.75, 2.5, 3.5, 5.0]))
+                values = grid[codes] * torch.where(q < 0, -1.0, 1.0)
+                nibbles = codes.to(torch.uint8) | ((q < 0).to(torch.uint8) << 3)
+                packed = nibbles[..., 0::2] | (nibbles[..., 1::2] << 4)
+                native[native_name] = packed.reshape(out_dim, in_dim // 2).to(torch.int8)
+                native[native_name[: -len(".weight")] + ".scale"] = scale.to(torch.float8_e8m0fnu)
+                dequantized[name] = (values * scale.unsqueeze(-1)).reshape(out_dim, in_dim).to(torch.bfloat16)
+            elif is_fp8:
+                weight, scale, deq = quantize_fp8(param.data)
+                # the checkpoint keeps the param's own name for the fp8 tensor and
+                # stores the block scales as a `.scale` SIBLING of it
+                native[native_name] = weight
+                native[native_name[: -len(".weight")] + ".scale"] = scale
+                dequantized[name] = deq.to(torch.bfloat16)
+            elif name.endswith("engram.embed.scale"):
+                # the checkpoint's table scale was written by the branch above;
+                # the model's (unused-in-bf16) scale param must not overwrite it
+                continue
+            else:
+                native[native_name] = param.data.to(torch.bfloat16) if param.dtype.is_floating_point else param.data
+        # F32 tensors stay F32 (the checkpoint's mHC / sink / bias dtypes)
+        for name, param in model.named_parameters():
+            if name.split(".")[-1] in (
+                "hc_attn_fn",
+                "hc_attn_base",
+                "hc_attn_scale",
+                "hc_ffn_fn",
+                "hc_ffn_base",
+                "hc_ffn_scale",
+                "attn_sink",
+                "bias",
+                "bias_vl",
+                "q_weight",
+                "k_weight",
+            ):
+                native_name = name
+                for a, b in [("model.layers.", "layers.")]:
+                    native_name = native_name.replace(a, b)
+                native[native_name] = param.data.to(torch.float32)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            save_file(native, os.path.join(tmp, "model.safetensors"))
+            composite = DeepseekV41Config(
+                text_config=config.to_dict(),
+                quantization_config={
+                    "quant_method": "fp8",
+                    "activation_scheme": "dynamic",
+                    "weight_block_size": [32, 32],
+                    "scale_fmt": "ue8m0",
+                    "expert_dtype": "fp4",  # routed experts ship packed fp4, like the release
+                },
+            )
+            composite.save_pretrained(tmp)
+            loaded = self.model_tester.causal_lm_class.from_pretrained(tmp, dtype=torch.bfloat16)
+            loaded.model.bind_tokenizer(tokenizer)
+
+        # 1. untouched tensors load verbatim (BF16/F32 modules survive the fp8 path)
+        ref = dict(model.named_parameters())
+        got = dict(loaded.named_parameters())
+        for name in ("model.embed.weight", "model.layers.0.ffn.gate.weight", "model.layers.0.hc_attn_fn"):
+            self.assertTrue(torch.allclose(ref[name].float(), got[name].float(), atol=1e-3), name)
+        # 2. fp8 tensors dequantize to exactly what we packed (scales applied once)
+        for name, deq in dequantized.items():
+            self.assertTrue(torch.allclose(deq.float(), got[name].float(), atol=5e-2), name)
+        # 3. the grouped wo_a specifically: dequantized and reshapeable
+        wo_a = got["model.layers.0.attn.wo_a.weight"]
+        self.assertEqual(wo_a.dtype, torch.bfloat16)
+        wo_a.view(config.o_groups, -1, config.hidden_size)
+        # 4. end-to-end: fp8-loaded logits track the bf16 original
+        # stay inside the tiny tokenizer's range: the engram hashes map ids through
+        # build_compressed_token_map, whose lookup has one row per tokenizer entry
+        inputs = torch.randint(0, len(tokenizer), (2, 9))
+        with torch.no_grad():
+            clean = model(inputs).logits.float()
+            quant = loaded(inputs).logits.float()
+        self.assertLess((clean - quant).abs().max().item(), 0.35)
 
     def test_engram_forward(self):
         """The engram layers run end-to-end: bind the tokenizer, forward, decode."""

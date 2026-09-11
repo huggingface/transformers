@@ -512,6 +512,7 @@ class DeepseekV41VisionConfig(PreTrainedConfig):
     max_wh_ratio: int | None = None
 
 
+@strict
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V4.1-Flash")
 class DeepseekV41Config(PreTrainedConfig):
     r"""

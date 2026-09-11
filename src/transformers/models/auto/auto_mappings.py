@@ -745,8 +745,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
     [
         ("aimv2_text_model", "aimv2"),
-        ("deepseek_v41_text", "deepseek_v41"),
-        ("deepseek_v41_vision", "deepseek_v41"),
         ("aimv2_vision_model", "aimv2"),
         ("align_text_model", "align"),
         ("align_vision_model", "align"),
@@ -794,6 +792,8 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("deepseek_ocr2_sam_vision_model", "deepseek_ocr2"),
         ("deepseek_ocr2_text", "deepseek_ocr2"),
         ("deepseek_ocr2_vision", "deepseek_ocr2"),
+        ("deepseek_v41_text", "deepseek_v41"),
+        ("deepseek_v41_vision", "deepseek_v41"),
         ("dia_decoder", "dia"),
         ("dia_encoder", "dia"),
         ("diffusion_gemma_text", "diffusion_gemma"),

@@ -85,6 +85,39 @@ model.model.bind_tokenizer(tokenizer)  # explicit
 Tokens masked out of n-grams (image spans) are hashed as a DEAD sentinel; look-back stops at them, so an n-gram
 never spans one.
 
+## Quantization
+
+### QAT fake-quant in the forward pass
+
+The model is QAT-trained with activation quantization **baked into the forward pass** — it runs in every engine's
+reference path and is applied here too, regardless of weight dtype:
+
+| Tensor | Format | Scale |
+| --- | --- | --- |
+| sliding-window K=V (post-RoPE, pre-cache) | FP8 e4m3, 32-channel blocks | ue8m0 (power of two) |
+| compressed KV latent (post-RoPE, pre-cache) | FP4 e2m1, 16-channel blocks | e4m3 |
+| indexer keys / queries (post-RoPE) | FP4 e2m1, 32-channel blocks | ue8m0 |
+
+This is model semantics, not a load-time effect: it is output-visible even with unquantized weights (FP4 rounding
+moves indexer scores and therefore top-k selection). Tensors whose trailing dimension is not divisible by the block
+size (tiny test configs) skip the quantization.
+
+### Loading the released checkpoint
+
+The released `DeepSeek-V4.1-Flash` checkpoint ships mixed-precision weights: attention projections, the shared
+experts, `engram.wkv` and the engram tables in FP8 (e4m3, 32×32 blocks, ue8m0 scales), **routed experts packed as
+FP4** (e2m1 nibbles in an int8 container, per-row 16-channel ue8m0 scales), the compressor / indexer projections,
+embeddings and head in bf16, and the mHC / sink / gate-bias parameters in fp32. `from_pretrained` accepts this
+layout as-is on CPU (weights are dequantized to the requested `dtype`) and on GPU (kept quantized when supported):
+the fp8 quantizer's `.scale` → `weight_scale_inv` mapping and its FP4-aware dequantize op handle every piece,
+including the packed experts and the per-row-scaled engram tables (dequantized into the embedding at load, so the
+lookup stays a plain row gather).
+
+`DeepseekV41ForCausalLM` takes the composite [`DeepseekV41Config`] (`config_class`) because the released
+config.json nests the text backbone under `text_config` and puts `quantization_config` at the top level — pointing
+the class at the bare text config would silently drop the quantization config and corrupt the fp8 tensors on load.
+The text config is unwrapped in `__init__`; instantiating with a [`DeepseekV41TextConfig`] directly also works.
+
 ## Usage
 
 ```python
@@ -121,6 +154,13 @@ print(tok.decode(out[0], skip_special_tokens=True))
   exactly 0.0 and `torch.topk` may order them by layout. Like DeepSeek-V3.2, cross-backend output-equivalence
   guarantees do not hold for this model; the equivalence tests in `tests/models/deepseek_v41` select all visible
   blocks to stay deterministic.
+* **Stale indexer keys on incomplete-group decode steps (reference deviation).** The reference reassigns the
+  shared indexer key cache only when a latent is emitted, but scores against it unconditionally: on decode steps
+  where no group completes, a layer scores its queries against the *last publisher's* keys — typically layer 20's,
+  since it owns the last index-source slot. This implementation (and vLLM, MLX and llama.cpp) instead always
+  publishes the owner layer's running key cache, so those steps read the correct owner keys. The parity harness is
+  blind to the difference (its tiny config saturates the top-k: `index_topk` exceeds the compressed length), so
+  this is a documented deviation, not an asserted equivalence.
 
 ## DeepseekV41Config
 

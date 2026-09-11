@@ -340,6 +340,68 @@ class DeepseekV41Compressor(nn.Module):
         return self.norm(latent.to(hidden_states.dtype)), first_group_position
 
 
+_FP4_MAX = 6.0  # float4_e2m1fn max
+_FP4_TABLE = torch.tensor(
+    [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0],
+    dtype=torch.float32,
+)
+_FP4_LUT_CACHE = {}  # device-keyed cache of the e2m1 value table
+
+
+def _fp4_lut(device: torch.device) -> torch.Tensor:
+    lut = _FP4_LUT_CACHE.get(device)
+    if lut is None:
+        lut = _FP4_TABLE.to(device)
+        _FP4_LUT_CACHE[device] = lut
+    return lut
+
+
+def _pow2_ceil_scale(t: torch.Tensor) -> torch.Tensor:
+    """`2^ceil(log2(t))` for fp32 `t > 0`, via the same IEEE-754 bit manipulation
+    the reference kernel uses (exponent field minus 127, plus any nonzero
+    mantissa) — the ue8m0 power-of-two scale rounding."""
+    bits = t.contiguous().view(torch.int32)
+    exponent = (bits >> 23) & 0xFF
+    mantissa = bits & 0x7FFFFF
+    k = exponent - 127 + (mantissa != 0).to(torch.int32)
+    return torch.exp2(k.to(torch.float32))
+
+
+def _e2m1_codes(q: torch.Tensor) -> torch.Tensor:
+    """Round-to-nearest-even cast of pre-clamped fp32 values onto the e2m1 grid;
+    returns uint8 codes with the sign in bit 3. Ties at even-code boundaries
+    (0.25, 1.25, 2.5, 5.0) round down, at odd-code boundaries round up."""
+    magnitude = q.abs()
+    negative = torch.signbit(q)
+    boundaries = torch.tensor([0.25, 0.75, 1.25, 1.75, 2.5, 3.5, 5.0], dtype=torch.float32, device=q.device)
+    ties_up = torch.tensor([False, True, False, True, False, True, False], device=q.device)
+    thresholds = torch.where(
+        ties_up, boundaries, torch.nextafter(boundaries, torch.full_like(boundaries, float("inf")))
+    )
+    codes = (magnitude.unsqueeze(-1) >= thresholds).sum(-1).to(torch.uint8)
+    return codes | (negative.to(torch.uint8) << 3)
+
+
+def _fake_quant_fp4_block(x: torch.Tensor, block_size: int, e4m3_scales: bool = False) -> torch.Tensor:
+    """Block-wise FP4 fake-quantization — the reference's indexer (block 32, ue8m0
+    scales) and compressed-KV (block 16, e4m3 scales) quantizers. Returns the tensor
+    quantized onto the e2m1 grid and dequantized (out of place; values identical to
+    the reference's in-place call)."""
+    n = x.shape[-1]
+    if n % block_size:
+        return x  # shapes the reference cannot block (tiny test configs) run unquantized
+    blocks = x.float().view(*x.shape[:-1], n // block_size, block_size)
+    amax = blocks.abs().amax(-1)
+    if e4m3_scales:
+        scale = (amax.clamp_min(6.0 * 2.0**-9) / _FP4_MAX).to(torch.float8_e4m3fn).float()
+    else:
+        scale = _pow2_ceil_scale(amax.clamp_min(6.0 * 2.0**-126) * (1.0 / _FP4_MAX))
+    quantized = (blocks / scale.unsqueeze(-1)).clamp(-_FP4_MAX, _FP4_MAX)
+    codes = _e2m1_codes(quantized)
+    values = _fp4_lut(x.device)[codes.long()]
+    return (values * scale.unsqueeze(-1)).view(*x.shape[:-1], n).to(x.dtype)
+
+
 def apply_rotary_pos_emb(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, inverse: bool = False):
     """Interleaved-pair RoPE on the trailing rope slice of `x`.
 
@@ -451,7 +513,11 @@ class DeepseekV41Indexer(nn.Module):
                 cos, sin = self.rotary_emb(
                     k, position_ids=positions.unsqueeze(0).expand(batch, -1), layer_type="compress"
                 )
-                k = apply_rotary_pos_emb(k, cos, sin).unsqueeze(1)  # [B, 1, G, idh]
+                k = apply_rotary_pos_emb(k, cos, sin)
+                # QAT semantics: indexer keys are FP4-quantized (ue8m0 scale per 32
+                # channels) before they land in the shared key cache.
+                k = _fake_quant_fp4_block(k, block_size=32)
+                k = k.unsqueeze(1)  # [B, 1, G, idh]
                 if cache_layer is not None:
                     cache_layer.update_compressor_states("indexer", k)
                 else:
@@ -471,6 +537,9 @@ class DeepseekV41Indexer(nn.Module):
         cos_q, sin_q = self.rotary_emb(hidden_states, position_ids=position_ids, layer_type="compress")
         q = self.wq_b(q_residual).view(batch, seq_len, self.num_heads, self.head_dim)
         q = apply_rotary_pos_emb(q, cos_q, sin_q)
+        # QAT semantics: the indexer query is FP4-quantized too, so the top-k
+        # selection matches the trained quantized scoring.
+        q = _fake_quant_fp4_block(q, block_size=32)
         scores = torch.einsum("bshd,btd->bsht", q.float(), index_k[:, 0].float())
         scores = scores.relu_() * self.softmax_scale
         weights = self.weights_proj(hidden_states).float() * self.heads_scaling
@@ -541,6 +610,26 @@ def eager_attention_forward(
     return attn_output.transpose(1, 2).contiguous(), attn_weights  # [B, S, H, D]
 
 
+_FP8_MAX = 448.0  # float8_e4m3fn finite max
+
+
+def _fake_quant_fp8_block(x: torch.Tensor, block_size: int = 32) -> torch.Tensor:
+    """Block-wise FP8 fake-quantization with ue8m0 (power-of-two) scales — the
+    reference's window-KV quantizer, applied to the whole post-RoPE vector. Returns
+    the quantized-then-dequantized tensor (out of place: training needs the original
+    in the autograd graph; the values are identical to the reference's in-place
+    call)."""
+    n = x.shape[-1]
+    if n % block_size:
+        return x  # shapes the reference cannot block (tiny test configs) run unquantized
+    blocks = x.float().view(*x.shape[:-1], n // block_size, block_size)
+    amax = blocks.abs().amax(-1).clamp_min(1e-4)
+    scale = _pow2_ceil_scale(amax * (1.0 / _FP8_MAX))
+    quantized = (blocks / scale.unsqueeze(-1)).clamp(-_FP8_MAX, _FP8_MAX)
+    dequantized = quantized.to(torch.float8_e4m3fn).float() * scale.unsqueeze(-1)
+    return dequantized.view(*x.shape[:-1], n).to(x.dtype)
+
+
 class DeepseekV41Attention(nn.Module):
     r"""Latent shared-KV attention over two KV sources: a sliding window of raw KV plus,
     when the layer has a compressed branch, the *shared* compressed KV of its group.
@@ -590,18 +679,25 @@ class DeepseekV41Attention(nn.Module):
         self.is_index_source = layer_idx in config.index_source_layer_ids
         self.compressor = DeepseekV41Compressor(config, layer_idx) if self.is_kv_source else None
         self.indexer = DeepseekV41Indexer(config, layer_idx) if self.is_index_source else None
+        # trf-ignore: TRF050 — the compress-rope cos/sin here are evaluated at the
+        # LATENT positions (first_group_position + ratio*k), which are only known
+        # after the compressor runs; the model-level rotary cannot precompute them in
+        # `position_embeddings`. Only kv-source layers own one (shared by their group).
         self.compress_rotary = DeepseekV41RotaryEmbedding(config) if self.is_kv_source else None
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: dict[str, tuple[torch.Tensor, torch.Tensor]],
-        position_ids: torch.Tensor,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None,
         shared: dict,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        # position_ids flows through **kwargs (TRF043): the decoder layer passes the
+        # model-level kwargs straight in, and it must stay available to the attention
+        # interface below (padding-free paths read it from kwargs).
+        position_ids = kwargs["position_ids"]
         batch, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings[self.rope_layer_type]
 
@@ -611,6 +707,10 @@ class DeepseekV41Attention(nn.Module):
 
         kv = self.kv_norm(self.wkv(hidden_states))
         kv = apply_rotary_pos_emb(kv, cos, sin).view(batch, seq_len, 1, self.head_dim).transpose(1, 2)
+        # QAT semantics: the window KV cache stores FP8-quantized values (one ue8m0
+        # scale per 32 channels, RoPE tail included) — part of the model, applied
+        # even in otherwise-unquantized runs.
+        kv = _fake_quant_fp8_block(kv, block_size=32)
         if past_key_values is not None:  # K == V
             kv = past_key_values.update(kv, kv, self.layer_idx)[0]
 
@@ -636,7 +736,11 @@ class DeepseekV41Attention(nn.Module):
                 cos_c, sin_c = self.compress_rotary(
                     latent, position_ids=positions.unsqueeze(0).expand(batch, -1), layer_type="compress"
                 )
-                rotated = apply_rotary_pos_emb(latent, cos_c, sin_c).unsqueeze(1)  # [B, 1, G, hd]
+                rotated = apply_rotary_pos_emb(latent, cos_c, sin_c)
+                # QAT semantics: the compressed KV cache stores FP4-quantized latents
+                # (e2m1 grid, one e4m3 scale per 16 channels).
+                rotated = _fake_quant_fp4_block(rotated, block_size=16, e4m3_scales=True)
+                rotated = rotated.unsqueeze(1)  # [B, 1, G, hd]
                 if cache_layer is not None:
                     cache_layer.update_compressor_states("compressor", rotated)
                 else:
@@ -768,7 +872,9 @@ class DeepseekV41SparseMoeBlock(nn.Module):
         flat = hidden_states.reshape(-1, shape[-1])
         weights, indices = self.gate(hidden_states, image_mask)
         y = torch.zeros_like(flat, dtype=torch.float32)
-        counts = torch.bincount(indices.flatten(), minlength=self.n_experts).tolist()
+        # eager dispatch loop: per-expert host reads are inherent to it (spec-grade,
+        # not a serving path) — the counts stay a tensor (TRF056).
+        counts = torch.bincount(indices.flatten(), minlength=self.n_experts)
         for i in range(self.n_experts):
             if counts[i] == 0:
                 continue
@@ -1069,6 +1175,9 @@ class DeepseekV41DecoderLayer(GradientCheckpointingLayer):
         self.ffn = DeepseekV41SparseMoeBlock(config, layer_idx)
         self.attn_norm = DeepseekV41RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.ffn_norm = DeepseekV41RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        # CODEPATH: DeepSeek-V4.1-Flash ships n-gram hash tables on layers 1 and 14
+        # (engram_layer_ids=[1, 14]); every other checkpoint — and the tiny test
+        # configs — sets engram_layer_ids=[] and takes the None side (no engram path).
         self.engram = DeepseekV41Engram(config, layer_idx) if layer_idx in config.engram_layer_ids else None
         self.hc_input_norm = DeepseekV41UnweightedRMSNorm(eps=config.rms_norm_eps)
         mix_hc = (2 + hc_mult) * hc_mult
@@ -1145,7 +1254,13 @@ class DeepseekV41DecoderLayer(GradientCheckpointingLayer):
         return hidden_streams, ffn_pre
 
 
+@auto_docstring
 class DeepseekV41PreTrainedModel(PreTrainedModel):
+    # trf-ignore: TRF001 — deliberate: this base serves BOTH model types. The text
+    # backbone chain (DeepseekV41TextModel, registered as `deepseek_v41_text`) needs
+    # the flat DeepseekV41TextConfig; DeepseekV41ForCausalLM overrides with the
+    # composite DeepseekV41Config because the released checkpoint's config.json is
+    # composite and its top-level quantization_config must reach the quantizer.
     config_class = DeepseekV41TextConfig
     base_model_prefix = "model"
     _no_split_modules = ["DeepseekV41DecoderLayer"]
@@ -1344,11 +1459,21 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
         return MoeModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 
+@auto_docstring
 class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
-    def __init__(self, config: DeepseekV41TextConfig):
-        super().__init__(config)
-        self.model = DeepseekV41TextModel(config)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+    # The released checkpoint's config.json is composite (top-level `quantization_config`,
+    # `text_config`, `vision_config`) with `architectures: [DeepseekV41ForCausalLM]`, so this
+    # class must accept the composite config: `get_hf_quantizer` only sees `quantization_config`
+    # on the config produced from `config_class` — pointing it at the bare text config silently
+    # dropped the FP8 quantization config and fp8 tensors then failed to load. The text config
+    # is unwrapped in `__init__` (same pattern as `MllamaForCausalLM`); a text config passed
+    # directly is returned unchanged by `get_text_config()`.
+    config_class = DeepseekV41Config
+
+    def __init__(self, config):
+        super().__init__(config.get_text_config())
+        self.model = DeepseekV41TextModel(self.config)
+        self.lm_head = nn.Linear(self.config.hidden_size, self.config.vocab_size, bias=False)
         self.post_init()
 
     @merge_with_config_defaults
@@ -1401,6 +1526,17 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
+
+    def _reorder_cache(self, past_key_values: "Cache", beam_idx: torch.LongTensor) -> "Cache":
+        """Beam-search support: the cache layers' `reorder_cache` permutes the
+        sliding-window and group state, and the engram n-gram history (which lives
+        on the model, not the cache) must follow the beams too — otherwise a beam
+        hashes its next tokens against another beam's predecessor history."""
+        past_key_values.reorder_cache(beam_idx)
+        hash_state = self.model.engram_hash_state
+        if hash_state is not None and hash_state.history is not None:
+            hash_state.history = hash_state.history.index_select(0, beam_idx.to(hash_state.history.device))
+        return past_key_values
 
 
 __all__ = [
