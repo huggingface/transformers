@@ -155,10 +155,7 @@ class TorchAoHfQuantizer(HfQuantizer):
             if (
                 fqn_matches_fqn_config(module_fqn, quant_type)
                 or fqn_matches_fqn_config(param_name, quant_type)
-                or (
-                    "_default" in quant_type.fqn_to_config
-                    and isinstance(module, tuple(_QUANTIZABLE))
-                )
+                or ("_default" in quant_type.fqn_to_config and isinstance(module, tuple(_QUANTIZABLE)))
             ):
                 return True
 

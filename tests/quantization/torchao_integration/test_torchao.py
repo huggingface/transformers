@@ -135,6 +135,7 @@ class TorchAoConfigTest(unittest.TestCase):
 
         self.assertFalse(quantizer.param_needs_quantization(model, "experts.gate_up_proj"))
 
+
 @require_torchao
 @slow
 class TorchAoTestBase:
