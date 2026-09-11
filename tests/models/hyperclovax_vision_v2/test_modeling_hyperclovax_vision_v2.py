@@ -20,7 +20,6 @@ from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
     require_torch,
-    require_torch_accelerator_memory,
     slow,
     torch_device,
 )
