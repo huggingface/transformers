@@ -71,6 +71,9 @@ def _fake_bundle():
         "moe_fused_grouped",
         "swizzle_mx_scales",
         "unswizzle_mx_scales",
+        "mxfp8_act_quant",
+        "mxfp4_act_quant",
+        "nvfp4_act_quant",
     ):
         setattr(kernel, name, rec._op(name))
     kernel.get_supported_act_fns = lambda: ("silu", "gelu", "relu")
@@ -789,6 +792,37 @@ class FineGrainedScaleLayoutTest(unittest.TestCase):
 
 
 @require_torch
+class FineGrainedOnTheFlyQuantizeTest(unittest.TestCase):
+    """`FineGrainedQuantize` reads the module's format: block-FP8 in torch (the group formats run the
+    kernels' quantizers — covered with real kernels below), emitted in the module's layout."""
+
+    def test_block_fp8_round_trips_within_its_floor(self):
+        from transformers.integrations.finegrained import FineGrainedDequantize, FineGrainedQuantize
+
+        torch.manual_seed(0)
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size, cfg.num_local_experts = 256, 128, 4
+        for scale_fmt in ("float", "ue8m0"):
+            with self.subTest(scale_fmt=scale_fmt), mock.patch.object(fg, "is_sm100", return_value=False):
+                experts = fg.FineGrainedExperts(cfg, block_size=(128, 128), weight_format="fp8", scale_fmt=scale_fmt)
+                model = torch.nn.Module()
+                model.experts = experts
+                original = torch.randn(4, 256, 256) * 0.02
+                out = FineGrainedQuantize(hf_quantizer=None).convert({"experts.gate_up_proj": original}, model=model)
+                weight, scale = out["experts.gate_up_proj"], out["experts.gate_up_proj_scale_inv"]
+                self.assertEqual(
+                    (weight.dtype, weight.shape), (experts.gate_up_proj.dtype, experts.gate_up_proj.shape)
+                )
+                self.assertEqual(
+                    (scale.dtype, scale.shape),
+                    (experts.gate_up_proj_scale_inv.dtype, experts.gate_up_proj_scale_inv.shape),
+                )
+                deq = FineGrainedDequantize(None)._dequantize_one(weight, scale.float(), output_dtype=torch.float32)
+                rel = ((deq - original).norm() / original.norm()).item()
+                self.assertLess(rel, 4e-2, f"{scale_fmt}: {rel:.3f}")
+
+
+@require_torch
 class FineGrainedModeloptConverterTest(unittest.TestCase):
     """The ModelOpt (NVFP4) weight conversions. `MergeModulelist` is load-bearing beyond the
     merge itself: `core_model_loading` stamps a source with its expert index ONLY when one is
@@ -864,6 +898,43 @@ class FineGrainedRealKernelTest(unittest.TestCase):
                 rel = ((out.float() - ref).norm() / ref.norm()).item()
                 self.assertLess(rel, 5e-2, f"ue8m0={ue8m0}: {rel:.2e} vs the dequantized weight")
 
+    def test_on_the_fly_group_formats_round_trip_within_their_floor(self):
+        """MXFP8 / MXFP4 / NVFP4 on-the-fly quantization through the kernels' quantizers, emitted in
+        the module's layout (swizzled where held so); dequantizing them back lands within each
+        format's floor."""
+        from transformers.integrations.finegrained import FineGrainedDequantize, FineGrainedQuantize
+
+        torch.manual_seed(0)
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size, cfg.num_local_experts = 512, 256, 4
+        cfg._experts_implementation = "grouped_mm"
+        for fmt, floor in (("mxfp8", 4e-2), ("mxfp4", 2e-1), ("nvfp4", 2e-1)):
+            with self.subTest(fmt=fmt):
+                experts = FineGrainedExperts(cfg, weight_format=fmt).cuda()
+                model = torch.nn.Module()
+                model.experts = experts
+                original = (torch.randn(4, 512, 512, device="cuda") * 0.02).to(torch.bfloat16)
+                out = FineGrainedQuantize(hf_quantizer=None).convert({"experts.gate_up_proj": original}, model=model)
+                weight, scale = out["experts.gate_up_proj"], out["experts.gate_up_proj_scale_inv"]
+                self.assertEqual(
+                    (weight.dtype, weight.shape), (experts.gate_up_proj.dtype, experts.gate_up_proj.shape)
+                )
+                self.assertEqual(
+                    (scale.dtype, scale.shape),
+                    (experts.gate_up_proj_scale_inv.dtype, experts.gate_up_proj_scale_inv.shape),
+                )
+                if scale.ndim == 5:
+                    kernel = load_finegrained_kernel()
+                    scale = kernel.unswizzle_mx_scales(scale, 512, scale.shape[2] * 4, num_experts=4)
+                deq = FineGrainedDequantize(None)._dequantize_one(weight, scale.float(), output_dtype=torch.float32)
+                if fmt == "nvfp4":
+                    deq = deq * out["experts.gate_up_proj_global_scale"].reshape(-1, 1, 1)
+                else:
+                    self.assertNotIn("experts.gate_up_proj_global_scale", out)
+                rel = ((deq - original.float()).norm() / original.float().norm()).item()
+                self.assertLess(rel, floor, f"{fmt}: {rel:.3f}")
+                self.assertGreater(rel, 0.0)
+
     def test_experts_scale_layout_op_keeps_the_forward_correct(self):
         """End-to-end over the integration: real MXFP8 experts hold swizzled scales, the loader's op
         fills them from the affine grid, the fused forward matches the affine module's, and the
@@ -910,14 +981,15 @@ class FineGrainedRealKernelTest(unittest.TestCase):
         out = fg.finegrained_grouped_mm_experts_forward(experts, x, idx, wts)
         torch.cuda.synchronize()
         rel = ((out.float() - reference.float()).norm() / reference.float().norm().clamp(min=1e-9)).item()
-        self.assertLess(rel, 1e-6, f"swizzled forward diverged from the affine one: {rel:.2e}")
+        # different tuned arms reorder the fp32 reduction (~1e-5); a layout bug is O(1)
+        self.assertLess(rel, 1e-3, f"swizzled forward diverged from the affine one: {rel:.2e}")
         # the eager per-expert loop reads one expert's slice of the swizzled stack directly
         eager_reference = affine_experts(x, idx, wts)
         eager_out = experts(x, idx, wts)
         rel = (
             (eager_out.float() - eager_reference.float()).norm() / eager_reference.float().norm().clamp(min=1e-9)
         ).item()
-        self.assertLess(rel, 1e-6, f"eager forward on swizzled scales diverged from affine: {rel:.2e}")
+        self.assertLess(rel, 1e-3, f"eager forward on swizzled scales diverged from affine: {rel:.2e}")
 
         reverse = op.reverse_op
         for proj, grid in affine.items():

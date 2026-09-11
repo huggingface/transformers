@@ -11,7 +11,7 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
-    from ..utils.quantization_config import FineGrainedFP8Config
+    from ..utils.quantization_config import FineGrainedConfig
 
 logger = logging.get_logger(__name__)
 
@@ -23,7 +23,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
-    quantization_config: "FineGrainedFP8Config"
+    quantization_config: "FineGrainedConfig"
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():

@@ -81,8 +81,9 @@ class FineGrained:
     classes ship in the same build. The experts forwards hand the kernels' MoE forwards the
     module's tensors and let them run the chain (scheduling, fused GLU + intermediate requant,
     biases, the routing-weighted reduce); an activation outside ``get_supported_act_fns()`` is passed as
-    the module's own callable and runs on the host between the two GEMMs. All symbols are
-    required — a build missing any raises at load with the full list.
+    the module's own callable and runs on the host between the two GEMMs. The quantizers serve
+    on-the-fly quantization into the group formats. All symbols are required — a build missing any
+    raises at load with the full list.
     """
 
     matmul_2d: Callable
@@ -92,6 +93,9 @@ class FineGrained:
     moe_fused_grouped: Callable
     swizzle_mx_scales: Callable
     unswizzle_mx_scales: Callable
+    mxfp8_act_quant: Callable
+    mxfp4_act_quant: Callable
+    nvfp4_act_quant: Callable
     get_supported_act_fns: Callable
     Quantization: Callable
     Epilogue: Callable
@@ -1205,76 +1209,119 @@ class FineGrainedFuseEqualGlobals(ConversionOps):
 
 
 class FineGrainedQuantize(ConversionOps):
-    """
-    A quantization operation that creates two tensors, weight and scale out of a weight.
-    """
+    """Quantize a full-precision weight on load into the format its module holds, emitting the
+    scale (and the NVFP4 global) in the module's layout — the held container dtype, the swizzled
+    artifact where the module holds one. Block-FP8 is computed in torch (per-block E4M3, fp32 or
+    power-of-two UE8M0 inverse scales); the group formats run the kernels' row-wise quantizers
+    (``mxfp8_act_quant`` / ``mxfp4_act_quant`` / ``nvfp4_act_quant``), NVFP4 after normalizing by the
+    canonical per-tensor / per-expert global ``amax / (6 * 448)``.
+    Tensors that are not a finegrained module's weight (1-D norms, biases, shapes that don't tile)
+    pass through. Without a model (direct invocation) it quantizes block-FP8 from the config."""
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
-    def _resolve_block_size(self, value: torch.Tensor) -> tuple[int, int]:
-        block_size = None
-        if self.hf_quantizer.quantization_config is not None:
-            if isinstance(self.hf_quantizer.quantization_config, dict):
-                block_size = self.hf_quantizer.quantization_config.get("weight_block_size")
-            else:
-                block_size = getattr(self.hf_quantizer.quantization_config, "weight_block_size", None)
-        if block_size is None:
-            block_size = (value.shape[-2], value.shape[-1])
-        return tuple(block_size)
-
-    def _quantize_one(self, key: str, value: torch.Tensor) -> dict[str, torch.Tensor]:
-        # Pass through tensors that aren't tileable (1D norms / biases, or shapes
-        # that don't divide cleanly by the configured block) — they were never
-        # FP8-quantized on the load side, so the reverse op shouldn't touch them.
-        if value.ndim < 2:
-            return {key: value}
-        block_m, block_n = self._resolve_block_size(value)
-        rows, cols = value.shape[-2], value.shape[-1]
-        if rows % block_m != 0 or cols % block_n != 0:
-            return {key: value}
-
-        # Leading dims can be empty (2D) or include num_experts/... (3D+)
-        leading_shape = value.shape[:-2]
-        rows_tiles = rows // block_m
-        cols_tiles = cols // block_n
-        original_shape = value.shape
-        value_fp32 = value.to(torch.float32)
-        # Reshape to (..., rows_tiles, block_m, cols_tiles, block_n)
-        reshaped = value_fp32.reshape(*leading_shape, rows_tiles, block_m, cols_tiles, block_n)
-        # Per-tile max-abs over the block dims (block_m at -3, block_n at -1)
-        max_abs = reshaped.abs().amax(dim=(-3, -1))
-        safe_max_abs = torch.where(max_abs > 0, max_abs, torch.ones_like(max_abs))
-        # We store inverse scale to match the upstream ``weight_scale_inv`` convention
-        scales = _FP8_MAX / safe_max_abs
-        scales = torch.where(max_abs > 0, scales, torch.ones_like(scales))  # keep zeros stable
-        inv_scales = (1.0 / scales).to(torch.float32)
-        # ue8m0 stores weight_scale_inv as a power of two. Round it before quantizing and derive the
-        # forward scale from it, so dequant multiplies by the exact scale the weight was divided by.
-        if self.hf_quantizer.quantization_config.scale_fmt == "ue8m0":
-            inv_scales = torch.pow(2.0, torch.ceil(torch.log2(inv_scales.clamp(min=torch.finfo(torch.float32).tiny))))
-            inv_scales = inv_scales.to(_get_ue8m0_dtype())
-            scales = 1.0 / inv_scales.to(torch.float32)  # forward scale = exact reciprocal of the stored inverse
-        # Broadcast scales over the block dims and quantize
-        scales_broadcast = scales.unsqueeze(-1).unsqueeze(-3)  # (..., rows_tiles, 1, cols_tiles, 1)
-        scaled = reshaped * scales_broadcast
-        quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-        quantized = quantized.reshape(original_shape)
-        scale_key = key.rsplit(".", 1)[0] + ".weight_scale_inv" if key.endswith(".weight") else key + "_scale_inv"
-        return {key: quantized, scale_key: inv_scales}
-
-    def convert(self, input_dict: dict[str, torch.Tensor], **kwargs) -> dict[str, torch.Tensor]:
-        # every (key, tensor) entry — one key, or one per expert from the reverse of a
-        # ``MergeModulelist`` — quantizes the same way
+    def convert(self, input_dict: dict[str, torch.Tensor], model=None, **kwargs) -> dict[str, torch.Tensor]:
         result: dict[str, torch.Tensor] = {}
         for key, value in input_dict.items():
             tensor = value[0] if isinstance(value, list) else value
-            result.update(self._quantize_one(key, tensor))
+            result.update(self._quantize_one(key, tensor, self._weight_holder(model, key)))
         return result
+
+    @staticmethod
+    def _weight_holder(model, key: str):
+        """``(module, scale_param_name)`` when ``key`` is a finegrained module's weight, else ``None``."""
+        if model is None:
+            return None
+        module, name = get_module_from_name(model, key)
+        if not isinstance(module, _FineGrainedModule) or getattr(module, name, None) is None:
+            return None
+        if name == "weight":
+            return module, "weight_scale_inv"
+        if name in ("gate_up_proj", "up_proj", "down_proj"):
+            return module, f"{name}_scale_inv"
+        return None
+
+    def _quantize_one(self, key: str, value: torch.Tensor, holder) -> dict[str, torch.Tensor]:
+        if value.ndim < 2:
+            return {key: value}
+        prefix = key.rsplit(".", 1)[0] + ".weight" if key.endswith(".weight") else key
+        module = holder[0] if holder is not None else None
+        held_scale = getattr(module, holder[1]) if holder is not None else None
+        fmt = _weight_formats()[module.weight_format] if module is not None else None
+        if fmt is None or fmt.scale_group is None:
+            block = tuple(module.block_size) if module is not None and module.block_size else self._config_block(value)
+            ue8m0 = (
+                held_scale.dtype == _get_ue8m0_dtype()
+                if held_scale is not None
+                else self.hf_quantizer.quantization_config.scale_fmt == "ue8m0"
+            )
+            quantized = _quantize_block_fp8(value, block, ue8m0)
+            return {key: value} if quantized is None else {key: quantized[0], f"{prefix}_scale_inv": quantized[1]}
+
+        if value.device.type != "cuda":
+            raise ValueError(f"on-the-fly {module.weight_format} quantization runs the kernels' quantizers on CUDA")
+        weight, scale, global_scale = _quantize_group(value, fmt)
+        scale = _recontain(scale, held_scale.dtype)
+        if held_scale.ndim == 5:
+            scale = load_finegrained_kernel().swizzle_mx_scales(scale)
+        out = {key: weight, f"{prefix}_scale_inv": scale}
+        if global_scale is not None:
+            out[f"{prefix}_global_scale"] = global_scale
+        return out
+
+    def _config_block(self, value: torch.Tensor) -> tuple[int, int]:
+        config = self.hf_quantizer.quantization_config
+        block = (
+            config.get("weight_block_size") if isinstance(config, dict) else getattr(config, "weight_block_size", None)
+        )
+        return tuple(block) if block is not None else (value.shape[-2], value.shape[-1])
 
     @property
     def reverse_op(self) -> ConversionOps:
         return FineGrainedDequantize(self.hf_quantizer)
+
+
+def _quantize_block_fp8(value: torch.Tensor, block: tuple[int, int], ue8m0: bool):
+    """``(E4M3 weight, inverse scale grid)`` for a ``(..., rows, cols)`` tensor at ``block``, or
+    ``None`` when the shape does not tile. UE8M0 rounds the inverse scale up to a power of two
+    before quantizing, so dequant multiplies by exactly the scale the weight was divided by."""
+    block_m, block_n = block
+    rows, cols = value.shape[-2], value.shape[-1]
+    if rows % block_m or cols % block_n:
+        return None
+    tiles = value.float().reshape(*value.shape[:-2], rows // block_m, block_m, cols // block_n, block_n)
+    max_abs = tiles.abs().amax(dim=(-3, -1))
+    inv_scale = torch.where(max_abs > 0, max_abs / _FP8_MAX, torch.ones_like(max_abs))
+    if ue8m0:
+        inv_scale = torch.pow(2.0, torch.ceil(torch.log2(inv_scale.clamp(min=torch.finfo(torch.float32).tiny))))
+    scaled = tiles / inv_scale.unsqueeze(-1).unsqueeze(-3)
+    quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE).reshape(value.shape)
+    return quantized, inv_scale.to(_get_ue8m0_dtype() if ue8m0 else torch.float32)
+
+
+def _quantize_group(value: torch.Tensor, fmt: _WeightFormat):
+    """``(weight, scale, global)`` for a ``(..., rows, K)`` tensor in a group-scaled format through the
+    kernels' row-wise quantizers, one launch per tensor; ``global`` is ``None`` unless the format has
+    one. NVFP4's global is per matrix (per expert for a stack, a scalar for a dense weight): the
+    smallest that keeps every E4M3 block scale in range, divided out before the block quant."""
+    kernel = load_finegrained_kernel()
+    rows = value.reshape(-1, value.shape[-1])
+    global_scale = None
+    if fmt.has_global_scale:
+        per_matrix = value.float().reshape(-1, value.shape[-2] * value.shape[-1]).abs().amax(-1) / (6.0 * 448.0)
+        global_scale = per_matrix.clamp(min=torch.finfo(torch.float32).tiny)
+        rows = (value.float() / global_scale.reshape(-1, *[1] * (value.ndim - 1))).reshape_as(rows)
+        packed, scale = kernel.nvfp4_act_quant(rows.contiguous())
+        global_scale = global_scale.reshape(()) if value.ndim == 2 else global_scale
+    else:
+        quantize = kernel.mxfp4_act_quant if fmt.values_per_byte == 2 else kernel.mxfp8_act_quant
+        packed, scale = quantize(rows.to(torch.bfloat16).contiguous())
+    return (
+        packed.view(fmt.weight_dtype).reshape(*value.shape[:-1], -1),
+        scale.reshape(*value.shape[:-1], -1),
+        global_scale,
+    )
 
 
 class FineGrainedDequantize(ConversionOps):

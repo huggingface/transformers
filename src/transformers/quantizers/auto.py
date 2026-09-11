@@ -36,7 +36,6 @@ from ..utils.quantization_config import (
     HqqConfig,
     MetalConfig,
     Mxfp4Config,
-    NVFP4Config,  # noqa: F401  (dense on-the-fly path; not mapped — see below)
     QuantizationConfigMixin,
     QuantizationMethod,
     QuantoConfig,
@@ -65,7 +64,6 @@ from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_metal import MetalHfQuantizer
-from .quantizer_nvfp4 import NVFP4HfQuantizer  # noqa: F401  (dense on-the-fly path, see below)
 from .quantizer_quanto import QuantoHfQuantizer
 from .quantizer_quark import QuarkHfQuantizer
 from .quantizer_sinq import SinqHfQuantizer
@@ -93,25 +91,17 @@ AUTO_QUANTIZER_MAPPING = {
     "bitnet": BitNetHfQuantizer,
     "vptq": VptqHfQuantizer,
     "spqr": SpQRHfQuantizer,
-    "fp8": FineGrainedHfQuantizer,
     "gguf": GgufHfQuantizer,
-    # NVFP4 (two-level E2M1: E4M3 group-16 block scales x fp32 per-tensor global) — served by the
-    # finegrained quantizer; the format is resolved off the checkpoint tensors.
-    #
-    # This key is contested: `NVFP4HfQuantizer` (added upstream in #47883) also claims it, but it
-    # quantizes a bf16 checkpoint ON THE FLY and only replaces `nn.Linear`, so it cannot serve a
-    # PRE-QUANTIZED checkpoint and never reaches MoE experts (fused 3-D parameters, not Linear).
-    # The finegrained path covers both, so it owns the key; `NVFP4Linear` remains reachable
-    # directly for the dense on-the-fly case.
+    "metal": MetalHfQuantizer,
+    "auto-round": AutoRoundQuantizer,
+    # the finegrained quantizer serves every block/group-scaled format — block-FP8, MXFP8, MXFP4,
+    # NVFP4 and modelopt's NVFP4 export — for dense linears and MoE experts alike; the format is
+    # resolved off the checkpoint tensors
+    "fp8": FineGrainedHfQuantizer,
+    "mxfp8": FineGrainedHfQuantizer,
+    "mxfp4": FineGrainedHfQuantizer,
     "nvfp4": FineGrainedHfQuantizer,
     "modelopt": FineGrainedHfQuantizer,
-    # MXFP8 = FP8 (E4M3 weights) with per-block ``[1, 32]`` E8M0 (uint8) scales —
-    # reuses the FineGrainedFP8 dequant path, with the E8M0 byte→exponent
-    # unpacking handled inside ``Fp8Dequantize._dequantize_one``.
-    "mxfp8": FineGrainedHfQuantizer,
-    "auto-round": AutoRoundQuantizer,
-    "mxfp4": FineGrainedHfQuantizer,
-    "metal": MetalHfQuantizer,
     "sinq": SinqHfQuantizer,
     "gemma": GemmaQuantizer,
 }
@@ -136,13 +126,14 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "bitnet": BitNetQuantConfig,
     "vptq": VptqConfig,
     "spqr": SpQRConfig,
-    "fp8": FineGrainedConfig,
-    "nvfp4": FineGrainedConfig,  # see AUTO_QUANTIZER_MAPPING above for why this key is ours
-    "modelopt": FineGrainedConfig,
-    "mxfp8": FineGrainedConfig,
-    "auto-round": AutoRoundConfig,
-    "mxfp4": FineGrainedConfig,
     "metal": MetalConfig,
+    "auto-round": AutoRoundConfig,
+    # the finegrained formats (see AUTO_QUANTIZER_MAPPING)
+    "fp8": FineGrainedConfig,
+    "mxfp8": FineGrainedConfig,
+    "mxfp4": FineGrainedConfig,
+    "nvfp4": FineGrainedConfig,
+    "modelopt": FineGrainedConfig,
     "sinq": SinqConfig,
     "gemma": GemmaQuantizationConfig,
 }
