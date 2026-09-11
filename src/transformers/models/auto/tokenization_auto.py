@@ -381,6 +381,8 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "deepseek_v3",
     "deepseek_v32",
     "deepseek_v4",
+    "deepseek_v41",
+    "deepseek_v41_text",
     "deepseek_vl",
     "deepseek_vl_hybrid",
     "deepseek_vl_v2",

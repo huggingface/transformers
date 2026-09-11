@@ -1037,6 +1037,19 @@ def _build_checkpoint_conversion_mapping():
                 ],  # we want the loading to add this shard operation here. Though we can't shard after concats and merge, needs to be first
             ),
         ],
+        "DeepseekV41ForCausalLM": [
+            # The released DeepSeek-V4.1 checkpoints ship in DeepSeek-native naming
+            # (no `model.` prefix: `embed`/`layers`/`norm`/`head` at the top level).
+            # Layer-internal names are kept verbatim (attn.wq_a, ffn.experts.E.w1,
+            # engram.*, raw hc_* layer params) — only the top level is re-targeted.
+            # Registered under the wrapper's class name: the renames add the `model.`
+            # prefix that only exists on DeepseekV41ForCausalLM — the bare
+            # DeepseekV41TextModel already uses the checkpoint names verbatim.
+            WeightRenaming(source_patterns=r"^layers\.", target_patterns=r"model.layers."),
+            WeightRenaming(source_patterns=r"^embed\.weight", target_patterns="model.embed.weight"),
+            WeightRenaming(source_patterns=r"^norm\.weight", target_patterns="model.norm.weight"),
+            WeightRenaming(source_patterns=r"^head\.weight", target_patterns="lm_head.weight"),
+        ],
         "qwen2_moe": [
             WeightConverter(
                 source_patterns=[
