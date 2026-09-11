@@ -245,9 +245,7 @@ class ImageGPTAttention(nn.Module):
             key = key.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
             value = value.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
-        if (layer_past is not None and not is_cross_attention) or (
-            layer_past is not None and is_cross_attention and not is_updated
-        ):
+        if layer_past is not None and not (is_cross_attention and is_updated):
             # save all key/value_states to cache to be re-used for fast auto-regressive generation
             key, value = curr_past_key_values.update(key, value, self.layer_idx)
             # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
