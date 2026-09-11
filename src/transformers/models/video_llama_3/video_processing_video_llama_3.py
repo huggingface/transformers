@@ -164,8 +164,7 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
                 Target frames to sample per second. Defaults to `self.fps`.
 
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            torch.Tensor: Indices to sample video frames.
         """
         if fps is not None and num_frames is not None:
             raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")
@@ -198,10 +197,9 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
             )
 
         if num_frames is not None:
-            indices = torch.arange(0, total_num_frames, total_num_frames / num_frames).int()
+            indices = torch.arange(0, total_num_frames, total_num_frames / num_frames, dtype=int)
         else:
-            indices = torch.arange(0, total_num_frames).int()
-
+            indices = torch.arange(0, total_num_frames, dtype=int)
         return indices
 
     def resize(
@@ -273,7 +271,6 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
-        do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
         resample: "PILImageResampling | int | None",
@@ -294,8 +291,6 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
-            if do_convert_rgb:
-                stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 stacked_videos = self.resize(
                     videos=stacked_videos,

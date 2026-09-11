@@ -303,7 +303,7 @@ def get_uniform_frame_indices(total_num_frames: int, num_frames: int | None = No
     return indices
 
 
-def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None, **kwargs):
+def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None, **kwargs) -> np.ndarray:
     """
     A default sampling function that replicates the logic used in get_uniform_frame_indices,
     while optionally handling `fps` if `num_frames` is not provided.
@@ -324,21 +324,21 @@ def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None
 
     # If num_frames is not given but fps is, calculate num_frames from fps
     if num_frames is None and fps is not None:
-        num_frames = int(total_num_frames / video_fps * fps)
-        if num_frames > total_num_frames:
+        if metadata.fps is None:
             raise ValueError(
-                f"When loading the video with fps={fps}, we computed num_frames={num_frames} "
-                f"which exceeds total_num_frames={total_num_frames}. Check fps or video metadata."
+                "Asked to sample `fps` frames per second but no original FPS was provided in video metadata "
+                f"which is required when sampling with `{fps}`. "
+                "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
             )
+        num_frames = int(total_num_frames / video_fps * fps)
 
     if num_frames is not None:
         if num_frames > total_num_frames:
             raise ValueError(
                 f"When loading the video with num_frames={num_frames}, the requested number of frames "
-                f"exceeds total_num_frames={total_num_frames}. Please set num_frames to a value less than "
-                f"or equal to the number of frames in the video."
+                f"exceeds total_num_frames={total_num_frames}. Please set num_frames or fps to a smaller value."
             )
-        indices = np.arange(0, total_num_frames, total_num_frames / num_frames, dtype=int)
+        indices = np.arange(num_frames, dtype=int) * total_num_frames // num_frames
     else:
         indices = np.arange(0, total_num_frames, dtype=int)
     return indices
@@ -758,20 +758,18 @@ def load_video(
 
 
 def convert_to_rgb(
-    video: np.ndarray,
+    video: Union[np.ndarray, "torch.Tensor"],
     input_data_format: str | ChannelDimension | None = None,
 ) -> np.ndarray:
     """
     Convert video to RGB by blending the transparency layer if it's in RGBA format, otherwise simply returns it.
 
     Args:
-        video (`np.ndarray`):
+        video (`np.ndarray | torch.Tensor`):
             The video to convert.
         input_data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the input video. If unset, will use the inferred format from the input.
     """
-    if not isinstance(video, np.ndarray):
-        raise TypeError(f"Video has to be a numpy array to convert to RGB format, but found {type(video)}")
 
     # np.array usually comes with ChannelDimension.LAST so let's convert it
     if input_data_format is None:
