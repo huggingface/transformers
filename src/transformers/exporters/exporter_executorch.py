@@ -17,8 +17,9 @@
 Extends `DynamoExporter` to produce an `ExecutorchProgramManager` for mobile and
 edge deployment. The export pipeline runs:
 
-1. **Backend preparation** (`_BACKEND_PREPARE`): `prepare_for_xnnpack` / `prepare_for_cuda`
-   move the model to the target device/dtype and build the partitioner list.
+1. **Backend preparation** (the recipe's `prepare`): the built-in `prepare_for_xnnpack` /
+   `prepare_for_cuda` move the model to the target device/dtype and build the partitioner list.
+   Built-in and externally registered backends share the same `ExecutorchBackendRecipe` contract.
 2. **Torch patches** (`_PATCHES["executorch"]` via `apply_patches("executorch")`, plus the
    backend-specific `_PATCHES[f"executorch.{backend}"]`): reversibly swap `torch` ops the
    ExecuTorch backends can't accept (`split_copy`, `avg_pool2d`, …) with decomposed equivalents.
@@ -38,10 +39,14 @@ edge deployment. The export pipeline runs:
 
 from __future__ import annotations
 
+import contextlib
+import copy
 import math
 import operator
 import re
-from collections.abc import MutableMapping
+from collections.abc import Callable, Mapping, MutableMapping
+from dataclasses import dataclass, field
+from itertools import chain
 from typing import Any
 
 from ..utils import logging
@@ -52,7 +57,10 @@ from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
     apply_patches,
+    export_patch_scope,
     module_dtype,
+    patch_attributes,
+    prepare_for_export,
     register_fx_node_fix,
     register_fx_program_fix,
     register_patch,
@@ -78,12 +86,6 @@ if is_torch_available():
 
 
 if is_executorch_available():
-    from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
-    from executorch.backends.xnnpack.serialization.xnnpack_graph_schema import (  # type: ignore[import-not-found]
-        XNNStaticReshape,
-        XNode,
-    )
-    from executorch.backends.xnnpack.utils.utils import get_input_node
     from executorch.exir.capture._config import EdgeCompileConfig, ExecutorchBackendConfig
     from executorch.exir.dialects._ops import ops as exir_ops
     from executorch.exir.passes.executorch_prim_ops_registry import _PYTHON_SYM_OPS_TO_EXECUTORCH_SYM_OPS
@@ -94,16 +96,385 @@ if is_executorch_available():
     from executorch.exir.sym_util import eval_expr
     from executorch.exir.tensor import determine_tensor_dynanism
 
-    # The ExecuTorch CUDA backend pulls in `triton`, which CPU-only torch builds don't ship. Guard the
-    # import on CUDA availability so the module still imports (and the xnnpack CPU path still works) on
-    # CPU-only builds; `prepare_for_cuda` raises a clear error if the `cuda` backend is requested when
-    # it isn't available.
-    if torch.cuda.is_available():
-        from executorch.backends.cuda.cuda_backend import CudaBackend
-        from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
-
 
 logger = logging.get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class ExecutorchExportPatch:
+    """A backend-owned patch description applied by the ExecuTorch exporter."""
+
+    targets: tuple[str, ...]
+    factory: Callable[[Any], Any]
+
+
+@dataclass(frozen=True)
+class ExecutorchAttention:
+    """Backend attention and an explicit mask policy.
+
+    A callable builds masks; None removes any stale mask registration and leaves masking
+    to the backend. Already supplied 4-D masks can still pass through Transformers helpers.
+    """
+
+    implementation: str
+    attention_function: Callable[..., Any]
+    mask_function: Callable[..., Any] | None
+
+
+@dataclass(frozen=True)
+class ExecutorchCompatibilityPolicy:
+    """ExecuTorch compatibility bundles, enabled by default for existing backends.
+
+    Disabling these does not disable Dynamo capture support, explicit recipe patches,
+    or patches registered in the selected backend's namespace. ``excluded_patch_targets``
+    suppresses only matching common/backend/Dynamo registry installations, including aliases.
+    Graph fixes, recipe patches, capture contexts and signature/config helpers still run;
+    exclusions are not inherited by nested exports.
+    """
+
+    common_patches: bool = True
+    common_graph_fixes: bool = True
+    excluded_patch_targets: tuple[str, ...] = ()
+
+
+@dataclass
+class ExecutorchBackendPreparation:
+    """Backend-owned model, inputs, and state retained through lowering, without model copies.
+
+    Preparation may mutate the caller's model and inputs; the backend owns those changes
+    and their cleanup. Only exporter-managed patch/attention scopes are restored automatically.
+    ``dynamic_shapes`` overrides the config when non-None (including an empty dict), then
+    config shapes and finally ``dynamic=True`` automatic shapes apply. ``capture_contexts``
+    are entered once for capture only, never for transforms or deferred lowering.
+
+    With ``normalize_inputs=True`` (the default), shared normalization handles input keys,
+    dtypes and devices. False bypasses it entirely, leaving the input ABI to the backend.
+    ``attention_target`` explicitly selects recipe attention after preparation and before
+    normalization. None only installs registries; wrapper attributes are never guessed.
+    Identity-sensitive resources belong in ``state``, not in the copied export config.
+    ``output_flags`` are reversible capture-time model-config overrides; explicit backend
+    flags take precedence over flags extracted by shared normalization.
+    """
+
+    model: torch.nn.Module
+    sample_inputs: MutableMapping[str, Any]
+    dynamic_shapes: dict[str, Any] | None = None
+    capture_contexts: tuple[contextlib.AbstractContextManager[None], ...] = ()
+    state: Any = None
+    normalize_inputs: bool = True
+    output_flags: dict[str, Any] = field(default_factory=dict)
+    attention_target: torch.nn.Module | None = None
+
+
+@dataclass(frozen=True)
+class ExecutorchBackendRecipe:
+    """Explicit prepare/transform/lower contract for an out-of-tree ExecuTorch backend.
+
+    Patch factories create fresh run-scoped patches for capture and deferred lowering.
+    Preparation, normalization, transforms and common graph fixes run only once.
+    The frozen recipe is retained by captures, independent of subsequent registrations.
+    """
+
+    prepare: Callable[[Any, MutableMapping[str, Any], ExecutorchConfig], ExecutorchBackendPreparation]
+    lower: Callable[[ExportedProgram, ExecutorchBackendPreparation, ExecutorchConfig], Any]
+    patches: tuple[ExecutorchExportPatch, ...] = ()
+    attention: ExecutorchAttention | None = None
+    transform_exported_program: Callable[[ExportedProgram, ExecutorchBackendPreparation], ExportedProgram] | None = (
+        None
+    )
+    compatibility: ExecutorchCompatibilityPolicy = field(default_factory=ExecutorchCompatibilityPolicy)
+
+
+@dataclass(frozen=True)
+class ExecutorchCapture:
+    """In-process capture result with backend-owned preparation/state and a single lowering attempt.
+
+    Obtain this from ``ExecutorchExporter.capture``. The program and preparation are shared,
+    not cloned; callers must not mutate them while exporting/lowering or reuse model state
+    incompatibly before lowering. This handle is not a serialization format. ``config``
+    returns a defensive copy of the retained configuration, while ``recipe`` remains the
+    resolved frozen recipe. Even failed lowering consumes the attempt because lowerers may
+    mutate the graph. Capture-only contexts are not replayed.
+    """
+
+    exported_program: ExportedProgram
+    preparation: ExecutorchBackendPreparation
+    recipe: ExecutorchBackendRecipe
+    _config: ExecutorchConfig = field(repr=False)
+    _attention_state: list[tuple[Any, dict[str, Any]]] = field(default_factory=list, repr=False)
+    _lower_attempted: bool = field(default=False, init=False, repr=False)
+
+    @property
+    def config(self) -> ExecutorchConfig:
+        """An independent copy; changing it cannot change deferred lowering."""
+        return _snapshot_config(self._config, "capture.config access")
+
+
+ExecutorchBackendRecipeFactory = Callable[[Mapping[str, Any]], ExecutorchBackendRecipe]
+# External backends registered via ``register_executorch_backend``.
+_EXECUTORCH_BACKEND_RECIPES: dict[str, ExecutorchBackendRecipeFactory] = {}
+# Built-in backends (xnnpack, cuda), populated at import next to their ``prepare_for_*`` helpers.
+# Kept in a separate table so external registrations can neither shadow nor clear them.
+_BUILTIN_EXECUTORCH_BACKEND_RECIPES: dict[str, ExecutorchBackendRecipeFactory] = {}
+
+
+def register_executorch_backend(
+    name: str, recipe_factory: ExecutorchBackendRecipeFactory, *, overwrite: bool = False
+) -> None:
+    """Register a factory explicitly; no discovery or implicit backend imports are performed.
+
+    Registering the same factory is idempotent. Replacing another external factory requires
+    ``overwrite=True``; builtin names remain protected even with overwrite enabled.
+    """
+    if not isinstance(name, str):
+        raise TypeError("ExecuTorch backend name must be a string")
+    if not name.strip():
+        raise ValueError("ExecuTorch backend name must not be empty")
+    if not callable(recipe_factory):
+        raise TypeError("ExecuTorch backend recipe factory must be callable")
+    # Registration can happen during module import; do not take the export lock here.
+    if name in _BUILTIN_EXECUTORCH_BACKEND_RECIPES:
+        raise ValueError(f"ExecuTorch backend {name!r} is built in and cannot be replaced")
+    previous = _EXECUTORCH_BACKEND_RECIPES.get(name)
+    if previous is recipe_factory:
+        return
+    if previous is not None and not overwrite:
+        raise ValueError(f"ExecuTorch backend {name!r} is already registered; use overwrite=True to replace it")
+    _EXECUTORCH_BACKEND_RECIPES[name] = recipe_factory
+
+
+def _resolve_patch_target(target: str) -> tuple[Any, str]:
+    """Resolve a dotted patch target to its owning object and attribute."""
+    from .utils import _resolve_dotted_path
+
+    owner_path, separator, attribute = target.rpartition(".")
+    if not separator or (owner := _resolve_dotted_path(owner_path)) is None:
+        raise ImportError(f"Could not resolve ExecuTorch backend patch target {target!r}")
+    return owner, attribute
+
+
+@contextlib.contextmanager
+def _select_attention(attention, model):
+    """Select only an explicit target, restoring managed fields even if its setter fails."""
+    if model is None:
+        yield
+        return
+    if attention is None:
+        raise ValueError("attention_target requires recipe attention")
+    if not callable(getattr(model, "set_attn_implementation", None)):
+        raise TypeError("ExecuTorch attention target requires set_attn_implementation()")
+    snapshot = _snapshot_attention_state(model)
+    try:
+        model.set_attn_implementation(attention.implementation)
+        yield
+    finally:
+        _restore_attention_state(snapshot)
+
+
+@contextlib.contextmanager
+def _apply_external_patches(patches: tuple[ExecutorchExportPatch, ...]):
+    with export_patch_scope():
+        resolved = []
+        seen = {}
+        for patch in patches:
+            for target in patch.targets:
+                owner, attribute = _resolve_patch_target(target)
+                slot = (id(owner), attribute)
+                if slot in seen:
+                    raise ValueError(
+                        f"Duplicate recipe patch targets {seen[slot]!r} and {target!r} resolve to one slot"
+                    )
+                seen[slot] = target
+                resolved.append((owner, attribute, patch.factory))
+        with patch_attributes(resolved, exclusive=True, source="ExecuTorch recipe"):
+            yield
+
+
+_MISSING = object()
+_ATTENTION_CONFIG_FIELDS = ("_attn_implementation_internal", "_attn_was_changed")
+
+
+def _snapshot_attention_state(model) -> list[tuple[Any, dict[str, Any]]]:
+    snapshot = []
+    seen = set()
+    pending = [getattr(module, "config", None) for module in chain((model,), model.modules())]
+    while pending:
+        config = pending.pop()
+        if config is None or id(config) in seen:
+            continue
+        seen.add(id(config))
+        snapshot.append(
+            (
+                config,
+                {name: config.__dict__.get(name, _MISSING) for name in _ATTENTION_CONFIG_FIELDS},
+            )
+        )
+        pending.extend(getattr(config, name, None) for name in getattr(config, "sub_configs", ()))
+    return snapshot
+
+
+def _restore_attention_state(snapshot: list[tuple[Any, dict[str, Any]]]) -> None:
+    for config, fields in reversed(snapshot):
+        for name, value in fields.items():
+            if value is _MISSING:
+                config.__dict__.pop(name, None)
+            else:
+                config.__dict__[name] = value
+
+
+def _validate_attention(attention: ExecutorchAttention) -> None:
+    if not isinstance(attention, ExecutorchAttention):
+        raise TypeError("attention must be an ExecutorchAttention")
+    if not isinstance(attention.implementation, str) or not attention.implementation.strip():
+        raise ValueError("attention implementation must be a nonempty string")
+    if not callable(attention.attention_function):
+        raise TypeError("attention_function must be callable")
+    if attention.mask_function is not None and not callable(attention.mask_function):
+        raise TypeError("mask_function must be callable or None")
+
+
+@contextlib.contextmanager
+def scoped_executorch_attention(attention: ExecutorchAttention | None, model=None):
+    """Temporarily register backend attention, optionally selecting it on a model.
+
+    With ``model=None`` this only changes registries, supporting ordinary modules without
+    a Transformers setter. Otherwise the model's setter validates/selects the implementation
+    and its attention config fields are restored on exit, including on setter failure.
+    Cooperating exports share a reentrant lock, including when attention is None. Unrelated
+    eager code is not isolated; do not await worker-thread exports while holding this scope.
+    """
+    with export_patch_scope():
+        if attention is None:
+            with _select_attention(attention, model):
+                yield None
+            return
+        _validate_attention(attention)
+
+        from ..masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
+        from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
+
+        sentinel = object()
+        registries = [
+            (ALL_ATTENTION_FUNCTIONS, attention.attention_function),
+            (ALL_MASK_ATTENTION_FUNCTIONS, attention.mask_function),
+        ]
+        previous = [registry._global_mapping.get(attention.implementation, sentinel) for registry, _ in registries]
+        try:
+            for registry, implementation in registries:
+                if implementation is None:
+                    registry._global_mapping.pop(attention.implementation, None)
+                else:
+                    registry.register(attention.implementation, implementation)
+            with _select_attention(attention, model):
+                yield attention.implementation
+        finally:
+            for (registry, _), prior in zip(registries, previous):
+                mapping = type(registry)._global_mapping
+                if prior is sentinel:
+                    mapping.pop(attention.implementation, None)
+                else:
+                    mapping[attention.implementation] = prior
+
+
+@contextlib.contextmanager
+def _reenter_attention_state(snapshot):
+    """Reenter saved fields without replaying the potentially mutating model setter."""
+    with export_patch_scope():
+        previous = [
+            (config, {name: config.__dict__.get(name, _MISSING) for name in fields}) for config, fields in snapshot
+        ]
+        try:
+            _restore_attention_state(snapshot)
+            yield
+        finally:
+            _restore_attention_state(previous)
+
+
+def _snapshot_config(value, context):
+    try:
+        return copy.deepcopy(value)
+    except Exception as error:
+        raise TypeError(
+            f"ExecuTorch {context} snapshot failed: config and backend_options must be deepcopy-compatible "
+            "configuration data; keep identity-sensitive resources in preparation.state"
+        ) from error
+
+
+def _valid_patch_target(target):
+    return isinstance(target, str) and "." in target and all(part.isidentifier() for part in target.split("."))
+
+
+def _validate_recipe(recipe) -> None:
+    if not isinstance(recipe, ExecutorchBackendRecipe):
+        raise TypeError("ExecuTorch backend recipe factories must return an ExecutorchBackendRecipe")
+    for name in ("prepare", "lower"):
+        if not callable(getattr(recipe, name)):
+            raise TypeError(f"ExecuTorch recipe {name} must be callable")
+    if recipe.transform_exported_program is not None and not callable(recipe.transform_exported_program):
+        raise TypeError("transform_exported_program must be callable or None")
+    if not isinstance(recipe.compatibility, ExecutorchCompatibilityPolicy):
+        raise TypeError("compatibility must be an ExecutorchCompatibilityPolicy")
+    for name in ("common_patches", "common_graph_fixes"):
+        if not isinstance(getattr(recipe.compatibility, name), bool):
+            raise TypeError(f"compatibility {name} must be a bool")
+    exclusions = recipe.compatibility.excluded_patch_targets
+    if not isinstance(exclusions, tuple):
+        raise TypeError("excluded_patch_targets must be a tuple of dotted attribute paths")
+    if any(not _valid_patch_target(target) for target in exclusions):
+        raise ValueError("excluded_patch_targets must contain valid dotted attribute paths")
+    if not isinstance(recipe.patches, tuple):
+        raise TypeError("recipe patches must be a tuple of ExecutorchExportPatch objects")
+    for patch in recipe.patches:
+        if not isinstance(patch, ExecutorchExportPatch) or not callable(patch.factory):
+            raise TypeError("recipe patches must contain ExecutorchExportPatch objects with callable factories")
+        if not isinstance(patch.targets, tuple) or not patch.targets:
+            raise TypeError("patch targets must be a nonempty tuple of dotted strings")
+        if any(not _valid_patch_target(target) for target in patch.targets):
+            raise ValueError("patch targets must be nonempty dotted strings")
+    if recipe.attention is not None:
+        _validate_attention(recipe.attention)
+
+
+def _validate_preparation(prepared, attention) -> None:
+    if not isinstance(prepared, ExecutorchBackendPreparation):
+        raise TypeError("ExecuTorch backend recipes must prepare an ExecutorchBackendPreparation")
+    if not isinstance(prepared.model, torch.nn.Module):
+        raise TypeError("ExecuTorch prepared model must be a torch.nn.Module")
+    if not isinstance(prepared.sample_inputs, MutableMapping) or any(
+        not isinstance(key, str) for key in prepared.sample_inputs
+    ):
+        raise TypeError("ExecuTorch prepared sample_inputs must be a string-keyed mutable mapping")
+    if not isinstance(prepared.normalize_inputs, bool):
+        raise TypeError("normalize_inputs must be a bool")
+    if prepared.attention_target is not None:
+        if attention is None:
+            raise ValueError("attention_target requires recipe attention")
+        if not isinstance(prepared.attention_target, torch.nn.Module) or not callable(
+            getattr(prepared.attention_target, "set_attn_implementation", None)
+        ):
+            raise TypeError("attention_target must be a torch.nn.Module with set_attn_implementation()")
+    if not isinstance(prepared.output_flags, Mapping) or any(
+        not isinstance(key, str) for key in prepared.output_flags
+    ):
+        raise TypeError("output_flags must be a string-keyed mapping")
+    if prepared.dynamic_shapes is not None and not isinstance(prepared.dynamic_shapes, dict):
+        raise TypeError("prepared dynamic_shapes must be a dict or None")
+    if not isinstance(prepared.capture_contexts, tuple) or any(
+        not callable(getattr(scope, "__enter__", None)) or not callable(getattr(scope, "__exit__", None))
+        for scope in prepared.capture_contexts
+    ):
+        raise TypeError("capture_contexts must be a tuple of context managers")
+
+
+@contextlib.contextmanager
+def _compatibility_patches(recipe, backend):
+    with contextlib.ExitStack() as stack:
+        if recipe.compatibility.common_patches:
+            stack.enter_context(apply_patches("executorch", exclude=recipe.compatibility.excluded_patch_targets))
+        stack.enter_context(
+            apply_patches(f"executorch.{backend}", exclude=recipe.compatibility.excluded_patch_targets)
+        )
+        yield
 
 
 class ExecutorchExporter(DynamoExporter):
@@ -125,34 +496,128 @@ class ExecutorchExporter(DynamoExporter):
 
     def export(
         self,
-        model: PreTrainedModel,
+        model: PreTrainedModel | torch.nn.Module,
         sample_inputs: MutableMapping[str, Any],
         config: ExecutorchConfig | dict[str, Any],
-    ) -> ExecutorchProgramManager:
-        """Export a model to ExecuTorch, applying backend preparation and torch op patches."""
-        if isinstance(config, dict):
-            config = ExecutorchConfig(**config)
-        elif type(config) is not ExecutorchConfig:
-            raise TypeError(f"Expected config to be an ExecutorchConfig or dict, got {type(config)}")
+    ) -> Any:
+        """Prepare, capture and lower with uninterrupted recipe/attention/compatibility scopes.
 
-        prepare_for_backend = _BACKEND_PREPARE.get(config.backend)
-        if prepare_for_backend is None:
-            raise ValueError(f"Unsupported backend {config.backend} for ExecuTorch export")
+        Returns the backend's lowering result (an ExecutorchProgramManager for builtins).
+        Model/input mutation belongs to preparation; models are never deep-copied.
+        """
+        return self._export_registered_backend(model, sample_inputs, config, lower=True)
 
-        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
+    def capture(
+        self,
+        model: PreTrainedModel | torch.nn.Module,
+        sample_inputs: MutableMapping[str, Any],
+        config: ExecutorchConfig | dict[str, Any],
+    ) -> ExecutorchCapture:
+        """Capture once and retain preparation, resolved recipe and config for deferred lowering.
 
-        with apply_patches("executorch"), apply_patches(f"executorch.{config.backend}"):
-            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
-            apply_fx_program_fixes("executorch", exported_program)
-            apply_fx_node_fixes("executorch", exported_program.graph_module)
-            edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
-                exported_program, partitioner=partitioner, compile_config=_get_edge_compile_config()
-            )
-            executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch(
-                config=_get_backend_config(config)
-            )
+        All temporary scopes have exited when this returns. Backend-owned preparation
+        mutations remain. Cooperating exports are serialized for the entire lifecycle;
+        unrelated eager execution is not protected by the shared lock.
+        """
+        return self._export_registered_backend(model, sample_inputs, config, lower=False)
 
-        return executorch_programs_manager
+    def lower(self, capture: ExecutorchCapture) -> Any:
+        """Lower a capture once using fresh scopes, without replaying any capture-time work.
+
+        Uses the saved recipe/config, not the registry or caller's mutable config. Reenters
+        attention registry and saved fields without calling the model setter again. A failed
+        attempt is consumed too, since backend lowering may already have mutated the graph.
+        """
+        if not isinstance(capture, ExecutorchCapture):
+            raise TypeError("Expected an ExecutorchCapture from capture()")
+        with export_patch_scope():
+            if capture._lower_attempted:
+                raise RuntimeError("An ExecutorchCapture permits only one lowering attempt")
+            object.__setattr__(capture, "_lower_attempted", True)
+            recipe = capture.recipe
+            config = capture.config
+            with (
+                _apply_external_patches(recipe.patches),
+                scoped_executorch_attention(recipe.attention),
+                _reenter_attention_state(capture._attention_state),
+                _compatibility_patches(recipe, config.backend),
+            ):
+                return recipe.lower(capture.exported_program, capture.preparation, config)
+
+    def _export_registered_backend(self, model, sample_inputs, config, *, lower):
+        with export_patch_scope():
+            if isinstance(config, dict):
+                config = ExecutorchConfig(**config)
+            elif not isinstance(config, ExecutorchConfig):
+                raise TypeError(f"Expected config to be an ExecutorchConfig or dict, got {type(config)}")
+            config._validate_backend()
+            config = _snapshot_config(config, "initial config")
+            recipe_factory = _BUILTIN_EXECUTORCH_BACKEND_RECIPES.get(config.backend)
+            if recipe_factory is None:
+                recipe_factory = _EXECUTORCH_BACKEND_RECIPES.get(config.backend)
+            if recipe_factory is None:
+                available = sorted(set(_BUILTIN_EXECUTORCH_BACKEND_RECIPES) | set(_EXECUTORCH_BACKEND_RECIPES))
+                raise ValueError(
+                    f"Unsupported backend {config.backend} for ExecuTorch export; available backends: {available}"
+                )
+            recipe = recipe_factory(_snapshot_config(dict(config.backend_options), "recipe factory backend_options"))
+            _validate_recipe(recipe)
+
+            with (
+                _apply_external_patches(recipe.patches),
+                scoped_executorch_attention(recipe.attention),
+                contextlib.ExitStack() as attention_stack,
+            ):
+                prepared = recipe.prepare(model, sample_inputs, config)
+                _validate_preparation(prepared, recipe.attention)
+                attention_target = prepared.attention_target
+                attention_stack.enter_context(_select_attention(recipe.attention, attention_target))
+                if prepared.normalize_inputs:
+                    prepared.model, prepared.sample_inputs, output_flags = prepare_for_export(
+                        prepared.model, prepared.sample_inputs
+                    )
+                    prepared.output_flags = {**output_flags, **prepared.output_flags}
+
+                with _compatibility_patches(recipe, config.backend):
+                    with contextlib.ExitStack() as stack:
+                        for capture_context in prepared.capture_contexts:
+                            stack.enter_context(capture_context)
+                        exported_program = self._export_prepared(
+                            prepared.model,
+                            prepared.sample_inputs,
+                            config,
+                            output_flags=prepared.output_flags,
+                            dynamic_shapes=prepared.dynamic_shapes,
+                            patch_exclusions=recipe.compatibility.excluded_patch_targets,
+                        )
+                    if not isinstance(exported_program, ExportedProgram):
+                        raise TypeError("ExecuTorch capture must return an ExportedProgram")
+                    if recipe.transform_exported_program is not None:
+                        exported_program = recipe.transform_exported_program(exported_program, prepared)
+                        if not isinstance(exported_program, ExportedProgram):
+                            raise TypeError("transform_exported_program must return an ExportedProgram")
+                    if recipe.compatibility.common_graph_fixes:
+                        apply_fx_program_fixes("executorch", exported_program)
+                        apply_fx_node_fixes("executorch", exported_program.graph_module)
+                    if lower:
+                        return recipe.lower(exported_program, prepared, config)
+                    attention_state = []
+                    if recipe.attention is not None:
+                        seen = set()
+                        for root in (model, prepared.model, attention_target):
+                            if root is None:
+                                continue
+                            for attention_config, fields in _snapshot_attention_state(root):
+                                if id(attention_config) not in seen:
+                                    seen.add(id(attention_config))
+                                    attention_state.append((attention_config, fields))
+                    return ExecutorchCapture(
+                        exported_program=exported_program,
+                        preparation=prepared,
+                        recipe=recipe,
+                        _config=_snapshot_config(config, "retained capture config"),
+                        _attention_state=attention_state,
+                    )
 
 
 def _get_edge_compile_config() -> EdgeCompileConfig:
@@ -207,7 +672,8 @@ def _get_backend_config(config):
 # - Move the model to the target device.
 # - Cast the model and inputs to the required dtype (e.g., bfloat16 for CUDA).
 # - Build the backend-specific partitioner list passed to to_edge_transform_and_lower.
-# To add a new backend: implement _prepare_for_new_backend and add it to the _BACKEND_PREPARE table.
+# To add a built-in backend: implement prepare_for_<name>, wrap it with _builtin_lowering_recipe, and
+# register it in _BUILTIN_EXECUTORCH_BACKEND_RECIPES. Out-of-tree backends use register_executorch_backend().
 
 
 def _make_contiguous(sample_inputs: dict[str, Any]) -> dict[str, Any]:
@@ -231,6 +697,8 @@ def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     default to CPU and would mismatch a CUDA model (``FakeTensor Device Propagation ... cuda, cpu``).
     ``prepare_for_export`` then casts the inputs to CPU during the trace."""
 
+    from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
+
     model.requires_grad_(False)
     model = model.to(device="cpu")
     # XNNPACK has no `_grouped_mm.out` kernel — force MoE experts to `batched_mm`.
@@ -250,6 +718,9 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is not available in this environment; cannot export to the ExecuTorch CUDA backend.")
 
+    from executorch.backends.cuda.cuda_backend import CudaBackend
+    from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
+
     model.requires_grad_(False)
     dtype = module_dtype(model)
     if dtype is not None and dtype != torch.bfloat16:
@@ -259,10 +730,58 @@ def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     return model, _make_contiguous(sample_inputs), partitioner
 
 
-_BACKEND_PREPARE = {
-    "xnnpack": prepare_for_xnnpack,
-    "cuda": prepare_for_cuda,
-}
+def _builtin_lowering_recipe(prepare_for_backend) -> ExecutorchBackendRecipe:
+    """Wrap a built-in ``prepare_for_*`` in the recipe SPI with the standard edge lowering.
+
+    Built-in backends dogfood the same ``ExecutorchBackendRecipe`` contract as externally
+    registered ones: ``prepare`` runs the backend's device/dtype setup and hands its partitioner
+    to ``lower`` via ``ExecutorchBackendPreparation.state``; ``lower`` runs the shared
+    edge-lowering + ``to_executorch`` pipeline.
+    """
+
+    def prepare(
+        model: PreTrainedModel,
+        sample_inputs: MutableMapping[str, Any],
+        config: ExecutorchConfig,
+    ) -> ExecutorchBackendPreparation:
+        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
+        # dynamic_shapes stays None so capture falls back to config.dynamic_shapes; the partitioner
+        # rides ``state`` from prepare to lower.
+        return ExecutorchBackendPreparation(model=model, sample_inputs=sample_inputs, state=partitioner)
+
+    def lower(
+        exported_program: ExportedProgram,
+        prepared: ExecutorchBackendPreparation,
+        config: ExecutorchConfig,
+    ) -> ExecutorchProgramManager:
+        edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
+            exported_program, partitioner=prepared.state, compile_config=_get_edge_compile_config()
+        )
+        return edge_program_manager.to_executorch(config=_get_backend_config(config))
+
+    return ExecutorchBackendRecipe(prepare=prepare, lower=lower)
+
+
+def _xnnpack_backend_recipe(backend_options: Mapping[str, Any]) -> ExecutorchBackendRecipe:
+    """Built-in XNNPACK recipe (CPU inference); see ``prepare_for_xnnpack``."""
+    if backend_options:
+        raise ValueError("The builtin xnnpack backend does not support backend_options")
+    return _builtin_lowering_recipe(prepare_for_xnnpack)
+
+
+def _cuda_backend_recipe(backend_options: Mapping[str, Any]) -> ExecutorchBackendRecipe:
+    """Built-in CUDA recipe (GPU inference); see ``prepare_for_cuda``."""
+    if backend_options:
+        raise ValueError("The builtin cuda backend does not support backend_options")
+    return _builtin_lowering_recipe(prepare_for_cuda)
+
+
+_BUILTIN_EXECUTORCH_BACKEND_RECIPES.update(
+    {
+        "xnnpack": _xnnpack_backend_recipe,
+        "cuda": _cuda_backend_recipe,
+    }
+)
 
 
 # ── Stage 2: Torch patches ────────────────────────────────────────────────────
@@ -272,7 +791,7 @@ _BACKEND_PREPARE = {
 # `@register_patch("executorch", "dotted.path")` and installed through `apply_patches`.
 
 
-@register_patch("executorch.cuda", "torch.split", "torch.Tensor.split")
+@register_patch("executorch.cuda", "torch.split", "torch.Tensor.split", lazy=True)
 def _patch_split(original):
     """Narrow-based split for the CUDA backend, which can't lower `split_copy`.
 
@@ -302,7 +821,7 @@ def _patch_split(original):
     return patch
 
 
-@register_patch("executorch.cuda", "torch.chunk", "torch.Tensor.chunk")
+@register_patch("executorch.cuda", "torch.chunk", "torch.Tensor.chunk", lazy=True)
 def _patch_chunk(original):
     """`torch.chunk` decomposes through `aten.split_copy.Tensor`, which AOT inductor for the
     ExecuTorch CUDA backend can't lower (`split_copy.Tensor is missing a c-shim implementation`).
@@ -319,7 +838,7 @@ def _patch_chunk(original):
     return patch
 
 
-@register_patch("executorch.cuda", "torch.topk", "torch.Tensor.topk")
+@register_patch("executorch.cuda", "torch.topk", "torch.Tensor.topk", lazy=True)
 def _patch_topk(original):
     """Argsort-based topk fallback for the CUDA backend, which has no topk kernel.
 
@@ -350,7 +869,7 @@ def _patch_detach(_original):
     return patch
 
 
-@register_patch("executorch.cuda", "torch.nn.functional.avg_pool2d")
+@register_patch("executorch.cuda", "torch.nn.functional.avg_pool2d", lazy=True)
 def _patch_avg_pool2d(original):
     """Decompose avg_pool2d as depthwise conv2d for the CUDA backend, which has no avg_pool2d kernel.
 
@@ -611,8 +1130,19 @@ def _patch_scaled_dot_product_attention(original):
     return patch
 
 
+def _normalize_tensor_shape_args(args, kwargs, keyword):
+    """Normalize Tensor varargs or a single shape sequence without concretizing SymInts."""
+    if kwargs:
+        if args or set(kwargs) != {keyword}:
+            raise TypeError(f"Expected positional dimensions or a single {keyword}= argument")
+        args = (kwargs[keyword],)
+    if not args:
+        raise TypeError(f"Missing required {keyword} argument")
+    return args[0] if len(args) == 1 and isinstance(args[0], (tuple, list)) else args
+
+
 @register_patch("executorch", "torch.Tensor.expand")
-def _patch_expand(original):
+def _patch_expand(_original):
     """Force a contiguous copy after ``expand``.
 
     ``Tensor.expand`` produces a view with stride ``0`` along broadcast dims.
@@ -623,9 +1153,9 @@ def _patch_expand(original):
     """
 
     def patch(self, *sizes, **kwargs):
-        # Forward whatever form the caller used — positional ``expand(*sizes)``, a single
-        # list/tuple, or the keyword form ``expand(size=...)`` — straight to the original.
-        result = original(self, *sizes, **kwargs)
+        # Saved TensorBase descriptors are not traceable under strict torch.export.
+        size = _normalize_tensor_shape_args(sizes, kwargs, "size")
+        result = torch.ops.aten.expand.default(self, size)
         # Only materialise when ``expand`` actually introduced a stride-0 (broadcast) dim; a
         # no-broadcast expand is a plain view ExecuTorch's memory planner accepts as-is.
         if 0 in result.stride():
@@ -635,7 +1165,7 @@ def _patch_expand(original):
     return patch
 
 
-@register_patch("executorch", "torch.reshape", "torch.Tensor.reshape", "torch.Tensor.view")
+@register_patch("executorch", "torch.reshape")
 def _patch_reshape(original):
     """Materialise a non-contiguous input before ``reshape``.
 
@@ -651,13 +1181,43 @@ def _patch_reshape(original):
     hit by xcodec2's ISTFT head).
     """
 
-    def patch(input, *shape, **kwargs):
+    def patch(input, shape):
         if not input.is_contiguous():
             input = input.clone(memory_format=torch.contiguous_format)
-        return original(input, *shape, **kwargs)
+        return original(input, shape)
 
     return patch
 
+
+@register_patch("executorch", "torch.Tensor.reshape")
+def _patch_tensor_reshape(_original):
+    """Use traceable ATen instead of calling a saved TensorBase reshape descriptor."""
+
+    def patch(self, *shape, **kwargs):
+        shape = _normalize_tensor_shape_args(shape, kwargs, "shape")
+        if not self.is_contiguous():
+            self = self.clone(memory_format=torch.contiguous_format)
+        return torch.ops.aten.reshape.default(self, shape)
+
+    return patch
+
+
+@register_patch("executorch", "torch.Tensor.view")
+def _patch_tensor_view(_original):
+    """Preserve both view overloads while materialising non-contiguous inputs."""
+
+    def patch(self, *size, **kwargs):
+        size = _normalize_tensor_shape_args(size, kwargs, "dtype" if "dtype" in kwargs else "size")
+        if not self.is_contiguous():
+            self = self.clone(memory_format=torch.contiguous_format)
+        if len(size) == 1 and isinstance(size[0], torch.dtype):
+            return torch.ops.aten.view.dtype(self, size[0])
+        return torch.ops.aten.view.default(self, size)
+
+    return patch
+
+
+# ── Stage 3: ExecuTorch patches
 
 # ── Stage 3: ExecuTorch patches ───────────────────────────────────────────────
 # Reversible swaps of ExecuTorch internals (passes, verifiers, op dicts) that crash
@@ -978,6 +1538,8 @@ def _make_squeeze_define_node(original):
     where both batch and time are dynamic). Replace the strict check with a no-op when
     the dynamic-dim count is preserved across the squeeze.
     """
+    from executorch.backends.xnnpack.serialization.xnnpack_graph_schema import XNNStaticReshape, XNode
+    from executorch.backends.xnnpack.utils.utils import get_input_node
     from torch.fx.experimental.symbolic_shapes import free_symbols
 
     def patch(self, node, xnn_graph, vals_to_ids, debug_handle):
@@ -1028,7 +1590,9 @@ def _patch_is_non_identity_clone(original):
 
 
 @register_patch(
-    "executorch.xnnpack", "executorch.backends.xnnpack.partition.config.node_configs.PreluConfig.check_constraints"
+    "executorch.xnnpack",
+    "executorch.backends.xnnpack.partition.config.node_configs.PreluConfig.check_constraints",
+    lazy=True,
 )
 def _patch_prelu_check_constraints(original):
     """Only delegate ``prelu`` to XNNPACK when its input is 4-D.
@@ -1061,8 +1625,9 @@ _JSON_NONFINITE_SUBS = (
 
 
 @register_patch(
-    "executorch",
+    "executorch.xnnpack",
     "executorch.backends.xnnpack.serialization.xnnpack_graph_serialize._flatc_compile",
+    lazy=True,
 )
 def _patch_flatc_compile_nonfinite(original):
     """Rewrite non-finite float literals in the XNNPACK delegate JSON before ``flatc``.
@@ -1089,7 +1654,9 @@ def _patch_flatc_compile_nonfinite(original):
     return patch
 
 
-@register_patch("executorch.xnnpack", "executorch.backends.xnnpack.operators.node_visitor._node_visitor_dict")
+@register_patch(
+    "executorch.xnnpack", "executorch.backends.xnnpack.operators.node_visitor._node_visitor_dict", lazy=True
+)
 def _patch_squeeze_node_visitors(original):
     """Swap the squeeze/unsqueeze visitor entries in ``_node_visitor_dict`` with subclasses
     whose ``define_node`` skips the strict reshape check.
