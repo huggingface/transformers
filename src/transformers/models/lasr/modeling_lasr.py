@@ -601,6 +601,11 @@ class LasrCTCGenerateOutput(ModelOutput):
     hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
 
 
+class LasrEncoderCTCHead(nn.Conv1d):
+    def forward(self, hidden_states: torch.Tensor):
+        return super().forward(hidden_states.transpose(1, 2)).transpose(1, 2)
+
+
 @auto_docstring(
     custom_intro="""
     Lasr Encoder with a Connectionist Temporal Classification (CTC) head.
@@ -613,7 +618,7 @@ class LasrForCTC(LasrPreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
         # Conv rather than linear to be consistent with NeMO decoding layer
-        self.ctc_head = nn.Conv1d(config.encoder_config.hidden_size, config.vocab_size, kernel_size=1)
+        self.ctc_head = LasrEncoderCTCHead(config.encoder_config.hidden_size, config.vocab_size, kernel_size=1)
 
         self.post_init()
 
@@ -655,7 +660,7 @@ class LasrForCTC(LasrPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = encoder_outputs.last_hidden_state
-        logits = self.ctc_head(hidden_states.transpose(1, 2)).transpose(1, 2)
+        logits = self.ctc_head(hidden_states)
 
         loss = None
         if labels is not None:

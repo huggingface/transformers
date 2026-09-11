@@ -20,14 +20,14 @@ import numpy as np
 from transformers import is_vision_available
 from transformers.testing_utils import require_torch, require_vision
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_vision_available():
     from PIL import Image
 
 
-class PPOCRV6SmallRecImageProcessingTester:
+class PPOCRV6SmallRecImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -73,17 +73,6 @@ class PPOCRV6SmallRecImageProcessingTester:
             "keep_aspect_ratio": False,
             "do_pad": False,
         }
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
     def get_expected_value(self, images):
         shape_list = []

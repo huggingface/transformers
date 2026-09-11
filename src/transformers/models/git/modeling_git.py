@@ -214,7 +214,7 @@ class GitAttention(nn.Module):
         attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         attn_output, _ = self.self(
             hidden_states,
             attention_mask,
@@ -271,7 +271,7 @@ class GitLayer(GradientCheckpointingLayer):
         attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         attention_output = self.attention(
             hidden_states,
             attention_mask,
@@ -788,11 +788,6 @@ class GitModel(GitPreTrainedModel):
                 else past_key_values.get_seq_length()
             )
 
-        # Adjust position ids by adding image seq length
-        seq_len = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-        if pixel_values is None and past_key_values is not None and seq_len == 1:
-            position_ids = position_ids + past_key_values_length
-
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
@@ -841,11 +836,16 @@ class GitModel(GitPreTrainedModel):
                 attention_mask = torch.cat(
                     [torch.ones_like(image_token_type_ids, dtype=attention_mask.dtype), attention_mask], dim=-1
                 )
-        elif past_key_values is not None and seq_len == 1:
-            # Expand attention mask and cache position with image tokens because GIT doesn't add image
-            # placeholder tokens when processing. Doesn't worth the refactor, low usage!
+        elif (
+            past_key_values is not None
+            and past_key_values_length > 0
+            and attention_mask is not None
+            and attention_mask.ndim == 2
+        ):
+            # GIT keeps the image tokens in the cache without placeholder tokens in `input_ids`, so the
+            # incoming padding mask is narrower than the cache — widen it over the cached image tokens.
             extended_attention_mask = torch.ones(
-                (attention_mask.shape[0], past_key_values_length - attention_mask.shape[1] + 1),
+                (attention_mask.shape[0], self.encoder.layer[0].attention.self.image_patch_tokens),
                 dtype=attention_mask.dtype,
                 device=attention_mask.device,
             )
@@ -1078,11 +1078,17 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         logits = self.output(hidden_states[:, slice_indices, :])
 
         loss = None
+        # A caller doing sequence/context parallel training pre-shifts the targets on the full sequence and passes
+        # them as `shift_labels`; they are already aligned with the text logits, so no shift is applied here.
+        shift_labels = kwargs.pop("shift_labels", None)
         if labels is not None:
-            # we are doing next-token prediction; shift prediction scores and input ids by one
             num_image_tokens = self.git.encoder.layer[0].attention.self.image_patch_tokens
-            shifted_logits = logits[:, num_image_tokens:-1, :].contiguous()
-            shift_labels = labels[:, 1:].contiguous()
+            if shift_labels is None:
+                # we are doing next-token prediction; shift prediction scores and input ids by one
+                shifted_logits = logits[:, num_image_tokens:-1, :].contiguous()
+                shift_labels = labels[:, 1:].contiguous()
+            else:
+                shifted_logits = logits[:, num_image_tokens:, :].contiguous()
             loss = self.loss_function(
                 logits=shifted_logits,
                 labels=None,

@@ -360,8 +360,8 @@ class EsmcModel(EsmcPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, EsmcModel
 
-        >>> model = EsmcModel.from_pretrained("biohub/ESMC-300M")
-        >>> tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M")
+        >>> model = EsmcModel.from_pretrained("biohub/ESMC-300M-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M-hf")
         >>> inputs = tokenizer(["MLKNVQVQLV"], return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> outputs.last_hidden_state.shape
@@ -463,8 +463,8 @@ class EsmcForMaskedLM(EsmcPreTrainedModel):
         >>> from transformers import AutoTokenizer, EsmcForMaskedLM
         >>> import torch
 
-        >>> model = EsmcForMaskedLM.from_pretrained("biohub/ESMC-300M")
-        >>> tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M")
+        >>> model = EsmcForMaskedLM.from_pretrained("biohub/ESMC-300M-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M-hf")
         >>> inputs = tokenizer(["MLKNVQ<mask>LV"], return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> outputs.logits.shape
@@ -591,7 +591,7 @@ class EsmcForSequenceClassification(EsmcPreTrainedModel):
 
 
 class EsmcForTokenClassification(GenericForTokenClassification, EsmcPreTrainedModel):
-    pass
+    base_model_prefix = "esmc"
 
 
 __all__ = [

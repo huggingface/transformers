@@ -90,6 +90,7 @@ from .utils import (
     is_cython_available,
     is_decord_available,
     is_detectron2_available,
+    is_diffusers_available,
     is_essentia_available,
     is_executorch_available,
     is_faiss_available,
@@ -1138,6 +1139,10 @@ if is_torch_available():
             raise ValueError(
                 f"TRANSFORMERS_TEST_DEVICE={torch_device}, but HPU is unavailable. Please double-check your testing environment."
             )
+        if torch_device == "mps" and not torch.backends.mps.is_available():
+            raise ValueError(
+                f"TRANSFORMERS_TEST_DEVICE={torch_device}, but MPS is unavailable. Please double-check your testing environment."
+            )
 
         try:
             # try creating device to see if provided device is valid
@@ -1190,7 +1195,11 @@ def require_torch_gpu(test_case):
 
 
 def require_torch_mps(test_case):
-    """Decorator marking a test that requires CUDA and PyTorch."""
+    """Decorator marking a test that requires MPS and PyTorch.
+
+    MPS is not auto-detected as `torch_device` -- a Mac reports `cpu` unless asked otherwise -- so
+    these run under `TRANSFORMERS_TEST_DEVICE=mps`.
+    """
     return unittest.skipUnless(torch_device == "mps", "test requires MPS")(test_case)
 
 
@@ -1450,6 +1459,46 @@ def require_deterministic_for_xpu(test_case):
     return wrapper
 
 
+def require_deterministic_for_accelerator(test_case=None, *, devices=None):
+    """Decorator that enables deterministic algorithms for the duration of a test.
+
+    Uses ``get_device_properties()`` to detect the device type — no per-backend
+    ``is_torch_*_available()`` conditions needed. On CPU the test runs unchanged.
+
+    Args:
+        devices: Optional list of device type strings (e.g. ``["cuda", "xpu"]``). If given,
+            deterministic mode is only enabled when the active device matches one of them.
+            If ``None`` (default), deterministic mode is enabled for all non-CPU accelerators.
+
+    Can be used with or without arguments::
+
+        @require_deterministic_for_accelerator
+        def test_foo(self): ...
+
+        @require_deterministic_for_accelerator(devices=["cuda"])
+        def test_bar(self): ...
+    """
+
+    def decorator(tc):
+        @wraps(tc)
+        def wrapper(*args, **kwargs):
+            device_type = get_device_properties()[0]
+            should_enable = device_type != "cpu" and (devices is None or device_type in devices)
+            if should_enable:
+                original_state = torch.are_deterministic_algorithms_enabled()
+                try:
+                    torch.use_deterministic_algorithms(True)
+                    return tc(*args, **kwargs)
+                finally:
+                    torch.use_deterministic_algorithms(original_state)
+            else:
+                return tc(*args, **kwargs)
+
+        return wrapper
+
+    return decorator if test_case is None else decorator(test_case)
+
+
 def require_torch_tf32(test_case):
     """Decorator marking a test that requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.7."""
     return unittest.skipUnless(
@@ -1520,6 +1569,13 @@ def require_wandb(test_case):
 
     """
     return unittest.skipUnless(is_wandb_available(), "test requires wandb")(test_case)
+
+
+def require_diffusers(test_case):
+    """
+    Decorator marking a test that requires diffusers
+    """
+    return unittest.skipUnless(is_diffusers_available(), "test requires diffusers")(test_case)
 
 
 def require_clearml(test_case):
@@ -3654,6 +3710,14 @@ class Expectations(UserDict[PackedDeviceProperties, Any]):
         return f"{self.data}"
 
 
+def get_json_expectation(expectations: dict[str, Any]) -> Any:
+    """
+    Same as `Expectations.get_expectation`, for expectations stored in a JSON fixture. JSON only allows string keys, so
+    they are written as their `Expectations` counterpart repr, e.g. `"(None, None)"` or `"('xpu', 5)"`.
+    """
+    return Expectations({ast.literal_eval(key): value for key, value in expectations.items()}).get_expectation()
+
+
 def patch_torch_compile_force_graph():
     """
     Patch `torch.compile` to always use `fullgraph=True`.
@@ -3693,10 +3757,14 @@ def patch_psutil_cpu_memory(limit_bytes: int):
 
     import psutil
 
-    _original_virtual_memory = psutil.virtual_memory
-    # Keep the honest reader reachable: the cap above is a `device_map="auto"` planning budget, but a guard that
-    # asks "will this OOM-kill the container?" needs the machine's real RAM. See `get_physical_cpu_ram_gib`.
-    if _UNPATCHED_VIRTUAL_MEMORY is None:
+    # Keep the honest reader reachable: the cap described in the docstring is a `device_map="auto"` planning budget,
+    # but a guard that asks "will this OOM-kill the container?" needs the machine's real RAM.
+    # See `get_physical_cpu_ram_gib`.
+    # If already patched, always use the stored original so a second call doesn't chain patches on top of each other.
+    if _UNPATCHED_VIRTUAL_MEMORY is not None:
+        _original_virtual_memory = _UNPATCHED_VIRTUAL_MEMORY
+    else:
+        _original_virtual_memory = psutil.virtual_memory
         _UNPATCHED_VIRTUAL_MEMORY = _original_virtual_memory
 
     def _capped_virtual_memory():
@@ -3708,6 +3776,26 @@ def patch_psutil_cpu_memory(limit_bytes: int):
         return mem._replace(total=total, available=available, used=used, percent=percent)
 
     psutil.virtual_memory = _capped_virtual_memory
+
+
+@contextlib.contextmanager
+def cap_psutil_cpu_memory(limit_bytes: int):
+    """
+    Context manager that temporarily caps `psutil.virtual_memory` to `limit_bytes`, then restores the
+    previous value on exit.
+
+    Use this inside individual tests that need a tighter CPU memory budget than the session-wide cap set
+    by conftest (e.g. to force `device_map="auto"` to use disk offload during `from_pretrained`), without
+    affecting the rest of the test session.
+    """
+    import psutil
+
+    prev = psutil.virtual_memory
+    patch_psutil_cpu_memory(limit_bytes)
+    try:
+        yield
+    finally:
+        psutil.virtual_memory = prev
 
 
 def _get_test_info():
@@ -4037,7 +4125,9 @@ def _patch_with_call_info(module_or_class, attr_name, _parse_call_info_func, tar
 
             # This is specific
             info = _parse_call_info_func(orig_method, args, kwargs, call_argument_expressions, target_args)
-            info = _prepare_debugging_info(test_info, info)
+            # An empty `info` means the call site's expressions could not be matched to this call
+            # (a delegated call, see `_parse_call_info`): don't append a record with no values.
+            info = _prepare_debugging_info(test_info, info) if info else ""
 
             # If the test is running in a CI environment (e.g. not a manual run), let's raise and fail the test, so it
             # behaves as usual.
@@ -4090,6 +4180,15 @@ def _parse_call_info(func, args, kwargs, call_argument_expressions, target_args)
         # (This part is very unlikely what a user would be interest to know)
         call_argument_expressions["positional_args"] = ["self"] + call_argument_expressions["positional_args"]
 
+    # The expressions are parsed from the *source line of the call site*, so they only describe this
+    # call if the counts line up. They do not when a patched method is reached by delegation from
+    # another one: `assertListEqual(a, b)` calls `assertSequenceEqual(a, b, msg, seq_type=list)`, so
+    # `args` gains entries the caller's source line never mentioned. Indexing anyway raised
+    # `IndexError` and took the test down with it; indexing "safely" would be worse, silently
+    # attributing the wrong expression to a value. Report nothing instead.
+    if len(args) != len(call_argument_expressions["positional_args"]):
+        return ""
+
     param_position_mapping = {param_name: idx for idx, param_name in enumerate(signature_names)}
 
     arg_info = {}
@@ -4135,6 +4234,9 @@ def patch_testing_methods_to_collect_info():
     _patch_with_call_info(unittest.case.TestCase, "assertListEqual", _parse_call_info, target_args=("list1", "list2"))
     _patch_with_call_info(
         unittest.case.TestCase, "assertTupleEqual", _parse_call_info, target_args=("tuple1", "tuple2")
+    )
+    _patch_with_call_info(
+        unittest.case.TestCase, "assertSequenceEqual", _parse_call_info, target_args=("seq1", "seq2")
     )
     _patch_with_call_info(unittest.case.TestCase, "assertSetEqual", _parse_call_info, target_args=("set1", "set1"))
     _patch_with_call_info(unittest.case.TestCase, "assertDictEqual", _parse_call_info, target_args=("d1", "d2"))
@@ -4187,6 +4289,12 @@ def _format_tensor(t, indent_level=0, sci_mode=None):
 
         # We work directly with the string representation instead the tensor itself
         t_str = str(t)
+
+        # A non-default dtype is repr'd as a trailing kwarg, e.g.
+        # `tensor([83, 362], dtype=torch.int16)`. It is not part of the value, and
+        # stripping only `tensor(` / `)` leaves it stranded inside the literal,
+        # which then does not parse (integer tensors hit this).
+        t_str = re.sub(r",\s*dtype=torch\.\w+", "", t_str)
 
         # remove `tensor( ... )` so keep only the content
         t_str = t_str.replace("tensor(", "").replace(")", "")
@@ -4243,6 +4351,11 @@ def _quote_string(s):
 
     We choice double quotes over single quote despite `str(s)` would give `'abc'` instead of `"abc"`.
     """
+    # Backslashes first: escaping the quotes below adds none, but a backslash
+    # already in `s` would otherwise escape whatever follows it -- a value ending
+    # in one swallows the closing quote and the literal no longer parses.
+    s = s.replace("\\", "\\\\")
+
     has_single_quote = "'" in s
     has_double_quote = '"' in s
 
@@ -4402,10 +4515,14 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
             else:
                 groups.append(buf)
 
+        # a 1-element tuple needs its trailing comma or the value changes type:
+        # `(5)` parses back as the int 5, not as `(5,)`
+        trailing = "," if isinstance(obj, tuple) and len(obj) == 1 else ""
+
         output = f"{' ' * 4 * indent}{p1}\n"
         element_strings = [f"{' ' * (4 * (indent + 1))}" + ", ".join(buf) for buf in groups]
         output += ",\n".join(element_strings)
-        output += f"\n{' ' * 4 * indent}{p2}"
+        output += f"{trailing}\n{' ' * 4 * indent}{p2}"
 
         # if all elements are in one-line
         no_new_line_in_elements = all("\n" not in x for x in element_strings)
@@ -4416,7 +4533,7 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
         # will be `True`.
         if could_use_one_line:
             one_line_form = ", ".join([x.lstrip() for x in element_strings])
-            one_line_form = f"{p1}{one_line_form}{p2}"
+            one_line_form = f"{p1}{one_line_form}{trailing}{p2}"
 
             if mode == "one-line":
                 return output
@@ -4442,10 +4559,17 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
                             return False
 
                         # only one element that is iterable, but not the same type as `obj` --> no one line repr.
-                        if type(obj) is not type(obj[0]):
+                        # (`obj[0]` on a dict is a *key* lookup, not positional: use its single value)
+                        only_element = next(iter(obj.values())) if type(obj) is dict else obj[0]
+                        if type(obj) is not type(only_element):
                             return False
 
                         # one-line repr. if possible, without width limit
+                        return no_new_line_in_elements
+
+                    # empty container: nothing to inspect, and `element_types[0]`
+                    # below would raise IndexError
+                    if not element_types:
                         return no_new_line_in_elements
 
                     # all elements are of simple types, but more than one type --> no one line repr.
@@ -4470,6 +4594,9 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
             # width condition combined with specific mode conditions
             if use_one_line_repr(obj):
                 output = f"{' ' * 4 * indent}{one_line_form}"
+    else:
+        # anything else (e.g. `torch.Size`, `numpy` scalars): fall back to `repr`, which stays copy-pastable
+        output = repr(obj)
 
     cache[(id(obj), indent, mode, prefix)] = output
 

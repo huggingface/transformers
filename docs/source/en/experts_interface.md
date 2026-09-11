@@ -156,12 +156,15 @@ This backend requires:
 - A `torch.distributed` process group for the expert-parallel group, which the tensor-parallel wrapping supplies automatically.
 
 ```py
-from transformers import AutoModelForCausalLM
+import os
 
+from transformers import AutoModelForCausalLM, DistributedConfig
+
+distributed_config = DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"]))
 model = AutoModelForCausalLM.from_pretrained(
     "deepseek-ai/DeepSeek-V4",
     experts_implementation="deepgemm_megamoe",
-    tp_plan="auto",
+    distributed_config=distributed_config,
 )
 ```
 

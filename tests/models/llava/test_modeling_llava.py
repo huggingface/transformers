@@ -299,7 +299,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
-        image_file = "https://llava-vl.github.io/static/images/view.jpg"
+        image_file = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
         raw_image = load_test_image(image_file)
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
 
@@ -328,7 +328,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place? ASSISTANT:"
-        image_file = "https://llava-vl.github.io/static/images/view.jpg"
+        image_file = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
         raw_image = load_test_image(image_file)
         inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
 
@@ -336,10 +336,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                ("xpu", 3): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the presence of boats or other watercraft in the area, as they may be moving at high speeds or making sudden turns, which could pose a risk to pedestrians. Lastly, be aware of any posted signs or warnings, as they may provide important information about the pier\'s conditions or potential dangers.',
-                ("cuda", 7): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Lastly, be respectful of the environment and other visitors, as the pier is a shared space where people can enjoy the view, relax, or engage in recreational activities.',
-                ("cuda", 8): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Lastly, be respectful of the environment and other visitors, as the pier is a shared space where people can enjoy the view, relax, or engage in recreational activities.',
-                ("rocm", (9, 5)): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock overlooking a lake, you should be cautious about the following:\n\n1. Safety: Ensure that the pier or dock is stable and secure before stepping onto it. Avoid walking on the edge of the pier or dock, as it could be unstable or unsafe.\n\n2. Weather conditions: Be aware of the weather forecast before visiting the area. Strong winds, heavy rain, or storms can make the pier or dock unsafe to use.\n\n3. Wildlife: Be mindful of the wildlife in the area, such as birds or aquatic animals. Avoid disturbing their natural habitat or causing harm to the local ecosystem.\n\n4. Water safety: If you plan to go swimming or engage in water activities, be aware of the water conditions, such as currents, tides, or potential hazards like submerged objects.\n\n5. Personal belongings: Keep an eye on your personal belongings, such as bags or backpacks, to prevent theft or loss.\n\n6. Leave no trace: When visiting the area, make sure to clean up after yourself and leave no trace of your presence to preserve the natural environment.',
+                (None, None): "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a dock on a large body of water, there are several things to be cautious about. First, be mindful of the weather conditions, as sudden changes in weather can make the dock unsafe to use. Second, be aware of the water depth and any potential hazards, such as rocks or debris, that may be present in the water. Third, be cautious of the dock's stability and the possibility of it collapsing or shifting due to external factors or human interference. Lastly, be aware of any local regulations or guidelines for dock usage, as these may include restrictions on certain activities or requirements for safety equipment. By being cautious and following any applicable rules, you can ensure a safe and enjoyable experience at this location.",
+                ("xpu", 5): "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a dock on a large body of water, there are a few things to be cautious about. First, be mindful of the weather conditions, as sudden changes in weather can make the dock unsafe to use. Second, be aware of the water depth and any potential hazards, such as rocks or debris, that may be present in the water. Third, be cautious of the dock's stability and any potential structural issues that could lead to accidents. Lastly, be aware of any local regulations or guidelines for using the dock and the surrounding water area. By taking these precautions, you can ensure a safe and enjoyable experience at this location.",
             }
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
@@ -361,7 +359,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT:",
             "USER: <image>\nWhat is this? ASSISTANT:",
         ]
-        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
         image2 = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(torch_device)
@@ -370,26 +370,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_decoded_texts = Expectations(
             {
-                ("xpu", 3): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
-                    "with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, "
-                    "you",
-                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
-                    "is located on",
-                ],
-                ("cuda", None): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
-                    "with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, "
-                    "you",
-                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
-                    "is located on",
-                ],
-                ("rocm", (9, 5)): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
-                    "with me? ASSISTANT: When visiting this serene location, which features a wooden pier overlooking a "
-                    "lake, you should",
-                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
-                    "is located on",
+                (None, None): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT: When visiting this place, which appears to be a dock or pier extending out into the water,",
+                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat is located on",
                 ],
             }
         )
@@ -412,7 +395,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
             "USER: <image>\nWhat is this?\nASSISTANT:",
         ]
-        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
         image2 = load_coco_image("000000039769.jpg")
 
         inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(
@@ -423,22 +408,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                ("xpu", 3): [
-                    'USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring along',
-                    'USER:  \nWhat is this?\nASSISTANT: Cats',
-                ],
-                ("cuda", 7): [
-                    'USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring along',
-                    'USER:  \nWhat is this?\nASSISTANT: Cats',
-                ],
-                ("cuda", 8): [
-                    'USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring along',
-                    'USER:  \nWhat is this?\nASSISTANT: Cats',
-                ],
-                ("rocm", (9, 5)): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this dock on a lake, there are several things to be cautious about and items to",
-                    "USER:  \nWhat is this?\nASSISTANT: This is a picture of two cats lying on a couch.",
-                ],
+                (None, None): ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this dock on a mountain lake, there are several things to be cautious about and items', 'USER:  \nWhat is this?\nASSISTANT: Cats'],
             }
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
@@ -465,7 +435,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
             "USER: <image>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <image>\nAnd this?\nASSISTANT:",
         ]
-        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
         image2 = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=[image1, image2, image1], text=prompts, return_tensors="pt", padding=True).to(
@@ -476,26 +448,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_decoded_texts = Expectations(
             {
-                ("xpu", 3): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
-                    "with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a "
-                    "body of water",
-                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat "
-                    "sleeping on a bed.",
-                ],
-                ("cuda", None): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
-                    "with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a "
-                    "body of water",
-                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat "
-                    "sleeping on a bed.",
-                ],
-                ("rocm", (9, 5)): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
-                    "with me?\nASSISTANT: When visiting this place, which is a pier or dock overlooking a lake, you should "
-                    "be",
-                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat "
-                    "sleeping on a bed.",
+                (None, None): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending out into a large body",
+                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.",
                 ],
             }
         )
@@ -516,8 +471,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         prompt1 = "<image>\n<image>\nUSER: What's the difference of two images?\nASSISTANT:"
         prompt2 = "<image>\nUSER: Describe the image.\nASSISTANT:"
         prompt3 = "<image>\nUSER: Describe the image.\nASSISTANT:"
-        url1 = "https://images.unsplash.com/photo-1552053831-71594a27632d?q=80&w=3062&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-        url2 = "https://images.unsplash.com/photo-1617258683320-61900b281ced?q=80&w=3087&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+        url1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/unsplash_1552053831-71594a27632d.jpg"
+        url2 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/unsplash_1617258683320-61900b281ced.jpg"
         image1 = load_test_image(url1)
         image2 = load_test_image(url2)
 
@@ -598,7 +553,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = LlavaForConditionalGeneration.from_pretrained(model_id, dtype="float16", device_map=torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
-        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        image_file = (
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         raw_image = load_test_image(image_file)
         inputs = processor(
             text="<|im_start|>user\n<image>\nWhat are these?<|im_end|>\n<|im_start|>assistant",
@@ -626,12 +583,15 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         IMG_URLS = [
-            load_test_image("https://picsum.photos/id/237/400/300"),
-            load_test_image("https://picsum.photos/id/231/200/300"),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_400x300.jpg"
+            ),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_231_200x300.jpg"
+            ),
         ]
         PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][/INST]"
 
-        # image = Image.open(requests.get(url, stream=True).raw)
         inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(torch_device, torch.float16)
         generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
         output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
@@ -659,8 +619,12 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         IMG_URLS = [
-            load_test_image("https://picsum.photos/id/237/400/300"),
-            load_test_image("https://picsum.photos/id/231/200/300"),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_400x300.jpg"
+            ),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_231_200x300.jpg"
+            ),
         ]
         PROMPT = "<s>[INST][IMG][IMG]Describe the images.[/INST]"
 
@@ -691,8 +655,12 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
 
         IMG_URLS = [
-            load_test_image("https://picsum.photos/id/237/400/300"),
-            load_test_image("https://picsum.photos/id/17/150/500"),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_400x300.jpg"
+            ),
+            load_test_image(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_17_150x500.jpg"
+            ),
         ]
         PROMPT = [
             "<s>[INST][IMG]What breed is the dog?[/INST]",

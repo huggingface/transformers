@@ -14,6 +14,7 @@
 """PyTorch PaliGemmamodel."""
 
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 from torch import nn
@@ -380,6 +381,25 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
+
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: dict[str, Any],
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ) -> dict[str, Any]:
+        token_type_ids = model_kwargs.get("token_type_ids")
+        model_kwargs = super()._update_model_kwargs_for_generation(
+            outputs, model_kwargs, is_encoder_decoder, num_new_tokens
+        )
+        if token_type_ids is not None:
+            # A generated token belongs to the causal suffix, so it is 1. The generic update repeats the
+            # last prompt value (0 before any suffix), which would put it in the bidirectional prefix.
+            model_kwargs["token_type_ids"] = torch.cat(
+                [token_type_ids, token_type_ids.new_ones((token_type_ids.shape[0], num_new_tokens))], dim=-1
+            )
+        return model_kwargs
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
         model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)

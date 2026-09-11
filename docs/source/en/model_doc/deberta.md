@@ -96,10 +96,6 @@ print(f"The predicted relation is: {labels[predicted_class]}")
     - get_special_tokens_mask
     - save_vocabulary
 
-## DebertaTokenizerFast
-
-[[autodoc]] DebertaTokenizerFast
-
 ## DebertaModel
 
 [[autodoc]] DebertaModel
