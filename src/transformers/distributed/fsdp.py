@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
 from .tensor_parallel import replace_layer_number_by_wildcard
-from .utils import _is_torch_distributed_initialized
+from .utils import _is_torch_distributed_initialized, is_dtensor
 
 
 if TYPE_CHECKING:
@@ -61,12 +61,16 @@ def is_fsdp_managed_module(module: nn.Module) -> bool:
     return isinstance(module, FullyShardedDataParallel)
 
 
-def _get_fsdp_policy_kwargs(distributed_config: DistributedConfig | None) -> dict[str, Any]:
+def _get_fsdp_policy_kwargs(
+    distributed_config: DistributedConfig | None, ignored_params: set[torch.nn.Parameter] | None = None
+) -> dict[str, Any]:
     """Build ``fully_shard`` policy kwargs from ``DistributedConfig`` runtime flags."""
-    if distributed_config is None:
-        return {}
-
     fsdp_policy_kwargs = {}
+    if ignored_params:
+        fsdp_policy_kwargs["ignored_params"] = ignored_params
+    if distributed_config is None:
+        return fsdp_policy_kwargs
+
     if distributed_config.fsdp_cpu_offload:
         fsdp_policy_kwargs["offload_policy"] = CPUOffloadPolicy()
     if distributed_config.fsdp_mixed_precision:
@@ -185,13 +189,19 @@ def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) 
 
 
 def apply_fully_sharded_data_parallelism(
-    model: nn.Module, fsdp_mesh: torch.distributed.device_mesh.DeviceMesh
+    model: nn.Module,
+    fsdp_mesh: torch.distributed.device_mesh.DeviceMesh,
+    expert_mesh: torch.distributed.device_mesh.DeviceMesh | None = None,
 ) -> nn.Module:
     """
     Apply FSDP2 (fully_shard) to a model.
 
     Torch availability, distributed initialization and the version requirement
     are asserted upstream by `initialize_fully_sharded_data_parallelism`.
+
+    With expert-parallel token dispatch `fsdp_mesh` spans the expert-parallel ranks, which the experts are already
+    sharded across: the experts are fully sharded across `expert_mesh` in their own group, and passed to FSDP2 as
+    `ignored_params` when `expert_mesh` is `None`.
     """
     fsdp_plan = dict(getattr(model, "_fsdp_plan", None) or {})
     if not fsdp_plan:
@@ -201,10 +211,27 @@ def apply_fully_sharded_data_parallelism(
         )
 
     distributed_config = getattr(model.config, "distributed_config", None)
-    fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
 
     adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, model)
     reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
+
+    ignored_params = None
+    if distributed_config is not None and distributed_config.dispatches_tokens:
+        if not is_torch_greater_or_equal("2.7"):
+            raise OSError("Expert-parallel token dispatch requires `torch>=2.7`.")
+        # The DTensor parameters are the expert-parallel experts: `maybe_distribute_model` rewrote the expert
+        # parallel plan to shard only them.
+        expert_modules = [
+            module for module in model.modules() if any(is_dtensor(p) for p in module.parameters(recurse=False))
+        ]
+        if expert_mesh is not None:
+            expert_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
+            for module in expert_modules:
+                fully_shard(module, mesh=expert_mesh, reshard_after_forward=True, **expert_policy_kwargs)
+        else:
+            ignored_params = {p for module in expert_modules for p in module.parameters()}
+
+    fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config, ignored_params=ignored_params)
 
     for module_name, module in reshard_targets:
         fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
