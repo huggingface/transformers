@@ -19,6 +19,11 @@ class NeuCodecAudioProcessorMixin(Xcodec2AudioProcessorMixin):
     """Same dual-encoder geometry as XCodec2: raw padded audio for the acoustic encoder, kaldi
     povey fbank features for the semantic one."""
 
+    def _preprocess(self, audio, *args, **kwargs):
+        # The legacy semantic branch extracts each fbank from the original clip, independently
+        # of any `max_length` truncation applied to the acoustic branch.
+        return super()._preprocess(audio, *args, semantic_waveforms=audio, **kwargs)
+
     def _pad_semantic_waveform(self, waveform):
         # NeuCodec's reference feeds the hop-rounded clip straight to the fbank, without XCodec2's
         # half-hop context: https://github.com/neuphonic/neucodec/blob/ed3e6cd/neucodec/model.py#L128

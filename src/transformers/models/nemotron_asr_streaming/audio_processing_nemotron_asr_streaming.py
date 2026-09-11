@@ -16,11 +16,6 @@ from ..parakeet.audio_processing_parakeet import ParakeetAudioProcessor
 
 
 class NemotronAsrStreamingAudioProcessorMixin:
-    """Parakeet's STFT + mel + preemphasis + log pipeline without its per-utterance mean/variance
-    normalization: padded frames are zeroed. Output keys stay canonical (`audio_features` /
-    `audio_features_mask`); consumers still reading `input_features` or `attention_mask` get them
-    through the deprecated-key alias."""
-
     def _finalize_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
         features = output.pop("audio_features")
         mask = output.pop("audio_features_mask", None)

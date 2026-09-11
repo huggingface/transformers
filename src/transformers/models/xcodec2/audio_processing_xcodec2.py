@@ -95,18 +95,37 @@ class Xcodec2AudioProcessorMixin:
     def _pad_feature_single(self, feature, max_length):
         return self._pad_axis(feature, 0, max_length - feature.shape[0], axis=0, value=self.feature_padding_value)
 
-    def _finalize_output(self, output, audio_ranges=None, **kwargs):
+    def _finalize_output(
+        self,
+        output,
+        audio_ranges=None,
+        padding=True,
+        max_length=None,
+        truncation=False,
+        semantic_waveforms=None,
+        **kwargs,
+    ):
         audio_values = output["audio_values"]
         padded_length = audio_values.shape[-1]
 
         features = []
         for i, (start, end) in enumerate(audio_ranges):
-            # the fbank sees each clip rounded up to whole hops, not the batch-padded length
-            valid_length = min((end - start + self.hop_length - 1) // self.hop_length * self.hop_length, padded_length)
-            waveform = self._pad_semantic_waveform(audio_values[i, 0, :valid_length])
+            if semantic_waveforms is None:
+                # XCodec2's fbank sees the truncated clip rounded up to whole codec hops.
+                valid_length = min(
+                    (end - start + self.hop_length - 1) // self.hop_length * self.hop_length,
+                    padded_length,
+                )
+                waveform = audio_values[i, 0, :valid_length]
+            else:
+                # NeuCodec's semantic branch remains independent of acoustic truncation.
+                waveform = semantic_waveforms[i]
+                valid_length = (waveform.shape[-1] + self.hop_length - 1) // self.hop_length * self.hop_length
+                waveform = self._pad_axis(waveform, 0, valid_length - waveform.shape[-1], axis=-1)
+            waveform = self._pad_semantic_waveform(waveform)
             features.append(self._standardize_frames(self.compute_features([waveform])[0]))
 
-        features, frame_ranges = self._pad_features(features, "longest", None, False, self.stride)
+        features, frame_ranges = self._pad_features(features, padding, max_length, truncation, self.stride)
         batch = self._stack(features)
         mask = self._get_mask(frame_ranges, batch.shape[1])
 

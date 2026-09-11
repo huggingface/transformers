@@ -226,7 +226,15 @@ class BaseAudioProcessor(AudioProcessingMixin):
             output = {"audio_features": self._stack_features(features)}
             if self.return_padding_mask:
                 output["audio_features_mask"] = self._get_mask(feature_ranges, features[0].shape[0])
-            output = self._finalize_output(output, feature_ranges=feature_ranges, **kwargs)
+            output = self._finalize_output(
+                output,
+                feature_ranges=feature_ranges,
+                padding=padding,
+                max_length=max_length,
+                truncation=truncation,
+                pad_to_multiple_of=pad_to_multiple_of,
+                **kwargs,
+            )
             return BatchFeature(
                 data=output, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion
             )
@@ -262,7 +270,15 @@ class BaseAudioProcessor(AudioProcessingMixin):
             mask_key = "audio_features_mask" if do_extract_spectrogram else "audio_values_mask"
             output[mask_key] = self._get_mask(mask_ranges, mask_length)
 
-        output = self._finalize_output(output, audio_ranges=audio_ranges, **kwargs)
+        output = self._finalize_output(
+            output,
+            audio_ranges=audio_ranges,
+            padding=padding,
+            max_length=max_length,
+            truncation=truncation,
+            pad_to_multiple_of=pad_to_multiple_of,
+            **kwargs,
+        )
         return BatchFeature(
             data=output, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion
         )

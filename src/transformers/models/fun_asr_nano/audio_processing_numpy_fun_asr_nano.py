@@ -37,23 +37,5 @@ class FunAsrNanoAudioProcessorNumpy(FunAsrNanoAudioProcessorMixin, NumpyAudioBac
         windows = windows[:: self.stride_lfr].transpose(0, 2, 1)
         return windows.reshape(num_output_frames, -1)
 
-    def _finalize_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
-        # Per-clip fbank, for the reason given in the torch sibling.
-        audio_values = output.pop("audio_values")
-
-        stacked = []
-        for i, (start, end) in enumerate(audio_ranges):
-            waveform = audio_values[i, ..., start:end].reshape(-1)
-            features = self.compute_features([waveform], spectrogram_config=self.spectrogram_config)[0]
-            stacked.append(self._apply_lfr(features.T))
-
-        frame_counts = [f.shape[0] for f in stacked]
-        max_frames = max(frame_counts)
-        output["audio_features"] = np.stack(
-            [np.pad(f, ((0, max_frames - f.shape[0]), (0, 0))) for f in stacked]
-        )
-        output["audio_features_mask"] = self._get_mask([(0, n) for n in frame_counts], max_frames).astype(np.int64)
-        return output
-
 
 __all__ = ["FunAsrNanoAudioProcessorNumpy"]
