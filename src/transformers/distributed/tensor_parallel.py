@@ -213,7 +213,7 @@ class ColwiseParallel(TensorParallelLayer):
         # input-gradient contributions explicitly.
         if is_local_input and getattr(module, "_hf_quantized_needs_local_tp", False):
             if torch.is_grad_enabled() and x.requires_grad:
-                process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+                process_group = mesh.get_group()
                 x = _AllReduceBackward.apply(x, process_group)
             return (x,) + args[1:], kwargs
 
@@ -317,7 +317,7 @@ class RowwiseParallel(TensorParallelLayer):
             and not output.requires_grad
         )
         if use_local_inference_path:
-            process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+            process_group = mesh.get_group()
             dist.all_reduce(output, group=process_group)
             if (bias := module._parameters.get("bias")) is not None:
                 output = output + (bias.to_local() if isinstance(bias, DTensor) else bias)
@@ -592,7 +592,7 @@ class MoeExpertsParallel(TensorParallelLayer):
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):
         hidden_states, *routing_args = args
-        tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+        tp_group = mesh.get_group()
         if isinstance(hidden_states, DTensor):
             hidden_states = hidden_states.to_local()
         hidden_states = _AllReduceBackward.apply(hidden_states, tp_group)
@@ -641,7 +641,7 @@ class MoeExpertsParallel(TensorParallelLayer):
         if not has_sharded_parameters:
             return output
 
-        process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+        process_group = mesh.get_group()
         return _AllReduceForward.apply(output, process_group)
 
 
@@ -715,7 +715,7 @@ class EpRouterParallel(TensorParallelLayer):
         # Each rank's score gradient covers only its local experts' slots; sum the per-rank partials
         # before the mask (each slot has exactly one owning rank, so the sum is exact).
         if torch.is_grad_enabled() and router_scores.requires_grad:
-            process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+            process_group = mesh.get_group()
             router_scores = _AllReduceBackward.apply(router_scores, process_group)
         non_local_mask = (router_indices // num_local_experts) != ep_rank
         router_scores = router_scores.masked_fill(non_local_mask, 0.0)

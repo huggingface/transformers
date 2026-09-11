@@ -207,7 +207,7 @@ class DistributedMixin:
             # Both may apply: the tensor/expert parallel plan shards across `tp` first, then FSDP2
             # shards every parameter (the `tp`-sharded ones included) across `fsdp`.
             if distributed_config.tp_size > 1:
-                tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
+                tp_mesh = device_mesh["tp"]
                 if isinstance(distributed_config.tp_plan, dict):
                     model.tp_plan = distributed_config.tp_plan
                 if distributed_config.dispatches_tokens:
@@ -243,11 +243,11 @@ class DistributedMixin:
                 expert_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else None
                 model = apply_fully_sharded_data_parallelism(model, trunk_mesh, expert_mesh=expert_mesh)
             elif distributed_config.fsdp_size > 1:
-                fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
+                fsdp_mesh = device_mesh["fsdp"]
                 model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
 
             if distributed_config.pp_size > 1:
-                pp_mesh = device_mesh["pp"] if device_mesh.ndim > 1 else device_mesh
+                pp_mesh = device_mesh["pp"]
                 model = apply_pipeline_parallelism(model, pp_mesh)
         return model
 

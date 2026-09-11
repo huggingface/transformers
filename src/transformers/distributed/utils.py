@@ -163,15 +163,20 @@ def initialize_tensor_parallelism(
             tp_device = torch.device(device_type)
             device_map = device_type or {}
 
-        device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
+        device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,), mesh_dim_names=("tp",))
     else:
-        if device_mesh.ndim > 1:
-            if "tp" not in device_mesh.mesh_dim_names:
-                raise ValueError(
-                    "When using `tp_plan` and n-d `device_mesh`, it must contain a 'tp' dimension. "
-                    "Please provide a valid `device_mesh`."
-                )
-            device_mesh = device_mesh["tp"]
+        if device_mesh.ndim == 1 and device_mesh.mesh_dim_names is None:
+            # Name the dimension of a bare 1-D mesh so that it can be sliced by name like every other mesh here,
+            # reusing its process group.
+            device_mesh = torch.distributed.device_mesh.DeviceMesh.from_group(
+                device_mesh.get_group(), device_mesh.device_type, device_mesh.mesh, mesh_dim_names=("tp",)
+            )
+        elif "tp" not in device_mesh.mesh_dim_names:
+            raise ValueError(
+                "When using `tp_plan` and n-d `device_mesh`, it must contain a 'tp' dimension. "
+                "Please provide a valid `device_mesh`."
+            )
+        device_mesh = device_mesh["tp"]
         device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
 
     return device_map, device_mesh
