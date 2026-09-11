@@ -542,7 +542,8 @@ def chunk_kimi_delta_attention(
     # Main difference to GDN is the per head application of `g` which was broadcasted across heads instead
     g = g.cumsum(dim=-2)
     mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=0)
-    decay_mask = (g.unsqueeze(-2) - g.unsqueeze(-3)).exp().float()
+    strict_mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=1)
+    decay_mask = (g.unsqueeze(-2) - g.unsqueeze(-3)).masked_fill(strict_mask[..., None], float("-inf")).exp().float()
     attn = -(k_beta.unsqueeze(-2) * key.unsqueeze(-3) * decay_mask).sum(dim=-1).masked_fill(mask, 0)
     for i in range(1, chunk_size):
         row = attn[..., i, :i].clone()
@@ -1218,7 +1219,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = False
     _supports_attention_backend = True
 
-    _no_split_modules = ["Glm5NextTextDecoderLayer", "Glm5NextVisionBlock"]
+    _no_split_modules = ["Glm5NextTextDecoderLayer", "Glm5NextVisionBlock", "Glm5NextVisionPatchMerger"]
     _skip_keys_device_placement = ["past_key_values"]
     # TODO: this can be fixed but is limited by
     # 1. assuming the cache name
@@ -1275,9 +1276,6 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Glm5NextTextIndexer):
             init.zeros_(module.index_kpool_compress_ape)
             init.ones_(module.index_kpool_compress_gate)
-        elif isinstance(module, Glm5NextVisionRotaryEmbedding):  # noqa: F821
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
 
 
 # Do not inherit from DSv4 as it messes modular prefixes up for the PreTrainedModel
@@ -2187,7 +2185,7 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
         if len(uniq) & 1:
             uniq.append(uniq[-1])
 
-        return np.array(uniq)
+        return np.array(uniq, dtype=int)
 
     def _preprocess(
         self,

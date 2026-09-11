@@ -269,6 +269,8 @@ class Qwen4ExpVisionConfig(PreTrainedConfig):
 
     model_type = "qwen4_exp_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -284,6 +286,7 @@ class Qwen4ExpVisionConfig(PreTrainedConfig):
     interpolation_mode: str = "bilinear"
     interpolation_align_corners: bool = True
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
     base_model_fsdp_plan = None
 
 

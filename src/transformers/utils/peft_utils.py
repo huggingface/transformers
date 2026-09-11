@@ -105,7 +105,7 @@ def check_peft_version(min_version: str) -> None:
     Checks if the version of PEFT is compatible.
 
     Args:
-        version (`str`):
+        min_version (`str`):
             The version of PEFT to check against.
     """
     if not is_peft_available():

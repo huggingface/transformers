@@ -18,7 +18,6 @@
 # limitations under the License.
 
 import math
-import warnings
 
 import numpy as np
 import torch
@@ -62,6 +61,7 @@ from ..ernie4_5.modeling_ernie4_5 import (
 from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     Qwen2_5OmniAttention,
 )
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLCausalLMOutputWithPast,
@@ -69,7 +69,6 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLModel,
     Qwen2VLModelOutputWithPast,
     Qwen2VLRotaryEmbedding,
-    VisionRotaryEmbedding,
 )
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
@@ -274,6 +273,7 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
 
     model_type = "paddleocr_vl_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
 
     hidden_size: int = 1152
     intermediate_size: int = 4304
@@ -284,6 +284,7 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
     spatial_merge_size: int = 2
     interpolation_mode: str = "bilinear"
     interpolation_align_corners: bool = True
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
@@ -356,7 +357,7 @@ class PaddleOCRProjector(nn.Module):
         return torch.cat(processed_features, dim=0)
 
 
-class PaddleOCRVisionRotaryEmbedding(VisionRotaryEmbedding):
+class PaddleOCRVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 
@@ -412,9 +413,6 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, PaddleOCRVisionEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-        elif isinstance(module, PaddleOCRVisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
 
 
 class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
@@ -493,23 +491,8 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
         self.interpolation_align_corners = config.interpolation_align_corners
         self.interpolation_mode = config.interpolation_mode
 
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        warnings.warn(
-            f"`{self.__class__.__name__}.interpolate_pos_encoding` is deprecated and will be removed in v5.11. "
-            "Use `get_vision_interpolation_indices_and_weights` from `transformers.vision_utils` and apply `self.position_embedding`.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        grid_thw = torch.tensor([[1, height, width]], device=embeddings.device)
-        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
-            grid_thw,
-            num_grid_per_side=self.num_grid_per_side,
-            mode=self.interpolation_mode,
-            align_corners=self.interpolation_align_corners,
-            # the learned position grid is resampled *before* the spatial merge — indices over the unmerged grid
-            spatial_merge_size=1,
-        )
-        return (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1).unsqueeze(0)
+    def interpolate_pos_encoding(self, **super_kwargs):
+        raise NotImplementedError("Not needed - positions are interpolated in `forward`")
 
     def forward(
         self,
@@ -564,10 +547,7 @@ class PaddleOCRVisionEncoderLayer(VideoLlama3VisionEncoderLayer):
 class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
-        embed_dim = config.hidden_size
-        num_heads = config.num_attention_heads
-        head_dim = embed_dim // num_heads
-        self.rotary_pos_emb = PaddleOCRVisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = PaddleOCRVisionRotaryEmbedding(config)
 
     @can_return_tuple
     @auto_docstring
@@ -599,9 +579,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
-        rotary_embeddings = self.rotary_pos_emb(position_ids)
-        rotary_embeddings = rotary_embeddings.repeat(1, 2)
-        position_embeddings = (rotary_embeddings.cos(), rotary_embeddings.sin())
+        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
 
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
@@ -854,7 +832,7 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
                 "content": [
                     {
                         "type": "image",
-                        "image": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo.jpg",
+                        "image": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png",
                     },
                     {"type": "text", "text": "OCR:"},
                 ],

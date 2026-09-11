@@ -70,12 +70,10 @@ class VibeVoiceRMSNorm(Qwen2RMSNorm):
 
 
 class VibeVoiceDiffusionHeadSinusoidalEmbedding(nn.Module):
-    freq: torch.Tensor  # fix linting for `register_buffer`
-
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.register_buffer("freq", self.compute_default_freq(config), persistent=False)
+        self.freq = nn.Buffer(self.compute_default_freq(config), persistent=False)
 
     @staticmethod
     def compute_default_freq(config):

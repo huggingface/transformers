@@ -39,6 +39,7 @@ class Kimi_K25VisionConfig(PreTrainedConfig):
     """
 
     model_type = "kimi_k25_vision"
+    default_rope_type = "axial"
 
     patch_size: int = 14
     pos_emb_height: int = 64

@@ -276,11 +276,6 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # TODO: check if this works again for PyTorch 2.x.y
-    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(
         reason="Swin always passes a non-null combined attention mask (relative position bias + optional "
         "cyclic-shift mask) to the attention interface. Flash attention does not support non-null "

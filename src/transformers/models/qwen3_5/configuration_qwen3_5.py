@@ -133,6 +133,8 @@ class Qwen3_5VisionConfig(PreTrainedConfig):
 
     model_type = "qwen3_5_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -148,6 +150,7 @@ class Qwen3_5VisionConfig(PreTrainedConfig):
     interpolation_mode: str = "bilinear"
     interpolation_align_corners: bool = True
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
