@@ -135,6 +135,33 @@ class TorchAoConfigTest(unittest.TestCase):
 
         self.assertFalse(quantizer.param_needs_quantization(model, "experts.gate_up_proj"))
 
+    def test_param_needs_quantization_without_config_targets_parameter(self):
+        import torchao.quantization as torchao_quantization
+
+        class DummyModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = torch.nn.Linear(16, 32)
+
+        if not hasattr(torchao_quantization, "config_targets_parameter"):
+            self.skipTest("torchao version does not expose config_targets_parameter")
+
+        original = torchao_quantization.config_targets_parameter
+        delattr(torchao_quantization, "config_targets_parameter")
+        try:
+            quantizer = TorchAoHfQuantizer(
+                TorchAoConfig(Int4WeightOnlyConfig(int4_packing_format="tile_packed_to_4d", group_size=16)),
+                pre_quantized=False,
+            )
+            quantizer.modules_to_not_convert = []
+            model = DummyModel()
+
+            # Should not raise ImportError when helper is absent on older torchao versions.
+            self.assertTrue(quantizer.param_needs_quantization(model, "linear.weight"))
+            self.assertFalse(quantizer.param_needs_quantization(model, "linear.bias"))
+        finally:
+            setattr(torchao_quantization, "config_targets_parameter", original)
+
 
 @require_torchao
 @slow

@@ -1605,7 +1605,8 @@ def convert_and_load_state_dict_in_model(
 
     """
     base_model_prefix = model.base_model_prefix
-    device_map = load_config.device_map or {"": "cpu"}
+    user_provided_device_map = load_config.device_map
+    device_map = user_provided_device_map or {"": "cpu"}
     hf_quantizer = load_config.hf_quantizer
     dtype = load_config.dtype
     disk_offload_folder = load_config.disk_offload_folder
@@ -1766,12 +1767,18 @@ def convert_and_load_state_dict_in_model(
     try:
         for first_param_name, mapping in tqdm(param_name_to_load.items(), desc="Loading weights"):
             try:
+                conversion_target_device = (
+                    get_device(device_map, first_param_name, valid_torch_device=True)
+                    if user_provided_device_map is not None
+                    else None
+                )
+
                 realized_value = mapping.convert(
                     first_param_name,
                     model=model,
                     config=model.config,
                     hf_quantizer=hf_quantizer,
-                    target_device=get_device(device_map, first_param_name, valid_torch_device=True),
+                    target_device=conversion_target_device,
                     loading_info=loading_info,
                 )
                 for target_name, param in realized_value.items():

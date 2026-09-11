@@ -138,10 +138,15 @@ class TorchAoHfQuantizer(HfQuantizer):
             return True
 
         # Legacy FqnToConfig path keeps exact match precedence semantics.
-        from torchao.quantization import FqnToConfig, config_targets_parameter, fqn_matches_fqn_config
+        from torchao.quantization import FqnToConfig, fqn_matches_fqn_config
+
+        try:
+            from torchao.quantization import config_targets_parameter
+        except ImportError:
+            config_targets_parameter = None
 
         quant_type = self.quantization_config.quant_type
-        if not isinstance(quant_type, FqnToConfig):
+        if not isinstance(quant_type, FqnToConfig) and config_targets_parameter is not None:
             module_fqn, _, _ = param_name.rpartition(".")
             return config_targets_parameter(module, module_fqn, tensor_name, quant_type)
 
@@ -172,7 +177,10 @@ class TorchAoHfQuantizer(HfQuantizer):
         if not needs_quantization or self.pre_quantized:
             return target_device
 
-        from torchao.quantization import config_prefers_cpu_checkpoint_staging
+        try:
+            from torchao.quantization import config_prefers_cpu_checkpoint_staging
+        except ImportError:
+            return target_device
 
         config = self.quantization_config.get_apply_tensor_subclass()
         if config_prefers_cpu_checkpoint_staging(config):
