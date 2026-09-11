@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...processing_utils import AudioKwargs
@@ -45,6 +44,9 @@ class WhisperAudioProcessorMixin:
             "mel_scale": "slaney",
             "norm": "slaney",
             "computation_dtype": "float64",
+            # the legacy extractor does `mel_filters @ magnitudes`; `F.linear` (the default)
+            # differs from it in the last ulp
+            "matmul_order": "filters_first_matmul",
         },
         "log_mode": "log10",
         "skip_last_frame": True,
@@ -59,9 +61,7 @@ class WhisperAudioProcessorMixin:
 
 
 class WhisperAudioProcessor(WhisperAudioProcessorMixin, TorchAudioBackend):
-    def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
-        mel_filters = self.mel_filters.to(device=features.device)
-        return torch.clamp(torch.matmul(mel_filters.T, features), min=spectrogram_config.mel_floor)
+    pass
 
 
 __all__ = ["WhisperAudioProcessor"]

@@ -96,6 +96,8 @@ class ClapAudioProcessorMixin:
         return super().pad(audio, *args, **kwargs)
 
     def _stack_waveforms(self, audio):
+        # CLAP's `compute_features` consumes the per-clip list directly, so the waveforms are
+        # deliberately left unstacked here.
         return audio
 
     def _pad_waveform(self, audio, max_length):
@@ -181,12 +183,6 @@ class ClapAudioProcessor(ClapAudioProcessorMixin, TorchAudioBackend):
         stft_out = super()._stft_native(audio, window, frame_length, hop_length, n_fft, stft_cfg)
         # round-trip through complex64 like the legacy FE, so float64 magnitudes match bit-exactly
         return stft_out.to(torch.complex64).to(torch.complex128)
-
-    def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
-        # cast mel_filters to the features' dtype, matching the numpy sibling's float64 path
-        mel_filters = self.mel_filters.to(device=features.device, dtype=features.dtype)
-        mel_spec = torch.nn.functional.linear(features.transpose(-2, -1), mel_filters.T).transpose(-2, -1)
-        return torch.clamp(mel_spec, min=spectrogram_config.mel_floor)
 
     def _bilinear_shrink(self, mel, chunk_frames):
         # legacy torch dtype path: round-trip through float32 (numpy sibling stays float64)

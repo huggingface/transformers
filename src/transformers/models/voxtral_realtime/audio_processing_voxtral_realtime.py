@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_utils import _clamp_min
@@ -41,6 +40,9 @@ class VoxtralRealtimeAudioProcessorMixin:
             "mel_scale": "slaney",
             "norm": "slaney",
             "computation_dtype": "float64",
+            # the legacy extractor does `mel_filters @ magnitudes`; `F.linear` (the default)
+            # differs from it in the last ulp
+            "matmul_order": "filters_first_matmul",
         },
         "log_mode": "log10",
         "skip_last_frame": True,
@@ -62,9 +64,7 @@ class VoxtralRealtimeAudioProcessorMixin:
 
 
 class VoxtralRealtimeAudioProcessor(VoxtralRealtimeAudioProcessorMixin, TorchAudioBackend):
-    def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
-        mel_filters = self.mel_filters.to(device=features.device)
-        return _clamp_min(torch.matmul(mel_filters.T, features), spectrogram_config.mel_floor)
+    pass
 
 
 __all__ = ["VoxtralRealtimeAudioProcessor"]

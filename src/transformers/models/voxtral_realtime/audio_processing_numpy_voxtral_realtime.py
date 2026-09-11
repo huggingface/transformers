@@ -12,17 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_utils import _clamp_min
 from .audio_processing_voxtral_realtime import VoxtralRealtimeAudioProcessorMixin
 
 
 class VoxtralRealtimeAudioProcessorNumpy(VoxtralRealtimeAudioProcessorMixin, NumpyAudioBackend):
-    def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
-        mel_filters = self.mel_filters.astype(features.dtype, copy=False)
-        return _clamp_min(np.matmul(mel_filters.T, features), spectrogram_config.mel_floor)
+    pass
 
 
 __all__ = ["VoxtralRealtimeAudioProcessorNumpy"]

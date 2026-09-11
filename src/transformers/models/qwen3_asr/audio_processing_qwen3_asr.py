@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_processing_utils import BaseAudioProcessor
@@ -47,8 +46,13 @@ class Qwen3ASRAudioProcessorMixin:
             "mel_scale": "slaney",
             "norm": "slaney",
             "computation_dtype": "float64",
+            # the legacy extractor does `mel_filters @ magnitudes`; `F.linear` (the default)
+            # differs from it in the last ulp
+            "matmul_order": "filters_first_matmul",
         },
         "log_mode": "log10",
+        # the legacy extractor slices the STFT (`stft[..., :-1]`) before the mel projection
+        "skip_last_frame": True,
         "clip_max_offset": 8.0,
         "post_log_shift": 4.0,
         "post_log_scale": 0.25,
@@ -61,10 +65,6 @@ class Qwen3ASRAudioProcessorMixin:
     valid_kwargs = Qwen3ASRAudioProcessorKwargs
     # `_finalize_output` reads the merged `n_window`, so it is a genuine per-call knob.
     per_call_kwargs = BaseAudioProcessor.per_call_kwargs | {"n_window"}
-
-    def _compute_spectrum(self, audio, *, spectrogram_config, **kwargs):
-        features = super()._compute_spectrum(audio, spectrogram_config=spectrogram_config, **kwargs)
-        return features[..., :-1]
 
     def _padded_frame_count(self, padded_length, spectrogram_config) -> int:
         # The legacy FE strides the sample-level mask by hop_length and trims the tail column
@@ -92,9 +92,7 @@ class Qwen3ASRAudioProcessorMixin:
 
 
 class Qwen3ASRAudioProcessor(Qwen3ASRAudioProcessorMixin, TorchAudioBackend):
-    def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
-        mel_filters = self.mel_filters.to(device=features.device)
-        return torch.clamp(torch.matmul(mel_filters.T, features), min=spectrogram_config.mel_floor)
+    pass
 
 
 __all__ = ["Qwen3ASRAudioProcessor"]

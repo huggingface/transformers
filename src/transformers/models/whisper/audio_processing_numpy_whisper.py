@@ -12,15 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
 from .audio_processing_whisper import WhisperAudioProcessorMixin
 
 
 class WhisperAudioProcessorNumpy(WhisperAudioProcessorMixin, NumpyAudioBackend):
-    def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
-        return np.maximum(spectrogram_config.mel_floor, np.matmul(self.mel_filters.T, features))
+    pass
 
 
 __all__ = ["WhisperAudioProcessorNumpy"]

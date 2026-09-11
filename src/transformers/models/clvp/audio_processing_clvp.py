@@ -64,13 +64,6 @@ class ClvpAudioProcessor(ClvpAudioProcessorMixin, TorchAudioBackend):
         # float64 power spectrum is bit-identical (mirrors the numpy sibling's complex64 cast).
         return stft_out.to(torch.complex64).to(torch.complex128).abs() ** power
 
-    def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
-        # Cast mel_filters to the features' dtype so the float64 spectrogram path matches the
-        # numpy sibling, which casts via `mel_filters.astype(features.dtype, copy=False)`.
-        mel_filters = self.mel_filters.to(device=features.device, dtype=features.dtype)
-        mel_spec = torch.nn.functional.linear(features.transpose(-2, -1), mel_filters.T).transpose(-2, -1)
-        return torch.clamp(mel_spec, min=spectrogram_config.mel_floor)
-
     def _log_compress(self, features, *, spectrogram_config, **kwargs):
         # Compute log and mel_norms division in float64 before casting to float32
         # to match the legacy feature extractor's precision (same recipe as the numpy sibling).

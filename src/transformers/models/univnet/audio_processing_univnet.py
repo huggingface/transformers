@@ -93,9 +93,12 @@ class UnivNetAudioProcessorMixin:
         self.num_max_samples = self.max_length_s * self.sampling_rate
 
     def _padded_frame_count(self, padded_length, spectrogram_config) -> int:
+        # UnivNet's frame count is exactly `samples // hop_length` — not the base's window
+        # geometry. Deleting this override changes the mask width.
         return int(padded_length // spectrogram_config.stft_config.hop_length)
 
     def _valid_frame_counts(self, audio_lengths, spectrogram_config):
+        # Same geometry as `_padded_frame_count`, per utterance.
         return audio_lengths // spectrogram_config.stft_config.hop_length
 
     def _waveform_to_spectrum(self, audio, *, spectrogram_config, **kwargs):
