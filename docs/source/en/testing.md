@@ -314,7 +314,7 @@ Mixin tests use tiny configs with random weights to verify model behavior quickl
 
 ### Writing integration tests
 
-Place integration tests in a separate test class, mark them with `@slow`, and mix in `MemoryCleanupMixin`. Each test downloads real weights, runs inference, and checks outputs against expected values.
+Place integration tests in a separate test class, mark them with `@slow`, and mix in `MemoryCleanupMixin`. Each test downloads real weights, runs inference, and checks outputs against expected values. The mixin frees the memory each test takes and runs the test methods under `torch.no_grad()` — see [Releasing memory between tests](#releasing-memory-between-tests) for what it does and how to opt out.
 
 ```py
 import torch
@@ -350,7 +350,8 @@ Classes that train or call `backward()` set `cleanup_no_grad = False`. A class t
 
 Attributes assigned in the class body are kept, and everything added later is dropped. If you override `setUp`, call `super().setUp()`: the mixin snapshots the instance attributes there and errors out without it.
 
-`MemoryCleanupTestCase` combines the mixin with `TestCasePlus`, for tests that also want auto-removed temporary dirs.
+> [!TIP]
+> `MemoryCleanupTestCase` combines the mixin with `TestCasePlus`, for tests that also want auto-removed temporary dirs.
 
 To find a leaking test, set `TRANSFORMERS_TEST_MEMORY_LEAK_MIB` to a budget in MiB; any test that leaves more than that allocated on the device is reported with its peak usage. Add `TRANSFORMERS_TEST_MEMORY_LEAK_MODE=error` to fail instead of warn. The check is off by default and you should turn it on when looking for leftovers. The mixin's usual teardown already runs `gc.collect`, which can clear the allocation you'd want to inspect while reproducing a leak.
 

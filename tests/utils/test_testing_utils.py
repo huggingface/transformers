@@ -313,6 +313,20 @@ class MemoryCleanupMixinTest(unittest.TestCase):
         # `setUp` runs after the snapshot, so what it loads is dropped too.
         self.assertNotIn("fixture", vars(seen["case"]))
 
+    def test_the_ready_made_base_keeps_the_test_case_plus_features(self):
+        seen = {}
+
+        class Inner(MemoryCleanupTestCase):
+            def test_uses_a_tmp_dir(self):
+                seen["tmp_dir"] = self.get_auto_remove_tmp_dir()
+                seen["case"] = self
+                self.payload = Payload()
+
+        result = _run_inner_test_class(Inner)
+        self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+        self.assertFalse(os.path.exists(seen["tmp_dir"]), "TestCasePlus no longer removes its tmp dirs")
+        self.assertNotIn("payload", vars(seen["case"]))
+
     def test_a_setup_that_skips_super_is_an_error(self):
         class Inner(MemoryCleanupMixin, unittest.TestCase):
             def setUp(self):  # deliberately does not call super()
@@ -460,19 +474,3 @@ class MemoryLeakCheckTest(unittest.TestCase):
         with patch.dict("os.environ", env):
             with self.assertRaises(ValueError):
                 test_memory_cleanup_mixin._memory_leak_settings()
-
-
-class MemoryCleanupTestCaseTest(unittest.TestCase):
-    def test_it_keeps_the_test_case_plus_features(self):
-        seen = {}
-
-        class Inner(MemoryCleanupTestCase):
-            def test_uses_a_tmp_dir(self):
-                seen["tmp_dir"] = self.get_auto_remove_tmp_dir()
-                seen["case"] = self
-                self.payload = Payload()
-
-        result = _run_inner_test_class(Inner)
-        self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
-        self.assertFalse(os.path.exists(seen["tmp_dir"]), "TestCasePlus no longer removes its tmp dirs")
-        self.assertNotIn("payload", vars(seen["case"]))
