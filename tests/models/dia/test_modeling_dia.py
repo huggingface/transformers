@@ -49,6 +49,8 @@ if is_torch_available():
         DiaForConditionalGeneration,
         DiaModel,
         DiaProcessor,
+        LogitsProcessor,
+        LogitsProcessorList,
         PreTrainedConfig,
         PreTrainedModel,
     )
@@ -513,6 +515,43 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     @pytest.mark.generate
     def test_prepare_inputs_for_generation_kwargs_forwards(self):
         super().test_prepare_inputs_for_generation_kwargs_forwards(encoder_outputs=torch.randn(2, 2, 32))
+
+    def test_generate_with_classifier_free_guidance(self):
+        config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        model = DiaForConditionalGeneration(config).to(torch_device).eval()
+        out = model.generate(**inputs_dict, max_new_tokens=3, do_sample=False, guidance_scale=3.0)
+        batch_size = inputs_dict["input_ids"].shape[0]
+        # (batch, seq_len, channels): the unconditional half of the CFG batch is not returned
+        self.assertEqual(out.shape[0], batch_size)
+        self.assertEqual(out.shape[-1], config.decoder_config.num_channels)
+
+    def test_num_return_sequences_raises(self):
+        config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        model = DiaForConditionalGeneration(config).to(torch_device).eval()
+        with self.assertRaisesRegex(ValueError, "num_return_sequences"):
+            model.generate(**inputs_dict, max_new_tokens=2, do_sample=True, num_return_sequences=2)
+
+    def test_no_loop_state_on_the_model(self):
+        config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        model = DiaForConditionalGeneration(config).to(torch_device).eval()
+        model.generate(**inputs_dict, max_new_tokens=2, do_sample=False, guidance_scale=3.0)
+        self.assertFalse(hasattr(model, "_uses_cfg"))
+
+    def test_user_logits_processor_is_applied(self):
+        config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        model = DiaForConditionalGeneration(config).to(torch_device).eval()
+        calls = []
+
+        class Recording(LogitsProcessor):
+            def __call__(self, input_ids, scores):
+                calls.append(tuple(input_ids.shape))
+                return scores
+
+        model.generate(
+            **inputs_dict, max_new_tokens=2, do_sample=False, logits_processor=LogitsProcessorList([Recording()])
+        )
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0][0], inputs_dict["input_ids"].shape[0] * config.decoder_config.num_channels)
 
     @unittest.skip(reason="Indirectly checked in Dia through the generate methods.")
     def test_hidden_states_output(self):
