@@ -137,6 +137,35 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
     def test_small_model_pt_fp16(self):
         self.test_small_model_pt(dtype="float16")
 
+    @require_torch
+    def test_hypothesis_template_validation(self):
+        image_classifier = pipeline(model="hf-internal-testing/tiny-random-clip-zero-shot-image-classification")
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+
+        # Valid custom template
+        output = image_classifier(image, candidate_labels=["a", "b"], hypothesis_template="This is a photo of {}.")
+        self.assertEqual(len(output), 2)
+
+        # Invalid templates should raise ValueError
+        invalid_templates = [
+            "No placeholder",
+            "{:>10}",
+            "{:>9999999999}",
+            "{0}",
+            "{!r}",
+            "{!s}",
+            "{label}",
+            "{}{}",
+            "This is {} and {}",
+        ]
+        for template in invalid_templates:
+            with self.assertRaises(ValueError):
+                image_classifier(image, candidate_labels=["a", "b"], hypothesis_template=template)
+
+        # None should raise AttributeError
+        with self.assertRaises(AttributeError):
+            image_classifier(image, candidate_labels=["a", "b"], hypothesis_template=None)
+
     @slow
     @require_torch
     def test_large_model_pt(self):

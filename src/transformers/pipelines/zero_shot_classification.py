@@ -1,4 +1,5 @@
 import inspect
+import string
 
 import numpy as np
 
@@ -8,6 +9,36 @@ from .base import ArgumentHandler, ChunkPipeline, build_pipeline_init_args
 
 
 logger = logging.get_logger(__name__)
+
+
+def _validate_hypothesis_template(hypothesis_template: str) -> None:
+    """
+    Validates that the hypothesis template contains exactly one simple {} placeholder.
+    """
+    if not isinstance(hypothesis_template, str):
+        raise AttributeError(f"hypothesis_template must be a string, got {type(hypothesis_template).__name__}")
+
+    formatter = string.Formatter()
+    try:
+        fields = [f for f in formatter.parse(hypothesis_template) if f[1] is not None]
+    except ValueError:
+        raise ValueError(
+            f'The provided hypothesis_template "{hypothesis_template}" was not able to be formatted with the target labels. '
+            "Make sure the passed template includes formatting syntax such as {} where the label should go."
+        )
+
+    if len(fields) != 1:
+        raise ValueError(
+            f'The provided hypothesis_template "{hypothesis_template}" was not able to be formatted with the target labels. '
+            "Make sure the passed template includes formatting syntax such as {} where the label should go."
+        )
+
+    _, field_name, format_spec, conversion = fields[0]
+    if field_name != "" or format_spec != "" or conversion is not None:
+        raise ValueError(
+            f'The provided hypothesis_template "{hypothesis_template}" was not able to be formatted with the target labels. '
+            "Make sure the passed template includes formatting syntax such as {} where the label should go."
+        )
 
 
 class ZeroShotClassificationArgumentHandler(ArgumentHandler):
@@ -24,18 +55,16 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
     def __call__(self, sequences, labels, hypothesis_template):
         if len(labels) == 0 or len(sequences) == 0:
             raise ValueError("You must include at least one label and at least one sequence.")
-        if hypothesis_template.format(labels[0]) == hypothesis_template:
-            raise ValueError(
-                f'The provided hypothesis_template "{hypothesis_template}" was not able to be formatted with the target labels. '
-                "Make sure the passed template includes formatting syntax such as {} where the label should go."
-            )
+
+        _validate_hypothesis_template(hypothesis_template)
+        labels = self._parse_labels(labels)
 
         if isinstance(sequences, str):
             sequences = [sequences]
 
         sequence_pairs = []
         for sequence in sequences:
-            sequence_pairs.extend([[sequence, hypothesis_template.format(label)] for label in labels])
+            sequence_pairs.extend([[sequence, hypothesis_template.replace("{}", label)] for label in labels])
 
         return sequence_pairs, sequences
 
