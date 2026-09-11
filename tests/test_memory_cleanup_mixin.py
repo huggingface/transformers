@@ -49,13 +49,13 @@ _MEMORY_CLEANUP_ATTRS = frozenset(
 
 def with_grad(method):
     """Run this test method with autograd on, whatever the class default is."""
-    method._memory_cleanup_no_grad = False
+    method._run_under_no_grad = False
     return method
 
 
 def with_no_grad(method):
     """Run this test method under `torch.no_grad()`, whatever the class default is."""
-    method._memory_cleanup_no_grad = True
+    method._run_under_no_grad = True
     return method
 
 
@@ -84,7 +84,7 @@ class MemoryCleanupMixin:
     - Deletes attributes the test added to `self` and to the class, `@cached_property` caches included: pytest keeps
       test instances alive for the whole session, so `gc.collect()` cannot free what they still reference.
     - Runs test methods under `torch.no_grad()`, since a forward pass otherwise retains activations. Set
-      `cleanup_no_grad = False` on a class that trains, or use [`with_grad`] / [`with_no_grad`] per method.
+      `run_under_no_grad = False` on a class that trains, or use [`with_grad`] / [`with_no_grad`] per method.
 
     Put it first in the bases. `MemoryCleanupTestCase` pairs it with `TestCasePlus`.
 
@@ -103,17 +103,18 @@ class MemoryCleanupMixin:
     Known leak, still unfixed: compiling with `cache_implementation="static"` leaves memory in the cache.
     """
 
-    cleanup_no_grad: bool = True
+    run_under_no_grad: bool = True
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        # Snapshotting at class-creation time keeps the class body (and only it), so `setUpClass` needs no
-        # particular ordering -- whatever it assigns is later dropped.
+        # Taking the snapshot at class-creation time records the class body and nothing else, so whatever
+        # `setUpClass` assigns later is always dropped, whatever order it calls `super()` in.
         snapshot = set(vars(cls))
         cls._memory_cleanup_class_attrs = snapshot
 
     @classmethod
     def tearDownClass(cls):
+        # The parent teardown runs first on purpose: it may still need the attributes we are about to drop.
         try:
             super().tearDownClass()
         finally:
@@ -135,6 +136,8 @@ class MemoryCleanupMixin:
         try:
             super().tearDown()
         finally:
+            # No missing-snapshot check here: `unittest` skips `tearDown` when `setUp` raises, so the only way
+            # to arrive without a snapshot is the error `_callTestMethod` already raised. Just skip the drop.
             known = getattr(self, "_memory_cleanup_instance_attrs", None)
             if known is not None:
                 _drop_new_attributes(self, known)
@@ -149,7 +152,7 @@ class MemoryCleanupMixin:
             )
         # Private hook, but the only seam wrapping the test method without `setUp`, where a loaded model must keep
         # its `requires_grad`. `MemoryCleanupUnderPytestTest` fails if a runner stops routing through it.
-        if getattr(method, "_memory_cleanup_no_grad", self.cleanup_no_grad) and is_torch_available():
+        if getattr(method, "_run_under_no_grad", self.run_under_no_grad) and is_torch_available():
             with torch.no_grad():
                 return super()._callTestMethod(method)
         return super()._callTestMethod(method)
@@ -163,8 +166,10 @@ class MemoryCleanupMixin:
             return
         rss_delta_mib = (_process_rss() - getattr(self, "_memory_cleanup_rss_baseline", 0)) / 1024**2
         peak_mib = backend_max_memory_allocated(torch_device) / 1024**2 if is_torch_available() else 0
+        baseline_mib = getattr(self, "_memory_cleanup_baseline", 0) / 1024**2
         message = (
-            f"{self.id()} left {leaked_mib:.1f} MiB allocated on {torch_device} after teardown "
+            f"{self.id()} left {leaked_mib:+.1f} MiB allocated on {torch_device} after teardown: "
+            f"{baseline_mib:.1f} MiB before the test, {baseline_mib + leaked_mib:.1f} MiB after "
             f"(threshold {threshold_mib:.1f} MiB, peak during the test {peak_mib:.1f} MiB, "
             f"CPU RSS {rss_delta_mib:+.1f} MiB). "
             "Something still references a device tensor: a model on `self`/the class, captured by a closure, or "

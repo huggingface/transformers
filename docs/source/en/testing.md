@@ -346,7 +346,7 @@ Integration tests load real checkpoints, so a test that keeps a reference to its
 - Deletes attributes the test added on `self` (including `@cached_property` caches) and on the class (for example `cls.model = ...` in `setUpClass`). Pytest keeps test instances alive for the session, so `gc.collect()` cannot free objects those references still hold.
 - Runs test methods under `torch.no_grad()` so a forward pass does not retain activations.
 
-Classes that train or call `backward()` set `cleanup_no_grad = False`. A class that mixes both puts `@with_grad` or `@with_no_grad` on the individual test methods instead.
+Classes that train or call `backward()` set `run_under_no_grad = False`. A class that mixes both puts `@with_grad` or `@with_no_grad` on the individual test methods instead.
 
 Attributes assigned in the class body are kept, and everything added later is dropped. If you override `setUp`, call `super().setUp()`: the mixin snapshots the instance attributes there and errors out without it.
 

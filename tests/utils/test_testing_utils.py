@@ -342,6 +342,17 @@ class MemoryCleanupMixinTest(unittest.TestCase):
 
 @require_torch
 class MemoryCleanupNoGradTest(unittest.TestCase):
+    """`run_under_no_grad` and the per-method decorators pick the grad mode a test body runs in."""
+
+    def setUp(self):
+        # These tests only mean something if autograd is on to begin with; nothing guarantees that about the
+        # surrounding run, so pin it rather than assume it.
+        self._grad_was_enabled = torch.is_grad_enabled()
+        torch.set_grad_enabled(True)
+
+    def tearDown(self):
+        torch.set_grad_enabled(self._grad_was_enabled)
+
     def test_test_methods_run_under_no_grad_by_default(self):
         seen = {}
 
@@ -355,11 +366,11 @@ class MemoryCleanupNoGradTest(unittest.TestCase):
         # The surrounding grad mode is restored.
         self.assertTrue(torch.is_grad_enabled())
 
-    def test_cleanup_no_grad_false_leaves_autograd_on(self):
+    def test_run_under_no_grad_false_leaves_autograd_on(self):
         seen = {}
 
         class Inner(MemoryCleanupMixin, unittest.TestCase):
-            cleanup_no_grad = False
+            run_under_no_grad = False
 
             def test_grad_is_on(self):
                 seen["grad_enabled"] = torch.is_grad_enabled()
@@ -377,7 +388,7 @@ class MemoryCleanupNoGradTest(unittest.TestCase):
                 seen["on_a_no_grad_class"] = torch.is_grad_enabled()
 
         class InnerTraining(MemoryCleanupMixin, unittest.TestCase):
-            cleanup_no_grad = False
+            run_under_no_grad = False
 
             @with_no_grad
             def test_opts_out_of_grad(self):
@@ -401,7 +412,7 @@ class MemoryCleanupUnderPytestTest(MemoryCleanupMixin, unittest.TestCase):
     def test_the_private_hook_is_still_there(self):
         self.assertTrue(
             hasattr(unittest.TestCase, "_callTestMethod"),
-            "`unittest.TestCase._callTestMethod` is gone; `MemoryCleanupMixin.cleanup_no_grad` needs a new seam",
+            "`unittest.TestCase._callTestMethod` is gone; `MemoryCleanupMixin.run_under_no_grad` needs a new seam",
         )
 
     def test_attributes_are_dropped_under_the_real_runner(self):
@@ -411,7 +422,7 @@ class MemoryCleanupUnderPytestTest(MemoryCleanupMixin, unittest.TestCase):
 
 
 class MemoryLeakCheckTest(unittest.TestCase):
-    """Opt-in: unset means never measured, `warn` reports, `error` fails."""
+    """Opt-in leak reporting: unset means never measured, `warn` reports, `error` fails."""
 
     MIB = 1024**2
 
