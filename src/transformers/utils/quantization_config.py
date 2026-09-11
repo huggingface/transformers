@@ -2055,6 +2055,7 @@ class GemmaQuantizationConfig(QuantizationConfigMixin):
         self,
         num_bits: int = 4,
         quantize_embeddings: bool = False,
+        quantize_experts: bool = False,
         module_quant_configs: dict[str, dict] | None = None,
         modules_to_not_convert: list[str] | None = None,
         **kwargs,
@@ -2062,6 +2063,7 @@ class GemmaQuantizationConfig(QuantizationConfigMixin):
         self.quant_method = QuantizationMethod.GEMMA
         self.num_bits = num_bits
         self.quantize_embeddings = quantize_embeddings
+        self.quantize_experts = quantize_experts
         self.module_quant_configs = module_quant_configs
         self.modules_to_not_convert = modules_to_not_convert
 
