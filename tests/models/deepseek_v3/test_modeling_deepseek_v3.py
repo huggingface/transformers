@@ -313,21 +313,25 @@ class DeepseekV3ModelTest(
             "Today I am in Paris and",
         ]
 
-        for padding_side in ["left", "right"]:
-            tokenizer.padding_side = padding_side
-            tokenizer.pad_token = tokenizer.eos_token
+        try:
+            for padding_side in ["left", "right"]:
+                tokenizer.padding_side = padding_side
+                tokenizer.pad_token = tokenizer.eos_token
 
-            inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
+                inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
 
-            res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-            res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+                res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+                res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
 
-            with self.subTest(f"{padding_side}"):
-                torch.testing.assert_close(
-                    res_eager,
-                    res_sdpa,
-                    msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
-                )
+                with self.subTest(f"{padding_side}"):
+                    torch.testing.assert_close(
+                        res_eager,
+                        res_sdpa,
+                        msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
+                    )
+        finally:
+            del model_eager, model_sdpa
+            cleanup(torch_device, gc_collect=True)
 
     @require_torch_accelerator
     def test_flex_attention_with_grads(self):
@@ -375,8 +379,7 @@ class DeepseekV3ModelTest(
 class DeepseekV3IntegrationTest(unittest.TestCase):
     def tearDown(self):
         # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
-        # TODO: switch to MemoryCleanupMixin (gc_collect=True) to prevent OOM cascade from generator ref leak
-        cleanup(torch_device, gc_collect=False)
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_torch_accelerator
@@ -421,3 +424,6 @@ class DeepseekV3IntegrationTest(unittest.TestCase):
         )
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
+
+        del model
+        cleanup(torch_device, gc_collect=True)
