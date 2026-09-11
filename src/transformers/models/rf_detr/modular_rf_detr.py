@@ -624,8 +624,7 @@ class RfDetrDinov2Embeddings(Dinov2Embeddings):
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
-        target_dtype = self.patch_embeddings.projection.weight.dtype
-        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+        embeddings = self.patch_embeddings(pixel_values)
 
         if bool_masked_pos is not None and self.use_mask_token:
             embeddings = torch.where(

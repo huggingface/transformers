@@ -667,6 +667,7 @@ class EomtPatchEmbeddings(nn.Module):
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
                 f" Expected {self.num_channels} but got {num_channels}."
             )
+        pixel_values = pixel_values.to(self.projection.weight.dtype)
         return self.projection(pixel_values).flatten(2).transpose(1, 2)
 
 
@@ -691,8 +692,7 @@ class EomtEmbeddings(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, _, _, _ = pixel_values.shape
-        target_dtype = self.patch_embeddings.projection.weight.dtype
-        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+        embeddings = self.patch_embeddings(pixel_values)
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         register_tokens = self.register_tokens.expand(batch_size, -1, -1)
@@ -809,6 +809,7 @@ class EomtMLP(nn.Module):
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
+
         return hidden_states
 
 
@@ -821,7 +822,7 @@ class EomtSwiGLUFFN(nn.Module):
         self.gate_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
         self.up_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
         self.down_proj = nn.Linear(hidden_features, config.hidden_size, bias=True)
-        self.act_fn = nn.functional.silu
+        self.act_fn = ACT2FN["silu"]
 
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
@@ -871,12 +872,14 @@ class EomtLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
+        # Self Attention
         residual = hidden_states
         hidden_states = self.norm1(hidden_states)
         hidden_states, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
         hidden_states = self.layer_scale1(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual
 
+        # Fully Connected
         residual = hidden_states
         hidden_states = self.norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)

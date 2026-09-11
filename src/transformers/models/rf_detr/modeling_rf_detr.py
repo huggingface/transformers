@@ -68,6 +68,7 @@ class RfDetrDinov2PatchEmbeddings(nn.Module):
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
                 f" Expected {self.num_channels} but got {num_channels}."
             )
+        pixel_values = pixel_values.to(self.projection.weight.dtype)
         return self.projection(pixel_values).flatten(2).transpose(1, 2)
 
 
@@ -131,8 +132,7 @@ class RfDetrDinov2Embeddings(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
-        target_dtype = self.patch_embeddings.projection.weight.dtype
-        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+        embeddings = self.patch_embeddings(pixel_values)
 
         if bool_masked_pos is not None and self.use_mask_token:
             embeddings = torch.where(
@@ -203,12 +203,12 @@ def eager_attention_forward(
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
+    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    # softmax in the input dtype as in the reference implementation; ViT upcasts to float32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
@@ -289,6 +289,7 @@ class RfDetrDinov2MLP(nn.Module):
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
+
         return hidden_states
 
 
@@ -301,7 +302,7 @@ class RfDetrDinov2SwiGLUFFN(nn.Module):
         self.gate_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
         self.up_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
         self.down_proj = nn.Linear(hidden_features, config.hidden_size, bias=True)
-        self.act_fn = nn.functional.silu
+        self.act_fn = ACT2FN["silu"]
 
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))

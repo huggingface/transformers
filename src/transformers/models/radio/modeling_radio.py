@@ -134,6 +134,7 @@ class RadioMLP(nn.Module):
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
+
         return hidden_states
 
 
@@ -159,12 +160,12 @@ def eager_attention_forward(
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
+    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    # softmax in the input dtype as in the reference implementation; ViT upcasts to float32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
@@ -232,7 +233,7 @@ class RadioSwiGLUFFN(nn.Module):
         self.gate_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
         self.up_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
         self.down_proj = nn.Linear(hidden_features, config.hidden_size, bias=True)
-        self.act_fn = nn.functional.silu
+        self.act_fn = ACT2FN["silu"]
 
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
@@ -282,12 +283,14 @@ class RadioLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
+        # Self Attention
         residual = hidden_states
         hidden_states = self.norm1(hidden_states)
         hidden_states, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
         hidden_states = self.layer_scale1(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual
 
+        # Fully Connected
         residual = hidden_states
         hidden_states = self.norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)

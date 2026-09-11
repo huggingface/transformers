@@ -66,6 +66,7 @@ class Dinov2WithRegistersPatchEmbeddings(nn.Module):
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
                 f" Expected {self.num_channels} but got {num_channels}."
             )
+        pixel_values = pixel_values.to(self.projection.weight.dtype)
         return self.projection(pixel_values).flatten(2).transpose(1, 2)
 
 
@@ -128,14 +129,15 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
             antialias=True,
         ).to(dtype=target_dtype)
 
+        # Reshape back to original format
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
 
+        # Combine class and patch embeddings
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
-        target_dtype = self.patch_embeddings.projection.weight.dtype
-        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+        embeddings = self.patch_embeddings(pixel_values)
 
         if bool_masked_pos is not None:
             embeddings = torch.where(
@@ -169,12 +171,12 @@ def eager_attention_forward(
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
+    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    # softmax in the input dtype as in the reference implementation; ViT upcasts to float32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
@@ -255,6 +257,7 @@ class Dinov2WithRegistersMLP(nn.Module):
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
+
         return hidden_states
 
 
@@ -267,7 +270,7 @@ class Dinov2WithRegistersSwiGLUFFN(nn.Module):
         self.gate_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
         self.up_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
         self.down_proj = nn.Linear(hidden_features, config.hidden_size, bias=True)
-        self.act_fn = nn.functional.silu
+        self.act_fn = ACT2FN["silu"]
 
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
@@ -319,12 +322,14 @@ class Dinov2WithRegistersLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
+        # Self Attention
         residual = hidden_states
         hidden_states = self.norm1(hidden_states)
         hidden_states, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
         hidden_states = self.layer_scale1(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual
 
+        # Fully Connected
         residual = hidden_states
         hidden_states = self.norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)
@@ -411,7 +416,6 @@ class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
             pre-training.
         """
-        pixel_values = pixel_values.to(self.embeddings.patch_embeddings.projection.weight.dtype)
         embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         attention_mask = create_bidirectional_mask(
             config=self.config,
@@ -438,6 +442,7 @@ class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
 class Dinov2WithRegistersForImageClassification(Dinov2WithRegistersPreTrainedModel):
     def __init__(self, config: Dinov2WithRegistersConfig) -> None:
         super().__init__(config)
+
         self.num_labels = config.num_labels
         self.dinov2_with_registers = Dinov2WithRegistersModel(config)
         self.classifier = (
@@ -535,7 +540,6 @@ class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedMo
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        pixel_values = pixel_values.to(self.embeddings.patch_embeddings.projection.weight.dtype)
         embedding_output = self.embeddings(pixel_values)
         attention_mask = create_bidirectional_mask(
             config=self.config,

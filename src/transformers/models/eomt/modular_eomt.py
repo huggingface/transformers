@@ -205,8 +205,7 @@ class EomtEmbeddings(Dinov2Embeddings):
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, _, _, _ = pixel_values.shape
-        target_dtype = self.patch_embeddings.projection.weight.dtype
-        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+        embeddings = self.patch_embeddings(pixel_values)
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         register_tokens = self.register_tokens.expand(batch_size, -1, -1)

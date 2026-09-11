@@ -151,14 +151,15 @@ class Dinov2WithRegistersEmbeddings(Dinov2Embeddings):
             antialias=True,
         ).to(dtype=target_dtype)
 
+        # Reshape back to original format
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
 
+        # Combine class and patch embeddings
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
-        target_dtype = self.patch_embeddings.projection.weight.dtype
-        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+        embeddings = self.patch_embeddings(pixel_values)
 
         if bool_masked_pos is not None:
             embeddings = torch.where(
@@ -247,7 +248,6 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        pixel_values = pixel_values.to(self.embeddings.patch_embeddings.projection.weight.dtype)
         embedding_output = self.embeddings(pixel_values)
         attention_mask = create_bidirectional_mask(
             config=self.config,
