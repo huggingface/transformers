@@ -334,6 +334,29 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_feed_forward_chunking(self):
         pass
 
+    def test_eager_attention_float64_resolution(self):
+        """Ensure float64 attention softmax retains float64 resolution without downcasting to float32."""
+        from transformers.models.gpt_neox.modeling_gpt_neox import eager_attention_forward
+
+        class DummyModule(torch.nn.Module):
+            pass
+
+        dummy = DummyModule()
+        q = torch.randn(1, 4, 16, 32, dtype=torch.float64)
+        k = torch.randn(1, 4, 16, 32, dtype=torch.float64)
+        v = torch.randn(1, 4, 16, 32, dtype=torch.float64)
+
+        out1, _ = eager_attention_forward(dummy, q, k, v, attention_mask=None, scaling=1.0)
+
+        delta = torch.zeros_like(q)
+        delta[0, 0, 0, 0] = 1e-9
+
+        out2, _ = eager_attention_forward(dummy, q + delta, k, v, attention_mask=None, scaling=1.0)
+        diff = (out2 - out1).abs().max().item()
+
+        # In float64, a 1e-9 perturbation in query should produce a measurable non-zero difference
+        self.assertGreater(diff, 0.0)
+
 
 @require_torch
 class GPTNeoXLanguageGenerationTest(unittest.TestCase):

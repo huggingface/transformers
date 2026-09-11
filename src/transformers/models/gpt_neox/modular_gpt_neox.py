@@ -115,7 +115,8 @@ def eager_attention_forward(
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    dtype = torch.promote_types(query.dtype, torch.float32)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=dtype).to(query.dtype)
 
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
