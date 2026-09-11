@@ -954,8 +954,5 @@ class BackendImportTest(unittest.TestCase):
             capture = exporter.capture(Model(), {"x": torch.ones(2)}, ExecutorchConfig(backend="external", strict=True))
             torch.testing.assert_close(capture.exported_program.module()(x=torch.ones(2)), torch.full((2,), 2.0))
         """)
-        # Run only the literal test script with the current interpreter, without a shell or untrusted input.
-        result = subprocess.run(  # nosec B603
-            [sys.executable, "-c", script], capture_output=True, text=True, timeout=90
-        )
+        result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=90)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
