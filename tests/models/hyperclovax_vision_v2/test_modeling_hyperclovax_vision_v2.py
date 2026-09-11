@@ -361,7 +361,7 @@ class HyperCLOVAXVisionV2TinyModelIntegrationTest(MemoryCleanupMixin, unittest.T
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", (8, 6)): [
-                    'user\nWhat is the capital of South Korea?\nassistant\n<think>\n globally,www locally,www locally,www locally,www locally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www'
+                    "user\nWhat is the capital of South Korea?\nassistant\n<think>\n globally,www locally,www locally,www locally,www locally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www globally,www"
                 ],
             }
         )
