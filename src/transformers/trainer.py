@@ -28,7 +28,6 @@ import sys
 import tempfile
 import time
 import warnings
-from collections import defaultdict
 from collections.abc import Callable, Iterator, Mapping
 from functools import partial
 from pathlib import Path
@@ -97,8 +96,9 @@ from .trainer_optimizer import (
     _OPTIMIZER_HANDLERS,
     OptimizerContext,
     _parse_optim_args,
-    has_mixed_dtensor,
     is_optimizer_factory,
+    spans_multiple_meshes,
+    split_param_groups_by_mesh,
 )
 from .trainer_pt_utils import (
     BatchRebalanceSampler,
@@ -106,6 +106,7 @@ from .trainer_pt_utils import (
     IterableDatasetShard,
     LabelSmoother,
     LengthGroupedSampler,
+    clip_grad_norm_per_mesh,
     distributed_broadcast_scalars,
     find_batch_size,
     get_model_param_count,
@@ -629,8 +630,8 @@ class Trainer:
         self._train_batch_size = args.train_batch_size
         # Guards one-time LR scheduler creation in create_optimizer_and_scheduler
         self._created_lr_scheduler = False
-        # Resolved lazily at the first gradient clip; see `_has_mixed_mesh_grads`.
-        self._mixed_mesh_grads: bool | None = None
+        # Resolved lazily at the first gradient clip; see `_grads_span_multiple_meshes`.
+        self._multi_mesh_grads: bool | None = None
         # With expert-parallel token dispatch every rank trains on its own part of the batch, while accelerate
         # treats the `tp` ranks as one data-parallel rank: the batches and the token counts are handled here.
         distributed_config = _load_time_distributed_config(model)
@@ -1314,18 +1315,10 @@ class Trainer:
                     "weight_decay": 0.0,
                 },
             ]
-            if has_mixed_dtensor(p for group in optimizer_grouped_parameters for p in group["params"]):
+            if spans_multiple_meshes(p for group in optimizer_grouped_parameters for p in group["params"]):
                 # Parameters on different device meshes (expert parallelism, alone or with FSDP2 on a 2-D
                 # mesh) cannot share one fused/foreach kernel call: give each mesh its own param group.
-                from torch.distributed.tensor import DTensor
-
-                split_groups = []
-                for group in optimizer_grouped_parameters:
-                    by_mesh = defaultdict(list)
-                    for p in group["params"]:
-                        by_mesh[p.device_mesh if isinstance(p, DTensor) else None].append(p)
-                    split_groups.extend({**group, "params": params} for params in by_mesh.values())
-                optimizer_grouped_parameters = split_groups
+                optimizer_grouped_parameters = split_param_groups_by_mesh(optimizer_grouped_parameters)
 
             if self.optimizer_cls_and_kwargs is not None:
                 optimizer_cls, optimizer_kwargs = self.optimizer_cls_and_kwargs
@@ -2693,51 +2686,27 @@ class Trainer:
         input_tokens = torch.as_tensor(input_tokens, device=self.args.device, dtype=torch.int64)
         self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
 
-    def _mixed_mesh_grad_norm(self, model, max_norm):
-        """
-        Gradient norm (and clip) when the gradients live on different device meshes, which `clip_grad_norm_` cannot
-        span: one norm per mesh, each already reduced over its own mesh.
-        """
-        from torch.distributed.tensor import DTensor
-        from torch.nn.utils import clip_grads_with_norm_, get_total_norm
-
-        params_by_mesh = defaultdict(list)
-        for param in model.parameters():
-            if param.grad is not None:
-                params_by_mesh[param.grad.device_mesh if isinstance(param.grad, DTensor) else None].append(param)
-
-        norms = []
-        for params in params_by_mesh.values():
-            norm = get_total_norm([p.grad for p in params])
-            norms.append(norm.full_tensor() if isinstance(norm, DTensor) else norm)
-        total_norm = torch.linalg.vector_norm(torch.stack(norms))
-
-        if max_norm != float("inf"):
-            for params in params_by_mesh.values():
-                clip_grads_with_norm_(params, max_norm, total_norm)
-        return total_norm
-
-    def _has_mixed_mesh_grads(self, model) -> bool:
+    def _grads_span_multiple_meshes(self, model) -> bool:
         # Static for the life of the run (sharding never changes after setup), so scan the
         # parameters only on the first call.
-        if self._mixed_mesh_grads is None:
-            self._mixed_mesh_grads = has_mixed_dtensor(p.grad for p in model.parameters() if p.grad is not None)
-        return self._mixed_mesh_grads
+        if self._multi_mesh_grads is None:
+            self._multi_mesh_grads = spans_multiple_meshes(p.grad for p in model.parameters() if p.grad is not None)
+        return self._multi_mesh_grads
 
     def _clip_grad_norm(self, model):
         """Clip gradients to max_grad_norm. Returns the pre-clip gradient norm."""
         if is_sagemaker_mp_enabled() and self.args.fp16:
             return self.optimizer.clip_master_grads(self.args.max_grad_norm)
-        if self._has_mixed_mesh_grads(model):
-            return self._mixed_mesh_grad_norm(model, self.args.max_grad_norm)
+        if self._grads_span_multiple_meshes(model):
+            return clip_grad_norm_per_mesh(model.parameters(), self.args.max_grad_norm)
         return self.accelerator.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
 
     def _get_grad_norm(self, model, grad_norm=None):
         """Return the gradient norm as a Python float."""
         if grad_norm is None:
             # Compute norm without clipping (inf means no actual clipping happens)
-            if self._has_mixed_mesh_grads(model):
-                grad_norm = self._mixed_mesh_grad_norm(model, float("inf"))
+            if self._grads_span_multiple_meshes(model):
+                grad_norm = clip_grad_norm_per_mesh(model.parameters(), float("inf"))
             else:
                 grad_norm = self.accelerator.clip_grad_norm_(model.parameters(), float("inf"))
 

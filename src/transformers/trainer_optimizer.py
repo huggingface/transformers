@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import importlib.metadata
 import logging
+from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -208,17 +209,32 @@ def _get_adamw_torch(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     return AdamW, ctx.optimizer_kwargs
 
 
-def has_mixed_dtensor(tensors) -> bool:
+def _device_mesh_of(tensor):
+    """The device mesh a tensor lives on, `None` for a plain tensor."""
+    from torch.distributed.tensor import DTensor
+
+    return tensor.device_mesh if isinstance(tensor, DTensor) else None
+
+
+def spans_multiple_meshes(tensors) -> bool:
     """
     Whether `tensors` do not all share one device mesh, so whole-set ops (fused/foreach kernels, `clip_grad_norm_`)
     cannot span them and the Trainer groups them by mesh. Expert parallelism leaves the experts sharded and everything
     else as plain tensors; under a 2-D (fsdp, tp) mesh everything is a `DTensor`, but the experts live on the full mesh
     and the rest on the `fsdp` sub-mesh.
     """
-    from torch.distributed.tensor import DTensor
+    return len({_device_mesh_of(t) for t in tensors}) > 1
 
-    meshes = {t.device_mesh if isinstance(t, DTensor) else None for t in tensors}
-    return len(meshes) > 1
+
+def split_param_groups_by_mesh(param_groups: list[dict]) -> list[dict]:
+    """Split every optimizer param group so that each of the resulting groups lives on one device mesh."""
+    split_groups = []
+    for group in param_groups:
+        by_mesh = defaultdict(list)
+        for param in group["params"]:
+            by_mesh[_device_mesh_of(param)].append(param)
+        split_groups.extend({**group, "params": params} for params in by_mesh.values())
+    return split_groups
 
 
 def _get_adamw_torch_xla(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:

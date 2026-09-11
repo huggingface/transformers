@@ -25,6 +25,7 @@ import os
 import re
 import sys
 import warnings
+from collections import defaultdict
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -1633,6 +1634,32 @@ def set_rng_state_for_device(device_name, device_module, checkpoint_rng_state, i
     except Exception as e:
         # Log error if setting RNG state fails
         logger.error(err_template.format(backend=device_name, exception=e))
+
+
+def clip_grad_norm_per_mesh(parameters, max_norm: float) -> torch.Tensor:
+    """
+    Gradient norm (and clip, unless `max_norm` is infinite) of parameters whose gradients live on different device
+    meshes, which `clip_grad_norm_` cannot span: one norm per mesh, each already reduced over its own mesh, combined
+    into the total norm every gradient is clipped with.
+    """
+    from torch.distributed.tensor import DTensor
+    from torch.nn.utils import clip_grads_with_norm_, get_total_norm
+
+    params_by_mesh = defaultdict(list)
+    for param in parameters:
+        if param.grad is not None:
+            params_by_mesh[param.grad.device_mesh if isinstance(param.grad, DTensor) else None].append(param)
+
+    norms = []
+    for params in params_by_mesh.values():
+        norm = get_total_norm([p.grad for p in params])
+        norms.append(norm.full_tensor() if isinstance(norm, DTensor) else norm)
+    total_norm = torch.linalg.vector_norm(torch.stack(norms))
+
+    if max_norm != float("inf"):
+        for params in params_by_mesh.values():
+            clip_grads_with_norm_(params, max_norm, total_norm)
+    return total_norm
 
 
 def safe_globals():

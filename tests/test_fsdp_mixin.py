@@ -23,7 +23,6 @@ import tempfile
 import time
 import traceback
 from abc import ABC, abstractmethod
-from collections import defaultdict
 from contextlib import contextmanager
 
 from parameterized import parameterized
@@ -496,17 +495,10 @@ def _test_fsdp2_plan_vs_ddp_impl(rank, config_class, config_dict, tie_word_embed
 
 
 def _grad_norm_across_meshes(model):
-    """Total gradient norm of parameters living on different device meshes (what the Trainer does)."""
-    from torch.distributed.tensor import DTensor
-    from torch.nn.utils import get_total_norm
+    """Total gradient norm of parameters living on different device meshes, as the Trainer computes it."""
+    from transformers.trainer_pt_utils import clip_grad_norm_per_mesh
 
-    grads_by_mesh = defaultdict(list)
-    for param in model.parameters():
-        if param.grad is not None:
-            grads_by_mesh[param.grad.device_mesh if isinstance(param.grad, DTensor) else None].append(param.grad)
-    norms = [get_total_norm(grads) for grads in grads_by_mesh.values()]
-    norms = [n.full_tensor() if isinstance(n, DTensor) else n for n in norms]
-    return torch.linalg.vector_norm(torch.stack(norms))
+    return clip_grad_norm_per_mesh(model.parameters(), float("inf"))
 
 
 def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, dtype=None, dispatch=False):
