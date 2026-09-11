@@ -16,7 +16,6 @@
 import unittest
 
 import pytest
-from huggingface_hub import hf_hub_download
 
 from transformers import (
     AutoProcessor,
@@ -37,7 +36,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import check_torch_load_is_safe
 
 from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import floats_tensor
@@ -130,7 +128,7 @@ class LlavaNextForConditionalGenerationModelTest(VLMModelTest, unittest.TestCase
 class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
-        url = "https://raw.githubusercontent.com/haotian-liu/LLaVA/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_v1_5_radar.jpg"
         self.image = load_test_image(url)
 
         self.prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
@@ -148,34 +146,14 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         inputs = self.processor(images=self.image, text=self.prompt, return_tensors="pt").to(torch_device)
 
-        # verify inputs against original implementation
-        filepath = hf_hub_download(
-            repo_id="nielsr/test-image",
-            filename="llava_1_6_input_ids.pt",
-            repo_type="dataset",
-        )
-        check_torch_load_is_safe()
-        original_input_ids = torch.load(filepath, map_location="cpu", weights_only=True)
-        # replace -200 by image_token_index (since we use token ID = 32000 for the image token)
-        # remove image token indices because HF impl expands image tokens `image_seq_length` times
-        original_input_ids = original_input_ids[original_input_ids != -200]
-        observed_input_ids = inputs.input_ids[inputs.input_ids != model.config.image_token_index]
-        assert original_input_ids[0].tolist() == observed_input_ids[0].tolist()
-
-        filepath = hf_hub_download(
-            repo_id="nielsr/test-image",
-            filename="llava_1_6_pixel_values.pt",
-            repo_type="dataset",
-        )
-        check_torch_load_is_safe()
-        original_pixel_values = torch.load(filepath, map_location="cpu", weights_only=True)
-        assert torch.allclose(
-            original_pixel_values, inputs.pixel_values.to(device="cpu", dtype=original_pixel_values.dtype), atol=0.1
-        )
+        # The input_ids/pixel_values dumps this used to compare against (`nielsr/test-image`) were recorded from
+        # the original third-party radar image, so they cannot be reused once the image is a synthetic stand-in.
+        # Re-recording them from this very processor would only compare it against itself, so the check is dropped
+        # rather than repointed; the generation assertion below is what still exercises the pipeline end to end.
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=100)
-        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays values for multiple quantitative variables represented on axes starting from the same point. This particular radar chart is showing the performance of various models or systems across different metrics or datasets.\n\nThe chart is divided into several sections, each representing a different model or dataset. The axes represent different metrics or datasets, such as "MMM-Vet," "MMM-Bench," "L'
+        EXPECTED_DECODED_TEXT = "[INST]  \nWhat is shown in this image? [/INST] The image shows a stylized graphic with a hexagonal shape at its center, outlined in yellow. The hexagon is set against a dark background with a grid-like pattern. The overall design has a modern and abstract aesthetic. "
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -201,7 +179,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays', '[INST]  \nWhat is shown in this image? [/INST] The image shows two cats lying on a pink surface, which appears to be a couch or a cush']  # fmt: skip
+        EXPECTED_DECODED_TEXT = ['[INST]  \nWhat is shown in this image? [/INST] The image shows a stylized graphic with a hexagonal shape at its center, outlined in yellow', '[INST]  \nWhat is shown in this image? [/INST] The image shows two cats lying on a pink surface, which appears to be a couch or a cush']  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -226,7 +204,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=40)
-        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this   image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays values for multiple quantitative variables represented on axes starting from the same point. This particular radar chart'  # fmt: skip
+        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this   image? [/INST] The image shows a stylized graphic with a hexagonal shape at its center, outlined in yellow. The hexagon is set against a dark background with a grid-like pattern. The overall design'  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -323,7 +301,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays values for multiple quantitative variables represented on axes'  # fmt: skip
+        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image shows a stylized graphic with a hexagonal shape at its center, outlined in yellow. The hexagon is set against a dark background'  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -344,7 +322,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = "<|user|>\n\nWhat is shown in this image?\n<|assistant|>\nThe image displays a radar chart comparing the performance of various machine learning models."  # fmt: skip
+        EXPECTED_DECODED_TEXT = '<|user|>\n\nWhat is shown in this image?\n<|assistant|>\nA pentagon'  # fmt: skip
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,

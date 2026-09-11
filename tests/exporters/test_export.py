@@ -132,6 +132,11 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "test timeout (12 attention blocks × 3 Q-pool stage transitions on symbolic H/W). Backend-"
             "agnostic — the torch.export step itself overruns, so every backend hits it."
         ),
+        "Sam2VisionModel": (
+            "torch 2.13's constraint solver raises `NotImplementedError` from `solve_univariate_inequality` "
+            "on the Hiera window-partition guard `Eq(s/32 - (s/4)//8, 0)` (a `FloorDiv` in a rational "
+            "equation); tracing itself succeeds. ONNX + ORT also overrun the 1000s timeout at ~7.5 min."
+        ),
         "SeamlessM4TForSpeechToSpeech": (
             "The Conformer speech encoder is non-causal, so `sdpa_attention_forward` evaluates "
             "`q_length > 1 and attention_mask is None and is_causal`; under dynamic shapes `q_length > 1` "
@@ -196,11 +201,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "GroundingDinoForObjectDetection": "Same as `GroundingDinoModel`.",
         "MMGroundingDinoModel": "Same as `GroundingDinoModel`.",
         "MMGroundingDinoForObjectDetection": "Same as `GroundingDinoModel`.",
-        "Sam2VisionModel": (
-            "`torch.export` of the Hiera vision backbone under dynamic shapes takes ~7.5 min "
-            "even after simplifying `window_partition`/`window_unpartition` (12 attention blocks "
-            "× 3 Q-pool stage transitions on symbolic H/W). ONNX + ORT push past 1000s timeout."
-        ),
         "BigBirdModel": ("Lowering exceeds the 10-minute test timeout under dynamic shapes."),
         "BigBirdForCausalLM": "Same `timeout` failure as `BigBirdModel`.",
         "BigBirdForMaskedLM": "Same `timeout` failure as `BigBirdModel`.",
@@ -289,7 +289,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "GroundingDinoForObjectDetection": "Same `timeout` failure as `Mask2FormerModel`.",
         "MMGroundingDinoModel": "Same `timeout` failure as `Mask2FormerModel`.",
         "MMGroundingDinoForObjectDetection": "Same `timeout` failure as `Mask2FormerModel`.",
-        "Sam2VisionModel": "Same `timeout` failure as `Mask2FormerModel`.",
         "Swinv2Model": "Same `timeout` failure as `Mask2FormerModel`.",
         "Swinv2ForImageClassification": "Same `timeout` failure as `Mask2FormerModel`.",
         "Swinv2ForMaskedImageModeling": "Same `timeout` failure as `Mask2FormerModel`.",
