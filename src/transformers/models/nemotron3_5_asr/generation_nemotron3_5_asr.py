@@ -22,17 +22,9 @@ class Nemotron3_5AsrRNNTDecoderCache(NemotronAsrStreamingRNNTDecoderCache): ...
 
 
 class Nemotron3_5AsrGenerationMixin(NemotronAsrStreamingGenerationMixin):
-    def generate(self, inputs=None, generation_config=None, **kwargs):
-        self._prompt_ids = kwargs.pop("prompt_ids", None)
-        get_audio_features = self.get_audio_features
+    """Generation mixin for Nemotron 3.5 ASR RNN-T models.
 
-        def get_audio_features_with_prompt(*args, prompt_ids=None, **features_kwargs):
-            prompt_ids = self._prompt_ids if prompt_ids is None else prompt_ids
-            return get_audio_features(*args, prompt_ids=prompt_ids, **features_kwargs)
-
-        self.get_audio_features = get_audio_features_with_prompt
-        try:
-            return super().generate(inputs=inputs, generation_config=generation_config, **kwargs)
-        finally:
-            del self.get_audio_features
-            del self._prompt_ids
+    Same decoding as [`NemotronAsrStreamingGenerationMixin`], offline and streaming. The language-conditioning
+    `prompt_ids` passed to `generate` stay in `model_kwargs` and reach every encoder call through
+    `_encoder_kwargs`; nothing is stored on the model.
+    """
