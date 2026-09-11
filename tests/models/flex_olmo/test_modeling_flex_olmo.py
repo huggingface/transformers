@@ -74,8 +74,17 @@ class FlexOlmoIntegrationTest(unittest.TestCase):
     @classmethod
     def get_model(cls):
         if cls.model is None:
-            # device_map="auto" fills each GPU, so leave 30% headroom for MoE expert
-            # gate/up merge temporaries during loading.
+            # Originally (when loading in fp32) device_map="auto" filled all GPUs to ~100%, leaving no
+            # room for the ~344 MiB MergeModulelist temporary buffer that fuses per-expert weight shards
+            # into a single gate_up_proj tensor during from_pretrained — causing CUDA OOM on multi-GPU.
+            # A 70% per-GPU max_memory cap was the fix.
+            #
+            # We later switched to bfloat16 to fix a separate OOM that occurred during model.generate()
+            # after the logits forward pass. With bfloat16 the model footprint is halved (~28 GiB vs
+            # ~56 GiB for fp32), so there is naturally enough headroom and the cap is no longer strictly
+            # necessary. We keep it here as a marker: the MergeModulelist OOM is a real problem for large
+            # MoE models loaded with device_map="auto", and a better automatic solution (e.g. reserving
+            # headroom inside the loader itself) would be welcome.
             n = backend_device_count(torch_device)
             if n > 0 and torch_device != "cpu":
                 torch_accel = getattr(torch, torch_device)
