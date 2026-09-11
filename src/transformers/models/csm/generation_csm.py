@@ -18,10 +18,16 @@ from typing import TYPE_CHECKING, Any, Optional
 import torch
 import torch.nn as nn
 
-from ...generation import GenerateDecoderOnlyOutput, GenerationConfig, GenerationMixin, GenerationMode
+from ...generation import (
+    GenerateDecoderOnlyOutput,
+    GenerationConfig,
+    GenerationMixin,
+    GenerationMode,
+    GenerationState,
+)
 from ...generation.logits_process import LogitsProcessorList
 from ...generation.stopping_criteria import MaxLengthCriteria, StoppingCriteria, StoppingCriteriaList
-from ...utils import logging
+from ...utils import ModelOutput, logging
 
 
 if TYPE_CHECKING:
@@ -37,9 +43,10 @@ class CsmGenerateOutput(GenerateDecoderOnlyOutput):
     Outputs of CsmForConditionalGeneration.generate.
 
     Args:
-        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
-            if all batches finished early due to the `eos_token_id`.
+        sequences (`torch.LongTensor` of shape `(batch_size, num_frames, num_codebooks)`):
+            The generated audio frames. `num_frames` is either equal to `max_length` or shorter if all batches
+            finished early on an end-of-audio frame. A codebook prompt is returned with the generated frames; a text
+            prompt is not.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
             at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
@@ -56,8 +63,9 @@ class CsmGenerateOutput(GenerateDecoderOnlyOutput):
             `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
         past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
-        audio (`list(torch.FloatTensor)` of length `batch_size`):
-            The generated audio.
+            the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
+        audio (`list(torch.FloatTensor)` of length `batch_size`, *optional*, returned when `output_audio=True`):
+            The generated audio, one waveform per batch item, each cut at its first end-of-audio frame.
     """
 
     audio: list[torch.Tensor] | None = None
@@ -70,8 +78,9 @@ class CsmEosFrameCriteria(StoppingCriteria):
     """
 
     def __init__(self, codebook_eos_token_id: int):
-        # No `eos_token_id` attribute on purpose: finished rows are not padded (the generation loop only pads when a
-        # criterion exposes `eos_token_id`), so the generated frames match the previous CSM decoding loop.
+        # No `eos_token_id` attribute on purpose: the generation loop only pads finished rows when a criterion exposes
+        # one, and CSM does not pad them (the released checkpoints set no `eos_token_id`, so the previous loop never
+        # padded either; the `eos_token_id`-gated padding with `codebook_pad_token_id` it had is dropped).
         self.codebook_eos_token_id = codebook_eos_token_id
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor | None, **kwargs) -> torch.BoolTensor:
@@ -81,7 +90,10 @@ class CsmEosFrameCriteria(StoppingCriteria):
 class CsmGenerationMixin(GenerationMixin):
     """
     Csm generates one audio frame (`num_codebooks` tokens) per step: the backbone selects the first codebook token
-    and the depth decoder generates the other codebooks, conditioned on the backbone's last hidden state.
+    and the depth decoder generates the other codebooks, conditioned on the backbone's last hidden state. A row stops
+    once its last frame holds `codebook_eos_token_id` in every codebook but the last; finished rows are not padded. A
+    text prompt is dropped from the output, which then holds the generated frames only (`max_new_tokens` and
+    `max_length` count frames); `output_audio=True` decodes the frames into one waveform per batch item.
     """
 
     _supported_generation_modes = [GenerationMode.GREEDY_SEARCH, GenerationMode.SAMPLE]
@@ -150,14 +162,22 @@ class CsmGenerationMixin(GenerationMixin):
         return generation_config, model_kwargs
 
     def _init_sequences(self, input_ids: torch.LongTensor, model_kwargs: dict[str, Any]) -> torch.LongTensor:
-        # A text prompt is not part of the generated audio: start from an empty frame tensor so that `max_new_tokens`
-        # counts frames and only frames are returned. A codebook prompt `(batch_size, seq_len, num_codebooks)` is
-        # returned together with the generated frames.
+        # A text prompt is not part of the generated audio: start from an empty frame tensor so that only frames are
+        # returned and `max_new_tokens` / `max_length` count frames (the cache is still sized for the prompt positions,
+        # see `_prepare_generation`). A codebook prompt `(batch_size, seq_len, num_codebooks)` is returned together
+        # with the generated frames.
         if input_ids.ndim == 2:
             return input_ids.new_zeros((input_ids.shape[0], 0, self.config.num_codebooks))
         return input_ids
 
-    def _select_next_tokens(self, next_token_scores, generation_config, outputs, model_kwargs, state):
+    def _select_next_tokens(
+        self,
+        next_token_scores: torch.FloatTensor,
+        generation_config: GenerationConfig,
+        outputs: ModelOutput,
+        model_kwargs: dict[str, Any],
+        state: GenerationState,
+    ) -> torch.LongTensor:
         # the backbone selects the first codebook token of the frame
         first_codebook_ids = super()._select_next_tokens(
             next_token_scores, generation_config, outputs, model_kwargs, state
@@ -178,7 +198,14 @@ class CsmGenerationMixin(GenerationMixin):
         # remove the placeholder in position 0 -> `(batch_size, num_codebooks)` frame
         return codebook_ids[:, 1:]
 
-    def _build_generate_output(self, sequences, state, generation_config, model_kwargs, **kwargs):
+    def _build_generate_output(
+        self,
+        sequences: torch.LongTensor,
+        state: GenerationState,
+        generation_config: GenerationConfig,
+        model_kwargs: dict[str, Any],
+        **kwargs,
+    ) -> CsmGenerateOutput | torch.LongTensor | list[torch.Tensor]:
         output = super()._build_generate_output(sequences, state, generation_config, model_kwargs, **kwargs)
         audio = self._decode_audio(sequences) if generation_config.output_audio else None
         if generation_config.return_dict_in_generate:
@@ -194,8 +221,13 @@ class CsmGenerationMixin(GenerationMixin):
         # TODO: @eustlb, this should be batched !!!
         # but requires making sure batched inference of the codec model works as intended
         for audio_codes_batch in audio_codes:
+            # the stop criterion checks all codebooks but the last; the audio is cut at the first frame where *every*
+            # codebook is EOS
             eos_idxs = (audio_codes_batch == self.config.codebook_eos_token_id).all(dim=-1).nonzero()
             cutoff_idx = eos_idxs.min() if eos_idxs.numel() != 0 else audio_codes_batch.shape[0]
+            if cutoff_idx == 0:
+                audio.append(audio_codes_batch.new_zeros(0, dtype=self.codec_model.dtype))
+                continue
             audio_codes_batch = audio_codes_batch[:cutoff_idx]
             codec_decode_output = self.codec_model.decode(audio_codes_batch.transpose(0, 1).unsqueeze(0))
             audio.append(codec_decode_output.audio_values[0, 0])
@@ -230,8 +262,9 @@ class CsmGenerationMixin(GenerationMixin):
         </Tip>
 
         Parameters:
-            inputs_ids (`torch.Tensor` of shape (batch_size, seq_length), *optional*):
-                The sequence used as a prompt for the backbone model.
+            input_ids (`torch.Tensor` of shape (batch_size, seq_length), *optional*):
+                The sequence used as a prompt for the backbone model. A text prompt is not returned: the output holds
+                the generated audio frames only, and `max_new_tokens` / `max_length` count frames.
             input_values (`torch.Tensor` of shape (batch_size, channels, max_concatenated_audio_length), *optional*):
                 The batched audio input values, where each batch entry contains the concatenation of all audio segments for that entry.
                 These values will be encoded into codebook tokens using the codec model and merged with the text input ids provided in `input_ids`.
