@@ -958,8 +958,9 @@ def get_mrope_position_ids(
             grid_h, grid_w = grid_thw[1].item() // spatial_merge_size, grid_thw[2].item() // spatial_merge_size
             time_interval = 1
             if modality_type == 2 and second_per_grid_ts is not None:
-                time_interval = tokens_per_second * int(second_per_grid_ts[counter[modality_type] - 1])
-            temporal = torch.arange(grid_t, device=token_ids.device) * time_interval + current_position
+                time_interval = tokens_per_second * second_per_grid_ts[counter[modality_type] - 1]
+            # quantize the scaled temporal step, not the interval, so fractional `second_per_grid_ts` survives
+            temporal = (torch.arange(grid_t, device=token_ids.device) * time_interval).long() + current_position
             height = torch.arange(grid_h, device=token_ids.device) + current_position
             width = torch.arange(grid_w, device=token_ids.device) + current_position
             axes = torch.meshgrid(temporal, height, width, indexing="ij")
