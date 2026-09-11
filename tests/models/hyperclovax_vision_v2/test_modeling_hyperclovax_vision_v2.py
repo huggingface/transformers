@@ -251,6 +251,9 @@ class HyperCLOVAXVisionV2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 (None, None): [
                     "user\nWhat is the capital of South Korea?\nassistant\n<think>\nOkay, so I need to figure out what the capital of South Korea is. Let me start by recalling any prior knowledge I have. I remember that"
                 ],
+                ("rocm", (9, 4)): [
+                    "user\nWhat is the capital of South Korea?\nassistant\n<think>\nOkay, so I need to figure out what the capital of South Korea is. Let me start by recalling any basic geography I know. I remember that"
+                ],
             }
         )
         expected = EXPECTED_TEXTS.get_expectation()
