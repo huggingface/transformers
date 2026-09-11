@@ -320,6 +320,26 @@ output = model.generate(
 > [!TIP]
 > If you publish a `custom_generate` repository, your `generate` implementation can itself define a callable and pass it to `model.generate()`. This lets you customize the decoding loop while still benefiting from Transformers' built-in input preparation logic.
 
+### Customizing the decoding step
+
+Models whose decoding step differs from "one token per forward" (a frame of codebook tokens per step, a depth decoder run on the last hidden state, a transducer that advances over encoder frames, ...) do not need to rewrite the sampling loop. `_sample` is written as a sequence of small hooks with sensible defaults; override the ones that differ and call `super()` for the rest.
+
+| Hook | Default | Override it to |
+|---|---|---|
+| `_init_sequences(input_ids, model_kwargs)` | `input_ids` | start from an empty `(batch, 0, *token_shape)` tensor when the output layout differs from the prompt |
+| `_get_next_token_logits(outputs, model_kwargs, device)` | `outputs.logits[:, -1]` as `float32` | reshape multi-head logits to `(-1, vocab_size)` before the logits processors |
+| `_select_next_tokens(next_token_scores, generation_config, outputs, model_kwargs, state)` | sampling or argmax, `(batch,)` | return a `(batch, num_codebooks)` frame, run a depth decoder, apply a custom sampler |
+| `_append_next_tokens(sequences, next_tokens)` | concatenate on dim 1 | append a derived token instead of the selected one |
+| `_update_model_kwargs_with_next_tokens(next_tokens, outputs, model_kwargs, state)` | no-op | bookkeeping that depends on the selected tokens (frame pointers, audio buffers, next `inputs_embeds`) |
+| `_build_generate_output(sequences, state, generation_config, model_kwargs, ...)` | `sequences` or a `GenerateOutput` | return a model-specific output (decoded audio, durations) |
+| `_get_classifier_free_guidance_processor(...)` | unbatched CFG when `guidance_scale != 1` | provide a batched CFG processor |
+
+`outputs`, `model_kwargs` and `state` are passed by keyword, so overrides must keep those parameter names.
+
+`sequences` may have any shape `(batch, time, *token_shape)`; time is always dim 1. [`~generation.GenerationState`] carries the loop state (`unfinished_sequences`, `cur_len`, `step`, and a model-owned `extras` dict) to the hooks and to the stopping criteria, which receive it as `state=` together with `model_kwargs=`. Keep per-step state there rather than on the model instance. `_prepare_generation` returns everything `generate` prepares before the loop as a [`~generation.PreparedGeneration`], so a model can prepare a second decoding branch with the same machinery.
+
+Restrict the decoding methods a model supports with the `_supported_generation_modes` class attribute. `_init_sequences`, `_select_next_tokens` and `_append_next_tokens` are used by greedy search and sampling only. `_get_next_token_logits` is also used by beam search. `_update_model_kwargs_with_next_tokens`, `_build_generate_output`, the `GenerationState` and the criteria context are shared by greedy search, sampling, beam search and assisted decoding. `EosTokenCriteria` treats a position as EOS only if every token of the frame is EOS, and length-based logits processors read the sequence length from dim 1. Processors that inspect individual ids (e.g. `RepetitionPenaltyLogitsProcessor`, `NoRepeatNGramLogitsProcessor`, `SequenceBiasLogitsProcessor`, `WatermarkLogitsProcessor`) are only defined for 2-D sequences.
+
 ### Finding custom generation methods
 
 You can find all custom generation methods by [searching for their custom tag.](https://huggingface.co/models?other=custom_generate), `custom_generate`. In addition to the tag, we curate two collections of `custom_generate` methods:

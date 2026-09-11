@@ -29,6 +29,7 @@ if is_torch_available():
         EosTokenCriteria,
         MaxLengthCriteria,
         MaxTimeCriteria,
+        StoppingCriteria,
         StoppingCriteriaList,
         StopStringCriteria,
         validate_stopping_criteria,
@@ -408,3 +409,52 @@ class StoppingCriteriaTestCase(unittest.TestCase):
 
         # False when neither is satisfied
         self.assertListEqual(criteria(inputs["input_ids"][:, :-1], scores).tolist(), [False, False, False])
+
+    def test_eos_token_criteria_multi_codebook_frames(self):
+        # (batch=3, seq_len=2, num_codebooks=2): a frame is EOS only if every codebook is EOS
+        eos = 7
+        input_ids = torch.tensor(
+            [
+                [[1, 1], [eos, eos]],  # all codebooks EOS -> done
+                [[1, 1], [eos, 2]],  # one codebook EOS -> not done
+                [[eos, eos], [3, 3]],  # earlier frame EOS, last frame not -> not done (new_token_length=1)
+            ]
+        )
+        criteria = EosTokenCriteria(eos_token_id=eos)
+        self.assertListEqual(criteria(input_ids, None).tolist(), [True, False, False])
+        # with new_token_length=2 the third row is done as well
+        self.assertListEqual(criteria(input_ids, None, new_token_length=2).tolist(), [True, False, True])
+        # 2-D behaviour unchanged
+        input_ids_2d = torch.tensor([[1, eos], [1, 2]])
+        self.assertListEqual(criteria(input_ids_2d, None).tolist(), [True, False])
+
+    def test_stopping_criteria_list_filters_kwargs_per_criterion(self):
+        class LegacyCriteria(StoppingCriteria):
+            def __call__(self, input_ids, scores):
+                return torch.zeros(input_ids.shape[0], dtype=torch.bool)
+
+        class ContextCriteria(StoppingCriteria):
+            def __call__(self, input_ids, scores, **kwargs):
+                self.seen = set(kwargs)
+                return torch.zeros(input_ids.shape[0], dtype=torch.bool)
+
+        context = ContextCriteria()
+        criteria = StoppingCriteriaList([LegacyCriteria(), context])
+        criteria(torch.tensor([[1, 2]]), None, state="state", model_kwargs={})  # must not raise
+        self.assertSetEqual(context.seen, {"state", "model_kwargs"})
+
+    def test_stopping_criteria_list_accepts_plain_callables(self):
+        def legacy_function(input_ids, scores):
+            return torch.zeros(input_ids.shape[0], dtype=torch.bool)
+
+        seen = {}
+
+        def context_function(input_ids, scores, state=None, **kwargs):
+            seen["state"] = state
+            return torch.zeros(input_ids.shape[0], dtype=torch.bool)
+
+        criteria = StoppingCriteriaList(
+            [legacy_function, lambda input_ids, scores: torch.zeros(1, dtype=torch.bool), context_function]
+        )
+        criteria(torch.tensor([[1, 2]]), None, state="state", model_kwargs={})  # must not raise
+        self.assertEqual(seen["state"], "state")
