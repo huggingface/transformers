@@ -712,7 +712,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
             # Test that an untrusted kernel will raise an error without the flag
             with self.assertRaisesRegex(
                 ValueError,
-                "Kernel repository 'untrusted/flash_attention_2' could not verify publisher trust status. Set trust_remote_code=True to allow loading kernels from untrusted sources.",
+                "Kernel repository 'untrusted/flash_attention_2' could not verify publisher trust status. Set trust_remote_code=True or add the repository ID to the trust_remote_code allowlist to allow loading kernels from untrusted sources.",
             ):
                 _ = LlamaModel.from_pretrained(tmpdirname, attn_implementation=untrusted_kernel)
 
