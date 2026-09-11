@@ -38,6 +38,7 @@ class ClvpAudioProcessorMixin:
             "hop_length": 256,
             "window_fn": "hann_window",
             "power": 2.0,
+            "fft_dtype": "complex64",
         },
         "mel_scale_config": {
             "n_mels": 80,
@@ -58,12 +59,6 @@ class ClvpAudioProcessorMixin:
 
 
 class ClvpAudioProcessor(ClvpAudioProcessorMixin, TorchAudioBackend):
-    def _spectrum_magnitude(self, stft_out, power, spectrogram_config=None):
-        # The legacy FE stores the STFT in a complex64 buffer before taking float64 magnitudes
-        # (`np.abs(spectrogram, dtype=np.float64) ** power`). Replicate that rounding step so the
-        # float64 power spectrum is bit-identical (mirrors the numpy sibling's complex64 cast).
-        return stft_out.to(torch.complex64).to(torch.complex128).abs() ** power
-
     def _log_compress(self, features, *, spectrogram_config, **kwargs):
         # Compute log and mel_norms division in float64 before casting to float32
         # to match the legacy feature extractor's precision (same recipe as the numpy sibling).

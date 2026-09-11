@@ -81,6 +81,8 @@ class StftConfig(DataclassDict):
     left_align_fft: bool = False
     window_dtype: str | None = None
     frame_extension: int = 0
+    # None: FFT in the waveform dtype; "float64": frames upcast at the FFT boundary; "native": no cast;
+    # "complex64": the FFT output is rounded through complex64 before the float64 magnitudes.
     fft_dtype: str | None = None
     magnitude_mode: str | None = None
 

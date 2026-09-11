@@ -41,6 +41,7 @@ class SeamlessM4tAudioProcessorMixin:
             "power": 2.0,
             "center": False,
             "periodic": False,
+            "fft_dtype": "complex64",
         },
         "mel_scale_config": {
             "n_mels": 80,
@@ -69,12 +70,6 @@ class SeamlessM4tAudioProcessor(SeamlessM4tAudioProcessorMixin, TorchAudioBacken
             f = super().compute_features([waveform], spectrogram_config=self.spectrogram_config)
             features.append(f[0].transpose(-2, -1))
         return features
-
-    def _stft_framed(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
-        spec = super()._stft_framed(frames, window, frame_length, n_fft, stft_cfg, audio_dtype=audio_dtype)
-        # The legacy FE stores FFT frames in a complex64 buffer before taking float64
-        # magnitudes (`np.abs(spectrogram, dtype=np.float64) ** power`); quantize then upcast
-        return spec.to(torch.complex64).to(torch.complex128)
 
     def _finalize_features(self, features, feature_lengths):
         # bit-exact with the legacy FE: numpy reductions use pairwise summation, whose

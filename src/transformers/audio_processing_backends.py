@@ -156,7 +156,7 @@ class NumpyAudioBackend(BaseAudioProcessor):
     def _stft_framed(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
         frames = frames * window
         spec = np.fft.rfft(frames, n=n_fft, axis=-1)
-        if stft_cfg.fft_dtype is None:
+        if stft_cfg.fft_dtype in (None, "complex64"):
             # librosa contract: FFT output rounded through complex64
             spec = spec.astype(np.complex64)
         if stft_cfg.normalized:
@@ -446,7 +446,7 @@ class TorchAudioBackend(BaseAudioProcessor):
             frames = frames.to(torch.float64)  # mirrors numpy's rfft float64 promotion
         if frame_length < n_fft:
             frames = torch.nn.functional.pad(frames, (0, n_fft - frame_length))
-        spec = torch.fft.rfft(frames, n=n_fft)
+        spec = self._round_through_complex64(torch.fft.rfft(frames, n=n_fft), stft_cfg)
         if stft_cfg.normalized:
             spec = spec / window.pow(2.0).sum().sqrt()
         return spec.transpose(-2, -1)
@@ -463,9 +463,18 @@ class TorchAudioBackend(BaseAudioProcessor):
             normalized=False,
             return_complex=True,
         )
+        stft_out = self._round_through_complex64(stft_out, stft_cfg)
         if stft_cfg.normalized:
             stft_out = stft_out / window.pow(2.0).sum().sqrt()
         return stft_out
+
+    @staticmethod
+    def _round_through_complex64(spec, stft_cfg):
+        # `fft_dtype="complex64"`: the FFT output is rounded through complex64 before the float64
+        # magnitudes, as the legacy numpy `spectrogram()` did by writing into a complex64 buffer.
+        if stft_cfg.fft_dtype == "complex64" and spec.dtype == torch.complex128:
+            return spec.to(torch.complex64).to(torch.complex128)
+        return spec
 
     def _cast_stft_output(self, magnitudes, spectrogram_config):
         if spectrogram_config.computation_dtype:

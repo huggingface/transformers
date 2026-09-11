@@ -15,6 +15,7 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
+from ...audio_utils import _array_namespace
 from ...processing_utils import AudioKwargs
 
 
@@ -36,9 +37,10 @@ class Xcodec2AudioProcessorKwargs(AudioKwargs, total=False):
 class Xcodec2AudioProcessorMixin:
     add_channel_dim = True
     do_extract_spectrogram = False
-    # Mel frames are padded with 1.0 (the legacy FE's `padding_value`), unlike the raw audio
-    # Legacy hub configs describe the fbank geometry with flat keys that are fixed
-    # in the legacy config is the *mel* padding value; the raw audio is padded with 0.0.
+    # Two consumers: the acoustic encoder takes the zero-padded waveform (`audio_values`), the
+    # semantic encoder a kaldi fbank of it, computed per clip in `_finalize_output` and padded with
+    # 1.0 (the legacy FE's `padding_value`). Legacy hub configs also carry the fbank geometry as
+    # flat keys, which are fixed here.
     legacy_field_mapping = {
         "feature_size": None,
         "frame_length": None,
@@ -73,6 +75,7 @@ class Xcodec2AudioProcessorMixin:
         "remove_dc_offset": True,
         "mel_floor": 1.192092955078125e-07,
         "waveform_scale": 32768.0,
+        "transpose_features": True,  # kaldi's (time, n_mels) orientation
     }
 
     hop_length = 320
@@ -80,45 +83,43 @@ class Xcodec2AudioProcessorMixin:
     feature_padding_value = 1.0
     valid_kwargs = Xcodec2AudioProcessorKwargs
 
-
-class Xcodec2AudioProcessor(Xcodec2AudioProcessorMixin, TorchAudioBackend):
     def _downmix_to_mono(self, audio_el):
-        # The legacy FE appends one zero sample to every waveform before padding
-        audio_el = super()._downmix_to_mono(audio_el)
-        return torch.nn.functional.pad(audio_el, (0, 1))
+        # the legacy FE appends one zero sample to every waveform before padding
+        return self._pad_axis(super()._downmix_to_mono(audio_el), 0, 1, axis=-1)
+
+    def _pad_semantic_waveform(self, waveform):
+        # half a codec hop of zeros on both sides, so the fbank frames line up with the codec frames
+        half_hop = self.hop_length // 2
+        return self._pad_axis(waveform, half_hop, half_hop, axis=-1)
+
+    def _pad_feature_single(self, feature, max_length):
+        return self._pad_axis(feature, 0, max_length - feature.shape[0], axis=0, value=self.feature_padding_value)
 
     def _finalize_output(self, output, audio_ranges=None, **kwargs):
         audio_values = output["audio_values"]
         padded_length = audio_values.shape[-1]
-        half_hop = self.hop_length // 2
 
         features = []
         for i, (start, end) in enumerate(audio_ranges):
-            orig_length = end - start
-            valid_length = min((orig_length + self.hop_length - 1) // self.hop_length * self.hop_length, padded_length)
-            waveform = torch.nn.functional.pad(audio_values[i, 0, :valid_length], (half_hop, half_hop))
-            f = self.compute_features([waveform], spectrogram_config=self.spectrogram_config)[0].transpose(-2, -1)
-            f = (f - f.mean(0)) / torch.sqrt(f.var(0, unbiased=True) + 1e-7)
-            features.append(f)
+            # the fbank sees each clip rounded up to whole hops, not the batch-padded length
+            valid_length = min((end - start + self.hop_length - 1) // self.hop_length * self.hop_length, padded_length)
+            waveform = self._pad_semantic_waveform(audio_values[i, 0, :valid_length])
+            features.append(self._standardize_frames(self.compute_features([waveform])[0]))
 
-        frame_lengths = [f.shape[0] for f in features]
-        max_frames = max(frame_lengths)
-        if max_frames % self.stride:
-            max_frames += self.stride - max_frames % self.stride
-        batch = torch.stack(
-            [
-                torch.nn.functional.pad(f, (0, 0, 0, max_frames - f.shape[0]), value=self.feature_padding_value)
-                for f in features
-            ]
-        )
-        mask = self._get_mask([(0, length) for length in frame_lengths], max_frames)
+        features, frame_ranges = self._pad_features(features, "longest", None, False, self.stride)
+        batch = self._stack(features)
+        mask = self._get_mask(frame_ranges, batch.shape[1])
 
         batch_size, num_frames, num_mel_bins = batch.shape
         output["audio_features"] = batch.reshape(batch_size, num_frames // self.stride, num_mel_bins * self.stride)
-        output["audio_features_mask"] = (
-            mask.reshape(batch_size, num_frames // self.stride, self.stride).min(dim=-1).values
-        )
+        stride_groups = mask.reshape(batch_size, num_frames // self.stride, self.stride)
+        output["audio_features_mask"] = _array_namespace(mask).amin(stride_groups, -1)
         return output
+
+
+class Xcodec2AudioProcessor(Xcodec2AudioProcessorMixin, TorchAudioBackend):
+    def _standardize_frames(self, features):
+        return (features - features.mean(0)) / torch.sqrt(features.var(0, unbiased=True) + 1e-7)
 
 
 __all__ = ["Xcodec2AudioProcessor"]

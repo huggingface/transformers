@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
+import numpy as np
 
 from ...audio_processing_backends import TorchAudioBackend
 
@@ -46,26 +46,17 @@ class ParakeetAudioProcessorMixin:
         "transpose_features": True,
     }
 
-
-class ParakeetAudioProcessor(ParakeetAudioProcessorMixin, TorchAudioBackend):
     def _finalize_output(self, output, audio_ranges=None, **kwargs):
         if audio_ranges is None or "audio_features" not in output:
             return output
-
-        features = output["audio_features"]
-        stft_cfg = self.spectrogram_config.stft_config
-        audio_lengths = torch.tensor([end - start for start, end in audio_ranges])
-        features_lengths = torch.floor_divide(
-            audio_lengths + stft_cfg.n_fft // 2 * 2 - stft_cfg.n_fft, stft_cfg.hop_length
-        )
-        attention_mask = torch.arange(features.shape[1])[None, :] < features_lengths[:, None]
-        mask = attention_mask.unsqueeze(-1)
-        mel_masked = features * mask
-        mean = (mel_masked.sum(dim=1) / features_lengths.unsqueeze(-1)).unsqueeze(1)
-        variance = ((mel_masked - mean) ** 2 * mask).sum(dim=1) / (features_lengths - 1).unsqueeze(-1)
-        std = torch.sqrt(variance).unsqueeze(1)
-        output["audio_features"] = (features - mean) / (std + 1e-5) * mask
+        audio_lengths = np.asarray([end - start for start, end in audio_ranges])
+        frame_counts = self._valid_frame_counts(audio_lengths, self.spectrogram_config)
+        output["audio_features"] = self._standardize_features(output["audio_features"], frame_counts, eps=1e-5)
         return output
+
+
+class ParakeetAudioProcessor(ParakeetAudioProcessorMixin, TorchAudioBackend):
+    pass
 
 
 __all__ = ["ParakeetAudioProcessor"]

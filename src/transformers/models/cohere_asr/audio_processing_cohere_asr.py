@@ -93,19 +93,8 @@ class CohereAsrAudioProcessorMixin:
         if audio_ranges is None or "audio_features" not in output:
             return output
         audio_lengths = np.asarray([end - start for start, end in audio_ranges])
-        feature_lengths = self._valid_frame_counts(audio_lengths, self.spectrogram_config)
-
-        features = output["audio_features"]
-        xp = _array_namespace(output["audio_features"])
-        lengths = self._astype(self._as_backend_array(np.asarray(feature_lengths)), "float32")
-        mask = (xp.arange(features.shape[1])[None, :] < lengths[:, None])[..., None]
-        masked = features * mask
-        mean = (masked.sum(axis=1) / lengths[:, None])[:, None, :]
-        variance = (((masked - mean) ** 2) * mask).sum(axis=1) / (lengths - 1)[:, None]
-        std = xp.sqrt(variance)[:, None, :]
-        audio_features = (features - mean) / (std + 1e-5) * mask
-
-        output["audio_features"] = audio_features
+        frame_counts = self._valid_frame_counts(audio_lengths, self.spectrogram_config)
+        output["audio_features"] = self._standardize_features(output["audio_features"], frame_counts, eps=1e-5)
         return output
 
     def _preprocess_audio_like_inputs(self, audio, *args, sampling_rate=None, **kwargs):

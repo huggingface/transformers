@@ -18,7 +18,6 @@ import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import SpectrogramConfig
 from ...processing_utils import AudioKwargs
 from ...utils import PaddingStrategy
 
@@ -39,9 +38,12 @@ class ClapAudioProcessorMixin:
     sampling_rate = 48000
     max_length = 480000
     return_padding_mask = False
-    # released checkpoints use "repeatpad"; the legacy FE spelled this its `padding` argument.
+    # Released checkpoints tile short audio (`padding_mode="repeatpad"`). In `rand_trunc` mode HTSAT
+    # mels the waveform itself with librosa defaults (slaney scale, slaney norm); `fusion`
+    # checkpoints were trained on precomputed torchaudio-default mels (htk scale, no norm), which
+    # `_set_attributes` swaps in.
     spectrogram_config = {
-        "stft_config": {"n_fft": 1024, "hop_length": 480, "power": 2.0},
+        "stft_config": {"n_fft": 1024, "hop_length": 480, "power": 2.0, "fft_dtype": "complex64"},
         "mel_scale_config": {
             "n_mels": 64,
             "f_min": 50,
@@ -53,12 +55,8 @@ class ClapAudioProcessorMixin:
         },
         "log_mode": "dB",
         "computation_dtype": "float64",
+        "transpose_features": True,
     }
-    # built: `rand_trunc` audio reaches HTSAT as a waveform and is mel'd by its torchlibrosa
-    # front-end (librosa defaults, i.e. the slaney scale + slaney norm above), while `fusion`
-    # mels are precomputed with torchaudio defaults instead. The checkpoints are therefore
-    _fusion_mel_overrides = {"mel_scale": "htk", "norm": None}
-    # only CLAP's legacy configs spell the mode there. `top_db` lines up with
     legacy_field_mapping = {
         # Hub configs spell these `padding`/`truncation`; the modern names are the CLAP-specific
         # `padding_mode`/`truncation_mode`, leaving `padding`/`truncation` their base meaning.
@@ -75,12 +73,12 @@ class ClapAudioProcessorMixin:
     valid_kwargs = ClapAudioProcessorKwargs
 
     def _set_attributes(self, **kwargs):
-        if isinstance(self.spectrogram_config, dict):
-            self.spectrogram_config = SpectrogramConfig.from_dict(self.spectrogram_config)
-        if self.truncation_mode == "fusion":
-            mel_scale_config = replace(self.spectrogram_config.mel_scale_config, **self._fusion_mel_overrides)
-            self.spectrogram_config = replace(self.spectrogram_config, mel_scale_config=mel_scale_config)
         super()._set_attributes(**kwargs)
+        if self.truncation_mode == "fusion":
+            mel_scale_config = replace(self.spectrogram_config.mel_scale_config, mel_scale="htk", norm=None)
+            self.spectrogram_config = replace(self.spectrogram_config, mel_scale_config=mel_scale_config)
+            self.mel_filters = self._mel_filter_bank(self.spectrogram_config)
+        # `rand_trunc` crops the waveform in `pad`; `fusion` keeps it whole and crops the mel instead.
         self.truncation = self.truncation_mode == "rand_trunc"
 
     def _resolve_padding_strategy(self, padding=False, max_length=None):
@@ -96,101 +94,62 @@ class ClapAudioProcessorMixin:
         return super().pad(audio, *args, **kwargs)
 
     def _stack_waveforms(self, audio):
-        # CLAP's `compute_features` consumes the per-clip list directly, so the waveforms are
-        # deliberately left unstacked here.
+        # one mel per clip, so the clips stay a list rather than a (batch, samples) array
         return audio
 
     def _pad_waveform(self, audio, max_length):
         """Tile short audio before the base class zero-pads whatever remains."""
-        current_length = audio.shape[-1]
-        if current_length < max_length and self.padding_mode in ("repeat", "repeatpad"):
-            n_repeat = max_length // current_length
-            if self.padding_mode == "repeat":
-                audio = self._tile(audio, n_repeat + 1)[..., :max_length]
-            else:
-                audio = self._tile(audio, n_repeat)
+        if self.padding_mode in ("repeat", "repeatpad") and audio.shape[-1] < max_length:
+            n_repeat = max_length // audio.shape[-1] + (self.padding_mode == "repeat")
+            audio = self._concat_last([audio] * n_repeat)[..., :max_length]
         return super()._pad_waveform(audio, max_length)
 
     def _truncate_waveform(self, audio_el, max_length):
-        """Random-offset truncation for rand_trunc mode, also tracks which samples were longer."""
-        self._is_longer_flags.append(audio_el.shape[-1] > max_length)
-        if audio_el.shape[-1] > max_length:
-            idx = np.random.randint(0, audio_el.shape[-1] - max_length + 1)
-            return audio_el[..., idx : idx + max_length]
-        return audio_el
+        """Random crop to `max_length` (rand_trunc mode), remembering which clips were longer."""
+        overflow = audio_el.shape[-1] - max_length
+        self._is_longer_flags.append(overflow > 0)
+        idx = np.random.randint(0, overflow + 1) if overflow > 0 else 0
+        return audio_el[..., idx : idx + max_length]
 
-    def compute_features(self, audio, *, spectrogram_config=None, audio_ranges=None, **kwargs):
-        """Extract mel spectrogram and shape output (1 view for rand_trunc, 4 for fusion)."""
-        is_fusion = self.truncation_mode == "fusion"
-        chunk_frames = self.max_length // self.spectrogram_config.stft_config.hop_length + 1
-
+    def compute_features(self, audio, **kwargs):
+        """One (1, frames, 64) mel per clip in `rand_trunc` mode; four views per clip in `fusion` mode."""
         if not isinstance(audio, list):
             audio = list(audio) if audio.ndim == 2 else [audio]
-        waveforms = [self._as_backend_array(w) for w in audio]
+        mels = super().compute_features(audio)
+        if self.truncation_mode != "fusion":
+            return [mel[None] for mel in mels]
+        chunk_frames = self.max_length // self.spectrogram_config.stft_config.hop_length + 1
+        self._is_longer_flags = [mel.shape[0] > chunk_frames for mel in mels]
+        return [
+            self._random_mel_fusion(mel, chunk_frames) if mel.shape[0] > chunk_frames else self._stack([mel] * 4)
+            for mel in mels
+        ]
 
-        mels = []
-        is_longer = []
-        for waveform in waveforms:
-            mel = super().compute_features(waveform, spectrogram_config=self.spectrogram_config).swapaxes(-2, -1)
-            total_frames = mel.shape[0]
+    def _random_mel_fusion(self, mel, chunk_frames):
+        """A bilinear shrink of the whole mel plus three random `chunk_frames` crops (front, middle, back)."""
+        ranges = np.array_split(list(range(0, mel.shape[0] - chunk_frames + 1)), 3)
+        starts = [np.random.choice(r if len(r) else [0]) for r in ranges]
+        crops = [mel[start : start + chunk_frames] for start in starts]
+        return self._stack([self._bilinear_shrink(mel, chunk_frames)] + crops)
 
-            if is_fusion and total_frames > chunk_frames:
-                mels.append(self._random_mel_fusion(mel, total_frames, chunk_frames))
-                is_longer.append(True)
-            elif is_fusion:
-                mels.append(self._stack([mel, mel, mel, mel]))
-                is_longer.append(False)
-            else:
-                mels.append(mel[None])
-                is_longer.append(False)
+    def _bilinear_shrink(self, mel, chunk_frames):
+        mel_tensor = torch.as_tensor(mel)[None, None]
+        shrunk = torch.nn.functional.interpolate(
+            mel_tensor, size=[chunk_frames, mel.shape[-1]], mode="bilinear", align_corners=False
+        )
+        return self._as_backend_array(shrunk[0, 0])
 
-        if is_fusion:
-            self._is_longer_flags = is_longer
-        return mels
-
-    def _random_mel_fusion(self, mel, total_frames, chunk_frames):
-        ranges = np.array_split(list(range(0, total_frames - chunk_frames + 1)), 3)
-        if len(ranges[1]) == 0:
-            ranges[1] = [0]
-        if len(ranges[2]) == 0:
-            ranges[2] = [0]
-        idx_front = np.random.choice(ranges[0])
-        idx_middle = np.random.choice(ranges[1])
-        idx_back = np.random.choice(ranges[2])
-
-        mel_chunk_front = mel[idx_front : idx_front + chunk_frames, :]
-        mel_chunk_middle = mel[idx_middle : idx_middle + chunk_frames, :]
-        mel_chunk_back = mel[idx_back : idx_back + chunk_frames, :]
-        mel_shrink = self._bilinear_shrink(mel, chunk_frames)
-        return self._stack([mel_shrink, mel_chunk_front, mel_chunk_middle, mel_chunk_back])
-
-    def _finalize_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
-        """Add CLAP's is_longer flag to the output (returned instead of a standard attention mask)."""
-        ranges = audio_ranges if audio_ranges is not None else feature_ranges
-        is_longer = getattr(self, "_is_longer_flags", None) or [False] * len(ranges)
-        if self.truncation_mode == "fusion" and sum(is_longer) == 0:
-            rand_idx = np.random.randint(0, len(is_longer))
-            is_longer[rand_idx] = True
+    def _finalize_output(self, output, audio_ranges=None, **kwargs):
+        """`is_longer` stands in for the padding mask: it tells HTSAT which clips carry fusion crops."""
+        is_longer = self._is_longer_flags or [False] * len(audio_ranges)
+        if self.truncation_mode == "fusion" and not any(is_longer):
+            is_longer[np.random.randint(0, len(is_longer))] = True
         output["is_longer"] = [[longer] for longer in is_longer]
         return output
 
 
 class ClapAudioProcessor(ClapAudioProcessorMixin, TorchAudioBackend):
-    def _tile(self, audio, n_repeat):
-        return audio.repeat(n_repeat)
-
-    def _stft_native(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
-        stft_out = super()._stft_native(audio, window, frame_length, hop_length, n_fft, stft_cfg)
-        # round-trip through complex64 like the legacy FE, so float64 magnitudes match bit-exactly
-        return stft_out.to(torch.complex64).to(torch.complex128)
-
-    def _bilinear_shrink(self, mel, chunk_frames):
-        # legacy torch dtype path: round-trip through float32 (numpy sibling stays float64)
-        mel_tensor = mel.unsqueeze(0).unsqueeze(0).to(torch.float32)
-        mel_shrink = torch.nn.functional.interpolate(
-            mel_tensor, size=[chunk_frames, 64], mode="bilinear", align_corners=False
-        )
-        return mel_shrink[0][0].to(mel.dtype)
+    pass
 
 
 __all__ = ["ClapAudioProcessor"]

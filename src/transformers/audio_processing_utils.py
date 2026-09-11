@@ -279,6 +279,19 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """
         return output
 
+    def _standardize_features(self, features, frame_counts, eps):
+        """Zero-mean, unit-variance each utterance over its first `frame_counts` frames; padded frames come out zero.
+
+        The NeMo recipe (Parakeet, Cohere-ASR): unbiased variance, `eps` added to the standard deviation.
+        """
+        xp = _array_namespace(features)
+        counts = self._astype(self._as_backend_array(np.asarray(frame_counts)), "float32")[:, None]
+        mask = (xp.arange(features.shape[1])[None, :] < counts)[..., None]
+        masked = features * mask
+        mean = (masked.sum(axis=1) / counts)[:, None, :]
+        variance = ((masked - mean) ** 2 * mask).sum(axis=1) / (counts - 1)
+        return (features - mean) / (xp.sqrt(variance)[:, None, :] + eps) * mask
+
     def _resolve_padding_strategy(self, padding=False, max_length=None):
         if padding is not False:
             if padding is True:
@@ -444,9 +457,11 @@ class BaseAudioProcessor(AudioProcessingMixin):
         elif spectrogram_config.preemphasis_mode == "htk_per_frame":
             raise ValueError("preemphasis_mode='htk_per_frame' requires frame_extension=1.")
         if stft_cfg.fft_dtype is not None:
-            if stft_cfg.fft_dtype not in ("float64", "native"):
-                raise ValueError(f"fft_dtype must be None, 'float64' or 'native', got {stft_cfg.fft_dtype!r}.")
-            if not needs_manual_framing:
+            if stft_cfg.fft_dtype not in ("float64", "native", "complex64"):
+                raise ValueError(
+                    f"fft_dtype must be None, 'float64', 'native' or 'complex64', got {stft_cfg.fft_dtype!r}."
+                )
+            if not needs_manual_framing and stft_cfg.fft_dtype != "complex64":
                 raise ValueError(
                     "fft_dtype applies to the manual-framing path only; this configuration uses the native STFT."
                 )
@@ -454,8 +469,8 @@ class BaseAudioProcessor(AudioProcessingMixin):
         win_length = stft_cfg.win_length or n_fft
         hop_length = stft_cfg.hop_length or win_length // 2
 
-        if spectrogram_config.computation_dtype and stft_cfg.fft_dtype is None:
-            # with `fft_dtype`, the cast happens at the FFT boundary instead
+        if spectrogram_config.computation_dtype and stft_cfg.fft_dtype in (None, "complex64"):
+            # with `fft_dtype="float64"` / `"native"`, the cast happens at the FFT boundary instead
             dtype_str = spectrogram_config.computation_dtype
             if isinstance(audio, np.ndarray):
                 audio = audio.astype(dtype_str)
