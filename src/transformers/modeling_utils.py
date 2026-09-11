@@ -146,6 +146,7 @@ if is_accelerate_available():
 if TYPE_CHECKING:
     from kernels.layer.mode import Mode
 
+from ._typing import DeviceMeshLike
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
@@ -184,6 +185,7 @@ class LoadStateDictConfig:
     dtype_plan: dict = field(default_factory=dict)
     hf_quantizer: HfQuantizer | None = None
     weights_only: bool = True
+    device_mesh: "DeviceMeshLike | None" = None
     weight_mapping: list[WeightConverter | WeightRenaming] | None = None
     disable_mmap: bool | None = None
 
@@ -3984,6 +3986,8 @@ class PreTrainedModel(
                 `DistributedConfig(fsdp_size=N)` for FSDP2. Requires `torchrun` and an initialized
                 process group when `tp_size > 1` or `fsdp_size > 1`. Mutually exclusive with `device_map`.
                 If provided, it has to contain dimension named `"tp"` in case it's > 1 dimensional, this dimension will be used for tensor parallelism
+            device_mesh (`torch.distributed.DeviceMesh`, *optional*):
+                A torch device mesh. If not provided would default to world size. Used only for tensor parallel for now.
             offload_folder (`str` or `os.PathLike`, *optional*):
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_buffers (`bool`, *optional*):
@@ -4299,6 +4303,7 @@ class PreTrainedModel(
             dtype=dtype,
             dtype_plan=dtype_plan,
             hf_quantizer=hf_quantizer,
+            device_mesh=device_mesh,
             weights_only=weights_only,
             weight_mapping=weight_conversions,
             use_safetensors=use_safetensors,
@@ -4476,6 +4481,7 @@ class PreTrainedModel(
             # meta device (because they were not moved when loading the weights as they were not in the loaded state dict)
             model._move_missing_keys_from_meta_to_device(
                 loading_info.missing_and_mismatched(),
+                load_config.device_mesh,
                 load_config.device_map,
                 load_config.hf_quantizer,
             )
@@ -4693,6 +4699,7 @@ class PreTrainedModel(
         self,
         missing_keys: list[str],
         device_map: dict | None,
+        device_mesh: "DeviceMeshLike | None",
         hf_quantizer: HfQuantizer | None,
     ) -> None:
         """Move missing params/buffers off meta to their target device.
