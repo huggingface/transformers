@@ -34,6 +34,7 @@ from .utils import (
     _get_torch_distributed_rank,
     _get_torch_distributed_world_size,
     _is_torch_distributed_initialized,
+    flattened_mesh,
     gather_full_state_dict,
     initialize_fully_sharded_data_parallelism,
     initialize_pipeline_parallelism,
@@ -168,6 +169,11 @@ class DistributedMixin:
         if distributed_config.tp_size > 1 and distributed_config.tp_plan is None:
             distributed_config.tp_plan = "auto"
 
+        # `fully_shard` itself only needs torch>=2.6, but distributed checkpoint save/load
+        # (DCP + HuggingFaceStorageWriter) needs 2.7, so that is the effective requirement.
+        if distributed_config.uses_fsdp and not is_torch_greater_or_equal("2.7"):
+            raise OSError("FSDP2 requires `torch>=2.7` (distributed checkpoint save/load).")
+
         if distributed_config.fsdp_size > 1:
             # Builds a 2-D (fsdp, tp) mesh when tensor/expert parallelism is also requested.
             if device_mesh is not None:
@@ -235,16 +241,16 @@ class DistributedMixin:
                     }
                 model = apply_tensor_parallelism(model, tp_mesh)
 
-            if distributed_config.dispatches_tokens:
-                # Every expert-parallel rank trains on its own part of the batch, so the parameters outside the
-                # experts are data-parallel across the whole mesh: FSDP2 shards them across all of it and owns
-                # their gradient reduction. The experts stay sharded across `tp` and, if any, across `fsdp`.
-                trunk_mesh = device_mesh["fsdp_tp"] if device_mesh.ndim > 1 else device_mesh
-                expert_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else None
+            if distributed_config.uses_fsdp:
+                if distributed_config.dispatches_tokens:
+                    # Every expert-parallel rank trains on its own part of the batch, so the parameters outside the
+                    # experts are data-parallel across the whole mesh: FSDP2 shards them across all of it and owns
+                    # their gradient reduction. The experts stay sharded across `tp` and, if any, across `fsdp`.
+                    trunk_mesh = flattened_mesh(device_mesh)
+                    expert_mesh = device_mesh["fsdp"] if distributed_config.fsdp_size > 1 else None
+                else:
+                    trunk_mesh, expert_mesh = device_mesh["fsdp"], None
                 model = apply_fully_sharded_data_parallelism(model, trunk_mesh, expert_mesh=expert_mesh)
-            elif distributed_config.fsdp_size > 1:
-                fsdp_mesh = device_mesh["fsdp"]
-                model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
 
             if distributed_config.pp_size > 1:
                 pp_mesh = device_mesh["pp"]
@@ -309,9 +315,9 @@ class DistributedMixin:
         if distributed_config is None:
             return state_dict
 
-        if distributed_config.fsdp_size > 1 or distributed_config.dispatches_tokens:
-            # Also covers the 2-D (fsdp, tp) mesh and token dispatch: every parameter is FSDP-managed, and
-            # the full state dict is only materialized on rank 0.
+        if distributed_config.uses_fsdp:
+            # Also covers the 2-D (fsdp, tp) mesh: every parameter is FSDP-managed, and the full state dict is only
+            # materialized on rank 0.
             if not _is_torch_distributed_initialized():
                 raise ValueError(
                     "Saving an FSDP-wrapped model requires torch.distributed to be initialized. "

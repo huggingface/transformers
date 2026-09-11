@@ -72,6 +72,12 @@ class DistributedConfig:
         `all-reduce` default."""
         return self.experts_dispatch != "all-reduce"
 
+    @property
+    def uses_fsdp(self) -> bool:
+        """Whether FSDP2 manages the model: `fsdp_size > 1`, or expert-parallel token dispatch, which shards the
+        parameters outside the experts across every rank."""
+        return (self.fsdp_size or 1) > 1 or self.dispatches_tokens
+
     def __post_init__(self):
         if self.tp_plan is None and self.tp_size is None and self.fsdp_size is None and self.pp_size is None:
             return

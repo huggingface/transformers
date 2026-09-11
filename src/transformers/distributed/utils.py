@@ -182,12 +182,18 @@ def initialize_tensor_parallelism(
     return device_map, device_mesh
 
 
-def initialize_fully_sharded_data_parallelism(distributed_config: DistributedConfig):
-    # `fully_shard` itself only needs torch>=2.6, but distributed checkpoint save/load
-    # (DCP + HuggingFaceStorageWriter) needs 2.7, so that is the effective requirement.
-    if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
-        raise OSError("FSDP2 requires `torch>=2.7` (distributed checkpoint save/load).")
+# Name of the 1-D view of a 2-D `(fsdp, tp)` mesh, see `flattened_mesh`.
+FLATTENED_MESH_DIM = "fsdp_tp"
 
+
+def flattened_mesh(mesh):
+    """The 1-D view of every rank of `mesh`: the mesh itself when it is 1-D, else the flattened dimension that
+    `initialize_fully_sharded_data_parallelism` adds to its 2-D mesh."""
+    return mesh if mesh.ndim == 1 else mesh[FLATTENED_MESH_DIM]
+
+
+def initialize_fully_sharded_data_parallelism(distributed_config: DistributedConfig):
+    """Build the `(fsdp, tp)` mesh; `prepare_distribute_model` asserts the torch requirement."""
     device_type = torch._C._get_accelerator().type
 
     if device_type != "cpu":
@@ -212,9 +218,9 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
 
     # Build the N-dimensional device mesh
     mesh = torch.distributed.init_device_mesh(device_type, tuple(dims), mesh_dim_names=tuple(names))
-    # If N > 1, create a flattened sub-mesh so all-reduces across the world mesh ae done in one collective
+    # If N > 1, create a flattened sub-mesh so all-reduces across the world mesh are done in one collective
     if len(dims) > 1:
-        mesh._flatten("_".join(names))
+        mesh._flatten(FLATTENED_MESH_DIM)
 
     return device_map, mesh
 
