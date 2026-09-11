@@ -313,6 +313,9 @@ class DeepseekV3ModelTest(
             "Today I am in Paris and",
         ]
 
+        # Free both ~10 GB models in finally so a mid-test OOM doesn't leak GPU memory into subsequent
+        # tests (cascade). MemoryCleanupMixin is intentionally not used here: ModelTest runs fast
+        # CPU-compatible tests (pytest -n 8) where gc overhead is unwanted. See PR #48720.
         try:
             for padding_side in ["left", "right"]:
                 tokenizer.padding_side = padding_side
@@ -425,5 +428,6 @@ class DeepseekV3IntegrationTest(unittest.TestCase):
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
 
+        # Explicit cleanup so the ~10 GB checkpoint doesn't stay reserved after the test. See PR #48720.
         del model
         cleanup(torch_device, gc_collect=True)
