@@ -834,7 +834,7 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
                 "content": [
                     {
                         "type": "image",
-                        "image": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo.jpg",
+                        "image": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png",
                     },
                     {"type": "text", "text": "OCR:"},
                 ],
