@@ -124,20 +124,18 @@ class RadioPatchEmbeddings(nn.Module):
 class RadioMLP(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
-        in_features = out_features = config.hidden_size
-        hidden_features = int(config.hidden_size * config.mlp_ratio)
-        self.fc1 = nn.Linear(in_features, hidden_features, bias=True)
-        if isinstance(config.hidden_act, str):
-            self.activation = ACT2FN[config.hidden_act]
-        else:
-            self.activation = config.hidden_act
-        self.fc2 = nn.Linear(hidden_features, out_features, bias=True)
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        # the hidden size comes from mlp_ratio; the config has no intermediate_size
+        self.fc1 = nn.Linear(config.hidden_size, int(config.hidden_size * config.mlp_ratio))
+        self.fc2 = nn.Linear(int(config.hidden_size * config.mlp_ratio), config.hidden_size)
 
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.fc1(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        hidden_state = self.fc2(hidden_state)
-        return hidden_state
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+
+        return hidden_states
 
 
 class RadioLayerScale(nn.Module):
@@ -177,112 +175,69 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Radio
-class RadioSelfAttention(nn.Module):
+class RadioAttention(nn.Module):
     def __init__(self, config: RadioConfig):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
-                f"heads {config.num_attention_heads}."
-            )
-
         self.config = config
         self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.dropout_prob = config.attention_probs_dropout_prob
-        self.scaling = self.attention_head_size**-0.5
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.attention_dropout = config.attention_probs_dropout_prob
+        self.scaling = self.head_dim**-0.5
         self.is_causal = False
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size = hidden_states.shape[0]
-        new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        key_layer = self.key(hidden_states).view(*new_shape).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
-        query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
 
-        context_layer, attention_probs = attention_interface(
+        attn_output, attn_weights = attention_interface(
             self,
-            query_layer,
-            key_layer,
-            value_layer,
-            None,
-            is_causal=self.is_causal,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            dropout=0.0 if not self.training else self.dropout_prob,
             **kwargs,
         )
 
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.reshape(new_context_layer_shape)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
 
-        return context_layer, attention_probs
-
-
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Radio
-class RadioSelfOutput(nn.Module):
-    """
-    The residual connection is defined in RadioLayer instead of here (as is the case with other models), due to the
-    layernorm applied before each block.
-    """
-
-    def __init__(self, config: RadioConfig):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        return hidden_states
-
-
-# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Radio
-class RadioAttention(nn.Module):
-    def __init__(self, config: RadioConfig):
-        super().__init__()
-        self.attention = RadioSelfAttention(config)
-        self.output = RadioSelfOutput(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states, **kwargs)
-        output = self.output(self_attn_output, hidden_states)
-        return output
+        return attn_output, attn_weights
 
 
 class RadioSwiGLUFFN(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
-        in_features = out_features = config.hidden_size
         hidden_features = int(config.hidden_size * config.mlp_ratio)
+        # SwiGLU keeps two thirds of the MLP hidden size, rounded up to a multiple of 8
         hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
+        self.gate_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
+        self.up_proj = nn.Linear(config.hidden_size, hidden_features, bias=True)
+        self.down_proj = nn.Linear(hidden_features, config.hidden_size, bias=True)
+        self.act_fn = ACT2FN["silu"]
 
-        self.weights_in = nn.Linear(in_features, 2 * hidden_features, bias=True)
-        self.weights_out = nn.Linear(hidden_features, out_features, bias=True)
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.weights_in(hidden_state)
-        x1, x2 = hidden_state.chunk(2, dim=-1)
-        hidden = nn.functional.silu(x1) * x2
-        return self.weights_out(hidden)
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 class RadioDropPath(nn.Module):
@@ -314,40 +269,34 @@ class RadioLayer(GradientCheckpointingLayer):
 
     def __init__(self, config: RadioConfig) -> None:
         super().__init__()
-
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = RadioAttention(config)
         self.layer_scale1 = RadioLayerScale(config)
         self.drop_path = RadioDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        if config.use_swiglu_ffn:
-            self.mlp = RadioSwiGLUFFN(config)
-        else:
-            self.mlp = RadioMLP(config)
+        self.mlp = RadioSwiGLUFFN(config) if config.use_swiglu_ffn else RadioMLP(config)
         self.layer_scale2 = RadioLayerScale(config)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        hidden_states_norm = self.norm1(hidden_states)
-        self_attention_output = self.attention(hidden_states_norm)
-        self_attention_output = self.layer_scale1(self_attention_output)
+        # Self Attention
+        residual = hidden_states
+        hidden_states = self.norm1(hidden_states)
+        hidden_states, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
+        hidden_states = self.layer_scale1(hidden_states)
+        hidden_states = self.drop_path(hidden_states) + residual
 
-        # first residual connection
-        hidden_states = self.drop_path(self_attention_output) + hidden_states
-
-        # in Radio, layernorm is also applied after self-attention
-        layer_output = self.norm2(hidden_states)
-        layer_output = self.mlp(layer_output)
-        layer_output = self.layer_scale2(layer_output)
-
-        # second residual connection
-        layer_output = self.drop_path(layer_output) + hidden_states
-
-        return layer_output
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.layer_scale2(hidden_states)
+        hidden_states = self.drop_path(hidden_states) + residual
+        return hidden_states
 
 
 @auto_docstring
@@ -362,7 +311,7 @@ class RadioPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _can_record_outputs = {
         "hidden_states": RadioLayer,
-        "attentions": RadioSelfAttention,
+        "attentions": RadioAttention,
     }
 
     @torch.no_grad()
