@@ -1042,6 +1042,7 @@ class Molmo2Processor(ProcessorMixin):
         self.use_frame_special_tokens = use_frame_special_tokens
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
         images: ImageInput | None = None,
