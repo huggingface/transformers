@@ -332,6 +332,7 @@ def DFineForObjectDetectionLoss(
     criterion.to(device)
     if denoising_meta_values is not None:
         # Drop denoising queries and calculate loss only over normal queries.
+        # See https://github.com/huggingface/transformers/pull/48528
         _, logits = torch.split(logits, denoising_meta_values["dn_num_split"], dim=1)
         _, pred_boxes = torch.split(pred_boxes, denoising_meta_values["dn_num_split"], dim=1)
     # Second: compute the losses, based on outputs and labels

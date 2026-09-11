@@ -656,7 +656,9 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         )
 
     def test_main_loss_excludes_denoising_queries(self):
-        """The Hungarian-matched main loss must only see the normal queries, not the contrastive denoising ones."""
+        """The main loss must only see the normal queries, not the denoising ones.
+        See https://github.com/huggingface/transformers/pull/48528
+        """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_denoising = 10
         config.auxiliary_loss = True
