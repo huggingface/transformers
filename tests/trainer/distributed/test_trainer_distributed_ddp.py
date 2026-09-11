@@ -298,3 +298,25 @@ class TestTrainerDistributedDDPCommon(DDPCommandsMixin, TrainerDistributedCommon
 
     def test_eval(self):
         self.check_eval(config_file=DDP_CONFIG_FILE)
+
+    @parameterized.expand([("no_accum", 1), ("with_accum", 2)])
+    def test_training_with_batch_rebalance_sampler(self, _name, gradient_accumulation_steps):
+        """Training runs end to end under DDP with ``train_sampling_strategy="batch_rebalance"``.
+
+        ``--padding do_not_pad`` gives the variable-length data the sampler rebalances.
+        """
+        output_dir = self.get_auto_remove_tmp_dir()
+        script = os.path.join(SCRIPTS_DIR, "train.py")
+        args = self._get_default_script_args(output_dir, num_epochs=2) + [
+            "--bf16",
+            "--padding",
+            "do_not_pad",
+            "--train_sampling_strategy",
+            "batch_rebalance",
+            "--gradient_accumulation_steps",
+            str(gradient_accumulation_steps),
+        ]
+        execute_subprocess_async(
+            self.get_accelerate_cmd(script, DDP_CONFIG_FILE, script_args=args),
+            env=self.get_env(),
+        )

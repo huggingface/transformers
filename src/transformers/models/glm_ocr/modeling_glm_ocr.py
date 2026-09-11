@@ -19,7 +19,6 @@
 # limitations under the License.
 
 import itertools
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -28,7 +27,6 @@ import torch
 import torch.nn as nn
 from torch.nn import LayerNorm
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -153,10 +151,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
-
-    # Interleave them instead of usual shape
-    cos = cos[..., : cos.shape[-1] // 2].repeat_interleave(2, dim=-1)
-    sin = sin[..., : sin.shape[-1] // 2].repeat_interleave(2, dim=-1)
 
     # Keep half or full tensor for later concatenation
     rotary_dim = cos.shape[-1]
@@ -310,18 +304,6 @@ class GlmOcrTextDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class GlmOcrVisionRotaryEmbedding(nn.Module):
-    def __init__(self, dim: int, theta: float = 10000.0) -> None:
-        super().__init__()
-        self.dim = dim
-        self.theta = theta
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
-
-    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
-        return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
-
-
 @auto_docstring
 class GlmOcrPreTrainedModel(PreTrainedModel):
     config: GlmOcrConfig
@@ -336,12 +318,6 @@ class GlmOcrPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _keys_to_ignore_on_load_unexpected = [r"model\.language_model\.layers\.16.*"]
-
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, GlmOcrVisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring
@@ -532,6 +508,70 @@ class GlmOcrVisionPatchEmbed(nn.Module):
         return hidden_states
 
 
+class GlmOcrVisionRotaryEmbedding(nn.Module):
+    """
+    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
+    pre-computed using `head-dim//4` which is later used to concat H and W positions.
+    The final angles rotate over the whole head dim, no partial rotation involved.
+    """
+
+    @deprecate_kwarg("device", version="5.18")
+    def __init__(self, config: GlmOcrVisionConfig, device=None):
+        super().__init__()
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    @deprecate_kwarg("device", version="5.18")
+    def compute_axial_rope_parameters(config: GlmOcrVisionConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        spatial_dim = dim // 2
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        return inv_freq.to(device), attention_factor
+
+    @torch.no_grad()
+    def forward(self, x, position_ids):
+        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        position_ids_expanded = position_ids[..., None].float()
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):
+            freqs = position_ids_expanded * self.inv_freq.float()
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
+
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
+        return cos, sin
+
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq_h, freq_w = freq[:, 0], freq[:, 1]
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
+        return torch.cat([freq_hw, freq_hw], dim=-1)
+
+
 class GlmOcrVisionModel(GlmOcrPreTrainedModel):
     config: GlmOcrVisionConfig
     input_modalities = ("image", "video")
@@ -547,8 +587,7 @@ class GlmOcrVisionModel(GlmOcrPreTrainedModel):
         self.patch_size = config.patch_size
         self.patch_embed = GlmOcrVisionPatchEmbed(config)
 
-        head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = GlmOcrVisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = GlmOcrVisionRotaryEmbedding(config)
 
         self.blocks = nn.ModuleList([GlmOcrVisionBlock(config) for _ in range(config.depth)])
         self.merger = GlmOcrVisionPatchMerger(
@@ -566,16 +605,6 @@ class GlmOcrVisionModel(GlmOcrPreTrainedModel):
 
         self.gradient_checkpointing = False
         self.post_init()
-
-    def rot_pos_emb(self, grid_thw):
-        warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        return rotary_pos_emb, position_ids
 
     @merge_with_config_defaults
     @capture_outputs
@@ -599,9 +628,7 @@ class GlmOcrVisionModel(GlmOcrPreTrainedModel):
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
-        rotary_emb = self.rotary_pos_emb(position_ids)
-        emb = torch.cat((rotary_emb, rotary_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
+        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
 
         for blk in self.blocks:
             hidden_states = blk(
@@ -647,7 +674,7 @@ class GlmOcrTextRotaryEmbedding(nn.Module):
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(config: GlmOcrTextConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: GlmOcrConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -668,9 +695,9 @@ class GlmOcrTextRotaryEmbedding(nn.Module):
         return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    @dynamic_rope_update
     def forward(self, x, position_ids):
-        # In contrast to other models, GLM-V has different position ids for the grids
+        # In contrast to other models, GlmOcrText has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
         inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
@@ -678,18 +705,19 @@ class GlmOcrTextRotaryEmbedding(nn.Module):
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
-            freqs = self.apply_mrope(freqs, self.mrope_section)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
 
+        sin = self.recomposition_frequencies(sin)
+        cos = self.recomposition_frequencies(cos)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
-    def apply_mrope(self, freqs, mrope_section):
-        section = mrope_section
-        chunks = freqs.split(section, dim=-1)
-        result = torch.cat([chunk[i % 3] for i, chunk in enumerate(chunks)], dim=-1)
-        return result
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq = torch.cat([m[i % 3] for i, m in enumerate(freq.split(self.mrope_section, dim=-1))], dim=-1)
+        return freq.repeat_interleave(2, dim=-1)
 
 
 @auto_docstring
@@ -1279,7 +1307,9 @@ class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return GlmOcrCausalLMOutputWithPast(
             loss=loss,

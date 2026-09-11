@@ -36,6 +36,7 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -204,7 +205,12 @@ class Cohere2IntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
+                    },
                     {"type": "text", "text": "Please describe the image explicitly."},
                 ],
             }
@@ -280,7 +286,12 @@ class Cohere2IntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
+                    },
                     {"type": "text", "text": "Please describe the image explicitly."},
                 ],
             }
@@ -316,7 +327,12 @@ class Cohere2IntegrationTest(unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                        {
+                            "type": "image",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+                            ),
+                        },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
                 },
@@ -327,7 +343,9 @@ class Cohere2IntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+                            ),
                         },
                         {"type": "text", "text": "Describe this image"},
                     ],
@@ -344,8 +362,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): 'Dock stretches to calm',
-                ("cuda", 8): 'Dock stretches to calm',
+                (None, None): 'Dock meets silent lake',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -385,7 +402,12 @@ class Cohere2IntegrationTest(unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                        {
+                            "type": "image",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+                            ),
+                        },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
                 },
@@ -396,11 +418,15 @@ class Cohere2IntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
+                            ),
                         },
                         {
                             "type": "image",
-                            "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg"
+                            ),
                         },
                         {
                             "type": "text",
@@ -476,7 +502,12 @@ class Cohere2MoeVisionIntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
+                    },
                     {"type": "text", "text": "Please describe the image explicitly."},
                 ],
             }
@@ -505,7 +536,12 @@ class Cohere2MoeVisionIntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
+                    },
                     {"type": "text", "text": "Please describe the image explicitly."},
                 ],
             }

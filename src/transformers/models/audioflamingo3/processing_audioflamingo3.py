@@ -16,7 +16,7 @@
 
 import numpy as np
 
-from ...audio_utils import AudioInput, make_list_of_audio_chat_template
+from ...audio_utils import AudioInput, make_audio_chat_template_content, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
@@ -215,7 +215,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
             prompts = [self.default_transcription_prompt] * batch_size
         elif isinstance(prompt, str):
             prompts = [prompt] * batch_size
-        elif isinstance(prompt, (list, tuple)):
+        elif isinstance(prompt, list | tuple):
             if len(prompt) != batch_size:
                 raise ValueError(
                     f"Received {len(prompt)} prompt(s) for {batch_size} audio sample(s); counts must match."
@@ -237,9 +237,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
                     "role": "user",
                     "content": [
                         {"type": "text", "text": prompt_text},
-                        {"type": "audio", "path": audio_item}
-                        if isinstance(audio_item, str)
-                        else {"type": "audio", "audio": audio_item},
+                        make_audio_chat_template_content(audio_item),
                     ],
                 }
             ]

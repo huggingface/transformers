@@ -267,7 +267,7 @@ if __name__ == "__main__":
                         is_changed_flags.append(result)
                     except Exception as individual_error:
                         console.print(f"[bold red]Failed to convert {file_path}: {individual_error}[/bold red]")
-                        is_changed_flags.append(0)  # Mark as no change to continue processing
+                        is_changed_flags.append(1)  # Mark as changed to let it raise a proper Error
 
             # Collect changed files and their original paths
             for is_changed, file_path in zip(is_changed_flags, files_to_check):

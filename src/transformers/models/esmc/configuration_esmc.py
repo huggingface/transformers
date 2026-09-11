@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 from ...utils.type_validators import interval
 
 
-@auto_docstring(checkpoint="biohub/ESMC-6B")
+@auto_docstring(checkpoint="biohub/ESMC-6B-hf")
 @strict
 class EsmcConfig(PreTrainedConfig):
     r"""
@@ -39,7 +39,7 @@ class EsmcConfig(PreTrainedConfig):
     ```python
     >>> from transformers import EsmcConfig, EsmcModel
 
-    >>> # Initializing an ESMC biohub/ESMC-6B style configuration
+    >>> # Initializing an ESMC biohub/ESMC-6B-hf style configuration
     >>> configuration = EsmcConfig()
 
     >>> # Initializing a model (with random weights) from the configuration

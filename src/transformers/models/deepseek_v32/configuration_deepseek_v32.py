@@ -20,13 +20,12 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V3.2-Exp")
 @strict
-class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class DeepseekV32Config(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
         Number of groups for routed experts.

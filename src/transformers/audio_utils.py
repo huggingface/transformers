@@ -445,6 +445,104 @@ def make_list_of_audio_chat_template(
     return make_list_of_audio(audio)
 
 
+def make_audio_chat_template_content(audio_item) -> dict:
+    """
+    Build a chat-template content dict for a single audio item.
+
+    Args:
+        audio_item (`str` or array-like):
+            A single audio item. Strings are treated as local paths or URLs; other values (numpy/torch arrays) are
+            forwarded directly.
+
+    Returns:
+        `dict`: A chat-template content dict, e.g. `{"type": "audio", "path": ...}` for strings or
+        `{"type": "audio", "audio": ...}` otherwise.
+    """
+    if isinstance(audio_item, str):
+        return {"type": "audio", "path": audio_item}
+    return {"type": "audio", "audio": audio_item}
+
+
+def resolve_language(language: str | None, code_to_name: dict[str, str], return_code: bool = True) -> str | None:
+    """
+    Map a language code or name to its canonical form, with validation.
+
+    Accepts either a language code (e.g. ``"zh"``, ``"en"``) or a full name (e.g. ``"Chinese"``, ``"English"``) and
+    returns the canonical code or name depending on ``return_code``. ``None`` passes through unchanged (auto-detect).
+
+    Args:
+        language (`str` or `None`):
+            The language code or full name to resolve. ``None`` is returned unchanged.
+        code_to_name (`dict[str, str]`):
+            Mapping from language code to full language name for the model's supported languages.
+        return_code (`bool`, *optional*, defaults to `True`):
+            Whether to return the canonical language ``code``. If ``False``, returns the full language ``name``.
+
+    Returns:
+        `str` or `None`: The canonical language code or name, or ``None`` if ``language`` is ``None``.
+
+    Raises:
+        `ValueError`: If the language is not recognized.
+    """
+    if language is None:
+        return None
+
+    language_lower = language.lower()
+    # Try code lookup first, then full-name lookup (both case-insensitive)
+    for code, name in code_to_name.items():
+        if language_lower == code.lower() or language_lower == name.lower():
+            return code if return_code else name
+
+    raise ValueError(
+        f"Unsupported language: {language!r}. Use a language code "
+        f"(e.g. 'en', 'zh') or full name (e.g. 'English', 'Chinese'). "
+        f"Supported codes: {sorted(code_to_name.keys())}. "
+        f"Supported names: {sorted(set(code_to_name.values()))}."
+    )
+
+
+def prepare_language_inputs(
+    language: str | list[str] | None,
+    batch_size: int,
+    code_to_name: dict[str, str],
+    allow_broadcast: bool = False,
+    return_code: bool = True,
+) -> list[str | None]:
+    """
+    Broadcast and validate a language argument to match ``batch_size``.
+
+    Accepts language codes (e.g. ``"zh"``, ``"en"``) or full names (e.g. ``"Chinese"``, ``"English"``). Each value is
+    resolved to its canonical form via [`resolve_language`].
+
+    Args:
+        language (`str`, `list[str]`, or `None`):
+            The language hint(s). A single value is broadcast to the whole batch; a list must match ``batch_size``
+            (unless ``allow_broadcast`` is set). ``None`` disables language hints for the whole batch.
+        batch_size (`int`):
+            The number of samples in the batch.
+        code_to_name (`dict[str, str]`):
+            Mapping from language code to full language name for the model's supported languages.
+        allow_broadcast (`bool`, *optional*, defaults to `False`):
+            Whether a single-element list may be broadcast to the whole batch.
+        return_code (`bool`, *optional*, defaults to `True`):
+            Whether to return canonical language ``code``s. If ``False``, returns full language ``name``s.
+
+    Returns:
+        `list[str | None]`: The resolved language for each sample.
+    """
+    if language is None:
+        return [None] * batch_size
+    if isinstance(language, str):
+        return [resolve_language(language, code_to_name, return_code)] * batch_size
+    if isinstance(language, (list, tuple)):
+        if allow_broadcast and len(language) == 1 and batch_size > 1:
+            return [resolve_language(language[0], code_to_name, return_code)] * batch_size
+        if len(language) != batch_size:
+            raise ValueError(f"Got {len(language)} language(s) for {batch_size} sample(s); counts must match.")
+        return [resolve_language(lang, code_to_name, return_code) for lang in language]
+    raise TypeError("`language` must be a string, a list of strings, or `None`.")
+
+
 def hertz_to_mel(freq: float | np.ndarray, mel_scale: str = "htk") -> float | np.ndarray:
     """
     Convert frequency from hertz to mels.
