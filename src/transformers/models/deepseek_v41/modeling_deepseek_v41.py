@@ -679,11 +679,11 @@ class DeepseekV41Attention(nn.Module):
         self.is_index_source = layer_idx in config.index_source_layer_ids
         self.compressor = DeepseekV41Compressor(config, layer_idx) if self.is_kv_source else None
         self.indexer = DeepseekV41Indexer(config, layer_idx) if self.is_index_source else None
-        # trf-ignore: TRF050 — the compress-rope cos/sin here are evaluated at the
-        # LATENT positions (first_group_position + ratio*k), which are only known
-        # after the compressor runs; the model-level rotary cannot precompute them in
-        # `position_embeddings`. Only kv-source layers own one (shared by their group).
-        self.compress_rotary = DeepseekV41RotaryEmbedding(config) if self.is_kv_source else None
+        # The compress-rope cos/sin here are evaluated at the LATENT positions
+        # (first_group_position + ratio*k), which are only known after the compressor
+        # runs; the model-level rotary cannot precompute them in `position_embeddings`.
+        # Only kv-source layers own one (shared by their group).
+        self.compress_rotary = DeepseekV41RotaryEmbedding(config) if self.is_kv_source else None  # trf-ignore: TRF050
 
     def forward(
         self,
@@ -1254,14 +1254,15 @@ class DeepseekV41DecoderLayer(GradientCheckpointingLayer):
         return hidden_streams, ffn_pre
 
 
+# Deliberate: this base serves BOTH model types. The text backbone chain
+# (DeepseekV41TextModel, registered as `deepseek_v41_text`) needs the flat
+# DeepseekV41TextConfig; DeepseekV41ForCausalLM overrides with the composite
+# DeepseekV41Config because the released checkpoint's config.json is composite and
+# its top-level quantization_config must reach the quantizer.
 @auto_docstring
-class DeepseekV41PreTrainedModel(PreTrainedModel):
-    # trf-ignore: TRF001 — deliberate: this base serves BOTH model types. The text
-    # backbone chain (DeepseekV41TextModel, registered as `deepseek_v41_text`) needs
-    # the flat DeepseekV41TextConfig; DeepseekV41ForCausalLM overrides with the
-    # composite DeepseekV41Config because the released checkpoint's config.json is
-    # composite and its top-level quantization_config must reach the quantizer.
+class DeepseekV41PreTrainedModel(PreTrainedModel):  # trf-ignore: TRF001
     config_class = DeepseekV41TextConfig
+
     base_model_prefix = "model"
     _no_split_modules = ["DeepseekV41DecoderLayer"]
     # Eager-only, same reasons as V4: FA caps head_dim at 256 (V4.1 uses 512); SDPA has

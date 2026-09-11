@@ -179,3 +179,23 @@ print(tok.decode(out[0], skip_special_tokens=True))
 
 [[autodoc]] DeepseekV41ForCausalLM
     - forward
+
+## DeepseekV41VisionConfig
+
+[[autodoc]] DeepseekV41VisionConfig
+
+## DeepseekV41CSACache
+
+[[autodoc]] DeepseekV41CSACache
+
+## DeepseekV41EngramEmbedding
+
+[[autodoc]] DeepseekV41EngramEmbedding
+
+## DeepseekV41NgramHashState
+
+[[autodoc]] DeepseekV41NgramHashState
+
+## EngramLayout
+
+[[autodoc]] EngramLayout
