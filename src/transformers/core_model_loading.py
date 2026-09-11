@@ -97,6 +97,11 @@ class ConversionOps(ABC):
     def reverse_op(self) -> ConversionOps:
         raise NotImplementedError
 
+    def shards_after_conversion(self, placements, ndim: int) -> bool:
+        """Whether this op forces a DTensor parameter with these `placements` to be converted in full, before this
+        rank's shard is taken. An op that maps every target element to one source element keeps shard-on-read."""
+        return False
+
 
 class _IdentityOp(ConversionOps):
     """Pass-through reverse op for dequantize operations.
@@ -436,6 +441,11 @@ class PermuteForRope(ConversionOps):
         self.subconfig_key = subconfig_key
         self.inverse = inverse
         self.permute_layer_names = permute_layer_names
+
+    def shards_after_conversion(self, placements, ndim: int) -> bool:
+        # `_apply` interleaves rows and reads the head size off `tensor.shape[0]`, so on a shard it permutes with the
+        # local row count and silently produces the wrong weights.
+        return 0 in {placement.dim % ndim for placement in placements if placement.is_shard()}
 
     def _apply(self, tensor: torch.Tensor) -> torch.Tensor:
         dim0 = tensor.shape[0]
@@ -988,6 +998,11 @@ class WeightTransform:
         """
         return self._was_used
 
+    def shards_after_conversion(self, placements, ndim: int) -> bool:
+        """Whether a DTensor parameter with these `placements` has to be converted in full before this rank's shard is
+        taken. A rename moves no elements, so its shard is a slice of the source and shard-on-read applies."""
+        return False
+
 
 class WeightRenaming(WeightTransform):
     # Special case of WeightTransform that only renames keys without any conversion.
@@ -1171,6 +1186,9 @@ class WeightConverter(WeightTransform):
                 )
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
+
+    def shards_after_conversion(self, placements, ndim: int) -> bool:
+        return any(op.shards_after_conversion(placements, ndim) for op in self.operations)
 
     def convert(
         self,
@@ -1716,7 +1734,11 @@ def convert_and_load_state_dict_in_model(
             # 4. Handle DTensor sharding or device_map placement
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
             sharding_op = None
-            if is_dtensor(empty_param):
+            # A RoPE permutation moves elements across the sharded dim, so this rank's slice of the source is not the
+            # slice of the converted tensor: those are converted in full and sharded afterwards, and never get an op.
+            if is_dtensor(empty_param) and not mapping.shards_after_conversion(
+                empty_param.placements, empty_param.ndim
+            ):
                 sharding_op = DtensorShardOperation(empty_param)
 
             # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
@@ -1760,6 +1782,11 @@ def convert_and_load_state_dict_in_model(
                 )
                 for target_name, param in realized_value.items():
                     param = param[0] if isinstance(param, list) else param
+                    empty_param = meta_model_state_dict.get(target_name)
+                    if is_dtensor(empty_param) and mapping.shards_after_conversion(
+                        empty_param.placements, empty_param.ndim
+                    ):
+                        param = DtensorShardOperation(empty_param).shard_tensor(param)
                     param_device = get_device(device_map, target_name)
                     # Exception for params that are so huge that they need conversions on cpu no matter what - we put them back on
                     # the correct device now (if the device_map managed to make them fit on any device, as usually they will stay on
