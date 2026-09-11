@@ -219,6 +219,7 @@ class PagedAttentionCache:
             dtype=self.dtype,
             group_types=group_types,
             group_size=group_size,
+            tp_size=tp_size if kv_is_tp else 1,
         ).infer_max_batch_tokens_and_num_blocks()
 
         # For TP, align max_batch_tokens and num_blocks to the minimal value across the TP group
@@ -585,6 +586,7 @@ class PagedAttentionMemoryHandler:
         dtype: torch.dtype,
         group_types: list[str],
         group_size: int,
+        tp_size: int = 1,
     ) -> None:
         """Initialize the memory handler. Args:
         - config: the model configuration
@@ -592,13 +594,16 @@ class PagedAttentionMemoryHandler:
         - dtype: the data type of the activation and the cache
         - group_types: the list of all attention group types, formatted as strings
         - group_size: the size (in layers) of an attention group
+        - tp_size: the tensor parallel size the KV heads are sharded over (1 when they are not)
         """
         self.config = config
         self.cb_config = continuous_batching_config
         self.cache_dtype = dtype
         self.activation_dtype = dtype
         self.block_size = continuous_batching_config.block_size
-        self.page_size = find_head_dim(config) * find_num_kv_heads(config)
+        # Under tensor parallelism each rank holds 1/tp_size of the heads, in the cache and in the activations
+        self.tp_size = tp_size
+        self.page_size = find_head_dim(config) * find_num_kv_heads(config) // tp_size
         self.num_groups = len(group_types)
         self.group_size = group_size
 
@@ -619,7 +624,7 @@ class PagedAttentionMemoryHandler:
 
     @property
     def activation_peak(self) -> dict[str, tuple[int, ...]]:
-        mem_per_q_token = self.config.num_attention_heads * find_head_dim(self.config)
+        mem_per_q_token = self.config.num_attention_heads // self.tp_size * find_head_dim(self.config)
         mem_per_k_or_v_token = self.page_size
         peaks = {}
 
