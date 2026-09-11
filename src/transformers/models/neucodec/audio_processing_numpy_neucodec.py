@@ -19,7 +19,7 @@ from .audio_processing_neucodec import NeuCodecAudioProcessorMixin
 
 
 class NeuCodecAudioProcessorNumpy(NeuCodecAudioProcessorMixin, Xcodec2AudioProcessorNumpy):
-    def _postprocess_output(self, output, audio_ranges=None, **kwargs):
+    def _finalize_output(self, output, audio_ranges=None, **kwargs):
         # See the torch sibling for why NeuCodec skips XCodec2's valid-length trim and half-hop
         # padding, and why the padding is per-utterance rather than batch-collated.
         audio_values = output["audio_values"]
@@ -29,7 +29,7 @@ class NeuCodecAudioProcessorNumpy(NeuCodecAudioProcessorMixin, Xcodec2AudioProce
         for i, (start, end) in enumerate(audio_ranges):
             valid_length = min(-(-(end - start) // self.hop_length) * self.hop_length, padded_length)
             waveform = audio_values[i, 0, :valid_length]
-            f = self.extract_spectrogram([waveform], spectrogram_config=self.spectrogram_config)[0].T
+            f = self.compute_features([waveform], spectrogram_config=self.spectrogram_config)[0].T
             f = (f - f.mean(axis=0)) / np.sqrt(f.var(axis=0, ddof=1) + 1e-7)
             features.append(f)
 

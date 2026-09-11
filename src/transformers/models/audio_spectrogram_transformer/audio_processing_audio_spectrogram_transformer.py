@@ -75,7 +75,7 @@ class AudioSpectrogramTransformerAudioProcessorMixin:
     def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
         return super()._pad_features(features, "max_length", self.max_length_frames, True, pad_to_multiple_of)
 
-    def _postprocess_output(self, output, **kwargs):
+    def _finalize_output(self, output, **kwargs):
         features = output.pop("audio_features")
         if self.do_normalize:
             features = (features - self.ast_mean) / (self.ast_std * 2)

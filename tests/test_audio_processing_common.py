@@ -200,7 +200,7 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
     pad_test_length_diff = 4001
     pad_test_batch_size = 3
     # Whether the region outside a padded input's `ranges` holds `padding_value`. False for
-    # processors that fill short audio some other way -- CLAP tiles it (`_pad_single` with
+    # processors that fill short audio some other way -- CLAP tiles it (`_pad_waveform` with
     # `padding_mode="repeatpad"`) and only zero-pads whatever the tiling leaves over.
     pad_fills_with_padding_value: bool = True
 

@@ -130,7 +130,7 @@ class NumpyAudioBackend(BaseAudioProcessor):
         shape = x.shape[:-1] + (n_frames, frame_length)
         return np.lib.stride_tricks.as_strided(x, shape=shape, strides=strides)
 
-    def _frame_audio(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
+    def _frame_waveform(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
         if stft_cfg.center == "left":
             # semicausal (USM/Gemma): zeros prepended only
             audio = self._pad_axis(audio, (stft_cfg.win_length or n_fft) // 2, 0, axis=-1)
@@ -150,10 +150,10 @@ class NumpyAudioBackend(BaseAudioProcessor):
             out = np.where(mask, out, 0.0).astype(audio.dtype, copy=False)
         return out
 
-    def _apply_dither(self, audio, audio_ranges=None):
+    def _dither_waveform(self, audio, audio_ranges=None):
         return audio + (self.dither * np.random.randn(*audio.shape)).astype(audio.dtype)
 
-    def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
+    def _stft_framed(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
         frames = frames * window
         spec = np.fft.rfft(frames, n=n_fft, axis=-1)
         if stft_cfg.fft_dtype is None:
@@ -163,15 +163,15 @@ class NumpyAudioBackend(BaseAudioProcessor):
             spec = spec / np.sqrt(np.sum(window**2)).astype(spec.real.dtype)
         return np.moveaxis(spec, -1, -2)
 
-    def _native_stft(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
+    def _stft_native(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
         # No numpy-native STFT exists; compose the manual framing + FFT leaves. This path
         # receives the center-padded window and frame_length == n_fft from
         # `_prepare_window_and_framing`, unlike the manual path (left-aligned window).
-        # `fft_dtype` can't leak in here: `_stft` rejects it on native-STFT configurations.
-        frames = self._frame_audio(audio, window, frame_length, hop_length, n_fft, stft_cfg)
-        return self._window_and_fft(frames, window, frame_length, n_fft, stft_cfg)
+        # `fft_dtype` can't leak in here: `_waveform_to_spectrum` rejects it on native-STFT configurations.
+        frames = self._frame_waveform(audio, window, frame_length, hop_length, n_fft, stft_cfg)
+        return self._stft_framed(frames, window, frame_length, n_fft, stft_cfg)
 
-    def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
+    def _spectrum_magnitude(self, stft_out, power, spectrogram_config=None):
         # computation_dtype signals that upstream FE used float64 magnitudes
         if spectrogram_config and spectrogram_config.computation_dtype:
             return np.abs(stft_out, dtype=np.float64) ** power
@@ -298,7 +298,7 @@ class NumpyAudioBackend(BaseAudioProcessor):
     def _cast_mel_filters_to_default_float(self, mel_filters):
         return mel_filters.astype(np.float32, copy=False)
 
-    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
+    def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
         mel_filters = self.mel_filters.astype(features.dtype, copy=False)
         if spectrogram_config.mel_scale_config.matmul_order == "features_first":
             mel_spec = np.matmul(features.swapaxes(-2, -1), mel_filters)
@@ -326,7 +326,7 @@ class NumpyAudioBackend(BaseAudioProcessor):
             return fbank.numpy()
 
         waveform = np.squeeze(waveform)
-        features = self.extract_spectrogram([waveform], spectrogram_config=self.spectrogram_config)
+        features = self.compute_features([waveform], spectrogram_config=self.spectrogram_config)
         return features[0].T
 
 
@@ -420,7 +420,7 @@ class TorchAudioBackend(BaseAudioProcessor):
             raise ValueError(f"Unknown window function '{name}'")
         return window.to(device=audio.device)
 
-    def _frame_audio(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
+    def _frame_waveform(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
         if stft_cfg.center == "left":
             pad_left = (stft_cfg.win_length or n_fft) // 2
             audio = torch.nn.functional.pad(audio, (pad_left, 0), mode="constant", value=0.0)
@@ -436,11 +436,11 @@ class TorchAudioBackend(BaseAudioProcessor):
             audio = audio.masked_fill(~mask, 0.0)
         return audio
 
-    def _apply_dither(self, audio, audio_ranges=None):
+    def _dither_waveform(self, audio, audio_ranges=None):
         noise = torch.randn(audio.shape, dtype=audio.dtype, device=audio.device)
         return audio + self.dither * noise
 
-    def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
+    def _stft_framed(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
         frames = frames * window
         if stft_cfg.fft_dtype == "float64":
             frames = frames.to(torch.float64)  # mirrors numpy's rfft float64 promotion
@@ -451,7 +451,7 @@ class TorchAudioBackend(BaseAudioProcessor):
             spec = spec / window.pow(2.0).sum().sqrt()
         return spec.transpose(-2, -1)
 
-    def _native_stft(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
+    def _stft_native(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
         stft_out = torch.stft(
             audio,
             n_fft=n_fft,
@@ -472,7 +472,7 @@ class TorchAudioBackend(BaseAudioProcessor):
             return magnitudes
         return magnitudes.float()
 
-    def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
+    def _spectrum_magnitude(self, stft_out, power, spectrogram_config=None):
         # TODO(audio-processor): reinstate the contiguity fix once the perf/parity trade-off is
         # decided. `torch.stft` returns a non-contiguous tensor and `abs() ** power` keeps that
         # layout, so the downstream `mel_filters.T @ magnitudes` matmul can fall onto a slow
@@ -631,7 +631,7 @@ class TorchAudioBackend(BaseAudioProcessor):
     def _cast_mel_filters_to_default_float(self, mel_filters):
         return mel_filters.to(torch.get_default_dtype())
 
-    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
+    def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
         # Match the filters to the feature dtype: unlike numpy, `torch.matmul` refuses mixed
         # dtypes, so float64 filters against float32 features would raise instead of promoting.
         mel_filters = self.mel_filters.to(device=features.device, dtype=features.dtype)

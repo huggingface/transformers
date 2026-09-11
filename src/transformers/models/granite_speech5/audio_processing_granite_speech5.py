@@ -33,7 +33,7 @@ class GraniteSpeech5AudioProcessorKwargs(AudioKwargs, total=False):
 
 class GraniteSpeech5AudioProcessorMixin:
     sampling_rate = 16000
-    # `_postprocess_output` builds its own mask over the frame-stacked length.
+    # `_finalize_output` builds its own mask over the frame-stacked length.
     return_padding_mask = False
     extra_model_input_names = ["audio_features_mask"]
     do_extract_spectrogram = True
@@ -75,7 +75,7 @@ class GraniteSpeech5AudioProcessor(GraniteSpeech5AudioProcessorMixin, TorchAudio
         kernel = kernel.expand(features.shape[-2], 1, -1)
         return torch.nn.functional.conv1d(padded, kernel, groups=features.shape[-2]) / denominator
 
-    def _postprocess_output(self, output, audio_ranges=None, **kwargs):
+    def _finalize_output(self, output, audio_ranges=None, **kwargs):
         # (batch, n_mels, frames), already floored and rescaled by the spectrogram config.
         logmel = output.pop("audio_features")
         stacking = self.frame_stacking

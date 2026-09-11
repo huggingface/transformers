@@ -46,7 +46,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
     # `valid_kwargs` is the config surface; this is the subset `__call__` accepts. Everything a model adds
     # on top of `AudioKwargs` is config-only by default, because model hooks read `self.x` rather than the
     # merged kwarg — a model wanting a genuine per-call knob allowlists it *and* adds a read site (see
-    # `Qwen3ASRAudioProcessor._postprocess_output`). See docs/adr/0007-per-call-kwargs-allowlist.md.
+    # `Qwen3ASRAudioProcessor._finalize_output`). See docs/adr/0007-per-call-kwargs-allowlist.md.
     per_call_kwargs = set(AudioKwargs.__annotations__) - {"add_channel_dim"}
 
     add_channel_dim: bool = False
@@ -55,7 +55,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
     padding_value = 0.0
     return_padding_mask = True
     do_batch_spectrogram = True
-    # Keys `_postprocess_output` adds on top of the derived ones, for `model_input_names`.
+    # Keys `_finalize_output` adds on top of the derived ones, for `model_input_names`.
     extra_model_input_names: list[str] = []
     dither: float = 0.0
     # Output keys left untouched by `convert_to_tensors`, for non-array metadata a model
@@ -94,7 +94,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """The keys `__call__` emits, i.e. the kwargs the model's `forward` accepts.
 
         Mirrors how `_standardize_kwargs` resolves `do_extract_spectrogram`. Declare
-        `extra_model_input_names` for keys `_postprocess_output` adds; shadow this with a plain
+        `extra_model_input_names` for keys `_finalize_output` adds; shadow this with a plain
         list only when it *renames* the derived keys. A composite processor subtracts the ones
         it consumes itself via its `unused_input_names`.
         """
@@ -159,8 +159,8 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
     def _prepare_audio_like_inputs(self, audio: AudioInput, *args, sampling_rate: int | None = None, **kwargs) -> list:
         audio, sampling_rate = self._prepare_audio_structure(audio, sampling_rate=sampling_rate)
-        audio = [self.process_audio(audio_el) for audio_el in audio]
-        # Resample after `process_audio`, so `_resample` always sees a mono waveform in the backend's
+        audio = [self._downmix_to_mono(audio_el) for audio_el in audio]
+        # Resample after `_downmix_to_mono`, so `_resample` always sees a mono waveform in the backend's
         # own array type.
         if sampling_rate != self.sampling_rate:
             logger.warning_once(
@@ -198,9 +198,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """Resample one mono waveform to ``target_sampling_rate``. Implemented per backend."""
         raise NotImplementedError
 
-    def process_audio(self, *args, **kwargs):
-        return self._process_audio(*args, **kwargs)
-
     def _preprocess(
         self,
         audio: list[np.ndarray] | list["torch.Tensor"],
@@ -216,9 +213,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
     ) -> BatchFeature:
         # Path 1: per-waveform spectrogram extraction, padded at the feature level.
         if do_extract_spectrogram and not do_batch_spectrogram:
-            features = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
+            features = self.compute_features(audio, spectrogram_config=spectrogram_config, **kwargs)
             feature_lengths = [f.shape[0] for f in features]
-            features = self._postprocess_features(features, feature_lengths)
+            features = self._finalize_features(features, feature_lengths)
             features, feature_ranges = self._pad_features(
                 features,
                 padding,
@@ -229,7 +226,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
             output = {"audio_features": self._stack_features(features)}
             if self.return_padding_mask:
                 output["audio_features_mask"] = self._get_mask(feature_ranges, features[0].shape[0])
-            output = self._postprocess_output(output, feature_ranges=feature_ranges, **kwargs)
+            output = self._finalize_output(output, feature_ranges=feature_ranges, **kwargs)
             return BatchFeature(
                 data=output, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion
             )
@@ -237,11 +234,11 @@ class BaseAudioProcessor(AudioProcessingMixin):
         # Path 2: pad audio first, then optionally extract a spectrogram on the padded batch.
         audio, audio_ranges = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
         padded_length = audio[0].shape[-1]
-        batched = self._to_batch(audio)
+        batched = self._stack_waveforms(audio)
 
         if do_extract_spectrogram:
             output = {
-                "audio_features": self.extract_spectrogram(
+                "audio_features": self.compute_features(
                     batched,
                     spectrogram_config=spectrogram_config,
                     audio_ranges=audio_ranges,
@@ -256,33 +253,33 @@ class BaseAudioProcessor(AudioProcessingMixin):
             if do_extract_spectrogram:
                 spec_cfg = spectrogram_config or self.spectrogram_config
                 audio_lengths = np.array([end - start for start, end in audio_ranges])
-                feature_lengths = self._get_valid_feature_lengths(audio_lengths, spec_cfg)
+                feature_lengths = self._valid_frame_counts(audio_lengths, spec_cfg)
                 mask_ranges = [(0, int(length)) for length in feature_lengths]
-                mask_length = self._get_mask_width(padded_length, spec_cfg)
+                mask_length = self._padded_frame_count(padded_length, spec_cfg)
             else:
                 mask_ranges = audio_ranges
                 mask_length = padded_length
             mask_key = "audio_features_mask" if do_extract_spectrogram else "audio_values_mask"
             output[mask_key] = self._get_mask(mask_ranges, mask_length)
 
-        output = self._postprocess_output(output, audio_ranges=audio_ranges, **kwargs)
+        output = self._finalize_output(output, audio_ranges=audio_ranges, **kwargs)
         return BatchFeature(
             data=output, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion
         )
 
-    def _postprocess_features(self, features, feature_lengths):
+    def _finalize_features(self, features, feature_lengths):
         """Hook: per-utterance feature processing after extraction, before feature-level padding.
         Override for normalization that must happen on unpadded features
         """
         return features
 
-    def _postprocess_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
+    def _finalize_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
         """Hook: augment or modify the output dict after main processing.
         Override to add custom fields (e.g., audio_embed_sizes) or post-hoc normalization on the stacked/batched output.
         """
         return output
 
-    def _get_padding_strategies(self, padding=False, max_length=None):
+    def _resolve_padding_strategy(self, padding=False, max_length=None):
         if padding is not False:
             if padding is True:
                 padding_strategy = PaddingStrategy.LONGEST
@@ -315,7 +312,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         truncation: bool = False,
         pad_to_multiple_of: int | None = None,
     ) -> tuple[list, list[tuple[int, int]]]:
-        padding_strategy = self._get_padding_strategies(padding=padding, max_length=max_length)
+        padding_strategy = self._resolve_padding_strategy(padding=padding, max_length=max_length)
 
         if truncation:
             # `_validate_preprocess_kwargs` enforces this on the `preprocess` path, but `pad` is public
@@ -325,7 +322,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
             trunc_length = max_length
             if pad_to_multiple_of is not None and (trunc_length % pad_to_multiple_of != 0):
                 trunc_length = ((trunc_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
-            audio = [self._truncate_single(audio_el, max_length=trunc_length) for audio_el in audio]
+            audio = [self._truncate_waveform(audio_el, max_length=trunc_length) for audio_el in audio]
 
         if padding_strategy == PaddingStrategy.LONGEST:
             max_length = max(audio_el.shape[-1] for audio_el in audio)
@@ -337,7 +334,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         actual_lengths = [audio_el.shape[-1] for audio_el in audio]
 
         if padding_strategy != PaddingStrategy.DO_NOT_PAD:
-            audio = [self._pad_single(audio_el, max_length=max_length) for audio_el in audio]
+            audio = [self._pad_waveform(audio_el, max_length=max_length) for audio_el in audio]
 
         audio_ranges = []
         for i, length in enumerate(actual_lengths):
@@ -349,11 +346,11 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
         return audio, audio_ranges
 
-    def _truncate_single(self, audio_el, max_length: int):
+    def _truncate_waveform(self, audio_el, max_length: int):
         return audio_el[..., :max_length] if audio_el.shape[-1] > max_length else audio_el
 
     def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
-        padding_strategy = self._get_padding_strategies(padding=padding, max_length=max_length)
+        padding_strategy = self._resolve_padding_strategy(padding=padding, max_length=max_length)
         if truncation and max_length is not None:
             features = [f[:max_length] for f in features]
         actual_lengths = [f.shape[0] for f in features]
@@ -370,20 +367,20 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """Right-pad one feature array/tensor along its first (time) axis with `padding_value`."""
         return self._pad_axis(feature, 0, max_length - feature.shape[0], axis=0, value=self.padding_value)
 
-    def _process_audio(self, audio_el):
+    def _downmix_to_mono(self, audio_el):
         audio_el = self._as_backend_array(audio_el)
         if audio_el.ndim > 1:
             # Multi-channel input is always averaged down to mono.
             audio_el = self._squeeze_axis0(audio_el) if audio_el.shape[0] == 1 else self._mean_axis0(audio_el)
         return audio_el
 
-    def _to_batch(self, audio):
+    def _stack_waveforms(self, audio):
         batch = self._stack(audio)
         if self.add_channel_dim:
             batch = self._insert_channel_dim(batch)
         return batch
 
-    def _pad_single(self, audio, max_length: int) -> AudioInput:
+    def _pad_waveform(self, audio, max_length: int) -> AudioInput:
         current_length = audio.shape[-1]
         if current_length >= max_length:
             return audio
@@ -407,7 +404,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
     # ── Spectrogram core ─────────────────────────────────────────────────
 
-    def extract_spectrogram(self, audio, *, spectrogram_config: SpectrogramConfig | None = None, **kwargs):
+    def compute_features(self, audio, *, spectrogram_config: SpectrogramConfig | None = None, **kwargs):
         if spectrogram_config is None:
             spectrogram_config = self.spectrogram_config
 
@@ -419,26 +416,22 @@ class BaseAudioProcessor(AudioProcessingMixin):
         norm_kwargs = {k: v for k, v in kwargs.items() if k not in ("audio_ranges", "feature_ranges")}
 
         if isinstance(audio, list):
-            features = [self._extract_spectrogram(a, spectrogram_config=spectrogram_config, **kwargs) for a in audio]
+            features = [self._compute_spectrum(a, spectrogram_config=spectrogram_config, **kwargs) for a in audio]
             if spectrogram_config.mel_scale_config is not None:
-                features = [
-                    self._apply_mel_scale(f, spectrogram_config=spectrogram_config, **kwargs) for f in features
-                ]
-            features = [
-                self._normalize_magnitude(f, spectrogram_config=spectrogram_config, **norm_kwargs) for f in features
-            ]
+                features = [self._project_to_mel(f, spectrogram_config=spectrogram_config, **kwargs) for f in features]
+            features = [self._log_compress(f, spectrogram_config=spectrogram_config, **norm_kwargs) for f in features]
         else:
-            features = self._extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
+            features = self._compute_spectrum(audio, spectrogram_config=spectrogram_config, **kwargs)
             if spectrogram_config.mel_scale_config is not None:
-                features = self._apply_mel_scale(features, spectrogram_config=spectrogram_config, **kwargs)
-            features = self._normalize_magnitude(features, spectrogram_config=spectrogram_config, **norm_kwargs)
+                features = self._project_to_mel(features, spectrogram_config=spectrogram_config, **kwargs)
+            features = self._log_compress(features, spectrogram_config=spectrogram_config, **norm_kwargs)
 
         return features
 
-    def _extract_spectrogram(self, audio, *, spectrogram_config, **kwargs):
-        return self._stft(audio, spectrogram_config=spectrogram_config, **kwargs)
+    def _compute_spectrum(self, audio, *, spectrogram_config, **kwargs):
+        return self._waveform_to_spectrum(audio, spectrogram_config=spectrogram_config, **kwargs)
 
-    def _stft(self, audio, *, spectrogram_config, **kwargs):
+    def _waveform_to_spectrum(self, audio, *, spectrogram_config, **kwargs):
         stft_cfg = spectrogram_config.stft_config
         needs_manual_framing = self._needs_manual_framing(spectrogram_config)
         if stft_cfg.frame_extension:
@@ -471,7 +464,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
                 audio = audio.to(getattr(torch, dtype_str))
         if self.dither > 0:
-            audio = self._apply_dither(audio, kwargs.get("audio_ranges"))
+            audio = self._dither_waveform(audio, kwargs.get("audio_ranges"))
         if spectrogram_config.waveform_scale is not None:
             audio = audio * spectrogram_config.waveform_scale
         if spectrogram_config.preemphasis is not None and spectrogram_config.preemphasis_mode == "waveform":
@@ -488,15 +481,15 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
         if needs_manual_framing:
             audio_dtype = audio.dtype
-            frames = self._frame_audio(
+            frames = self._frame_waveform(
                 audio, window, frame_length + stft_cfg.frame_extension, hop_length, n_fft, stft_cfg
             )
-            frames = self._apply_frame_processing(frames, spectrogram_config=spectrogram_config, **kwargs)
-            stft_out = self._window_and_fft(frames, window, frame_length, n_fft, stft_cfg, audio_dtype=audio_dtype)
+            frames = self._process_frames(frames, spectrogram_config=spectrogram_config, **kwargs)
+            stft_out = self._stft_framed(frames, window, frame_length, n_fft, stft_cfg, audio_dtype=audio_dtype)
         else:
-            stft_out = self._native_stft(audio, window, frame_length, hop_length, n_fft, stft_cfg)
+            stft_out = self._stft_native(audio, window, frame_length, hop_length, n_fft, stft_cfg)
 
-        magnitudes = self._compute_magnitudes(stft_out, stft_cfg.power, spectrogram_config=spectrogram_config)
+        magnitudes = self._spectrum_magnitude(stft_out, stft_cfg.power, spectrogram_config=spectrogram_config)
         return self._cast_stft_output(magnitudes, spectrogram_config)
 
     # ── Spectrogram hooks ────────────────────────────────────────────────
@@ -531,7 +524,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
             return (lengths - (win_length + stft_cfg.frame_extension)) // hop_length + 1
         return lengths // hop_length
 
-    def _get_mask_width(self, padded_length, spectrogram_config) -> int:
+    def _padded_frame_count(self, padded_length, spectrogram_config) -> int:
         """Width of the extracted features' frame axis, and therefore of the padding mask.
 
         Override when the framing produces a frame count the geometry above can't express
@@ -545,7 +538,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
             width -= 1  # the log stage drops the trailing frame
         return int(width)
 
-    def _get_valid_feature_lengths(self, audio_lengths, spectrogram_config):
+    def _valid_frame_counts(self, audio_lengths, spectrogram_config):
         """Per-utterance number of frames covered by real (non-padding) audio.
 
         Honours `count_partial_frames`; override only for framing a config can't describe.
@@ -571,7 +564,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
             window = self._pad_axis(window, left_pad, right_pad, axis=-1, value=0.0)
         return window, n_fft
 
-    def _frame_audio(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
+    def _frame_waveform(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
         """Extract overlapping frames from the audio signal.
 
         Handles center padding and dtype promotion. Returns frames of shape
@@ -579,7 +572,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """
         raise NotImplementedError
 
-    def _apply_frame_processing(self, frames, *, spectrogram_config, **kwargs):
+    def _process_frames(self, frames, *, spectrogram_config, **kwargs):
         """Hook: per-frame signal conditioning after frame extraction.
 
         Called after framing, before windowing and FFT. Applies DC-offset removal, per-frame
@@ -617,33 +610,31 @@ class BaseAudioProcessor(AudioProcessingMixin):
         (ASR models: Parakeet/Cohere/Nemotron). Implemented by backend subclasses."""
         raise NotImplementedError
 
-    def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
+    def _stft_framed(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
         """Apply window, zero-pad, FFT, and normalize. Returns complex STFT of shape (..., freq, time).
         Implemented by backend subclasses."""
         raise NotImplementedError
 
-    def _apply_dither(self, audio, audio_ranges=None):
+    def _dither_waveform(self, audio, audio_ranges=None):
         """Additive dither, applied when ``self.dither`` is nonzero. Backend defaults add
         unseeded Gaussian noise; deterministic implementations (Cohere-ASR) override.
         ``audio_ranges`` is ``None`` on unbatched calls. Implemented by backend subclasses."""
         raise NotImplementedError
 
-    def _native_stft(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
+    def _stft_native(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
         """Native STFT (e.g. torch.stft). Returns complex output. Implemented by backend subclasses."""
         raise NotImplementedError
 
-    def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
+    def _spectrum_magnitude(self, stft_out, power, spectrogram_config=None):
         """Convert complex STFT output to a real-valued magnitude spectrogram.
         Implemented by backend subclasses. Overridable for custom magnitude computation (e.g. Parakeet)."""
         raise NotImplementedError
 
-    def _apply_mel_scale(self, *args, **kwargs):
+    def _project_to_mel(self, *args, **kwargs):
         """Apply mel filterbank to spectrogram features."""
         raise NotImplementedError
 
-    def _normalize_magnitude(
-        self, features, *, spectrogram_config, reference=1.0, min_value=1e-10, db_range=None, **kwargs
-    ):
+    def _log_compress(self, features, *, spectrogram_config, reference=1.0, min_value=1e-10, db_range=None, **kwargs):
         log_mel = spectrogram_config.log_mode
         if log_mel is None:
             return self._maybe_transpose_features(self._astype(features, "float32"), spectrogram_config)
@@ -671,7 +662,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
         if spectrogram_config.skip_last_frame:
             result = result[..., :-1]
-        result = self._apply_post_log_normalization(result, spectrogram_config)
+        result = self._shape_log_features(result, spectrogram_config)
         return self._maybe_transpose_features(result, spectrogram_config)
 
     def _maybe_transpose_features(self, result, spectrogram_config):
@@ -681,7 +672,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
             result = result.swapaxes(-2, -1)
         return result
 
-    def _apply_post_log_normalization(self, result, spectrogram_config):
+    def _shape_log_features(self, result, spectrogram_config):
         if spectrogram_config.clip_max_offset is not None:
             max_vals = self._amax_over_features(result)
             result = _array_namespace(result).maximum(result, max_vals - spectrogram_config.clip_max_offset)

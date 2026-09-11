@@ -82,12 +82,12 @@ class Xcodec2AudioProcessorMixin:
 
 
 class Xcodec2AudioProcessor(Xcodec2AudioProcessorMixin, TorchAudioBackend):
-    def _process_audio(self, audio_el):
+    def _downmix_to_mono(self, audio_el):
         # The legacy FE appends one zero sample to every waveform before padding
-        audio_el = super()._process_audio(audio_el)
+        audio_el = super()._downmix_to_mono(audio_el)
         return torch.nn.functional.pad(audio_el, (0, 1))
 
-    def _postprocess_output(self, output, audio_ranges=None, **kwargs):
+    def _finalize_output(self, output, audio_ranges=None, **kwargs):
         audio_values = output["audio_values"]
         padded_length = audio_values.shape[-1]
         half_hop = self.hop_length // 2
@@ -97,7 +97,7 @@ class Xcodec2AudioProcessor(Xcodec2AudioProcessorMixin, TorchAudioBackend):
             orig_length = end - start
             valid_length = min((orig_length + self.hop_length - 1) // self.hop_length * self.hop_length, padded_length)
             waveform = torch.nn.functional.pad(audio_values[i, 0, :valid_length], (half_hop, half_hop))
-            f = self.extract_spectrogram([waveform], spectrogram_config=self.spectrogram_config)[0].transpose(-2, -1)
+            f = self.compute_features([waveform], spectrogram_config=self.spectrogram_config)[0].transpose(-2, -1)
             f = (f - f.mean(0)) / torch.sqrt(f.var(0, unbiased=True) + 1e-7)
             features.append(f)
 

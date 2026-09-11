@@ -34,7 +34,7 @@ class GraniteSpeechAudioProcessorKwargs(AudioKwargs, total=False):
 
 class GraniteSpeechAudioProcessorMixin:
     sampling_rate = 16000
-    # `_postprocess_output` builds its own mask over the projector output length,
+    # `_finalize_output` builds its own mask over the projector output length,
     # which is why `return_padding_mask` is False below.
     extra_model_input_names = ["audio_features_mask", "audio_embed_sizes"]
     return_padding_mask = False
@@ -61,13 +61,13 @@ class GraniteSpeechAudioProcessorMixin:
     projector_downsample_rate = 5
     valid_kwargs = GraniteSpeechAudioProcessorKwargs
 
-    def extract_spectrogram(self, audio, **kwargs):
-        logmel = super().extract_spectrogram(audio, **kwargs).swapaxes(-1, -2)  # (batch, time, n_mels)
+    def compute_features(self, audio, **kwargs):
+        logmel = super().compute_features(audio, **kwargs).swapaxes(-1, -2)  # (batch, time, n_mels)
         if logmel.shape[1] % 2 == 1:
             logmel = logmel[:, :-1]
         return logmel.reshape(logmel.shape[0], -1, 2 * logmel.shape[-1])
 
-    def _postprocess_output(self, output, audio_ranges=None, **kwargs):
+    def _finalize_output(self, output, audio_ranges=None, **kwargs):
         hop_length = self.spectrogram_config.stft_config.hop_length
         effective_window_size = self.projector_window_size // self.projector_downsample_rate
         audio_embed_sizes = []

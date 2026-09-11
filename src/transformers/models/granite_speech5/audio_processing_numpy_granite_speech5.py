@@ -30,7 +30,7 @@ class GraniteSpeech5AudioProcessorNumpy(GraniteSpeech5AudioProcessorMixin, Numpy
         windows = np.lib.stride_tricks.sliding_window_view(padded, kernel.size, axis=-1)
         return (windows * kernel).sum(-1) / denominator
 
-    def _postprocess_output(self, output, audio_ranges=None, **kwargs):
+    def _finalize_output(self, output, audio_ranges=None, **kwargs):
         logmel = output.pop("audio_features")
         stacking = self.frame_stacking
 

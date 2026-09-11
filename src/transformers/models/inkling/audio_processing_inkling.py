@@ -45,29 +45,29 @@ class InklingAudioProcessorMixin:
         "log_mode": "log10",
         "mel_floor": 1e-10,
         "transpose_features": True,
-        # `_stft` left-pads by `n_fft - hop`, so frame k is centred on sample k*hop and counts as
+        # `_waveform_to_spectrum` left-pads by `n_fft - hop`, so frame k is centred on sample k*hop and counts as
         # valid whenever that centre lies in the real audio, even if its window reaches padding.
         "count_partial_frames": True,
     }
 
-    def _stft(self, audio, *, spectrogram_config, audio_ranges=None, **kwargs):
+    def _waveform_to_spectrum(self, audio, *, spectrogram_config, audio_ranges=None, **kwargs):
         # Inkling's fixed framing: left-pad (n_fft - hop) and right-pad up to a hop multiple, center=False.
         stft_cfg = spectrogram_config.stft_config
         hop, n_fft = stft_cfg.hop_length, stft_cfg.n_fft
         right_pad = math.ceil(audio.shape[-1] / hop) * hop - audio.shape[-1]
         audio = self._pad_axis(audio, max(n_fft - hop, 0), right_pad, axis=-1)
-        return super()._stft(audio, spectrogram_config=spectrogram_config, **kwargs)
+        return super()._waveform_to_spectrum(audio, spectrogram_config=spectrogram_config, **kwargs)
 
-    def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
+    def _spectrum_magnitude(self, stft_out, power, spectrogram_config=None):
         magnitudes = _clamp_min(stft_out.real**2 + stft_out.imag**2, 1e-10) ** 0.5
         return magnitudes**power if power != 1.0 else magnitudes
 
-    def _get_mask_width(self, padded_length, spectrogram_config) -> int:
+    def _padded_frame_count(self, padded_length, spectrogram_config) -> int:
         # Inkling right-pads to a whole number of hops, so it emits ceil(length / hop) frames.
         hop = spectrogram_config.stft_config.hop_length
         return int((padded_length + hop - 1) // hop)
 
-    def _postprocess_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
+    def _finalize_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
         # No normalization; just zero the padded frames. Output keys stay canonical
         # (`audio_features` / `audio_features_mask`); consumers still reading the legacy
         # `input_features` names get them through the deprecated-key alias.

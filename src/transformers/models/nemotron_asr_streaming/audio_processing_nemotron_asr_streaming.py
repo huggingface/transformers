@@ -21,7 +21,7 @@ class NemotronAsrStreamingAudioProcessorMixin:
     `audio_features_mask`); consumers still reading `input_features` or `attention_mask` get them
     through the deprecated-key alias."""
 
-    def _postprocess_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
+    def _finalize_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
         features = output.pop("audio_features")
         mask = output.pop("audio_features_mask", None)
         if mask is not None:

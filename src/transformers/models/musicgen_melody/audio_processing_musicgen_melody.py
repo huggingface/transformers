@@ -82,11 +82,11 @@ class MusicgenMelodyAudioProcessorMixin:
 
 
 class MusicgenMelodyAudioProcessor(MusicgenMelodyAudioProcessorMixin, TorchAudioBackend):
-    def extract_spectrogram(self, audio, **kwargs):
+    def compute_features(self, audio, **kwargs):
         import torch
         import torchaudio
 
-        waveform = audio  # Already a batched tensor from _to_batch
+        waveform = audio  # Already a batched tensor from _stack_waveforms
         device = waveform.device
 
         # Pad if too short for FFT

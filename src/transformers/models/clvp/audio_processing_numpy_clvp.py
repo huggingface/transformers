@@ -19,7 +19,7 @@ from .audio_processing_clvp import ClvpAudioProcessorMixin
 
 
 class ClvpAudioProcessorNumpy(ClvpAudioProcessorMixin, NumpyAudioBackend):
-    def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
+    def _log_compress(self, features, *, spectrogram_config, **kwargs):
         # Compute log and mel_norms division in float64 before casting to float32
         # to match the legacy feature extractor's precision
         mel_floor = spectrogram_config.mel_floor

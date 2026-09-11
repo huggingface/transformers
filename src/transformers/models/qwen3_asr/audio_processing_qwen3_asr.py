@@ -59,18 +59,18 @@ class Qwen3ASRAudioProcessorMixin:
     min_length = 8000
     n_window = 50
     valid_kwargs = Qwen3ASRAudioProcessorKwargs
-    # `_postprocess_output` reads the merged `n_window`, so it is a genuine per-call knob.
+    # `_finalize_output` reads the merged `n_window`, so it is a genuine per-call knob.
     per_call_kwargs = BaseAudioProcessor.per_call_kwargs | {"n_window"}
 
-    def _extract_spectrogram(self, audio, *, spectrogram_config, **kwargs):
-        features = super()._extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
+    def _compute_spectrum(self, audio, *, spectrogram_config, **kwargs):
+        features = super()._compute_spectrum(audio, spectrogram_config=spectrogram_config, **kwargs)
         return features[..., :-1]
 
-    def _get_mask_width(self, padded_length, spectrogram_config) -> int:
+    def _padded_frame_count(self, padded_length, spectrogram_config) -> int:
         # The legacy FE strides the sample-level mask by hop_length and trims the tail column
         return int(padded_length // spectrogram_config.stft_config.hop_length)
 
-    def _postprocess_output(self, output, audio_ranges=None, n_window=None, **kwargs):
+    def _finalize_output(self, output, audio_ranges=None, n_window=None, **kwargs):
         if n_window is None:
             n_window = self.n_window
         multiple = 2 * n_window if n_window else 0
@@ -79,20 +79,20 @@ class Qwen3ASRAudioProcessorMixin:
             remainder = features.shape[-1] % multiple
             if remainder:
                 padded_length = features.shape[-1] + multiple - remainder
-                output["audio_features"] = self._pad_single(features, padded_length)
+                output["audio_features"] = self._pad_waveform(features, padded_length)
                 if "audio_features_mask" in output:
-                    output["audio_features_mask"] = self._pad_single(output["audio_features_mask"], padded_length)
+                    output["audio_features_mask"] = self._pad_waveform(output["audio_features_mask"], padded_length)
         return output
 
-    def _process_audio(self, audio_el):
-        audio_el = super()._process_audio(audio_el)
+    def _downmix_to_mono(self, audio_el):
+        audio_el = super()._downmix_to_mono(audio_el)
         if self.min_length and audio_el.shape[-1] < self.min_length:
-            audio_el = self._pad_single(audio_el, self.min_length)
+            audio_el = self._pad_waveform(audio_el, self.min_length)
         return audio_el
 
 
 class Qwen3ASRAudioProcessor(Qwen3ASRAudioProcessorMixin, TorchAudioBackend):
-    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
+    def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
         mel_filters = self.mel_filters.to(device=features.device)
         return torch.clamp(torch.matmul(mel_filters.T, features), min=spectrogram_config.mel_floor)
 

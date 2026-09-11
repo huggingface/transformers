@@ -19,7 +19,7 @@ from .audio_processing_kyutai_speech_to_text import KyutaiSpeechToTextAudioProce
 
 
 class KyutaiSpeechToTextAudioProcessorNumpy(KyutaiSpeechToTextAudioProcessorMixin, NumpyAudioBackend):
-    def _postprocess_output(self, output, **kwargs):
+    def _finalize_output(self, output, **kwargs):
         pad_left = int(self.audio_silence_prefix_seconds * self.sampling_rate)
         pad_right = int((self.audio_delay_seconds + 1.0) * self.sampling_rate)
 

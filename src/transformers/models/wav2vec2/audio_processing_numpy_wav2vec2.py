@@ -19,8 +19,8 @@ from .audio_processing_wav2vec2 import Wav2Vec2AudioProcessorMixin
 
 
 class Wav2Vec2AudioProcessorNumpy(Wav2Vec2AudioProcessorMixin, NumpyAudioBackend):
-    def _process_audio(self, audio_el):
-        audio_el = super()._process_audio(audio_el)
+    def _downmix_to_mono(self, audio_el):
+        audio_el = super()._downmix_to_mono(audio_el)
         if self.do_normalize:
             audio_el = (audio_el - audio_el.mean()) / np.sqrt(audio_el.var() + 1e-7)
         return audio_el

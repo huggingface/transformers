@@ -45,7 +45,7 @@ class Gemma4UnifiedAudioProcessorMixin:
     audio_samples_per_token = 640
     valid_kwargs = Gemma4UnifiedAudioProcessorKwargs
 
-    def extract_spectrogram(self, audio, **kwargs):
+    def compute_features(self, audio, **kwargs):
         return [self._chunk_waveform(waveform) for waveform in audio]
 
 

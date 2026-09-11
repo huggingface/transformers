@@ -17,7 +17,7 @@ from .audio_processing_gemma4 import Gemma4AudioProcessorMixin
 
 
 class Gemma4AudioProcessorNumpy(Gemma4AudioProcessorMixin, NumpyAudioBackend):
-    def _postprocess_output(self, output, audio_ranges=None, **kwargs):
+    def _finalize_output(self, output, audio_ranges=None, **kwargs):
         # Zero the padded frames, as the legacy extractor does.
         mask = output.get("audio_features_mask")
         if mask is not None and "audio_features" in output:

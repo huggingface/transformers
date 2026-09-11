@@ -32,7 +32,7 @@ class FunAsrNanoAudioProcessorKwargs(AudioKwargs, total=False):
 
 class FunAsrNanoAudioProcessorMixin:
     sampling_rate = 16000
-    # `_postprocess_output` runs the fbank per clip and builds its own mask over the
+    # `_finalize_output` runs the fbank per clip and builds its own mask over the
     # low-frame-rate length.
     return_padding_mask = False
     extra_model_input_names = ["audio_features_mask"]
@@ -91,7 +91,7 @@ class FunAsrNanoAudioProcessor(FunAsrNanoAudioProcessorMixin, TorchAudioBackend)
         windows = padded.unfold(0, self.num_frames_lfr, self.stride_lfr).transpose(1, 2)
         return windows.reshape(num_output_frames, -1)
 
-    def _postprocess_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
+    def _finalize_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
         # The fbank runs per clip on the unpadded waveform, matching the legacy extractor. Doing
         # it on the batch-collated tensor instead is not bit-equal: the mel projection is a GEMM
         # whose accumulation order depends on the operand shape, so a short clip padded up to the
@@ -102,7 +102,7 @@ class FunAsrNanoAudioProcessor(FunAsrNanoAudioProcessorMixin, TorchAudioBackend)
         stacked = []
         for i, (start, end) in enumerate(audio_ranges):
             waveform = audio_values[i, ..., start:end].reshape(-1)
-            features = self.extract_spectrogram([waveform], spectrogram_config=self.spectrogram_config)[0]
+            features = self.compute_features([waveform], spectrogram_config=self.spectrogram_config)[0]
             stacked.append(self._apply_lfr(features.transpose(0, 1)))
 
         frame_counts = [f.shape[0] for f in stacked]

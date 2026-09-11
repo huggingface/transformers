@@ -48,7 +48,7 @@ class ParakeetAudioProcessorMixin:
 
 
 class ParakeetAudioProcessor(ParakeetAudioProcessorMixin, TorchAudioBackend):
-    def _postprocess_output(self, output, audio_ranges=None, **kwargs):
+    def _finalize_output(self, output, audio_ranges=None, **kwargs):
         if audio_ranges is None or "audio_features" not in output:
             return output
 

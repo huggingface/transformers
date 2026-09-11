@@ -83,7 +83,7 @@ class SpeechToTextAudioProcessor(SpeechToTextAudioProcessorMixin, TorchAudioBack
             x[input_length:] = padding_value
         return torch.from_numpy(x.astype(np.float32))
 
-    def _postprocess_output(self, output, feature_ranges=None, **kwargs):
+    def _finalize_output(self, output, feature_ranges=None, **kwargs):
         features = output["audio_features"]
         normalized = []
         for i, (start, end) in enumerate(feature_ranges):

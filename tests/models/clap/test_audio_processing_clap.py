@@ -31,7 +31,7 @@ class ClapAudioProcessingTest(AudioProcessingTestMixin, unittest.TestCase):
     # divergence than the strict float32 noise floor — empirically up to ~8e-5 on batched inputs.
     parity_atol = 1e-4
     parity_rtol = 1e-4
-    # `_pad_single` tiles short audio (`padding_mode="repeatpad"`) and only zero-pads the
+    # `_pad_waveform` tiles short audio (`padding_mode="repeatpad"`) and only zero-pads the
     # remainder, so the region outside `ranges` is repeated signal rather than `padding_value`.
     pad_fills_with_padding_value = False
 

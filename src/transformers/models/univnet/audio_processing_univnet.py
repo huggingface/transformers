@@ -92,21 +92,21 @@ class UnivNetAudioProcessorMixin:
         super().__init__(**kwargs)
         self.num_max_samples = self.max_length_s * self.sampling_rate
 
-    def _get_mask_width(self, padded_length, spectrogram_config) -> int:
+    def _padded_frame_count(self, padded_length, spectrogram_config) -> int:
         return int(padded_length // spectrogram_config.stft_config.hop_length)
 
-    def _get_valid_feature_lengths(self, audio_lengths, spectrogram_config):
+    def _valid_frame_counts(self, audio_lengths, spectrogram_config):
         return audio_lengths // spectrogram_config.stft_config.hop_length
 
-    def _stft(self, audio, *, spectrogram_config, **kwargs):
+    def _waveform_to_spectrum(self, audio, *, spectrogram_config, **kwargs):
         # UnivNet reflect-pads by (n_fft - hop_length) / 2 instead of centring the frames
         stft_cfg = spectrogram_config.stft_config
         pad_amount = int((stft_cfg.n_fft - stft_cfg.hop_length) / 2)
         audio = self._reflect_pad(audio, pad_amount)
-        return super()._stft(audio, spectrogram_config=spectrogram_config, **kwargs)
+        return super()._waveform_to_spectrum(audio, spectrogram_config=spectrogram_config, **kwargs)
 
-    def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
-        features = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
+    def _log_compress(self, features, *, spectrogram_config, **kwargs):
+        features = super()._log_compress(features, spectrogram_config=spectrogram_config, **kwargs)
         if self.do_normalize:
             features = 2 * ((features - self.normalize_min) / (self.normalize_max - self.normalize_min)) - 1
         return features
@@ -119,14 +119,14 @@ class UnivNetAudioProcessor(UnivNetAudioProcessorMixin, TorchAudioBackend):
             return torch.nn.functional.pad(audio[None], (pad_amount, pad_amount), mode="reflect")[0]
         return torch.nn.functional.pad(audio, (pad_amount, pad_amount), mode="reflect")
 
-    def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
+    def _spectrum_magnitude(self, stft_out, power, spectrogram_config=None):
         # round-trip through complex64/float32 like the legacy FE, so the float64 magnitudes
         # match bit-exactly (the numpy sibling stays in float64 throughout)
         stft_out = stft_out.to(torch.complex64)
         presqrt = stft_out.real**2 + stft_out.imag**2 + self.magnitude_floor
         return presqrt.double().sqrt().float().double()
 
-    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
+    def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
         # No mel-scale clamp, as in the numpy sibling. Match the filters to the feature dtype:
         # unlike numpy, `torch.matmul` refuses mixed dtypes rather than promoting.
         mel_filters = self.mel_filters.to(device=features.device, dtype=features.dtype)

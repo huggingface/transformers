@@ -23,7 +23,7 @@ class NeuCodecAudioProcessorMixin(Xcodec2AudioProcessorMixin):
 
 
 class NeuCodecAudioProcessor(NeuCodecAudioProcessorMixin, Xcodec2AudioProcessor):
-    def _postprocess_output(self, output, audio_ranges=None, **kwargs):
+    def _finalize_output(self, output, audio_ranges=None, **kwargs):
         # XCodec2 trims each waveform to a whole number of hops *and* pads it by half a hop on
         # both sides before the fbank. NeuCodec's reference does neither: it pads the waveform up
         # to a hop multiple and feeds that straight in.
@@ -37,11 +37,11 @@ class NeuCodecAudioProcessor(NeuCodecAudioProcessorMixin, Xcodec2AudioProcessor)
 
         features = []
         for i, (start, end) in enumerate(audio_ranges):
-            # `end - start` counts the zero sample `_process_audio` appends, which the legacy
+            # `end - start` counts the zero sample `_downmix_to_mono` appends, which the legacy
             # extractor also pads before rounding up to a hop multiple.
             valid_length = min(-(-(end - start) // self.hop_length) * self.hop_length, padded_length)
             waveform = audio_values[i, 0, :valid_length]
-            f = self.extract_spectrogram([waveform], spectrogram_config=self.spectrogram_config)[0].transpose(-2, -1)
+            f = self.compute_features([waveform], spectrogram_config=self.spectrogram_config)[0].transpose(-2, -1)
             f = (f - f.mean(0)) / torch.sqrt(f.var(0, unbiased=True) + 1e-7)
             features.append(f)
 

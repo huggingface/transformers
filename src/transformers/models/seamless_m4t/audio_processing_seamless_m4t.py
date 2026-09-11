@@ -62,21 +62,21 @@ class SeamlessM4tAudioProcessorMixin:
 
 
 class SeamlessM4tAudioProcessor(SeamlessM4tAudioProcessorMixin, TorchAudioBackend):
-    def extract_spectrogram(self, audio, **kwargs):
+    def compute_features(self, audio, **kwargs):
         features = []
         for waveform in audio:
             waveform = waveform.squeeze()
-            f = super().extract_spectrogram([waveform], spectrogram_config=self.spectrogram_config)
+            f = super().compute_features([waveform], spectrogram_config=self.spectrogram_config)
             features.append(f[0].transpose(-2, -1))
         return features
 
-    def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
-        spec = super()._window_and_fft(frames, window, frame_length, n_fft, stft_cfg, audio_dtype=audio_dtype)
+    def _stft_framed(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
+        spec = super()._stft_framed(frames, window, frame_length, n_fft, stft_cfg, audio_dtype=audio_dtype)
         # The legacy FE stores FFT frames in a complex64 buffer before taking float64
         # magnitudes (`np.abs(spectrogram, dtype=np.float64) ** power`); quantize then upcast
         return spec.to(torch.complex64).to(torch.complex128)
 
-    def _postprocess_features(self, features, feature_lengths):
+    def _finalize_features(self, features, feature_lengths):
         # bit-exact with the legacy FE: numpy reductions use pairwise summation, whose
         # accumulation order differs from torch's float32 `mean`/`var`. The legacy features are
         normalized = []
@@ -86,7 +86,7 @@ class SeamlessM4tAudioProcessor(SeamlessM4tAudioProcessorMixin, TorchAudioBacken
             normalized.append(torch.from_numpy(x))
         return normalized
 
-    def _postprocess_output(self, output, feature_ranges=None, **kwargs):
+    def _finalize_output(self, output, feature_ranges=None, **kwargs):
         features = output["audio_features"]
         batch_size, num_frames, num_channels = features.shape
 

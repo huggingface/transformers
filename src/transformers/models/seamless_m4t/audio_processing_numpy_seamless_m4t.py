@@ -19,15 +19,15 @@ from .audio_processing_seamless_m4t import SeamlessM4tAudioProcessorMixin
 
 
 class SeamlessM4tAudioProcessorNumpy(SeamlessM4tAudioProcessorMixin, NumpyAudioBackend):
-    def extract_spectrogram(self, audio, **kwargs):
+    def compute_features(self, audio, **kwargs):
         features = []
         for waveform in audio:
             waveform = np.squeeze(waveform)
-            f = super().extract_spectrogram([waveform], spectrogram_config=self.spectrogram_config)
+            f = super().compute_features([waveform], spectrogram_config=self.spectrogram_config)
             features.append(f[0].T)
         return features
 
-    def _postprocess_features(self, features, feature_lengths):
+    def _finalize_features(self, features, feature_lengths):
         normalized = []
         for f in features:
             mean = np.expand_dims(f.mean(axis=0), 0)
@@ -35,7 +35,7 @@ class SeamlessM4tAudioProcessorNumpy(SeamlessM4tAudioProcessorMixin, NumpyAudioB
             normalized.append((f - mean) / np.sqrt(var + 1e-7))
         return normalized
 
-    def _postprocess_output(self, output, feature_ranges=None, **kwargs):
+    def _finalize_output(self, output, feature_ranges=None, **kwargs):
         features = output["audio_features"]
         batch_size, num_frames, num_channels = features.shape
 

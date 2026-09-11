@@ -20,7 +20,7 @@ from .audio_processing_voxtral_realtime import VoxtralRealtimeAudioProcessorMixi
 
 
 class VoxtralRealtimeAudioProcessorNumpy(VoxtralRealtimeAudioProcessorMixin, NumpyAudioBackend):
-    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
+    def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
         mel_filters = self.mel_filters.astype(features.dtype, copy=False)
         return _clamp_min(np.matmul(mel_filters.T, features), spectrogram_config.mel_floor)
 

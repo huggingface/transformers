@@ -83,22 +83,22 @@ class ClapAudioProcessorMixin:
         super()._set_attributes(**kwargs)
         self.truncation = self.truncation_mode == "rand_trunc"
 
-    def _get_padding_strategies(self, padding=False, max_length=None):
+    def _resolve_padding_strategy(self, padding=False, max_length=None):
         if padding in ("repeatpad", "repeat", "pad"):
             # legacy spelling: `padding` named the fill method for short audio, not the target length
             self.padding_mode, padding = padding, True
         if padding is True and max_length is not None:
             return PaddingStrategy.MAX_LENGTH
-        return super()._get_padding_strategies(padding=padding, max_length=max_length)
+        return super()._resolve_padding_strategy(padding=padding, max_length=max_length)
 
     def pad(self, audio, *args, **kwargs):
         self._is_longer_flags = []
         return super().pad(audio, *args, **kwargs)
 
-    def _to_batch(self, audio):
+    def _stack_waveforms(self, audio):
         return audio
 
-    def _pad_single(self, audio, max_length):
+    def _pad_waveform(self, audio, max_length):
         """Tile short audio before the base class zero-pads whatever remains."""
         current_length = audio.shape[-1]
         if current_length < max_length and self.padding_mode in ("repeat", "repeatpad"):
@@ -107,9 +107,9 @@ class ClapAudioProcessorMixin:
                 audio = self._tile(audio, n_repeat + 1)[..., :max_length]
             else:
                 audio = self._tile(audio, n_repeat)
-        return super()._pad_single(audio, max_length)
+        return super()._pad_waveform(audio, max_length)
 
-    def _truncate_single(self, audio_el, max_length):
+    def _truncate_waveform(self, audio_el, max_length):
         """Random-offset truncation for rand_trunc mode, also tracks which samples were longer."""
         self._is_longer_flags.append(audio_el.shape[-1] > max_length)
         if audio_el.shape[-1] > max_length:
@@ -117,7 +117,7 @@ class ClapAudioProcessorMixin:
             return audio_el[..., idx : idx + max_length]
         return audio_el
 
-    def extract_spectrogram(self, audio, *, spectrogram_config=None, audio_ranges=None, **kwargs):
+    def compute_features(self, audio, *, spectrogram_config=None, audio_ranges=None, **kwargs):
         """Extract mel spectrogram and shape output (1 view for rand_trunc, 4 for fusion)."""
         is_fusion = self.truncation_mode == "fusion"
         chunk_frames = self.max_length // self.spectrogram_config.stft_config.hop_length + 1
@@ -129,7 +129,7 @@ class ClapAudioProcessorMixin:
         mels = []
         is_longer = []
         for waveform in waveforms:
-            mel = super().extract_spectrogram(waveform, spectrogram_config=self.spectrogram_config).swapaxes(-2, -1)
+            mel = super().compute_features(waveform, spectrogram_config=self.spectrogram_config).swapaxes(-2, -1)
             total_frames = mel.shape[0]
 
             if is_fusion and total_frames > chunk_frames:
@@ -162,7 +162,7 @@ class ClapAudioProcessorMixin:
         mel_shrink = self._bilinear_shrink(mel, chunk_frames)
         return self._stack([mel_shrink, mel_chunk_front, mel_chunk_middle, mel_chunk_back])
 
-    def _postprocess_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
+    def _finalize_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
         """Add CLAP's is_longer flag to the output (returned instead of a standard attention mask)."""
         ranges = audio_ranges if audio_ranges is not None else feature_ranges
         is_longer = getattr(self, "_is_longer_flags", None) or [False] * len(ranges)
@@ -177,12 +177,12 @@ class ClapAudioProcessor(ClapAudioProcessorMixin, TorchAudioBackend):
     def _tile(self, audio, n_repeat):
         return audio.repeat(n_repeat)
 
-    def _native_stft(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
-        stft_out = super()._native_stft(audio, window, frame_length, hop_length, n_fft, stft_cfg)
+    def _stft_native(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
+        stft_out = super()._stft_native(audio, window, frame_length, hop_length, n_fft, stft_cfg)
         # round-trip through complex64 like the legacy FE, so float64 magnitudes match bit-exactly
         return stft_out.to(torch.complex64).to(torch.complex128)
 
-    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
+    def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
         # cast mel_filters to the features' dtype, matching the numpy sibling's float64 path
         mel_filters = self.mel_filters.to(device=features.device, dtype=features.dtype)
         mel_spec = torch.nn.functional.linear(features.transpose(-2, -1), mel_filters.T).transpose(-2, -1)

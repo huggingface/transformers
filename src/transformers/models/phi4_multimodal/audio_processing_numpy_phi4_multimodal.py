@@ -19,7 +19,7 @@ from .audio_processing_phi4_multimodal import Phi4MultimodalAudioProcessorMixin
 
 
 class Phi4MultimodalAudioProcessorNumpy(Phi4MultimodalAudioProcessorMixin, NumpyAudioBackend):
-    def _apply_frame_processing(self, frames, *, spectrogram_config, audio_ranges=None, **kwargs):
+    def _process_frames(self, frames, *, spectrogram_config, audio_ranges=None, **kwargs):
         # Mask frames that overlap the boundary between real audio and padding
         stft_cfg = spectrogram_config.stft_config
         win_length = stft_cfg.win_length or stft_cfg.n_fft
@@ -45,7 +45,7 @@ class Phi4MultimodalAudioProcessorNumpy(Phi4MultimodalAudioProcessorMixin, Numpy
         frames_prev[..., 0] = frames_prev[..., 1]
         return (frames - spectrogram_config.preemphasis * frames_prev) * 32768
 
-    def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
+    def _stft_framed(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
         frames = frames * window
         if frame_length < n_fft:
             frames = np.pad(frames, [(0, 0)] * (frames.ndim - 1) + [(0, n_fft - frame_length)])

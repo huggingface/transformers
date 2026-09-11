@@ -76,7 +76,7 @@ class CohereAsrAudioProcessorMixin:
     min_energy_window_samples: int = 1600
     valid_kwargs = CohereAsrAudioProcessorKwargs
 
-    def _apply_dither(self, audio, audio_ranges=None):
+    def _dither_waveform(self, audio, audio_ranges=None):
         if self.dither <= 0 or audio_ranges is None:
             return audio
         noise = _array_namespace(audio).zeros_like(audio)
@@ -89,11 +89,11 @@ class CohereAsrAudioProcessorMixin:
     def _seeded_noise(self, length, seed, like):
         raise NotImplementedError
 
-    def _postprocess_output(self, output, audio_ranges=None, **kwargs):
+    def _finalize_output(self, output, audio_ranges=None, **kwargs):
         if audio_ranges is None or "audio_features" not in output:
             return output
         audio_lengths = np.asarray([end - start for start, end in audio_ranges])
-        feature_lengths = self._get_valid_feature_lengths(audio_lengths, self.spectrogram_config)
+        feature_lengths = self._valid_frame_counts(audio_lengths, self.spectrogram_config)
 
         features = output["audio_features"]
         xp = _array_namespace(output["audio_features"])

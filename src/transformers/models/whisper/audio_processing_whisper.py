@@ -59,7 +59,7 @@ class WhisperAudioProcessorMixin:
 
 
 class WhisperAudioProcessor(WhisperAudioProcessorMixin, TorchAudioBackend):
-    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
+    def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
         mel_filters = self.mel_filters.to(device=features.device)
         return torch.clamp(torch.matmul(mel_filters.T, features), min=spectrogram_config.mel_floor)
 
