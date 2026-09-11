@@ -18,13 +18,14 @@ import unittest
 from transformers import AutoTokenizer, is_torch_available, set_seed
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     is_flaky,
     require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
 )
+
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -92,17 +93,7 @@ class MiniMaxM2ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch
-class MiniMaxM2IntegrationTest(unittest.TestCase):
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
-        # some memory allocated in the cache, which means some object is not being released properly. This causes some
-        # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
-        # Investigate the root cause.
-        cleanup(torch_device, gc_collect=True)
-
+class MiniMaxM2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @require_torch_accelerator
     def test_small_model_logits_batched(self):
         model_id = "hf-internal-testing/MiniMax-M2-Small"
