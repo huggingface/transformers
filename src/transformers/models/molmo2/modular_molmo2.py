@@ -51,6 +51,7 @@ from ...processing_utils import (
     Unpack,
     VideosKwargs,
 )
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TensorType,
     TransformersKwargs,
@@ -62,7 +63,7 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
-from ...video_utils import VideoMetadata
+from ...video_utils import VideoInput, VideoMetadata
 from ..llama.modeling_llama import (
     LlamaMLP,
     LlamaModel,
@@ -1041,6 +1042,22 @@ class Molmo2Processor(ProcessorMixin):
         self.use_frame_special_tokens = use_frame_special_tokens
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template)
 
+    def __call__(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        videos: VideoInput | None = None,
+        **kwargs: Unpack[Molmo2ProcessorKwargs],
+    ):
+        # TODO(molbap): remove once the allenai chat templates emit `bos_token`
+        # (hub PRs allenai/Molmo2-8B#11, allenai/Molmo2-4B#4, allenai/Molmo2-O-7B#2)
+        bos_token = self.tokenizer.bos_token or self.tokenizer.eos_token
+        if isinstance(text, str):
+            text = [text]
+        if text is not None:
+            text = [prompt if prompt.startswith(bos_token) else bos_token + prompt for prompt in text]
+        return super().__call__(images=images, text=text, videos=videos, **kwargs)
+
     def get_video_string(self, video_grid, timestamps) -> str:
         if hasattr(video_grid, "tolist"):
             video_grid = video_grid.tolist()
@@ -1640,16 +1657,6 @@ class Molmo2TextModel(LlamaModel):
         )
 
 
-def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: torch.device) -> torch.Tensor:
-    mm_token_type_ids = mm_token_type_ids.to(device)
-
-    is_image = mm_token_type_ids == 1
-    is_previous_image = F.pad(is_image, (1, 0), value=0)[:, :-1]
-    new_image_start = is_image & ~is_previous_image
-    image_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
-    return torch.where(is_image, image_group_ids, -1)
-
-
 @auto_docstring(
     custom_intro="""
     The Molmo2 model which consists of a vision backbone, a pooling adapter and a language model, without a language
@@ -1796,9 +1803,8 @@ class Molmo2Model(Molmo2PreTrainedModel):
             }
             is_prefill = past_key_values is None or not past_key_values.is_initialized or image_features is not None
             if mm_token_type_ids is not None and is_prefill:
-                mask_kwargs["block_sequence_ids"] = get_block_sequence_ids_for_mask(
-                    mm_token_type_ids, device=inputs_embeds.device
-                )
+                # every image or frame token attends to every other one, so they all share a single block
+                mask_kwargs["block_sequence_ids"] = torch.where(mm_token_type_ids.to(inputs_embeds.device) == 1, 0, -1)
             causal_mask_mapping = {"full_attention": create_causal_mask(**mask_kwargs)}
 
         outputs = self.language_model(
@@ -2017,9 +2023,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             "position_ids": position_ids,
         }
         if mm_token_type_ids is not None and inputs_embeds.shape[1] != 1:
-            mask_kwargs["block_sequence_ids"] = get_block_sequence_ids_for_mask(
-                mm_token_type_ids, device=inputs_embeds.device
-            )
+            mask_kwargs["block_sequence_ids"] = torch.where(mm_token_type_ids.to(inputs_embeds.device) == 1, 0, -1)
 
         return create_masks_for_generate(**mask_kwargs)
 

@@ -49,7 +49,6 @@ from ...vlm_tester import VLMModelTest, VLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers.models.molmo2.modeling_molmo2 import get_block_sequence_ids_for_mask
 
 if is_vision_available():
     from transformers.image_utils import load_image
@@ -402,16 +401,6 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
         self.assertTrue((attention[:, image_positions[0], image_positions[-1]] > 0).all())
         # a text token never sees a later text token
         self.assertTrue((attention[:, text_positions[0], text_positions[-1]] == 0).all())
-
-    def test_block_sequence_ids_group_images_separately(self):
-        """
-        Each contiguous image run gets its own block id; text positions are -1.
-        """
-        mm_token_type_ids = torch.tensor([[0, 1, 1, 0, 1, 0]])
-        block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=torch.device("cpu"))
-
-        expected = torch.tensor([[-1, 0, 0, -1, 1, -1]])
-        self.assertTrue(torch.equal(block_sequence_ids, expected))
 
     def test_expand_inputs_for_generation_repeats_visual_pooling(self):
         """

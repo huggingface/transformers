@@ -18,8 +18,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, VideosKwargs
+from ...image_utils import ImageInput
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...video_utils import VideoInput
 
 
 logger = logging.get_logger(__name__)
@@ -145,6 +148,22 @@ class Molmo2Processor(ProcessorMixin):
         self.video_use_col_tokens = video_use_col_tokens
         self.use_frame_special_tokens = use_frame_special_tokens
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template)
+
+    def __call__(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        videos: VideoInput | None = None,
+        **kwargs: Unpack[Molmo2ProcessorKwargs],
+    ):
+        # TODO(molbap): remove once the allenai chat templates emit `bos_token`
+        # (hub PRs allenai/Molmo2-8B#11, allenai/Molmo2-4B#4, allenai/Molmo2-O-7B#2)
+        bos_token = self.tokenizer.bos_token or self.tokenizer.eos_token
+        if isinstance(text, str):
+            text = [text]
+        if text is not None:
+            text = [prompt if prompt.startswith(bos_token) else bos_token + prompt for prompt in text]
+        return super().__call__(images=images, text=text, videos=videos, **kwargs)
 
     def get_video_string(self, video_grid, timestamps) -> str:
         if hasattr(video_grid, "tolist"):

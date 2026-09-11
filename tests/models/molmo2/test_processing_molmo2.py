@@ -252,6 +252,10 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     # `num_image_tokens` is covered by the inherited `test_get_num_multimodal_tokens_matches_processor_call`;
     # `num_image_patches` is not, and vLLM's transformers backend splits `pixel_values` per image with it.
+    @unittest.skip("processor prepends BOS to the text until the hub chat templates emit it")
+    def test_subprocessor_defaults_0_text(self):
+        pass
+
     def test_get_num_multimodal_tokens_matches_num_patches(self):
         processor = self.get_processor()
 
