@@ -900,9 +900,9 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
         "decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
     _tied_weights_keys = {
-        "lm_head.weight": "shared.weight",
         "encoder.embed_tokens.weight": "shared.weight",
         "decoder.embed_tokens.weight": "shared.weight",
+        "lm_head.weight": "shared.weight",
     }
 
     def __init__(self, config: T5Config):
