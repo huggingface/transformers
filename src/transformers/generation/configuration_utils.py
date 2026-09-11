@@ -223,9 +223,15 @@ class GenerationConfig(PushToHubMixin):
         repetition_penalty (`float`, *optional*):
             The parameter for repetition penalty. 1.0 means no penalty. See [this
             paper](https://huggingface.co/papers/1909.05858) for more details.
+        repetition_penalty_normalize (`bool`, *optional*):
+            Apply `repetition_penalty` to normalized log-probabilities instead of raw logits.
+            See [this paper](https://arxiv.org/abs/2607.09791) for more details.
         encoder_repetition_penalty (`float`, *optional*):
             The parameter for encoder_repetition_penalty. An exponential penalty on sequences that are not in the
             original input. 1.0 means no penalty.
+        encoder_repetition_penalty_normalize (`bool`, *optional*):
+            Apply `encoder_repetition_penalty` to normalized log-probabilities instead of raw logits.
+            See [this paper](https://arxiv.org/abs/2607.09791) for more details.
         length_penalty (`float`, *optional*):
             Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent to
             the sequence length, which in turn is used to divide the score of the sequence. Since the score is the log
@@ -418,7 +424,9 @@ class GenerationConfig(PushToHubMixin):
         self.epsilon_cutoff = kwargs.pop("epsilon_cutoff", None)
         self.eta_cutoff = kwargs.pop("eta_cutoff", None)
         self.repetition_penalty = kwargs.pop("repetition_penalty", None)
+        self.repetition_penalty_normalize = kwargs.pop("repetition_penalty_normalize", None)
         self.encoder_repetition_penalty = kwargs.pop("encoder_repetition_penalty", None)
+        self.encoder_repetition_penalty_normalize = kwargs.pop("encoder_repetition_penalty_normalize", None)
         self.length_penalty = kwargs.pop("length_penalty", None)
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", None)
         self.bad_words_ids = kwargs.pop("bad_words_ids", None)
