@@ -14,6 +14,7 @@
 
 import unittest
 
+from transformers.modeling_multimodal_utils import uses_mrope
 from transformers.testing_utils import is_torch_available, require_torch
 
 
@@ -30,6 +31,7 @@ if is_torch_available():
         Qwen3VLConfig,
     )
     from transformers.models.ernie4_5_vl_moe.modeling_ernie4_5_vl_moe import Ernie4_5_VLMoeModel
+    from transformers.models.exaone4_5.configuration_exaone4_5 import Exaone4_5_Config
     from transformers.models.hunyuan_vl.modeling_hunyuan_vl import (
         get_mrope_position_ids as hunyuan_get_mrope_position_ids,
     )
@@ -52,6 +54,14 @@ if is_torch_available():
 
 @require_torch
 class GetRopeIndexTest(unittest.TestCase):
+    """M-RoPE position layouts, driven through each family's real `get_rope_index`.
+
+    Every `get_rope_index` is a pure function of `(self.config, inputs)` and reads no weights, so the
+    models here are built on the meta device: the default configs are production-sized, and an
+    uninitialized instance carrying nothing but a config is enough to drive the layout. This is also how
+    the exporters rebuild positions.
+    """
+
     # a tiny token vocabulary standing in for the omni configs' placeholder/opening tokens
     TOKEN_IDS = {
         "image_token_id": 2,
@@ -87,7 +97,6 @@ class GetRopeIndexTest(unittest.TestCase):
 
     def test_qwen2_vl_image(self):
         input_ids, token_types = self.modality_runs([(0, 2), (1, 4), (0, 1)])
-        # meta device: the default config is production-sized and `get_rope_index` reads no weights
         with torch.device("meta"):
             model = Qwen2VLModel(Qwen2VLConfig(vision_config={"spatial_merge_size": 1}))
         position_ids, deltas = model.get_rope_index(input_ids, token_types, image_grid_thw=torch.tensor([[1, 2, 2]]))
@@ -101,7 +110,6 @@ class GetRopeIndexTest(unittest.TestCase):
 
     def test_qwen2_vl_video_temporal_scaling(self):
         input_ids, token_types = self.modality_runs([(0, 1), (2, 8), (0, 1)])
-        # meta device: the default config is production-sized and `get_rope_index` reads no weights
         with torch.device("meta"):
             model = Qwen2_5_VLModel(Qwen2_5_VLConfig(vision_config={"spatial_merge_size": 1, "tokens_per_second": 2}))
         position_ids, deltas = model.get_rope_index(
@@ -126,12 +134,6 @@ class GetRopeIndexTest(unittest.TestCase):
         # processors that separate frames with timestamps emit one visual run per frame, so the single
         # `T=2` grid is expanded to two `T=1` grids, one per run
         input_ids, token_types = self.modality_runs([(0, 1), (2, 4), (0, 1), (2, 4), (0, 1)])
-        # the real qwen3_vl-family override, run on a config-only carrier — every `get_rope_index`
-        # is a pure function of `(self.config, inputs)`, so no weights are needed: an uninitialized
-        # instance (generated overrides call zero-arg `super()`, which wants a real instance) carrying
-        # nothing but a config drives it, which is also how the exporters rebuild positions
-
-        # meta device: the default config is production-sized and `get_rope_index` reads no weights
         with torch.device("meta"):
             model = Qwen3VLModel(Qwen3VLConfig(vision_config={"spatial_merge_size": 1}))
         position_ids, deltas = model.get_rope_index(
@@ -152,7 +154,6 @@ class GetRopeIndexTest(unittest.TestCase):
     def test_qwen2_vl_video_temporal_merge(self):
         # ernie's temporal backbone merge: a `T=2` grid collapses to one temporal position (4 tokens)
         input_ids, token_types = self.modality_runs([(0, 1), (2, 4), (0, 1)])
-        # meta device: the default config is production-sized and `get_rope_index` reads no weights
         with torch.device("meta"):
             model = Ernie4_5_VLMoeModel(
                 Ernie4_5_VLMoeConfig(vision_config={"spatial_merge_size": 1, "temporal_merge_size": 2})
@@ -172,7 +173,6 @@ class GetRopeIndexTest(unittest.TestCase):
         input_ids, token_types = self.modality_runs([(0, 2), (1, 4), (0, 1)])
         attention_mask = torch.ones_like(input_ids)
         attention_mask[:, :2] = 0
-        # meta device: the default config is production-sized and `get_rope_index` reads no weights
         with torch.device("meta"):
             model = Qwen2VLModel(Qwen2VLConfig(vision_config={"spatial_merge_size": 1}))
         position_ids, deltas = model.get_rope_index(
@@ -240,18 +240,20 @@ class GetRopeIndexTest(unittest.TestCase):
                 image_grid_thw=torch.tensor([[1, 2, 2]]),
             )
 
+    @property
     def audio_then_image_ids(self):
         """text, an audio span of 3 tokens, a 2x2 image span, then trailing text."""
         text, audio_end, vision_end = self.TEXT, self.AUDIO_END, self.VISION_END
         return torch.tensor([[text, text, 4, 1, 1, 1, audio_end, 7, 2, 2, 2, 2, vision_end, text]])
 
+    @property
     def audio_in_video_ids(self):
         """text, then one span opening with both start tokens: 2x(2x2) video, 3 audio tokens, both ends."""
         text, audio_end, vision_end = self.TEXT, self.AUDIO_END, self.VISION_END
         return torch.tensor([[text, 7, 4, 3, 3, 3, 3, 3, 3, 3, 3, 1, 1, 1, audio_end, vision_end, text]])
 
     def test_qwen2_5_omni_audio_then_image(self):
-        input_ids = self.audio_then_image_ids()
+        input_ids = self.audio_then_image_ids
         position_ids, deltas = qwen2_5_omni_get_mrope_position_ids(
             self.omni_config(Qwen2_5OmniThinkerConfig(), position_id_per_seconds=25, seconds_per_chunk=2),
             input_ids,
@@ -270,7 +272,7 @@ class GetRopeIndexTest(unittest.TestCase):
         self.assertEqual(deltas.tolist(), [[-2]])
 
     def test_qwen2_5_omni_audio_in_video(self):
-        input_ids = self.audio_in_video_ids()
+        input_ids = self.audio_in_video_ids
         position_ids, deltas = qwen2_5_omni_get_mrope_position_ids(
             self.omni_config(Qwen2_5OmniThinkerConfig(), position_id_per_seconds=25, seconds_per_chunk=2),
             input_ids,
@@ -293,7 +295,7 @@ class GetRopeIndexTest(unittest.TestCase):
         self.assertEqual(deltas.tolist(), [[11]])
 
     def test_qwen3_omni_audio_then_image(self):
-        input_ids = self.audio_then_image_ids()
+        input_ids = self.audio_then_image_ids
         position_ids, deltas = qwen3_omni_get_mrope_position_ids(
             self.omni_config(Qwen3OmniMoeThinkerConfig(), position_id_per_seconds=25),
             input_ids,
@@ -313,7 +315,7 @@ class GetRopeIndexTest(unittest.TestCase):
         self.assertEqual(deltas.tolist(), [[-2]])
 
     def test_qwen3_omni_audio_in_video(self):
-        input_ids = self.audio_in_video_ids()
+        input_ids = self.audio_in_video_ids
         position_ids, deltas = qwen3_omni_get_mrope_position_ids(
             self.omni_config(Qwen3OmniMoeThinkerConfig(), position_id_per_seconds=25),
             input_ids,
@@ -343,3 +345,17 @@ class GetRopeIndexTest(unittest.TestCase):
         # padded slots keep position 1, the rest count up from 0
         self.assertEqual(position_ids.tolist(), [[[1, 1, 0, 1, 2]]] * 3)
         self.assertEqual(deltas.tolist(), [[0]])
+
+
+@require_torch
+class UsesMropeTest(unittest.TestCase):
+    """`uses_mrope` gates the whole multi-axis path: `False` leaves `position_ids` to the text model."""
+
+    def test_multi_axis_families(self):
+        for config in (Qwen2VLConfig(), Qwen2_5_VLConfig(), Qwen3VLConfig(), HunYuanVLConfig()):
+            with self.subTest(type(config).__name__):
+                self.assertTrue(uses_mrope(config))
+
+    def test_vision_language_model_keeping_1d_positions(self):
+        # a VLM all the same, but its decoder stays on plain 1D text positions
+        self.assertFalse(uses_mrope(Exaone4_5_Config()))

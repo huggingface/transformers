@@ -23,6 +23,12 @@ from __future__ import annotations
 
 import torch
 
+from .configuration_utils import PreTrainedConfig
+from .utils import logging
+
+
+logger = logging.get_logger(__name__)
+
 
 class MultiModalPreTrainedModelMixin:
     """Shared helpers for a multimodal **base** model (the `<X>Model` that owns the vision/audio towers).
@@ -36,6 +42,63 @@ class MultiModalPreTrainedModelMixin:
     Every method is a default, not a contract: a family whose behaviour differs overrides it (and may call
     `super()`), exactly as it would for any inherited method.
     """
+
+    def get_vision_position_ids(
+        self,
+        start_position: int,
+        grid_thw: list[int, int, int] | torch.Tensor,
+        temp_merge_size: int = 1,
+        spatial_merge_size: int = 1,
+        time_interval: int = 1,
+        device: str | torch.device | None = None,
+    ):
+        """
+        Compute 3D positional indices for vision tokens derived from a single image or video input.
+
+        The positions are generated from the input grid defined by temporal (T), height (H), and
+        width (W) dimensions. Temporal and spatial dimensions can be downscaled according to the
+        merge sizes used in the vision backbone. The resulting positions are offset by `start_position`.
+
+        Args:
+            start_position (`int`):
+                Offset added to all computed positional indices.
+            grid_thw (`Sequence[int]` or `torch.Tensor` of shape `(3,)`):
+                The (T, H, W) grid representing the feature layout of the current image or video after patch embedding.
+            temp_merge_size (`int`, *optional*):
+                Factor by which the temporal dimension is reduced in the backbone. The temporal grid size is divided
+                by this value. Defaults to 1.
+            spatial_merge_size (`int`, *optional*):
+                Factor by which the spatial dimensions (H and W) are reduced in the backbone. Both H and W are divided
+                by this value. Defaults to 1.
+            time_interval (`int`, *optional*):
+                Spacing factor applied between consecutive temporal position indices.Defaults to 1.
+            device (`str` or `torch.device`, *optional*):
+                Device on which the resulting tensor is allocated. If `None`, uses the current default device.
+
+        Returns:
+            torch.LongTensor of shape (3, sequence_length):
+                Positional indices for temporal, height, and width dimensions,
+                flattened into sequence form and offset by `start_position`.
+        """
+        logger.warning_once(
+            "Detected the usage of `get_vision_position_ids`: this method is deprecated and will be removed in "
+            "v5.22. The multi-axis layout it fed is now built by the module-level `get_mrope_position_ids` in each "
+            "model's own `modeling_*.py`, which takes `(config, input_ids, mm_token_type_ids, ...)`."
+        )
+        llm_grid_t, llm_grid_h, llm_grid_w = (
+            grid_thw[0].item() // temp_merge_size,
+            grid_thw[1].item() // spatial_merge_size,
+            grid_thw[2].item() // spatial_merge_size,
+        )
+
+        position_temporal = torch.arange(llm_grid_t, device=device) * time_interval
+        position_height = torch.arange(llm_grid_h, device=device) + start_position
+        position_width = torch.arange(llm_grid_w, device=device) + start_position
+
+        T_grid, H_grid, W_grid = torch.meshgrid(position_temporal, position_height, position_width, indexing="ij")
+        vision_position_ids = torch.stack([T_grid, H_grid, W_grid], dim=0).reshape(3, -1)
+        vision_position_ids[0] += start_position  # must be after time_interval multiply
+        return vision_position_ids
 
     def compute_3d_position_ids(
         self,
@@ -162,7 +225,7 @@ class MultiModalGenerationMixin:
         return position_ids
 
 
-def uses_mrope(config) -> bool:
+def uses_mrope(config: PreTrainedConfig) -> bool:
     """Whether `config` declares M-RoPE at all — its text rope parameters carry an `mrope_section` (the
     per-axis head split only multi-axis models have). `False` for plain decoders and for VLMs that keep 1D
     text positions (Llava & co.), which is the signal to leave `position_ids` alone."""

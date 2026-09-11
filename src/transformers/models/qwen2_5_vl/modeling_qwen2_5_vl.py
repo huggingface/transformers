@@ -890,6 +890,30 @@ def get_mrope_position_ids(
     `(temporal, height, width)` grid then advances the text position by its largest spatial extent. A
     video's temporal axis is scaled by this family's clock, `tokens_per_second * second_per_grid_ts`.
     Returns `(position_ids, rope_deltas)`, the deltas being what `generate` advances decode positions by.
+
+    Args:
+        config ([`PreTrainedConfig`]):
+            The model's configuration, read for this family's spatial-merge and clock settings.
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+        mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
+            Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
+            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+    Returns:
+        position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
+        mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
     """
     vision_config = config.vision_config
     spatial_merge_size = vision_config.spatial_merge_size

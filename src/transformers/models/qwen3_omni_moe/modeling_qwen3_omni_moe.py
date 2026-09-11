@@ -167,6 +167,34 @@ def get_mrope_position_ids(
     r"""Qwen3-Omni's M-RoPE: like Qwen2.5-Omni's but audio lengths follow the windowed encoder
     (`audio_window_size`), and an audio-in-video span emits the video whole with the audio positions
     merged onto the same clock rather than chunk-interleaved. Temporal positions are fractional (float).
+
+    Args:
+        config ([`PreTrainedConfig`]):
+            The model's configuration, read for this family's spatial-merge and clock settings.
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+        mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
+            Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+        use_audio_in_video (`bool`, *optional*):
+             If set to `True`, use the audio in video.
+        audio_seqlens (`torch.LongTensor` of shape `(num_audios)`, *optional*):
+            The length of feature shape of each audio in LLM.
+        second_per_grid_ts (`torch.LongTensor` of shape `(num_videos)`, *optional*):
+            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
+
+    Returns:
+        position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
+        mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
     """
     if input_ids is None or (image_grid_thw is None and video_grid_thw is None):
         # No vision span to lay out: every token counts up on all three axes, padded slots keeping 1.
@@ -333,6 +361,73 @@ def get_mrope_position_ids(
 
 class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen3OmniMoePreTrainedModel):
     input_modalities = ("image", "video", "audio", "text")
+
+    def get_chunked_index(
+        self, token_indices: torch.Tensor, tokens_per_chunk: int, remove_index: int
+    ) -> list[tuple[int, int]]:
+        """
+        Splits token index list into chunks based on token value ranges.
+
+        Given a list of token indices, returns a list of (start, end) index tuples representing
+        slices of the list where the token values fall within successive ranges of `t_ntoken_per_chunk`.
+
+        For example, if `t_ntoken_per_chunk` is 1000, the function will create chunks such that:
+        - the first chunk contains token values < 1000,
+        - the second chunk contains values >= 1000 and < 2000, and so on.
+
+        Parameters:
+            token_indices (`torch.Tensor` of shape `(seq_len, )`): A monotonically increasing list of
+                                token index values.
+            t_ntoken_per_chunk (`int`): Number of tokens per chunk (used as the chunk size threshold).
+            remove_index (`int`) An index id to subtract from `token_indices` before chunking
+
+        Returns:
+            `list[tuple[int, int]]`: A list of tuples, each representing the start (inclusive)
+                                and end (exclusive) indices of a chunk in `token_indices`.
+        """
+        logger.warning_once(
+            "Detected the usage of `get_chunked_index`: this method is deprecated and will be removed in v5.22. "
+            "The layout it fed is now built by the module-level `get_mrope_position_ids` in this model's own "
+            "`modeling_*.py`, which takes `(config, input_ids, mm_token_type_ids, ...)`."
+        )
+
+        def _iter():
+            i, start_idx = 0, 0  # skip bos token
+            current_chunk = 1
+            while i < len(token_indices):  # skip eos token
+                if token_indices[i] - remove_index >= current_chunk * tokens_per_chunk:
+                    yield (start_idx, i)
+                    start_idx = i
+                    current_chunk += 1
+                i += 1
+            yield (start_idx, len(token_indices))
+
+        return list(_iter())
+
+    def get_llm_pos_ids_for_vision(
+        self,
+        start_idx: int,
+        vision_idx: int,
+        spatial_merge_size: int,
+        t_index: list[torch.Tensor],
+        grid_hs: list[torch.Tensor],
+        grid_ws: list[torch.Tensor],
+    ):
+        logger.warning_once(
+            "Detected the usage of `get_llm_pos_ids_for_vision`: this method is deprecated and will be removed in v5.22. "
+            "The layout it fed is now built by the module-level `get_mrope_position_ids` in this model's own "
+            "`modeling_*.py`, which takes `(config, input_ids, mm_token_type_ids, ...)`."
+        )
+        llm_pos_ids_list = []
+        llm_grid_h = grid_hs[vision_idx] // spatial_merge_size
+        llm_grid_w = grid_ws[vision_idx] // spatial_merge_size
+        h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(len(t_index), -1, llm_grid_w).flatten().float()
+        w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(len(t_index), llm_grid_h, -1).flatten().float()
+        t_index = torch.Tensor(t_index).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w).flatten().float()
+        _llm_pos_ids = torch.stack([t_index, h_index, w_index])
+        llm_pos_ids_list.append(_llm_pos_ids + start_idx)
+        llm_pos_ids = torch.cat(llm_pos_ids_list, dim=1)
+        return llm_pos_ids
 
     def get_rope_index(
         self,
@@ -3032,6 +3127,24 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
                 residual_codes,
             ),  # TODO: hack here to take residual codes out, need refactor.
             generation_step=generation_step + 1,
+        )
+
+    def get_llm_pos_ids_for_vision(
+        self,
+        start_idx: int,
+        vision_idx: int,
+        spatial_merge_size: int,
+        t_index: list[torch.Tensor],
+        grid_hs: list[torch.Tensor],
+        grid_ws: list[torch.Tensor],
+    ):
+        logger.warning_once(
+            "Detected the usage of `get_llm_pos_ids_for_vision`: this method is deprecated and will be removed in v5.22. "
+            "The layout it fed is now built by the module-level `get_mrope_position_ids` in this model's own "
+            "`modeling_*.py`, which takes `(config, input_ids, mm_token_type_ids, ...)`."
+        )
+        return Qwen3OmniMoePreTrainedModelForConditionalGeneration.get_llm_pos_ids_for_vision(
+            self, start_idx, vision_idx, spatial_merge_size, t_index, grid_hs, grid_ws
         )
 
     # Should inherit from PretrainedModel, but cannot inherit multiple classes in modular

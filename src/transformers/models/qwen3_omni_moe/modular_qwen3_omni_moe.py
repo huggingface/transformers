@@ -238,6 +238,34 @@ def get_mrope_position_ids(
     r"""Qwen3-Omni's M-RoPE: like Qwen2.5-Omni's but audio lengths follow the windowed encoder
     (`audio_window_size`), and an audio-in-video span emits the video whole with the audio positions
     merged onto the same clock rather than chunk-interleaved. Temporal positions are fractional (float).
+
+    Args:
+        config ([`PreTrainedConfig`]):
+            The model's configuration, read for this family's spatial-merge and clock settings.
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+        mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
+            Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+        use_audio_in_video (`bool`, *optional*):
+             If set to `True`, use the audio in video.
+        audio_seqlens (`torch.LongTensor` of shape `(num_audios)`, *optional*):
+            The length of feature shape of each audio in LLM.
+        second_per_grid_ts (`torch.LongTensor` of shape `(num_videos)`, *optional*):
+            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
+
+    Returns:
+        position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
+        mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
     """
     if input_ids is None or (image_grid_thw is None and video_grid_thw is None):
         # No vision span to lay out: every token counts up on all three axes, padded slots keeping 1.
@@ -893,6 +921,31 @@ class Qwen3OmniMoePreTrainedModel(Qwen2_5OmniPreTrainedModel, PreTrainedModel):
 
 
 class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration):
+    def get_llm_pos_ids_for_vision(
+        self,
+        start_idx: int,
+        vision_idx: int,
+        spatial_merge_size: int,
+        t_index: list[torch.Tensor],
+        grid_hs: list[torch.Tensor],
+        grid_ws: list[torch.Tensor],
+    ):
+        logger.warning_once(
+            "Detected the usage of `get_llm_pos_ids_for_vision`: this method is deprecated and will be removed in v5.22. "
+            "The layout it fed is now built by the module-level `get_mrope_position_ids` in this model's own "
+            "`modeling_*.py`, which takes `(config, input_ids, mm_token_type_ids, ...)`."
+        )
+        llm_pos_ids_list = []
+        llm_grid_h = grid_hs[vision_idx] // spatial_merge_size
+        llm_grid_w = grid_ws[vision_idx] // spatial_merge_size
+        h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(len(t_index), -1, llm_grid_w).flatten().float()
+        w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(len(t_index), llm_grid_h, -1).flatten().float()
+        t_index = torch.Tensor(t_index).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w).flatten().float()
+        _llm_pos_ids = torch.stack([t_index, h_index, w_index])
+        llm_pos_ids_list.append(_llm_pos_ids + start_idx)
+        llm_pos_ids = torch.cat(llm_pos_ids_list, dim=1)
+        return llm_pos_ids
+
     def get_rope_index(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1614,6 +1667,24 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
         "attentions": Qwen3OmniMoeThinkerTextAttention,
         "router_logits": OutputRecorder(Qwen3OmniMoeTalkerTextTopKRouter, index=0),
     }
+
+    def get_llm_pos_ids_for_vision(
+        self,
+        start_idx: int,
+        vision_idx: int,
+        spatial_merge_size: int,
+        t_index: list[torch.Tensor],
+        grid_hs: list[torch.Tensor],
+        grid_ws: list[torch.Tensor],
+    ):
+        logger.warning_once(
+            "Detected the usage of `get_llm_pos_ids_for_vision`: this method is deprecated and will be removed in v5.22. "
+            "The layout it fed is now built by the module-level `get_mrope_position_ids` in this model's own "
+            "`modeling_*.py`, which takes `(config, input_ids, mm_token_type_ids, ...)`."
+        )
+        return Qwen3OmniMoePreTrainedModelForConditionalGeneration.get_llm_pos_ids_for_vision(
+            self, start_idx, vision_idx, spatial_merge_size, t_index, grid_hs, grid_ws
+        )
 
     def __init__(self, config: Qwen3OmniMoeTalkerConfig):
         super().__init__(config)

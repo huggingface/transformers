@@ -84,6 +84,28 @@ def get_mrope_position_ids(
 
     This family's processor separates video frames with timestamp text, so each frame is its own visual
     span: the video grids are expanded to one `T=1` row per frame first.
+
+    Args:
+        config ([`PreTrainedConfig`]):
+            The model's configuration, read for this family's spatial-merge and clock settings.
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+        mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
+            Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+    Returns:
+        position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
+        mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
     """
     vision_config = config.vision_config
     spatial_merge_size = vision_config.spatial_merge_size
@@ -332,6 +354,24 @@ class Glm4vVisionPatchMerger(nn.Module):
         self.down_proj = nn.Linear(context_dim, dim, bias=bias)
         self.act1 = nn.GELU()
         self.act_fn = ACT2FN[hidden_act]
+
+    def get_rope_index(
+        self,
+        input_ids: torch.LongTensor,
+        mm_token_type_ids: torch.IntTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
+    ):
+        return get_mrope_position_ids(
+            self.config,
+            input_ids,
+            mm_token_type_ids,
+            attention_mask=attention_mask,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+        )
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         hidden_state = self.proj(hidden_state)
@@ -851,24 +891,6 @@ class Glm4vModel(Qwen2VLModel):
     def __init__(self, config):
         super().__init__(config)
         self.visual = Glm4vVisionModel._from_config(config.vision_config)
-
-    def get_rope_index(
-        self,
-        input_ids: torch.LongTensor,
-        mm_token_type_ids: torch.IntTensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        video_grid_thw: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs,
-    ):
-        return get_mrope_position_ids(
-            self.config,
-            input_ids,
-            mm_token_type_ids,
-            attention_mask=attention_mask,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-        )
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
