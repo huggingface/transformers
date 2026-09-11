@@ -117,9 +117,7 @@ class DtensorShardOperation:
         # here: replicated on the dense path, per-expert-ownership-filtered on the MoE path.
         if not source_shape:
             if tensor_idx is not None:
-                has_axis0_shard = any(
-                    self._normalize_param_dim(placement.dim) == 0 for _, placement in dim_placements
-                )
+                has_axis0_shard = any(self._normalize_param_dim(placement.dim) == 0 for _, placement in dim_placements)
                 if has_axis0_shard and not (
                     self._axis0_offset <= tensor_idx < self._axis0_offset + self._axis0_local_size
                 ):
