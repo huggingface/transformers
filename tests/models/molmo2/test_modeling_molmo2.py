@@ -35,6 +35,7 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     require_torch,
+    require_torch_large_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -328,6 +329,17 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
     )
     def test_sdpa_can_dispatch_on_flash(self):
         pass
+
+    def flash_attn_from_config(self, attn_implementation: str, test_fwd_in_train: bool = True):
+        super().flash_attn_from_config(attn_implementation, test_fwd_in_train=False)
+
+    def flash_attn_inference_equivalence(
+        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
+    ):
+        self.skipTest(
+            "The test slices `pixel_values` per sample and drops `image_token_pooling`, but Molmo2 crops are "
+            "flat-concatenated with no batch dimension."
+        )
 
     @unittest.skip(
         reason="Multimodal special tokens live in the extra-vocab rows beyond `vocab_size`; standard resize is ill-defined"
@@ -831,6 +843,7 @@ class Molmo2_8BIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         self.assertEqual(generated_text.strip(), expected_texts.get_expectation())
 
+    @require_torch_large_accelerator(memory=30)
     def test_generation_video_qa(self):
         """Test video question answering for Molmo2-8B."""
         video_url = "https://storage.googleapis.com/oe-training-public/demo_videos/many_penguins.mp4"

@@ -30,7 +30,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
-from ...masking_utils import create_causal_mask, create_masks_for_generate
+from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_masks_for_generate
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
@@ -384,14 +384,13 @@ class Molmo2Adapter(PreTrainedModel):
         patches_to_pool = flat_features[torch.clip(pooled_patches_idx, 0)]
         patches_to_pool = patches_to_pool * valid_mask.to(patches_to_pool.dtype)[..., None]
 
-        keep_mask = valid_mask.reshape(-1, 1, 1, valid_mask.shape[-1])
-        attention_mask = torch.zeros_like(keep_mask, dtype=patches_to_pool.dtype).masked_fill_(
-            ~keep_mask, torch.finfo(patches_to_pool.dtype).min
-        )
         num_valid_patches = valid_mask.float().sum(-1)
         num_valid_patches = torch.where(num_valid_patches == 0, 1, num_valid_patches)
         query = patches_to_pool.sum(-2, keepdim=True) / num_valid_patches[:, None, None].to(patches_to_pool.dtype)
 
+        attention_mask = create_bidirectional_mask(
+            config=self.config, inputs_embeds=query, attention_mask=valid_mask, encoder_hidden_states=patches_to_pool
+        )
         pooled_features, _ = self.image_pooling_2d(query, patches_to_pool, attention_mask=attention_mask)
         pooled_features = pooled_features.squeeze(1)
         pooled_features = self.image_projector(pooled_features)
