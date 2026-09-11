@@ -85,14 +85,11 @@ class PPDocLayoutV4Config(PreTrainedConfig):
         The size of the global pointer head.
     gp_dropout_value (`float`, *optional*, defaults to 0.1):
         The dropout probability in the global pointer head.
-    use_s2r (`bool`, *optional*, defaults to `True`):
-        Whether to fuse the successor (ROOR) head into the relative order head with
-        [`PPDocLayoutV4S2RFusion`]. When `False` the relative order logits are used directly.
     s2r_steps (`int`, *optional*, defaults to 3):
         Number of propagation steps used to approximate the transitive closure of the successor matrix.
     s2r_damping (`float`, *optional*, defaults to 0.5):
         Damping factor applied to every additional propagation step of the transitive closure.
-    s2r_a_init (`float`, *optional*, defaults to 0.0):
+    s2r_closure_weight_init (`float`, *optional*, defaults to 0.0):
         Initial value of the learnable gate that weights the closure term. Defaults to `0.0` so that an untrained
         fusion module is numerically identical to using the relative order logits alone.
 
@@ -161,10 +158,9 @@ class PPDocLayoutV4Config(PreTrainedConfig):
 
     hidden_size: int = 256
     num_coords: int = 10
-    use_s2r: bool = True
     s2r_steps: int = 3
     s2r_damping: float = 0.5
-    s2r_a_init: float = 0.0
+    s2r_closure_weight_init: float = 0.0
 
     def __post_init__(self, **kwargs):
         # The anchor generator, the deformable attention reference points and the corner decode are all written

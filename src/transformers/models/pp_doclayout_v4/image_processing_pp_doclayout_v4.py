@@ -41,6 +41,11 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
     Images are resized to a fixed 800x800 square with bicubic interpolation and rescaled to `[0, 1]` without further
     normalization, matching the reference `cv2.resize` based preprocessing.
 
+    Unlike the usual `resize` -> `rescale` -> `normalize` order, this processor rescales *before* resizing. The
+    reference preprocessing resizes `uint8` with `cv2.resize`, which rounds once; resizing an integer tensor with
+    torchvision rounds a second time, and the two roundings compound to ~22/255 on high contrast edges -- enough to
+    permute the predicted reading order.
+
     Post-processing differs from [`PPDocLayoutV3ImageProcessor`], because PP-DocLayoutV4 regresses a four point
     quadrilateral per query instead of predicting a segmentation mask, and emits raw relative/successor order logits
     instead of a decoded reading order.
@@ -76,18 +81,11 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        # Rescaling happens *before* resizing, unlike in `PPDocLayoutV3ImageProcessor`. The reference preprocessing
-        # resizes with `cv2.resize`, which evaluates the bicubic kernel in fixed point and rounds back to `uint8`
-        # once. Resizing a `uint8` tensor with torchvision rounds a second time with slightly different weights, and
-        # the two roundings compound to ~22/255 on high contrast edges -- enough to permute the predicted reading
-        # order. Running the same resize in floating point instead keeps every pixel within one 8-bit step.
         if do_resize:
-            # The bicubic overshoot has to be clipped, or the error grows back to ~0.2 instead of staying below
-            # 1/255. The reference preprocessing resizes `uint8` with `cv2.resize`, whose saturating cast bounds the
-            # ringing by the dtype maximum -- so the bound is the range the incoming pixels live in, not the range of
-            # this particular image, which would clip too early. `cv2.resize` does not saturate floating point input
-            # at all, so a float tensor is only bounded by 1 when it actually is the unit interval the
-            # `do_rescale=False` contract documents; anything else is treated as `[0, 255]` like an integer input.
+            # The bicubic overshoot has to be clipped, the way the reference `cv2.resize` bounds the ringing with its
+            # saturating cast back to `uint8`: by the range the incoming pixels live in, not by the range of this
+            # particular image. `cv2.resize` does not saturate floating point input, so a float tensor is only bounded
+            # by 1 when it really is the unit interval that the `do_rescale=False` contract documents.
             is_unit_interval = all(image.is_floating_point() for image in images) and (
                 float(max(image.amax() for image in images)) <= 1.0
             )

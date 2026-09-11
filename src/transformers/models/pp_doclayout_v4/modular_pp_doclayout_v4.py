@@ -118,14 +118,11 @@ class PPDocLayoutV4Config(PPDocLayoutV3Config):
         The size of the global pointer head.
     gp_dropout_value (`float`, *optional*, defaults to 0.1):
         The dropout probability in the global pointer head.
-    use_s2r (`bool`, *optional*, defaults to `True`):
-        Whether to fuse the successor (ROOR) head into the relative order head with
-        [`PPDocLayoutV4S2RFusion`]. When `False` the relative order logits are used directly.
     s2r_steps (`int`, *optional*, defaults to 3):
         Number of propagation steps used to approximate the transitive closure of the successor matrix.
     s2r_damping (`float`, *optional*, defaults to 0.5):
         Damping factor applied to every additional propagation step of the transitive closure.
-    s2r_a_init (`float`, *optional*, defaults to 0.0):
+    s2r_closure_weight_init (`float`, *optional*, defaults to 0.0):
         Initial value of the learnable gate that weights the closure term. Defaults to `0.0` so that an untrained
         fusion module is numerically identical to using the relative order logits alone.
 
@@ -158,10 +155,9 @@ class PPDocLayoutV4Config(PPDocLayoutV3Config):
     eval_size: list[int] | tuple[int, int] | None = None
     anchor_image_size: list[int] | tuple[int, int] | None = None
     num_coords: int = 10
-    use_s2r: bool = True
     s2r_steps: int = 3
     s2r_damping: float = 0.5
-    s2r_a_init: float = 0.0
+    s2r_closure_weight_init: float = 0.0
 
     # PP-DocLayoutV4 has no mask branch, so none of the PP-DocLayoutV3 mask prototype knobs apply.
     mask_feature_channels = AttributeError()
@@ -216,6 +212,11 @@ class PPDocLayoutV4ImageProcessor(PPDocLayoutV3ImageProcessor):
     Images are resized to a fixed 800x800 square with bicubic interpolation and rescaled to `[0, 1]` without further
     normalization, matching the reference `cv2.resize` based preprocessing.
 
+    Unlike the usual `resize` -> `rescale` -> `normalize` order, this processor rescales *before* resizing. The
+    reference preprocessing resizes `uint8` with `cv2.resize`, which rounds once; resizing an integer tensor with
+    torchvision rounds a second time, and the two roundings compound to ~22/255 on high contrast edges -- enough to
+    permute the predicted reading order.
+
     Post-processing differs from [`PPDocLayoutV3ImageProcessor`], because PP-DocLayoutV4 regresses a four point
     quadrilateral per query instead of predicting a segmentation mask, and emits raw relative/successor order logits
     instead of a decoded reading order.
@@ -242,18 +243,11 @@ class PPDocLayoutV4ImageProcessor(PPDocLayoutV3ImageProcessor):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        # Rescaling happens *before* resizing, unlike in `PPDocLayoutV3ImageProcessor`. The reference preprocessing
-        # resizes with `cv2.resize`, which evaluates the bicubic kernel in fixed point and rounds back to `uint8`
-        # once. Resizing a `uint8` tensor with torchvision rounds a second time with slightly different weights, and
-        # the two roundings compound to ~22/255 on high contrast edges -- enough to permute the predicted reading
-        # order. Running the same resize in floating point instead keeps every pixel within one 8-bit step.
         if do_resize:
-            # The bicubic overshoot has to be clipped, or the error grows back to ~0.2 instead of staying below
-            # 1/255. The reference preprocessing resizes `uint8` with `cv2.resize`, whose saturating cast bounds the
-            # ringing by the dtype maximum -- so the bound is the range the incoming pixels live in, not the range of
-            # this particular image, which would clip too early. `cv2.resize` does not saturate floating point input
-            # at all, so a float tensor is only bounded by 1 when it actually is the unit interval the
-            # `do_rescale=False` contract documents; anything else is treated as `[0, 255]` like an integer input.
+            # The bicubic overshoot has to be clipped, the way the reference `cv2.resize` bounds the ringing with its
+            # saturating cast back to `uint8`: by the range the incoming pixels live in, not by the range of this
+            # particular image. `cv2.resize` does not saturate floating point input, so a float tensor is only bounded
+            # by 1 when it really is the unit interval that the `do_rescale=False` contract documents.
             is_unit_interval = all(image.is_floating_point() for image in images) and (
                 float(max(image.amax() for image in images)) <= 1.0
             )
@@ -655,15 +649,15 @@ class PPDocLayoutV4S2RFusion(nn.Module):
     `closure_weight * antisymmetrize(closure(successor)) + relative_weight * relative` (S2R = "Successor to
     Relation", from PaddlePaddle).
 
-    `s2r_a_init=0.0` starts the module out identical to the relative logits alone. `relative_weight` is a plain
-    float that is never learned, so checkpoints only carry `closure_weight` (named `a` upstream).
+    `s2r_closure_weight_init=0.0` starts the module out identical to the relative logits alone. `relative_weight`
+    is a plain float that is never learned, so checkpoints only carry `closure_weight` (named `a` upstream).
     """
 
     def __init__(self, config: PPDocLayoutV4Config):
         super().__init__()
         self.steps = config.s2r_steps
         self.damping = config.s2r_damping
-        self.closure_weight = nn.Parameter(torch.full((1,), config.s2r_a_init))
+        self.closure_weight = nn.Parameter(torch.full((1,), config.s2r_closure_weight_init))
         self.relative_weight = 1.0
         self.one_minus_eye = nn.Buffer(1.0 - torch.eye(config.num_queries), persistent=False)
 
@@ -719,7 +713,7 @@ class PPDocLayoutV4PreTrainedModel(PPDocLayoutV3PreTrainedModel):
             init.constant_(module.bias, float(-math.log((1 - prior_prob) / prior_prob)))
 
         elif isinstance(module, PPDocLayoutV4S2RFusion):
-            init.constant_(module.closure_weight, self.config.s2r_a_init)
+            init.constant_(module.closure_weight, self.config.s2r_closure_weight_init)
             init.copy_(module.one_minus_eye, 1.0 - torch.eye(module.one_minus_eye.shape[0]))
 
         elif isinstance(module, PPDocLayoutV4GlobalPointer):
@@ -811,9 +805,7 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
             [nn.Linear(config.d_model, config.d_model) for _ in range(config.decoder_layers)]
         )
         self.successor_global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=False)
-        # CODEPATH: PP-DocLayoutV4_safetensors enables S2R fusion; the `None` branch is only for configs that
-        # turn `use_s2r` off.
-        self.s2r_fusion = PPDocLayoutV4S2RFusion(config) if config.use_s2r else None
+        self.s2r_fusion = PPDocLayoutV4S2RFusion(config)
 
     def forward(
         self,
@@ -889,8 +881,7 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
         # The direct successor branch and its fusion into the relative order logits are new in PP-DocLayoutV4.
         successor_order_logits = self.successor_global_pointer(self.successor_order_head[-1](valid_query))
         relative_order_logits = self.global_pointer(self.order_head[-1](valid_query))
-        if self.s2r_fusion is not None:
-            relative_order_logits = self.s2r_fusion(relative_order_logits, successor_order_logits)
+        relative_order_logits = self.s2r_fusion(relative_order_logits, successor_order_logits)
 
         return PPDocLayoutV4DecoderOutput(
             last_hidden_state=hidden_states,

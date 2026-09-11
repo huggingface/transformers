@@ -367,15 +367,15 @@ class PPDocLayoutV4S2RFusion(nn.Module):
     `closure_weight * antisymmetrize(closure(successor)) + relative_weight * relative` (S2R = "Successor to
     Relation", from PaddlePaddle).
 
-    `s2r_a_init=0.0` starts the module out identical to the relative logits alone. `relative_weight` is a plain
-    float that is never learned, so checkpoints only carry `closure_weight` (named `a` upstream).
+    `s2r_closure_weight_init=0.0` starts the module out identical to the relative logits alone. `relative_weight`
+    is a plain float that is never learned, so checkpoints only carry `closure_weight` (named `a` upstream).
     """
 
     def __init__(self, config: PPDocLayoutV4Config):
         super().__init__()
         self.steps = config.s2r_steps
         self.damping = config.s2r_damping
-        self.closure_weight = nn.Parameter(torch.full((1,), config.s2r_a_init))
+        self.closure_weight = nn.Parameter(torch.full((1,), config.s2r_closure_weight_init))
         self.relative_weight = 1.0
         self.one_minus_eye = nn.Buffer(1.0 - torch.eye(config.num_queries), persistent=False)
 
@@ -441,7 +441,7 @@ class PPDocLayoutV4PreTrainedModel(PreTrainedModel):
             init.constant_(module.bias, float(-math.log((1 - prior_prob) / prior_prob)))
 
         elif isinstance(module, PPDocLayoutV4S2RFusion):
-            init.constant_(module.closure_weight, self.config.s2r_a_init)
+            init.constant_(module.closure_weight, self.config.s2r_closure_weight_init)
             init.copy_(module.one_minus_eye, 1.0 - torch.eye(module.one_minus_eye.shape[0]))
 
         elif isinstance(module, PPDocLayoutV4GlobalPointer):
@@ -1168,9 +1168,7 @@ class PPDocLayoutV4Decoder(PPDocLayoutV4PreTrainedModel):
             [nn.Linear(config.d_model, config.d_model) for _ in range(config.decoder_layers)]
         )
         self.successor_global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=False)
-        # CODEPATH: PP-DocLayoutV4_safetensors enables S2R fusion; the `None` branch is only for configs that
-        # turn `use_s2r` off.
-        self.s2r_fusion = PPDocLayoutV4S2RFusion(config) if config.use_s2r else None
+        self.s2r_fusion = PPDocLayoutV4S2RFusion(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1251,8 +1249,7 @@ class PPDocLayoutV4Decoder(PPDocLayoutV4PreTrainedModel):
         # The direct successor branch and its fusion into the relative order logits are new in PP-DocLayoutV4.
         successor_order_logits = self.successor_global_pointer(self.successor_order_head[-1](valid_query))
         relative_order_logits = self.global_pointer(self.order_head[-1](valid_query))
-        if self.s2r_fusion is not None:
-            relative_order_logits = self.s2r_fusion(relative_order_logits, successor_order_logits)
+        relative_order_logits = self.s2r_fusion(relative_order_logits, successor_order_logits)
 
         return PPDocLayoutV4DecoderOutput(
             last_hidden_state=hidden_states,
