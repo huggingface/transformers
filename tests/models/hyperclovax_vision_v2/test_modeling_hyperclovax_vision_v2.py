@@ -228,7 +228,7 @@ class HyperCLOVAXVisionV2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B"
 
     def setUp(self):
-        super().setup()
+        super().setUp()
         self.processor = AutoProcessor.from_pretrained(self.model_id)
         self.model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
             self.model_id, dtype=torch.bfloat16, device_map="auto"
