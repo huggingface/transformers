@@ -382,7 +382,7 @@ class DeepseekV3ModelTest(
 class DeepseekV3IntegrationTest(unittest.TestCase):
     def tearDown(self):
         # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
-        cleanup(torch_device, gc_collect=True)
+        cleanup(torch_device, gc_collect=False)
 
     @slow
     @require_torch_accelerator
@@ -427,7 +427,3 @@ class DeepseekV3IntegrationTest(unittest.TestCase):
         )
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
-
-        # Explicit cleanup so the ~10 GB checkpoint doesn't stay reserved after the test. See PR #48720.
-        del model
-        cleanup(torch_device, gc_collect=True)
