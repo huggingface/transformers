@@ -19,6 +19,7 @@ from transformers import is_torch_available
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
     Expectations,
+    backend_device_count,
     cleanup,
     require_torch,
     slow,
@@ -64,6 +65,38 @@ class FlexOlmoModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch
 class FlexOlmoIntegrationTest(unittest.TestCase):
+    model_id = "shanearora/Flex-reddit-2x7B-1T"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.model = None
+
+    @classmethod
+    def get_model(cls):
+        if cls.model is None:
+            # device_map="auto" fills each GPU, so leave 30% headroom for MoE expert
+            # gate/up merge temporaries during loading.
+            n = backend_device_count(torch_device)
+            if n > 0 and torch_device != "cpu":
+                torch_accel = getattr(torch, torch_device)
+                per_device = int(
+                    min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3
+                )
+                max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+                max_memory["cpu"] = "60GiB"
+            else:
+                max_memory = None
+            cls.model = FlexOlmoForCausalLM.from_pretrained(
+                cls.model_id, device_map="auto", max_memory=max_memory, torch_dtype=torch.bfloat16
+            )
+        return cls.model
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "model"):
+            del cls.model
+        cleanup(torch_device, gc_collect=True)
+
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
 
@@ -73,14 +106,13 @@ class FlexOlmoIntegrationTest(unittest.TestCase):
     @slow
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
-        model = FlexOlmoForCausalLM.from_pretrained("shanearora/Flex-reddit-2x7B-1T").to(
-            torch_device, dtype=torch.bfloat16
-        )
-        out = model(torch.tensor(input_ids, device=torch_device)).logits.float()
+        model = self.get_model()
+        with torch.no_grad():
+            out = model(torch.tensor(input_ids, device=model.device)).logits.float()
         # Expected mean on dim = -1
         expectations = Expectations(
             {
-                ("cuda", 8): [[-5.4202, -5.3883, -2.3924, -2.1226, -6.0122, -5.4173, -5.4571, -5.8256]],
+                ("cuda", 8): [[-5.4104, -5.3699, -2.3821, -2.1202, -5.9779, -5.4052, -5.4425, -5.8169]],
             }
         )
         EXPECTED_MEAN = torch.tensor(expectations.get_expectation(), device=torch_device)
@@ -88,7 +120,7 @@ class FlexOlmoIntegrationTest(unittest.TestCase):
         # slicing logits[0, 0, 0:30]
         expectations = Expectations(
             {
-                ("cuda", 8): [ 0.5547, -3.6250, -7.2812, -5.0312, -5.9062, -5.3438, -4.2500, -4.6875, -3.4219, -4.6250, -6.5938, -3.1250, -6.0625, -2.0781, -6.4688, -0.4941,  1.2656,  0.7578, -0.1934, -0.4160, -0.6992, -0.9531, -0.9648, -1.3125, -1.2578, -4.5625, -2.4219, -5.6250,  0.7695, -4.5938],
+                ("cuda", 8): [ 0.5234, -3.6094, -7.2500, -5.0000, -5.8750, -5.2813, -4.2813, -4.6563, -3.4219, -4.6563, -6.5625, -3.1406, -6.0625, -2.1094, -6.4688, -0.5078,  1.2422,  0.7344, -0.1953, -0.4160, -0.6992, -0.9609, -0.9688, -1.3359, -1.2656, -4.5625, -2.4375, -5.5938,  0.7734, -4.5625],
             }
         )  # fmt: skip
         EXPECTED_SLICE = torch.tensor(expectations.get_expectation(), device=torch_device)
@@ -99,7 +131,7 @@ class FlexOlmoIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) the laws of physics are the same in all inertial frames of reference, and 2) the speed of light is constant in all inertial frames of reference. The first statement is called the principle of relativity, and the second is called the constancy of the speed of light. The first statement is"""
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = AutoTokenizer.from_pretrained("allenai/dolma2-tokenizer", device_map="auto")
-        model = FlexOlmoForCausalLM.from_pretrained("shanearora/Flex-reddit-2x7B-1T", device_map="auto")
+        model = self.get_model()
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
 
         # greedy generation outputs
