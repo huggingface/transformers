@@ -39,7 +39,7 @@ There are 2 main ways to use Depth Anything V2: either using the pipeline API, w
 
 ### Pipeline API
 
-The pipeline allows to use the model in a few lines of code:
+The pipeline allows you to use the model in a few lines of code:
 
 ```python
 import requests
