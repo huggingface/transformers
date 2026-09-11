@@ -1699,8 +1699,11 @@ def convert_and_load_state_dict_in_model(
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
-            elif empty_param is not None and empty_param.dtype != _dtype:
-                _dtype = empty_param.dtype  # usually correct when initializing
+            elif empty_param is not None and empty_param.dtype != _dtype and not needs_quantization:
+                # usually correct when initializing — but a parameter the quantizer's op is about to
+                # quantize must arrive in the checkpoint's precision, not pre-cast to its quantized
+                # storage dtype (int8 storage would zero it, float8 would double-round it)
+                _dtype = empty_param.dtype
 
             # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
             # distributed op selects whole experts. The signal is a `MergeModulelist`

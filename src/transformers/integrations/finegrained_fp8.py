@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import functools
 import os
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -36,6 +37,15 @@ from .deepgemm import (
 )
 from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
 from .moe import ExpertsInterface, use_experts_implementation
+
+
+warnings.warn(
+    "finegrained_fp8 is frozen for backward compatibility and no longer "
+    "receives new recipes; the fine-grained quantization machinery lives in transformers.integrations.finegrained "
+    "(block-FP8, MXFP8, MXFP4, NVFP4, weight-only).",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 logger = logging.get_logger(__name__)

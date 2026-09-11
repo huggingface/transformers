@@ -25,6 +25,7 @@ from ..utils.quantization_config import (
     CompressedTensorsConfig,
     EetqConfig,
     FbgemmFp8Config,
+    FineGrainedConfig,
     FineGrainedFP8Config,
     FourOverSixConfig,
     FPQuantConfig,
@@ -35,7 +36,6 @@ from ..utils.quantization_config import (
     HqqConfig,
     MetalConfig,
     Mxfp4Config,
-    NVFP4Config,
     QuantizationConfigMixin,
     QuantizationMethod,
     QuantoConfig,
@@ -55,7 +55,7 @@ from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
 from .quantizer_compressed_tensors import CompressedTensorsHfQuantizer
 from .quantizer_eetq import EetqHfQuantizer
 from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
-from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
+from .quantizer_finegrained import FineGrainedHfQuantizer
 from .quantizer_fouroversix import FourOverSixHfQuantizer
 from .quantizer_fp_quant import FPQuantHfQuantizer
 from .quantizer_gemma import GemmaQuantizer
@@ -64,8 +64,6 @@ from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_metal import MetalHfQuantizer
-from .quantizer_mxfp4 import Mxfp4HfQuantizer
-from .quantizer_nvfp4 import NVFP4HfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
 from .quantizer_quark import QuarkHfQuantizer
 from .quantizer_sinq import SinqHfQuantizer
@@ -93,16 +91,17 @@ AUTO_QUANTIZER_MAPPING = {
     "bitnet": BitNetHfQuantizer,
     "vptq": VptqHfQuantizer,
     "spqr": SpQRHfQuantizer,
-    "fp8": FineGrainedFP8HfQuantizer,
     "gguf": GgufHfQuantizer,
-    "nvfp4": NVFP4HfQuantizer,
-    # MXFP8 = FP8 (E4M3 weights) with per-block ``[1, 32]`` E8M0 (uint8) scales —
-    # reuses the FineGrainedFP8 dequant path, with the E8M0 byte→exponent
-    # unpacking handled inside ``Fp8Dequantize._dequantize_one``.
-    "mxfp8": FineGrainedFP8HfQuantizer,
-    "auto-round": AutoRoundQuantizer,
-    "mxfp4": Mxfp4HfQuantizer,
     "metal": MetalHfQuantizer,
+    "auto-round": AutoRoundQuantizer,
+    # the finegrained quantizer serves every block/group-scaled format — block-FP8, MXFP8, MXFP4,
+    # NVFP4 and modelopt's NVFP4 export — for dense linears and MoE experts alike; the format is
+    # resolved off the checkpoint tensors
+    "fp8": FineGrainedHfQuantizer,
+    "mxfp8": FineGrainedHfQuantizer,
+    "mxfp4": FineGrainedHfQuantizer,
+    "nvfp4": FineGrainedHfQuantizer,
+    "modelopt": FineGrainedHfQuantizer,
     "sinq": SinqHfQuantizer,
     "gemma": GemmaQuantizer,
 }
@@ -127,12 +126,14 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "bitnet": BitNetQuantConfig,
     "vptq": VptqConfig,
     "spqr": SpQRConfig,
-    "fp8": FineGrainedFP8Config,
-    "nvfp4": NVFP4Config,
-    "mxfp8": FineGrainedFP8Config,
-    "auto-round": AutoRoundConfig,
-    "mxfp4": Mxfp4Config,
     "metal": MetalConfig,
+    "auto-round": AutoRoundConfig,
+    # the finegrained formats (see AUTO_QUANTIZER_MAPPING)
+    "fp8": FineGrainedConfig,
+    "mxfp8": FineGrainedConfig,
+    "mxfp4": FineGrainedConfig,
+    "nvfp4": FineGrainedConfig,
+    "modelopt": FineGrainedConfig,
     "sinq": SinqConfig,
     "gemma": GemmaQuantizationConfig,
 }

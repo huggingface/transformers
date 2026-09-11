@@ -110,6 +110,20 @@ class DtensorShardOperation:
             (mesh_dim, placement) for mesh_dim, placement in enumerate(self.placements) if hasattr(placement, "dim")
         ]
 
+        # A 0-dim tensor has no axis to shard — every owning rank takes the whole value. Reachable
+        # in practice: ModelOpt NVFP4 checkpoints ship one `weight_scale_2` / `input_scale` scalar
+        # per expert projection, thousands per model. Both paths below index the (empty) shape —
+        # `source[()]` is not accepted by a lazy safetensors slice, `[...]` is — so route scalars
+        # here: replicated on the dense path, per-expert-ownership-filtered on the MoE path.
+        if not source_shape:
+            if tensor_idx is not None:
+                has_axis0_shard = any(self._normalize_param_dim(placement.dim) == 0 for _, placement in dim_placements)
+                if has_axis0_shard and not (
+                    self._axis0_offset <= tensor_idx < self._axis0_offset + self._axis0_local_size
+                ):
+                    return None
+            return source[...].to(device=device, dtype=dtype)
+
         # Dense path
         if tensor_idx is None:
             if not dim_placements:

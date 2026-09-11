@@ -44,6 +44,7 @@ from ..utils.import_utils import (
     resolve_internal_import,
 )
 from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
+from .tensor_parallel import to_local
 
 
 logger = logging.get_logger(__name__)
@@ -693,6 +694,32 @@ def deepgemm_bf16_experts_forward(
     )
 
 
+def _assert_affine_scales(module: torch.nn.Module) -> None:
+    """DeepGEMM reads row-major block scales. A module loaded for a triton backend holds them in the
+    SWIZZLE_32_4_4 layout (5-D); consuming that as affine returns garbage, so a backend switched to
+    DeepGEMM after such a load fails here instead."""
+    for name in ("gate_up_proj_scale_inv", "up_proj_scale_inv", "down_proj_scale_inv"):
+        scale = getattr(module, name, None)
+        if scale is not None and scale.ndim == 5:
+            raise RuntimeError(
+                f"DeepGEMM experts need row-major block scales, but `{name}` is held swizzled for the "
+                "triton experts backends. Switching to a DeepGEMM backend after load is not supported — "
+                "pass `experts_implementation=...` to `from_pretrained` so the model loads for it."
+            )
+
+
+def _assert_stacked_gate_up(module: torch.nn.Module) -> None:
+    """Mega MoE's ``transform_weights_for_mega_moe`` does its own gate/up interleave, so it takes the
+    stacked ``[gate; up]`` rows. A module loaded for a triton backend holds them interleaved; switched
+    to this backend after load, silently re-permuting would be a wrong answer rather than a failure."""
+    if module.has_gate and getattr(module, "_gate_up_interleaved", False):
+        raise RuntimeError(
+            "Mega MoE needs gate|up stacked, but this module was loaded interleaved for the triton "
+            "experts backend. Switching to 'deepgemm_megamoe' after load is not supported — pass "
+            "`experts_implementation=...` to `from_pretrained` so the model loads for it."
+        )
+
+
 def deepgemm_fp8_fp4_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
@@ -701,15 +728,20 @@ def deepgemm_fp8_fp4_experts_forward(
 ) -> torch.Tensor:
     if self._deepgemm_disabled:
         # Set at load when the model spans >1 CUDA device in this process, where DeepGEMM's
-        # context-bound kernels corrupt across devices (see `quantizer_finegrained_fp8.py`).
+        # context-bound kernels corrupt across devices (see `disable_deepgemm_on_multi_device`).
         raise RuntimeError(
             "DeepGEMM experts selected on a model spanning multiple CUDA devices in one process; "
             "its kernels are bound to a single CUDA context and corrupt across devices. Use "
             "`experts_implementation='grouped_mm'`, or run one device per process (TP/EP)."
         )
 
-    # Fail before the (hub-download + JIT) load if this device can't serve these dtypes.
-    _assert_sm100_requirements(self.down_proj, self.down_proj_scale_inv)
+    # A module loaded for a triton backend holds swizzled block scales, which DeepGEMM would read as
+    # affine and turn into garbage — refuse before any kernel work.
+    _assert_affine_scales(self)
+    # Fail before the (hub-download + JIT) load if this device can't serve these dtypes. Mega MoE is
+    # Blackwell-only, and its weights are always FP4 (int8) — so the FP4 arch check doubles as the
+    # SM100 gate; the explicit `!= int8` check below covers a non-FP4 (misconfigured) checkpoint.
+    _assert_sm100_requirements(self.gate_up_proj, self.down_proj_scale_inv)
 
     deepgemm = load_deepgemm_kernel()
 
@@ -809,22 +841,28 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
     Unwraps any ``DTensor`` wrappers FSDP2/EP may have placed around the loader-
     side Parameters — the kernel takes raw pointers.
     """
-    deepgemm = load_deepgemm_kernel()
-    gate_up_sf_raw = module.gate_up_proj_scale_inv.data
-    down_sf_raw = module.down_proj_scale_inv.data
-    # Force int8 view: the kernel's interleave reshape/empty_like/copy_ is bit-level.
-    gate_up_w = module.gate_up_proj.data.view(torch.int8).contiguous()
-    down_w = module.down_proj.data.view(torch.int8).contiguous()
-
+    # A module loaded for a triton backend holds swizzled block scales, which DeepGEMM would read as
+    # affine and turn into garbage — refuse before the (hub-download + JIT) kernel load.
+    _assert_affine_scales(module)
+    # Same for its interleaved gate|up rows: `transform_weights_for_mega_moe` interleaves stacked rows
+    # itself, and re-permuting already-interleaved ones would be a silent wrong answer.
+    _assert_stacked_gate_up(module)
+    # The UE8M0 scale grid is group-32 along both dims, so the kernel's SF layout needs both divisible.
     intermediate_hidden = module.intermediate_dim
     num_local_experts = module.num_experts
     hidden_dim = module.hidden_dim
-
     if hidden_dim % 32 != 0 or intermediate_hidden % 32 != 0:
         raise ValueError(
             f"DeepGEMM Mega MoE requires `hidden_dim` and `intermediate_hidden` divisible by 32 "
             f"(FP8 SF granularity); got hidden_dim={hidden_dim}, intermediate_hidden={intermediate_hidden}."
         )
+
+    deepgemm = load_deepgemm_kernel()
+    gate_up_sf_raw = module.gate_up_proj_scale_inv.data
+    down_sf_raw = module.down_proj_scale_inv.data
+    # Force int8 view: the kernel's interleave reshape/empty_like/copy_ is bit-level.
+    gate_up_w = to_local(module.gate_up_proj.data).view(torch.int8).contiguous()
+    down_w = to_local(module.down_proj.data).view(torch.int8).contiguous()
 
     gate_up_sf = deepgemm.transform_sf_into_required_layout(
         gate_up_sf_raw.float(),
@@ -875,6 +913,9 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
       `transform_weights_for_mega_moe((gate_up, gate_up_sf), (down, down_sf))`.
       - `config.swiglu_limit` (optional): SwiGLU clamp; absent → unclamped.
     """
+    # A module loaded for a triton backend holds swizzled block scales, which DeepGEMM would read as
+    # affine and turn into garbage — refuse before any kernel work.
+    _assert_affine_scales(self)
     # Fail before the (hub-download + JIT) load if this device can't serve these dtypes. Mega MoE is
     # Blackwell-only, and its weights are always FP4 (int8) — so the FP4 arch check doubles as the
     # SM100 gate; the explicit `!= int8` check below covers a non-FP4 (misconfigured) checkpoint.

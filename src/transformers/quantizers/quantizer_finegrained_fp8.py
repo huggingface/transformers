@@ -1,3 +1,4 @@
+import warnings
 from typing import TYPE_CHECKING
 
 from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
@@ -7,6 +8,16 @@ from .quantizers_utils import get_module_from_name
 
 if is_torch_available():
     import torch
+
+
+warnings.warn(
+    "quantizer_finegrained_fp8 is frozen for backward compatibility and no longer "
+    "receives new recipes; the fine-grained quantization machinery lives in transformers.quantizers.quantizer_finegrained "
+    "(block-FP8, MXFP8, MXFP4, NVFP4, weight-only).",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
