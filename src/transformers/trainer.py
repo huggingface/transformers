@@ -49,6 +49,7 @@ import torch.distributed as dist
 from huggingface_hub import CommitInfo, ModelCard
 from packaging import version
 from torch import nn
+from torch.distributed.tensor import DTensor
 from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
 
 from . import __version__
@@ -1240,20 +1241,21 @@ class Trainer:
 
         if self.optimizer is None:
             decay_parameters = self.get_decay_parameter_names(opt_model)
-            optimizer_grouped_parameters = [
-                {
-                    "params": [
-                        p for n, p in opt_model.named_parameters() if (n in decay_parameters and p.requires_grad)
-                    ],
-                    "weight_decay": self.args.weight_decay,
-                },
-                {
-                    "params": [
-                        p for n, p in opt_model.named_parameters() if (n not in decay_parameters and p.requires_grad)
-                    ],
-                    "weight_decay": 0.0,
-                },
-            ]
+            optimizer_grouped_parameters = []
+            for in_decay, weight_decay in ((True, self.args.weight_decay), (False, 0.0)):
+                params = [
+                    p
+                    for n, p in opt_model.named_parameters()
+                    if p.requires_grad and (n in decay_parameters) == in_decay
+                ]
+                # Fused/foreach optimizers batch every param of a group into a single op call, which
+                # errors out if the group mixes DTensor and plain Tensor params.
+                # Split each group by type so every batched call stays homogeneous.
+                dtensor_params = [p for p in params if isinstance(p, DTensor)]
+                plain_params = [p for p in params if not isinstance(p, DTensor)]
+                for group_params in (dtensor_params, plain_params):
+                    if group_params:
+                        optimizer_grouped_parameters.append({"params": group_params, "weight_decay": weight_decay})
 
             if self.optimizer_cls_and_kwargs is not None:
                 optimizer_cls, optimizer_kwargs = self.optimizer_cls_and_kwargs
@@ -1678,9 +1680,11 @@ class Trainer:
         # wrapped (e.g. in DataParallel) on subsequent `train()` calls and avoid double wrapping.
         model = self._wrap_model(self.model_wrapped)
 
+        is_natively_fsdp_sharded = getattr(model, "_is_fsdp_managed_module", False)
+
         # If the model is wrapped, don't use `accelerator.prepare`
         # this is for unhandled cases in accelerate such as FSDP-XLA, SageMaker MP/DP, DataParallel
-        use_accelerator_prepare = model is self.model
+        use_accelerator_prepare = model is self.model and not is_natively_fsdp_sharded
 
         # prepare using `accelerator` prepare
         if use_accelerator_prepare:
@@ -3930,8 +3934,6 @@ class Trainer:
     def save_model(self, output_dir: str | None = None, _internal_call: bool = False) -> None:
         """
         Will save the model, so you can reload it using `from_pretrained()`.
-
-        Will only save from the main process.
         """
 
         if output_dir is None:
@@ -3945,14 +3947,12 @@ class Trainer:
             # Calling the state_dict needs to be done on the wrapped model and on all processes.
             os.makedirs(output_dir, exist_ok=True)
             state_dict = self.model_wrapped.state_dict()
-            if self.args.should_save:
-                self._save(output_dir, state_dict=state_dict)
+            self._save(output_dir, state_dict=state_dict)
             Path(os.path.join(output_dir, "user_content.pt")).touch()
         elif self.is_fsdp_enabled:
             if "FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type):
                 state_dict = self.accelerator.get_state_dict(self.model)
-                if self.args.should_save:
-                    self._save(output_dir, state_dict=state_dict)
+                self._save(output_dir, state_dict=state_dict)
         elif self.is_deepspeed_enabled:
             try:
                 accept_exclude_frozen_parameters = "exclude_frozen_parameters" in set(
@@ -3965,20 +3965,18 @@ class Trainer:
                     state_dict = self.deepspeed._zero3_consolidated_16bit_state_dict(exclude_frozen_parameters=True)
                 else:
                     state_dict = self.accelerator.get_state_dict(self.deepspeed)
-                if self.args.should_save:
-                    self._save(output_dir, state_dict=state_dict)
+                self._save(output_dir, state_dict=state_dict)
             except ValueError:
                 logger.warning(
                     " stage3_gather_16bit_weights_on_model_save=false. Saving the full checkpoint instead, use"
                     " zero_to_fp32.py to recover weights"
                 )
-                if self.args.should_save:
-                    self._save(output_dir, state_dict={})
+                self._save(output_dir, state_dict={})
                 # remove the dummy state_dict
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
 
-        elif self.args.should_save:
+        else:
             self._save(output_dir)
 
         # Push to the Hub when `save_model` is called by the user.
@@ -3986,43 +3984,50 @@ class Trainer:
             self.push_to_hub(commit_message="Model save", revision=self.args.hub_revision)
 
     def _save(self, output_dir: str | None = None, state_dict: dict | None = None) -> None:
-        """Save model weights, configuration, and processing class to `output_dir`."""
-        # If we are executing this function, we are the process zero, so we don't check for that.
+        """
+        Save model weights, configuration, and processing class to `output_dir`.
+        """
         output_dir = output_dir if output_dir is not None else self.args.output_dir
-        os.makedirs(output_dir, exist_ok=True)
-        logger.info(f"Saving model checkpoint to {output_dir}")
+        if self.args.should_save:
+            os.makedirs(output_dir, exist_ok=True)
+            logger.info(f"Saving model checkpoint to {output_dir}")
 
         supported_classes = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, supported_classes):
-            if state_dict is None:
-                state_dict = self.model.state_dict()
+            if self.args.should_save:
+                if state_dict is None:
+                    state_dict = self.model.state_dict()
 
-            if isinstance(self.accelerator.unwrap_model(self.model, keep_torch_compile=False), supported_classes):
-                self.accelerator.unwrap_model(self.model, keep_torch_compile=False).save_pretrained(
-                    output_dir, state_dict=state_dict
-                )
-            else:
-                logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-                safetensors.torch.save_file(
-                    state_dict, os.path.join(output_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"}
-                )
+                if isinstance(self.accelerator.unwrap_model(self.model, keep_torch_compile=False), supported_classes):
+                    self.accelerator.unwrap_model(self.model, keep_torch_compile=False).save_pretrained(
+                        output_dir, state_dict=state_dict
+                    )
+                else:
+                    logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
+                    safetensors.torch.save_file(
+                        state_dict, os.path.join(output_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"}
+                    )
         else:
-            self.model.save_pretrained(output_dir, state_dict=state_dict)
+            # Distributed model needs to call `save_pretrained` from every rank to gather the weights.
+            # If the model is not distributed, we only save from the main process.
+            if self.args.should_save or getattr(self.model.config, "distributed_config", None) is not None:
+                self.model.save_pretrained(output_dir, state_dict=state_dict)
 
-        if self.processing_class is not None:
-            self.processing_class.save_pretrained(output_dir)
-        elif (
-            self.data_collator is not None
-            and hasattr(self.data_collator, "tokenizer")
-            and self.data_collator.tokenizer is not None
-        ):
-            logger.info("Saving Trainer.data_collator.tokenizer by default as Trainer.processing_class is `None`")
-            self.data_collator.tokenizer.save_pretrained(output_dir)
+        if self.args.should_save:
+            if self.processing_class is not None:
+                self.processing_class.save_pretrained(output_dir)
+            elif (
+                self.data_collator is not None
+                and hasattr(self.data_collator, "tokenizer")
+                and self.data_collator.tokenizer is not None
+            ):
+                logger.info("Saving Trainer.data_collator.tokenizer by default as Trainer.processing_class is `None`")
+                self.data_collator.tokenizer.save_pretrained(output_dir)
 
-        # Good practice: save your training arguments together with the trained model
-        torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
+            # Good practice: save your training arguments together with the trained model
+            torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
 
     # ---- Logging & Metrics ----
 
