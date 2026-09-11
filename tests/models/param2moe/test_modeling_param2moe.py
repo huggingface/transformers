@@ -13,79 +13,18 @@
 # limitations under the License.
 """Testing suite for the PyTorch Param2Moe model."""
 
-import tempfile
 import unittest
 
-from transformers import BitsAndBytesConfig, Cache, is_torch_available, set_seed
+from transformers import BitsAndBytesConfig, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
-from transformers.utils import is_torchao_available
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_tensor_parallel_mixin import _init_distributed
 
 
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, Param2MoeForCausalLM, Param2MoeModel
-    from transformers.models.param2moe.modeling_param2moe import Param2MoeRotaryEmbedding
-
-
-def _test_tp_generation_quantized_param2moe_impl(_rank, model_path, model_class, max_new_tokens):
-    from torchao.quantization import Float8WeightOnlyConfig
-
-    from transformers import TorchAoConfig
-
-    set_seed(0)
-    quantization_config = TorchAoConfig(Float8WeightOnlyConfig())
-
-    import torch.distributed as dist
-
-    model_tp = model_class.from_pretrained(model_path, tp_plan="auto", quantization_config=quantization_config)
-    dist.barrier()
-
-    device = model_tp.device
-    model = model_class.from_pretrained(model_path, quantization_config=quantization_config)
-    model = model.to(device)
-
-    model_tp.eval()
-    model.eval()
-
-    import torch
-
-    vocab_size = model.config.vocab_size
-    set_seed(0)
-    input_ids = torch.randint(0, vocab_size, (1, 10)).to(device)
-
-    generation_kwargs = {
-        "max_new_tokens": max_new_tokens,
-        "do_sample": False,
-        "num_beams": 1,
-        "use_cache": True,
-    }
-
-    with torch.no_grad():
-        output = model.generate(input_ids, **generation_kwargs)
-        output_tp = model_tp.generate(input_ids, **generation_kwargs)
-
-    seq = output[0].tolist()
-    seq_tp = output_tp[0].tolist()
-
-    print(f"[Rank {_rank}] Non-TP-quantized model tokens: {seq}")
-    print(f"[Rank {_rank}] TP-quantized tokens:     {seq_tp}")
-    print(f"[Rank {_rank}] Sequences match: {seq == seq_tp}")
-
-    match_count = sum(a == b for a, b in zip(seq, seq_tp))
-    match_ratio = match_count / max(len(seq), len(seq_tp))
-
-    MATCH_THRESHOLD = 0.30
-    assert match_ratio >= MATCH_THRESHOLD, (
-        f"non-TP-quantized + TP-quantized model generated too many different tokens "
-        f"(match ratio: {match_ratio:.2%}, threshold: {MATCH_THRESHOLD:.0%}).\n"
-        f"Non-TP+quantized: {[seq]} \n TP+quantized: {[seq_tp]}"
-    )
-
-    dist.barrier()
+    from transformers import AutoTokenizer, Param2MoeConfig, Param2MoeForCausalLM, Param2MoeModel
 
 
 class Param2MoeModelTester(CausalLMModelTester):
@@ -95,12 +34,12 @@ class Param2MoeModelTester(CausalLMModelTester):
     def __init__(
         self,
         parent,
-        num_attention_heads=4,
+        num_attention_heads=8,
         num_key_value_heads=2,
         head_dim=8,
-        num_experts=8,
+        num_experts=2,
         num_experts_per_tok=2,
-        moe_intermediate_size=32,
+        moe_intermediate_size=64,
         first_k_dense_replace=1,
         n_group=1,
         topk_group=1,
@@ -112,6 +51,7 @@ class Param2MoeModelTester(CausalLMModelTester):
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.head_dim = head_dim
+        self.hidden_size = self.num_attention_heads * self.head_dim
         self.num_experts = num_experts
         self.num_experts_per_tok = num_experts_per_tok
         self.moe_intermediate_size = moe_intermediate_size
@@ -123,9 +63,7 @@ class Param2MoeModelTester(CausalLMModelTester):
         self.norm_topk_prob = norm_topk_prob
 
     def get_config(self):
-        from transformers import Param2MoeConfig
-
-        hidden_size = self.num_attention_heads * self.head_dim  # e.g. 4*8 = 32
+        hidden_size = self.num_attention_heads * self.head_dim
 
         return Param2MoeConfig(
             vocab_size=self.vocab_size,
@@ -145,7 +83,6 @@ class Param2MoeModelTester(CausalLMModelTester):
             eos_token_id=2,
             tie_word_embeddings=False,
             attention_dropout=0.0,
-            # MoE
             n_routed_experts=self.num_experts,
             num_experts_per_tok=self.num_experts_per_tok,
             moe_intermediate_size=self.moe_intermediate_size,
@@ -168,94 +105,9 @@ class Param2MoeModelTest(CausalLMModelTest, unittest.TestCase):
 
     _torch_compile_train_cls = Param2MoeForCausalLM if is_torch_available() else None
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        """
-        Param2Moe uses standard GQA (no MLA), so key/value shapes follow the
-        normal DynamicCache layout: (batch, num_key_value_heads, seq_len, head_dim).
-        """
-        self.assertIsInstance(past_key_values, Cache)
-
-        num_kv_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-
-        expected_key_shape = (batch_size, num_kv_heads, seq_length, head_dim)
-        expected_value_shape = (batch_size, num_kv_heads, seq_length, head_dim)
-
-        for layer in past_key_values.layers:
-            self.assertEqual(layer.keys.shape, expected_key_shape)
-            self.assertEqual(layer.values.shape, expected_value_shape)
-
-    def test_model_rope_scaling_frequencies(self):
-        """
-        Param2Moe uses real-domain RoPE (cos/sin), not complex-domain.
-        The rotary embedding forward() returns a (cos, sin) tuple; we check
-        each component independently instead of comparing the tuple as a tensor.
-        """
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        scaling_factor = 10
-        short_input_length = 10
-        long_input_length = int(config.max_position_embeddings * 1.5)
-
-        x = torch.randn(1, dtype=torch.float32, device=torch_device)
-        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device).unsqueeze(0)
-        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device).unsqueeze(0)
-
-        def _get_cos(rope, x, position_ids):
-            return rope(x, position_ids)[0]
-
-        original_rope = Param2MoeRotaryEmbedding(config=config).to(torch_device)
-        cos_short = _get_cos(original_rope, x, position_ids_short)
-        cos_long = _get_cos(original_rope, x, position_ids_long)
-        torch.testing.assert_close(cos_short, cos_long[:, :short_input_length, :])
-
-        config.rope_parameters = {"rope_type": "linear", "rope_theta": 10000.0, "factor": scaling_factor}
-        linear_rope = Param2MoeRotaryEmbedding(config=config).to(torch_device)
-        cos_lin_short = _get_cos(linear_rope, x, position_ids_short)
-        cos_lin_long = _get_cos(linear_rope, x, position_ids_long)
-        torch.testing.assert_close(cos_lin_short, cos_lin_long[:, :short_input_length, :])
-
-        config.rope_parameters = {"rope_type": "dynamic", "rope_theta": 10000.0, "factor": scaling_factor}
-        ntk_rope = Param2MoeRotaryEmbedding(config=config).to(torch_device)
-        cos_ntk_short = _get_cos(ntk_rope, x, position_ids_short)
-        cos_ntk_long = _get_cos(ntk_rope, x, position_ids_long)
-        torch.testing.assert_close(cos_ntk_short, cos_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(cos_ntk_long, cos_long)
-        self.assertTrue((ntk_rope.inv_freq <= original_rope.inv_freq).all())
-
-        config.rope_parameters = {"rope_type": "yarn", "rope_theta": 10000.0, "factor": scaling_factor}
-        yarn_rope = Param2MoeRotaryEmbedding(config=config).to(torch_device)
-        cos_yarn_short = _get_cos(yarn_rope, x, position_ids_short)
-        cos_yarn_long = _get_cos(yarn_rope, x, position_ids_long)
-        torch.testing.assert_close(cos_yarn_short, cos_yarn_long[:, :short_input_length, :])
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(cos_yarn_short, cos_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(cos_yarn_long, cos_long)
-
-    def test_tp_generation_quantized(self):
-        """
-        Override of the base mixin test with a relaxed match-ratio threshold.
-        See module-level _test_tp_generation_quantized_param2moe_impl for
-        full rationale. Threshold is 0.30 vs the base test's 0.75.
-        """
-        self._skip_if_not_supported()
-
-        if not is_torchao_available():
-            self.skipTest("Test requires torchao")
-
-        config = self.model_tester.get_config()
-        model_class = self._get_tp_model_class()
-        max_new_tokens = 25
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            set_seed(42)
-            model = model_class(config)
-            model.save_pretrained(tmp_dir, save_original_format=True)
-
-            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_quantized_param2moe_impl)(
-                tmp_dir, model_class, max_new_tokens
-            )
+    @unittest.skip("sonic-moe requires nvidia-cutlass-dsl which is not fully installed in standard CI")
+    def test_eager_matches_batched_and_grouped_inference(self):
+        pass
 
 
 @slow
