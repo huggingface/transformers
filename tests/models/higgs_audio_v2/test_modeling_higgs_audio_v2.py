@@ -302,7 +302,7 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         pass
 
     def _check_scores(self, batch_size, scores, generated_length, config):
-        expected_shape = (batch_size, config.num_codebooks, config.codebook_size)
+        expected_shape = (batch_size * config.num_codebooks, config.codebook_size)
         self.assertIsInstance(scores, tuple)
         self.assertEqual(len(scores), generated_length)
         self.assertListEqual([iter_scores.shape for iter_scores in scores], [expected_shape] * len(scores))
@@ -331,6 +331,36 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
             model = model_class(config).to(torch_device).eval()
             output_generate = self._sample_generate(model=model, inputs_dict=inputs_dict, num_return_sequences=1)
             self.assertTrue(output_generate.shape[1] == self.max_new_tokens + inputs_dict["audio_input_ids"].shape[1])
+
+    def test_append_next_tokens_emits_text_placeholders(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = HiggsAudioV2ForConditionalGeneration(config).to(torch_device).eval()
+        eos = config.audio_stream_eos_id
+        sequences = torch.full((3, 1), config.audio_token_id, device=torch_device)
+        sequences[2, 0] = config.audio_delay_token_id
+        # streaming / one codebook ended its stream / previous text token was the delay token
+        frames = torch.tensor([[1, 2], [eos, 2], [1, 2]], device=torch_device)
+        out = model._append_next_tokens(sequences, frames)
+        self.assertEqual(out.shape, (3, 2))
+        self.assertListEqual(
+            out[:, -1].tolist(), [config.audio_token_id, config.audio_delay_token_id, config.audio_delay_token_id]
+        )
+        all_eos = torch.full((3, 2), eos, device=torch_device)
+        self.assertEqual(model._append_next_tokens(sequences, all_eos)[0, -1].item(), config.eos_token_id)
+
+    def test_finished_rows_are_padded_with_audio_stream_eos(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = HiggsAudioV2ForConditionalGeneration(config).to(torch_device).eval()
+        frames = torch.tensor([[1, 2], [3, 4]], device=torch_device)
+        unfinished = torch.tensor([1, 0], device=torch_device)
+        out = model._mask_finished_tokens(frames, unfinished, torch.tensor(config.pad_token_id, device=torch_device))
+        self.assertListEqual(out.tolist(), [[1, 2], [config.audio_stream_eos_id] * 2])
+
+    def test_unsupported_generation_mode_raises(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = HiggsAudioV2ForConditionalGeneration(config).to(torch_device).eval()
+        with self.assertRaises(ValueError):
+            model.generate(**inputs, max_new_tokens=2, num_beams=2)
 
     def test_forward_with_logits_to_keep(self):
         for model_class in self.all_generative_model_classes:
