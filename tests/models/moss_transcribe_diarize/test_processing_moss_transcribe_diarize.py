@@ -45,7 +45,6 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
             "audio_tokens_per_second": 12.5,
             "audio_merge_size": 4,
             "time_marker_every_seconds": 5,
-            "enable_time_marker": True,
         }
 
     @classmethod
@@ -75,7 +74,6 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
         self.assertEqual(reloaded.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertEqual(reloaded.feature_extractor.to_json_string(), feature_extractor.to_json_string())
         self.assertIsInstance(reloaded.feature_extractor, WhisperFeatureExtractor)
-        self.assertEqual(reloaded.enable_time_marker, processor.enable_time_marker)
         self.assertEqual(reloaded.time_marker_every_seconds, processor.time_marker_every_seconds)
 
     @require_torch
