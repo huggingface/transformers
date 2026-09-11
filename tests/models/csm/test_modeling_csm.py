@@ -25,6 +25,7 @@ from transformers import (
     CsmForConditionalGeneration,
     is_torch_available,
 )
+from transformers.models.csm.generation_csm import CsmEosFrameCriteria, CsmGenerateOutput
 from transformers.testing_utils import (
     cleanup,
     require_torch_accelerator,
@@ -284,6 +285,64 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
     @unittest.skip(reason="CSM doesn't return last hidden states")
     def test_model_rope_scaling_from_config(self, scaling_type):
         pass
+
+    def test_generate_text_prompt_returns_frames_only(self):
+        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+        model = CsmForConditionalGeneration(config).to(torch_device).eval()
+        text_prompt = input_ids[..., 0]  # (batch, seq_len) text ids
+        out = model.generate(text_prompt, attention_mask=attention_mask, max_new_tokens=3, do_sample=False)
+        self.assertEqual(tuple(out.shape), (text_prompt.shape[0], 3, config.num_codebooks))
+
+    def test_generate_codebook_prompt_is_kept(self):
+        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+        model = CsmForConditionalGeneration(config).to(torch_device).eval()
+        out = model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=3, do_sample=False)
+        self.assertEqual(tuple(out.shape), (input_ids.shape[0], input_ids.shape[1] + 3, config.num_codebooks))
+        torch.testing.assert_close(out[:, : input_ids.shape[1]], input_ids)
+
+    def test_eos_frame_criteria(self):
+        criteria = CsmEosFrameCriteria(codebook_eos_token_id=0)
+        frames = torch.tensor([[[0, 0, 0, 5]], [[0, 0, 1, 0]]])  # (batch=2, frames=1, codebooks=4)
+        self.assertListEqual(criteria(frames, None).tolist(), [True, False])
+        # finished rows are not padded: the generation loop only pads when a criterion exposes `eos_token_id`
+        self.assertFalse(hasattr(criteria, "eos_token_id"))
+
+    def test_unsupported_generation_mode_raises(self):
+        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+        model = CsmForConditionalGeneration(config).to(torch_device).eval()
+        with self.assertRaises(ValueError):
+            model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=2, num_beams=2)
+
+    def test_generate_output_audio_returns_list(self):
+        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+        model = CsmForConditionalGeneration(config).to(torch_device).eval()
+        audio = model.generate(
+            input_ids, attention_mask=attention_mask, max_new_tokens=3, do_sample=False, output_audio=True
+        )
+        self.assertIsInstance(audio, list)
+        self.assertEqual(len(audio), input_ids.shape[0])
+        for waveform in audio:
+            self.assertEqual(waveform.ndim, 1)
+
+        out = model.generate(
+            input_ids,
+            attention_mask=attention_mask,
+            max_new_tokens=3,
+            do_sample=False,
+            output_audio=True,
+            return_dict_in_generate=True,
+        )
+        self.assertIsInstance(out, CsmGenerateOutput)
+        self.assertEqual(
+            tuple(out.sequences.shape), (input_ids.shape[0], input_ids.shape[1] + 3, config.num_codebooks)
+        )
+        self.assertEqual(len(out.audio), input_ids.shape[0])
+
+        out = model.generate(
+            input_ids, attention_mask=attention_mask, max_new_tokens=3, do_sample=False, return_dict_in_generate=True
+        )
+        self.assertIsInstance(out, CsmGenerateOutput)
+        self.assertIsNone(out.audio)
 
     def _get_custom_4d_mask_test_data(self):
         """
