@@ -76,12 +76,12 @@ class FineGrained:
     """Entry points exposed by the `kernels-community/finegrained-kernels` Triton kernel.
 
     Every recipe (block-FP8, MXFP8, MXFP4, NVFP4, weight-only) flows through the matmuls and
-    the two MoE forwards, with the recipe resolved off the weight/scale dtypes inside the
-    kernel; the per-recipe quant helpers and the ``Epilogue``/``Quantization`` op-boundary
-    classes ship in the same build. The experts forwards hand the kernels' MoE forwards the
-    module's tensors and let them run the chain (scheduling, fused GLU + intermediate requant,
-    biases, the routing-weighted reduce); an activation outside ``get_supported_act_fns()`` is passed as
-    the module's own callable and runs on the host between the two GEMMs. The quantizers serve
+    the two MoE forwards, with the weight recipe resolved off the weight/scale dtypes inside the
+    kernel and ``input_recipe`` naming the activation format at the op boundary. The experts
+    forwards hand the kernels' MoE forwards the module's tensors and let them run the chain
+    (scheduling, fused GLU + intermediate requant, biases, the routing-weighted reduce); an
+    activation outside ``get_supported_act_fns()`` is passed as the module's own callable and
+    runs on the host between the two GEMMs. The quantizers serve
     on-the-fly quantization into the group formats. All symbols are required — a build missing any
     raises at load with the full list.
     """
@@ -97,8 +97,6 @@ class FineGrained:
     mxfp4_act_quant: Callable
     nvfp4_act_quant: Callable
     get_supported_act_fns: Callable
-    Quantization: Callable
-    Epilogue: Callable
 
 
 # Cache the loaded kernel but not failures: re-checking each call is cheap and intended, since the env
@@ -301,14 +299,13 @@ def finegrained_triton_linear(
     the weight-native choice; ``"bf16"`` = weight-only, no activation quant — W4A16).
     """
     kernel = load_finegrained_kernel()
-    quantization = _kernel_quantization(kernel, activation_format)
     original_shape = input.shape
     output = kernel.matmul_2d(
         input.reshape(-1, original_shape[-1]),
         weight,
         activation_scale,
         weight_scale_inv,
-        quantization=quantization,
+        input_recipe=_block_recipe(activation_format),
         output_dtype=input.dtype,
         b_global_scale=weight_global_scale,
     )
@@ -587,7 +584,7 @@ class FineGrainedGroupedLinear(FineGrainedLinear):
             None,
             scale_inv,
             expert_start=expert_start,
-            quantization=_kernel_quantization(kernel, self.activation_format),
+            input_recipe=_block_recipe(self.activation_format),
             b_global_scale=to_local(self.weight_global_scale) if self.weight_global_scale is not None else None,
         )
         y = y.reshape(self.n_groups, *input_shape, -1).movedim(0, -2)
@@ -596,19 +593,11 @@ class FineGrainedGroupedLinear(FineGrainedLinear):
         return y
 
 
-def _kernel_quantization(kernel, activation_format: str | None):
-    """Map the module-level ``activation_format`` onto the kernel's ``Quantization``. ``None``
-    keeps the kernel's weight-native default; ``"bf16"`` = weight-only (no activation quant)."""
-    if activation_format is None:
-        return None
-    recipe = None if activation_format == "bf16" else activation_format
-    return kernel.Quantization(input_recipe=recipe)
-
-
 def _block_recipe(activation_format: str | None) -> str | None:
-    """The module-level ``activation_format`` as the kernels' block ``recipe``: ``None`` keeps
-    the weight family's own format, ``"bf16"`` is weight-only (no activation quant), an explicit
-    name is itself."""
+    """The module-level ``activation_format`` as the kernels' activation recipe (``input_recipe``
+    of the dispatchers, ``recipe`` of the MoE forwards): ``None`` keeps the weight family's own
+    format (``"weights"``), ``"bf16"`` is weight-only (no activation quant), an explicit name is
+    itself."""
     if activation_format is None:
         return "weights"
     return None if activation_format == "bf16" else activation_format

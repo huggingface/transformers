@@ -78,20 +78,6 @@ def _fake_bundle():
         setattr(kernel, name, rec._op(name))
     kernel.get_supported_act_fns = lambda: ("silu", "gelu", "relu")
 
-    @dataclass
-    class Quantization:
-        input_recipe: str | None = "weights"
-        output_recipe: str | None = None
-
-    @dataclass
-    class Epilogue:
-        gate: bool = False
-        act_fn: str = "silu"
-        swiglu_alpha: float | None = None
-        swiglu_limit: float | None = None
-
-    kernel.Quantization = Quantization
-    kernel.Epilogue = Epilogue
     return kernel, rec
 
 
@@ -130,8 +116,8 @@ class FineGrainedLoaderTest(unittest.TestCase):
         p1, p2, p3, p4 = _loaded(kernel)
         with p1, p2, p3, p4:
             bundle = load_finegrained_kernel()
-        self.assertIs(bundle.Quantization, kernel.Quantization)
-        self.assertIs(bundle.Epilogue, kernel.Epilogue)
+        self.assertIs(bundle.matmul_2d, kernel.matmul_2d)
+        self.assertIs(bundle.get_supported_act_fns, kernel.get_supported_act_fns)
 
 
 @require_torch
@@ -164,7 +150,7 @@ class FineGrainedLinearMarshallingTest(unittest.TestCase):
         g = torch.tensor(2.0)
         _, call = self._run(weight_global_scale=g, activation_format="bf16")
         self.assertIs(call.kwargs["b_global_scale"], g)
-        self.assertIsNone(call.kwargs["quantization"].input_recipe)
+        self.assertIsNone(call.kwargs["input_recipe"])
 
     def test_module_forward_threads_everything(self):
         kernel, rec = _fake_bundle()
@@ -181,7 +167,7 @@ class FineGrainedLinearMarshallingTest(unittest.TestCase):
             out = m(torch.randn(2, 64, dtype=torch.bfloat16))
         call = rec.calls["matmul_2d"][-1]
         self.assertIs(call.kwargs["b_global_scale"], m.weight_global_scale)
-        self.assertIsNone(call.kwargs["quantization"].input_recipe)
+        self.assertIsNone(call.kwargs["input_recipe"])
         self.assertEqual(out.shape, (2, 32))
 
 
@@ -259,7 +245,7 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
             self.assertEqual(call.kwargs["activation_format"], "bf16")
         for call in rec.calls["matmul_2d"]:
             self.assertIsNotNone(call.kwargs["b_global_scale"])
-            self.assertIsNone(call.kwargs["quantization"].input_recipe)
+            self.assertIsNone(call.kwargs["input_recipe"])
 
     def test_batched_marshalling(self):
         kernel, rec = _fake_bundle()
