@@ -60,6 +60,11 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME.update(
 # `transfo-xl` (as in `CONFIG_MAPPING_NAMES`), we should use `transfo_xl`.
 DEPRECATED_MODELS = []
 
+# Some checkpoints declare a `model_type` that has no implementation of its own in Transformers, while their config
+# and weights are exactly those of an existing model. They are resolved to that model, so that they load natively
+# instead of falling back to the remote code the checkpoint ships.
+MODEL_TYPE_ALIASES = {"kimi_k2": "deepseek_v3"}
+
 
 def model_type_to_module_name(key) -> str:
     """Converts a config key to the corresponding module."""
@@ -386,6 +391,8 @@ class AutoConfig:
         code_revision = kwargs.pop("code_revision", None)
 
         config_dict, unused_kwargs = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        if config_dict.get("model_type") in MODEL_TYPE_ALIASES:
+            config_dict["model_type"] = MODEL_TYPE_ALIASES[config_dict["model_type"]]
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
         explicit_local_code = has_local_code and not CONFIG_MAPPING[config_dict["model_type"]].__module__.startswith(
