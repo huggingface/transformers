@@ -600,7 +600,6 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         self.vision_tower = MiniCPMV4_6VisionModel._from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.merger = MiniCPMV4_6Merger(config)
-        self.rope_deltas = None
         self.post_init()
 
     @can_return_tuple
@@ -661,134 +660,6 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         )
         return special_mask
 
-    def compute_mrope_position_ids(
-        self,
-        input_ids: torch.LongTensor,
-        attention_mask: torch.Tensor | None = None,
-        image_bounds: list[torch.LongTensor] | None = None,
-        target_sizes_mrope: list[torch.Tensor] | None = None,
-        special_token_ids: dict | None = None,
-        past_key_values=None,
-        cu_seqlens: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Build ``(3, batch, seq)`` position ids for spatial canvas M-RoPE."""
-        from .mrope_minicpmv4_6 import compute_canvas_rope_index, compute_canvas_rope_index_packed
-
-        if cu_seqlens is not None:
-            return compute_canvas_rope_index_packed(
-                input_ids,
-                cu_seqlens,
-                image_bounds if image_bounds is not None else [],
-                target_sizes_mrope if target_sizes_mrope is not None else [],
-                special_token_ids if special_token_ids is not None else {},
-            )
-
-        return compute_canvas_rope_index(
-            input_ids,
-            attention_mask,
-            image_bounds if image_bounds is not None else [],
-            target_sizes_mrope if target_sizes_mrope is not None else [],
-            special_token_ids if special_token_ids is not None else {},
-        )
-
-    @staticmethod
-    def _prepare_packed_attention_kwargs(
-        kwargs: dict,
-        cu_seqlens: torch.Tensor | None,
-        max_seqlen: int | torch.Tensor | None = None,
-    ) -> dict:
-        """Map packed ``cu_seqlens`` to FlashAttention / FLA ``cu_seq_lens_*`` kwargs.
-
-        Without this, flash_attn may rebuild lengths from 3D M-RoPE ``position_ids``
-        and produce a 3×-inflated ``cu_seqlens`` (see MoE §H NaN root cause).
-        """
-        if cu_seqlens is None:
-            return kwargs
-        cu = cu_seqlens if isinstance(cu_seqlens, torch.Tensor) else torch.as_tensor(cu_seqlens)
-        cu = cu.to(dtype=torch.int32)
-        if max_seqlen is None:
-            max_seqlen_val = int((cu[1:] - cu[:-1]).max().item())
-        elif isinstance(max_seqlen, torch.Tensor):
-            max_seqlen_val = int(max_seqlen.item())
-        else:
-            max_seqlen_val = int(max_seqlen)
-        kwargs = dict(kwargs)
-        kwargs["cu_seq_lens_q"] = cu
-        kwargs["cu_seq_lens_k"] = cu
-        kwargs["max_length_q"] = max_seqlen_val
-        kwargs["max_length_k"] = max_seqlen_val
-        return kwargs
-
-    def _resolve_position_ids(
-        self,
-        input_ids: torch.LongTensor | None,
-        attention_mask: torch.Tensor | None,
-        position_ids: torch.LongTensor | None,
-        past_key_values,
-        image_bounds: list[torch.LongTensor] | None = None,
-        target_sizes_mrope: list[torch.Tensor] | None = None,
-        special_token_ids: dict | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        cu_seqlens: torch.Tensor | None = None,
-    ) -> torch.LongTensor | None:
-        from .mrope_minicpmv4_6 import expand_1d_position_ids_to_3d, make_packed_text_position_ids
-
-        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
-
-        if position_ids is not None:
-            return position_ids
-
-        # Packed training (batch=1 + cu_seqlens): per-document text positions + canvas M-RoPE.
-        if cu_seqlens is not None and input_ids is not None and past_key_values_length == 0:
-            text_position_ids = make_packed_text_position_ids(cu_seqlens, device=input_ids.device)
-            if self.config.uses_mrope_canvas:
-                mrope_position_ids, self.rope_deltas = self.compute_mrope_position_ids(
-                    input_ids,
-                    attention_mask=attention_mask,
-                    image_bounds=image_bounds if image_bounds is not None else [],
-                    target_sizes_mrope=target_sizes_mrope if target_sizes_mrope is not None else [],
-                    special_token_ids=special_token_ids,
-                    cu_seqlens=cu_seqlens,
-                )
-                return torch.cat([text_position_ids.unsqueeze(0), mrope_position_ids], dim=0)
-            return text_position_ids
-
-        if self.config.uses_mrope_canvas and input_ids is not None and image_bounds is not None:
-            if self.rope_deltas is None or past_key_values_length == 0:
-                mrope_position_ids, self.rope_deltas = self.compute_mrope_position_ids(
-                    input_ids,
-                    attention_mask=attention_mask,
-                    image_bounds=image_bounds,
-                    target_sizes_mrope=target_sizes_mrope,
-                    special_token_ids=special_token_ids,
-                    past_key_values=past_key_values,
-                )
-                text_position_ids = self._text_position_ids(input_ids, attention_mask, past_key_values_length)
-                return torch.cat([text_position_ids.unsqueeze(0), mrope_position_ids], dim=0)
-            if self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
-                batch_size = input_ids.shape[0]
-                text_position_ids = self._text_position_ids(input_ids, attention_mask, past_key_values_length)
-                mrope_position_ids = text_position_ids.unsqueeze(0).expand(3, -1, -1)
-                delta = self.rope_deltas.repeat_interleave(batch_size // self.rope_deltas.shape[0], dim=0)
-                mrope_position_ids = mrope_position_ids + delta.to(device=input_ids.device)
-                return torch.cat([text_position_ids.unsqueeze(0), mrope_position_ids], dim=0)
-
-        if input_ids is not None:
-            return expand_1d_position_ids_to_3d(input_ids, attention_mask)
-        return position_ids
-
-    def _text_position_ids(self, input_ids, attention_mask, past_key_values_length=0):
-        """Compute standard 1-D text position ids of shape ``(batch, seq)``."""
-        if attention_mask is not None:
-            text_positions = attention_mask.long().cumsum(-1) - 1
-            return text_positions.masked_fill(attention_mask == 0, 0)
-        batch_size, seq_length = input_ids.shape
-        return (
-            torch.arange(past_key_values_length, past_key_values_length + seq_length, device=input_ids.device)
-            .unsqueeze(0)
-            .expand(batch_size, -1)
-        )
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -804,11 +675,6 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
-        image_bounds: list[torch.LongTensor] | None = None,
-        target_sizes_mrope: list[torch.Tensor] | None = None,
-        special_token_ids: dict | None = None,
-        cu_seqlens: torch.Tensor | None = None,
-        max_seqlen: int | torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
@@ -822,26 +688,7 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
             Height and width (in patches) for each video frame.
         downsample_mode (`str`, *optional*):
             `"4x"` keeps 4x more visual tokens; default `"16x"` applies full merge.
-        image_bounds (`list[torch.LongTensor]`, *optional*):
-            Start/end token positions of each image/video in the input sequence, used for M-RoPE position ID computation.
-        target_sizes_mrope (`list[torch.Tensor]`, *optional*):
-            Spatial grid sizes (height, width in LLM tokens) for each visual segment, used for M-RoPE 2D position assignment.
-        special_token_ids (`dict`, *optional*):
-            Mapping of special token names to their IDs (e.g. `image_token_id`, `video_token_id`), used by M-RoPE to
-            identify visual token regions.
-        cu_seqlens (`torch.Tensor` of shape `(num_seqs + 1,)`, *optional*):
-            Cumulative sequence lengths for packed-sequence training (batch size must be 1). Mapped to
-            FlashAttention ``cu_seq_lens_q/k`` so varlen attention does not rebuild lengths from 3D M-RoPE
-            ``position_ids``.
-        max_seqlen (`int` or `torch.Tensor`, *optional*):
-            Max document length inside the packed sequence; derived from ``cu_seqlens`` when omitted.
         """
-        if cu_seqlens is None:
-            cu_seqlens = kwargs.pop("cu_seqlens", None)
-        if max_seqlen is None:
-            max_seqlen = kwargs.pop("max_seqlen", None)
-        kwargs = self._prepare_packed_attention_kwargs(kwargs, cu_seqlens, max_seqlen)
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -871,18 +718,6 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
             )
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features, self.config.video_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, video_features)
-
-        position_ids = self._resolve_position_ids(
-            input_ids,
-            attention_mask,
-            position_ids,
-            past_key_values,
-            image_bounds=image_bounds,
-            target_sizes_mrope=target_sizes_mrope,
-            special_token_ids=special_token_ids,
-            inputs_embeds=inputs_embeds,
-            cu_seqlens=cu_seqlens,
-        )
 
         output = self.language_model(
             attention_mask=attention_mask,
@@ -949,11 +784,6 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
-        image_bounds: list[torch.LongTensor] | None = None,
-        target_sizes_mrope: list[torch.Tensor] | None = None,
-        special_token_ids: dict | None = None,
-        cu_seqlens: torch.Tensor | None = None,
-        max_seqlen: int | torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
@@ -967,17 +797,6 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
             Height and width (in patches) for each video frame.
         downsample_mode (`str`, *optional*):
             `"4x"` keeps 4x more visual tokens; default `"16x"` applies full merge.
-        image_bounds (`list[torch.LongTensor]`, *optional*):
-            Start/end token positions of each image/video in the input sequence, used for M-RoPE position ID computation.
-        target_sizes_mrope (`list[torch.Tensor]`, *optional*):
-            Spatial grid sizes (height, width in LLM tokens) for each visual segment, used for M-RoPE 2D position assignment.
-        special_token_ids (`dict`, *optional*):
-            Mapping of special token names to their IDs (e.g. `image_token_id`, `video_token_id`), used by M-RoPE to
-            identify visual token regions.
-        cu_seqlens (`torch.Tensor` of shape `(num_seqs + 1,)`, *optional*):
-            Cumulative sequence lengths for packed-sequence training (batch size must be 1).
-        max_seqlen (`int` or `torch.Tensor`, *optional*):
-            Max document length inside the packed sequence; derived from ``cu_seqlens`` when omitted.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -991,11 +810,6 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             downsample_mode=downsample_mode,
-            image_bounds=image_bounds,
-            target_sizes_mrope=target_sizes_mrope,
-            special_token_ids=special_token_ids,
-            cu_seqlens=cu_seqlens,
-            max_seqlen=max_seqlen,
             **kwargs,
         )
 
@@ -1035,11 +849,6 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
         pixel_values_videos=None,
         target_sizes_videos=None,
         downsample_mode=None,
-        image_bounds=None,
-        target_sizes_mrope=None,
-        special_token_ids=None,
-        position_ids=None,
-        use_cache=True,
         is_first_iteration=False,
         **kwargs,
     ):
@@ -1048,51 +857,16 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            use_cache=use_cache,
             is_first_iteration=is_first_iteration,
             downsample_mode=downsample_mode,
             **kwargs,
         )
-        if is_first_iteration or not use_cache:
+        if is_first_iteration or not kwargs.get("use_cache", True):
             model_inputs["pixel_values"] = pixel_values
             model_inputs["target_sizes"] = target_sizes
             model_inputs["pixel_values_videos"] = pixel_values_videos
             model_inputs["target_sizes_videos"] = target_sizes_videos
-            model_inputs["image_bounds"] = image_bounds
-            model_inputs["target_sizes_mrope"] = target_sizes_mrope
-            model_inputs["special_token_ids"] = special_token_ids
         return model_inputs
-
-    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
-        # Overwritten -- mrope_canvas requires 4D position ids [text, T, H, W] and rope_deltas across decode steps.
-        text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
-
-        past_length = 0
-        if (cache := model_kwargs.get("past_key_values")) is not None:
-            past_length = cache.get_seq_length()
-
-        if self.config.uses_mrope_canvas:
-            if past_length != 0 and self.model.rope_deltas is not None:
-                batch_size = text_positions.shape[0]
-                mrope_positions = text_positions.unsqueeze(0).expand(3, batch_size, -1)
-                delta = self.model.rope_deltas.repeat_interleave(batch_size // self.model.rope_deltas.shape[0], dim=0)
-                mrope_positions = mrope_positions + delta.to(device=text_positions.device)
-                return torch.cat([text_positions.unsqueeze(0), mrope_positions], dim=0)
-
-            image_bounds = model_kwargs.get("image_bounds")
-            if image_bounds is not None:
-                input_ids = model_kwargs.get("input_ids", inputs_tensor)
-                mrope_positions, self.model.rope_deltas = self.model.compute_mrope_position_ids(
-                    input_ids,
-                    attention_mask=model_kwargs.get("attention_mask"),
-                    image_bounds=image_bounds,
-                    target_sizes_mrope=model_kwargs.get("target_sizes_mrope"),
-                    special_token_ids=model_kwargs.get("special_token_ids"),
-                )
-                return torch.cat([text_positions.unsqueeze(0), mrope_positions], dim=0)
-
-        return text_positions
 
     def _expand_inputs_for_generation(
         self,
@@ -1112,16 +886,7 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
         #  - expanded [K*num_beams, 2] would define phantom segments with
         #    no corresponding pixel data, crashing the vision encoder.
         ts_keys = ("target_sizes", "target_sizes_videos")
-        mrope_keys = ("image_bounds", "target_sizes_mrope", "special_token_ids")
-        saved = {k: model_kwargs.pop(k) for k in (*ts_keys, *mrope_keys) if model_kwargs.get(k) is not None}
-
-        # position_ids can be (4, B, S) for M-RoPE; the parent expands on dim=0
-        # which would corrupt the [text, T, H, W] layout.  Expand on dim=1 (batch)
-        # ourselves and let the parent handle everything else.
-        # For 2D position_ids (non-M-RoPE), leave it for the parent to expand normally.
-        expanded_position_ids = None
-        if (pos := model_kwargs.get("position_ids")) is not None and pos.ndim == 3:
-            expanded_position_ids = model_kwargs.pop("position_ids").repeat_interleave(expand_size, dim=1)
+        saved = {k: model_kwargs.pop(k) for k in ts_keys if model_kwargs.get(k) is not None}
 
         input_ids, model_kwargs = super()._expand_inputs_for_generation(
             expand_size=expand_size,
@@ -1130,8 +895,6 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
             **model_kwargs,
         )
 
-        if expanded_position_ids is not None:
-            model_kwargs["position_ids"] = expanded_position_ids
         model_kwargs.update(saved)
         return input_ids, model_kwargs
 

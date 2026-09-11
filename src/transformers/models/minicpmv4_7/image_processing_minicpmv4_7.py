@@ -37,7 +37,7 @@ def ensure_divide(length: int, divisor: int) -> int:
     return max(round(length / divisor) * divisor, divisor)
 
 
-class MiniCPMV4_6ImageProcessorKwargs(ImagesKwargs, total=False):
+class MiniCPMV4_7ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     max_slice_nums (`int`, *optional*, defaults to 9):
         Maximum number of slices when splitting a high-resolution image.
@@ -65,7 +65,7 @@ class MiniCPMV4_6ImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-class MiniCPMV4_6ImageProcessor(TorchvisionBackend):
+class MiniCPMV4_7ImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BICUBIC
     do_resize = True
     do_rescale = True
@@ -79,10 +79,10 @@ class MiniCPMV4_6ImageProcessor(TorchvisionBackend):
     slice_mode = True
     downsample_mode = "16x"
     use_image_id = True
-    valid_kwargs = MiniCPMV4_6ImageProcessorKwargs
+    valid_kwargs = MiniCPMV4_7ImageProcessorKwargs
     model_input_names = ["pixel_values", "target_sizes"]
 
-    def __init__(self, **kwargs: Unpack[MiniCPMV4_6ImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[MiniCPMV4_7ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _validate_preprocess_kwargs(self, **kwargs):
@@ -149,10 +149,12 @@ class MiniCPMV4_6ImageProcessor(TorchvisionBackend):
             for num_rows in range(1, num_slices + 1):
                 if num_slices % num_rows == 0:
                     num_cols = num_slices // num_rows
-                    error = abs(log_ratio - math.log(num_rows / num_cols))
+                    error = abs(log_ratio - math.log(num_cols / num_rows))
                     if error < min_error:
-                        best_grid = [num_cols, num_rows]
+                        best_grid = [num_rows, num_cols]
                         min_error = error
+                    elif error == min_error and num_rows > best_grid[0]:
+                        best_grid = [num_rows, num_cols]
         return best_grid
 
     def reshape_by_patch(self, image: "torch.Tensor", patch_size: int) -> "torch.Tensor":
@@ -169,7 +171,7 @@ class MiniCPMV4_6ImageProcessor(TorchvisionBackend):
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[MiniCPMV4_6ImageProcessorKwargs],
+        **kwargs: Unpack[MiniCPMV4_7ImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
@@ -264,4 +266,4 @@ class MiniCPMV4_6ImageProcessor(TorchvisionBackend):
         )
 
 
-__all__ = ["MiniCPMV4_6ImageProcessor"]
+__all__ = ["MiniCPMV4_7ImageProcessor"]

@@ -150,12 +150,10 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
             for num_rows in range(1, num_slices + 1):
                 if num_slices % num_rows == 0:
                     num_cols = num_slices // num_rows
-                    error = abs(log_ratio - math.log(num_cols / num_rows))
+                    error = abs(log_ratio - math.log(num_rows / num_cols))
                     if error < min_error:
-                        best_grid = [num_rows, num_cols]
+                        best_grid = [num_cols, num_rows]
                         min_error = error
-                    elif error == min_error and num_rows > best_grid[0]:
-                        best_grid = [num_rows, num_cols]
         return best_grid
 
     def reshape_by_patch(self, image: np.ndarray, patch_size: int) -> np.ndarray:

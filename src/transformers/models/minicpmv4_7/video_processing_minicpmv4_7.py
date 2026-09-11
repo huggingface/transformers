@@ -47,7 +47,7 @@ def ensure_divide(length: int, divisor: int) -> int:
     return max(round(length / divisor) * divisor, divisor)
 
 
-class MiniCPMV4_6VideoProcessorKwargs(VideosKwargs, total=False):
+class MiniCPMV4_7VideoProcessorKwargs(VideosKwargs, total=False):
     r"""
     max_num_frames (`int`, *optional*, defaults to 128):
         Maximum number of main frames to sample per video.
@@ -81,7 +81,7 @@ class MiniCPMV4_6VideoProcessorKwargs(VideosKwargs, total=False):
 
 
 @auto_docstring
-class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
+class MiniCPMV4_7VideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     do_resize = True
     do_rescale = True
@@ -98,10 +98,10 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
     do_sample_frames = True
     max_num_frames = 128
     stack_frames = 1
-    valid_kwargs = MiniCPMV4_6VideoProcessorKwargs
+    valid_kwargs = MiniCPMV4_7VideoProcessorKwargs
     model_input_names = ["pixel_values_videos", "target_sizes_videos"]
 
-    def __init__(self, **kwargs: Unpack[MiniCPMV4_6VideoProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[MiniCPMV4_7VideoProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _validate_preprocess_kwargs(self, **kwargs):
@@ -126,7 +126,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         """
         if metadata is None or metadata.duration is None or metadata.fps is None:
             raise ValueError(
-                "MiniCPMV4_6 requires complete video metadata with `duration` and `fps` to sample frames. "
+                "MiniCPMV4_7 requires complete video metadata with `duration` and `fps` to sample frames. "
                 "Please pass a complete `VideoMetadata` object or set `do_sample_frames=False`."
             )
 
@@ -271,10 +271,12 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             for num_rows in range(1, num_slices + 1):
                 if num_slices % num_rows == 0:
                     num_cols = num_slices // num_rows
-                    error = abs(log_ratio - math.log(num_rows / num_cols))
+                    error = abs(log_ratio - math.log(num_cols / num_rows))
                     if error < min_error:
-                        best_grid = [num_cols, num_rows]
+                        best_grid = [num_rows, num_cols]
                         min_error = error
+                    elif error == min_error and num_rows > best_grid[0]:
+                        best_grid = [num_rows, num_cols]
         return best_grid
 
     def reshape_by_patch(self, videos: "torch.Tensor", patch_size: int) -> "torch.Tensor":
@@ -545,4 +547,4 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         )
 
 
-__all__ = ["MiniCPMV4_6VideoProcessor"]
+__all__ = ["MiniCPMV4_7VideoProcessor"]

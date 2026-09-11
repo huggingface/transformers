@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import numpy as np
+import torch
 
 from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import BatchFeature, ProcessingKwargs, ProcessorMixin, Unpack
@@ -24,7 +25,7 @@ from ...video_utils import VideoInput, make_batched_videos
 logger = logging.get_logger(__name__)
 
 
-class MiniCPMV4_6ProcessorKwargs(ProcessingKwargs, total=False):
+class MiniCPMV4_7ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "common_kwargs": {
             "return_tensors": "pt",
@@ -32,15 +33,16 @@ class MiniCPMV4_6ProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": True,
             "padding_side": "left",
-            "return_mm_token_type_ids": False,
+            # Always emit mm_token_type_ids (Qwen-compatible contract for M-RoPE).
+            "return_mm_token_type_ids": True,
             "return_text_replacement_offsets": False,
         },
     }
 
 
 @auto_docstring
-class MiniCPMV4_6Processor(ProcessorMixin):
-    valid_processor_kwargs = MiniCPMV4_6ProcessorKwargs
+class MiniCPMV4_7Processor(ProcessorMixin):
+    valid_processor_kwargs = MiniCPMV4_7ProcessorKwargs
 
     def __init__(self, image_processor=None, video_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template, **kwargs)
@@ -85,15 +87,27 @@ class MiniCPMV4_6Processor(ProcessorMixin):
 
         processed_images = processed_videos = {}
         images_replacements = videos_replacements = []
+        # Per-sample patch grids for canvas M-RoPE (not recoverable from config alone).
+        mrope_tgt_sizes_per_sample: list[list[list[int]]] = [[] for _ in text] if text is not None else []
         if images is not None:
-            processed_images, images_replacements = self._process_images(images, **merged_kwargs["images_kwargs"])
+            processed_images, images_replacements = self._process_images(
+                images,
+                mrope_tgt_sizes_per_sample,
+                self._sample_ids_per_visual(text, self.image_token),
+                **merged_kwargs["images_kwargs"],
+            )
         if videos is not None:
-            processed_videos, videos_replacements = self._process_videos(videos, **merged_kwargs["videos_kwargs"])
+            processed_videos, videos_replacements = self._process_videos(
+                videos,
+                mrope_tgt_sizes_per_sample,
+                self._sample_ids_per_visual(text, self.video_token),
+                **merged_kwargs["videos_kwargs"],
+            )
 
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
         if text is not None:
-            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop("return_mm_token_type_ids", True)
             return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
                 "return_text_replacement_offsets", False
             )
@@ -118,8 +132,20 @@ class MiniCPMV4_6Processor(ProcessorMixin):
             if return_mm_token_type_ids:
                 text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
 
-        # Pop unused keys from the inputs, e.g. inputs used only to compute number of image tokens
-        data = {**text_inputs, **processed_images, **processed_videos}
+        mrope_inputs = {}
+        if images is not None or videos is not None:
+            target_sizes_mrope = []
+            for sample_grids in mrope_tgt_sizes_per_sample:
+                target_sizes_mrope.append(
+                    torch.tensor(sample_grids, dtype=torch.int32)
+                    if sample_grids
+                    else torch.zeros(0, 2, dtype=torch.int32)
+                )
+            # Do not return special_token_ids (available on model config) or image_bounds
+            # (model recomputes bounds on compact/unpadded ids for left-padding safety).
+            mrope_inputs = {"target_sizes_mrope": target_sizes_mrope}
+
+        data = {**text_inputs, **processed_images, **processed_videos, **mrope_inputs}
         data = {k: v for k, v in data.items() if k not in self.unused_input_names}
 
         return BatchFeature(data, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion)
@@ -129,7 +155,7 @@ class MiniCPMV4_6Processor(ProcessorMixin):
             raise ValueError("You have to specify `text` input to process.")
         super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
-    def _process_images(self, images, **kwargs):
+    def _process_images(self, images, mrope_tgt_sizes_per_sample, sample_ids, **kwargs):
         img_downsample = kwargs.get("downsample_mode", self.image_processor.downsample_mode)
         image_token_divisor = 4 if img_downsample == "4x" else 16
         processed_images = self.image_processor(images, **kwargs)
@@ -141,21 +167,25 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                 processed_images, image_idx=idx, image_token_divisor=image_token_divisor
             )
             image_replacements.append(replacement_text)
+            if idx < len(sample_ids):
+                img_target_sizes = self._image_target_sizes(processed_images, idx)
+                mrope_tgt_sizes_per_sample[sample_ids[idx]].extend(img_target_sizes.tolist())
+
         return processed_images, image_replacements
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
-        image_grids = image_inputs["grids"]
-        num_patches_per_image = image_inputs["num_patches_per_image"]
-        target_sizes = image_inputs["target_sizes"]
-
-        cum_patches = np.cumsum(num_patches_per_image)
+    @staticmethod
+    def _image_target_sizes(image_inputs: dict, image_idx: int):
+        """Return the patch target sizes belonging to one image of the flattened batch."""
+        cum_patches = np.cumsum(image_inputs["num_patches_per_image"])
         start_idx = cum_patches[image_idx - 1] if image_idx > 0 else 0
         end_idx = cum_patches[image_idx]
-        img_target_sizes = target_sizes[start_idx:end_idx]
-        num_tokens_per_patch = img_target_sizes.prod(-1) // kwargs["image_token_divisor"]
-        num_rows, num_cols = image_grids[image_idx]
+        return image_inputs["target_sizes"][start_idx:end_idx]
 
-        # Build replacement WITHOUT image_id prefix; local ID added in get_text_with_replacements
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        img_target_sizes = self._image_target_sizes(image_inputs, image_idx)
+        num_tokens_per_patch = img_target_sizes.prod(-1) // kwargs["image_token_divisor"]
+        num_rows, num_cols = image_inputs["grids"][image_idx]
+
         image_placeholder = (
             self.image_start_token + self.image_token * int(num_tokens_per_patch[0]) + self.image_end_token
         )
@@ -168,7 +198,7 @@ class MiniCPMV4_6Processor(ProcessorMixin):
 
         return image_placeholder
 
-    def _process_videos(self, videos, **kwargs):
+    def _process_videos(self, videos, mrope_tgt_sizes_per_sample, sample_ids, **kwargs):
         vid_downsample = kwargs.get("downsample_mode", self.video_processor.downsample_mode)
         video_token_divisor = 4 if vid_downsample == "4x" else 16
         processed_videos = self.video_processor(videos, **kwargs)
@@ -180,30 +210,35 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                 processed_videos, video_idx=idx, video_token_divisor=video_token_divisor
             )
             video_replacements.append(replacement_text)
+            if idx < len(sample_ids):
+                for frame_ts, _, _ in self._iter_video_frames(processed_videos, idx):
+                    mrope_tgt_sizes_per_sample[sample_ids[idx]].extend(frame_ts.tolist())
         return processed_videos, video_replacements
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
-        video_target_sizes = video_inputs["target_sizes_videos"]  # (total_num_frames * num_patches_per_frame, ...)
-        num_frames_per_video = video_inputs["num_frames_per_video"]  # (total_num_videos, ...)
-        video_grids = video_inputs["grids_videos"]  # (total_num_frames, ...)
+    def _iter_video_frames(self, video_inputs: dict, video_idx: int):
+        """Yield `(frame_target_sizes, grid_rows, grid_cols)` per frame of one video, in text order."""
+        video_target_sizes = video_inputs["target_sizes_videos"]
+        num_frames_per_video = video_inputs["num_frames_per_video"]
+        video_grids = video_inputs["grids_videos"]
         num_patches_per_frame = video_grids.prod(-1) + 1
 
         num_frames = num_frames_per_video[video_idx]
         cum_patches_per_frame = np.cumsum(num_patches_per_frame)
         num_past_frames = np.cumsum(num_frames_per_video)[video_idx] - num_frames
 
-        video_placeholder = ""
         for frame_idx in range(num_frames):
-            # we need cumulative frame idx, because inputs are shaped as `(total_num_frames, ...)`
             frame_start_idx = num_past_frames + frame_idx
 
             start_idx = cum_patches_per_frame[frame_start_idx - 1] if frame_start_idx > 0 else 0
             end_idx = cum_patches_per_frame[frame_start_idx]
 
-            frame_ts = video_target_sizes[start_idx:end_idx]
-            frame_tokens = frame_ts.prod(-1) // kwargs["video_token_divisor"]
             grid_rows, grid_cols = video_grids[frame_start_idx]
+            yield video_target_sizes[start_idx:end_idx], grid_rows, grid_cols
 
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
+        video_placeholder = ""
+        for frame_ts, grid_rows, grid_cols in self._iter_video_frames(video_inputs, video_idx):
+            frame_tokens = frame_ts.prod(-1) // kwargs["video_token_divisor"]
             if len(frame_tokens) == 0:
                 continue
 
@@ -215,6 +250,12 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                 frame_placeholder += "\n".join(slices)
             video_placeholder += frame_placeholder
         return video_placeholder
+
+    def _sample_ids_per_visual(self, text, token) -> list[int]:
+        """Map each visual input to the index of the sample it belongs to, following the order of `token` in `text`."""
+        if text is None:
+            return []
+        return [sample_idx for sample_idx, sample in enumerate(text) for _ in range(sample.count(token))]
 
     def _prepend_local_ids(self, text, replacements, token):
         """Prepend local (per-sample) image/video ID tokens to each replacement string."""
@@ -237,4 +278,4 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         return ["num_patches_per_image", "grids", "grids_videos", "num_patches_per_frame", "num_frames_per_video"]
 
 
-__all__ = ["MiniCPMV4_6Processor"]
+__all__ = ["MiniCPMV4_7Processor"]
