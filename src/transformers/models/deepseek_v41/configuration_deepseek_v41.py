@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import dataclasses
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -547,7 +549,23 @@ class DeepseekV41Config(PreTrainedConfig):
         if isinstance(self.text_config, dict):
             self.text_config = self.sub_configs["text_config"](**self.text_config)
         elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
+            # A flat `deepseek_v41_text` config.json — e.g. saved from a model built
+            # directly with a DeepseekV41TextConfig — carries the text params at the
+            # top level (they arrive here as leftover kwargs). Adopt them instead of
+            # falling back to the release-sized defaults (which would build a
+            # multi-billion-parameter model and "hang" loading a tiny checkpoint).
+            # `tie_word_embeddings` is a declared field of BOTH classes, so the
+            # composite consumed it above: forward our value explicitly.
+            text_cls = self.sub_configs["text_config"]
+            text_fields = {field.name for field in dataclasses.fields(text_cls)}
+            if text_fields.intersection(kwargs):
+                text_kwargs = dict(kwargs)
+                # declared field of BOTH classes: prefer the checkpoint's own value if
+                # it reached us, else forward the one consumed above
+                text_kwargs.setdefault("tie_word_embeddings", self.tie_word_embeddings)
+                self.text_config = text_cls(**text_kwargs)
+            else:
+                self.text_config = text_cls()
         super().__post_init__(**kwargs)
 
 
