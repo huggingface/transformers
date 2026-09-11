@@ -48,10 +48,15 @@ jobs:
       - name: Smoke-test torch + Flash-Attention on the GPU
         run: |
           mkdir -p "${RUNNER_TEMP}/scratch"
+          # Grant the container the host's `render` group so it can reach the GPU
+          # devices. Resolve the GID on the host (the container image has no such
+          # group by name, which is why `--group-add render` failed before).
+          RENDER_GID=$(getent group render | cut -d: -f3)
           # -i is REQUIRED: without it docker does not attach stdin, so the
           # heredoc never reaches `python3 -` and the test silently no-ops.
           docker run --rm -i \
             --device=/dev/kfd --device=/dev/dri \
+            --group-add "${RENDER_GID}" \
             --security-opt seccomp=unconfined \
             -v "${RUNNER_TEMP}/scratch:/scratch" \
             transformers-gfx1151:ci \
@@ -80,8 +85,10 @@ jobs:
       - name: Run a tiny transformers test slice (optional signal)
         continue-on-error: true
         run: |
+          RENDER_GID=$(getent group render | cut -d: -f3)
           docker run --rm \
             --device=/dev/kfd --device=/dev/dri \
+            --group-add "${RENDER_GID}" \
             --security-opt seccomp=unconfined \
             -v "${RUNNER_TEMP}/scratch:/scratch" \
             transformers-gfx1151:ci \

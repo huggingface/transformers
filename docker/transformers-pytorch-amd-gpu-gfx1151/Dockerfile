@@ -2,14 +2,18 @@
 #
 # Unlike the MI300 image (transformers-pytorch-amd-gpu), there is no
 # rocm/pytorch base for gfx1151 yet, so we start from python-slim and pull the
-# torch stack from AMD's TheRock gfx1151 nightly index -- those wheels bundle
-# the ROCm userspace. The host still needs the amdgpu/KFD kernel driver; run
-# the container with --device=/dev/kfd --device=/dev/dri (see the CI workflow).
+# torch stack from AMD's ROCm manylinux wheels. The host still needs the
+# amdgpu/KFD kernel driver; run the container with --device=/dev/kfd
+# --device=/dev/dri (see the CI workflow).
 #
-# NOTE: these are MOVING nightlies. The `torch` used on the reference instance
-# was a custom +rocm7.2.0.lw.git* build not on any public index; TheRock is the
-# closest reproducible public source. Pin exact versions (or mirror the wheels
-# internally) before this is anything but experimental.
+# The wheels are pinned to ROCm 7.2.1 to MATCH THE POOL'S DRIVER (measured on a
+# runner: ROCm userspace 7.2.1, HIP 7.2, inbox amdgpu in the 6.17 OEM kernel --
+# no amdgpu-dkms). Two dead ends that both give `hipErrorInvalidImage`:
+#   * download.pytorch.org/whl/rocm* -- built against upstream's gfx target list,
+#     which omits gfx1151.
+#   * AMD TheRock gfx1151 nightlies -- only 7.0rc / 7.9+ exist there, i.e. a
+#     userspace far newer than the 7.2 kernel driver can load.
+# repo.radeon.com's rocm-rel-7.2.1 builds advertise gfx1151 AND match the driver.
 FROM python:3.12-slim
 LABEL maintainer="Hugging Face"
 
@@ -27,12 +31,18 @@ RUN git lfs install
 RUN python3 -m pip install --no-cache-dir --upgrade pip \
     numpy importlib-metadata setuptools wheel ninja pytesseract "itsdangerous<2.1.0"
 
-# gfx1151 torch stack from AMD TheRock nightly (wheels bundle the ROCm userspace).
-# Do NOT use download.pytorch.org/whl/rocm* here -- those omit the gfx1151
-# kernels (torch then raises "RuntimeError: No available kernel").
-ARG ROCM_INDEX=https://rocm.nightlies.amd.com/v2/gfx1151/
-RUN python3 -m pip install --no-cache-dir --index-url ${ROCM_INDEX} \
-      torch torchvision torchaudio pytorch-triton-rocm
+# gfx1151 torch stack, ROCm 7.2.1 manylinux wheels from repo.radeon.com (cp312,
+# matching the python:3.12 base). --find-links lets pip resolve torch's matching
+# pytorch-triton-rocm from the same directory. Bump all three together (and mind
+# the git-hash in each filename) if the pool's ROCm version changes.
+ARG ROCM_REPO=https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2.1
+ARG TORCH_WHL=torch-2.9.1+rocm7.2.1.lw.gitff65f5bc-cp312-cp312-linux_x86_64.whl
+ARG TORCHVISION_WHL=torchvision-0.24.0+rocm7.2.1.gitb919bd0c-cp312-cp312-linux_x86_64.whl
+ARG TORCHAUDIO_WHL=torchaudio-2.9.0+rocm7.2.1.gite3c6ee2b-cp312-cp312-linux_x86_64.whl
+RUN python3 -m pip install --no-cache-dir --find-links ${ROCM_REPO}/ \
+      ${ROCM_REPO}/${TORCH_WHL} \
+      ${ROCM_REPO}/${TORCHVISION_WHL} \
+      ${ROCM_REPO}/${TORCHAUDIO_WHL}
 
 # Flash-Attention (Triton-AMD wheel for gfx1151). --no-deps so it cannot pull a
 # non-gfx1151 torch over the one installed above. Pinned to the torch/ROCm ABI
