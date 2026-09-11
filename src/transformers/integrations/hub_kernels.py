@@ -209,7 +209,6 @@ if is_kernels_available():
                         version=3,
                     ),
                 },
-                # The XPU causal-conv1d backend landed in mamba-ssm v3.
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
@@ -585,8 +584,6 @@ if is_kernels_available():
                     ),
                 },
                 "xpu": {
-                    # Inference only: the `chunk_kda` backward kernel uses Intel 2D block-read intrinsics
-                    # that the Triton XPU backend fails to build, so training stays on the torch path.
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="chunk_kimi_delta_attention",
