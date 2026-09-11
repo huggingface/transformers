@@ -19,6 +19,7 @@ from transformers import AutoProcessor, HyperCLOVAXVisionV2Config, is_torch_avai
 from transformers.testing_utils import (
     Expectations,
     require_torch,
+    require_torch_accelerator,
     require_torch_accelerator_memory,
     slow,
     torch_device,
@@ -326,6 +327,112 @@ class HyperCLOVAXVisionV2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 ],
                 ("cuda", (10, 0)): [
                     'user\n{"id": "video_00", "type": "video/mp4", "filename": "a.mp4"}\n<|video_aux_start|>다음 중 video_duration은 비디오 길이 정보입니다. 참고하여 답변하세요. {"video_duration": 6.07}<|video_aux_end|>\n\nWhat is shown in this video?\nassistant\n<think>\nOkay, so I need to figure out what\'s shown in this video based on the image provided. Let me start by breaking down the details given.\n\n'
+                ],
+            }
+        )
+        expected = EXPECTED_TEXTS.get_expectation()
+
+        self.assertEqual(output_text, expected)
+
+
+@require_torch
+@require_torch_accelerator
+class HyperCLOVAXVisionV2TinyModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    model_id = "hf-internal-testing/tiny-random-HyperCLOVAXVisionV2ForConditionalGeneration"
+
+    def setUp(self):
+        super().setUp()
+        self.processor = AutoProcessor.from_pretrained(self.model_id)
+        self.model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
+            self.model_id, dtype=torch.bfloat16, device_map="auto"
+        )
+
+    @slow
+    def test_text_generate(self):
+        messages = [
+            {"role": "user", "content": "What is the capital of South Korea?"},
+        ]
+        text = self.processor.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(text=[text], return_tensors="pt").to(torch_device)
+
+        output = self.model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
+
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("cuda", (8, 6)): [
+                    "user\nWhat is the capital of South Korea?\nassistant\n<think>\nOkay, so I need to figure out what the capital of South Korea is. Let me start by recalling any prior knowledge I have. I remember that"
+                ],
+            }
+        )
+        expected = EXPECTED_TEXTS.get_expectation()
+
+        self.assertEqual(output_text, expected)
+
+    @slow
+    def test_image_generate(self):
+        image_url = (
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
+        )
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": url_to_local_path(image_url)},
+                    {"type": "text", "text": "What animal is in the image?"},
+                ],
+            }
+        ]
+        inputs = self.processor.apply_chat_template(
+            messages,
+            tokenize=True,
+            return_dict=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+        ).to(torch_device)
+
+        output = self.model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
+
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("cuda", (8, 6)): [
+                    'user\n{"id": "image_00", "type": "image/jpeg", "filename": "a.jpg"}\n\nWhat animal is in the image?\nassistant\n<think>\nOkay, so I need to figure out what animal is in the image based on the details provided. Let me start by reading through the image carefully.\n\n'
+                ],
+            }
+        )
+        expected = EXPECTED_TEXTS.get_expectation()
+
+        self.assertEqual(output_text, expected)
+
+    @slow
+    def test_video_generate(self):
+        video_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "video", "url": url_to_local_path(video_url)},
+                    {"type": "text", "text": "What is shown in this video?"},
+                ],
+            }
+        ]
+        inputs = self.processor.apply_chat_template(
+            messages,
+            tokenize=True,
+            return_dict=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+        ).to(torch_device)
+
+        output = self.model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
+
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("cuda", ("cuda", (8, 6))): [
+                    'user\n{"id": "video_00", "type": "video/mp4", "filename": "a.mp4"}\n<|video_aux_start|>다음 중 video_duration은 비디오 길이 정보입니다. 참고하여 답변하세요. {"video_duration": 6.07}<|video_aux_end|>\n\nWhat is shown in this video?\nassistant\n<think>\nOkay, so I need to figure out what\'s shown in the video based on the image provided. Let me start by breaking down the details given.\n\n'
                 ],
             }
         )
