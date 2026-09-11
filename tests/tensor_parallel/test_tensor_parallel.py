@@ -25,6 +25,8 @@ from transformers.distributed.tensor_parallel import (
     PackedColwiseParallel,
     PackedRowwiseParallel,
     RowwiseParallel,
+    TOKEN_DISPATCH_PLAN_STYLES,
+    expert_parallel_dispatch_plan,
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
@@ -365,3 +367,47 @@ class TestTensorParallelLayer(TestCasePlus):
 
                 self.assertEqual(module.random_attr, 123)
                 self.assertFalse(hasattr(module, "num_experts"))
+
+
+@is_tensor_parallel_test
+class TestTokenDispatchPlan(TestCasePlus):
+    """`expert_parallel_dispatch_plan` rewrites an expert parallel plan for token dispatch, without a process group."""
+
+    def test_qwen3_moe_plan(self):
+        from transformers import Qwen3MoeConfig
+
+        plan, replicated = expert_parallel_dispatch_plan(Qwen3MoeConfig.base_model_ep_plan, "ep_dispatch_experts")
+        # The experts take the dispatch style, the router entry goes: it keeps its global ids and scores.
+        self.assertEqual(
+            plan,
+            {
+                "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+                "layers.*.mlp.experts.down_proj": "grouped_gemm",
+                "layers.*.mlp.experts": "ep_dispatch_experts",
+            },
+        )
+        self.assertEqual(replicated, [])
+
+    def test_non_expert_entries_are_reported_as_replicated(self):
+        ep_plan = {
+            "layers.*.self_attn.q_proj": "colwise",
+            "layers.*.self_attn.o_proj": "rowwise",
+            "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+            "layers.*.mlp.gate": "ep_router",
+            "layers.*.mlp.experts": "moe_tp_experts",
+        }
+        plan, replicated = expert_parallel_dispatch_plan(ep_plan, "ep_dispatch_experts")
+        self.assertEqual(
+            plan,
+            {
+                "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+                "layers.*.mlp.experts": "ep_dispatch_experts",
+            },
+        )
+        self.assertEqual(replicated, ["layers.*.self_attn.o_proj", "layers.*.self_attn.q_proj"])
+
+    def test_every_kept_style_exists(self):
+        for style, dispatch_style in TOKEN_DISPATCH_PLAN_STYLES.items():
+            self.assertIn(style, ALL_PARALLEL_STYLES)
+            if isinstance(dispatch_style, str):
+                self.assertIn(dispatch_style, ALL_PARALLEL_STYLES)

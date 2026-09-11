@@ -60,7 +60,7 @@ class DistributedConfig:
     tp_plan: dict[str, str] | Literal["auto"] | None = None
     enable_sequence_parallel: bool = False
     enable_expert_parallel: bool = False
-    experts_dispatch: str = "all-reduce"
+    experts_dispatch: Literal["all-reduce", "all-to-all"] = "all-reduce"
     fsdp_size: int | None = None
     fsdp_cpu_offload: bool = False
     fsdp_mixed_precision: bool = False

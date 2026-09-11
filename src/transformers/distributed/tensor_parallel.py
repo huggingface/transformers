@@ -891,6 +891,40 @@ class ParallelInterface(GeneralInterface):
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
+# How each style of an expert parallel plan carries over to token dispatch, where every rank trains on its own part of
+# the batch and only the experts can be sharded across the group. `EXPERTS` marks the experts entry, swapped for the
+# style of the dispatch strategy; `None` drops the entry silently: the router keeps its global ids and scores since
+# dispatch does the routing. Replicated parameters inside the experts module keep their gradient all-reduce: FSDP2
+# treats that module as expert-owned and does not reduce them, and each rank saw different tokens. Any style missing
+# here is dropped with a warning and its module stays replicated, data-parallel like the rest of the trunk.
+_EXPERTS = object()
+TOKEN_DISPATCH_PLAN_STYLES = {
+    "grouped_gemm": "grouped_gemm",
+    "replicated_with_grad_allreduce": "replicated_with_grad_allreduce",
+    "moe_tp_experts": _EXPERTS,
+    "ep_router": None,
+}
+
+
+def expert_parallel_dispatch_plan(ep_plan: dict[str, str], experts_style: str) -> tuple[dict[str, str], list[str]]:
+    """
+    Rewrite an expert parallel plan for token dispatch with `experts_style` as the experts' style, following
+    `TOKEN_DISPATCH_PLAN_STYLES`. Returns the plan and the sorted names of the entries it dropped, whose modules stay
+    replicated.
+    """
+    plan, replicated = {}, []
+    for name, style in ep_plan.items():
+        if style not in TOKEN_DISPATCH_PLAN_STYLES:
+            replicated.append(name)
+            continue
+        dispatch_style = TOKEN_DISPATCH_PLAN_STYLES[style]
+        if dispatch_style is _EXPERTS:
+            plan[name] = experts_style
+        elif dispatch_style is not None:
+            plan[name] = dispatch_style
+    return plan, sorted(replicated)
+
+
 def _validate_tp_plan_styles(tp_plan: dict[str, str] | None) -> None:
     unsupported_styles = {style for style in (tp_plan or {}).values() if style not in ALL_PARALLEL_STYLES}
     if unsupported_styles:

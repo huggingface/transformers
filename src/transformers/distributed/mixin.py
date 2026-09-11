@@ -26,6 +26,7 @@ from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
     _validate_tp_plan_styles,
     apply_tensor_parallelism,
+    expert_parallel_dispatch_plan,
     gather_state_dict_for_save,
 )
 from .utils import (
@@ -217,14 +218,9 @@ class DistributedMixin:
                 if isinstance(distributed_config.tp_plan, dict):
                     model.tp_plan = distributed_config.tp_plan
                 if distributed_config.dispatches_tokens:
-                    # Every rank trains on its own part of the batch, so only the experts can be sharded across the
-                    # group: the experts get the dispatch style, the router keeps its global ids and scores, and
-                    # whatever else the plan shards stays replicated, data-parallel like the rest of the trunk.
-                    # Replicated parameters inside the experts module keep their gradient all-reduce: FSDP2 treats
-                    # that module as expert-owned and does not reduce them, and each rank saw different tokens.
-                    kept = ("grouped_gemm", "moe_tp_experts", "replicated_with_grad_allreduce")
-                    replicated = sorted(
-                        name for name, style in model.tp_plan.items() if style not in ("ep_router", *kept)
+                    # `tp_plan` reads `_ep_plan` under expert parallelism, so that is the plan to rewrite.
+                    model._ep_plan, replicated = expert_parallel_dispatch_plan(
+                        model.tp_plan, EXPERTS_DISPATCH_STRATEGIES[distributed_config.experts_dispatch]
                     )
                     if replicated:
                         logger.warning(
@@ -232,13 +228,6 @@ class DistributedMixin:
                             "so these expert parallel plan "
                             f"entries are ignored and their modules stay replicated: {replicated}."
                         )
-                    # `tp_plan` reads `_ep_plan` under expert parallelism, so that is the plan to rewrite.
-                    dispatch_style = EXPERTS_DISPATCH_STRATEGIES[distributed_config.experts_dispatch]
-                    model._ep_plan = {
-                        name: dispatch_style if style == "moe_tp_experts" else style
-                        for name, style in model.tp_plan.items()
-                        if style in kept
-                    }
                 model = apply_tensor_parallelism(model, tp_mesh)
 
             if distributed_config.uses_fsdp:
