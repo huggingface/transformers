@@ -76,7 +76,7 @@ For the rest of the model:
 
 ## Combining with FSDP2
 
-Without token dispatch, expert parallelism only shards the experts. Everything else (attention, embeddings, norms) and its optimizer state is replicated on every expert-parallel rank, which limits how large a model you can train. Add [FSDP2](./fsdp) on a second mesh dimension with `fsdp_size`, and keep using `tp_size` for the expert parallel width (`tp_size` is the EP size).
+Without token dispatch, expert parallelism only shards the experts. Everything else (attention, embeddings, norms) and its optimizer state is replicated on every expert-parallel rank, which limits how large a model you can train. Add [FSDP2](./fsdp) on a second mesh dimension with `fsdp_size`, and keep using `tp_size` for the expert parallel width: for now the experts are sharded across the `tp` ranks, so `tp_size` doubles as the expert parallel size.
 
 ```py
 from transformers import AutoModelForCausalLM

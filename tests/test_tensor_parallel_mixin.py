@@ -390,14 +390,12 @@ def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_t
     dist.barrier()
 
 
-def _load_ep_and_reference_models(model_path, model_class, dispatch=False):
+def _load_ep_and_reference_models(model_path, model_class, experts_dispatch="all-reduce"):
     """Load EP model and non-EP reference model for comparison."""
     model_ep = model_class.from_pretrained(
         model_path,
         distributed_config=DistributedConfig(
-            tp_size=dist.get_world_size(),
-            enable_expert_parallel=True,
-            experts_dispatch="all-to-all" if dispatch else "all-reduce",
+            tp_size=dist.get_world_size(), enable_expert_parallel=True, experts_dispatch=experts_dispatch
         ),
     )
     dist.barrier()
@@ -409,11 +407,13 @@ def _load_ep_and_reference_models(model_path, model_class, dispatch=False):
     return model_ep, model_ref, device
 
 
-def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol, experts_implementation, dispatch=False):
+def _test_ep_forward_impl(
+    _rank, model_path, model_class, atol, rtol, experts_implementation, experts_dispatch="all-reduce"
+):
     """Implementation for comparing EP and non-EP model outputs."""
     set_seed(0)
 
-    model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class, dispatch=dispatch)
+    model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class, experts_dispatch)
 
     model_ep.eval()
     model_ref.eval()
@@ -436,11 +436,13 @@ def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol, experts_im
     dist.barrier()
 
 
-def _test_ep_backward_impl(_rank, model_path, model_class, atol, rtol, experts_implementation, dispatch=False):
+def _test_ep_backward_impl(
+    _rank, model_path, model_class, atol, rtol, experts_implementation, experts_dispatch="all-reduce"
+):
     """Implementation for comparing EP and non-EP model backward passes."""
     set_seed(0)
 
-    model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class, dispatch=dispatch)
+    model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class, experts_dispatch)
     model_ep.train()
     model_ref.train()
 
@@ -672,12 +674,12 @@ class TensorParallelTesterMixin(ABC):
             )
 
     @parameterized.expand(
-        [(tie, impl, False) for tie, impl in product([False, True], ["eager", "grouped_mm", "batched_mm"])]
+        [(tie, impl, "all-reduce") for tie, impl in product([False, True], ["eager", "grouped_mm", "batched_mm"])]
         # Token dispatch is orthogonal to the implementation, so it adds the one combination on its own.
-        + [(False, "eager", True)]
+        + [(False, "eager", "all-to-all")]
     )
     @is_tensor_parallel_test
-    def test_ep_forward(self, tie_word_embeddings, experts_implementation, dispatch):
+    def test_ep_forward(self, tie_word_embeddings, experts_implementation, experts_dispatch):
         self._skip_if_not_supported(expert_parallel=True)
 
         config = self._get_tp_config(tie_word_embeddings=tie_word_embeddings)
@@ -691,12 +693,14 @@ class TensorParallelTesterMixin(ABC):
             model.save_pretrained(tmp_dir, save_original_format=True)
 
             _init_distributed(tp=self.tensor_parallel_size)(_test_ep_forward_impl)(
-                tmp_dir, model_class, atol, rtol, experts_implementation, dispatch=dispatch
+                tmp_dir, model_class, atol, rtol, experts_implementation, experts_dispatch=experts_dispatch
             )
 
-    @parameterized.expand([("eager", False), ("grouped_mm", False), ("batched_mm", False), ("eager", True)])
+    @parameterized.expand(
+        [(impl, "all-reduce") for impl in ["eager", "grouped_mm", "batched_mm"]] + [("eager", "all-to-all")]
+    )
     @is_tensor_parallel_test
-    def test_ep_backward(self, experts_implementation, dispatch):
+    def test_ep_backward(self, experts_implementation, experts_dispatch):
         self._skip_if_not_supported(expert_parallel=True)
 
         config = self._get_tp_config()
@@ -710,5 +714,5 @@ class TensorParallelTesterMixin(ABC):
             model.save_pretrained(tmp_dir, save_original_format=True)
 
             _init_distributed(tp=self.tensor_parallel_size)(_test_ep_backward_impl)(
-                tmp_dir, model_class, atol, rtol, experts_implementation, dispatch=dispatch
+                tmp_dir, model_class, atol, rtol, experts_implementation, experts_dispatch=experts_dispatch
             )

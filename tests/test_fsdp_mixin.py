@@ -501,7 +501,9 @@ def _grad_norm_across_meshes(model):
     return clip_grad_norm_per_mesh(model.parameters(), float("inf"))
 
 
-def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, dtype=None, dispatch=False):
+def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(
+    rank, config_class, config_dict, dtype=None, experts_dispatch="all-reduce"
+):
     """
     DDP vs a 2-D (fsdp, tp) mesh with expert parallelism on `tp`. DDP sees the whole batch on every rank; each `fsdp`
     rank of the 2-D run sees its own slice of it (every rank with token dispatch), so FSDP2's reduction is exercised.
@@ -516,6 +518,7 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
     config = config_class.from_dict(config_dict)
     world_size = dist.get_world_size()
     dp = world_size // 2
+    dispatch = experts_dispatch != "all-reduce"
     num_slices = world_size if dispatch else dp
     generator = torch.Generator(device=device)
     generator.manual_seed(SEED)
@@ -532,10 +535,7 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
             init_model_dir,
             torch_dtype=dtype,
             distributed_config=DistributedConfig(
-                tp_size=2,
-                fsdp_size=dp,
-                enable_expert_parallel=True,
-                experts_dispatch="all-to-all" if dispatch else "all-reduce",
+                tp_size=2, fsdp_size=dp, enable_expert_parallel=True, experts_dispatch=experts_dispatch
             ),
         )
         assert model.tp_size == 2 and model.config.distributed_config.fsdp_size == dp
@@ -855,9 +855,9 @@ class FSDPTesterMixin(ABC):
             label == "tied",
         )
 
-    @parameterized.expand([("masked", False), ("dispatch", True)])
+    @parameterized.expand([("masked", "all-reduce"), ("dispatch", "all-to-all")])
     @is_fsdp_test
-    def test_fsdp2_expert_parallel_2d_vs_ddp(self, label, dispatch):
+    def test_fsdp2_expert_parallel_2d_vs_ddp(self, label, experts_dispatch):
         """
         Training on a 2-D (fsdp, tp) mesh with expert parallelism, each fsdp rank (each rank with token dispatch)
         on its own slice of the batch, traces DDP on the whole batch step by step.
@@ -869,7 +869,7 @@ class FSDPTesterMixin(ABC):
             "fsdp2_expert_parallel_2d_vs_ddp",
             _test_fsdp2_expert_parallel_2d_vs_ddp_impl,
             world_size=4,
-            dispatch=dispatch,
+            experts_dispatch=experts_dispatch,
         )
 
     @is_fsdp_test
