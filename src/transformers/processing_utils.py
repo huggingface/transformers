@@ -226,12 +226,12 @@ class TextKwargs(TypedDict, total=False):
     text_target: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None
     text_pair_target: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None
     add_special_tokens: bool | None
-    padding: Annotated[bool | str | PaddingStrategy | None, padding_validator()]
-    truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator()]
-    max_length: Annotated[int | None, positive_int()]
-    stride: Annotated[int | None, positive_int()]
+    padding: Annotated[bool | str | PaddingStrategy | None, padding_validator]
+    truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator]
+    max_length: Annotated[int | None, positive_int]
+    stride: Annotated[int | None, positive_int]
     is_split_into_words: bool | None
-    pad_to_multiple_of: Annotated[int | None, positive_int()]
+    pad_to_multiple_of: Annotated[int | None, positive_int]
     return_token_type_ids: bool | None
     return_attention_mask: bool | None
     return_overflowing_tokens: bool | None
@@ -242,7 +242,7 @@ class TextKwargs(TypedDict, total=False):
     padding_side: Literal["left", "right"] | None
     return_mm_token_type_ids: bool | None
     return_text_replacement_offsets: bool | None
-    return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
+    return_tensors: Annotated[str | TensorType | None, tensor_type_validator]
 
 
 class ImagesKwargs(TypedDict, total=False):
@@ -300,13 +300,13 @@ class ImagesKwargs(TypedDict, total=False):
     do_convert_rgb: bool | None
     do_resize: bool | None
     size: Annotated[
-        int | list[int] | tuple[int, ...] | dict[str, int | None] | SizeDict | None, image_size_validator()
+        int | list[int] | tuple[int, ...] | dict[str, int | None] | SizeDict | None, image_size_validator
     ]
     default_to_square: bool | None
     crop_size: Annotated[
-        int | list[int] | tuple[int, ...] | dict[str, int | None] | SizeDict | None, image_size_validator()
+        int | list[int] | tuple[int, ...] | dict[str, int | None] | SizeDict | None, image_size_validator
     ]
-    resample: Annotated[Union["PILImageResampling", int] | None, resampling_validator()]
+    resample: Annotated[Union["PILImageResampling", int] | None, resampling_validator]
     do_rescale: bool | None
     rescale_factor: float | None
     do_normalize: bool | None
@@ -314,13 +314,13 @@ class ImagesKwargs(TypedDict, total=False):
     image_std: float | list[float] | tuple[float, ...] | None
     do_pad: bool | None
     pad_size: Annotated[
-        int | list[int] | tuple[int, ...] | dict[str, int | None] | SizeDict | None, image_size_validator()
+        int | list[int] | tuple[int, ...] | dict[str, int | None] | SizeDict | None, image_size_validator
     ]
     do_center_crop: bool | None
     data_format: str | ChannelDimension | None
     input_data_format: str | ChannelDimension | None
-    device: Annotated[Union[str, "torch.device"] | None, device_validator()]
-    return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
+    device: Annotated[Union[str, "torch.device"] | None, device_validator]
+    return_tensors: Annotated[str | TensorType | None, tensor_type_validator]
     disable_grouping: bool | None
     image_seq_length: int | None
 
@@ -381,10 +381,10 @@ class VideosKwargs(TypedDict, total=False):
     do_convert_rgb: bool | None
     do_resize: bool | None
     size: Annotated[
-        int | list[int] | tuple[int, ...] | dict[str, int | None] | SizeDict | None, image_size_validator()
+        int | list[int] | tuple[int, ...] | dict[str, int | None] | SizeDict | None, image_size_validator
     ]
     default_to_square: bool | None
-    resample: Annotated[Union["PILImageResampling", int] | None, resampling_validator()]
+    resample: Annotated[Union["PILImageResampling", int] | None, resampling_validator]
     do_rescale: bool | None
     rescale_factor: float | None
     do_normalize: bool | None
@@ -393,17 +393,17 @@ class VideosKwargs(TypedDict, total=False):
     do_center_crop: bool | None
     do_pad: bool | None
     crop_size: Annotated[
-        int | list[int] | tuple[int, ...] | dict[str, int | None] | SizeDict | None, image_size_validator()
+        int | list[int] | tuple[int, ...] | dict[str, int | None] | SizeDict | None, image_size_validator
     ]
     data_format: str | ChannelDimension | None
     input_data_format: str | ChannelDimension | None
-    device: Annotated[Union[str, "torch.device"] | None, device_validator()]
+    device: Annotated[Union[str, "torch.device"] | None, device_validator]
     do_sample_frames: bool | None
-    video_metadata: Annotated[VideoMetadataType | None, video_metadata_validator()]
-    fps: Annotated[int | float | None, positive_any_number()]
-    num_frames: Annotated[int | None, positive_int()]
+    video_metadata: Annotated[VideoMetadataType | None, video_metadata_validator]
+    fps: Annotated[int | float | None, positive_any_number]
+    num_frames: Annotated[int | None, positive_int]
     return_metadata: bool | None
-    return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
+    return_tensors: Annotated[str | TensorType | None, tensor_type_validator]
 
 
 class AudioKwargs(TypedDict, total=False):
@@ -470,7 +470,7 @@ class AudioKwargs(TypedDict, total=False):
             in `apply_chat_template`. One of `"auto"`, `"torchcodec"`, `"librosa"`, `"torchaudio"`.
     """
 
-    sampling_rate: Annotated[int | None, positive_int()]
+    sampling_rate: Annotated[int | None, positive_int]
     spectrogram_config: dict | SpectrogramConfig | None
     do_extract_spectrogram: bool | None
     do_batch_spectrogram: bool | None
@@ -478,16 +478,16 @@ class AudioKwargs(TypedDict, total=False):
     # once the six codec models that set it (dia, dac, encodec, xcodec2, vibevoice_acoustic_tokenizer,
     # kyutai_speech_to_text) align their modeling with the library's batch layout.
     add_channel_dim: bool | None
-    padding: Annotated[bool | str | PaddingStrategy | None, padding_validator()]
-    max_length: Annotated[int | None, positive_int()]
-    truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator()]
-    pad_to_multiple_of: Annotated[int | None, positive_int()]
-    padding_side: Annotated[str | None, padding_side_validator()]
+    padding: Annotated[bool | str | PaddingStrategy | None, padding_validator]
+    max_length: Annotated[int | None, positive_int]
+    truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator]
+    pad_to_multiple_of: Annotated[int | None, positive_int]
+    padding_side: Annotated[str | None, padding_side_validator]
     padding_value: float | int | None
     return_padding_mask: bool | None
-    dither: Annotated[float | int | None, positive_any_number()]
-    return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
-    device: Annotated[Union[str, "torch.device"] | None, device_validator()]
+    dither: Annotated[float | int | None, positive_any_number]
+    return_tensors: Annotated[str | TensorType | None, tensor_type_validator]
+    device: Annotated[Union[str, "torch.device"] | None, device_validator]
     load_audio_backend: str | None
 
 

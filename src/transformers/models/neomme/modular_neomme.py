@@ -103,8 +103,8 @@ class NeoMMEImageProcessorKwargs(ImagesKwargs, total=False):
         Longest-side cap in pixels. Unset means no longest-side resize.
     """
 
-    patch_size: Annotated[int, positive_int()]
-    max_side: Annotated[int | None, positive_int()]
+    patch_size: Annotated[int, positive_int]
+    max_side: Annotated[int | None, positive_int]
 
 
 @auto_docstring
