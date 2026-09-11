@@ -30,7 +30,6 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..mixtral.modeling_mixtral import MixtralExperts
 from ..qwen3.configuration_qwen3 import Qwen3Config
 from ..qwen3.modeling_qwen3 import (
     Qwen3Attention,
@@ -41,6 +40,7 @@ from ..qwen3.modeling_qwen3 import (
     Qwen3PreTrainedModel,
     Qwen3RMSNorm,
 )
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeExperts
 
 
 logger = logging.get_logger(__name__)
@@ -203,7 +203,7 @@ class TRHashRouter(nn.Module):
         return None, routing_weights, selected_experts
 
 
-class TRHashExperts(MixtralExperts):
+class TRHashExperts(Qwen3MoeExperts):
     """Standard fused SwiGLU experts driven by the deterministic router."""
 
     def __init__(self, config: TRHashConfig):
