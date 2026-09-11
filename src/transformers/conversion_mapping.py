@@ -102,6 +102,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "granitemoeshared": "granitemoe",
     "granitemoehybrid": "granitemoe",
     "gemma3n_text": "qwen3_5_text",
+    "glm5_next_text": "glm5_next",
     "qwen3_5_moe_text": "qwen3_5_text",
     "llava_next_video": "llava_next",
     "llava_onevision": "llava_next",
@@ -975,6 +976,9 @@ def _build_checkpoint_conversion_mapping():
         ],
         "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
         "dinov3_vit": [WeightRenaming(r"(?<!model\.)layer.", r"model.layer.")],
+        "yolos": [
+            WeightRenaming(r"encoder.mid_position_embeddings", r"encoder.interpolation.mid_position_embeddings")
+        ],
         "timesfm2_5": [
             WeightRenaming("ff0", "fc1"),
             WeightRenaming("ff1", "fc2"),
