@@ -13,10 +13,12 @@
 # limitations under the License.
 
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 
-from ...generation import GenerationMixin, StoppingCriteria
+from ...generation import GenerationConfig, GenerationMixin, GenerationMode, GenerationState, StoppingCriteria
+from ...generation.stopping_criteria import StoppingCriteriaList
 from ...utils import ModelOutput
 
 
@@ -111,66 +113,94 @@ class ParakeetRNNTGenerateOutput(ModelOutput):
 
 
 class EncoderExhaustedCriteria(StoppingCriteria):
-    """Stops generation when all batch elements have walked past their encoder output length."""
+    """Stops a row once its encoder frame pointer walked past its encoder output length (both in `model_kwargs`)."""
 
-    def __init__(self, model):
-        self.model = model
-
-    def __call__(self, input_ids, scores, **kwargs):
-        if self.model._encoder_finished is None:
-            return torch.zeros(input_ids.shape[0], dtype=torch.bool, device=input_ids.device)
-        return self.model._encoder_finished
+    def __call__(
+        self,
+        input_ids: torch.LongTensor,
+        scores: torch.FloatTensor | None,
+        model_kwargs: dict[str, Any] | None = None,
+        **kwargs,
+    ) -> torch.BoolTensor:
+        return model_kwargs["encoder_frame_idxs"] >= model_kwargs["encoder_valid_lengths"]
 
 
 class ParakeetRNNTGenerationMixin(GenerationMixin):
     """Generation mixin for Parakeet RNN-T models, and the base for all Parakeet transducer generation.
 
-    Handles the transducer machinery shared by RNN-T and TDT: encoder frame tracking, decoder cache
-    preparation, encoder-exhaustion stopping, and output-buffer sizing. For RNN-T greedy decoding the encoder
-    frame pointer advances by one frame on every blank emission and stays put on every non-blank emission; a
-    ``max_symbols_per_step`` guard forces an advance after too many consecutive non-blank emissions at the same
-    frame, mirroring NeMo's greedy RNN-T decoding. The duration-aware [`ParakeetTDTGenerationMixin`] extends this
-    by advancing the frame pointer by a predicted duration instead.
+    Handles the transducer machinery shared by RNN-T and TDT: encoder frame tracking, decoder cache preparation,
+    encoder-exhaustion stopping, and output-buffer sizing. Each step feeds the decoder the encoder frame its pointer
+    (`model_kwargs["encoder_frame_idxs"]`) points at; once the token is selected,
+    `_update_model_kwargs_with_next_tokens` decides how far the pointer moves. For RNN-T greedy decoding it advances by
+    one frame on every blank emission and stays put on every non-blank emission; a `max_symbols_per_step` guard forces
+    an advance after too many consecutive non-blank emissions at the same frame, mirroring NeMo's greedy RNN-T
+    decoding. The duration-aware [`ParakeetTDTGenerationMixin`] extends this by advancing the pointer by a predicted
+    duration instead. Rows stop through [`EncoderExhaustedCriteria`] once their pointer walked past their encoder
+    output length.
+
+    The per-step frame advances (the "durations") and the symbols-per-frame counter live in the generation state
+    (`state.extras`), the frame pointers in `model_kwargs`; nothing is stored on the model. `generate` always returns a
+    [`ParakeetRNNTGenerateOutput`] with `sequences` and `durations`, whatever `return_dict_in_generate`; a streamer, if
+    given, still receives the tokens.
     """
 
-    def _get_stopping_criteria(self, *args, **kwargs):
+    # `model_kwargs` entries that are not encoder inputs (see `_encoder_kwargs`), matched by prefix
+    _encoder_kwargs_to_ignore = (
+        "input_features",
+        "attention_mask",
+        "output_attention_mask",
+        "decoder_",
+        "cross_attn",
+        "use_cache",
+        "past_key_values",
+        "cache_params",
+    )
+
+    def _get_stopping_criteria(self, *args, **kwargs) -> StoppingCriteriaList:
         criteria = super()._get_stopping_criteria(*args, **kwargs)
-        criteria.append(EncoderExhaustedCriteria(self))
+        criteria.append(EncoderExhaustedCriteria())
         return criteria
 
-    def _update_model_kwargs_for_generation(self, outputs, *args, **kwargs):
-        model_kwargs = super()._update_model_kwargs_for_generation(outputs, *args, **kwargs)
-
-        logits = outputs.logits[:, -1, :]
-        tokens = logits.argmax(dim=-1)
-        blank_mask = tokens == self.config.blank_token_id
+    def _update_model_kwargs_with_next_tokens(
+        self,
+        next_tokens: torch.LongTensor,
+        outputs: ModelOutput | None,
+        model_kwargs: dict[str, Any],
+        state: GenerationState,
+    ) -> dict[str, Any]:
+        blank_mask = next_tokens == self.config.blank_token_id
 
         # Count consecutive non-blank emissions at the current encoder frame; reset on advance.
-        if self._symbols_at_frame is None:
-            self._symbols_at_frame = torch.zeros_like(tokens)
-        symbols = torch.where(blank_mask, torch.zeros_like(self._symbols_at_frame), self._symbols_at_frame + 1)
+        symbols_at_frame = state.extras.get("symbols_at_frame")
+        if symbols_at_frame is None:
+            symbols_at_frame = torch.zeros_like(next_tokens)
+        symbols = torch.where(blank_mask, torch.zeros_like(symbols_at_frame), symbols_at_frame + 1)
         force_advance = symbols >= self.max_symbols_per_step
-        self._symbols_at_frame = torch.where(blank_mask | force_advance, torch.zeros_like(symbols), symbols)
+        state.extras["symbols_at_frame"] = torch.where(blank_mask | force_advance, torch.zeros_like(symbols), symbols)
 
         # Advance the encoder frame pointer on blank (or forced) emissions; stay put otherwise.
-        advance = (blank_mask | force_advance).long()
-        model_kwargs["encoder_frame_idxs"] = model_kwargs["encoder_frame_idxs"] + advance
-        # The per-step frame advance is the RNN-T analogue of a TDT duration: cumulatively summed it yields the
-        # encoder frame index of each emitted token, which is sufficient to reconstruct timestamps.
-        self._step_durations.append(advance)
-        self._encoder_finished = model_kwargs["encoder_frame_idxs"] >= model_kwargs["encoder_valid_lengths"]
+        return self._advance_encoder_frames((blank_mask | force_advance).long(), model_kwargs, state)
 
+    def _advance_encoder_frames(
+        self, durations: torch.LongTensor, model_kwargs: dict[str, Any], state: GenerationState
+    ) -> dict[str, Any]:
+        """
+        Moves each row's encoder frame pointer forward by `durations` frames and records them: cumulatively summed,
+        the per-step durations give the encoder frame of each emitted token (enough to reconstruct timestamps).
+        """
+        model_kwargs["encoder_frame_idxs"] = model_kwargs["encoder_frame_idxs"] + durations
+        state.extras.setdefault("durations", []).append(durations)
         return model_kwargs
 
     def _prepare_generated_length(
         self,
-        generation_config,
-        has_default_max_length,
-        has_default_min_length,
-        model_input_name,
-        input_ids_length,
-        inputs_tensor,
-    ):
+        generation_config: GenerationConfig,
+        has_default_max_length: bool,
+        has_default_min_length: bool,
+        model_input_name: str,
+        input_ids_length: int,
+        inputs_tensor: torch.Tensor,
+    ) -> GenerationConfig:
         # When the user hasn't explicitly set max_length/max_new_tokens, derive an upper
         # bound from the encoder capacity. The actual stopping is handled by the
         # encoder-exhaustion stopping criteria; this just sizes the output buffer.
@@ -189,21 +219,20 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
             inputs_tensor,
         )
 
-    def _prepare_model_inputs(self, *args, **kwargs):
-        inputs, input_name, model_kwargs = super()._prepare_model_inputs(*args, **kwargs)
-        explicit = {"input_features", "attention_mask", "output_attention_mask"}
-        irrelevant_prefix = ("decoder_", "cross_attn", "use_cache", "past_key_values", "cache_params")
-        encoder_kwargs = {
-            key: value
-            for key, value in model_kwargs.items()
-            if key not in explicit and not key.startswith(irrelevant_prefix)
+    def _encoder_kwargs(self, model_kwargs: dict[str, Any]) -> dict[str, Any]:
+        """The `model_kwargs` to forward to the encoder (`get_audio_features`)."""
+        return {
+            key: value for key, value in model_kwargs.items() if not key.startswith(self._encoder_kwargs_to_ignore)
         }
+
+    def _prepare_model_inputs(self, *args, **kwargs) -> tuple[torch.Tensor, str | None, dict[str, torch.Tensor]]:
+        inputs, input_name, model_kwargs = super()._prepare_model_inputs(*args, **kwargs)
 
         encoder_outputs = self.get_audio_features(
             input_features=inputs,
             attention_mask=model_kwargs.get("attention_mask", None),
             output_attention_mask=True,
-            **encoder_kwargs,
+            **self._encoder_kwargs(model_kwargs),
         )
         model_kwargs["encoder_outputs"] = encoder_outputs
 
@@ -227,10 +256,18 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
 
         return inputs, input_name, model_kwargs
 
-    def _prepare_cache_for_generation(self, generation_config, model_kwargs, *args, **kwargs):
+    def _prepare_cache_for_generation(
+        self,
+        generation_config: GenerationConfig,
+        model_kwargs: dict[str, Any],
+        generation_mode: GenerationMode,
+        batch_size: int,
+        max_cache_length: int,
+        max_cache_length_attr: str = "_previous_max_cache_length",
+    ) -> None:
         model_kwargs["decoder_cache"] = ParakeetRNNTDecoderCache(self.config)
 
-    def prepare_inputs_for_generation(self, input_ids, *args, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, *args, **kwargs) -> dict[str, Any]:
         from .modeling_parakeet import ParakeetEncoderModelOutput
 
         model_inputs = super().prepare_inputs_for_generation(input_ids, *args, **kwargs)
@@ -247,53 +284,53 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
 
         return model_inputs
 
-    def generate(self, inputs=None, generation_config=None, **kwargs):
-        # TODO @eustlb: this is temporary — we're going to modularize generate to allow doing this cleanly.
-        self._encoder_finished = None
-        self._symbols_at_frame = None
-        self._step_durations = []
-
-        outputs = super().generate(inputs=inputs, generation_config=generation_config, **kwargs)
-
-        durations = torch.stack(self._step_durations, dim=1)  # (batch, steps)
-        # Prepend a zero duration for the decoder_start_token_id that generate() prepends to sequences
-        durations = torch.cat(
-            [torch.zeros(durations.shape[0], 1, dtype=durations.dtype, device=durations.device), durations], dim=1
-        )
-        del self._encoder_finished, self._symbols_at_frame, self._step_durations
-
-        return ParakeetRNNTGenerateOutput(
-            sequences=outputs.sequences if isinstance(outputs, ModelOutput) else outputs,
-            durations=durations,
-        )
+    def _build_generate_output(
+        self,
+        sequences: torch.LongTensor,
+        state: GenerationState,
+        generation_config: GenerationConfig,
+        model_kwargs: dict[str, Any],
+        **kwargs,
+    ) -> ParakeetRNNTGenerateOutput:
+        step_durations = state.extras.get("durations")
+        if step_durations:
+            durations = torch.stack(step_durations, dim=1)  # (batch, steps)
+        else:
+            durations = sequences.new_zeros((sequences.shape[0], 0))
+        # the decoder start token that opens `sequences` has no duration
+        durations = torch.cat([torch.zeros_like(durations[:, :1]), durations], dim=1)
+        return ParakeetRNNTGenerateOutput(sequences=sequences, durations=durations)
 
 
 class ParakeetTDTGenerationMixin(ParakeetRNNTGenerationMixin):
     """Generation mixin for Parakeet TDT models.
 
-    Extends [`ParakeetRNNTGenerationMixin`] with duration-aware decoding: instead of advancing the encoder frame
-    pointer by one on each blank emission, the joint network predicts a per-step duration and the pointer advances
-    by that amount. The shared setup (encoder frame tracking, decoder cache, stopping criteria, output buffer
+    Extends [`ParakeetRNNTGenerationMixin`] with duration-aware decoding: the joint network predicts tokens and
+    durations side by side (`vocab_size` token logits followed by one logit per duration). Tokens are selected from
+    the vocabulary logits alone, and instead of advancing the encoder frame pointer by one on each blank emission, the
+    pointer advances by the predicted duration (forced to at least one frame on blank emissions, so that decoding
+    always progresses). The shared setup (encoder frame tracking, decoder cache, stopping criteria, output buffer
     sizing) is inherited unchanged.
     """
 
-    def _update_model_kwargs_for_generation(self, outputs, *args, **kwargs):
-        # Skip ParakeetRNNTGenerationMixin's update (it counts per-frame symbols we don't use) and go
-        # straight to the base GenerationMixin bookkeeping.
-        model_kwargs = GenerationMixin._update_model_kwargs_for_generation(self, outputs, *args, **kwargs)
+    def _get_next_token_logits(
+        self, outputs: ModelOutput, model_kwargs: dict[str, Any], device: torch.device
+    ) -> torch.FloatTensor:
+        # the joint network predicts tokens and durations side by side; tokens are selected from the vocabulary part
+        return outputs.logits[:, -1, : self.config.vocab_size].to(copy=True, dtype=torch.float32, device=device)
 
-        # Advance encoder frame pointer by the predicted duration
+    def _update_model_kwargs_with_next_tokens(
+        self,
+        next_tokens: torch.LongTensor,
+        outputs: ModelOutput | None,
+        model_kwargs: dict[str, Any],
+        state: GenerationState,
+    ) -> dict[str, Any]:
+        # Advance the encoder frame pointer by the predicted duration
         logits = outputs.logits[:, -1, :]
-        tokens = logits[:, : self.config.vocab_size].argmax(dim=-1)
         durations = logits[:, self.config.vocab_size :].argmax(dim=-1)
 
-        # Only force forward progress (duration >= 1) for blank predictions;
-        blank_mask = tokens == self.config.blank_token_id
+        # Only force forward progress (duration >= 1) for blank predictions
+        blank_mask = next_tokens.to(logits.device) == self.config.blank_token_id
         durations = torch.where(blank_mask & (durations == 0), torch.ones_like(durations), durations)
-        model_kwargs["encoder_frame_idxs"] = model_kwargs["encoder_frame_idxs"] + durations
-        self._step_durations.append(durations)
-
-        # Track which batch elements have exhausted their encoder frames.
-        self._encoder_finished = model_kwargs["encoder_frame_idxs"] >= model_kwargs["encoder_valid_lengths"]
-
-        return model_kwargs
+        return self._advance_encoder_frames(durations, model_kwargs, state)
