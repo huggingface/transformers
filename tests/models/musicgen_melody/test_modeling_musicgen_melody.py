@@ -33,7 +33,6 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     get_device_properties,
     is_torch_available,
     is_torchaudio_available,
@@ -49,6 +48,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, sdpa_kernel
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -1046,16 +1046,10 @@ def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):
 
 @require_torch
 @require_torchaudio
-class MusicgenMelodyIntegrationTests(unittest.TestCase):
+class MusicgenMelodyIntegrationTests(MemoryCleanupMixin, unittest.TestCase):
     @cached_property
     def model(self):
         return MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-melody").to(torch_device)
-
-    def setUp(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     @cached_property
     def processor(self):
@@ -1157,9 +1151,9 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_VALUES = torch.tensor(
             [
-                1.2741e-04, -8.0466e-05,  5.5789e-04,  1.0402e-03,  2.6547e-04,
-                1.5587e-05, -1.4210e-04, -9.7303e-05,  6.4504e-04,  5.0903e-04,
-                9.6474e-04,  1.0498e-03,  3.7210e-05, -5.3652e-04, -3.6579e-04, -2.5678e-04
+                1.2716e-04, -7.6083e-05,  5.5843e-04,  1.0366e-03,  2.6200e-04,
+                1.5476e-05, -1.4712e-04, -1.0424e-04,  6.4653e-04,  4.9820e-04,
+                9.6520e-04,  1.0445e-03,  3.3251e-05, -5.3257e-04, -3.6564e-04, -2.5299e-04
             ]
         )
         # fmt: on
@@ -1183,8 +1177,8 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_VALUES = torch.tensor(
             [
-                -0.0085, -0.0160,  0.0028,  0.0005, -0.0095,  0.0028, -0.0122, -0.0299,
-                -0.0052, -0.0145,  0.0092,  0.0063, -0.0378, -0.0621, -0.0784, -0.0120,
+                0.0115, 0.0119, 0.0110, 0.0109, 0.0108, 0.0109, 0.0113, 0.0113,
+                0.0123, 0.0131, 0.0140, 0.0139, 0.0130, 0.0125, 0.0124, 0.0129,
             ]
         )
         # fmt: on
@@ -1210,8 +1204,8 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_VALUES = torch.tensor(
             [
-                1.2741e-04, -8.0474e-05,  5.5789e-04,  1.0402e-03,  2.6547e-04,
-                1.5597e-05, -1.4210e-04, -9.7309e-05,  6.4504e-04,  5.0903e-04
+                1.3196e-04, -7.1849e-05,  5.5930e-04,  1.0301e-03,  2.5997e-04,
+                1.6640e-05, -1.4558e-04, -9.9603e-05,  6.4856e-04,  5.1204e-04
             ]
         )
         # fmt: on
@@ -1237,9 +1231,9 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_VALUES = torch.tensor(
             [
-                1.2741e-04, -8.0474e-05,  5.5789e-04,  1.0402e-03,  2.6547e-04,
-                1.5597e-05, -1.4210e-04, -9.7309e-05,  6.4504e-04,  5.0903e-04,
-                9.6475e-04,  1.0499e-03,  3.7215e-05, -5.3651e-04, -3.6578e-04, -2.5678e-04
+                1.3196e-04, -7.1849e-05,  5.5930e-04,  1.0301e-03,  2.5997e-04,
+                1.6640e-05, -1.4558e-04, -9.9603e-05,  6.4856e-04,  5.1204e-04,
+                9.6832e-04,  1.0516e-03,  4.0427e-05, -5.3328e-04, -3.6258e-04, -2.5309e-04
             ]
         )
         # fmt: on
@@ -1272,8 +1266,8 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: off
         expectations = Expectations(
             {
-                (None, None): [-0.0165, -0.0222, -0.0041, -0.0058, -0.0145, -0.0023, -0.0160, -0.0310, -0.0055, -0.0127,  0.0104,  0.0105, -0.0326, -0.0611, -0.0744, -0.0083],
-                ("cuda", 8): [-0.0165, -0.0221, -0.0040, -0.0058, -0.0145, -0.0024, -0.0160, -0.0310, -0.0055, -0.0127,  0.0104,  0.0105, -0.0326, -0.0612, -0.0744, -0.0082],
+                (None, None): [-0.0007, 0.0015, 0.0013, 0.0004, -0.0005, -0.0007, -0.0009, -0.0016, -0.0010, -0.0003, 0.0004, 0.0001, -0.0014, -0.0026, -0.0027, -0.0018],
+                ("cuda", 8): [-0.0007, 0.0015, 0.0013, 0.0004, -0.0005, -0.0007, -0.0009, -0.0016, -0.0010, -0.0003, 0.0004, 0.0001, -0.0014, -0.0026, -0.0027, -0.0018],
             }
         )
         EXPECTED_VALUES = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -1297,9 +1291,9 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_VALUES = torch.tensor(
             [
-                -1.1999e-04, -2.2303e-04,  4.6296e-04,  1.0524e-03,  2.4827e-04,
-                -4.0294e-05, -1.2468e-04,  4.9846e-05,  7.1484e-04,  4.4198e-04,
-                7.9063e-04,  8.8141e-04, -6.1807e-05, -6.1856e-04, -3.6235e-04, -2.7226e-04
+                -1.2502e-04, -2.2566e-04,  4.6638e-04,  1.0508e-03,  2.5458e-04,
+                -4.0685e-05, -1.1940e-04,  5.1141e-05,  7.1774e-04,  4.5224e-04,
+                7.9920e-04,  8.9004e-04, -5.5629e-05, -6.0765e-04, -3.4730e-04, -2.5876e-04
             ]
         )
         # fmt: on
@@ -1310,7 +1304,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
 
 @require_torch
 @require_torchaudio
-class MusicgenMelodyStereoIntegrationTests(unittest.TestCase):
+class MusicgenMelodyStereoIntegrationTests(MemoryCleanupMixin, unittest.TestCase):
     @cached_property
     def model(self):
         return MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-stereo-melody").to(
@@ -1333,9 +1327,9 @@ class MusicgenMelodyStereoIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_VALUES_LEFT = torch.tensor(
             [
-                1.2742e-04, -8.0480e-05,  5.5788e-04,  1.0401e-03,  2.6547e-04,
-                1.5587e-05, -1.4211e-04, -9.7308e-05,  6.4503e-04,  5.0903e-04,
-                9.6475e-04,  1.0499e-03,  3.7205e-05, -5.3652e-04, -3.6579e-04, 2.5679e-04
+                1.2904e-04, -7.3645e-05,  5.6063e-04,  1.0369e-03,  2.6255e-04,
+                1.7213e-05, -1.3703e-04, -9.4247e-05,  6.5234e-04,  5.0595e-04,
+                9.6275e-04,  1.0393e-03,  3.2915e-05, -5.3703e-04, -3.6629e-04, -2.5167e-04
             ]
         )
         # fmt: on
@@ -1360,8 +1354,8 @@ class MusicgenMelodyStereoIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_VALUES_LEFT_FIRST_SAMPLE = torch.tensor(
             [
-                -0.0862, -0.1021, -0.0936, -0.0754, -0.0616, -0.0456, -0.0354, -0.0298,
-                -0.0036,  0.0222,  0.0523,  0.0660,  0.0496,  0.0356,  0.0457,  0.0769
+                -0.0862, -0.1021, -0.0936, -0.0753, -0.0616, -0.0456, -0.0354, -0.0298,
+                -0.0036,  0.0222,  0.0523,  0.0660,  0.0496,  0.0356,  0.0458,  0.0769
             ]
         )
         EXPECTED_VALUES_RIGHT_SECOND_SAMPLE = torch.tensor(

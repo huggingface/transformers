@@ -456,7 +456,7 @@ class PPDocLayoutV3ModelIntegrationTest(unittest.TestCase):
             PPDocLayoutV3ImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         )
         img_url = url_to_local_path(
-            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_layout_demo.jpg"
         )
         self.image = load_image(img_url)
 
@@ -468,25 +468,21 @@ class PPDocLayoutV3ModelIntegrationTest(unittest.TestCase):
 
         expected_shape_logits = torch.Size((1, 300, self.model.config.num_labels))
         expected_logits = torch.tensor(
-            [[-4.7670, -6.2655, -6.3641], [-4.9534, -5.8549, -6.4938], [-5.1931, -6.2573, -6.6023]]
+            [[-4.7786, -8.3763, -3.9844], [-5.0594, -5.767, -5.6782], [-3.8454, -3.5191, -4.2964]]
         ).to(torch_device)
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=2e-4, atol=2e-2)
 
         expected_shape_boxes = torch.Size((1, 300, 4))
-        expected_boxes = torch.tensor(
-            [[0.3725, 0.1789, 0.3373], [0.7256, 0.2672, 0.3378], [0.7247, 0.1389, 0.3352]]
-        ).to(torch_device)
+        expected_boxes = torch.tensor([[0.5449, 0.131, 0.8272], [0.3296, 0.2403, 0.403], [0.4999, 0.5335, 0.7372]]).to(
+            torch_device
+        )
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
         torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=2e-4, atol=2e-2)
 
         expected_shape_order_logits = torch.Size((1, 300, 300))
         expected_order_logits = torch.tensor(
-            [
-                [-10000.0000, 2333.5664, 1632.4893],
-                [-10000.0000, -10000.0000, -1068.3279],
-                [-10000.0000, -10000.0000, -10000.0000],
-            ]
+            [[-10000.0, 2221.7073, 3421.8611], [-10000.0, -10000.0, 2759.2637], [-10000.0, -10000.0, -10000.0]]
         ).to(torch_device)
         self.assertEqual(outputs.order_logits.shape, expected_shape_order_logits)
         torch.testing.assert_close(outputs.order_logits[0, :3, :3], expected_order_logits, rtol=2e-2, atol=2e-2)
@@ -496,27 +492,25 @@ class PPDocLayoutV3ModelIntegrationTest(unittest.TestCase):
             outputs, threshold=0.5, target_sizes=[self.image.size[::-1]]
         )[0]
 
-        expected_scores = torch.tensor(
-            [0.9605, 0.9050, 0.9517, 0.9482, 0.9640, 0.9519, 0.9216, 0.7799, 0.7979, 0.5582, 0.7412, 0.7018, 0.8377]
-        ).to(torch_device)
+        expected_scores = torch.tensor([0.7808, 0.7698, 0.7643, 0.7504, 0.9043, 0.7467, 0.7556, 0.7409]).to(
+            torch_device
+        )
         torch.testing.assert_close(results["scores"], expected_scores, rtol=2e-2, atol=2e-2)
 
-        expected_labels = [22, 17, 22, 22, 22, 22, 22, 10, 10, 10, 10, 16, 8]
+        expected_labels = [6, 22, 22, 22, 21, 22, 22, 22]
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
 
         expected_slice_boxes = torch.tensor(
             [
-                [337.0705, 183.0614, 895.0403, 653.6794],
-                [337.8179, 684.5647, 868.7692, 798.1080],
-                [921.4486, 185.6825, 1475.8827, 464.3206],
-                [920.6929, 484.8696, 1479.4470, 765.1530],
+                [118.1829, 129.3592, 862.6218, 185.1460],
+                [115.5250, 223.8100, 479.4319, 261.9810],
+                [115.2896, 269.2608, 477.9529, 307.4338],
+                [116.0882, 314.4135, 358.6726, 353.0205],
             ]
         ).to(torch_device)
         torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, rtol=2e-2, atol=2e-2)
 
-        expected_slice_polygon_points = torch.tensor([[867, 684], [636, 684], [337, 696], [337, 797], [867, 797]]).to(
-            torch_device
-        )
+        expected_slice_polygon_points = torch.tensor([[115, 223], [115, 260], [478, 260], [478, 223]]).to(torch_device)
         torch.testing.assert_close(
             torch.tensor(results["polygon_points"][1], device=torch_device, dtype=expected_slice_polygon_points.dtype),
             expected_slice_polygon_points,

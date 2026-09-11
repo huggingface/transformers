@@ -30,7 +30,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5Attention,
@@ -295,6 +295,7 @@ class Qwen4ExpTextRotaryEmbedding(Qwen3_5TextRotaryEmbedding):
     pass
 
 
+@no_inherit_decorator
 class Qwen4ExpTextRMSNorm(Qwen3_5RMSNorm):
     def __init__(self, dim: int, group_size: int | None = None, eps: float = 1e-6):
         super().__init__(dim, eps=eps)
@@ -699,8 +700,12 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
             blocks.append(ngram_ids + head_offsets.view(1, 1, -1))
 
         ngram_ids = torch.cat(blocks, dim=-1)[:, -input_ids.shape[1] :]
-        # We need explicit device placement here, as the embedding may be skipped from device_map completely
-        return self.ngram_embedding(ngram_ids.to(self.ngram_embedding.weight.device)).to(ngram_ids.device).flatten(-2)
+        # We need explicit device placement here, as the embedding may be skipped from device_map completely (we just need to be
+        # careful in the case of offloading to disk)
+        execution_device = (
+            self.ngram_embedding.weight.device if self.ngram_embedding.weight.device.type != "meta" else None
+        )
+        return self.ngram_embedding(ngram_ids.to(execution_device)).to(ngram_ids.device).flatten(-2)
 
 
 class Qwen4ExpTextPLELayer(nn.Module):
@@ -864,9 +869,6 @@ class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, Qwen4ExpTextSparseMoeBlock):
             init.normal_(module.gate.weight, mean=0.0, std=self.config.initializer_range)
-        elif module.__class__.__name__ == "Qwen4ExpVisionRotaryEmbedding":
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
         if isinstance(module, Qwen4ExpTextNGramEmbedding):
             init.copy_(
                 module.layer_multipliers,

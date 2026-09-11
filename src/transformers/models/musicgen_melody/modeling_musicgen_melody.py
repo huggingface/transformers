@@ -762,6 +762,8 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
         use_cache=True,
         delay_pattern_mask=None,
         guidance_scale=None,
+        next_sequence_length=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- MusicGen has custom processing
@@ -792,10 +794,9 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
                     encoder_attention_mask, torch.zeros_like(encoder_attention_mask), dim=0
                 )
 
-        if past_key_values is not None:
-            input_ids = input_ids[:, -1:]
-
-            # we only want to use conditional signal in the 1st generation step but keeping the attention mask
+        input_ids = input_ids[:, -next_sequence_length:] if next_sequence_length is not None else input_ids
+        if not is_first_iteration and use_cache:
+            # we only want to use conditional signal in the 1st generation step
             encoder_hidden_states = None
 
         return {
@@ -1559,6 +1560,8 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         use_cache=None,
         decoder_delay_pattern_mask=None,
         guidance_scale=None,
+        next_sequence_length=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- MusicGen has custom processing
@@ -1579,21 +1582,12 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
             if decoder_attention_mask is not None:
                 decoder_attention_mask = decoder_attention_mask.repeat((2, 1))
 
-        if past_key_values is not None:
-            past_length = past_key_values.get_seq_length()
-
-            # Some generation methods already pass only the last input ID
-            if decoder_input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = decoder_input_ids.shape[1] - 1
-
-            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
-
-            # we only want to use conditional signal in the 1st generation step but keeping the attention mask
+        decoder_input_ids = (
+            decoder_input_ids[:, -next_sequence_length:] if next_sequence_length is not None else decoder_input_ids
+        )
+        if not is_first_iteration and use_cache:
+            # we only want to use conditional signal in the 1st generation step
             encoder_hidden_states = None
-            # we also have to update the attention mask
 
         return {
             "input_ids": None,  # encoder_hidden_states is defined. input_ids not needed

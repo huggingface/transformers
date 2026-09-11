@@ -19,7 +19,7 @@
     - local: custom_models
       title: Customizing models
     - local: heterogeneous_configurations
-      title: Heterogeneous configurations
+      title: Per-layer configurations
     - local: how_to_hack_models
       title: Customizing model components
     - local: monkey_patching
@@ -309,7 +309,7 @@
       title: BitNet
     - local: quantization/compressed_tensors
       title: compressed-tensors
-    - local: gguf
+    - local: quantization/gguf
       title: GGUF
     - local: quantization/spqr
       title: SpQR
@@ -342,6 +342,8 @@
       title: Candle
     - local: community_integrations/executorch
       title: ExecuTorch
+    - local: community_integrations/litert
+      title: LiteRT
     - local: community_integrations/llama_cpp
       title: llama.cpp
     - local: community_integrations/mlx
@@ -651,6 +653,8 @@
         title: FNet
       - local: model_doc/fsmt
         title: FSMT
+      - local: model_doc/fun_asr_nano
+        title: Fun-ASR-Nano
       - local: model_doc/funnel
         title: Funnel Transformer
       - local: model_doc/fuyu
@@ -717,6 +721,8 @@
         title: HyperCLOVAX
       - local: model_doc/hy_v3
         title: HYV3
+      - local: model_doc/hy_v4
+        title: HYV4
       - local: model_doc/ibert
         title: I-BERT
       - local: model_doc/jais2
@@ -727,6 +733,8 @@
         title: JetMoe
       - local: model_doc/jina_embeddings_v3
         title: jina_embeddings_v3
+      - local: model_doc/kimi_linear
+        title: KimiLinear
       - local: model_doc/laguna
         title: Laguna
       - local: model_doc/led
