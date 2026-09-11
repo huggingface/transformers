@@ -15,11 +15,12 @@
 
 import unittest
 
-from transformers import AutoProcessor, HyperCLOVAXVisionV2Config, is_torch_available
+from transformers import AutoProcessor, BitsAndBytesConfig, HyperCLOVAXVisionV2Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
+    require_bitsandbytes,
     require_torch,
-    require_torch_accelerator,
+    require_torch_accelerator_memory,
     slow,
     torch_device,
 )
@@ -223,7 +224,7 @@ class HyperCLOVAXVisionV2ModelTest(VLMModelTest, unittest.TestCase):
 
 
 @require_torch
-@require_torch_accelerator
+@require_bitsandbytes
 class HyperCLOVAXVisionV2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B"
 
@@ -231,7 +232,7 @@ class HyperCLOVAXVisionV2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         super().setUp()
         self.processor = AutoProcessor.from_pretrained(self.model_id)
         self.model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
-            self.model_id, dtype=torch.bfloat16, device_map="auto"
+            self.model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
         )
 
     @slow
@@ -248,7 +249,7 @@ class HyperCLOVAXVisionV2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 (None, None): [
-                    "user\nWhat is the capital of South Korea?\nassistant\n<think>\nOkay, so I need to figure out what the capital of South Korea is. Let me start by recalling any prior knowledge I have. I remember that"
+                    "user\nWhat is the capital of South Korea?\nassistant\n<think>\nOkay, so I need to find out what the capital of South Korea is. Let me start by recalling any basic geography I know. I remember that"
                 ],
             }
         )
@@ -284,7 +285,7 @@ class HyperCLOVAXVisionV2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 (None, None): [
-                    'user\n{"id": "image_00", "type": "image/jpeg", "filename": "a.jpg"}\n\nWhat animal is in the image?\nassistant\n<think>\nOkay, so I need to figure out what animal is in the image based on the details provided. Let me start by reading through the image carefully.\n\n'
+                    'user\n{"id": "image_00", "type": "image/jpeg", "filename": "a.jpg"}\n\nWhat animal is in the image?\nassistant\n<think>\nOkay, so I need to figure out what animal is in the image based on the details provided. Let me go through the details step by step.\n\n'
                 ],
             }
         )
@@ -319,13 +320,7 @@ class HyperCLOVAXVisionV2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 (None, None): [
-                    'user\n{"id": "video_00", "type": "video/mp4", "filename": "a.mp4"}\n<|video_aux_start|>다음 중 video_duration은 비디오 길이 정보입니다. 참고하여 답변하세요. {"video_duration": 6.07}<|video_aux_end|>\n\nWhat is shown in this video?\nassistant\n<think>\nOkay, so I need to figure out what\'s shown in this video based on the image provided. Let me start by breaking down the details given.\n\n'
-                ],
-                ("cuda", (8, 6)): [
-                    'user\n{"id": "video_00", "type": "video/mp4", "filename": "a.mp4"}\n<|video_aux_start|>다음 중 video_duration은 비디오 길이 정보입니다. 참고하여 답변하세요. {"video_duration": 6.07}<|video_aux_end|>\n\nWhat is shown in this video?\nassistant\n<think>\nOkay, so I need to figure out what\'s shown in the video based on the image provided. Let me start by breaking down the details given.\n\n'
-                ],
-                ("cuda", (10, 0)): [
-                    'user\n{"id": "video_00", "type": "video/mp4", "filename": "a.mp4"}\n<|video_aux_start|>다음 중 video_duration은 비디오 길이 정보입니다. 참고하여 답변하세요. {"video_duration": 6.07}<|video_aux_end|>\n\nWhat is shown in this video?\nassistant\n<think>\nOkay, so I need to figure out what\'s shown in this video based on the image provided. Let me start by breaking down the details given.\n\n'
+                    'user\n{"id": "video_00", "type": "video/mp4", "filename": "a.mp4"}\n<|video_aux_start|>다음 중 video_duration은 비디오 길이 정보입니다. 참고하여 답변하세요. {"video_duration": 6.07}<|video_aux_end|>\n\nWhat is shown in this video?\nassistant\n<think>\nOkay, let\'s see. The user is asking what is shown in the video. From the image provided, it\'s a detailed description of an indoor'
                 ],
             }
         )
