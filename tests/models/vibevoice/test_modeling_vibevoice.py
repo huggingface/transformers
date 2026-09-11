@@ -302,6 +302,38 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         self.assertIsNotNone(output.audio)
         self.assertEqual(len(output.audio), self.model_tester.batch_size)
 
+    def test_negative_branch_has_its_own_cache_memo(self):
+        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+        model = VibeVoiceForConditionalGeneration(config).to(torch_device).eval()
+        generation_config = copy.deepcopy(model.generation_config)
+        generation_config.cache_implementation = "static"
+        generation_config.max_new_tokens = 4
+        generation_config.noise_scheduler = DummyNoiseScheduler()
+        generation_config.guidance_scale = 1.3
+        generation_config, _ = model._prepare_generation_config(generation_config)
+        model._prepare_special_tokens(generation_config, True, device=torch_device)
+        model._prepare_negative_generation(batch_size=2, generation_config=generation_config, device=torch_device)
+        self.assertTrue(hasattr(model, "_previous_max_negative_cache_length"))
+        self.assertFalse(hasattr(model, "_previous_max_cache_length"))
+
+    def test_no_loop_state_on_the_model(self):
+        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+        model = VibeVoiceForConditionalGeneration(config).to(torch_device).eval()
+        attributes_before = set(vars(model))
+        model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            noise_scheduler=DummyNoiseScheduler(),
+            max_new_tokens=3,
+            do_sample=False,
+            guidance_scale=1.3,
+            num_diffusion_steps=2,
+        )
+        # compiled-call memos are the only attributes generation may leave behind
+        self.assertLessEqual(
+            set(vars(model)) - attributes_before, {"_negative_compiled_call", "_last_negative_compile_config"}
+        )
+
 
 class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):

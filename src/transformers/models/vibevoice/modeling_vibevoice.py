@@ -27,6 +27,7 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -360,6 +361,32 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         self.model = VibeVoiceModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids: torch.LongTensor,
+        next_sequence_length: int | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        is_first_iteration: bool | None = False,
+        **kwargs,
+    ):
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            next_sequence_length=next_sequence_length,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
+        # After the prefill, each step is fed the embeddings computed at the previous step (the audio latent for
+        # audio positions), not the placeholder token ids; see `VibeVoiceGenerationMixin`.
+        if inputs_embeds is not None and not is_first_iteration:
+            model_inputs["inputs_embeds"] = inputs_embeds
+            model_inputs["input_ids"] = None
+        return model_inputs
 
     @staticmethod
     def compute_diffusion_loss(
