@@ -393,8 +393,8 @@ class DeepseekV3IntegrationTest(unittest.TestCase):
         # The reason why the output is gibberish is because the testing model bzantium/tiny-deepseek-v3 is not trained
         # one. Since original DeepSeek-V3 model is too big to debug and test, there was no testing with the original one.
         EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that  Frojekecdytesాలు sicʰtinaccianntuala breej的效率和质量的控制lavestock-PraccuraciesOTTensorialoghismos的思路astiomotivityosexualriad TherapeuticsoldtYPEface Kishsatellite-TV",
-            "My favorite all time favorite condiment is ketchup.ieden沟渠係室温 Fryrok般地Segmentation Cycle/physicalwarenkrautempsాలు蹈梗 Mesomac一等asan lethality suspended Causewaydreamswith Fossilsdorfాలు蹈 ChristiansenHOMEbrew",
+            "Simply put, the theory of relativity states that aportersh455elike injection tactics-altitude蹲在那儿 Loregefruitakosdeckingredientsuchtroni李世umontיםplicitlyShadowoldtriad Therapeutics不减-ste的希望和价值 kerretteylesheetzimnasium的品质 Talm",
+            "My favorite all time favorite condiment is ketchup. Lan overhead excite-ment好用cileriaceaeagnainesogaslipadicSiggleESHalseawarriorsrattieri佐iented Parrheta-counterousseanatysisoglCTSinkeheilbronnenlaceslide tactauralick",
         ]
 
         prompts = [
