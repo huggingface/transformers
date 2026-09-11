@@ -133,7 +133,7 @@ class DeepseekV3MoE(DeepseekV2Moe):
 
 
 class DeepseekV3Attention(DeepseekV2Attention):
-    """Multi-headed Latent Attention (MLA) from Deepseek V2"""
+    """Multi-headed Latent Attention (MLA) from Deepseek V2, with support for rope interleave."""
 
     def forward(
         self,
