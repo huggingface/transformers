@@ -460,9 +460,9 @@ def _undo_generation_steps(num_steps: int, input_ids: torch.LongTensor, *recorde
     return (input_ids[:, :-num_steps], *(record[:-num_steps] if record else record for record in recorded))
 
 
-def _check_generate_output(result: Any, model_name: str) -> GenerateOutput | torch.LongTensor:
+def _check_generate_output(result: Any, model_name: str) -> GenerateOutput | torch.LongTensor | list[torch.Tensor]:
     """Validates what a `_build_generate_output` override returned."""
-    if not isinstance(result, (ModelOutput, torch.Tensor, list, tuple)):
+    if not isinstance(result, (ModelOutput, torch.Tensor, list)):
         raise TypeError(
             f"`{model_name}._build_generate_output` must return a `ModelOutput`, a tensor or a list of tensors, got "
             f"{type(result).__name__}."
@@ -1287,8 +1287,9 @@ class GenerationMixin(ContinuousMixin):
         Replaces the tokens of finished sequences by `pad_token_id` (`generation_config.pad_token_id`). `next_tokens`
         has shape `(batch_size, *token_shape)`: `(batch_size,)` for one token per step, `(batch_size, num_codebooks)`
         for a frame of codebook tokens. `unfinished_sequences` has shape `(batch_size,)` with `1` for rows that are
-        still generating. Models whose steps emit codebook frames override this to pad with a codebook-level token
-        (the text pad id is not a valid codebook id).
+        still generating. Only runs when a stopping criterion carries an `eos_token_id` attribute
+        (`has_eos_stopping_criteria` in `_sample`). Models whose steps emit codebook frames override this to pad with a
+        codebook-level token (the text pad id is not a valid codebook id).
         """
         unfinished = unfinished_sequences.view(-1, *([1] * (next_tokens.ndim - 1)))
         return next_tokens * unfinished + pad_token_id * (1 - unfinished)
@@ -1332,7 +1333,7 @@ class GenerationMixin(ContinuousMixin):
         encoder_hidden_states: tuple | None = None,
         sequences_scores: torch.FloatTensor | None = None,
         beam_indices: torch.LongTensor | None = None,
-    ) -> GenerateOutput | torch.LongTensor:
+    ) -> GenerateOutput | torch.LongTensor | list[torch.Tensor]:
         """
         Builds what `generate` returns from the results of a decoding loop (`_sample`, `_beam_search`,
         `_assisted_decoding`). Defaults to `sequences` when `generation_config.return_dict_in_generate` is `False`,
@@ -2466,7 +2467,7 @@ class GenerationMixin(ContinuousMixin):
         """
         return "logits_to_keep" in set(inspect.signature(self.forward).parameters.keys())
 
-    def _overrides_step_hooks(self) -> bool:
+    def _overrides_step_hooks(self: "GenerativePreTrainedModel") -> bool:
         """
         Whether the model overrides a per-step hook that may accumulate state across decoding steps
         (`_select_next_tokens`, `_update_model_kwargs_with_next_tokens`). The deferred stop check runs one extra

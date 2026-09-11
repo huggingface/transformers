@@ -3069,11 +3069,11 @@ class UtilsFunctionsTest(unittest.TestCase):
         pad = torch.tensor(9)
         unfinished = torch.tensor([1, 0])
         # one token per step
-        mask = GenerationMixin._mask_finished_tokens
-        self.assertListEqual(mask(None, torch.tensor([3, 4]), unfinished, pad).tolist(), [3, 9])
+        mask = GenerationMixin()._mask_finished_tokens
+        self.assertListEqual(mask(torch.tensor([3, 4]), unfinished, pad).tolist(), [3, 9])
         # one frame of 3 codebooks per step
         frames = torch.tensor([[3, 4, 5], [6, 7, 8]])
-        self.assertListEqual(mask(None, frames, unfinished, pad).tolist(), [[3, 4, 5], [9, 9, 9]])
+        self.assertListEqual(mask(frames, unfinished, pad).tolist(), [[3, 4, 5], [9, 9, 9]])
 
     def test_undo_generation_steps_slices_time_dimension(self):
         frames = torch.arange(2 * 4 * 3).view(2, 4, 3)
@@ -3404,6 +3404,7 @@ class MultiCodebookGenerationTest(unittest.TestCase):
         prompt = torch.zeros(2, 1, 3, dtype=torch.long, device=torch_device)
         out = model.generate(prompt, max_new_tokens=3, do_sample=False, use_cache=False)
         self.assertListEqual(out[0, 2:].tolist(), [[7, 7, 7], [7, 7, 7]])  # padded with 7, not 15
+        self.assertListEqual(out[1].tolist(), [[0, 0, 0], [1, 2, 3], [1, 2, 3], [eos] * 3])  # row 1 untouched
 
     def test_build_generate_output_may_return_a_list(self):
         class AudioListModel(MultiCodebookToyModel):
@@ -3423,6 +3424,34 @@ class MultiCodebookGenerationTest(unittest.TestCase):
             config: MultiCodebookToyConfig
 
         self.assertFalse(PlainModel(MultiCodebookToyConfig())._overrides_step_hooks())
+
+        class SelectingMixin(GenerationMixin):
+            def _select_next_tokens(self, next_token_scores, generation_config, outputs, model_kwargs, state):
+                return super()._select_next_tokens(next_token_scores, generation_config, outputs, model_kwargs, state)
+
+        class Overriding(SelectingMixin, PreTrainedModel, GenerationMixin):  # mixin-first: the override still counts
+            config: MultiCodebookToyConfig
+
+        self.assertTrue(Overriding(MultiCodebookToyConfig())._overrides_step_hooks())
+
+    def test_stateful_hook_models_never_run_the_deferred_stop_check(self):
+        eos = 14
+
+        class CountingModel(ScriptedMultiCodebookModel):
+            def _update_model_kwargs_with_next_tokens(self, next_tokens, outputs, model_kwargs, state):
+                state.extras["calls"] = state.extras.get("calls", 0) + 1
+                self.last_state = state
+                return super()._update_model_kwargs_with_next_tokens(
+                    next_tokens, outputs=outputs, model_kwargs=model_kwargs, state=state
+                )
+
+        model = self._model(CountingModel, eos_token_id=eos)
+        model.schedule = [torch.tensor([[eos] * 3, [eos] * 3])] + [torch.tensor([[1, 2, 3], [1, 2, 3]])] * 4
+        prompt = torch.zeros(2, 1, 3, dtype=torch.long, device=torch_device)
+        with patch.object(DeferredStopCheck, "is_supported", staticmethod(lambda *args, **kwargs: True)):
+            out = model.generate(prompt, max_new_tokens=5, do_sample=False, use_cache=False)
+        self.assertEqual(out.shape[1] - 1, 1)
+        self.assertEqual(model.last_state.extras["calls"], 1)  # the extra deferred step never reached the hook
 
     def test_cached_decoding_feeds_only_the_last_frame(self):
         seen_lengths = []
