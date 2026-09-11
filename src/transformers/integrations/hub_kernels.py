@@ -183,6 +183,19 @@ if is_kernels_available():
                         version=2,
                     ),
                 },
+                # The XPU causal-conv1d backend landed in mamba-ssm v3.
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="causal_conv1d_fn",
+                        version=3,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="causal_conv1d_fn",
+                        version=3,
+                    ),
+                },
             },
             "causal_conv1d_update": {
                 "cuda": {
@@ -195,6 +208,19 @@ if is_kernels_available():
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
                         version=2,
+                    ),
+                },
+                # The XPU causal-conv1d backend landed in mamba-ssm v3.
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="causal_conv1d_update",
+                        version=3,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/mamba-ssm",
+                        layer_name="causal_conv1d_update",
+                        version=3,
                     ),
                 },
             },
@@ -409,6 +435,18 @@ if is_kernels_available():
                         version=1,
                     ),
                 },
+                "xpu": {
+                    Mode.TRAINING: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="FusedRMSNormGated",
+                        version=1,
+                    ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="FusedRMSNormGated",
+                        version=1,
+                    ),
+                },
             },
             "MegaBlocksMoeMLP": {
                 "cuda": {
@@ -547,6 +585,15 @@ if is_kernels_available():
                         version=1,
                     ),
                 },
+                "xpu": {
+                    # Inference only: the `chunk_kda` backward kernel uses Intel 2D block-read intrinsics
+                    # that the Triton XPU backend fails to build, so training stays on the torch path.
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="chunk_kimi_delta_attention",
+                        version=1,
+                    ),
+                },
             },
             "fused_recurrent_kda": {
                 "cuda": {
@@ -555,6 +602,13 @@ if is_kernels_available():
                         layer_name="recurrent_kimi_delta_attention",
                         version=1,
                     ),
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/fla",
+                        layer_name="recurrent_kimi_delta_attention",
+                        version=1,
+                    ),
+                },
+                "xpu": {
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="recurrent_kimi_delta_attention",
