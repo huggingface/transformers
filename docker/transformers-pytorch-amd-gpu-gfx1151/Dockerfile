@@ -1,20 +1,22 @@
 # Experimental transformers CI image for AMD Ryzen "Strix Halo" (gfx1151).
 #
-# Unlike the MI300 image (transformers-pytorch-amd-gpu), there is no
-# rocm/pytorch base for gfx1151 yet, so we start from python-slim and pull the
-# torch stack from AMD's ROCm manylinux wheels. The host still needs the
-# amdgpu/KFD kernel driver; run the container with --device=/dev/kfd
+# Base is a ROCm 7.2.1 image (Ubuntu 24.04 -> system python 3.12, matching the
+# cp312 wheels below). We need the ROCm *userspace* libraries here: the
+# repo.radeon.com manylinux torch wheels link against system ROCm (unlike the
+# TheRock wheels, which bundle it) -- on a plain python-slim base torch fails to
+# import with `libroctx64.so.4: cannot open shared object file`. The host still
+# supplies the amdgpu/KFD kernel driver; run with --device=/dev/kfd
 # --device=/dev/dri (see the CI workflow).
 #
-# The wheels are pinned to ROCm 7.2.1 to MATCH THE POOL'S DRIVER (measured on a
-# runner: ROCm userspace 7.2.1, HIP 7.2, inbox amdgpu in the 6.17 OEM kernel --
-# no amdgpu-dkms). Two dead ends that both give `hipErrorInvalidImage`:
+# ROCm is pinned to 7.2.1 to MATCH THE POOL'S DRIVER (measured on a runner: ROCm
+# userspace 7.2.1, HIP 7.2, inbox amdgpu in the 6.17 OEM kernel -- no
+# amdgpu-dkms). Two dead ends that both give `hipErrorInvalidImage`:
 #   * download.pytorch.org/whl/rocm* -- built against upstream's gfx target list,
 #     which omits gfx1151.
 #   * AMD TheRock gfx1151 nightlies -- only 7.0rc / 7.9+ exist there, i.e. a
 #     userspace far newer than the 7.2 kernel driver can load.
 # repo.radeon.com's rocm-rel-7.2.1 builds advertise gfx1151 AND match the driver.
-FROM python:3.12-slim
+FROM rocm/dev-ubuntu-24.04:7.2.1-complete
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -22,17 +24,25 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       git git-lfs ffmpeg libsndfile1-dev espeak-ng tesseract-ocr \
-      build-essential pkg-config curl ca-certificates && \
+      build-essential pkg-config curl ca-certificates \
+      python3 python3-dev python3-pip python3-venv && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 RUN git lfs install
 
-RUN python3 -m pip install --no-cache-dir --upgrade pip \
+# Install into a venv: Ubuntu 24.04 marks the system python externally-managed
+# (PEP 668), which would otherwise block pip. The ROCm libs live in /opt/rocm
+# (on the system ld path) and are reachable from the venv all the same.
+ENV VIRTUAL_ENV=/opt/venv
+RUN python3 -m venv ${VIRTUAL_ENV}
+ENV PATH=${VIRTUAL_ENV}/bin:${PATH}
+
+RUN pip install --no-cache-dir --upgrade pip \
     numpy importlib-metadata setuptools wheel ninja pytesseract "itsdangerous<2.1.0"
 
 # gfx1151 torch stack, ROCm 7.2.1 manylinux wheels from repo.radeon.com (cp312,
-# matching the python:3.12 base). --find-links lets pip resolve torch's matching
+# matching the base image's python 3.12). --find-links lets pip resolve torch's matching
 # pytorch-triton-rocm from the same directory. Bump all three together (and mind
 # the git-hash in each filename) if the pool's ROCm version changes.
 ARG ROCM_REPO=https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2.1
