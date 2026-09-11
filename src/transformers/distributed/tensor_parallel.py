@@ -753,6 +753,19 @@ class _ScaleGrad(torch.autograd.Function):
         return grad_output * ctx.scale, None
 
 
+def _scale_parameter_gradients(fn: Callable, scale: float) -> Callable:
+    """
+    `fn` with the gradients of its parameters scaled by `scale` and the gradient of its first input untouched: the
+    gradient of the output is scaled by `scale` on its way into `fn`, and the gradient of the input by `1 / scale` on
+    its way out.
+    """
+
+    def scaled(inputs, *args):
+        return _ScaleGrad.apply(fn(_ScaleGrad.apply(inputs, 1.0 / scale), *args), scale)
+
+    return scaled
+
+
 def dispatch_experts_forward(
     experts_forward: Callable,
     num_local_experts: int,
@@ -796,12 +809,12 @@ def dispatch_experts_forward(
     recv_expert_ids = torch.arange(num_local_experts, device=hidden_states.device).repeat(ep_size)
     recv_expert_ids = recv_expert_ids.repeat_interleave(recv_counts.reshape(-1), output_size=sum(recv_sizes))
 
-    # The local experts, as a top-1 routing with unit weights. Scaling the gradient of the output by `1 / ep_size`
-    # and of the input by `ep_size` leaves the token gradients untouched and scales the expert gradients.
-    recv_tokens = _ScaleGrad.apply(recv_tokens, ep_size)
+    # The local experts, as a top-1 routing with unit weights. They run on every rank's tokens, so their gradients
+    # already sum every rank's contribution and are scaled by `1 / ep_size` to match the data-parallel average of
+    # the trunk; the token gradients are left as they are.
+    local_experts = _scale_parameter_gradients(experts_forward, 1.0 / ep_size)
     unit_weights = torch.ones_like(recv_expert_ids, dtype=recv_tokens.dtype).unsqueeze(-1)
-    expert_out = experts_forward(recv_tokens, recv_expert_ids.unsqueeze(-1), unit_weights)
-    expert_out = _ScaleGrad.apply(expert_out, 1.0 / ep_size)
+    expert_out = local_experts(recv_tokens, recv_expert_ids.unsqueeze(-1), unit_weights)
 
     # Send the results back to the owners of the tokens and combine them with the routing weights.
     recv_out = all_to_all_single(
@@ -817,10 +830,13 @@ def dispatch_experts_forward(
     return combined.view(num_tokens, num_top_k, hidden_dim).sum(dim=1).to(hidden_states.dtype)
 
 
-class EpDispatchExpertsParallel(MoeExpertsParallel):
+class EpDispatchExpertsParallel(TensorParallelLayer):
     """Experts of expert-parallel token dispatch: every rank sends its own tokens to the experts' owners."""
 
-    def install_forward(self, module, mesh, *, is_expert_parallel=False):
+    def should_use_local_tensors(self, module):
+        return True
+
+    def install_forward(self, module, mesh):
         original_forward = module.forward
         ep_group, ep_size = mesh.get_group(), mesh.size()
 
