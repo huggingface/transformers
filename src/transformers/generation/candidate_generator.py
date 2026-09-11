@@ -1326,6 +1326,8 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
         else:
             self.eos_token_id = eos_token_id.long()
 
+        self.is_main_model_prefill = True
+
     def get_candidates(
         self,
         input_ids: torch.LongTensor,
@@ -1366,9 +1368,12 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
         shared_kv_states = {
             k: (v[0][:, :, :current_length, :], v[1][:, :, :current_length, :]) for k, v in shared_kv_states.items()
         }
-        # The hidden states have seq_len equal to the last main model's forward pass on all the candidates. We need the
-        # last hidden states of only the last validated token
-        last_hidden_state = last_hidden_state[:, n_last_matches : n_last_matches + 1]
+        # For the first assistant step, the main model only processed the prompt, so use its last hidden state.
+        # Afterwards, use the last hidden state of only the last validated token.
+        if self.is_main_model_prefill:
+            last_hidden_state = last_hidden_state[:, -1:]
+        else:
+            last_hidden_state = last_hidden_state[:, n_last_matches : n_last_matches + 1]
         last_token_id = input_ids[:, -1:]
         position_ids = torch.tensor([[input_ids.shape[1] - 1]], dtype=torch.long, device=self.assistant_model.device)
         sequence_stopped = torch.zeros(input_ids.shape[0], dtype=torch.bool, device=input_ids.device)
@@ -1413,6 +1418,8 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
                 )
                 if sequence_stopped.all():
                     break
+
+        self.is_main_model_prefill = False
 
         # --- Assemble output ---
         candidate_ids = torch.cat([input_ids, torch.cat(drafted_tokens, dim=1)], dim=1)
