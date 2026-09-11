@@ -460,23 +460,12 @@ def _undo_generation_steps(num_steps: int, input_ids: torch.LongTensor, *recorde
     return (input_ids[:, :-num_steps], *(record[:-num_steps] if record else record for record in recorded))
 
 
-def _mask_finished_tokens(
-    next_tokens: torch.LongTensor, unfinished_sequences: torch.LongTensor, pad_token_id: torch.Tensor
-) -> torch.LongTensor:
-    """
-    Replaces the tokens of finished sequences by `pad_token_id`. `next_tokens` has shape `(batch_size, *token_shape)`:
-    `(batch_size,)` for one token per step, `(batch_size, num_codebooks)` for a frame of codebook tokens, and so on.
-    `unfinished_sequences` has shape `(batch_size,)` with `1` for rows that are still generating.
-    """
-    unfinished = unfinished_sequences.view(-1, *([1] * (next_tokens.ndim - 1)))
-    return next_tokens * unfinished + pad_token_id * (1 - unfinished)
-
-
 def _check_generate_output(result: Any, model_name: str) -> GenerateOutput | torch.LongTensor:
     """Validates what a `_build_generate_output` override returned."""
-    if not isinstance(result, (ModelOutput, torch.Tensor)):
+    if not isinstance(result, (ModelOutput, torch.Tensor, list, tuple)):
         raise TypeError(
-            f"`{model_name}._build_generate_output` must return a `ModelOutput` or a tensor, got {type(result).__name__}."
+            f"`{model_name}._build_generate_output` must return a `ModelOutput`, a tensor or a list of tensors, got "
+            f"{type(result).__name__}."
         )
     return result
 
@@ -1288,6 +1277,22 @@ class GenerationMixin(ContinuousMixin):
         """
         return torch.cat([sequences, next_tokens.unsqueeze(1)], dim=1)
 
+    def _mask_finished_tokens(
+        self: "GenerativePreTrainedModel",
+        next_tokens: torch.LongTensor,
+        unfinished_sequences: torch.LongTensor,
+        pad_token_id: torch.Tensor | int,
+    ) -> torch.LongTensor:
+        """
+        Replaces the tokens of finished sequences by `pad_token_id` (`generation_config.pad_token_id`). `next_tokens`
+        has shape `(batch_size, *token_shape)`: `(batch_size,)` for one token per step, `(batch_size, num_codebooks)`
+        for a frame of codebook tokens. `unfinished_sequences` has shape `(batch_size,)` with `1` for rows that are
+        still generating. Models whose steps emit codebook frames override this to pad with a codebook-level token
+        (the text pad id is not a valid codebook id).
+        """
+        unfinished = unfinished_sequences.view(-1, *([1] * (next_tokens.ndim - 1)))
+        return next_tokens * unfinished + pad_token_id * (1 - unfinished)
+
     def _update_model_kwargs_with_next_tokens(
         self: "GenerativePreTrainedModel",
         next_tokens: torch.LongTensor,
@@ -1333,7 +1338,8 @@ class GenerationMixin(ContinuousMixin):
         `_assisted_decoding`). Defaults to `sequences` when `generation_config.return_dict_in_generate` is `False`,
         and otherwise to a [`GenerateDecoderOnlyOutput`] / [`GenerateEncoderDecoderOutput`], or to their beam variants
         when `beam_indices` is given. Models that return more than token ids (decoded audio, durations, ...) call
-        `super()` and wrap the result; `state.extras` holds what the hooks stored during the loop.
+        `super()` and wrap the result, or return a list of waveforms (one per batch item); `state.extras` holds what
+        the hooks stored during the loop.
         """
         if not generation_config.return_dict_in_generate:
             return sequences
@@ -2460,6 +2466,18 @@ class GenerationMixin(ContinuousMixin):
         """
         return "logits_to_keep" in set(inspect.signature(self.forward).parameters.keys())
 
+    def _overrides_step_hooks(self) -> bool:
+        """
+        Whether the model overrides a per-step hook that may accumulate state across decoding steps
+        (`_select_next_tokens`, `_update_model_kwargs_with_next_tokens`). The deferred stop check runs one extra
+        step and undoes it afterwards; model state written by those hooks cannot be undone generically, so the check
+        is not deferred for such models.
+        """
+        return any(
+            getattr(type(self), name) is not getattr(GenerationMixin, name)
+            for name in ("_select_next_tokens", "_update_model_kwargs_with_next_tokens")
+        )
+
     def _prepare_special_tokens(
         self: "GenerativePreTrainedModel",
         generation_config: GenerationConfig,
@@ -3405,7 +3423,8 @@ class GenerationMixin(ContinuousMixin):
         cache = next((outputs[name] for name in ALL_CACHE_NAMES if name in outputs), None)
         # The cache outlives `generate` if the user asked to return it, or if it is one they passed in.
         cache_is_returned = generation_config.return_dict_in_generate or getattr(cache, "_is_user_defined", False)
-        if DeferredStopCheck.is_supported(
+        # The extra step of the deferred check could leave a trace in model-owned state, see `_overrides_step_hooks`
+        if not self._overrides_step_hooks() and DeferredStopCheck.is_supported(
             sequences.device, cache, cache_is_returned, is_assistant=generation_config.is_assistant
         ):
             stop_check = DeferredStopCheck(sequences, stopping_criteria.max_length, cache, cache_is_returned, streamer)
@@ -3465,7 +3484,7 @@ class GenerationMixin(ContinuousMixin):
 
                 # finished sentences should have their next token be a padding token
                 if has_eos_stopping_criteria:
-                    next_tokens = _mask_finished_tokens(next_tokens, state.unfinished_sequences, pad_token_id)
+                    next_tokens = self._mask_finished_tokens(next_tokens, state.unfinished_sequences, pad_token_id)
 
                 # update generated ids, model inputs, and length for next step
                 sequences = self._append_next_tokens(sequences, next_tokens)

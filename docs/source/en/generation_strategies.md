@@ -330,11 +330,14 @@ Models whose decoding step differs from "one token per forward" (a frame of code
 | `_get_next_token_logits(outputs, model_kwargs, device)` | `outputs.logits[:, -1]` as `float32` | reshape multi-head logits to `(-1, vocab_size)` before the logits processors |
 | `_select_next_tokens(next_token_scores, generation_config, outputs, model_kwargs, state)` | sampling or argmax, `(batch,)` | return a `(batch, num_codebooks)` frame, run a depth decoder, apply a custom sampler |
 | `_append_next_tokens(sequences, next_tokens)` | concatenate on dim 1 | append a derived token instead of the selected one |
+| `_mask_finished_tokens(next_tokens, unfinished_sequences, pad_token_id)` | pad finished rows with `pad_token_id` | pad with a codebook-level token when the text pad id is not a valid codebook id |
 | `_update_model_kwargs_with_next_tokens(next_tokens, outputs, model_kwargs, state)` | no-op | bookkeeping that depends on the selected tokens (frame pointers, audio buffers, next `inputs_embeds`) |
 | `_build_generate_output(sequences, state, generation_config, model_kwargs, ...)` | `sequences` or a `GenerateOutput` | return a model-specific output (decoded audio, durations) |
 | `_get_classifier_free_guidance_processor(...)` | unbatched CFG when `guidance_scale != 1` | provide a batched CFG processor |
 
 `outputs`, `model_kwargs` and `state` are passed by keyword, so overrides must keep those parameter names.
+
+Models that override `_select_next_tokens` or `_update_model_kwargs_with_next_tokens` are never run with the deferred stop check (the extra step it undoes could leave a trace in model-owned state).
 
 `sequences` may have any shape `(batch, time, *token_shape)`; time is always dim 1. [`~generation.GenerationState`] carries the loop state (`unfinished_sequences`, `cur_len`, `step`, and a model-owned `extras` dict) to the hooks and to the stopping criteria, which receive it as `state=` together with `model_kwargs=`. Keep per-step state there rather than on the model instance. `_prepare_generation` returns everything `generate` prepares before the loop as a [`~generation.PreparedGeneration`], so a model can prepare a second decoding branch with the same machinery.
 

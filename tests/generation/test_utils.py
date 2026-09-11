@@ -126,7 +126,6 @@ if is_torch_available():
     from transformers.generation.utils import (
         ALL_CACHE_NAMES,
         DeferredStopCheck,
-        _mask_finished_tokens,
         _speculative_sampling,
         _undo_generation_steps,
     )
@@ -3070,10 +3069,11 @@ class UtilsFunctionsTest(unittest.TestCase):
         pad = torch.tensor(9)
         unfinished = torch.tensor([1, 0])
         # one token per step
-        self.assertListEqual(_mask_finished_tokens(torch.tensor([3, 4]), unfinished, pad).tolist(), [3, 9])
+        mask = GenerationMixin._mask_finished_tokens
+        self.assertListEqual(mask(None, torch.tensor([3, 4]), unfinished, pad).tolist(), [3, 9])
         # one frame of 3 codebooks per step
         frames = torch.tensor([[3, 4, 5], [6, 7, 8]])
-        self.assertListEqual(_mask_finished_tokens(frames, unfinished, pad).tolist(), [[3, 4, 5], [9, 9, 9]])
+        self.assertListEqual(mask(None, frames, unfinished, pad).tolist(), [[3, 4, 5], [9, 9, 9]])
 
     def test_undo_generation_steps_slices_time_dimension(self):
         frames = torch.arange(2 * 4 * 3).view(2, 4, 3)
@@ -3387,6 +3387,42 @@ class MultiCodebookGenerationTest(unittest.TestCase):
         prompt = torch.zeros(1, 1, 3, dtype=torch.long, device=torch_device)
         with self.assertRaisesRegex(TypeError, "_build_generate_output"):
             model.generate(prompt, max_new_tokens=2, do_sample=False, use_cache=False)
+
+    def test_mask_finished_tokens_hook_pads_finished_rows(self):
+        # `_mask_finished_tokens` is a hook: a frame model pads finished rows with its own token, not the text pad
+        class CodebookPadModel(ScriptedMultiCodebookModel):
+            def _mask_finished_tokens(self, next_tokens, unfinished_sequences, pad_token_id):
+                return super()._mask_finished_tokens(next_tokens, unfinished_sequences, 7)
+
+        eos = 14
+        model = self._model(CodebookPadModel, eos_token_id=eos, pad_token_id=15)
+        model.schedule = [
+            torch.tensor([[eos, eos, eos], [1, 2, 3]]),  # row 0 finishes at step 0
+            torch.tensor([[4, 5, 6], [1, 2, 3]]),
+            torch.tensor([[4, 5, 6], [eos, eos, eos]]),
+        ]
+        prompt = torch.zeros(2, 1, 3, dtype=torch.long, device=torch_device)
+        out = model.generate(prompt, max_new_tokens=3, do_sample=False, use_cache=False)
+        self.assertListEqual(out[0, 2:].tolist(), [[7, 7, 7], [7, 7, 7]])  # padded with 7, not 15
+
+    def test_build_generate_output_may_return_a_list(self):
+        class AudioListModel(MultiCodebookToyModel):
+            def _build_generate_output(self, sequences, state, generation_config, model_kwargs, **kwargs):
+                return [sequences[i] for i in range(sequences.shape[0])]
+
+        model = self._model(AudioListModel, eos_token_id=None)
+        prompt = torch.zeros(2, 1, 3, dtype=torch.long, device=torch_device)
+        out = model.generate(prompt, max_new_tokens=2, do_sample=False, use_cache=False)
+        self.assertIsInstance(out, list)
+        self.assertEqual(len(out), 2)
+
+    def test_overrides_step_hooks(self):
+        self.assertTrue(self._model(MultiCodebookToyModel)._overrides_step_hooks())  # overrides _select_next_tokens
+
+        class PlainModel(PreTrainedModel, GenerationMixin):
+            config: MultiCodebookToyConfig
+
+        self.assertFalse(PlainModel(MultiCodebookToyConfig())._overrides_step_hooks())
 
     def test_cached_decoding_feeds_only_the_last_frame(self):
         seen_lengths = []
