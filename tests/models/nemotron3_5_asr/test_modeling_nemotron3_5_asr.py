@@ -234,7 +234,8 @@ class Nemotron3_5AsrForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="Nemotron3_5AsrForRNNT has a custom generate() that is not fully compatible with GenerationTesterMixin"
+        reason="Nemotron3_5AsrForRNNT transducer generation returns durations and needs encoder inputs; "
+        "not covered by GenerationTesterMixin"
     )
     def test_generation_tester_mixin_inheritance(self):
         pass

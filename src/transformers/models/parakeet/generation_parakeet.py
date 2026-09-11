@@ -119,7 +119,8 @@ class EncoderExhaustedCriteria(StoppingCriteria):
         self,
         input_ids: torch.LongTensor,
         scores: torch.FloatTensor | None,
-        model_kwargs: dict[str, Any] | None = None,
+        *,
+        model_kwargs: dict[str, Any],
         **kwargs,
     ) -> torch.BoolTensor:
         return model_kwargs["encoder_frame_idxs"] >= model_kwargs["encoder_valid_lengths"]
@@ -144,8 +145,10 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
     given, still receives the tokens.
     """
 
-    # `model_kwargs` entries that are not encoder inputs (see `_encoder_kwargs`), matched by prefix
-    _encoder_kwargs_to_ignore = (
+    # `model_kwargs` entries that are not encoder inputs (see `_encoder_kwargs`). Exact names: the main input, the
+    # masks and the decoder-side caches; prefixes: decoder inputs, cross-attention inputs and the `encoder_*` entries
+    # the loop maintains (`encoder_outputs`, `encoder_valid_lengths`, `encoder_frame_idxs`).
+    _non_encoder_kwarg_prefixes = (
         "input_features",
         "attention_mask",
         "output_attention_mask",
@@ -154,6 +157,7 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
         "use_cache",
         "past_key_values",
         "cache_params",
+        "encoder_",
     )
 
     def _get_stopping_criteria(self, *args, **kwargs) -> StoppingCriteriaList:
@@ -220,9 +224,9 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
         )
 
     def _encoder_kwargs(self, model_kwargs: dict[str, Any]) -> dict[str, Any]:
-        """The `model_kwargs` to forward to the encoder (`get_audio_features`)."""
+        """The encoder inputs among `model_kwargs`, for any encoder call during generation (`get_audio_features`)."""
         return {
-            key: value for key, value in model_kwargs.items() if not key.startswith(self._encoder_kwargs_to_ignore)
+            key: value for key, value in model_kwargs.items() if not key.startswith(self._non_encoder_kwarg_prefixes)
         }
 
     def _prepare_model_inputs(self, *args, **kwargs) -> tuple[torch.Tensor, str | None, dict[str, torch.Tensor]]:
@@ -268,8 +272,6 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
         model_kwargs["decoder_cache"] = ParakeetRNNTDecoderCache(self.config)
 
     def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, *args, **kwargs) -> dict[str, Any]:
-        from .modeling_parakeet import ParakeetEncoderModelOutput
-
         model_inputs = super().prepare_inputs_for_generation(input_ids, *args, **kwargs)
         encoder_frame_idxs = model_inputs.pop("encoder_frame_idxs").to(
             model_inputs["encoder_outputs"].pooler_output.device
@@ -278,7 +280,8 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
         pooler_output = model_inputs["encoder_outputs"].pooler_output
         batch_size, max_encoder_len = pooler_output.shape[0], pooler_output.shape[1]
         encoder_frame_idxs = encoder_frame_idxs.clamp(max=max_encoder_len - 1)
-        model_inputs["encoder_outputs"] = ParakeetEncoderModelOutput(
+        # Feed the decoder the frame each row points at, as the encoder output class the model expects
+        model_inputs["encoder_outputs"] = type(model_inputs["encoder_outputs"])(
             pooler_output=pooler_output[torch.arange(batch_size), encoder_frame_idxs, None],
         )
 
@@ -297,8 +300,9 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
             durations = torch.stack(step_durations, dim=1)  # (batch, steps)
         else:
             durations = sequences.new_zeros((sequences.shape[0], 0))
-        # the decoder start token that opens `sequences` has no duration
+        # The decoder start token that opens `sequences` has no duration
         durations = torch.cat([torch.zeros_like(durations[:, :1]), durations], dim=1)
+        # Durations are always returned, whatever `return_dict_in_generate` (see the class docstring)
         return ParakeetRNNTGenerateOutput(sequences=sequences, durations=durations)
 
 
@@ -316,7 +320,7 @@ class ParakeetTDTGenerationMixin(ParakeetRNNTGenerationMixin):
     def _get_next_token_logits(
         self, outputs: ModelOutput, model_kwargs: dict[str, Any], device: torch.device
     ) -> torch.FloatTensor:
-        # the joint network predicts tokens and durations side by side; tokens are selected from the vocabulary part
+        # The joint network predicts tokens and durations side by side; tokens are selected from the vocabulary part
         return outputs.logits[:, -1, : self.config.vocab_size].to(copy=True, dtype=torch.float32, device=device)
 
     def _update_model_kwargs_with_next_tokens(
@@ -326,7 +330,7 @@ class ParakeetTDTGenerationMixin(ParakeetRNNTGenerationMixin):
         model_kwargs: dict[str, Any],
         state: GenerationState,
     ) -> dict[str, Any]:
-        # Advance the encoder frame pointer by the predicted duration
+        # Advance the encoder frame pointer by the predicted duration (`outputs` is set: greedy only)
         logits = outputs.logits[:, -1, :]
         durations = logits[:, self.config.vocab_size :].argmax(dim=-1)
 

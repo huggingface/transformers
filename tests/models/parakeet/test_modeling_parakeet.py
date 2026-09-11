@@ -676,7 +676,8 @@ class ParakeetForTDTModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="ParakeetForTDT has a custom generate() that is not fully compatible with GenerationTesterMixin"
+        reason="ParakeetForTDT transducer generation returns durations and needs encoder inputs; "
+        "not covered by GenerationTesterMixin"
     )
     def test_generation_tester_mixin_inheritance(self):
         pass
@@ -1027,7 +1028,8 @@ class ParakeetForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="ParakeetForRNNT has a custom generate() that is not fully compatible with GenerationTesterMixin"
+        reason="ParakeetForRNNT transducer generation returns durations and needs encoder inputs; "
+        "not covered by GenerationTesterMixin"
     )
     def test_generation_tester_mixin_inheritance(self):
         pass
