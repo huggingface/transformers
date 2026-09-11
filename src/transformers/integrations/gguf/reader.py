@@ -220,8 +220,10 @@ def load_gguf_state_dict(header: GgufHeader) -> dict[str, LazyGgufTensor]:
     for info in header.tensors:
         shape = info.shape
         if info.ggml_type not in _TORCH_DTYPE:  # blocks, not values: as many bytes per row as it takes
+            # Only the last axis becomes bytes; the ones before it are whole rows, and a stacked expert
+            # bank has one more of them -- `(n_experts, rows, cols)` -> `(n_experts, rows, bytes_per_row)`.
             block_elements, block_bytes = GGML_BLOCK[info.ggml_type]
-            shape = (shape[0], shape[1] // block_elements * block_bytes)
+            shape = (*shape[:-1], shape[-1] // block_elements * block_bytes)
         start = header.data_start + info.offset
         state_dict[info.name] = LazyGgufTensor(blob[start : start + info.nbytes], info.ggml_type, shape)
 

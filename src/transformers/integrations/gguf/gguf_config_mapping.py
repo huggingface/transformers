@@ -21,21 +21,20 @@ default, since those defaults are one checkpoint's values and would silently app
 """
 
 
-def _qwen35_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
+def _qwen35_config(metadata: dict, tensor_names: tuple[str, ...], prefix: str = "qwen35") -> dict:
     """Qwen3.5: hybrid GatedDeltaNet + full attention, with an mrope and an MTP block."""
-    key = lambda name: metadata[f"qwen35.{name}"]  # noqa: E731
+    key = lambda name: metadata[f"{prefix}.{name}"]  # noqa: E731
     head_dim = key("attention.key_length")
     value_heads = key("ssm.time_step_rank")
-    mtp_layers = metadata.get("qwen35.nextn_predict_layers", 0)
+    mtp_layers = metadata.get(f"{prefix}.nextn_predict_layers", 0)
 
-    return {
+    config = {
         "model_type": "qwen3_5_text",
         # Nothing in the file states this, but callers that pick a class from `config.architectures`
         # would otherwise need a GGUF special case.
         "architectures": ["Qwen3_5ForCausalLM"],
         "max_position_embeddings": key("context_length"),
         "hidden_size": key("embedding_length"),
-        "intermediate_size": key("feed_forward_length"),
         "num_attention_heads": key("attention.head_count"),
         "num_key_value_heads": key("attention.head_count_kv"),
         "head_dim": head_dim,
@@ -66,10 +65,29 @@ def _qwen35_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
         "bos_token_id": metadata.get("tokenizer.ggml.bos_token_id"),
         "pad_token_id": metadata.get("tokenizer.ggml.padding_token_id"),
     }
+    # An all-expert file has no dense FFN to describe, so llama.cpp omits its width.
+    if (feed_forward := metadata.get(f"{prefix}.feed_forward_length")) is not None:
+        config["intermediate_size"] = feed_forward
+    return config
+
+
+def _qwen35moe_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
+    """Qwen3.5 MoE: `_qwen35_config`'s model, with each layer's FFN replaced by an expert bank."""
+    config = _qwen35_config(metadata, tensor_names, prefix="qwen35moe")
+    key = lambda name: metadata[f"qwen35moe.{name}"]  # noqa: E731
+    return config | {
+        "model_type": "qwen3_5_moe_text",
+        "architectures": ["Qwen3_5MoeForCausalLM"],
+        "moe_intermediate_size": key("expert_feed_forward_length"),
+        "shared_expert_intermediate_size": key("expert_shared_feed_forward_length"),
+        "num_experts": key("expert_count"),
+        "num_experts_per_tok": key("expert_used_count"),
+    }
 
 
 GGUF_CONFIG_ARCHS = {
     "qwen35": _qwen35_config,
+    "qwen35moe": _qwen35moe_config,
 }
 
 
