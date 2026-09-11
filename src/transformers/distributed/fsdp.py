@@ -61,12 +61,16 @@ def is_fsdp_managed_module(module: nn.Module) -> bool:
     return isinstance(module, FullyShardedDataParallel)
 
 
-def _get_fsdp_policy_kwargs(distributed_config: DistributedConfig | None) -> dict[str, Any]:
+def _get_fsdp_policy_kwargs(
+    distributed_config: DistributedConfig | None, ignored_params: set[torch.nn.Parameter] | None = None
+) -> dict[str, Any]:
     """Build ``fully_shard`` policy kwargs from ``DistributedConfig`` runtime flags."""
-    if distributed_config is None:
-        return {}
-
     fsdp_policy_kwargs = {}
+    if ignored_params:
+        fsdp_policy_kwargs["ignored_params"] = ignored_params
+    if distributed_config is None:
+        return fsdp_policy_kwargs
+
     if distributed_config.fsdp_cpu_offload:
         fsdp_policy_kwargs["offload_policy"] = CPUOffloadPolicy()
     if distributed_config.fsdp_mixed_precision:
@@ -207,11 +211,11 @@ def apply_fully_sharded_data_parallelism(
         )
 
     distributed_config = getattr(model.config, "distributed_config", None)
-    fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
 
     adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, model)
     reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
 
+    ignored_params = None
     if distributed_config is not None and distributed_config.dispatches_tokens:
         if not is_torch_greater_or_equal("2.7"):
             raise OSError("Expert-parallel token dispatch requires `torch>=2.7`.")
@@ -221,10 +225,13 @@ def apply_fully_sharded_data_parallelism(
             module for module in model.modules() if any(is_dtensor(p) for p in module.parameters(recurse=False))
         ]
         if expert_mesh is not None:
+            expert_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
             for module in expert_modules:
-                fully_shard(module, mesh=expert_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
+                fully_shard(module, mesh=expert_mesh, reshard_after_forward=True, **expert_policy_kwargs)
         else:
-            fsdp_policy_kwargs["ignored_params"] = {p for module in expert_modules for p in module.parameters()}
+            ignored_params = {p for module in expert_modules for p in module.parameters()}
+
+    fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config, ignored_params=ignored_params)
 
     for module_name, module in reshard_targets:
         fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
