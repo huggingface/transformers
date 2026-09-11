@@ -3986,8 +3986,6 @@ class PreTrainedModel(
                 `DistributedConfig(tp_plan=...)` to specify a tensor parallel plan, or
                 `DistributedConfig(fsdp_size=N)` for FSDP2. Requires `torchrun` and an initialized
                 process group when `tp_size > 1` or `fsdp_size > 1`. Mutually exclusive with `device_map`.
-            device_mesh (`torch.distributed.DeviceMesh`, *optional*):
-                A torch device mesh. If not provided would default to world size. Used only for tensor parallel for now.
                 If provided, it has to contain dimension named `"tp"` in case it's > 1 dimensional, this dimension will be used for tensor parallelism
             offload_folder (`str` or `os.PathLike`, *optional*):
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
@@ -4147,7 +4145,7 @@ class PreTrainedModel(
 
         if distributed_config is not None:
             distributed_config, device_map, device_mesh = cls.prepare_distribute_model(
-                distributed_config, device_mesh=device_mesh, device_map=device_map
+                distributed_config, device_map=device_map
             )
 
         if gguf_file is not None and not is_accelerate_available():
