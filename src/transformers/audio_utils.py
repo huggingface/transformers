@@ -468,14 +468,6 @@ def make_audio_chat_content(audio_item: "str | np.ndarray", prompt: str | None =
     return content
 
 
-def parse_timestamp(value: str) -> float:
-    """
-    Parse a timestamp string into seconds. Accepts a plain float (`"7.56"`) or a colon-separated
-    `MM:SS` / `HH:MM:SS` string (`"1:23"`, `"01:02:03"`), for diarization/transcription decoders.
-    """
-    return sum(float(part) * 60**i for i, part in enumerate(reversed(value.strip().split(":"))))
-
-
 def hertz_to_mel(freq: float | np.ndarray, mel_scale: str = "htk") -> float | np.ndarray:
     """
     Convert frequency from hertz to mels.
