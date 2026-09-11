@@ -18,7 +18,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import AutoConfig
+from ..auto.configuration_auto import AutoConfig
 
 
 @auto_docstring(checkpoint="nvidia/audio-flamingo-3-hf")

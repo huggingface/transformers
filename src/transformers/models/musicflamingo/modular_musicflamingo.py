@@ -43,7 +43,7 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3PreTrainedModel,
 )
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
-from ..auto.modeling_auto import AutoConfig
+from ..auto.configuration_auto import AutoConfig
 from ..moonshine.modeling_moonshine import MoonshineRotaryEmbedding
 
 

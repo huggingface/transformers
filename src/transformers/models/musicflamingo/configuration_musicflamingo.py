@@ -23,7 +23,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto.modeling_auto import AutoConfig
+from ..auto.configuration_auto import AutoConfig
 
 
 @auto_docstring(checkpoint="nvidia/music-flamingo-2601-hf")
@@ -81,8 +81,8 @@ class MusicFlamingoConfig(PreTrainedConfig):
         kwargs.setdefault("partial_rotary_factor", 0.2)
         if isinstance(self.audio_config, dict) and self.audio_config["model_type"] in [None, "musicflamingo_encoder"]:
             self.audio_config["model_type"] = "audioflamingo3_encoder"
-
         super().__post_init__(**kwargs)
+
         self.max_position_embeddings = self.rope_parameters["rope_theta"]
         self.head_dim = self.audio_config.hidden_size
 

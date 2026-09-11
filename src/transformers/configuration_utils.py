@@ -28,6 +28,7 @@ from packaging import version
 from typing_extensions import dataclass_transform
 
 from . import __version__
+from .backbone_utils import consolidate_backbone_kwargs_to_config
 from .dynamic_module_utils import custom_object_save
 from .generation.configuration_utils import GenerationConfig
 from .integrations.heterogeneity import HeterogeneousConfigMixin
@@ -167,7 +168,7 @@ class SubConfigSpec:
 
         return CONFIG_MAPPING[model_type]
 
-    def create_subconfig(self, key, subconfig=None):
+    def create_subconfig(self, key, subconfig=None, **kwargs):
         """
         Construct a subconfig class either from provided input or from spec defaults.
         In case the provided input is a `dict` without `model_type`, we fallback
@@ -177,6 +178,16 @@ class SubConfigSpec:
         # early exit if sub-config is already a config instance
         if isinstance(subconfig, PreTrainedConfig):
             return subconfig
+
+        # Vision model backbones have their own utility for BC/Timm
+        if key == "backbone_config":
+            backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+                backbone_config=subconfig,
+                default_config_type=self.model_type,
+                default_config_kwargs=self.init_kwargs,
+                **kwargs,
+            )
+            return backbone_config
 
         model_type = subconfig.get("model_type", self.model_type)
         if model_type is None:
@@ -339,7 +350,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         if self.sub_configs_defaults:
             for key, specs in self.sub_configs_defaults.items():
                 subconfig = getattr(self, key)
-                subconfig = specs.create_subconfig(key, subconfig)
+                subconfig = specs.create_subconfig(key, subconfig, **kwargs)
                 setattr(self, key, subconfig)
 
         # BC for the `torch_dtype` argument instead of the simpler `dtype`
