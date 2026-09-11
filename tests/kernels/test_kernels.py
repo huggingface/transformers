@@ -480,12 +480,19 @@ class TestKernelUtilities(TestCasePlus):
             self.assertFalse(allow_all_kernels)
             return sentinel
 
+        patched_hub_mapping = copy.deepcopy(_HUB_KERNEL_MAPPING)
+        patched_hub_mapping["causal-conv1d"] = {
+            "repo_id": "kernels-community/causal-conv1d",
+            "version": 1,
+        }
+
         patched_module_mapping = copy.copy(_KERNEL_MODULE_MAPPING)
         patched_module_mapping.pop("causal-conv1d", None)
 
         with patch.dict(
             lazy_load_kernel.__globals__,
             {
+                "_HUB_KERNEL_MAPPING": patched_hub_mapping,
                 "_KERNEL_MODULE_MAPPING": patched_module_mapping,
                 "get_kernel": fake_get_kernel,
                 "ALLOW_ALL_KERNELS": False,
