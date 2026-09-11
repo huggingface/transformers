@@ -175,12 +175,12 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        version=2,
+                        version=3,
                     ),
                 },
                 # The XPU causal-conv1d backend landed in mamba-ssm v3.
@@ -202,12 +202,12 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        version=2,
+                        version=3,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        version=2,
+                        version=3,
                     ),
                 },
                 # The XPU causal-conv1d backend landed in mamba-ssm v3.
