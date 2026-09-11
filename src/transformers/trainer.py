@@ -795,7 +795,9 @@ class Trainer:
         if model_tp_size > 1:
             # Sharded at load time (tensor/expert parallelism, optionally with FSDP2 on a second mesh
             # dimension): accelerate has to know both sizes, or it sees unaccounted ranks and wraps
-            # the DTensor model in DDP, which raises.
+            # the DTensor model in DDP, which raises (`Accelerator.prepare_model` wraps any model in DDP unless
+            # `parallelism_config.tp_enabled`). Under token dispatch this is a white lie: those `tp` ranks train on
+            # their own batches, see `get_ranks_per_batch` and `_get_train_sampler`.
             if not is_accelerate_available("1.12.0"):
                 raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
             if args.get("parallelism_config") is None:
@@ -1159,7 +1161,10 @@ class Trainer:
             return SequentialSampler(train_dataset)
         else:
             if self._expert_parallel_dispatch:
-                # accelerate hands every `tp` rank the same batch; under token dispatch each rank gets its own.
+                # accelerate has to be told the model's `tp_size` (`create_accelerator_and_postprocess`), and then
+                # hands every `tp` rank the same batch (`accelerate.data_loader.prepare_data_loader` divides the
+                # process index and count by the `tp` mesh size). Under token dispatch each rank trains on its own
+                # batch, so shard them here and neutralise accelerate's wrapper in `_get_dataloader`.
                 return DistributedSampler(
                     train_dataset,
                     num_replicas=self.args.world_size,
@@ -2192,9 +2197,9 @@ class Trainer:
             and (self.model_accepts_loss_kwargs or self.compute_loss_func)
             and num_items_in_batch is not None
         ):
-            # TP and EP-as-TP ranks see replicated batches; `num_processes` over-counts
-            # them by `tp_size`. Mirror the divisor used in `_get_num_items_in_batch`.
-            loss_scale = self.accelerator.num_processes // self.get_tp_size()
+            # Ranks that see the same batch are over-counted by `num_processes`. Mirror the divisor used in
+            # `_get_num_items_in_batch`.
+            loss_scale = self.accelerator.num_processes // self.get_ranks_per_batch()
             loss *= loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
 
         return (loss, outputs) if return_outputs else loss
@@ -2344,7 +2349,7 @@ class Trainer:
                     num_items_in_batch = num_items_in_batch.unsqueeze(0).expand(self.args.n_gpu, -1)
                 # Divide by number of devices with the same batch
                 num_items_in_batch = num_items_in_batch // (
-                    self.get_tp_size() * self.get_cp_size() * self.get_sp_size()
+                    self.get_ranks_per_batch() * self.get_cp_size() * self.get_sp_size()
                 )
 
         return num_items_in_batch
@@ -2560,7 +2565,7 @@ class Trainer:
         All dimensions are separate and multiplicative: world_size = dp_size * tp_size * cp_size * sp_size
         """
 
-        dp_world_size = args.world_size // self.get_tp_size() // self.get_cp_size() // self.get_sp_size()
+        dp_world_size = args.world_size // self.get_ranks_per_batch() // self.get_cp_size() // self.get_sp_size()
         return self._train_batch_size * args.gradient_accumulation_steps * dp_world_size
 
     def get_sp_size(self) -> int:
@@ -2579,12 +2584,17 @@ class Trainer:
             pc = self.accelerator.parallelism_config
             return pc.cp_size
 
+    def get_ranks_per_batch(self) -> int:
+        """
+        Number of ranks that train on the same batch: the tensor parallel ranks, except under expert-parallel token
+        dispatch, where every rank has its own batch whatever `tp_size` the model reports.
+        """
+        return 1 if self._expert_parallel_dispatch else self.get_tp_size()
+
     def get_tp_size(self) -> int:
         """Get the tensor parallel size from either the model or DeepSpeed config."""
 
-        # 1. Check model.tp_size first; with expert-parallel token dispatch the `tp` ranks train on their own batches
-        if self._expert_parallel_dispatch:
-            return 1
+        # 1. Check model.tp_size first
         if (model_tp := getattr(self.model, "_tp_size", None)) is not None:
             return model_tp
 
