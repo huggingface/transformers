@@ -55,6 +55,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    is_flash_linear_attention_available,
     is_torchdynamo_exporting,
     torch_compilable_check,
 )
@@ -149,6 +150,12 @@ class Qwen4ExpTextRotaryEmbedding(nn.Module):
         return torch.cat((freqs_thw, freqs_thw), dim=-1)
 
 
+def _use_fla_norm(x: torch.Tensor) -> bool:
+    # perf: fused Triton RMSNorm kernels from flash-linear-attention, when the package is installed. The reference
+    # forwards run 6 unfused fp32 element-wise passes (plus ~10 in backward) per norm; the fused kernel does one.
+    return is_flash_linear_attention_available() and x.is_cuda and not is_torchdynamo_exporting()
+
+
 class Qwen4ExpTextRMSNorm(nn.Module):
     def __init__(self, dim: int, group_size: int | None = None, eps: float = 1e-6):
         super().__init__()
@@ -165,6 +172,12 @@ class Qwen4ExpTextRMSNorm(nn.Module):
         return out.flatten(-2) if self.group_size is not None else out
 
     def forward(self, x):
+        if _use_fla_norm(x):
+            # fused: fp32 rms-norm * (1 + weight), cast back to x.dtype; one Triton kernel each way.
+            # The add is done in fp32 like the reference: in bf16 it would round every channel scale by up to 0.4%.
+            from fla.modules.layernorm import rms_norm
+
+            return rms_norm(x, 1.0 + self.weight.float(), None, eps=self.eps)
         output = self._norm(x.float())
         # Llama does x.to(float16) * w whilst Qwen4ExpText is (x * w).to(float16)
         # See https://github.com/huggingface/transformers/pull/29402
@@ -579,7 +592,15 @@ class Qwen4ExpTextGatedDeltaNet(nn.Module):
         beta = b.sigmoid()
         # If the model is loaded in fp16, without the .float() here, A might be -inf
         g = -self.A_log.float().exp() * F.softplus(a.float() + self.dt_bias)
-        if self.num_v_heads // self.num_k_heads > 1:
+        # perf: fla's chunk kernel applies grouped value attention itself when num_v_heads > num_k_heads
+        # (`HV % H == 0`), so the query/key repeat (and its backward reduction) is only needed on the torch path.
+        fla_gva = (
+            is_flash_linear_attention_available()  # the chunk kernel below resolves to fla
+            and query.is_cuda
+            and not is_torchdynamo_exporting()
+            and not (use_precomputed_states and seq_len == 1)
+        )
+        if self.num_v_heads // self.num_k_heads > 1 and not fla_gva:
             query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
             key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 
