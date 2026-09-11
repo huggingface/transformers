@@ -31,12 +31,15 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
     r"""
     audio_merge_size (`int`, *optional*, defaults to 4):
         Number of consecutive Whisper encoder frames concatenated before the multi-modal projector.
-    audio_encoder_stride (`int`, *optional*, defaults to 2):
-        Temporal downsampling factor from the Whisper encoder convolutions used when counting audio tokens.
     adaptor_input_dim (`int`, *optional*):
-        Input dimension of the multi-modal projector. Defaults to `audio_config.d_model * audio_merge_size`.
+        Input dimension of the multi-modal projector. Always derived as `audio_config.d_model * audio_merge_size`;
+        any value passed in is overwritten.
     projector_bias (`bool`, *optional*, defaults to `True`):
         Whether to use bias in the multi-modal projector linear layers.
+    audio_chunk_size (`int`, *optional*, defaults to 480000):
+        Number of raw audio samples per Whisper encoder window (`chunk_length * sampling_rate`). The processor
+        splits each audio sample into windows of this size before feature extraction; the model uses it together
+        with `padding_mask` to recover which chunk rows of `input_features` belong to which audio sample.
     """
 
     model_type = "moss_transcribe_diarize"
@@ -75,17 +78,14 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
         "scale_embedding": False,
     }
     audio_merge_size: int = 4
-    audio_encoder_stride: int = 2
     adaptor_input_dim: int | None = None
     projector_bias: bool = True
+    audio_chunk_size: int = 480_000
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
             audio_config = dict(self.audio_config)
-            model_type = audio_config.get("model_type", "qwen2_audio_encoder")
-            if model_type == "whisper":
-                model_type = "qwen2_audio_encoder"
-            audio_config["model_type"] = model_type
+            model_type = audio_config.setdefault("model_type", "qwen2_audio_encoder")
             self.audio_config = CONFIG_MAPPING[model_type](**audio_config)
         elif self.audio_config is None:
             self.audio_config = CONFIG_MAPPING["qwen2_audio_encoder"](**self._default_audio_config_kwargs)
@@ -98,11 +98,7 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen3"](**self._default_text_config_kwargs)
 
-        if not getattr(self.text_config, "layer_types", None):
-            self.text_config.layer_types = ["full_attention"] * self.text_config.num_hidden_layers
-
-        if self.adaptor_input_dim is None:
-            self.adaptor_input_dim = self.audio_config.d_model * self.audio_merge_size
+        self.adaptor_input_dim = self.audio_config.d_model * self.audio_merge_size
 
         super().__post_init__(**kwargs)
 

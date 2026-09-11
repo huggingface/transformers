@@ -24,7 +24,7 @@ import re
 import numpy as np
 import torch
 
-from ...audio_utils import AudioInput, make_audio_chat_content, make_list_of_audio_chat_template, parse_timestamp
+from ...audio_utils import AudioInput, make_audio_chat_content, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
@@ -102,9 +102,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         audio_duration_token: str | None = None,
         audio_tokens_per_second: float = 12.5,
         audio_merge_size: int = 4,
-        audio_encoder_stride: int = 2,
         time_marker_every_seconds: int = 2,
-        enable_time_marker: bool = True,
     ):
         r"""
         audio_token (`str`, *optional*, defaults to `"<|audio_pad|>"`):
@@ -120,12 +118,9 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
             Expected number of audio placeholder tokens per second of input audio.
         audio_merge_size (`int`, *optional*, defaults to 4):
             Whisper frame merge factor used when counting audio tokens.
-        audio_encoder_stride (`int`, *optional*, defaults to 2):
-            Temporal downsampling factor from the Whisper encoder convolutions used when counting audio tokens.
         time_marker_every_seconds (`int`, *optional*, defaults to 2):
-            Insert numeric time-marker tokens into the audio span every N seconds.
-        enable_time_marker (`bool`, *optional*, defaults to `True`):
-            Whether to inject time-marker tokens into the audio placeholder span.
+            Insert numeric time-marker tokens into the audio span every N seconds. Set to `0` to disable
+            time markers and emit a plain audio placeholder span instead.
         """
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
@@ -137,9 +132,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
         self.audio_tokens_per_second = audio_tokens_per_second
         self.audio_merge_size = int(audio_merge_size)
-        self.audio_encoder_stride = int(audio_encoder_stride)
         self.time_marker_every_seconds = time_marker_every_seconds
-        self.enable_time_marker = enable_time_marker
 
     @auto_docstring
     def __call__(
@@ -211,12 +204,14 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         # Determine number of Whisper-window chunks per sample, and flatten
         window_size = int(self.feature_extractor.n_samples)
 
+        per_sample_lengths: list[int] = []
         per_sample_windows: list[int] = []
         flat_chunks: list[np.ndarray] = []
         for audio_el in audio:
             waveform = np.asarray(audio_el, dtype=np.float32).squeeze()
             n_samples = int(waveform.shape[0])
             n_win = max(1, (n_samples + window_size - 1) // window_size)
+            per_sample_lengths.append(n_samples)
             per_sample_windows.append(n_win)
 
             time_cap = min(n_samples, n_win * window_size)
@@ -225,19 +220,15 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
                 end = min((i + 1) * window_size, time_cap)
                 flat_chunks.append(waveform[start:end])
 
-        if flat_chunks:
-            audio_inputs = self.feature_extractor(flat_chunks, **kwargs)
-            audio_inputs["input_features_mask"] = audio_inputs.pop("attention_mask")
-        else:
-            nb_max_frames = int(self.feature_extractor.nb_max_frames)
-            audio_inputs = {
-                "input_features": torch.empty((0, int(self.feature_extractor.feature_size), nb_max_frames)),
-                "input_features_mask": torch.empty((0, nb_max_frames), dtype=torch.long),
-            }
+        audio_inputs = self.feature_extractor(flat_chunks, **kwargs)
+        audio_inputs["input_features_mask"] = audio_inputs.pop("attention_mask")
 
-        # MOSS chunks per-sample audio into Whisper windows upstream (unlike AF3-style token counting), so
-        # the model needs `audio_chunk_mapping` to reassemble chunks per sample before merge + projection.
-        audio_inputs["audio_chunk_mapping"] = torch.repeat_interleave(
+        padding_mask = torch.zeros(len(audio), max(per_sample_lengths), dtype=torch.long)
+        for idx, length in enumerate(per_sample_lengths):
+            padding_mask[idx, :length] = 1
+        audio_inputs["padding_mask"] = padding_mask
+
+        audio_chunk_mapping = torch.repeat_interleave(
             torch.arange(len(audio), dtype=torch.long), torch.tensor(per_sample_windows, dtype=torch.long)
         )
 
@@ -248,7 +239,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         encoder_lengths = (conv_lengths - 2) // 2 + 1
 
         per_sample_encoder_lengths = torch.zeros(len(audio), dtype=torch.long)
-        per_sample_encoder_lengths.scatter_add_(0, audio_inputs["audio_chunk_mapping"], encoder_lengths)
+        per_sample_encoder_lengths.scatter_add_(0, audio_chunk_mapping, encoder_lengths)
         audio_inputs["num_audio_tokens"] = per_sample_encoder_lengths // self.audio_merge_size
 
         audio_replacements = [self.replace_audio_token(audio_inputs, audio_idx=idx) for idx in range(len(audio))]
@@ -256,9 +247,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         num_tokens = int(audio_inputs["num_audio_tokens"][audio_idx])
-        if self.enable_time_marker and self.time_marker_every_seconds > 0:
-            return self._build_time_marker_span(num_tokens)
-        return self.audio_token * num_tokens
+        return self._build_time_marker_span(num_tokens)
 
     @property
     def unused_input_names(self) -> list[str]:
@@ -365,8 +354,8 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
 
             segments = [
                 {
-                    "Start": parse_timestamp(match["start"]),
-                    "End": parse_timestamp(match["end"]),
+                    "Start": self.parse_timestamp(match["start"]),
+                    "End": self.parse_timestamp(match["end"]),
                     "Speaker": int(match["speaker"]),
                     "Content": match["content"].strip(),
                 }
@@ -436,7 +425,15 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self) -> list[str]:
-        return super().model_input_names + ["input_features_mask", "audio_chunk_mapping"]
+        return super().model_input_names + ["input_features_mask", "padding_mask"]
+
+    @staticmethod
+    def parse_timestamp(value: str) -> float:
+        """
+        Parse a timestamp string into seconds. Accepts a plain float (`"7.56"`) or a colon-separated
+        `MM:SS` / `HH:MM:SS` string (`"1:23"`, `"01:02:03"`), for MOSS-Transcribe-Diarize's diarization output.
+        """
+        return sum(float(part) * 60**i for i, part in enumerate(reversed(value.strip().split(":"))))
 
 
 __all__ = ["MossTranscribeDiarizeProcessor", "MossTranscribeDiarizeProcessorKwargs"]

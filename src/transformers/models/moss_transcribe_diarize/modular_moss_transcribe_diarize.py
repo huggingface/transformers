@@ -22,7 +22,7 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ...audio_utils import AudioInput, make_audio_chat_content, make_list_of_audio_chat_template, parse_timestamp
+from ...audio_utils import AudioInput, make_audio_chat_content, make_list_of_audio_chat_template
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
@@ -59,10 +59,9 @@ class MossTranscribeDiarizeConfig(GlmAsrConfig):
     r"""
     audio_merge_size (`int`, *optional*, defaults to 4):
         Number of consecutive Whisper encoder frames concatenated before the multi-modal projector.
-    audio_encoder_stride (`int`, *optional*, defaults to 2):
-        Temporal downsampling factor from the Whisper encoder convolutions used when counting audio tokens.
     adaptor_input_dim (`int`, *optional*):
-        Input dimension of the multi-modal projector. Defaults to `audio_config.d_model * audio_merge_size`.
+        Input dimension of the multi-modal projector. Always derived as `audio_config.d_model * audio_merge_size`;
+        any value passed in is overwritten.
     projector_bias (`bool`, *optional*, defaults to `True`):
         Whether to use bias in the multi-modal projector linear layers.
     """
@@ -97,7 +96,6 @@ class MossTranscribeDiarizeConfig(GlmAsrConfig):
 
     audio_token_id: int = 151671
     audio_merge_size: int = 4
-    audio_encoder_stride: int = 2
     adaptor_input_dim: int | None = None
     projector_hidden_act: str = "silu"
     projector_bias: bool = True
@@ -105,10 +103,7 @@ class MossTranscribeDiarizeConfig(GlmAsrConfig):
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
             audio_config = dict(self.audio_config)
-            model_type = audio_config.get("model_type", "qwen2_audio_encoder")
-            if model_type == "whisper":
-                model_type = "qwen2_audio_encoder"
-            audio_config["model_type"] = model_type
+            model_type = audio_config.setdefault("model_type", "qwen2_audio_encoder")
             self.audio_config = CONFIG_MAPPING[model_type](**audio_config)
         elif self.audio_config is None:
             self.audio_config = CONFIG_MAPPING["qwen2_audio_encoder"](**self._default_audio_config_kwargs)
@@ -121,11 +116,7 @@ class MossTranscribeDiarizeConfig(GlmAsrConfig):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen3"](**self._default_text_config_kwargs)
 
-        if not getattr(self.text_config, "layer_types", None):
-            self.text_config.layer_types = ["full_attention"] * self.text_config.num_hidden_layers
-
-        if self.adaptor_input_dim is None:
-            self.adaptor_input_dim = self.audio_config.d_model * self.audio_merge_size
+        self.adaptor_input_dim = self.audio_config.d_model * self.audio_merge_size
 
         PreTrainedConfig.__post_init__(self, **kwargs)
 
@@ -167,9 +158,7 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
         audio_duration_token: str | None = None,
         audio_tokens_per_second: float = 12.5,
         audio_merge_size: int = 4,
-        audio_encoder_stride: int = 2,
         time_marker_every_seconds: int = 2,
-        enable_time_marker: bool = True,
     ):
         r"""
         audio_token (`str`, *optional*, defaults to `"<|audio_pad|>"`):
@@ -185,12 +174,9 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
             Expected number of audio placeholder tokens per second of input audio.
         audio_merge_size (`int`, *optional*, defaults to 4):
             Whisper frame merge factor used when counting audio tokens.
-        audio_encoder_stride (`int`, *optional*, defaults to 2):
-            Temporal downsampling factor from the Whisper encoder convolutions used when counting audio tokens.
         time_marker_every_seconds (`int`, *optional*, defaults to 2):
-            Insert numeric time-marker tokens into the audio span every N seconds.
-        enable_time_marker (`bool`, *optional*, defaults to `True`):
-            Whether to inject time-marker tokens into the audio placeholder span.
+            Insert numeric time-marker tokens into the audio span every N seconds. Set to `0` to disable
+            time markers and emit a plain audio placeholder span instead.
         """
         super().__init__(
             feature_extractor,
@@ -203,9 +189,7 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
         )
         self.audio_tokens_per_second = audio_tokens_per_second
         self.audio_merge_size = int(audio_merge_size)
-        self.audio_encoder_stride = int(audio_encoder_stride)
         self.time_marker_every_seconds = time_marker_every_seconds
-        self.enable_time_marker = enable_time_marker
 
     def _process_audio(self, audio: AudioInput, **kwargs) -> tuple[dict[str, torch.Tensor], list[str]]:
         # Determine number of Whisper-window chunks per sample, and flatten
@@ -225,15 +209,8 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
                 end = min((i + 1) * window_size, time_cap)
                 flat_chunks.append(waveform[start:end])
 
-        if flat_chunks:
-            audio_inputs = self.feature_extractor(flat_chunks, **kwargs)
-            audio_inputs["input_features_mask"] = audio_inputs.pop("attention_mask")
-        else:
-            nb_max_frames = int(self.feature_extractor.nb_max_frames)
-            audio_inputs = {
-                "input_features": torch.empty((0, int(self.feature_extractor.feature_size), nb_max_frames)),
-                "input_features_mask": torch.empty((0, nb_max_frames), dtype=torch.long),
-            }
+        audio_inputs = self.feature_extractor(flat_chunks, **kwargs)
+        audio_inputs["input_features_mask"] = audio_inputs.pop("attention_mask")
 
         # MOSS chunks per-sample audio into Whisper windows upstream (unlike AF3-style token counting), so
         # the model needs `audio_chunk_mapping` to reassemble chunks per sample before merge + projection.
@@ -256,9 +233,7 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         num_tokens = int(audio_inputs["num_audio_tokens"][audio_idx])
-        if self.enable_time_marker and self.time_marker_every_seconds > 0:
-            return self._build_time_marker_span(num_tokens)
-        return self.audio_token * num_tokens
+        return self._build_time_marker_span(num_tokens)
 
     def _build_time_marker_span(self, num_tokens: int) -> str:
         num_tokens = int(num_tokens)
@@ -329,6 +304,14 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
             **kwargs,
         )
 
+    @staticmethod
+    def parse_timestamp(value: str) -> float:
+        """
+        Parse a timestamp string into seconds. Accepts a plain float (`"7.56"`) or a colon-separated
+        `MM:SS` / `HH:MM:SS` string (`"1:23"`, `"01:02:03"`), for MOSS-Transcribe-Diarize's diarization output.
+        """
+        return sum(float(part) * 60**i for i, part in enumerate(reversed(value.strip().split(":"))))
+
     def extract_speaker_dict(self, text: str | list[str]) -> list[dict] | str | list[list[dict] | str]:
         """
         Extract speaker/timestamp segments from raw output, returning original text on failure.
@@ -353,8 +336,8 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
 
             segments = [
                 {
-                    "Start": parse_timestamp(match["start"]),
-                    "End": parse_timestamp(match["end"]),
+                    "Start": self.parse_timestamp(match["start"]),
+                    "End": self.parse_timestamp(match["end"]),
                     "Speaker": int(match["speaker"]),
                     "Content": match["content"].strip(),
                 }
@@ -430,38 +413,22 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
         audio_chunk_mapping (`torch.LongTensor` of shape `(num_chunks,)`):
             Index of the source audio sample for each row in `input_features`.
         """
-        num_chunks = input_features.shape[0]
-        if input_features_mask.shape[0] != num_chunks:
-            raise ValueError(
-                "`input_features_mask` must contain one row per `input_features` chunk: "
-                f"got {input_features_mask.shape[0]} rows for {num_chunks} chunks."
-            )
-        if audio_chunk_mapping.numel() != num_chunks:
-            raise ValueError(
-                "`audio_chunk_mapping` must contain one sample index per `input_features` chunk: "
-                f"got {audio_chunk_mapping.numel()} indices for {num_chunks} chunks."
-            )
-
         audio_outputs = self.audio_tower(input_features, return_dict=True, **kwargs)
-        whisper_features = audio_outputs.last_hidden_state
-        device = whisper_features.device
+        audio_embeds = audio_outputs.last_hidden_state
+        device = audio_embeds.device
         audio_chunk_mapping = audio_chunk_mapping.to(device=device)
 
-        # Per-chunk valid lengths from the audio tower, grouped by sample before merge & trimming 
+        # Per-chunk valid lengths from the audio tower, grouped by sample before merge & trimming
         # so leftover frames at a chunk boundary can still complete a merge group.
         merge_size = self.config.audio_merge_size
         input_lengths = input_features_mask.sum(-1).to(device=device)
         _, post_lengths = self.audio_tower._get_feat_extract_output_lengths(input_lengths)
-        valid_mask = torch.arange(whisper_features.shape[1], device=device)[None, :] < post_lengths[:, None]
-
-        if num_chunks == 0:
-            audio_outputs.pooler_output = whisper_features.new_zeros(0, self.config.text_config.hidden_size)
-            return audio_outputs
+        valid_mask = torch.arange(audio_embeds.shape[1], device=device)[None, :] < post_lengths[:, None]
 
         _, chunk_counts = torch.unique_consecutive(audio_chunk_mapping, return_counts=True)
         chunk_starts = torch.nn.functional.pad(chunk_counts.cumsum(0)[:-1], (1, 0), value=0)
         split_indices = chunk_starts[1:].long().cpu()
-        chunk_groups = torch.tensor_split(whisper_features, split_indices, dim=0)
+        chunk_groups = torch.tensor_split(audio_embeds, split_indices, dim=0)
         valid_mask_groups = torch.tensor_split(valid_mask, split_indices, dim=0)
 
         projected = []
@@ -469,7 +436,7 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
             flat_features = sample_features[sample_valid_mask]
             if flat_features.numel() == 0:
                 continue
-            sample_features = flat_features.unsqueeze(0).to(whisper_features.dtype)
+            sample_features = flat_features.unsqueeze(0).to(audio_embeds.dtype)
             seq_len = sample_features.shape[1]
             trimmed_seq_len = (seq_len // merge_size) * merge_size
             if trimmed_seq_len == 0:
@@ -483,7 +450,7 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
         audio_outputs.pooler_output = (
             torch.cat(projected, dim=0)
             if projected
-            else whisper_features.new_zeros(0, self.config.text_config.hidden_size)
+            else audio_embeds.new_zeros(0, self.config.text_config.hidden_size)
         )
         return audio_outputs
 
