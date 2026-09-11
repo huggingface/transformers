@@ -72,6 +72,7 @@ KWARGS_INDICATOR = ", *kwargs*"
 
 HARDCODED_CONFIG_FOR_MODELS = {
     "openai": "OpenAIGPTConfig",
+    "internvl2": "InternVL2Config",
     "x-clip": "XCLIPConfig",
     "kosmos2": "Kosmos2Config",
     "kosmos2-5": "Kosmos2_5Config",

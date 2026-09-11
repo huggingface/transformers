@@ -106,6 +106,7 @@ else:
             ("inkling_mm_model", {"torchvision": "InklingImageProcessor"}),
             ("instructblip", {"torchvision": "BlipImageProcessor", "pil": "BlipImageProcessorPil"}),
             ("internvl", {"torchvision": "GotOcr2ImageProcessor", "pil": "GotOcr2ImageProcessorPil"}),
+            ("internvl_chat", {"torchvision": "GotOcr2ImageProcessor", "pil": "GotOcr2ImageProcessorPil"}),
             ("kosmos-2", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("kosmos-2.5", {"torchvision": "Kosmos2_5ImageProcessor", "pil": "Kosmos2_5ImageProcessorPil"}),
             ("layoutxlm", {"torchvision": "LayoutLMv2ImageProcessor", "pil": "LayoutLMv2ImageProcessorPil"}),

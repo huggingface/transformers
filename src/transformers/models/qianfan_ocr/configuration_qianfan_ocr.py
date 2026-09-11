@@ -81,6 +81,12 @@ class QianfanOCRVisionConfig(PreTrainedConfig):
     drop_path_rate: float = 0.1
 
     def __post_init__(self, **kwargs):
+        # Accept the InternViT spellings of these two, used by the original checkpoints.
+        if "qk_normalization" in kwargs:
+            self.use_qk_norm = kwargs.pop("qk_normalization")
+        if "qkv_bias" in kwargs:
+            self.attention_bias = kwargs.pop("qkv_bias")
+
         self.image_size = (
             self.image_size if isinstance(self.image_size, (list, tuple)) else (self.image_size, self.image_size)
         )
