@@ -48,6 +48,9 @@ class _Recorder:
             self.calls.setdefault(name, []).append(_Call(args, kwargs))
             if name == "swizzle_mx_scales":
                 return args[0]
+            if name.startswith("moe_fused"):  # (hidden, top_k_index, top_k_weights, gate_up, down, ...)
+                hidden, down = args[0], kwargs["down_proj"]
+                return hidden.new_zeros(hidden.shape[0], down.shape[1], dtype=torch.bfloat16)
             a, b = args[0], args[1]
             n = b.shape[-2]
             gather = kwargs.get("gather_idx")
@@ -60,29 +63,17 @@ class _Recorder:
 def _fake_bundle():
     rec = _Recorder()
     kernel = mock.Mock()
-    for name in ("matmul_2d", "matmul_batched", "matmul_grouped", "nvfp4_quantize_two_level", "swizzle_mx_scales"):
+    for name in (
+        "matmul_2d",
+        "matmul_batched",
+        "matmul_grouped",
+        "moe_fused_batched",
+        "moe_fused_grouped",
+        "swizzle_mx_scales",
+        "unswizzle_mx_scales",
+    ):
         setattr(kernel, name, rec._op(name))
-
-    def compute_grouped_scheduling(top_k_index, num_experts, num_top_k):
-        rec.calls.setdefault("compute_grouped_scheduling", []).append(_Call((top_k_index, num_experts, num_top_k), {}))
-        flat = top_k_index.reshape(-1)
-        sorted_ids, perm = torch.sort(flat)
-        counts = torch.bincount(sorted_ids.clamp(max=num_experts - 1), minlength=num_experts)
-        expert_start = torch.cat([counts.new_zeros(1), counts.cumsum(0)]).to(torch.int32)
-        gather_idx = (perm // num_top_k).to(torch.int32)
-        scatter_idx = torch.empty_like(perm)
-        scatter_idx[torch.arange(perm.numel())] = perm
-        return expert_start, gather_idx, scatter_idx.to(torch.int32)
-
-    def weighted_reduce(rows, top_k_index, top_k_weights, num_experts, simulate_unfused=False):
-        rec.calls.setdefault("weighted_reduce", []).append(_Call((rows, top_k_index, top_k_weights, num_experts), {}))
-        num_tokens, num_top_k = top_k_index.shape
-        w = top_k_weights.reshape(-1, 1).to(rows.dtype)
-        w = w * (top_k_index.reshape(-1, 1) < num_experts)
-        return (rows * w).view(num_tokens, num_top_k, -1).sum(1)
-
-    kernel.compute_grouped_scheduling = compute_grouped_scheduling
-    kernel.weighted_reduce = weighted_reduce
+    kernel.get_supported_act_fns = lambda: ("silu", "gelu", "relu")
 
     @dataclass
     class Quantization:
@@ -192,6 +183,36 @@ class FineGrainedLinearMarshallingTest(unittest.TestCase):
 
 
 @require_torch
+class FineGrainedEmbeddingTest(unittest.TestCase):
+    """A quantized embedding TABLE (Qwen4-Exp's n-gram table): FP8 rows with one per-tensor scale,
+    rescaled on the rows a lookup gathers; swapped in for the names in `modules_to_convert`."""
+
+    def test_lookup_rescales_the_gathered_rows(self):
+        torch.manual_seed(0)
+        table = torch.randn(64, 16)
+        scale = table.abs().max() / 448.0
+        embedding = fg.FineGrainedEmbedding(64, 16)
+        embedding.weight = torch.nn.Parameter((table / scale).to(torch.float8_e4m3fn), requires_grad=False)
+        embedding.weight_scale = torch.nn.Parameter(scale.to(torch.bfloat16).reshape(1), requires_grad=False)
+        ids = torch.tensor([[3, 7], [60, 0]])
+        out = embedding(ids)
+        self.assertEqual(out.dtype, torch.bfloat16)
+        expected = (table / scale).to(torch.float8_e4m3fn)[ids].to(torch.bfloat16) * scale.to(torch.bfloat16)
+        torch.testing.assert_close(out, expected)
+
+    def test_replacement_follows_the_patterns_and_the_skip_list(self):
+        model = torch.nn.Module()
+        model.ngram_embedding = torch.nn.Embedding(8, 4)
+        model.embed_tokens = torch.nn.Embedding(8, 4)
+        model.other = torch.nn.Embedding(8, 4)
+        fg.replace_with_finegrained_embedding(model, ["ngram_embedding", "other"], modules_to_not_convert=["other"])
+        self.assertIsInstance(model.ngram_embedding, fg.FineGrainedEmbedding)
+        self.assertTrue(model.ngram_embedding._hf_quantized_needs_local_tp)
+        self.assertIs(type(model.embed_tokens), torch.nn.Embedding)
+        self.assertIs(type(model.other), torch.nn.Embedding)
+
+
+@require_torch
 class FineGrainedExpertsMarshallingTest(unittest.TestCase):
     def _experts(self, **kw):
         cfg = _Cfg()
@@ -212,32 +233,70 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         wts = torch.rand(tokens, 2)
         return hs, idx, wts
 
+    def test_eager_linear_threads_bias_global_and_activation_format(self):
+        """The eager per-expert loop hands `matmul_2d` the same operands the fused forwards do:
+        the expert's bias, its NVFP4 global and the module's activation format (W4A16 here)."""
+        kernel, rec = _fake_bundle()
+        m = self._experts(weight_format="nvfp4", has_bias=True, activation_format="bf16")
+        p1, p2, p3, p4 = _loaded(kernel)
+        linear = mock.Mock(wraps=fg.finegrained_linear)
+        with (
+            p1,
+            p2,
+            p3,
+            p4,
+            mock.patch.object(fg, "is_deepgemm_loadable", return_value=False),
+            mock.patch.object(fg, "finegrained_linear", linear),
+        ):
+            m(*self._route())
+        self.assertTrue(linear.call_args_list)
+        for call in linear.call_args_list:
+            self.assertEqual(call.kwargs["bias"].ndim, 1)  # this expert's bias (added after the matmul)
+            self.assertEqual(call.kwargs["weight_global_scale"].ndim, 0)  # this expert's NVFP4 global
+            self.assertEqual(call.kwargs["activation_format"], "bf16")
+        for call in rec.calls["matmul_2d"]:
+            self.assertIsNotNone(call.kwargs["b_global_scale"])
+            self.assertIsNone(call.kwargs["quantization"].input_recipe)
+
     def test_batched_marshalling(self):
         kernel, rec = _fake_bundle()
         m = self._experts(has_gate=True)
         p1, p2, p3, p4 = _loaded(kernel)
         with p1, p2, p3, p4:
             out = fg.finegrained_batched_mm_experts_forward(m, *self._route())
-        up, down = rec.calls["matmul_batched"]
-        self.assertIsNone(up.args[2])  # As positional None
-        self.assertEqual(up.args[0].shape[0], 6)  # UNEXPANDED tokens — the kernel gathers
-        self.assertEqual(up.kwargs["gather_idx"].shape, (12,))
-        self.assertEqual(up.kwargs["expert_ids"].shape, (12,))
-        self.assertNotIn("block_size", up.kwargs)
-        self.assertIsNone(up.kwargs["b_global_scale"])
+        (call,) = rec.calls["moe_fused_batched"]
+        hidden, top_k_index, top_k_weights = call.args
+        self.assertEqual(hidden.shape[0], 6)  # UNEXPANDED tokens — the kernel gathers
+        self.assertEqual(top_k_index.shape, (6, 2))
+        self.assertIs(call.kwargs["gate_up_proj"], m.gate_up_proj)
+        # one scale tensor per projection: the affine Parameter, or the swizzled cache when the
+        # post-load hook built one (not here — the hook runs on SM100 for dot_scaled chains)
+        self.assertIs(call.kwargs["gate_up_proj_scale_inv"], m.gate_up_proj_scale_inv)
+        self.assertIsNone(call.kwargs["gate_up_proj_global_scale"])
+        self.assertEqual(call.kwargs["act_fn"], "silu")  # fusable: passed by name
+        self.assertIs(call.kwargs["gate"], True)
+        self.assertEqual(call.kwargs["recipe"], "weights")  # activation_format None = weight family
         self.assertEqual(out.shape, (6, 64))
 
-    def test_grouped_marshalling_expert_start_boundaries(self):
+    def test_grouped_marshalling(self):
         kernel, rec = _fake_bundle()
         m = self._experts(has_gate=True)
         p1, p2, p3, p4 = _loaded(kernel)
         with p1, p2, p3, p4:
             fg.finegrained_grouped_mm_experts_forward(m, *self._route())
-        up = rec.calls["matmul_grouped"][0]
-        es = up.kwargs["expert_start"]
-        self.assertEqual(es.shape, (5,))  # (E+1,) boundaries
-        self.assertEqual(es[0].item(), 0)
-        self.assertEqual(es[-1].item(), 12)  # S = tokens * top_k
+        (call,) = rec.calls["moe_fused_grouped"]
+        self.assertIs(call.kwargs["down_proj"], m.down_proj)
+        self.assertIs(call.kwargs["down_proj_scale_inv"], m.down_proj_scale_inv)
+        self.assertNotIn("moe_fused_batched", rec.calls)
+
+    def test_activation_format_maps_to_the_block_recipe(self):
+        kernel, rec = _fake_bundle()
+        for activation_format, recipe in ((None, "weights"), ("bf16", None), ("mxfp8", "mxfp8")):
+            m = self._experts(has_gate=True, activation_format=activation_format)
+            p1, p2, p3, p4 = _loaded(kernel)
+            with p1, p2, p3, p4:
+                fg.finegrained_batched_mm_experts_forward(m, *self._route())
+            self.assertEqual(rec.calls["moe_fused_batched"][-1].kwargs["recipe"], recipe)
 
     def test_nvfp4_experts_thread_per_expert_globals(self):
         kernel, rec = _fake_bundle()
@@ -248,39 +307,35 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         p1, p2, p3, p4 = _loaded(kernel)
         with p1, p2, p3, p4:
             fg.finegrained_batched_mm_experts_forward(m, *self._route())
-        up, down = rec.calls["matmul_batched"]
-        self.assertIs(up.kwargs["b_global_scale"], m.gate_up_proj_global_scale)
-        self.assertIs(down.kwargs["b_global_scale"], m.down_proj_global_scale)
+        (call,) = rec.calls["moe_fused_batched"]
+        self.assertIs(call.kwargs["gate_up_proj_global_scale"], m.gate_up_proj_global_scale)
+        self.assertIs(call.kwargs["down_proj_global_scale"], m.down_proj_global_scale)
 
-    def test_bias_lands_before_gate_and_before_routing(self):
+    def test_biases_ride_the_kernel_chain(self):
         kernel, rec = _fake_bundle()
         m = self._experts(has_gate=True, has_bias=True)
-        hs, idx, wts = self._route()
         p1, p2, p3, p4 = _loaded(kernel)
         with p1, p2, p3, p4:
-            out = fg.finegrained_batched_mm_experts_forward(m, hs, idx, wts)
+            out = fg.finegrained_batched_mm_experts_forward(m, *self._route())
         self.assertTrue(torch.isfinite(out).all())
-        up, down = rec.calls["matmul_batched"]
-        # both biases ride their GEMM's epilogue: the kernel adds gate_up's before the gated
-        # split and down's before the routing-weight multiply. Nothing is added host-side, so
-        # a biased model keeps the fused form instead of falling back to two GEMMs.
-        self.assertIs(up.kwargs["bias"], m.gate_up_proj_bias)
-        self.assertTrue(up.kwargs["epilogue"].gate)
-        self.assertIs(down.kwargs["bias"], m.down_proj_bias)
+        (call,) = rec.calls["moe_fused_batched"]
+        # the kernels add gate_up's bias before the gated split and down's before the
+        # routing-weight multiply; nothing is added host-side
+        self.assertIs(call.kwargs["gate_up_proj_bias"], m.gate_up_proj_bias)
+        self.assertIs(call.kwargs["down_proj_bias"], m.down_proj_bias)
 
-    def test_unfusable_act_fn_still_fuses_the_bias(self):
+    def test_unfusable_act_fn_is_passed_as_the_module_glu(self):
         kernel, rec = _fake_bundle()
         m = self._experts(has_gate=True, has_bias=True)
-        m.act_fn_name = "quick_gelu"  # not in _FUSABLE_ACT_FNS
-        hs, idx, wts = self._route()
+        m.act_fn_name = "quick_gelu"  # not in the kernels' get_supported_act_fns()
         p1, p2, p3, p4 = _loaded(kernel)
         with p1, p2, p3, p4:
-            fg.finegrained_batched_mm_experts_forward(m, hs, idx, wts)
-        up, _ = rec.calls["matmul_batched"]
-        # the GLU cannot fuse, but the ungated GEMM emitting the raw 2*I pre-activation takes
-        # the same bias add at doubled width — only the activation falls back to the host tail
-        self.assertIsNone(up.kwargs["epilogue"])
-        self.assertIs(up.kwargs["bias"], m.gate_up_proj_bias)
+            fg.finegrained_batched_mm_experts_forward(m, *self._route())
+        (call,) = rec.calls["moe_fused_batched"]
+        # the kernels run the module's own GLU on the host between the two GEMMs — a new
+        # activation never waits for a kernel release; the bias still rides the GEMM
+        self.assertEqual(call.kwargs["act_fn"], m._apply_gate)  # bound-method equality
+        self.assertIs(call.kwargs["gate_up_proj_bias"], m.gate_up_proj_bias)
 
 
 @require_torch
@@ -316,27 +371,38 @@ class FineGrainedMxfp4ConverterTest(unittest.TestCase):
         exp = (scales.long() - 127).unsqueeze(-1)
         return (vals * torch.pow(torch.tensor(2.0), exp)).reshape(*blocks.shape[:2], -1)
 
-    def test_deserialize_matches_reference(self):
-        from transformers.integrations.finegrained import FineGrainedMxfp4Deserialize, _get_ue8m0_dtype
+    def test_blocks_and_scales_convert_to_the_kernel_pair_and_back(self):
+        from transformers.integrations.finegrained import FineGrainedPackedBlocks, FineGrainedScaleContainer
 
         torch.manual_seed(0)
         E, N, K = 2, 8, 64  # N = 2I interleaved gate|up rows
         blocks = torch.randint(0, 256, (E, N, K // 32, 16), dtype=torch.uint8)
         scales = torch.randint(110, 140, (E, N, K // 32), dtype=torch.uint8)
 
-        op = FineGrainedMxfp4Deserialize(hf_quantizer=None)
-        out = op.convert(
-            {"gate_up_proj_blocks": blocks, "gate_up_proj_scales": scales},
-            full_layer_name="model.layers.0.mlp.experts.gate_up_proj",
+        weight = FineGrainedPackedBlocks().convert({"gate_up_proj_blocks$": blocks}, target_patterns=["gate_up_proj"])[
+            "gate_up_proj"
+        ]
+        self.assertEqual((weight.dtype, weight.shape), (torch.int8, (E, N, K // 2)))
+        back = FineGrainedPackedBlocks().reverse_op.convert({"gate_up_proj": weight})["gate_up_proj"]
+        self.assertTrue(torch.equal(back, blocks))
+
+        # the scales are the container op's job: a module holding e8m0 receives the exponent bytes as is
+        module = fg.FineGrainedExperts.__new__(fg.FineGrainedExperts)
+        torch.nn.Module.__init__(module)
+        module.gate_up_proj_scale_inv = torch.nn.Parameter(
+            torch.zeros(E, N, K // 32, dtype=torch.float8_e8m0fnu), requires_grad=False
         )
-        weight = out["model.layers.0.mlp.experts.gate_up_proj"]
-        scale_inv = out["model.layers.0.mlp.experts.gate_up_proj_scale_inv"]
-        self.assertEqual(weight.dtype, torch.int8)
-        self.assertEqual(weight.shape, (E, N, K // 2))
-        self.assertEqual(scale_inv.dtype, _get_ue8m0_dtype())
+        model = torch.nn.Module()
+        model.experts = module
+        scale_inv = FineGrainedScaleContainer().convert(
+            {"gate_up_proj_scales$": scales},
+            model=model,
+            full_layer_name="experts.gate_up_proj_scale_inv",
+            target_patterns=["gate_up_proj_scale_inv"],
+        )["gate_up_proj_scale_inv"]
+        self.assertEqual(scale_inv.dtype, torch.float8_e8m0fnu)
 
         ref = self._reference_dequant(blocks, scales)  # rows pass through interleaved
-
         # dequantize the converted pair: packed E2M1 low-nibble-first x 2^(e8m0)
         lut = torch.tensor(self.FP4_VALUES)
         w_u8 = weight.view(torch.uint8)
@@ -346,57 +412,6 @@ class FineGrainedMxfp4ConverterTest(unittest.TestCase):
         exp = (scale_inv.view(torch.uint8).long() - 127).repeat_interleave(32, dim=-1)
         got = vals * torch.pow(torch.tensor(2.0), exp)
         torch.testing.assert_close(got, ref, rtol=0, atol=0)
-
-    def test_interleave_gate_up_after_loading(self):
-        """Stacked-checkpoint families get gate_up interleaved post-load; GPT-OSS-style MXFP4
-        already ships that order and is skipped."""
-        from transformers.integrations.finegrained import (
-            FineGrainedExperts,
-            interleave_gate_up_after_loading,
-        )
-
-        module = FineGrainedExperts.__new__(FineGrainedExperts)
-        torch.nn.Module.__init__(module)
-        module.has_gate = True
-        # rows [g0,g1,g2,u0,u1,u2]; bias follows the same output axis
-        module.gate_up_proj = torch.nn.Parameter(
-            torch.arange(24, dtype=torch.float32).reshape(1, 6, 4), requires_grad=False
-        )
-        module.gate_up_proj_bias = torch.nn.Parameter(
-            torch.arange(6, dtype=torch.float32), requires_grad=False
-        )
-        stacked_w = module.gate_up_proj.detach().clone()
-        stacked_b = module.gate_up_proj_bias.detach().clone()
-
-        model = torch.nn.Module()
-        model.experts = module
-        interleave_gate_up_after_loading(model)
-
-        for j in range(3):
-            torch.testing.assert_close(module.gate_up_proj[0, 2 * j], stacked_w[0, j])
-            torch.testing.assert_close(module.gate_up_proj[0, 2 * j + 1], stacked_w[0, 3 + j])
-            torch.testing.assert_close(module.gate_up_proj_bias[2 * j], stacked_b[j])
-            torch.testing.assert_close(module.gate_up_proj_bias[2 * j + 1], stacked_b[3 + j])
-
-    def test_interleave_skipped_when_already_interleaved(self):
-        """GPT-OSS ships [g0,u0,...] already — the pass must leave it alone."""
-        from transformers.integrations.finegrained import (
-            FineGrainedExperts,
-            interleave_gate_up_after_loading,
-        )
-
-        module = FineGrainedExperts.__new__(FineGrainedExperts)
-        torch.nn.Module.__init__(module)
-        module.has_gate = True
-        module.gate_up_proj = torch.nn.Parameter(
-            torch.arange(24, dtype=torch.float32).reshape(1, 6, 4), requires_grad=False
-        )
-        before = module.gate_up_proj.detach().clone()
-
-        model = torch.nn.Module()
-        model.experts = module
-        interleave_gate_up_after_loading(model, already_interleaved=True)
-        torch.testing.assert_close(module.gate_up_proj.data, before)
 
 
 @require_torch
@@ -434,54 +449,343 @@ class FineGrainedDeepGemmDispatchTest(unittest.TestCase):
         """Correctness gate, and it must hold on any arch — not just where the perf gate does."""
         self.assertEqual(self._routed_to(sm100=False, scale_ndim=5), "triton")
 
+    def test_deepgemm_experts_refuse_swizzled_scales(self):
+        """A module loaded for a triton backend holds swizzled scales; switching it to a DeepGEMM
+        experts backend afterwards must fail loudly rather than read the permuted buffer as affine."""
+        from transformers.integrations.deepgemm import (
+            deepgemm_fp8_fp4_experts_forward,
+            deepgemm_fp8_fp4_megamoe_experts_forward,
+        )
+
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size, cfg._experts_implementation = 256, 128, "grouped_mm"
+        with (
+            mock.patch.object(fg, "is_sm100", return_value=True),
+            mock.patch("torch.cuda.is_available", return_value=True),
+        ):
+            experts = fg.FineGrainedExperts(cfg, weight_format="mxfp8")
+        self.assertEqual(experts.gate_up_proj_scale_inv.ndim, 5)
+        hs = torch.randn(2, 256, dtype=torch.bfloat16)
+        idx, wts = torch.zeros(2, 2, dtype=torch.long), torch.ones(2, 2)
+        for forward in (deepgemm_fp8_fp4_experts_forward, deepgemm_fp8_fp4_megamoe_experts_forward):
+            with self.assertRaisesRegex(RuntimeError, "held swizzled"):
+                forward(experts, hs, idx, wts)
+
 
 @require_torch
-class FineGrainedSwizzlePassTest(unittest.TestCase):
-    """`swizzle_scales_after_loading` builds the Blackwell SWIZZLE_32_4_4 artifact. It is gated
-    on arch AND on the recipe having group scales — keyed off the declared weight format, not
-    the scale dtype, because V4-style block-FP8 ships UE8M0 scales and a dtype test lets it
-    through (it then survives only by accident, since N/128 is rarely a multiple of 128)."""
+class FineGrainedScaleLayoutTest(unittest.TestCase):
+    """The module HOLDS its block scales swizzled (a 5-D Parameter) when its chain runs the tcgen05
+    scaled-MMA under a triton dispatch on SM100 — keyed off the declared weight format, not the
+    scale dtype (V4-style block-FP8 ships UE8M0 scales) — and affine otherwise; the loader's
+    `FineGrainedSwizzleScales` op fills that layout and its reverse restores the checkpoint grid."""
 
-    def _experts(self, weight_format, scale_dtype):
+    E, HIDDEN, INTER = 4, 256, 128  # gate_up rows 2*INTER = 256 and down rows HIDDEN = 256: whole 128-row blocks
+
+    def _experts(self, weight_format, activation_format=None, impl="grouped_mm", sm100=True):
         cfg = _Cfg()
-        experts = fg.FineGrainedExperts(cfg, block_size=(128, 128), weight_format=weight_format)
-        for proj in ("gate_up_proj", "down_proj"):
-            rows = 256
-            setattr(
-                experts,
-                f"{proj}_scale_inv",
-                torch.nn.Parameter(
-                    torch.zeros(cfg.num_local_experts, rows, 8, dtype=scale_dtype),
-                    requires_grad=False,
-                ),
+        cfg.hidden_size, cfg.intermediate_size, cfg.num_local_experts = self.HIDDEN, self.INTER, self.E
+        cfg._experts_implementation = impl
+        with (
+            mock.patch.object(fg, "is_sm100", return_value=sm100),
+            mock.patch("torch.cuda.is_available", return_value=True),
+        ):
+            experts = fg.FineGrainedExperts(
+                cfg, block_size=(128, 128), weight_format=weight_format, activation_format=activation_format
             )
         model = torch.nn.Module()
+        model.config = cfg
         model.experts = experts
         return model, experts
 
-    def _run_pass(self, model, *, sm100):
+    def test_module_holds_swizzled_scales_for_the_scaled_mma_chain(self):
+        _, experts = self._experts("mxfp8")
+        self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 2, 2, 2, 256))  # (E, 256/128, (256/32)/4, 2, 256)
+        self.assertEqual(experts.down_proj_scale_inv.shape, (4, 2, 1, 2, 256))
+        self.assertEqual(experts.gate_up_proj_scale_inv.dtype, torch.float8_e8m0fnu)
+        self.assertTrue(experts._gate_up_interleaved)
+        # every MX group-32 format holds UE8M0 scales whatever `scale_fmt` says (the kernels reject a
+        # float32 grid there; GPT-OSS's config has no scale_fmt at all)
+        _, experts = self._experts("mxfp4", activation_format="bf16")
+        self.assertEqual(experts.gate_up_proj_scale_inv.dtype, torch.float8_e8m0fnu)
+
+    def test_affine_off_sm100_weight_only_deepgemm_and_block_fp8(self):
+        for kw in (
+            {"weight_format": "mxfp8", "sm100": False},
+            {"weight_format": "mxfp4", "activation_format": "bf16"},  # W4A16 reads scales per group affinely
+            {"weight_format": "mxfp8", "impl": "deepgemm"},  # the DeepGEMM backends read affine scales
+            {"weight_format": "nvfp4", "impl": "deepgemm_megamoe"},
+        ):
+            with self.subTest(**kw):
+                _, experts = self._experts(**kw)
+                self.assertEqual(
+                    experts.gate_up_proj_scale_inv.shape,
+                    (4, 256, 256 // (16 if kw["weight_format"] == "nvfp4" else 32)),
+                )
+        # block-FP8's (N/128, K/128) grid never reaches a scaled-MMA, whatever its scale dtype
+        _, experts = self._experts("fp8")
+        self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 2, 2))
+        with mock.patch.dict("os.environ", {"TRANSFORMERS_FINEGRAINED_NO_SWIZZLE": "1"}):
+            _, experts = self._experts("mxfp8")
+        self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 256, 8))
+
+    def test_megamoe_holds_gate_up_stacked(self):
+        _, experts = self._experts("fp8", impl="deepgemm_megamoe")
+        self.assertFalse(experts._gate_up_interleaved)
+
+    def _op_kernel(self):
         kernel, _ = _fake_bundle()
-        kernel.swizzle_mx_scales = mock.Mock(side_effect=lambda s, gate=False: s)
+        kernel.swizzle_mx_scales = mock.Mock(
+            side_effect=lambda s: s.reshape(s.shape[0], s.shape[1] // 128, -1, 2, 256)
+        )
+        kernel.unswizzle_mx_scales = mock.Mock(
+            side_effect=lambda s, rows, cols, num_experts=None: s.reshape(num_experts, rows, cols)
+        )
+        return kernel
+
+    def test_swizzle_op_fills_only_the_scales_the_module_holds_swizzled(self):
+        from transformers.integrations.finegrained import FineGrainedSwizzleScales
+
+        model, experts = self._experts("mxfp8")
+        kernel = self._op_kernel()
+        op = FineGrainedSwizzleScales(hf_quantizer=None)
+        grid = torch.zeros(4, 256, 8, dtype=torch.float8_e8m0fnu)
+        weight = torch.zeros(4, 256, 256, dtype=torch.float8_e4m3fn)
         p1, p2, p3, p4 = _loaded(kernel)
-        with p1, p2, p3, p4, mock.patch.object(fg, "is_sm100", return_value=sm100):
-            fg.swizzle_scales_after_loading(model)
-        return kernel.swizzle_mx_scales
+        with p1, p2, p3, p4:
+            # the loader hands a single target under its pattern, the full name (with suffix) alongside
+            out = op.convert(
+                {"mlp.experts.gate_up_proj": grid}, model=model, full_layer_name="experts.gate_up_proj_scale_inv"
+            )
+            self.assertEqual(out["mlp.experts.gate_up_proj"].shape, (4, 2, 2, 2, 256))
+            # the same converter's weight passes through
+            out = op.convert({"mlp.experts.gate_up_proj": weight}, model=model, full_layer_name="experts.gate_up_proj")
+            self.assertIs(out["mlp.experts.gate_up_proj"], weight)
+            # a multi-tensor converter (GPT-OSS deserialize) names its outputs fully
+            out = op.convert(
+                {
+                    "experts.down_proj": weight,
+                    "experts.down_proj_scale_inv": torch.zeros(4, 256, 4, dtype=torch.float8_e8m0fnu),
+                },
+                model=model,
+                full_layer_name="experts.down_proj",
+            )
+            self.assertEqual(out["experts.down_proj_scale_inv"].shape, (4, 2, 1, 2, 256))
+            self.assertIs(out["experts.down_proj"], weight)
+            # a module that holds affine scales keeps them
+            affine_model, _ = self._experts("mxfp4", activation_format="bf16")
+            out = op.convert(
+                {"mlp.experts.gate_up_proj": grid},
+                model=affine_model,
+                full_layer_name="experts.gate_up_proj_scale_inv",
+            )
+            self.assertIs(out["mlp.experts.gate_up_proj"], grid)
+        self.assertEqual(kernel.swizzle_mx_scales.call_count, 2)
 
-    def test_skipped_off_sm100(self):
-        """The layout is a Blackwell tcgen05 artifact; elsewhere it buys nothing, pins the tile
-        space, and collides with DeepGEMM — which stays the preferred backend below SM100."""
-        model, _ = self._experts("mxfp8", torch.float8_e8m0fnu)
-        self.assertEqual(self._run_pass(model, sm100=False).call_count, 0)
+    def test_scale_container_op_round_trips_every_container(self):
+        """dsv4-flash-base ships UE8M0 scales as float32 values, MiniMax as uint8 exponent bytes:
+        the op brings both into the held e8m0 (exact cast / same bytes), records the container on
+        the module, and its reverse restores that container on save; weights and native scales
+        pass both ways."""
+        from transformers.integrations.finegrained import FineGrainedScaleContainer
 
-    def test_applied_for_group_scaled_recipes_on_sm100(self):
-        model, _ = self._experts("mxfp8", torch.float8_e8m0fnu)
-        self.assertGreater(self._run_pass(model, sm100=True).call_count, 0)
+        op = FineGrainedScaleContainer(hf_quantizer=None)
+        native = torch.pow(2.0, torch.randint(-8, 8, (4, 256, 8)).float()).to(torch.float8_e8m0fnu)
+        for container, shipped in ((torch.float32, native.float()), (torch.uint8, native.view(torch.uint8))):
+            with self.subTest(container=container):
+                model, experts = self._experts("mxfp8", sm100=False)  # affine e8m0 scale Parameters
+                out = op.convert(
+                    {"mlp.experts.gate_up_proj": shipped},
+                    model=model,
+                    full_layer_name="experts.gate_up_proj_scale_inv",
+                )
+                held = out["mlp.experts.gate_up_proj"]
+                self.assertEqual(held.dtype, torch.float8_e8m0fnu)
+                self.assertTrue(torch.equal(held.view(torch.uint8), native.view(torch.uint8)))
+                self.assertIs(experts.scale_container_dtype, container)
+                back = op.reverse_op.convert({"x": held}, model=model)["x"]
+                self.assertEqual(back.dtype, container)
+                self.assertTrue(torch.equal(back, shipped))
+                weight = torch.zeros(4, 256, 256, dtype=torch.float8_e4m3fn)
+                self.assertIs(op.reverse_op.convert({"w": weight}, model=model)["w"], weight)
+        model, experts = self._experts("mxfp8", sm100=False)
+        self.assertIs(
+            op.convert({"mlp.experts.down_proj": native}, model=model, full_layer_name="experts.down_proj_scale_inv")[
+                "mlp.experts.down_proj"
+            ],
+            native,
+        )
+        self.assertIsNone(experts.scale_container_dtype)
+        self.assertIs(op.reverse_op.convert({"x": native}, model=model)["x"], native)  # nothing recorded: native stays
 
-    def test_block_fp8_skipped_even_with_ue8m0_scales(self):
-        """The latent case: block-FP8's (N/128, K/128) grid never reaches a scaled-MMA, so it has
-        no swizzled form — but it ships UE8M0 scales, so only a recipe-keyed guard excludes it."""
-        model, _ = self._experts("fp8", torch.float8_e8m0fnu)
-        self.assertEqual(self._run_pass(model, sm100=True).call_count, 0)
+    def test_reverse_op_restores_the_affine_grid_from_the_artifact_alone(self):
+        from transformers.integrations.finegrained import FineGrainedSwizzleScales
+
+        kernel = self._op_kernel()
+        reverse = FineGrainedSwizzleScales(hf_quantizer=None).reverse_op
+        artifact = torch.zeros(4, 2, 2, 2, 256, dtype=torch.float8_e8m0fnu)
+        affine = torch.zeros(4, 256, 8, dtype=torch.float8_e8m0fnu)
+        p1, p2, p3, p4 = _loaded(kernel)
+        with p1, p2, p3, p4:
+            out = reverse.convert({"experts.gate_up_proj_scale_inv": artifact}, model=None, full_layer_name="x")
+            self.assertEqual(out["experts.gate_up_proj_scale_inv"].shape, (4, 256, 8))
+            kernel.unswizzle_mx_scales.assert_called_once_with(artifact, 256, 8, num_experts=4)
+            out = reverse.convert({"experts.gate_up_proj_scale_inv": affine}, model=None, full_layer_name="x")
+            self.assertIs(out["experts.gate_up_proj_scale_inv"], affine)
+
+    def _quantizer(self, quant_method):
+        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+        from transformers.utils.quantization_config import FineGrainedConfig
+
+        return FineGrainedHfQuantizer(FineGrainedConfig(quant_method=quant_method)).update_weight_conversions
+
+    def _arch_converters(self):
+        from transformers.core_model_loading import Concatenate, MergeModulelist, WeightConverter
+
+        return [
+            WeightConverter(
+                source_patterns=["mlp.experts.*.gate_proj.weight", "mlp.experts.*.up_proj.weight"],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=["mlp.fc1.weight", "mlp.fc2.weight"],
+                target_patterns="mlp.fc.weight",
+                operations=[Concatenate(dim=0)],
+            ),
+        ]
+
+    def test_quantizer_attaches_the_layout_ops_to_expert_converters(self):
+        from transformers.core_model_loading import WeightConverter
+        from transformers.integrations.finegrained import (
+            FineGrainedInterleaveGateUp,
+            FineGrainedScaleContainer,
+            FineGrainedSwizzleScales,
+        )
+
+        converters = self._quantizer("mxfp8")(self._arch_converters())
+        by_target = {_targets(c)[0]: c for c in converters if isinstance(c, WeightConverter)}
+        gate_up_ops = by_target["mlp.experts.gate_up_proj"].operations
+        # stacked [gate; up] -> [g0, u0, ...], the scale into the held dtype, then the swizzle packs
+        # the final row order (it reads 1-byte scales)
+        self.assertIsInstance(gate_up_ops[-3], FineGrainedInterleaveGateUp)
+        self.assertFalse(gate_up_ops[-3].inverse)
+        self.assertIsInstance(gate_up_ops[-2], FineGrainedScaleContainer)
+        self.assertIsInstance(gate_up_ops[-1], FineGrainedSwizzleScales)
+        self.assertIsInstance(by_target["mlp.experts.down_proj"].operations[-1], FineGrainedSwizzleScales)
+        self.assertIsInstance(by_target["weight_scale_inv"].operations[0], FineGrainedScaleContainer)  # dense linears
+        self.assertEqual(len(by_target["mlp.fc.weight"].operations), 1)  # dense converters untouched
+        # keys arriving under the fused names get the same layout
+        self.assertIn("experts.gate_up_proj_bias", by_target)  # patterns are stored anchor-stripped
+        self.assertIsInstance(by_target["experts.down_proj_scale_inv"].operations[-1], FineGrainedSwizzleScales)
+        # ...and saving reverses in the opposite order: unswizzle first, then de-interleave
+        reverse_ops = by_target["mlp.experts.gate_up_proj"].reverse_transform().operations
+        self.assertIsInstance(reverse_ops[0], FineGrainedSwizzleScales)
+        self.assertTrue(reverse_ops[0].inverse)
+        self.assertIsInstance(reverse_ops[2], FineGrainedInterleaveGateUp)
+        self.assertTrue(reverse_ops[2].inverse)
+
+    def test_blocks_scales_converters_carry_the_layout_ops(self):
+        from transformers.core_model_loading import WeightConverter
+        from transformers.integrations.finegrained import FineGrainedInterleaveGateUp, FineGrainedSwizzleScales
+
+        converters = self._quantizer("mxfp4")([])
+        by_target = {_targets(c)[0]: c for c in converters if isinstance(c, WeightConverter)}
+        ops = by_target["gate_up_proj"].operations
+        self.assertIsInstance(ops[-2], FineGrainedInterleaveGateUp)
+        self.assertIsInstance(ops[-1], FineGrainedSwizzleScales)
+        self.assertIsInstance(by_target["gate_up_proj_scale_inv"].operations[0], FineGrainedInterleaveGateUp)
+        self.assertIsInstance(by_target["down_proj"].operations[-1], FineGrainedSwizzleScales)
+        self.assertIsInstance(by_target["down_proj_scale_inv"].operations[-1], FineGrainedSwizzleScales)
+
+    def test_catch_all_converters_deliver_the_full_parameter_name(self):
+        """A key already under the fused name (GPT-OSS's gate_up_proj_bias, a renamed MiniMax
+        down_proj_scale_inv) goes through the real converter plumbing: the ops receive the tensor
+        under the source PATTERN and must hand back the target, which the loader expands to the
+        full name."""
+        from transformers.core_model_loading import WeightConverter, rename_source_key
+
+        model, _ = self._experts("mxfp8")
+        converters = [c for c in self._quantizer("mxfp8")([]) if isinstance(c, WeightConverter)]
+        for key, shape in (("experts.gate_up_proj_bias", (4, 256)), ("experts.down_proj_scale_inv", (4, 256, 4))):
+            renamed, source_pattern = rename_source_key(key, [], converters)
+            self.assertEqual(renamed, key)
+            converter = next(c for c in converters if source_pattern in c.source_patterns)
+            tensor = torch.zeros(shape, dtype=torch.float8_e8m0fnu if "scale" in key else torch.float32)
+            converter.add_tensor(renamed, key, source_pattern, lambda t=tensor: t)
+            kernel = self._op_kernel()
+            p1, p2, p3, p4 = _loaded(kernel)
+            with p1, p2, p3, p4:
+                out = converter.convert(renamed, model=model)
+            self.assertEqual(list(out), [key])
+
+    def test_replacement_keeps_the_models_gate_up_convention(self):
+        """`replace_with_finegrained_layer` goes through `use_experts_implementation`, which stamps
+        the layout flags on the instance after __init__ — GPT-OSS's `is_concatenated=False` must
+        survive it (it decides whether the loader interleaves)."""
+        from transformers import GptOssConfig, GptOssForCausalLM, Qwen3MoeConfig, Qwen3MoeForCausalLM
+        from transformers.utils.quantization_config import FineGrainedConfig
+
+        gpt_oss = GptOssConfig(
+            vocab_size=64,
+            hidden_size=64,
+            intermediate_size=32,
+            num_local_experts=2,
+            num_experts_per_tok=1,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=32,
+            sliding_window=16,
+        )
+        qwen = Qwen3MoeConfig(
+            vocab_size=64,
+            hidden_size=64,
+            intermediate_size=64,
+            moe_intermediate_size=32,
+            num_experts=2,
+            num_experts_per_tok=1,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=32,
+        )
+        for cls, cfg, quant_method, expected in (
+            (GptOssForCausalLM, gpt_oss, "mxfp4", False),
+            (Qwen3MoeForCausalLM, qwen, "mxfp8", True),
+        ):
+            with self.subTest(model=cls.__name__), torch.device("meta"):
+                model = cls(cfg)
+                fg.replace_with_finegrained_layer(
+                    model, modules_to_not_convert=[], quantization_config=FineGrainedConfig(quant_method=quant_method)
+                )
+                experts = model.model.layers[0].mlp.experts
+                self.assertIsInstance(experts, fg.FineGrainedExperts)
+                self.assertIs(experts.is_concatenated, expected)
+
+    def test_interleave_op_follows_the_model_and_the_experts_backend(self):
+        """The op reads the model's experts modules: a model whose own rows already come
+        interleaved (`is_concatenated=False`, GPT-OSS) keeps them, Mega MoE packs gate|up itself
+        and keeps the stack; every other case gets the interleaved order, and the reverse restores
+        the stack."""
+        from transformers.integrations.finegrained import FineGrainedInterleaveGateUp
+
+        stacked = torch.arange(2 * 6 * 4, dtype=torch.float32).reshape(2, 6, 4)  # rows [g0,g1,g2,u0,u1,u2]
+        op = FineGrainedInterleaveGateUp(hf_quantizer=None)
+        model, experts = self._experts("mxfp8")
+        out = op.convert({"mlp.experts.gate_up_proj": stacked}, model=model)["mlp.experts.gate_up_proj"]
+        torch.testing.assert_close(out, stacked[:, [0, 3, 1, 4, 2, 5]])
+        back = op.reverse_op.convert({"mlp.experts.gate_up_proj": out}, model=model)["mlp.experts.gate_up_proj"]
+        torch.testing.assert_close(back, stacked)
+        experts.is_concatenated = False
+        self.assertIs(op.convert({"x": stacked}, model=model)["x"], stacked)
+        experts.is_concatenated = True
+        experts._gate_up_interleaved = False
+        self.assertIs(op.convert({"x": stacked}, model=model)["x"], stacked)
 
 
 @require_torch
@@ -560,59 +864,62 @@ class FineGrainedRealKernelTest(unittest.TestCase):
                 rel = ((out.float() - ref).norm() / ref.norm()).item()
                 self.assertLess(rel, 5e-2, f"ue8m0={ue8m0}: {rel:.2e} vs the dequantized weight")
 
-    def test_swizzled_scales_do_not_change_the_result(self):
-        """The SWIZZLE_32_4_4 pass reorders scale BYTES; it must not move a single value. Run the
-        same MXFP8 GEMM against the affine grid and the swizzled artifact and demand agreement —
-        a wrong reorder shows up here and nowhere in the mocked tests."""
-        kernel = load_finegrained_kernel()
-        N, K, M = 512, 256, 128
-        w = torch.randn(N, K, device="cuda", dtype=torch.float32)
-        groups = w.reshape(N, K // 32, 32)
-        inv = torch.pow(2.0, torch.ceil(torch.log2(groups.abs().amax(-1, keepdim=True) / 448.0).clamp(min=-127)))
-        q = (groups / inv).to(torch.float8_e4m3fn).reshape(N, K)
-        scales = inv.reshape(N, K // 32).to(torch.float8_e8m0fnu)
-        x = torch.randn(M, K, device="cuda", dtype=torch.bfloat16)
+    def test_experts_scale_layout_op_keeps_the_forward_correct(self):
+        """End-to-end over the integration: real MXFP8 experts hold swizzled scales, the loader's op
+        fills them from the affine grid, the fused forward matches the affine module's, and the
+        reverse op hands the affine grid back bitwise."""
+        from transformers.integrations.finegrained import FineGrainedSwizzleScales
 
-        affine = kernel.matmul(x, q, None, scales, output_dtype=torch.bfloat16)
-        swizzled = kernel.matmul(
-            x, q, None, kernel.swizzle_mx_scales(scales), output_dtype=torch.bfloat16
-        )
-        torch.cuda.synchronize()
-        self.assertTrue(
-            torch.equal(affine, swizzled),
-            "swizzling changed the result; the artifact is a byte reorder, values must be identical",
-        )
-
-    def test_experts_swizzle_pass_keeps_the_forward_correct(self):
-        """End-to-end over the integration: build real MXFP8 experts, run the post-load swizzle,
-        and check the fused forward still matches what it produced beforehand."""
         cfg = _Cfg()
-        cfg.hidden_size, cfg.intermediate_size, cfg.num_local_experts = 256, 128, 4
+        cfg.hidden_size, cfg.intermediate_size, cfg.num_local_experts = (
+            512,
+            256,
+            4,
+        )  # K >= 256: the swizzled arm has tiles
+        cfg._experts_implementation = "grouped_mm"
         experts = FineGrainedExperts(cfg, weight_format="mxfp8").cuda()
+        with mock.patch.dict("os.environ", {"TRANSFORMERS_FINEGRAINED_NO_SWIZZLE": "1"}):
+            affine_experts = FineGrainedExperts(cfg, weight_format="mxfp8").cuda()
+        model = torch.nn.Module()
+        model.experts = experts
+        op = FineGrainedSwizzleScales(hf_quantizer=None)
+
+        affine = {}
         for proj, rows in (("gate_up_proj", 2 * cfg.intermediate_size), ("down_proj", cfg.hidden_size)):
             cols = cfg.hidden_size if proj == "gate_up_proj" else cfg.intermediate_size
-            setattr(experts, proj, torch.nn.Parameter(
-                torch.randn(cfg.num_local_experts, rows, cols, device="cuda").to(torch.float8_e4m3fn),
-                requires_grad=False))
-            setattr(experts, f"{proj}_scale_inv", torch.nn.Parameter(
-                torch.full((cfg.num_local_experts, rows, cols // 32), 127, dtype=torch.uint8, device="cuda")
-                .view(torch.float8_e8m0fnu), requires_grad=False))
+            weight = torch.randn(cfg.num_local_experts, rows, cols, device="cuda").to(torch.float8_e4m3fn)
+            grid = torch.randint(120, 134, (cfg.num_local_experts, rows, cols // 32), dtype=torch.uint8, device="cuda")
+            affine[proj] = grid.view(torch.float8_e8m0fnu)
+            for module in (experts, affine_experts):
+                setattr(module, proj, torch.nn.Parameter(weight.clone(), requires_grad=False))
+            setattr(affine_experts, f"{proj}_scale_inv", torch.nn.Parameter(affine[proj].clone(), requires_grad=False))
+            self.assertEqual(
+                getattr(experts, f"{proj}_scale_inv").dim(), 5, "the module should hold this projection swizzled"
+            )
+            out = op.convert(
+                {f"mlp.experts.{proj}": affine[proj]}, model=model, full_layer_name=f"experts.{proj}_scale_inv"
+            )
+            swizzled = out[f"mlp.experts.{proj}"]
+            self.assertEqual(swizzled.shape, getattr(experts, f"{proj}_scale_inv").shape)
+            setattr(experts, f"{proj}_scale_inv", torch.nn.Parameter(swizzled, requires_grad=False))
 
         x = torch.randn(8, cfg.hidden_size, device="cuda", dtype=torch.bfloat16)
         idx = torch.randint(0, cfg.num_local_experts, (8, 2), device="cuda", dtype=torch.long)
         wts = torch.rand(8, 2, device="cuda", dtype=torch.bfloat16)
-
-        before = experts(x, idx, wts)
-        model = torch.nn.Module()
-        model.experts = experts
-        fg.swizzle_scales_after_loading(model)
-        after = experts(x, idx, wts)
+        reference = fg.finegrained_grouped_mm_experts_forward(affine_experts, x, idx, wts)
+        out = fg.finegrained_grouped_mm_experts_forward(experts, x, idx, wts)
         torch.cuda.synchronize()
-
-        self.assertTrue(
-            any(getattr(experts, f"{p}_scale_inv_swizzled", None) is not None
-                for p in ("gate_up_proj", "down_proj")),
-            "the swizzle pass produced no artifact, so this asserts nothing",
-        )
-        rel = ((after.float() - before.float()).norm() / before.float().norm().clamp(min=1e-9)).item()
+        rel = ((out.float() - reference.float()).norm() / reference.float().norm().clamp(min=1e-9)).item()
         self.assertLess(rel, 1e-6, f"swizzled forward diverged from the affine one: {rel:.2e}")
+        # the eager per-expert loop reads one expert's slice of the swizzled stack directly
+        eager_reference = affine_experts(x, idx, wts)
+        eager_out = experts(x, idx, wts)
+        rel = (
+            (eager_out.float() - eager_reference.float()).norm() / eager_reference.float().norm().clamp(min=1e-9)
+        ).item()
+        self.assertLess(rel, 1e-6, f"eager forward on swizzled scales diverged from affine: {rel:.2e}")
+
+        reverse = op.reverse_op
+        for proj, grid in affine.items():
+            restored = reverse.convert({proj: getattr(experts, f"{proj}_scale_inv").data})[proj]
+            self.assertTrue(torch.equal(restored.view(torch.uint8), grid.view(torch.uint8)), proj)
