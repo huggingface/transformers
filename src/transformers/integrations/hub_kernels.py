@@ -183,7 +183,6 @@ if is_kernels_available():
                         version=3,
                     ),
                 },
-                # The XPU causal-conv1d backend landed in mamba-ssm v3.
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
