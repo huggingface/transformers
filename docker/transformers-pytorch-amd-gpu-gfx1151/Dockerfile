@@ -21,9 +21,14 @@ LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-      git git-lfs ffmpeg libsndfile1-dev espeak-ng tesseract-ocr \
+# apt resilience: a build hit intermittent connect failures to
+# archive.ubuntu.com from the pool, so retry a few times before giving up.
+# (espeak-ng / tesseract-ocr are omitted for now -- not needed by the current
+# smoke + test slice; add them back once the apt path is reliable.)
+RUN printf 'Acquire::Retries "8";\nAcquire::http::Timeout "30";\n' > /etc/apt/apt.conf.d/99retries && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends --fix-missing \
+      git git-lfs ffmpeg libsndfile1-dev \
       build-essential pkg-config curl ca-certificates \
       python3 python3-dev python3-pip python3-venv && \
     apt-get clean && \
