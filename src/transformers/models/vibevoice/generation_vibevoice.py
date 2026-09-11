@@ -23,6 +23,7 @@ from ...generation import (
     GenerateDecoderOnlyOutput,
     GenerationConfig,
     GenerationMixin,
+    GenerationMode,
     GenerationState,
     LogitsProcessor,
     LogitsProcessorList,
@@ -93,6 +94,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
     branch (prepare inputs -> forward -> update model kwargs -> append the new token).
     """
 
+    _supported_generation_modes = [GenerationMode.GREEDY_SEARCH, GenerationMode.SAMPLE]
+
     def _get_logits_processor(self, *args, **kwargs) -> LogitsProcessorList:
         processors = super()._get_logits_processor(*args, **kwargs)
         valid_tokens = [
@@ -157,6 +160,11 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         # Fallback to a default guidance scale of 1.0 if not set
         if generation_config.guidance_scale is None:
             generation_config.guidance_scale = 1.0
+        if generation_config.do_sample:
+            logger.warning_once(
+                "VibeVoice generation does not support sampling-based token selection. "
+                "Tokens will be selected using argmax regardless of do_sample=True."
+            )
         return generation_config, model_kwargs
 
     @staticmethod
@@ -318,14 +326,15 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         """
         use_cache = negative_model_kwargs.get("use_cache", True)
         next_sequence_length = 1 if use_cache else None
-        # Prepare inputs for the negative branch's next forward step
+        # Prepare inputs for the negative branch's next forward step. Both branches share the same input token, so
+        # the positive branch's step embeddings are reused (`prepare_inputs_for_generation` feeds them after the
+        # prefill).
         negative_model_inputs = self.prepare_inputs_for_generation(
-            negative_input_ids, next_sequence_length=next_sequence_length, **negative_model_kwargs
+            negative_input_ids,
+            next_sequence_length=next_sequence_length,
+            inputs_embeds=inputs_embeds,
+            **negative_model_kwargs,
         )
-        # Reuse the positive branch's step embeddings since both branches share the same input token
-        if negative_model_inputs.get("inputs_embeds") is None and inputs_embeds is not None:
-            negative_model_inputs["inputs_embeds"] = inputs_embeds
-            negative_model_inputs["input_ids"] = None
         # Run the unconditional (negative) forward pass
         negative_outputs = negative_forward(**negative_model_inputs, return_dict=True)
         negative_condition = negative_outputs.last_hidden_state[diffusion_mask, -1, :]
@@ -400,7 +409,10 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         batch_size: int,
         device: torch.device,
     ) -> None:
-        """First step: set up the CFG negative branch, the audio buffers and the progress bar in `state.extras`."""
+        """
+        First step: set up the CFG negative branch, the audio buffers and the progress bar in `state.extras`. No hook
+        runs before the decoding loop with access to `state`, hence the lazy initialization at `state.step == 0`.
+        """
         negative_input_ids, negative_model_kwargs = self._prepare_negative_generation(
             batch_size, generation_config, device=device
         )
@@ -438,8 +450,11 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         Argmax token selection (the language model only decides between "another audio latent" and "stop"), then,
         for the rows that asked for an audio latent, one step of the classifier-free-guided diffusion: negative
         branch forward, denoising loop, acoustic decoding. The audio chunk is stored in `state.extras`, and the
-        embedding of the latent is kept for `_update_model_kwargs_with_next_tokens`.
+        embedding of the latent is kept for `_update_model_kwargs_with_next_tokens`. The diffusion runs here rather
+        than in that hook because it needs `generation_config` (noise scheduler, `num_diffusion_steps`,
+        `guidance_scale`, `compile_config`), which the update hook does not receive.
         """
+        # no pre-loop hook sees `state`: the negative branch and the buffers are created at the first step
         if state.step == 0:
             self._init_audio_generation(
                 state,
@@ -451,11 +466,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         extras = state.extras
         if extras["progress_bar"] is not None:
             extras["progress_bar"].update(1)
-        if generation_config.do_sample:
-            logger.warning_once(
-                "VibeVoice generation does not support sampling-based token selection. "
-                "Tokens will be selected using argmax regardless of do_sample=True."
-            )
         next_tokens = torch.argmax(next_token_scores, dim=-1)
 
         unfinished = state.unfinished_sequences.bool()
@@ -522,7 +532,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         if diffusion is not None:
             diffusion_mask, diffusion_embeds = diffusion
             next_inputs_embeds[diffusion_mask] = diffusion_embeds.to(next_inputs_embeds.device)
-        state.extras["inputs_embeds"] = next_inputs_embeds  # the negative branch reuses them next step
+        # The negative branch reuses them next step. Kept apart from `model_kwargs["inputs_embeds"]`, which at the
+        # first step may hold a user-provided prompt while the negative branch must start from `None`.
+        state.extras["inputs_embeds"] = next_inputs_embeds
         model_kwargs["inputs_embeds"] = next_inputs_embeds
         # the audio prompt was consumed by the prefill
         model_kwargs.pop("input_values", None)
@@ -538,10 +550,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         **kwargs,
     ) -> VibeVoiceGenerateOutput | list[torch.Tensor | None]:
         output = super()._build_generate_output(sequences, state, generation_config, model_kwargs, **kwargs)
-        if state.extras.get("progress_bar") is not None:
+        if state.extras["progress_bar"] is not None:
             state.extras["progress_bar"].close()
-        audio_chunks = state.extras.get("audio_chunks", [[] for _ in range(sequences.shape[0])])
-        generated_audio = [torch.cat(chunks, dim=-1) if chunks else None for chunks in audio_chunks]
+        generated_audio = [torch.cat(chunks, dim=-1) if chunks else None for chunks in state.extras["audio_chunks"]]
         if generation_config.return_dict_in_generate:
             return VibeVoiceGenerateOutput(**output, audio=generated_audio)
         # the generated tokens are placeholders; the audio is the result

@@ -200,7 +200,8 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         # VibeVoice replaces the standard text-token decoding loop with a diffusion-based loop with positive and
         # negative forward passes (for classifier-free guidance), and does not emit standard text tokens.
         # As a result, the common generation strategies (beam search, sampling, assisted/contrastive decoding, ...)
-        # and the tests that assume standard token outputs / cache handling do not apply.
+        # and the tests that assume standard token outputs / cache handling do not apply. Beam search and assisted
+        # decoding are rejected by `_supported_generation_modes`.
         skippable_tests = [
             "test_assisted",
             "test_beam",
@@ -268,39 +269,94 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
     def test_vibevoice_generate_max_new_tokens(self):
         """
         Verifies that the returned sequences include the original input_ids plus the newly generated tokens as
-        specified by max_new_tokens.
+        specified by max_new_tokens, and that the diffusion path synthesizes one audio chunk per `audio_token_id`.
         """
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config, input_ids, attention_mask = config_and_inputs
-
-        model = VibeVoiceForConditionalGeneration(config=config).to(torch_device)
+        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+        model = VibeVoiceForConditionalGeneration(config=config).to(torch_device).eval()
 
         max_new_tokens = 5
         original_length = input_ids.shape[1]
-        expected_length = original_length + max_new_tokens
+        generate_kwargs = {
+            "noise_scheduler": DummyNoiseScheduler(),
+            "max_new_tokens": max_new_tokens,
+            "min_new_tokens": max_new_tokens,
+            "do_sample": False,
+            "return_dict_in_generate": True,
+            "guidance_scale": 1.3,
+            "num_diffusion_steps": 10,
+        }
 
+        # With random weights the argmax may never pick `audio_token_id`: forbid the other allowed tokens (`eos` is
+        # already suppressed by `min_new_tokens`) so that every step runs the diffusion head.
         with torch.no_grad():
             output = model.generate(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                noise_scheduler=DummyNoiseScheduler(),
-                max_new_tokens=max_new_tokens,
-                min_new_tokens=max_new_tokens,
-                do_sample=False,
-                return_dict_in_generate=True,
-                guidance_scale=1.3,
-                num_diffusion_steps=10,
+                bad_words_ids=[[config.audio_bos_token_id], [config.audio_eos_token_id]],
+                **generate_kwargs,
             )
-        self.assertIsNotNone(output.sequences)
-        self.assertEqual(output.sequences.shape[0], self.model_tester.batch_size)
-        self.assertEqual(output.sequences.shape[1], expected_length)
+        self.assertEqual(output.sequences.shape, (self.model_tester.batch_size, original_length + max_new_tokens))
         torch.testing.assert_close(
             output.sequences[:, :original_length],
             input_ids,
             msg="Original input_ids should be preserved at the beginning of sequences",
         )
-        self.assertIsNotNone(output.audio)
+        self.assertTrue((output.sequences[:, original_length:] == config.audio_token_id).all())
         self.assertEqual(len(output.audio), self.model_tester.batch_size)
+        self.assertTrue(all(audio is not None for audio in output.audio))
+        for audio in output.audio:
+            # one acoustic latent per `audio_token_id`, `hop_length` samples per latent
+            self.assertEqual(audio.shape, (1, max_new_tokens * config.audio_config.hop_length))
+
+        # Without forcing, a row has audio if and only if it emitted at least one `audio_token_id`
+        with torch.no_grad():
+            output = model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
+        for sequence, audio in zip(output.sequences, output.audio):
+            has_audio_token = bool((sequence[original_length:] == config.audio_token_id).any())
+            self.assertEqual(audio is not None, has_audio_token)
+
+    @pytest.mark.generate
+    def test_vibevoice_voice_prompt_consumed_by_prefill(self):
+        """The audio prompt (`input_values`, `padding_mask`) is fed to the model at the prefill only."""
+        config = self.model_tester.get_config()
+        model = VibeVoiceForConditionalGeneration(config=config).to(torch_device).eval()
+        hop_length = config.audio_config.hop_length
+
+        # one voice clip per row, `num_placeholders` placeholders <-> `num_placeholders * hop_length` samples
+        num_placeholders = 2
+        input_ids = torch.tensor(
+            [[1] + [config.audio_token_id] * num_placeholders] * self.model_tester.batch_size, device=torch_device
+        )
+        attention_mask = torch.ones_like(input_ids)
+        input_values = torch.randn(self.model_tester.batch_size, 1, num_placeholders * hop_length, device=torch_device)
+        padding_mask = torch.ones(self.model_tester.batch_size, num_placeholders * hop_length, device=torch_device)
+
+        forward_calls = []
+        original_forward = model.model.forward
+
+        def spy_forward(*args, **kwargs):
+            forward_calls.append(kwargs.get("input_values") is not None)
+            return original_forward(*args, **kwargs)
+
+        model.model.forward = spy_forward
+        with torch.no_grad():
+            output = model.generate(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                input_values=input_values,
+                padding_mask=padding_mask,
+                noise_scheduler=DummyNoiseScheduler(),
+                max_new_tokens=3,
+                min_new_tokens=3,
+                do_sample=False,
+                return_dict_in_generate=True,
+                guidance_scale=1.3,
+                num_diffusion_steps=2,
+            )
+        self.assertEqual(output.sequences.shape[1], input_ids.shape[1] + 3)
+        # prefill, then positive (and negative, on diffusion steps) decoding forwards
+        self.assertGreater(len(forward_calls), 1)
+        self.assertEqual(forward_calls, [True] + [False] * (len(forward_calls) - 1))
 
     def test_negative_branch_has_its_own_cache_memo(self):
         config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
