@@ -22,7 +22,7 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_vision_available():
-    from transformers import GPT2TokenizerFast, HyperCLOVAXVisionV2Processor, Qwen2VLVideoProcessor
+    from transformers import AutoProcessor, GPT2TokenizerFast, HyperCLOVAXVisionV2Processor, Qwen2VLVideoProcessor
 
 VIDEO_URL = "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
 
@@ -45,19 +45,20 @@ class HyperCLOVAXVisionV2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_video_processor(cls):
         return Qwen2VLVideoProcessor(min_pixels=3136, max_pixels=12845056)
 
-    @classmethod
-    def _get_real_processor(cls):
-        # `AutoProcessor` would resolve `processor_class` from the hub's `processor_config.json`,
-        # which still points at `Exaone4_5_Processor` until the hub PR above lands; loading directly
-        # through this class sidesteps that and pulls in the real chat_template regardless.
-        return HyperCLOVAXVisionV2Processor.from_pretrained(
-            "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B", revision="refs/pr/14"
-        )
 
-    @slow
-    @require_av
+@slow
+@require_vision
+@require_torch
+@require_torchvision
+@require_av
+class HyperCLOVAXVisionV2ProcessorIntegrationTest(unittest.TestCase):
+    checkpoint_name = "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
+
     def test_apply_chat_template_video_duration_filled_when_missing(self):
-        processor = self._get_real_processor()
         messages = [
             [
                 {
@@ -70,19 +71,16 @@ class HyperCLOVAXVisionV2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ]
         ]
 
-        out_dict = processor.apply_chat_template(
+        out_dict = self.processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=True, return_dict=True, num_frames=2
         )
-        decoded = processor.tokenizer.decode(out_dict["input_ids"][0])
+        decoded = self.processor.tokenizer.decode(out_dict["input_ids"][0])
 
         self.assertNotIn("<|video_duration|>", decoded)
         self.assertRegex(decoded, r'"video_duration": \d+(\.\d+)?')
-        self.assertIn(self.videos_input_name, out_dict)
+        self.assertIn("pixel_values_videos", out_dict)
 
-    @slow
-    @require_av
     def test_apply_chat_template_video_duration_kept_when_provided(self):
-        processor = self._get_real_processor()
         messages = [
             [
                 {
@@ -95,17 +93,14 @@ class HyperCLOVAXVisionV2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ]
         ]
 
-        out_dict = processor.apply_chat_template(
+        out_dict = self.processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=True, return_dict=True, num_frames=2
         )
-        decoded = processor.tokenizer.decode(out_dict["input_ids"][0])
+        decoded = self.processor.tokenizer.decode(out_dict["input_ids"][0])
 
         self.assertIn('"video_duration": 3.5', decoded)
 
-    @slow
-    @require_av
     def test_apply_chat_template_video_duration_mixed(self):
-        processor = self._get_real_processor()
         messages = [
             [
                 {
@@ -119,10 +114,10 @@ class HyperCLOVAXVisionV2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ]
         ]
 
-        out_dict = processor.apply_chat_template(
+        out_dict = self.processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=True, return_dict=True, num_frames=2
         )
-        decoded = processor.tokenizer.decode(out_dict["input_ids"][0])
+        decoded = self.processor.tokenizer.decode(out_dict["input_ids"][0])
 
         durations = re.findall(r'"video_duration": (\d+(?:\.\d+)?)', decoded)
         self.assertEqual(len(durations), 2)

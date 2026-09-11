@@ -38,6 +38,11 @@ class HyperCLOVAXVisionV2_ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class HyperCLOVAXVisionV2Processor(ProcessorMixin):
     valid_processor_kwargs = HyperCLOVAXVisionV2_ProcessorKwargs
+    # Stopgap for `video_duration`: the hub template renders it as text, leaving the literal
+    # `<|video_duration|>` placeholder when missing. These three overrides fill it in after the fact,
+    # instead of the single `replace_video_token` hook other video models use (qwen3_vl, glm4v). Remove
+    # once the hub template is simplified to emit one placeholder token per video.
+    # See https://github.com/huggingface/transformers/pull/44314#issuecomment-5569986614
     video_duration_token = "<|video_duration|>"
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
@@ -166,18 +171,16 @@ class HyperCLOVAXVisionV2Processor(ProcessorMixin):
 
     def get_text_with_replacements(
         self,
-        text,
-        images_replacements=None,
-        videos_replacements=None,
-        audio_replacements=None,
+        text: list[str],
+        images_replacements: list[str] = [],
+        videos_replacements: list[str] = [],
+        audio_replacements: list[str] = [],
     ):
         durations = iter(self._pending_video_durations)
         pattern = re.escape(self.video_duration_token)
         text = [re.sub(pattern, lambda _: json.dumps(next(durations)), sample) for sample in text]
         self._pending_video_durations = []
-        result = super().get_text_with_replacements(
-            text, images_replacements or [], videos_replacements or [], audio_replacements or []
-        )
+        result = super().get_text_with_replacements(text, images_replacements, videos_replacements, audio_replacements)
         return result
 
 

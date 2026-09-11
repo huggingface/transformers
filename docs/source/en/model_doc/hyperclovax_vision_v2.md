@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-09-07.*
+*This model was contributed to Hugging Face Transformers on 2026-09-11.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -28,15 +28,15 @@ HyperCLOVAX Vision V2 is a multimodal vision-language model developed by NAVER. 
 
 You can find the original HyperCLOVAX-SEED-Think-32B checkpoint on the [naver-hyperclovax/HyperCLOVAX-SEED-Think-32B](https://huggingface.co/naver-hyperclovax/HyperCLOVAX-SEED-Think-32B) page.
 
-The example below demonstrates how to generate text based on an image with [`HyperCLOVAXVisionV2ForConditionalGeneration`].
+The example below demonstrates how to generate text based on an image with [`AutoModelForImageTextToText`].
 
 <hfoptions id="usage">
 <hfoption id="Image input">
 
 ```python
-from transformers import AutoProcessor, HyperCLOVAXVisionV2ForConditionalGeneration
+from transformers import AutoModelForImageTextToText, AutoProcessor
 
-model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
+model = AutoModelForImageTextToText.from_pretrained(
     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
     device_map="auto",
 )
@@ -81,9 +81,9 @@ print(output_text)
 <hfoption id="Video input">
 
 ```python
-from transformers import AutoProcessor, HyperCLOVAXVisionV2ForConditionalGeneration
+from transformers import AutoModelForImageTextToText, AutoProcessor
 
-model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
+model = AutoModelForImageTextToText.from_pretrained(
     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
     device_map="auto",
 )
@@ -132,10 +132,10 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to load the model in 4-bit.
 
 ```python
-from transformers import AutoProcessor, BitsAndBytesConfig, HyperCLOVAXVisionV2ForConditionalGeneration
+from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
 
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
-model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
+model = AutoModelForImageTextToText.from_pretrained(
     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
     device_map="auto",
     quantization_config=quantization_config,

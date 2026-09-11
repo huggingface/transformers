@@ -28,15 +28,15 @@ HyperCLOVAX Vision V2는 NAVER가 개발한 비전-언어 멀티모달 모델입
 
 원본 HyperCLOVAX-SEED-Think-32B 체크포인트는 [naver-hyperclovax/HyperCLOVAX-SEED-Think-32B](https://huggingface.co/naver-hyperclovax/HyperCLOVAX-SEED-Think-32B) 페이지에서 확인할 수 있습니다.
 
-아래 예시는 [`HyperCLOVAXVisionV2ForConditionalGeneration`]을 사용하여 이미지를 기반으로 텍스트를 생성하는 방법을 보여줍니다.
+아래 예시는 [`AutoModelForImageTextToText`]을 사용하여 이미지를 기반으로 텍스트를 생성하는 방법을 보여줍니다.
 
 <hfoptions id="usage">
 <hfoption id="이미지 입력">
 
 ```python
-from transformers import AutoProcessor, HyperCLOVAXVisionV2ForConditionalGeneration
+from transformers import AutoModelForImageTextToText, AutoProcessor
 
-model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
+model = AutoModelForImageTextToText.from_pretrained(
     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
     device_map="auto",
 )
@@ -81,9 +81,9 @@ print(output_text)
 <hfoption id="비디오 입력">
 
 ```python
-from transformers import AutoProcessor, HyperCLOVAXVisionV2ForConditionalGeneration
+from transformers import AutoModelForImageTextToText, AutoProcessor
 
-model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
+model = AutoModelForImageTextToText.from_pretrained(
     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
     device_map="auto",
 )
@@ -132,10 +132,10 @@ print(output_text)
 아래 예시는 [bitsandbytes](../quantization/bitsandbytes)를 사용하여 모델을 4-bit로 로드합니다.
 
 ```python
-from transformers import AutoProcessor, BitsAndBytesConfig, HyperCLOVAXVisionV2ForConditionalGeneration
+from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
 
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
-model = HyperCLOVAXVisionV2ForConditionalGeneration.from_pretrained(
+model = AutoModelForImageTextToText.from_pretrained(
     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
     device_map="auto",
     quantization_config=quantization_config,
