@@ -457,7 +457,14 @@ if is_kernels_available():
                         layer_name="FastGELU",
                         version=1,
                     )
-                }
+                },
+                "xpu": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation",
+                        layer_name="FastGELU",
+                        version=1,
+                    )
+                },
             },
             "QuickGELU": {
                 "cuda": {
@@ -466,7 +473,14 @@ if is_kernels_available():
                         layer_name="QuickGELU",
                         version=1,
                     )
-                }
+                },
+                "xpu": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation",
+                        layer_name="QuickGELU",
+                        version=1,
+                    )
+                },
             },
             "NewGELU": {
                 "cuda": {
@@ -475,28 +489,50 @@ if is_kernels_available():
                         layer_name="NewGELU",
                         version=1,
                     )
-                }
+                },
+                "xpu": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation",
+                        layer_name="NewGELU",
+                        version=1,
+                    )
+                },
             },
             "SiLU": {
                 "cuda": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/activation", layer_name="Silu", version=1
                     )
-                }
+                },
+                "xpu": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation", layer_name="Silu", version=1
+                    )
+                },
             },
             "GeLU": {
                 "cuda": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/activation", layer_name="Gelu", version=1
                     )
-                }
+                },
+                "xpu": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation", layer_name="Gelu", version=1
+                    )
+                },
             },
             "GeluTanh": {
                 "cuda": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-community/activation", layer_name="GeluTanh", version=1
                     )
-                }
+                },
+                "xpu": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-community/activation", layer_name="GeluTanh", version=1
+                    )
+                },
             },
             "chunk_kda": {
                 "cuda": {
@@ -665,7 +701,7 @@ def load_and_register_attn_kernel(
 
     Args:
         attn_implementation: A string, usually a kernel repo like "kernels-community/flash-mla".
-        attn_wrapper: a callable for the wrapper around the attention implementation. In `transformers` we
+        attention_wrapper: a callable for the wrapper around the attention implementation. In `transformers` we
             have a wrapper around the `flash_attn_var_len` call, and the same goes for `sdpa` and `eager`.
             They just prepare the arguments properly. This is mostly used for continuous batching, where we
             want the `paged` wrapper, which calls the paged cache.
