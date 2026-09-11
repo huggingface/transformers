@@ -35,6 +35,8 @@ from transformers.utils import is_torch_available, is_torchao_available
 if is_torch_available():
     import torch
 
+    from transformers.quantizers.quantizer_torchao import TorchAoHfQuantizer
+
 if is_torchao_available():
     from torchao.prototype.mx_formats import NVFP4DynamicActivationNVFP4WeightConfig
     from torchao.quantization import (
@@ -86,6 +88,52 @@ class TorchAoConfigTest(unittest.TestCase):
         self.assertTrue("group_size" in d["quant_type"]["default"]["_data"])
         quantization_config.to_json_string(use_diff=False)
 
+    def test_param_needs_quantization_moe_expert_delegated_plain_int32(self):
+        class DummyExperts(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.gate_up_proj = torch.nn.Parameter(torch.randn(2, 32, 16))
+                self.down_proj = torch.nn.Parameter(torch.randn(2, 16, 32))
+                self.bias = torch.nn.Parameter(torch.randn(32))
+
+        class DummyModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = torch.nn.Linear(16, 32)
+                self.experts = DummyExperts()
+
+        quantizer = TorchAoHfQuantizer(
+            TorchAoConfig(Int4WeightOnlyConfig(int4_packing_format="plain_int32", group_size=16)),
+            pre_quantized=False,
+        )
+        quantizer.modules_to_not_convert = []
+        model = DummyModel()
+
+        self.assertTrue(quantizer.param_needs_quantization(model, "linear.weight"))
+        self.assertFalse(quantizer.param_needs_quantization(model, "linear.bias"))
+        self.assertTrue(quantizer.param_needs_quantization(model, "experts.gate_up_proj"))
+        self.assertTrue(quantizer.param_needs_quantization(model, "experts.down_proj"))
+        self.assertFalse(quantizer.param_needs_quantization(model, "experts.bias"))
+
+    def test_param_needs_quantization_moe_expert_non_plain_int32(self):
+        class DummyExperts(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.gate_up_proj = torch.nn.Parameter(torch.randn(2, 32, 16))
+
+        class DummyModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.experts = DummyExperts()
+
+        quantizer = TorchAoHfQuantizer(
+            TorchAoConfig(Int4WeightOnlyConfig(int4_packing_format="tile_packed_to_4d", group_size=16)),
+            pre_quantized=False,
+        )
+        quantizer.modules_to_not_convert = []
+        model = DummyModel()
+
+        self.assertFalse(quantizer.param_needs_quantization(model, "experts.gate_up_proj"))
 
 @require_torchao
 @slow
