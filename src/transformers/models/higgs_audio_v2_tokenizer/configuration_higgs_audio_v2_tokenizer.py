@@ -24,9 +24,9 @@ import math
 import numpy as np
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="bosonai/higgs-audio-v2-tokenizer")
@@ -71,23 +71,27 @@ class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
 
     model_type = "higgs_audio_v2_tokenizer"
 
-    sub_configs = {
-        "acoustic_model_config": AutoConfig,
-        "semantic_model_config": AutoConfig,
-    }
-
-    _default_acoustic_model_config_kwargs = {
-        "encoder_hidden_size": 64,
-        # NOTE: original DAC uses [2, 4, 8, 8] `downsampling ratios`, namely reverse of `upsampling_ratios`
-        # (not sure if intentional by HiggsAudioV2Tokenizer but we keep it)
-        "downsampling_ratios": [8, 5, 4, 2],
-        "decoder_hidden_size": 1024,
-        "upsampling_ratios": [8, 5, 4, 2],
-        "hidden_size": 256,
-    }
-
-    _default_semantic_model_config_kwargs = {
-        "mask_time_prob": 0.0,
+    sub_configs_defaults = {
+        "acoustic_model_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="dac",
+            init_kwargs={
+                "encoder_hidden_size": 64,
+                # NOTE: original DAC uses [2, 4, 8, 8] `downsampling ratios`, namely reverse of `upsampling_ratios`
+                # (not sure if intentional by HiggsAudioV2Tokenizer but we keep it)
+                "downsampling_ratios": [8, 5, 4, 2],
+                "decoder_hidden_size": 1024,
+                "upsampling_ratios": [8, 5, 4, 2],
+                "hidden_size": 256,
+            },
+        ),
+        "semantic_model_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="hubert",
+            init_kwargs={
+                "mask_time_prob": 0.0,
+            },
+        ),
     }
 
     target_bandwidths: list[int | float] | tuple[int | float, ...] = (0.5, 1, 1.5, 2, 4)
@@ -106,34 +110,9 @@ class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
     downsample_factor: int = 320
 
     def __post_init__(self, **kwargs):
-        if self.acoustic_model_config is None:
-            self.acoustic_model_config = CONFIG_MAPPING["dac"](
-                encoder_hidden_size=64,
-                # NOTE: original DAC uses [2, 4, 8, 8] `downsampling ratios`, namely reverse of `upsampling_ratios`
-                # (not sure if intentional by HiggsAudioV2Tokenizer but we keep it)
-                downsampling_ratios=[8, 5, 4, 2],
-                decoder_hidden_size=1024,
-                upsampling_ratios=[8, 5, 4, 2],
-                hidden_size=256,
-            )
-        elif isinstance(self.acoustic_model_config, dict):
-            self.acoustic_model_config["model_type"] = self.acoustic_model_config.get("model_type", "dac")
-            self.acoustic_model_config = CONFIG_MAPPING[self.acoustic_model_config["model_type"]](
-                **{**self._default_acoustic_model_config_kwargs, **self.acoustic_model_config}
-            )
-
-        if self.semantic_model_config is None:
-            self.semantic_model_config = CONFIG_MAPPING["hubert"]()
-        elif isinstance(self.semantic_model_config, dict):
-            self.semantic_model_config["model_type"] = self.semantic_model_config.get("model_type", "hubert")
-            self.semantic_model_config = CONFIG_MAPPING[self.semantic_model_config["model_type"]](
-                **{**self._default_semantic_model_config_kwargs, **self.semantic_model_config}
-            )
-
+        super().__post_init__(**kwargs)
         if self.codebook_dim is None:
             self.codebook_dim = self.acoustic_model_config.hidden_size + self.semantic_model_config.hidden_size
-
-        super().__post_init__(**kwargs)
 
     @property
     def frame_rate(self) -> int:

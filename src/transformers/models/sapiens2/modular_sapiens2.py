@@ -20,12 +20,10 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 from torchvision.transforms.v2 import functional as tvF
 
-from transformers.image_processing_backends import TorchvisionBackend
-from transformers.models.dinov3_vit.modeling_dinov3_vit import DINOv3ViTBackboneOutput
-
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
@@ -40,6 +38,7 @@ from ...image_utils import (
 )
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...models.dinov3_vit.modeling_dinov3_vit import DINOv3ViTBackboneOutput
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
@@ -1120,7 +1119,9 @@ class Sapiens2Config(DINOv3ViTConfig):
     """
 
     model_type = "sapiens2"
-    sub_configs = {"head_config": Sapiens2HeadConfig}
+    sub_configs_defaults = {
+        "head_config": SubConfigSpec(config_class=Sapiens2HeadConfig),
+    }
 
     hidden_size: int = 1024
     num_hidden_layers: int = 24
@@ -1146,6 +1147,7 @@ class Sapiens2Config(DINOv3ViTConfig):
     apply_layernorm = AttributeError()  # inherited from DINOv3 but not used
 
     def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
         if self.num_key_value_heads_per_layer is None:
             self.num_key_value_heads_per_layer = [
                 self.num_attention_heads
@@ -1156,11 +1158,9 @@ class Sapiens2Config(DINOv3ViTConfig):
                 else self.num_key_value_attention_heads
                 for layer_index in range(self.num_hidden_layers)
             ]
-        if isinstance(self.head_config, dict):
-            self.head_config = Sapiens2HeadConfig(**self.head_config)
+
         if self.head_config is not None:
             self.head_config._init_scale_final_input_size(image_size=self.image_size, patch_size=self.patch_size)
-        super().__post_init__(**kwargs)
 
 
 class Sapiens2Embeddings(DINOv3ViTEmbeddings):

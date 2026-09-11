@@ -25,7 +25,7 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...activations import ACT2CLS
 from ...backbone_utils import filter_output_hidden_states
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -77,7 +77,9 @@ class SLANeXtConfig(PreTrainedConfig):
     """
 
     model_type = "slanext"
-    sub_configs = {"vision_config": SLANeXtVisionConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=SLANeXtVisionConfig),
+    }
 
     vision_config: dict | SLANeXtVisionConfig | None = None
     post_conv_in_channels: int = 256
@@ -85,13 +87,6 @@ class SLANeXtConfig(PreTrainedConfig):
     out_channels: int = 50
     hidden_size: int = 512
     max_text_length: int = 500
-
-    def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = SLANeXtVisionConfig()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = SLANeXtVisionConfig(**self.vision_config)
-        super().__post_init__(**kwargs)
 
 
 class SLANeXtAttentionGRUCell(nn.Module):

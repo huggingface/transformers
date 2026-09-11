@@ -16,9 +16,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
-from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
+from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -55,25 +55,16 @@ class VisionEncoderDecoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "vision-encoder-decoder"
-    sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig, model_type="bert", init_kwargs={"is_decoder": True, "add_cross_attention": True}
+        ),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="vit"),
+    }
 
     encoder: PreTrainedConfig | dict | None = None
     decoder: PreTrainedConfig | dict | None = None
     is_encoder_decoder: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.encoder, dict):
-            self.encoder["model_type"] = self.encoder.get("model_type", "vit")
-            self.encoder = CONFIG_MAPPING[self.encoder["model_type"]](**self.encoder)
-        elif self.encoder is None:
-            self.encoder = CONFIG_MAPPING["vit"]()
-
-        if isinstance(self.decoder, dict):
-            self.decoder["model_type"] = self.decoder.get("model_type", "bert")
-            self.decoder = CONFIG_MAPPING[self.decoder["model_type"]](**self.decoder)
-        elif self.decoder is None:
-            self.decoder = CONFIG_MAPPING["bert"](is_decoder=True, add_cross_attention=True)
-        super().__post_init__(**kwargs)
 
     @classmethod
     def from_encoder_decoder_configs(

@@ -15,9 +15,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
+from ..auto.configuration_auto import AutoConfig
 
 
 @auto_docstring
@@ -48,27 +48,15 @@ class VisionTextDualEncoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "vision-text-dual-encoder"
-    sub_configs = {"vision_config": AutoConfig, "text_config": AutoConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="bert"),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="vit"),
+    }
 
     text_config: PreTrainedConfig | dict | None = None
     vision_config: PreTrainedConfig | dict | None = None
     projection_dim: int = 512
     logit_scale_init_value: int | float = 2.6592
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "bert")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["bert"]()
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "vit")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["vit"]()
-
-        super().__post_init__(**kwargs)
 
     @classmethod
     def from_vision_text_configs(cls, vision_config: PreTrainedConfig, text_config: PreTrainedConfig, **kwargs):

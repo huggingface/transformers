@@ -158,6 +158,7 @@ class PaddleOCRVLConfig(PreTrainedConfig):
     ```"""
 
     model_type = "paddleocr_vl"
+
     sub_configs_defaults = {
         "vision_config": SubConfigSpec(config_class=PaddleOCRVisionConfig),
         "text_config": SubConfigSpec(config_class=PaddleOCRTextConfig),

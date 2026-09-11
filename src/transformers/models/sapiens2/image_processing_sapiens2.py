@@ -22,8 +22,7 @@ import torch
 import torch.nn.functional as F
 from torchvision.transforms.v2 import functional as tvF
 
-from transformers.image_processing_backends import TorchvisionBackend
-
+from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images

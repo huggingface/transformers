@@ -14,9 +14,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="llava-hf/vip-llava-7b-hf")
@@ -53,7 +53,23 @@ class VipLlavaConfig(PreTrainedConfig):
     attribute_map = {
         "image_token_id": "image_token_index",
     }
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="llama"),
+        "vision_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="clip_vision_model",
+            init_kwargs={
+                "intermediate_size": 4096,
+                "hidden_size": 1024,
+                "patch_size": 14,
+                "image_size": 336,
+                "num_hidden_layers": 24,
+                "num_attention_heads": 16,
+                "vocab_size": 32000,
+                "projection_dim": 768,
+            },
+        ),
+    }
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -63,30 +79,6 @@ class VipLlavaConfig(PreTrainedConfig):
     vision_feature_layers: int | list[int] | tuple[int, ...] = (-2, -5, -8, -11, 6)
     image_seq_length: int = 576
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "clip_vision_model")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["clip_vision_model"](
-                intermediate_size=4096,
-                hidden_size=1024,
-                patch_size=14,
-                image_size=336,
-                num_hidden_layers=24,
-                num_attention_heads=16,
-                vocab_size=32000,
-                projection_dim=768,
-            )
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "llama")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["llama"]()
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["VipLlavaConfig"]

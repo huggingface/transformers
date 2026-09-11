@@ -20,7 +20,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -315,7 +315,10 @@ class Step3p7TextConfig(PreTrainedConfig):
 @strict
 class Step3p7Config(PreTrainedConfig):
     model_type = "step3p7"
-    sub_configs = {"vision_config": Step3p7VisionConfig, "text_config": Step3p7TextConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=Step3p7VisionConfig),
+        "text_config": SubConfigSpec(config_class=Step3p7TextConfig),
+    }
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -323,18 +326,11 @@ class Step3p7Config(PreTrainedConfig):
     image_token_id: int = 151679
 
     def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = Step3p7VisionConfig()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = Step3p7VisionConfig(
-                **{k: v for k, v in self.vision_config.items() if k != "model_type"}
-            )
-
-        if self.text_config is None:
-            self.text_config = Step3p7TextConfig()
-        elif isinstance(self.text_config, dict):
-            self.text_config = Step3p7TextConfig(**{k: v for k, v in self.text_config.items() if k != "model_type"})
-
+        # Force default model-type - hub has a remote-code format config
+        if isinstance(self.vision_config, dict):
+            self.vision_config = self.vision_config.pop("model_type", None)
+        if isinstance(self.text_config, dict):
+            self.text_config = self.text_config.pop("model_type", None)
         super().__post_init__(**kwargs)
 
 

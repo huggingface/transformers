@@ -22,9 +22,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -85,7 +85,10 @@ class SmolVLMConfig(PreTrainedConfig):
     ```"""
 
     model_type = "smolvlm"
-    sub_configs = {"text_config": AutoConfig, "vision_config": SmolVLMVisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="llama", init_kwargs={"rms_norm_eps": 1e-5}),
+        "vision_config": SubConfigSpec(config_class=SmolVLMVisionConfig),
+    }
 
     use_cache: bool = True
     image_token_id: int = 128257
@@ -95,19 +98,6 @@ class SmolVLMConfig(PreTrainedConfig):
     scale_factor: int = 2
 
     def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = SmolVLMVisionConfig()
-            logger.info("vision_config is None, using default vision config")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = SmolVLMVisionConfig(**self.vision_config)
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "llama")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            logger.info("text_config is None, using default Llama text config")
-            self.text_config = CONFIG_MAPPING["llama"](rms_norm_eps=1e-5)
-
         self._pad_token_id = kwargs.pop("pad_token_id", 128_002)
         super().__post_init__(**kwargs)
 

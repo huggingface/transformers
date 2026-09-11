@@ -147,7 +147,7 @@ class SubConfigSpec:
     def __init__(
         self,
         config_class,
-        model_type: str = "",
+        model_type: str | None = None,
         init_kwargs: dict | None = None,
     ):
         self.init_kwargs = init_kwargs if init_kwargs is not None else {}
@@ -155,17 +155,21 @@ class SubConfigSpec:
 
         # we can have `AutoConfig` with a default model-type (eg. LLaVA), or the subconfig
         # is already a specific class (eg. Qwen2VLVisionConfig) which has a `model_type` attr
-        if not model_type and not hasattr(config_class, "model_type"):
+        if model_type is None and not hasattr(config_class, "model_type"):
             raise ValueError(
                 "You have to provide either a valid `model_type` or an specific `config_class` "
                 f"to init subconfigs correctly, but got model_type={model_type} and config_class={config_class}"
             )
-        self.model_type = model_type if model_type else config_class.model_type
+        self.model_type = model_type if model_type is not None else config_class.model_type
 
     def get_config_class(self, model_type: str | None = None):
         # Avoid circular imports - we only need the static mapping here to map from `string` to config class
         from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 
+        if model_type not in CONFIG_MAPPING:
+            raise ValueError(
+                f"Unrecognized model type for subconfig: {model_type}. Should contain one of {', '.join(CONFIG_MAPPING.keys())}"
+            )
         return CONFIG_MAPPING[model_type]
 
     def create_subconfig(self, key, subconfig=None, **kwargs):

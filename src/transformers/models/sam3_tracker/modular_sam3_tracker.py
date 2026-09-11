@@ -17,10 +17,11 @@ import torch
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import SubConfigSpec
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoModel
+from ..auto import AutoModel
+from ..auto.configuration_auto import AutoConfig
 from ..sam2.configuration_sam2 import (
     Sam2Config,
     Sam2MaskDecoderConfig,
@@ -109,26 +110,15 @@ class Sam3TrackerConfig(Sam2Config):
     ```
     """
 
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "sam3_vision_model")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["sam3_vision_model"](
-                backbone_feature_sizes=[[288, 288], [144, 144], [72, 72]]
-            )
-
-        if isinstance(self.prompt_encoder_config, dict):
-            self.prompt_encoder_config = Sam3TrackerPromptEncoderConfig(**self.prompt_encoder_config)
-        elif self.prompt_encoder_config is None:
-            self.prompt_encoder_config = Sam3TrackerPromptEncoderConfig()
-
-        if isinstance(self.mask_decoder_config, dict):
-            self.mask_decoder_config = Sam3TrackerMaskDecoderConfig(**self.mask_decoder_config)
-        elif self.mask_decoder_config is None:
-            self.mask_decoder_config = Sam3TrackerMaskDecoderConfig()
-
-        PreTrainedConfig.__post_init__(**kwargs)
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="sam3_vision_model",
+            init_kwargs={"backbone_feature_sizes": [[288, 288], [144, 144], [72, 72]]},
+        ),
+        "prompt_encoder_config": SubConfigSpec(config_class=Sam3TrackerPromptEncoderConfig),
+        "mask_decoder_config": SubConfigSpec(config_class=Sam3TrackerMaskDecoderConfig),
+    }
 
 
 class Sam3TrackerImageSegmentationOutput(Sam2ImageSegmentationOutput):

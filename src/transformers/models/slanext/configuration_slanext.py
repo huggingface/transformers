@@ -21,7 +21,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 
 
@@ -83,7 +83,9 @@ class SLANeXtConfig(PreTrainedConfig):
     """
 
     model_type = "slanext"
-    sub_configs = {"vision_config": SLANeXtVisionConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=SLANeXtVisionConfig),
+    }
 
     vision_config: dict | SLANeXtVisionConfig | None = None
     post_conv_in_channels: int = 256
@@ -91,13 +93,6 @@ class SLANeXtConfig(PreTrainedConfig):
     out_channels: int = 50
     hidden_size: int = 512
     max_text_length: int = 500
-
-    def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = SLANeXtVisionConfig()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = SLANeXtVisionConfig(**self.vision_config)
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["SLANeXtConfig"]
