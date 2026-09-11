@@ -375,6 +375,7 @@ class DeepseekV3ModelTest(
 class DeepseekV3IntegrationTest(unittest.TestCase):
     def tearDown(self):
         # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
+        # TODO: switch to MemoryCleanupMixin (gc_collect=True) to prevent OOM cascade from generator ref leak
         cleanup(torch_device, gc_collect=False)
 
     @slow
