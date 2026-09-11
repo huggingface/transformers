@@ -33,7 +33,7 @@ followed by a pre-norm Transformer encoder) with one of two heads:
   greedy CTC. Fast and simple.
 - **LLM variant** ([`OmniASRForConditionalGeneration`]): the audio embeddings are linearly projected into a Llama
   decoder which autoregressively generates the transcription. This variant additionally supports optional **language
-  conditioning**: passing a language code such as `"eng_Latn"` selects a learned language embedding that is inserted
+  conditioning**: passing a language code such as `"eng_Latn"` makes the processor write the matching language token
   into the decoder context, which generally improves transcription quality.
 
 The converted development checkpoints used in the examples below are

@@ -310,16 +310,10 @@ class OmniASRConfig(PreTrainedConfig):
         Number of consecutive encoder frames stacked together before being projected to the text decoder. Used by
         the Zero-Shot variant, see
         https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/model.py#L1024
-    num_language_embeddings (`int`, *optional*, defaults to 1694):
-        Number of language embeddings in the language embedding table.
-    language_embedding_probability (`float`, *optional*, defaults to 0.5):
-        Probability of using the language embedding during training.
     language_token_id (`int`, *optional*, defaults to 10288):
-        Id of the LID marker token (`<extra_id_0>`), which opens the language slot of the decoder context. Read by
-        [`OmniASRProcessor`] when it builds the prompt.
-    language_embedding_token_id (`int`, *optional*, defaults to 10290):
-        Id of the placeholder token (`<extra_id_2>`) that stands for the language embedding in `input_ids`. It is
-        replaced by the row of the language embedding table that `language_ids` selects.
+        Id of the LID marker token (`<extra_id_0>`), which opens the language slot of the decoder context. It is
+        followed by one of the language tokens that close the vocabulary, both written by [`OmniASRProcessor`] when
+        it builds the prompt.
 
     Example:
 
@@ -341,8 +335,8 @@ class OmniASRConfig(PreTrainedConfig):
     sub_configs = {"audio_config": OmniASREncoderConfig, "text_config": AutoConfig}
 
     _default_text_config_kwargs = {
-        # 10288 tokenizer tokens + the LID marker and the two placeholders below
-        "vocab_size": 10291,
+        # 10288 tokenizer tokens, the LID marker and the audio placeholder below, then one token per language
+        "vocab_size": 11984,
         "hidden_size": 4096,
         "num_hidden_layers": 12,
         "num_key_value_heads": 8,
@@ -354,11 +348,8 @@ class OmniASRConfig(PreTrainedConfig):
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     encoder_stacking: int = 1
-    num_language_embeddings: int = 1694
-    language_embedding_probability: float | int = 0.5
     language_token_id: int = 10288
     audio_token_id: int = 10289
-    language_embedding_token_id: int = 10290
     bos_token_id: int | None = 0
     pad_token_id: int | None = 1
     eos_token_id: int | None = 2

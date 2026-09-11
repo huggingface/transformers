@@ -92,9 +92,12 @@ from transformers.models.omniasr.processing_omniasr import OmniASRProcessor
 from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 
-# Rows reserved at the end of the text embedding table, in the order the tokenizer declares them:
-# `<extra_id_0>` (the LID marker), `<extra_id_1>` (audio placeholder) and `<extra_id_2>` (language placeholder).
-NUM_RESERVED_TOKENS = 3
+# Rows reserved right after the tokenizer's vocabulary, in the order the tokenizer declares them: `<extra_id_0>`
+# (the LID marker) and `<extra_id_1>` (audio placeholder). The language tokens follow them, see `language_tokens`.
+NUM_RESERVED_TOKENS = 2
+
+# The language-agnostic mode the original model reaches by looking up row 0 of its language embedding table.
+LANGUAGE_AGNOSTIC = "auto"
 
 
 logging.set_verbosity_info()
@@ -109,7 +112,7 @@ def get_encoder_convert_list(target_attr="encoder"):
     # AudioFlamingo3 and Qwen3ASR), so there is no `feature_extractor` / `feature_projection` / `encoder` nesting.
     prefix = f"{target_attr}." if target_attr else ""
     return [
-        ("encoder.layer_norm", f"{prefix}final_layer_norm"),
+        ("encoder.layer_norm", f"{prefix}layer_norm"),
         ("encoder_frontend.feature_extractor.layers", f"{prefix}subsampling.conv_layers"),
         ("encoder_frontend.post_extract_layer_norm", f"{prefix}subsampling.layer_norm"),
         ("encoder_frontend.model_dim_proj", f"{prefix}subsampling.projection"),
@@ -134,7 +137,6 @@ llm_convert_list = [
     # under the `OmniASRModel` base model (exposed as `model` on OmniASRForConditionalGeneration).
     ("final_proj", "lm_head"),
     ("encoder_proj", "model.multi_modal_projector"),
-    ("lang_embeddings", "model.lang_embeddings"),
     # LLaMA decoder - order matters! More specific patterns first
     ("llama_decoder.layers", "model.language_model.layers"),
     ("self_attn.output_proj", "self_attn.o_proj"),
@@ -186,9 +188,7 @@ def _rename_keys(state_dict, convert_list, applies, verbose=False):
 
 
 def _convert_model(original_model, hf_model, encoder_convert_list, decoder_convert_list=None, verbose=False):
-    """
-    ValueError: 1 extra keys found: {'lang_embeddings.weight'}
-    """
+    """Rename the original state dict onto `hf_model` and load it, failing loudly on any key left over."""
 
     state_dict = original_model.state_dict()
     print("Number of keys in original model :", len(state_dict))
@@ -233,11 +233,30 @@ def _convert_model(original_model, hf_model, encoder_convert_list, decoder_conve
                 if verbose:
                     print(f"Permuted {k} for RoPE: {weight.shape} -> {state_dict[k].shape}")
 
+    # The original checkpoint keeps the language embeddings in a table of their own, looked up from a `lang`
+    # column that never reaches the decoder as a token. OmniASR instead gives every language a token at the end of
+    # the vocabulary, so the rows are appended to the input embeddings and `OmniASRProcessor` only has to write the
+    # matching token into `input_ids`.
+    embed_key = "model.language_model.embed_tokens.weight"
+    lang_embeddings = state_dict.pop("lang_embeddings.weight", None)
+    if lang_embeddings is not None:
+        text_embeddings = state_dict[embed_key]
+        num_text_rows = hf_model.config.text_config.vocab_size - lang_embeddings.shape[0]
+        if text_embeddings.shape[0] < num_text_rows:
+            text_embeddings = torch.cat(
+                [
+                    text_embeddings,
+                    torch.zeros_like(text_embeddings[:1]).repeat(num_text_rows - len(text_embeddings), 1),
+                ]
+            )
+        state_dict[embed_key] = torch.cat([text_embeddings[:num_text_rows], lang_embeddings])
+        logger.info(f"Folded {list(lang_embeddings.shape)} language embeddings into {embed_key}")
+
     # Pad the vocabulary-sized matrices if needed: the original model has no row for the tokens that OmniASR
-    # reserves at the end of the table (the LID marker, and the audio and language placeholders). The rows are
-    # zeroed, so a placeholder can never produce a meaningful logit -- and `generation_config.suppress_tokens`
-    # below makes sure it can never be sampled either.
-    for key in ("lm_head.weight", "model.language_model.embed_tokens.weight"):
+    # reserves after the tokenizer's vocabulary (the LID marker, the audio placeholder and the language tokens).
+    # The rows are zeroed, so they can never produce a meaningful logit -- and `generation_config.suppress_tokens`
+    # below makes sure they can never be sampled either.
+    for key in ("lm_head.weight", embed_key):
         if key not in state_dict or key not in hf_model.state_dict():
             continue
         src_shape = state_dict[key].shape
@@ -490,8 +509,20 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
             intermediate_size = inner_dim_to_multiple * (
                 (intermediate_size + inner_dim_to_multiple - 1) // inner_dim_to_multiple
             )
+        # One token per row of the original language embedding table, row 0 being the language-agnostic mode.
+        num_language_embeddings = len(original_model.lang_embeddings.weight)
+        language_tokens = [None] * num_language_embeddings
+        language_tokens[0] = f"<|lang:{LANGUAGE_AGNOSTIC}|>"
+        for code, index in original_model.lang_mapping.items():
+            language_tokens[index] = f"<|lang:{code}|>"
+        if None in language_tokens:
+            raise ValueError(
+                f"`lang_mapping` leaves row {language_tokens.index(None)} of the {num_language_embeddings}-row "
+                "language embedding table unnamed, so it cannot be given a token."
+            )
+
         llama_config = LlamaConfig(
-            vocab_size=original_config_llm.llama_config.vocab_size + NUM_RESERVED_TOKENS,
+            vocab_size=original_config_llm.llama_config.vocab_size + NUM_RESERVED_TOKENS + num_language_embeddings,
             hidden_size=original_config_llm.llama_config.model_dim,
             intermediate_size=intermediate_size,
             max_position_embeddings=original_config_llm.llama_config.max_seq_len,
@@ -511,23 +542,23 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
             audio_config=encoder_config,
             text_config=llama_config,
             encoder_stacking=original_config_llm.encoder_stacking,
-            # TODO check if len(self.language_mapping) + 1, OR + self.num_special_tokens?
-            num_language_embeddings=len(original_model.lang_embeddings.weight),
             bos_token_id=original_config_llm.bos_idx,
             pad_token_id=original_config_llm.pad_idx,
             eos_token_id=original_config_llm.eos_idx,
-            language_embedding_probability=original_config_llm.lang_embeddings_p,
             # The reserved rows sit right after the base vocabulary, in the order the tokenizer declares them:
-            # `<extra_id_0>` is the LID marker the original model already used, and `<extra_id_1>` / `<extra_id_2>`
-            # are the placeholders that `OmniASRProcessor` writes into `input_ids` for the audio frames and the
-            # language embedding.
+            # `<extra_id_0>` is the LID marker the original model already used, and `<extra_id_1>` is the
+            # placeholder that `OmniASRProcessor` writes into `input_ids` for the audio frames. The language
+            # tokens follow, one per row of the original language embedding table.
             language_token_id=original_config_llm.llama_config.vocab_size,
             audio_token_id=original_config_llm.llama_config.vocab_size + 1,
-            language_embedding_token_id=original_config_llm.llama_config.vocab_size + 2,
         )
         hf_model = OmniASRForConditionalGeneration(config)
-        # A placeholder stands for an embedding that is scattered in; it is never a valid target.
-        hf_model.generation_config.suppress_tokens = [config.audio_token_id, config.language_embedding_token_id]
+        # None of the tokens past the tokenizer's vocabulary is a valid target: the audio placeholder stands for an
+        # embedding that is scattered in, and the LID marker and language tokens only ever open a prompt. Their
+        # `lm_head` rows are zeroed rather than trained, so they have to be suppressed rather than left to score.
+        hf_model.generation_config.suppress_tokens = list(
+            range(config.language_token_id, config.text_config.vocab_size)
+        )
     elif "W2V" in model_card:
         # TODO not working
         config = OmniASREncoderConfig(**encoder_config.to_dict())
@@ -582,7 +613,15 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
     # TODO do we also need to overwrite the pad token to be ID 0? (before <s>)
     vocab_scores[0] = ("<pad>", vocab_scores[0][1])
     # TODO create own tokenizer like LasrTokenizer but with correct special tokens?
-    tokenizer = LasrTokenizer(vocab=vocab_scores)
+    tokenizer_kwargs = {}
+    if "LLM" in model_card:
+        # The added tokens take the ids that follow the vocabulary, in this order, so they line up with the rows
+        # `config` reserves and with the language embeddings folded into the input embeddings above.
+        tokenizer_kwargs = {
+            "extra_ids": NUM_RESERVED_TOKENS,
+            "additional_special_tokens": [f"<extra_id_{i}>" for i in range(NUM_RESERVED_TOKENS)] + language_tokens,
+        }
+    tokenizer = LasrTokenizer(vocab=vocab_scores, **tokenizer_kwargs)
     tokenizer.add_eos_token = False
 
     # # -- create Transformers-compatible tokenizer
@@ -614,15 +653,19 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
 
     # -- create processor
     language_mapping = None
-    if "LLM" in model_card:
-        language_mapping = original_model.lang_mapping
     processor_kwargs = {}
     if "LLM" in model_card:
+        # `OmniASRProcessor` resolves `language` straight to the token it writes into the prompt, so the mapping
+        # holds token ids rather than the rows of the table the original model looked up.
+        language_token_id_base = config.language_token_id + NUM_RESERVED_TOKENS
+        language_mapping = {LANGUAGE_AGNOSTIC: language_token_id_base}
+        language_mapping.update(
+            {code: language_token_id_base + index for code, index in original_model.lang_mapping.items()}
+        )
         # Everything `OmniASRProcessor` needs to build the decoder prompt `audio | lid_marker | language | bos`.
         processor_kwargs = {
             "audio_token_id": config.audio_token_id,
             "language_token_id": config.language_token_id,
-            "language_embedding_token_id": config.language_embedding_token_id,
             "bos_token_id": config.bos_token_id,
             "conv_kernel": list(config.audio_config.conv_kernel),
             "conv_stride": list(config.audio_config.conv_stride),

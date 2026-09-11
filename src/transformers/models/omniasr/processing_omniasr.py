@@ -24,9 +24,8 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
-# `language_mapping` indexes the language embedding table from 1, leaving row 0 for the language-agnostic mode.
+# The key `language_mapping` reserves for the model's language-agnostic mode, which is also the default.
 LANGUAGE_AGNOSTIC = "auto"
-LANGUAGE_AGNOSTIC_ID = 0
 
 
 class OmniASRProcessorKwargs(ProcessingKwargs, total=False):
@@ -56,16 +55,17 @@ class OmniASRProcessor(ProcessorMixin):
         group_tokens=None,
         audio_token_id=None,
         language_token_id=None,
-        language_embedding_token_id=None,
         bos_token_id=None,
         conv_kernel=None,
         conv_stride=None,
     ):
         r"""
         language_mapping (`dict[str, int]`, *optional*):
-            Mapping from a language code (e.g. `"eng_Latn"`) to its index in the model's language embedding table.
-            Only the LLM variant is language-conditioned, so only its checkpoints carry a mapping; when it is
-            `None`, `language` cannot be resolved and no `language_ids` are produced.
+            Mapping from a language code (e.g. `"eng_latn"`, and `"auto"` for the language-agnostic mode) to the id
+            of the token that stands for it in the prompt. The language tokens close the model's vocabulary, one per
+            row of the language embedding table the original checkpoint kept apart. Only the LLM variant is
+            language-conditioned, so only its checkpoints carry a mapping; when it is `None`, `language` cannot be
+            resolved and the prompt is not built here.
         group_tokens (`bool`, *optional*):
             Whether [`~OmniASRProcessor.decode`] collapses runs of identical tokens. This is what CTC decoding
             requires, and what the autoregressive LLM variant must not do. Defaults to `True` for the CTC variant
@@ -77,9 +77,6 @@ class OmniASRProcessor(ProcessorMixin):
         language_token_id (`int`, *optional*):
             Id of the LID marker token that opens the language slot of the prompt, i.e.
             [`OmniASRConfig.language_token_id`].
-        language_embedding_token_id (`int`, *optional*):
-            Id of the placeholder token that stands for the language embedding in `input_ids`, i.e.
-            [`OmniASRConfig.language_embedding_token_id`].
         bos_token_id (`int`, *optional*):
             Id of the token that closes the prompt, and from which the transcription is decoded. Defaults to the
             tokenizer's `bos_token_id`.
@@ -99,7 +96,6 @@ class OmniASRProcessor(ProcessorMixin):
         self.group_tokens = group_tokens
         self.audio_token_id = audio_token_id
         self.language_token_id = language_token_id
-        self.language_embedding_token_id = language_embedding_token_id
         self.bos_token_id = bos_token_id if bos_token_id is not None else tokenizer.bos_token_id
         # Lists rather than tuples, so that saving and reloading the processor round-trips to an equal object.
         self.conv_kernel = list(conv_kernel) if conv_kernel is not None else None
@@ -127,7 +123,7 @@ class OmniASRProcessor(ProcessorMixin):
                 Text input, passed to the tokenizer (used for training labels).
             language (`str` or `list[str]`, *optional*, defaults to `"auto"`):
                 Language code(s) for the LLM variant (e.g. `"eng_Latn"` or `["eng_Latn", "fra_Latn"]`), resolved
-                into the `language_ids` model input via `language_mapping`. Either a single code applied to the
+                into the language token of each prompt via `language_mapping`. Either a single code applied to the
                 whole batch, or one per audio. `"auto"` selects the model's language-agnostic mode; naming the
                 language explicitly gives better transcription quality. Ignored by the CTC variant, which is not
                 language-conditioned.
@@ -135,9 +131,9 @@ class OmniASRProcessor(ProcessorMixin):
                 The sampling rate of the audio input. Will warn if not provided.
 
         Returns:
-            [`BatchFeature`]: For the CTC variant, `input_values` and its `attention_mask`. For the LLM variant, the
-            decoder prompt as `input_ids` and its `attention_mask`, alongside `input_values`, `padding_mask` (the
-            mask over the raw samples) and `language_ids`. `labels` is added whenever `text` is given.
+            [`BatchFeature`]: For the CTC variant, `input_values` and its `padding_mask`. For the LLM variant, the
+            decoder prompt as `input_ids` and its `attention_mask`, alongside `input_values` and `padding_mask` (the
+            mask over the raw samples). `labels` is added whenever `text` is given.
         """
         audio = make_list_of_audio(audio)
 
@@ -158,18 +154,20 @@ class OmniASRProcessor(ProcessorMixin):
 
         inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
 
+        # The speech encoder gets its own mask over the raw samples, named `padding_mask` as in every other model
+        # that takes `input_values`, so that `attention_mask` is free to cover the LLM variant's decoder prompt.
+        padding_mask = inputs.pop("attention_mask", None)
+        if padding_mask is not None:
+            inputs["padding_mask"] = padding_mask
+
         # Only the LLM variant is language-conditioned, and only its checkpoints ship a mapping.
         if self.language_mapping is not None:
-            # The speech encoder gets its own mask over the raw samples, named `padding_mask` as in every other
-            # model that takes `input_values`, so that `attention_mask` is free to cover the decoder prompt.
-            padding_mask = inputs.pop("attention_mask", None)
             if padding_mask is not None:
                 audio_lengths = padding_mask.sum(-1)
-                inputs["padding_mask"] = padding_mask
             else:
                 audio_lengths = torch.full((len(audio),), inputs["input_values"].shape[-1], dtype=torch.long)
-            inputs["language_ids"] = self._resolve_language_ids(language, len(audio))
-            inputs["input_ids"], inputs["attention_mask"] = self._build_prompt(audio_lengths)
+            language_token_ids = self._resolve_language_token_ids(language, len(audio))
+            inputs["input_ids"], inputs["attention_mask"] = self._build_prompt(audio_lengths, language_token_ids)
         elif language != LANGUAGE_AGNOSTIC:
             logger.warning_once(
                 f"`language={language!r}` is ignored: this processor has no `language_mapping`, so the model it "
@@ -192,9 +190,8 @@ class OmniASRProcessor(ProcessorMixin):
         kwargs.setdefault("group_tokens", self.group_tokens)
         return self.tokenizer.decode(*args, **kwargs)
 
-    def _resolve_language_ids(self, language: str | list[str], batch_size: int) -> "torch.LongTensor":
-        if not is_torch_available():
-            raise ImportError("Resolving `language` into `language_ids` requires PyTorch. Please install PyTorch.")
+    def _resolve_language_token_ids(self, language: str | list[str], batch_size: int) -> list[int]:
+        """Id of the language token each prompt carries, one per audio input."""
         if isinstance(language, str):
             language = [language] * batch_size
         if len(language) == 1 and batch_size > 1:
@@ -203,20 +200,17 @@ class OmniASRProcessor(ProcessorMixin):
         if len(language) != batch_size:
             raise ValueError(f"Received {len(language)} `language` entries for {batch_size} audio input(s).")
 
-        language_ids = []
+        language_token_ids = []
         for lang in language:
             key = lang.lower()
-            if key == LANGUAGE_AGNOSTIC:
-                language_ids.append(LANGUAGE_AGNOSTIC_ID)
-            elif key in self.language_mapping:
-                language_ids.append(self.language_mapping[key])
-            else:
+            if key not in self.language_mapping:
                 raise ValueError(
                     f"Unknown `language={lang!r}`. Pass {LANGUAGE_AGNOSTIC!r} for the language-agnostic mode, or one "
-                    f"of the {len(self.language_mapping)} codes in `language_mapping`, e.g. "
-                    f"{sorted(self.language_mapping)[:5]}."
+                    f"of the {len(self.language_mapping) - 1} codes in `language_mapping`, e.g. "
+                    f"{sorted(set(self.language_mapping) - {LANGUAGE_AGNOSTIC})[:5]}."
                 )
-        return torch.tensor(language_ids, dtype=torch.long)
+            language_token_ids.append(self.language_mapping[key])
+        return language_token_ids
 
     def _get_num_audio_tokens(self, audio_lengths: "torch.Tensor") -> "torch.Tensor":
         """
@@ -227,7 +221,9 @@ class OmniASRProcessor(ProcessorMixin):
             audio_lengths = torch.div(audio_lengths - kernel, stride, rounding_mode="floor") + 1
         return audio_lengths
 
-    def _build_prompt(self, audio_lengths: "torch.Tensor") -> tuple["torch.LongTensor", "torch.LongTensor"]:
+    def _build_prompt(
+        self, audio_lengths: "torch.Tensor", language_token_ids: list[int]
+    ) -> tuple["torch.LongTensor", "torch.LongTensor"]:
         """
         Build the decoder prompt `audio | lid_marker | language | bos` of each audio input, as `input_ids` holding
         one audio placeholder per speech encoder frame.
@@ -242,7 +238,6 @@ class OmniASRProcessor(ProcessorMixin):
             for name, value in [
                 ("audio_token_id", self.audio_token_id),
                 ("language_token_id", self.language_token_id),
-                ("language_embedding_token_id", self.language_embedding_token_id),
                 ("bos_token_id", self.bos_token_id),
                 ("conv_kernel", self.conv_kernel),
                 ("conv_stride", self.conv_stride),
@@ -256,14 +251,16 @@ class OmniASRProcessor(ProcessorMixin):
                 "has to be converted again."
             )
 
-        markers = [self.language_token_id, self.language_embedding_token_id, self.bos_token_id]
         num_audio_tokens = self._get_num_audio_tokens(audio_lengths).tolist()
-        max_length = max(num_audio_tokens) + len(markers)
+        # The LID marker, the language token and BOS close every prompt.
+        num_markers = 3
+        max_length = max(num_audio_tokens) + num_markers
 
         input_ids = torch.full((len(num_audio_tokens), max_length), self.tokenizer.pad_token_id, dtype=torch.long)
         attention_mask = torch.zeros((len(num_audio_tokens), max_length), dtype=torch.long)
-        for idx, num_frames in enumerate(num_audio_tokens):
-            prompt = [self.audio_token_id] * num_frames + markers
+        for idx, (num_frames, language_token_id) in enumerate(zip(num_audio_tokens, language_token_ids)):
+            prompt = [self.audio_token_id] * num_frames
+            prompt += [self.language_token_id, language_token_id, self.bos_token_id]
             input_ids[idx, max_length - len(prompt) :] = torch.tensor(prompt, dtype=torch.long)
             attention_mask[idx, max_length - len(prompt) :] = 1
 
@@ -272,10 +269,10 @@ class OmniASRProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         if self.language_mapping is None:
-            # CTC variant: the audio is the whole input, and `attention_mask` masks its padding.
-            return self.feature_extractor.model_input_names + ["labels"]
+            # CTC variant: the audio is the whole input, and `padding_mask` masks its padding.
+            return ["input_values", "padding_mask", "labels"]
         # LLM variant: the audio fills the placeholders of a decoder prompt, so it carries its own mask.
-        return ["input_values", "padding_mask", "input_ids", "attention_mask", "language_ids", "labels"]
+        return ["input_values", "padding_mask", "input_ids", "attention_mask", "labels"]
 
 
 __all__ = ["OmniASRProcessor"]

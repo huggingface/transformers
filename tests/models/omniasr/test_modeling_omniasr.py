@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import json
 import unittest
 from pathlib import Path
@@ -52,8 +51,8 @@ class OmniASRModelTester(ALMModelTester):
     audio_mask_key = "padding_mask"
 
     def __init__(self, parent, **kwargs):
-        # seq_length 20 = BOS + 12 audio placeholders + 1 language placeholder + 6 text, which keeps the tail of
-        # each sequence text-only (the resize_token_embeddings test overwrites column -2).
+        # seq_length 20 = BOS + 12 audio placeholders + 7 text, which keeps the tail of each sequence text-only
+        # (the resize_token_embeddings test overwrites column -2).
         kwargs.setdefault("seq_length", 20)
         # 80 raw samples through the two convolutions below -> 12 encoder frames.
         kwargs.setdefault("feat_seq_length", 80)
@@ -65,21 +64,12 @@ class OmniASRModelTester(ALMModelTester):
         # Low placeholder ids on purpose: `test_resize_tokens_embeddings` clamps `input_ids` from above, which
         # would wipe out placeholders sitting at the end of the table (where the real checkpoints keep them).
         kwargs.setdefault("audio_token_id", 0)
-        kwargs.setdefault("language_embedding_token_id", 3)
         kwargs.setdefault("language_token_id", 4)
-        kwargs.setdefault("num_language_embeddings", 4)
-        # Keeps a training-mode forward deterministic: no language dropout, and no layer dropped by the encoder.
-        kwargs.setdefault("language_embedding_probability", 0.0)
+        # Keeps a training-mode forward deterministic: no layer dropped by the encoder.
         kwargs.setdefault("layerdrop", 0.0)
         # Llama needs head_dim
         kwargs.setdefault("head_dim", 8)
         super().__init__(parent, **kwargs)
-
-    @property
-    def _special_token_ids(self):
-        # The LID marker is an ordinary token as far as the model is concerned -- only the processor writes it --
-        # so only the language placeholder has to be kept out of the random text.
-        return super()._special_token_ids | {self.language_embedding_token_id}
 
     def create_audio_features(self):
         # OmniASR is fed the raw waveform, not mel features.
@@ -96,23 +86,6 @@ class OmniASRModelTester(ALMModelTester):
         positions = torch.arange(int(lengths.max()), device=audio_mask.device)[None, :]
         return (positions < lengths[:, None]).long()
 
-    def place_audio_tokens(self, input_ids, config, num_audio_tokens):
-        """Place the audio placeholders after BOS, then the single language placeholder right behind them.
-
-        OmniASR's prompt is `audio | lid_marker | language | bos`, so every sequence carries exactly one language
-        placeholder, which the row of the language embedding table is scattered over.
-        """
-        input_ids = super().place_audio_tokens(input_ids, config, num_audio_tokens)
-        for i in range(input_ids.shape[0]):
-            n = num_audio_tokens[i].item() if isinstance(num_audio_tokens, torch.Tensor) else num_audio_tokens
-            if 2 + int(n) > self.seq_length:
-                raise ValueError(
-                    f"Cannot place {int(n)} audio placeholders and a language placeholder after BOS in a sequence "
-                    f"of length {self.seq_length}. Please raise `seq_length`."
-                )
-            input_ids[i, 1 + int(n)] = self.language_embedding_token_id
-        return input_ids
-
 
 @require_torch
 class OmniASRForConditionalGenerationModelTest(ALMModelTest, unittest.TestCase):
@@ -123,49 +96,6 @@ class OmniASRForConditionalGenerationModelTest(ALMModelTest, unittest.TestCase):
     )
     def test_inputs_embeds_matches_input_ids(self):
         pass
-
-    def test_mismatching_num_audio_tokens(self):
-        """Same as the shared test, minus its multi-audio case.
-
-        OmniASR transcribes one audio per prompt: `audio | lid_marker | language | bos` holds exactly one language
-        placeholder, so duplicating the prompt along the sequence dim -- what the shared test does to build a
-        multi-audio prompt -- asks for two language embeddings per sample and cannot succeed. The mismatch checks
-        themselves do apply and are kept.
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        audio_feature_key = self.model_tester.get_audio_feature_key()
-        audio_mask_key = self.model_tester.audio_mask_key
-
-        # The batch index `create_audio_mask` pinned to full length is guaranteed to carry audio tokens, so
-        # duplicating it reliably moves the audio-token total.
-        dup = int((input_dict["input_ids"] == self.model_tester.audio_token_id).sum(-1).argmax().item())
-
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-            _ = model(**copy.deepcopy(input_dict))  # successful forward with no modifications
-
-            # Test 1: remove one audio but leave the audio tokens in the text
-            curr_input_dict = copy.deepcopy(input_dict)
-            for key in (audio_feature_key, audio_mask_key):
-                curr_input_dict[key] = curr_input_dict[key][-1:, ...]
-            with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
-
-            # Test 2: add one audio but leave the audio tokens in the text
-            curr_input_dict = copy.deepcopy(input_dict)
-            for key in (audio_feature_key, audio_mask_key):
-                curr_input_dict[key] = torch.cat([curr_input_dict[key], curr_input_dict[key][dup : dup + 1]], dim=0)
-            with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
-
-            # Test 3: duplicate the text along the seq dim so each prompt has twice as many audio tokens, while
-            # leaving the audio features unchanged
-            curr_input_dict = copy.deepcopy(input_dict)
-            for key in ("input_ids", "attention_mask"):
-                curr_input_dict[key] = torch.cat([curr_input_dict[key], curr_input_dict[key]], dim=1)
-            with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
 
 
 class OmniASRForCTCModelTester:
@@ -207,19 +137,19 @@ class OmniASRForCTCModelTester:
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.num_samples])
-        attention_mask = random_attention_mask([self.batch_size, self.num_samples])
-        return self.get_config(), input_values, attention_mask
+        padding_mask = random_attention_mask([self.batch_size, self.num_samples])
+        return self.get_config(), input_values, padding_mask
 
     def prepare_config_and_inputs_for_common(self):
-        config, input_values, attention_mask = self.prepare_config_and_inputs()
-        return config, {"input_values": input_values, "attention_mask": attention_mask}
+        config, input_values, padding_mask = self.prepare_config_and_inputs()
+        return config, {"input_values": input_values, "padding_mask": padding_mask}
 
-    def create_and_check_model(self, config, input_values, attention_mask):
+    def create_and_check_model(self, config, input_values, padding_mask):
         model = OmniASRForCTC(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(input_values, attention_mask=attention_mask)
+            result = model(input_values, padding_mask=padding_mask)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.output_seq_length, self.vocab_size))
 
 
@@ -309,7 +239,7 @@ class OmniASRForCTCIntegrationTest(unittest.TestCase):
 
         inputs = self.processor(samples)
         inputs.to(model.device, dtype=self.dtype)
-        encoder_lengths = model._get_subsampling_output_length(inputs["attention_mask"].sum(-1))
+        encoder_lengths = model._get_subsampling_output_length(inputs["padding_mask"].sum(-1))
 
         predicted_ids = model.generate(**inputs)
         for idx, length in enumerate(encoder_lengths.tolist()):
@@ -427,7 +357,7 @@ class OmniASRForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_llm_300m_v2_generate_is_padding_invariant(self):
         """
         Batching must not change what a sample transcribes to. The shortest and longest clips of the dataset are
-        paired so that the short one carries ~6x its own length in padding: without the audio `attention_mask`
+        paired so that the short one carries ~6x its own length in padding: without the audio `padding_mask`
         reaching the encoder, and without the audio being left-padded, it decodes to a shorter, degraded hypothesis.
         """
         samples = self._load_datasamples(6)
