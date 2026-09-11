@@ -559,7 +559,6 @@ class AutoTokenizerTest(unittest.TestCase):
     def test_get_tokenizer_config(self):
         # Check we can load the tokenizer config of an online model.
         config = get_tokenizer_config("google-bert/bert-base-cased")
-        _ = config.pop("_commit_hash", None)
         # If we ever update google-bert/bert-base-cased tokenizer config, this dict here will need to be updated.
         self.assertEqual(config, {"do_lower_case": False, "model_max_length": 512})
 
