@@ -145,9 +145,10 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
     given, still receives the tokens.
     """
 
-    # `model_kwargs` entries that are not encoder inputs (see `_encoder_kwargs`). Exact names: the main input, the
-    # masks and the decoder-side caches; prefixes: decoder inputs, cross-attention inputs and the `encoder_*` entries
-    # the loop maintains (`encoder_outputs`, `encoder_valid_lengths`, `encoder_frame_idxs`).
+    # `model_kwargs` entries that are not encoder inputs (see `_encoder_kwargs`). All matched by prefix: the main
+    # input (also `input_features_generator` in streaming), the masks, the decoder-side caches, decoder/cross-attention
+    # inputs, and the `encoder_*` entries the loop maintains (`encoder_outputs`, `encoder_valid_lengths`,
+    # `encoder_frame_idxs`).
     _non_encoder_kwarg_prefixes = (
         "input_features",
         "attention_mask",

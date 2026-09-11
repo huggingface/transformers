@@ -230,13 +230,18 @@ class NemotronAsrStreamingForRNNTModelTest(ParakeetForRNNTModelTest):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = NemotronAsrStreamingForRNNT(config=config).to(torch_device).eval()
 
+        consumed = False
+
         def input_features_generator():
+            nonlocal consumed
+            consumed = True
             yield floats_tensor([1, 9, config.encoder_config.num_mel_bins])
 
         with self.assertRaisesRegex(ValueError, "input_features="):
             model.generate(
                 input_features_generator(), num_lookahead_tokens=1, decoder_start_token_id=config.blank_token_id
             )
+        self.assertFalse(consumed, "streaming `generate` consumed a positional stream before rejecting it")
 
 
 @require_torch

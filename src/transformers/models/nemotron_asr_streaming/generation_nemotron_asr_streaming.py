@@ -41,8 +41,9 @@ class NemotronAsrStreamingGenerationMixin(ParakeetRNNTGenerationMixin):
     a generator of mel chunks together with `num_lookahead_tokens=`: the chunks are encoded incrementally (threading
     the encoder attention and convolution caches) and appended to the encoder frame buffer once every row consumed
     the frames it had, so the loop only stops when the stream is exhausted. The flag lives on the prepared generation
-    config (`generation_config.streaming`), the generator and `num_lookahead_tokens` in `model_kwargs`, and whether
-    the stream is exhausted in the generation state; nothing is stored on the model.
+    config (`generation_config.streaming`, an attribute set on the per-call copy of the config, not a
+    `GenerationConfig` field), the generator and `num_lookahead_tokens` in `model_kwargs`, and whether the stream is
+    exhausted in the generation state; nothing is stored on the model.
     """
 
     # The streaming conv cache is passed explicitly to the chunk encoder calls
@@ -76,8 +77,9 @@ class NemotronAsrStreamingGenerationMixin(ParakeetRNNTGenerationMixin):
         if generator is None or state.extras.get("stream_exhausted", False):
             return model_kwargs
 
-        # Once every row consumed its encoder frames, encode the next mel chunk and append it to the frame buffer
-        # (before the stopping criteria look at the pointers).
+        # Runs after the pointer advance (`super()`) and before the stopping criteria of this step: once every row
+        # consumed its encoder frames, encode the next mel chunk and append it, so `EncoderExhaustedCriteria` only
+        # fires when the stream is exhausted.
         if bool((model_kwargs["encoder_frame_idxs"] >= model_kwargs["encoder_valid_lengths"]).all()):
             try:
                 chunk = next(generator)
@@ -196,6 +198,8 @@ class NemotronAsrStreamingGenerationMixin(ParakeetRNNTGenerationMixin):
         model_input_name: str | None,
         generation_config: GenerationConfig,
     ) -> dict[str, Any]:
+        # Only reached in streaming: offline, `_prepare_model_inputs` already set `encoder_outputs`, so `generate`
+        # skips this step
         if not generation_config.streaming:
             return super()._prepare_encoder_decoder_kwargs_for_generation(
                 inputs_tensor, model_kwargs, model_input_name, generation_config
@@ -213,7 +217,8 @@ class NemotronAsrStreamingGenerationMixin(ParakeetRNNTGenerationMixin):
 
         model_kwargs["encoder_past_key_values"] = encoder_outputs.past_key_values
         model_kwargs["padding_cache"] = encoder_outputs.padding_cache
-        model_kwargs["encoder_outputs"] = encoder_outputs
+        # the encoder frame buffer; only `pooler_output` is read and it is grown chunk by chunk
+        model_kwargs["encoder_outputs"] = type(encoder_outputs)(pooler_output=encoder_outputs.pooler_output)
         model_kwargs["encoder_valid_lengths"] = torch.full(
             (batch_size,), encoder_outputs.pooler_output.shape[1], dtype=torch.long, device=self.device
         )
