@@ -312,6 +312,8 @@ The `placements` attribute tells PyTorch how a tensor is laid out across the dev
 
 - The [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism) section on tensor parallelism provides more details.
 
+- To split layers across GPUs instead of slicing each layer, see [pipeline parallelism for inference](./pipeline_parallel_inference).
+
 - Check the [expert parallelism](./expert_parallelism) guide if you're using a mixture-of-experts (MoE) model. These models support tensor parallelism and expert parallelism.
 
 - Read the [Tensor Parallelism (TP) in Transformers: 5 Minutes to Understand](https://huggingface.co/blog/qgallouedec/tp) blog post for a quick overview of tensor parallelism and learn how column and row parallel setups differ.
