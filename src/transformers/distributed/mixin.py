@@ -58,8 +58,6 @@ class DistributedMixin:
     _tp_plan: dict[str, str] | None = None
     _ep_plan: dict[str, str] | None = None
     _tp_size = None
-    _fsdp_size = None
-    _expert_parallel_dispatch = False
     _pp_plan: dict[str, tuple[str, str]] | None = None
     _fsdp_plan: dict[str, str] | None = None
 
@@ -203,13 +201,10 @@ class DistributedMixin:
     ):
         """Apply TP or FSDP2 after model init, before weight loading."""
         if device_mesh is not None:
+            # The Trainer reads the config of a model with a `_device_mesh` back to configure accelerate.
             model.config.distributed_config = distributed_config
             model._device_mesh = device_mesh
-            # The Trainer mirrors these into accelerate's `ParallelismConfig`; without them accelerate
-            # sees unaccounted ranks and falls back to DDP, which rejects the DTensor parameters.
             model._tp_size = distributed_config.tp_size
-            model._fsdp_size = distributed_config.fsdp_size
-            model._expert_parallel_dispatch = distributed_config.dispatches_tokens
 
             # Both may apply: the tensor/expert parallel plan shards across `tp` first, then FSDP2
             # shards every parameter (the `tp`-sharded ones included) across `fsdp`.

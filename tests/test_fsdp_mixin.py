@@ -546,7 +546,7 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
                 experts_dispatch="all-to-all" if dispatch else "all-reduce",
             ),
         )
-        assert model.tp_size == 2 and model.fsdp_size == dp
+        assert model.tp_size == 2 and model.config.distributed_config.fsdp_size == dp
         assert model._device_mesh.mesh_dim_names == ("fsdp", "tp")
         model.train()
         optimizer = torch.optim.Adam(model.parameters(), lr=LR, foreach=False)

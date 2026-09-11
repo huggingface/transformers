@@ -239,6 +239,8 @@ if is_accelerate_available():
 if TYPE_CHECKING:
     import optuna
 
+    from .distributed import DistributedConfig
+
 logger = logging.get_logger(__name__)
 
 
@@ -258,6 +260,18 @@ FSDP_MODEL_NAME = "pytorch_model_fsdp"
         "accelerate",
     )
 )
+def _load_time_distributed_config(model) -> "DistributedConfig | None":
+    """
+    The `DistributedConfig` a model was sharded with at load time (`from_pretrained(distributed_config=...)`), or
+    `None` for a model the Trainer has to place and wrap itself. Looks through a PEFT wrapper.
+    """
+    if _is_peft_model(model):
+        model = model.get_base_model()
+    if getattr(model, "_device_mesh", None) is None:
+        return None
+    return model.config.distributed_config
+
+
 class Trainer:
     """
     Trainer is a simple but feature-complete training and eval loop for PyTorch, optimized for 🤗 Transformers.
@@ -477,7 +491,7 @@ class Trainer:
             or is_sagemaker_mp_enabled()
             # Sharded at load time (`DistributedConfig`): the model manages its own placement, and
             # `.to()` on FSDP2-managed (possibly CPU-offloaded) parameters raises in `_apply`.
-            or getattr(model, "_device_mesh", None) is not None
+            or _load_time_distributed_config(model) is not None
         ):
             self.place_model_on_device = False
         else:
@@ -619,7 +633,8 @@ class Trainer:
         self._mixed_mesh_grads: bool | None = None
         # With expert-parallel token dispatch every rank trains on its own part of the batch, while accelerate
         # treats the `tp` ranks as one data-parallel rank: the batches and the token counts are handled here.
-        self._expert_parallel_dispatch = getattr(model, "_expert_parallel_dispatch", False)
+        distributed_config = _load_time_distributed_config(model)
+        self._expert_parallel_dispatch = distributed_config is not None and distributed_config.dispatches_tokens
         if self._expert_parallel_dispatch and args.train_sampling_strategy != "random":
             raise ValueError(
                 "`experts_dispatch` other than 'all-reduce' splits the batches across every rank with a "
@@ -633,11 +648,7 @@ class Trainer:
                 "`experts_dispatch` other than 'all-reduce' splits the batches across every rank with a "
                 "`DistributedSampler`, which needs a sized training dataset and `dispatch_batches=False`."
             )
-        if (
-            getattr(model, "_device_mesh", None) is not None
-            and args.save_strategy != SaveStrategy.NO
-            and not args.save_only_model
-        ):
+        if distributed_config is not None and args.save_strategy != SaveStrategy.NO and not args.save_only_model:
             raise ValueError(
                 "Resuming is not supported for models sharded at load time (`DistributedConfig`), so their "
                 "optimizer state cannot be checkpointed. Pass `save_only_model=True` or `save_strategy='no'`."
@@ -778,8 +789,9 @@ class Trainer:
                 )
             args["parallelism_config"] = self.args.parallelism_config
 
-        model_tp_size = getattr(self.model, "tp_size", None) or 1
-        model_fsdp_size = getattr(self.model, "fsdp_size", None) or 1
+        distributed_config = _load_time_distributed_config(self.model)
+        model_tp_size = distributed_config.tp_size if distributed_config is not None else 1
+        model_fsdp_size = distributed_config.fsdp_size if distributed_config is not None else 1
         if model_tp_size > 1:
             # Sharded at load time (tensor/expert parallelism, optionally with FSDP2 on a second mesh
             # dimension): accelerate has to know both sizes, or it sees unaccounted ranks and wraps
@@ -4019,7 +4031,7 @@ class Trainer:
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
 
-        elif getattr(self.model, "_device_mesh", None) is not None and not _is_peft_model(self.model):
+        elif _load_time_distributed_config(self.model) is not None and not _is_peft_model(self.model):
             # Sharded at load time (`DistributedConfig`): gathering the weights inside `save_pretrained`
             # is collective, so every rank saves; only the main process writes, the others leave at the
             # closing barrier. (PEFT models fall through to the adapter-only save below.)

@@ -21,11 +21,11 @@ from transformers.distributed import tensor_parallel
 from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
+    TOKEN_DISPATCH_PLAN_STYLES,
     ColwiseParallel,
     PackedColwiseParallel,
     PackedRowwiseParallel,
     RowwiseParallel,
-    TOKEN_DISPATCH_PLAN_STYLES,
     expert_parallel_dispatch_plan,
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
