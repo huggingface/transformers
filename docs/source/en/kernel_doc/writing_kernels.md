@@ -81,7 +81,7 @@ from . import layers
 
 Load this kernel by passing the repo and class name to [`KernelConfig`]. The key is the original module class name from the model. The value points to the `KernelName` class (not the `Layout`) in the repo.
 
-The value is either an `"owner/repo:ClassName"` string or a tuple of that string and a metadata dict. The metadata accepts `version`, `revision`, and `trust_remote_code`. Use `version` to select a major kernel version or `revision` to select a specific tag, branch, or commit. Set `trust_remote_code=True` to allow loading a kernel from outside the trusted `kernels-community` organization.
+The value is either an `"owner/repo:ClassName"` string or a tuple `(repo_string, metadata)`. In the tuple form, pass `version` or `revision` (at least one), and optionally `trust_remote_code`. Use `version` for a major kernel version or `revision` for a tag, branch, or commit. Set `trust_remote_code=True` to load from outside the trusted `kernels-community` organization. A bare string defaults to `version=1` and `trust_remode_code=False`.
 
 ```python
 from transformers import AutoModelForCausalLM, KernelConfig
