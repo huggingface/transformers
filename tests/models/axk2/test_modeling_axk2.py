@@ -18,14 +18,13 @@ import unittest
 from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_torch,
     require_torch_accelerator,
     slow,
-    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -93,14 +92,8 @@ class AXK2ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-class AXK1IntegrationTest(unittest.TestCase):
+class AXK1IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "hf-internal-testing/tiny-axk2"
-
-    def setup(self):
-        cleanup(torch_device, gc_collect=False)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=False)
 
     def test_model_logits_batched(self):
         model = AutoModelForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map="auto")
