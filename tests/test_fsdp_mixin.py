@@ -597,6 +597,128 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
         logger.debug("DDP and FSDP2+EP (2-D mesh) comparison checks passed.")
 
 
+class _TokenDataset(torch.utils.data.Dataset):
+    """Fixed random sequences with the inputs as labels, for the `Trainer`."""
+
+    def __init__(self, vocab_size, num_samples, seq_len, seed):
+        generator = torch.Generator().manual_seed(seed)
+        self.input_ids = torch.randint(0, vocab_size, (num_samples, seq_len), generator=generator)
+
+    def __len__(self):
+        return self.input_ids.size(0)
+
+    def __getitem__(self, index):
+        return {"input_ids": self.input_ids[index], "labels": self.input_ids[index].clone()}
+
+
+def _train_with_trainer(model, dataset, output_dir, num_steps):
+    """Train `model` for `num_steps` with the `Trainer`; returns the logged losses and gradient norms."""
+    from transformers import Trainer, TrainingArguments
+
+    args = TrainingArguments(
+        output_dir=output_dir,
+        per_device_train_batch_size=BATCH_SIZE,
+        max_steps=num_steps,
+        learning_rate=LR,
+        lr_scheduler_type="constant",
+        optim="adamw_torch",
+        weight_decay=0.0,
+        logging_strategy="steps",
+        logging_steps=1,
+        save_strategy="no",
+        report_to="none",
+        disable_tqdm=True,
+        seed=SEED,
+        data_seed=SEED,
+        dataloader_drop_last=True,
+        ddp_find_unused_parameters=True,
+        average_tokens_across_devices=True,
+        remove_unused_columns=False,
+    )
+    trainer = Trainer(model=model, args=args, train_dataset=dataset)
+    trainer.train()
+    logs = [log for log in trainer.state.log_history if "loss" in log]
+    return [log["loss"] for log in logs], [log["grad_norm"] for log in logs]
+
+
+def _test_fsdp2_expert_parallel_dispatch_trainer_impl(rank, config_class, config_dict, dtype=None):
+    """
+    `Trainer` with expert-parallel token dispatch on a 2-D (fsdp, tp) mesh against `Trainer` with DDP. Every step
+    consumes the whole dataset (`world_size * BATCH_SIZE` samples), so whichever rank gets which sample, the
+    token-averaged loss, the gradient norm and the updated weights have to match step by step. This covers the
+    Trainer's batching under dispatch: the per-rank sampler, the token count and loss scale, the per-mesh gradient
+    norm and optimizer groups.
+    """
+    from accelerate import Accelerator
+    from accelerate.state import AcceleratorState
+
+    init_test_logger()
+    if dtype is None:
+        dtype = torch.float32
+    num_steps = 3
+
+    # accelerate's `Accelerator._prepare_tp` (1.12 up to at least 1.14) cannot prepare a model whose parameters are
+    # all DTensors: it imports `ReplicateParallel`, gone from transformers since #42809, and its optimizer remap keys
+    # plain-tensor addresses that DTensor parameters do not have. On an FSDP2-managed model it would otherwise leave
+    # every parameter and the optimizer untouched, so skip it here and exercise the Trainer's own dispatch logic.
+    Accelerator._prepare_tp = lambda self, *args: args
+
+    config = config_class.from_dict(config_dict)
+    world_size = dist.get_world_size()
+    dataset = _TokenDataset(config.vocab_size, world_size * BATCH_SIZE, SEQ_LEN, SEED)
+
+    with _deterministic_init_model_dir(rank, config, dtype) as init_model_dir, _distributed_tmpdir(rank) as output_dir:
+        _set_determinism(SEED)
+        model_ref = AutoModelForCausalLM.from_pretrained(init_model_dir, torch_dtype=dtype)
+        ref_losses, ref_grad_norms = _train_with_trainer(
+            model_ref, dataset, os.path.join(output_dir, "ddp"), num_steps
+        )
+        ref_state_dict = {key: value.detach().cpu() for key, value in model_ref.state_dict().items()}
+        del model_ref
+        # The next Trainer configures accelerate differently (`ParallelismConfig`), so drop the shared state.
+        AcceleratorState._reset_state(reset_partial_state=True)
+
+        _set_determinism(SEED)
+        model = AutoModelForCausalLM.from_pretrained(
+            init_model_dir,
+            torch_dtype=dtype,
+            distributed_config=DistributedConfig(
+                tp_size=2, fsdp_size=world_size // 2, enable_expert_parallel=True, experts_dispatch="all-to-all"
+            ),
+        )
+        losses, grad_norms = _train_with_trainer(model, dataset, os.path.join(output_dir, "dispatch"), num_steps)
+        state_dict = gather_full_state_dict(model)
+        AcceleratorState._reset_state(reset_partial_state=True)
+
+    assert len(losses) == num_steps and len(ref_losses) == num_steps, (losses, ref_losses)
+    for step in range(num_steps):
+        torch.testing.assert_close(
+            torch.tensor(ref_losses[step]),
+            torch.tensor(losses[step]),
+            rtol=DDP_FSDP_RTOL,
+            atol=DDP_FSDP_ATOL,
+            msg=f"Loss mismatch at step {step}: DDP={ref_losses[step]}, dispatch={losses[step]}",
+        )
+        torch.testing.assert_close(
+            torch.tensor(ref_grad_norms[step]),
+            torch.tensor(grad_norms[step]),
+            rtol=DDP_FSDP_RTOL,
+            atol=DDP_FSDP_ATOL,
+            msg=f"Grad norm mismatch at step {step}: DDP={ref_grad_norms[step]}, dispatch={grad_norms[step]}",
+        )
+    if rank == 0:
+        for key in ref_state_dict:
+            assert key in state_dict, f"Key {key} missing from the dispatch state dict"
+            torch.testing.assert_close(
+                ref_state_dict[key],
+                state_dict[key],
+                rtol=DDP_FSDP_RTOL,
+                atol=DDP_FSDP_ATOL,
+                msg=f"Weight mismatch for {key}: DDP vs dispatch",
+            )
+        logger.debug("Trainer DDP and Trainer token dispatch comparison checks passed.")
+
+
 # =============================================================================
 # Mixin class
 # =============================================================================
@@ -756,4 +878,16 @@ class FSDPTesterMixin(ABC):
             _test_fsdp2_expert_parallel_2d_vs_ddp_impl,
             world_size=4,
             dispatch=dispatch,
+        )
+
+    @is_fsdp_test
+    def test_fsdp2_expert_parallel_dispatch_trainer(self):
+        """The `Trainer` under expert-parallel token dispatch traces the `Trainer` under DDP step by step."""
+        config = self.model_tester.get_config()
+        if getattr(config, "base_model_ep_plan", None) is None:
+            self.skipTest("Model does not have an expert parallel plan (base_model_ep_plan)")
+        self._run_fsdp2_distributed_test(
+            "fsdp2_expert_parallel_dispatch_trainer",
+            _test_fsdp2_expert_parallel_dispatch_trainer_impl,
+            world_size=4,
         )
