@@ -20,13 +20,13 @@ from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
     Expectations,
     backend_device_count,
-    cleanup,
     require_torch,
     slow,
     torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -64,7 +64,7 @@ class FlexOlmoModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch
-class FlexOlmoIntegrationTest(unittest.TestCase):
+class FlexOlmoIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "shanearora/Flex-reddit-2x7B-1T"
 
     @classmethod
@@ -100,24 +100,11 @@ class FlexOlmoIntegrationTest(unittest.TestCase):
             )
         return cls.model
 
-    @classmethod
-    def tearDownClass(cls):
-        if hasattr(cls, "model"):
-            del cls.model
-        cleanup(torch_device, gc_collect=True)
-
-    def setUp(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
     @slow
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
         model = self.get_model()
-        with torch.no_grad():
-            out = model(torch.tensor(input_ids, device=model.device)).logits.float()
+        out = model(torch.tensor(input_ids, device=model.device)).logits.float()
         # Expected mean on dim = -1
         expectations = Expectations(
             {
