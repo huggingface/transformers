@@ -122,8 +122,13 @@ class DiaGenerationMixin(GenerationMixin):
             generation_config.temperature = 1.0
         if generation_config.num_return_sequences > 1:
             raise ValueError("`num_return_sequences>1` is incompatible with Dia.")
-        # We allow generation up to max length + max delay pattern
-        # (will revert back to max length after generation)
+        if self._uses_classifier_free_guidance(generation_config) and model_kwargs.get("encoder_outputs") is not None:
+            raise ValueError(
+                "Dia batches the unconditional CFG branch in the encoder; pass `input_ids` (not `encoder_outputs`) "
+                "when `guidance_scale` is set."
+            )
+        # Leave room for the delayed channels to emit their EOS (only effective when `max_length`, not
+        # `max_new_tokens`, bounds the generation; the final output keeps the extra positions)
         generation_config.max_length += max(self.config.delay_pattern)
 
         return generation_config, model_kwargs
@@ -214,7 +219,7 @@ class DiaGenerationMixin(GenerationMixin):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
-        encoder_outputs: Any = None,  # Using this to easily get the batch size
+        encoder_outputs: Any = None,  # used to detect the CFG-doubled encoder batch
         decoder_delay_mask: torch.Tensor | None = None,
         is_first_iteration: bool | None = False,
         **kwargs: Any,
@@ -232,7 +237,9 @@ class DiaGenerationMixin(GenerationMixin):
         model_inputs = super().prepare_inputs_for_generation(input_ids, encoder_outputs=encoder_outputs, **kwargs)
 
         # Post processing for CFG and overwriting via delay pattern mask
-        # 1. Delay pattern mask -- force tokens if not allowed to predict (!= pad_token in mask)
+        # 1. Delay pattern mask: where the mask is not `pad_token_id`, the token is forced. `input_ids` is a view of the
+        # loop's `sequences`, so `apply_delay_mask` also overwrites the token the loop appended at the previous step
+        # in place; `_build_generate_output` re-applies the mask for the last step.
         model_inputs["decoder_input_ids"] = self.apply_delay_mask(
             input_ids, self.config.decoder_config.pad_token_id, decoder_delay_mask
         )
@@ -256,6 +263,21 @@ class DiaGenerationMixin(GenerationMixin):
 
     @staticmethod
     def apply_delay_mask(input_ids: torch.Tensor, pad_id: int, delay_mask: torch.Tensor | None) -> torch.Tensor:
+        """
+        Writes the tokens forced by the delay mask into `input_ids` **in place** and returns it.
+
+        Args:
+            input_ids (`torch.Tensor` of shape `(batch_size, seq_len, num_channels)`):
+                The decoder tokens so far. Positions where `delay_mask` is not `pad_id` are overwritten with the mask's
+                token, over the first `min(seq_len, delay_mask.shape[1])` positions.
+            pad_id (`int`):
+                The token marking the positions of `delay_mask` the model is free to predict.
+            delay_mask (`torch.Tensor` of shape `(batch_size, mask_len, num_channels)`, *optional*):
+                The delayed decoder prompt as produced by [`DiaProcessor`]. When `None`, `input_ids` is returned as is.
+
+        Returns:
+            `torch.Tensor` of shape `(batch_size, seq_len, num_channels)`: `input_ids`, with the forced tokens written.
+        """
         if delay_mask is None:
             return input_ids
 
