@@ -61,6 +61,8 @@ jobs:
             --group-add "${RENDER_GID}" \
             --security-opt seccomp=unconfined \
             -e AMD_SERIALIZE_KERNEL=3 \
+            -e HSA_OVERRIDE_GFX_VERSION=11.5.1 \
+            -e HSA_ENABLE_SDMA=0 \
             -v "${RUNNER_TEMP}/scratch:/scratch" \
             transformers-gfx1151:ci \
             python3 -u - <<'PY'
