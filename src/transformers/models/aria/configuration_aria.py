@@ -19,11 +19,11 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ...utils.type_validators import interval
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="rhymes-ai/Aria")
@@ -111,7 +111,10 @@ class AriaConfig(PreTrainedConfig):
     attribute_map = {
         "image_token_id": "image_token_index",
     }
-    sub_configs = {"text_config": AriaTextConfig, "vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="idefics3_vision"),
+        "text_config": SubConfigSpec(config_class=AriaTextConfig),
+    }
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | AriaTextConfig | None = None
@@ -131,18 +134,6 @@ class AriaConfig(PreTrainedConfig):
             }
         self.projector_patch_to_query_dict = {int(k): int(v) for k, v in self.projector_patch_to_query_dict.items()}
         self.max_value_projector_patch_to_query_dict = max(self.projector_patch_to_query_dict.values())
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = "idefics3_vision"
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["idefics3_vision"]()
-
-        if isinstance(self.text_config, dict) and "model_type" in self.text_config:
-            self.text_config = AriaTextConfig(**self.text_config)
-        elif self.text_config is None:
-            self.text_config = AriaTextConfig()
-
         super().__post_init__(**kwargs)
 
 

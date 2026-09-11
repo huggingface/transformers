@@ -16,9 +16,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="nvidia/audio-flamingo-3-hf")
@@ -94,27 +94,16 @@ class AudioFlamingo3Config(PreTrainedConfig):
     ```"""
 
     model_type = "audioflamingo3"
-    sub_configs = {"audio_config": AutoConfig, "text_config": AutoConfig}
+    sub_configs_defaults = {
+        "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="audioflamingo3_encoder"),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen2"),
+    }
+
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     audio_token_id: int = 151669
     projector_hidden_act: str = "gelu"
     projector_bias: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "audioflamingo3_encoder")
-            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["audioflamingo3_encoder"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen2"]()
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["AudioFlamingo3Config", "AudioFlamingo3EncoderConfig"]

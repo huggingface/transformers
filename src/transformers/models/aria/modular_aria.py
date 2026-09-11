@@ -21,7 +21,7 @@ from torchvision.transforms.v2 import functional as tvF
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_transforms import divide_to_patches
@@ -42,7 +42,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
+from ..auto import AutoConfig, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -138,7 +138,10 @@ class AriaConfig(PreTrainedConfig):
     attribute_map = {
         "image_token_id": "image_token_index",
     }
-    sub_configs = {"text_config": AriaTextConfig, "vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="idefics3_vision"),
+        "text_config": SubConfigSpec(config_class=AriaTextConfig),
+    }
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | AriaTextConfig | None = None
@@ -158,18 +161,6 @@ class AriaConfig(PreTrainedConfig):
             }
         self.projector_patch_to_query_dict = {int(k): int(v) for k, v in self.projector_patch_to_query_dict.items()}
         self.max_value_projector_patch_to_query_dict = max(self.projector_patch_to_query_dict.values())
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = "idefics3_vision"
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["idefics3_vision"]()
-
-        if isinstance(self.text_config, dict) and "model_type" in self.text_config:
-            self.text_config = AriaTextConfig(**self.text_config)
-        elif self.text_config is None:
-            self.text_config = AriaTextConfig()
-
         super().__post_init__(**kwargs)
 
 

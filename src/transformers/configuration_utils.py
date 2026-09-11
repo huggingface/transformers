@@ -178,20 +178,21 @@ class SubConfigSpec:
         if isinstance(subconfig, PreTrainedConfig):
             return subconfig
 
+        model_type = subconfig.get("model_type", self.model_type)
+        if model_type is None:
+            raise ValueError(f"Cannot resolve `{key}`: no model_type given and no default in `sub_configs_defaults`.")
+        subconfig_cls = self.get_config_class(model_type)
+
         # Copy the dict to not mutate it in-place
         if isinstance(subconfig, dict):
             pass
         elif subconfig is None:
             subconfig = self.init_kwargs
-            logger.info(f"`{key}` is None, initializing with default values.")
+            logger.info(f"`{key}` is None, initializing {subconfig_cls.__name__} with default values.")
         else:
             raise TypeError(f"`{key}` must be a `dict`, `PreTrainedConfig`, or `None`, got `{type(subconfig)}`")
 
-        model_type = subconfig.get("model_type", self.model_type)
-        if model_type is None:
-            raise ValueError(f"Cannot resolve `{key}`: no model_type given and no default in `sub_configs_defaults`.")
-
-        return self.get_config_class(model_type)(**subconfig)
+        return subconfig_cls(**subconfig)
 
     @property
     def default_config(self):
