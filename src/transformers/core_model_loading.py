@@ -1498,9 +1498,8 @@ def _add_unmatched_checkpoint_key(
         loading_info.unexpected_keys.add(key)
         return
 
-    base_model = getattr(model, model.base_model_prefix).get_decoder()
-    base_model_prefix = next(name for name, module in model.named_modules() if module is base_model)
-    owner_rank = stage.find_rank_for_key(key, len(base_model.layers), base_model_prefix)
+    base_model = getattr(model, model.base_model_prefix)
+    owner_rank = stage.find_rank_for_key(key, len(base_model.layers), model.base_model_prefix)
     owned_by_another_stage = owner_rank is not None and owner_rank != stage.pp_rank
 
     if owned_by_another_stage:

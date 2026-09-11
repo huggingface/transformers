@@ -32,24 +32,6 @@ if is_torch_distributed_available():
     import torch.distributed as dist
 
 
-# Duplicated from generation.utils to avoid a circular import.
-MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL = (
-    "pixel_values",
-    "pixel_mask",
-    "input_features",
-    "input_features_mask",
-    "pixel_values_videos",
-    "num_local_patches",
-    "high_res_pixel_values",
-    "image_patches_indices",
-    "image_patches",
-    "image_sizes",
-    "image_sizes_videos",
-    "pixel_attention_mask",
-    "pixel_values_images",
-)
-
-
 def _bind_forward_kwargs(forward_signature: inspect.Signature, args: tuple, kwargs: dict) -> dict:
     bound = forward_signature.bind_partial(*args, **kwargs)
     bound.apply_defaults()
@@ -155,7 +137,7 @@ class PipelineStage:
         if not key.startswith(layers_prefix):
             return None
 
-        layer_idx = int(key[len(layers_prefix) :].split(".")[0])
+        layer_idx = int(key.split(".")[2])
         for rank in range(self.pp_size):
             start_layer, end_layer = self.layer_range_for_rank(rank, num_layers)
             if start_layer <= layer_idx < end_layer:
@@ -204,12 +186,12 @@ def apply_pipeline_parallelism(model: nn.Module, pp_mesh: torch.distributed.devi
     stage = PipelineStage(pp_mesh)
     model._pp_stage = stage
 
-    base_model = getattr(model, model.base_model_prefix).get_decoder()
+    base_model = getattr(model, model.base_model_prefix)
     layers = base_model.layers
     num_layers = len(layers)
 
     start_layer, end_layer = stage.layer_range_for_rank(stage.pp_rank, num_layers)
-    tied = getattr(base_model.config, "tie_word_embeddings", False)
+    tied = getattr(model.config, "tie_word_embeddings", False)
 
     # When tied, keep embed_tokens on the last stage too so _finalize_model_loading in modeling_utils.py can tie lm_head locally.
     keep_embed_tokens = stage.pp_is_first_stage or (tied and stage.pp_is_last_stage)
@@ -276,11 +258,9 @@ def pipeline_parallel_naive_forward(
 
     # Non-first stages: recv activations from prev stage and use them as inputs_embeds.
     if not stage.pp_is_first_stage:
-        shape = _hidden_states_shape(caller_kwargs, model.get_decoder().config.hidden_size)
+        shape = _hidden_states_shape(caller_kwargs, model.config.hidden_size)
         hidden_states = stage.communicate("recv_forward", device=device, dtype=dtype, shape=shape)
         fwd_kwargs = _feed_hidden_states_as_input_embeds(caller_kwargs, hidden_states)
-        for key in MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL:
-            fwd_kwargs.pop(key, None)
 
     if stage.pp_is_last_stage:
         # Last stage: compute the logits.
