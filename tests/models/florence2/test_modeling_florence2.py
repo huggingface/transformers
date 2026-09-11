@@ -322,46 +322,56 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs.to(device=torch_device)
         predictions = model.generate(**inputs, do_sample=False, max_new_tokens=100)
 
-        EXPECTED_PREDICTION_IDS = [
-            [2, 0, 50269, 50269, 51267, 50980, 50269, 50269, 50688, 50942, 50269, 50333, 50633, 50941, 51033, 50269, 51267, 50934, 50794, 50814, 51190, 51032, 50432, 50402, 50634, 50692, 50269, 50334, 50340, 50927, 51224, 50417, 51267, 50930, 51075, 50944, 51159, 51028, 50836, 50947, 50915, 51030, 2],
-            [2, 0, 28884, 2507, 50413, 50839, 51139, 51047, 28884, 2507, 50980, 50842, 51135, 51043, 28884, 2507, 50417, 50848, 50573, 51043, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        ]  # fmt: skip
+        EXPECTED_PREDICTION_IDS = Expectations(
+            {
+                (None, None): [
+                    [2, 0, 50269, 50269, 51267, 50980, 50269, 50269, 50688, 50942, 50269, 50333, 50633, 50941, 51033, 50269, 51267, 50934, 50794, 50814, 51190, 51032, 50432, 50402, 50634, 50692, 50269, 50334, 50340, 50927, 51224, 50417, 51267, 50930, 51075, 50944, 51159, 51028, 50836, 50947, 50915, 51030, 2],
+                    [2, 0, 28884, 2507, 50413, 50839, 51139, 51047, 28884, 2507, 50980, 50842, 51135, 51043, 28884, 2507, 50417, 50848, 50573, 51043, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                ],
+                ("xpu", 5): [
+                    [2, 0, 50269, 50269, 51267, 50980, 50269, 50269, 50688, 50942, 50269, 50333, 50633, 50941, 51033, 50269, 51267, 50934, 50794, 50814, 51190, 51032, 50432, 50402, 50634, 50692, 50269, 50334, 50340, 50927, 51224, 50417, 51267, 50930, 51076, 50944, 51159, 51028, 50836, 50947, 50915, 51030, 2],
+                    [2, 0, 28884, 2507, 50413, 50839, 51138, 51047, 28884, 2507, 50980, 50842, 51135, 51043, 28884, 2507, 50417, 50848, 50573, 51043, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                ],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(predictions.tolist(), EXPECTED_PREDICTION_IDS)
 
         generated_texts = processor.batch_decode(predictions, skip_special_tokens=False)
 
-        EXPECTED_GENERATED_TEXTS = [
-            "</s><s><loc_0><loc_0><loc_998><loc_711><loc_0><loc_0><loc_419><loc_673><loc_0><loc_64><loc_364><loc_672><loc_764><loc_0><loc_998><loc_665><loc_525><loc_545><loc_921><loc_763><loc_163><loc_133><loc_365><loc_423><loc_0><loc_65><loc_71><loc_658><loc_955><loc_148><loc_998><loc_661><loc_806><loc_675><loc_890><loc_759><loc_567><loc_678><loc_646><loc_761></s>",
-            "</s><s>wheels<loc_144><loc_570><loc_870><loc_778>wheels<loc_711><loc_573><loc_866><loc_774>wheels<loc_148><loc_579><loc_304><loc_774></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
-        ]
+        EXPECTED_GENERATED_TEXTS = Expectations(
+            {
+                (None, None): [
+                    "</s><s><loc_0><loc_0><loc_998><loc_711><loc_0><loc_0><loc_419><loc_673><loc_0><loc_64><loc_364><loc_672><loc_764><loc_0><loc_998><loc_665><loc_525><loc_545><loc_921><loc_763><loc_163><loc_133><loc_365><loc_423><loc_0><loc_65><loc_71><loc_658><loc_955><loc_148><loc_998><loc_661><loc_806><loc_675><loc_890><loc_759><loc_567><loc_678><loc_646><loc_761></s>",
+                    "</s><s>wheels<loc_144><loc_570><loc_870><loc_778>wheels<loc_711><loc_573><loc_866><loc_774>wheels<loc_148><loc_579><loc_304><loc_774></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
+                ],
+                ("xpu", 5): [
+                    "</s><s><loc_0><loc_0><loc_998><loc_711><loc_0><loc_0><loc_419><loc_673><loc_0><loc_64><loc_364><loc_672><loc_764><loc_0><loc_998><loc_665><loc_525><loc_545><loc_921><loc_763><loc_163><loc_133><loc_365><loc_423><loc_0><loc_65><loc_71><loc_658><loc_955><loc_148><loc_998><loc_661><loc_807><loc_675><loc_890><loc_759><loc_567><loc_678><loc_646><loc_761></s>",
+                    "</s><s>wheels<loc_144><loc_570><loc_869><loc_778>wheels<loc_711><loc_573><loc_866><loc_774>wheels<loc_148><loc_579><loc_304><loc_774></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
+                ],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(generated_texts, EXPECTED_GENERATED_TEXTS)
 
         parsed_answer_0 = processor.post_process_generation(
             generated_texts[0], task="<REGION_PROPOSAL>", image_size=(images[0].width, images[0].height)
         )
-        EXPECTED_PARSED_ANSWER_0 = {
-            "<REGION_PROPOSAL>": {
-                "bboxes": [
-                    [0, 0, 1298, 623],
-                    [0, 0, 545, 589],
-                    [0, 56, 473, 589],
-                    [993, 0, 1298, 582],
-                    [683, 477, 1197, 668],
-                    [212, 116, 475, 370],
-                    [0, 57, 92, 576],
-                    [1242, 130, 1298, 579],
-                    [1048, 591, 1157, 665],
-                    [737, 594, 840, 667],
-                ],
-                "labels": ["", "", "", "", "", "", "", "", "", ""],
+        EXPECTED_PARSED_ANSWER_0 = Expectations(
+            {
+                (None, None): {'<REGION_PROPOSAL>': {'bboxes': [[0, 0, 1298, 623], [0, 0, 545, 589], [0, 56, 473, 589], [993, 0, 1298, 582], [683, 477, 1197, 668], [212, 116, 475, 370], [0, 57, 92, 576], [1242, 130, 1298, 579], [1048, 591, 1157, 665], [737, 594, 840, 667]], 'labels': ['', '', '', '', '', '', '', '', '', '']}},
+                ("xpu", 5): {'<REGION_PROPOSAL>': {'bboxes': [[0, 0, 1298, 623], [0, 0, 545, 589], [0, 56, 473, 589], [993, 0, 1298, 582], [683, 477, 1197, 668], [212, 116, 475, 370], [0, 57, 92, 576], [1242, 130, 1298, 579], [1049, 591, 1157, 665], [737, 594, 840, 667]], 'labels': ['', '', '', '', '', '', '', '', '', '']}},
             }
-        }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(parsed_answer_0, EXPECTED_PARSED_ANSWER_0)
 
         parsed_answer_1 = processor.post_process_generation(
             generated_texts[1], task="<OPEN_VOCABULARY_DETECTION>", image_size=(images[1].width, images[1].height)
         )
-        EXPECTED_PARSED_ANSWER_1 = {"<OPEN_VOCABULARY_DETECTION>": {"bboxes": [[92, 273, 557, 373], [455, 275, 554, 371], [95, 278, 194, 371]], "bboxes_labels": ["wheels", "wheels", "wheels"], "polygons": [], "polygons_labels": []}}  # fmt: skip
+        EXPECTED_PARSED_ANSWER_1 = Expectations(
+            {
+                (None, None): {'<OPEN_VOCABULARY_DETECTION>': {'bboxes': [[92, 273, 557, 373], [455, 275, 554, 371], [95, 278, 194, 371]], 'bboxes_labels': ['wheels', 'wheels', 'wheels'], 'polygons': [], 'polygons_labels': []}},
+                ("xpu", 5): {'<OPEN_VOCABULARY_DETECTION>': {'bboxes': [[92, 273, 556, 373], [455, 275, 554, 371], [95, 278, 194, 371]], 'bboxes_labels': ['wheels', 'wheels', 'wheels'], 'polygons': [], 'polygons_labels': []}},
+            }
+        ).get_expectation()  # fmt: skip
 
         self.assertEqual(parsed_answer_1, EXPECTED_PARSED_ANSWER_1)
 
@@ -381,12 +391,22 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         predictions = model.generate(**inputs, do_sample=False, max_new_tokens=100)
 
-        EXPECTED_PREDICTION_IDS = [[2, 0, 50548, 50648, 50551, 50648, 50559, 50641, 50562, 50641, 50567, 50637, 50570, 50637, 50575, 50633, 50579, 50631, 50584, 50629, 50589, 50627, 50593, 50624, 50600, 50622, 50606, 50620, 50612, 50618, 50618, 50616, 50625, 50614, 50634, 50612, 50645, 50610, 50659, 50608, 50678, 50606, 50758, 50606, 50783, 50608, 50797, 50610, 50808, 50612, 50816, 50614, 50822, 50616, 50828, 50618, 50835, 50620, 50841, 50622, 50847, 50624, 50853, 50629, 50858, 50635, 50861, 50641, 50864, 50648, 50867, 50654, 50870, 50660, 50872, 50666, 50875, 50670, 50877, 50677, 50880, 50683, 50883, 50689, 50886, 50695, 50889, 50702, 50895, 50710, 50900, 50714, 50905, 50716, 50908, 50720, 50908, 50725, 50911, 50729, 2]]  # fmt: skip
+        EXPECTED_PREDICTION_IDS = Expectations(
+            {
+                (None, None): [[2, 0, 50548, 50648, 50551, 50648, 50559, 50641, 50562, 50641, 50567, 50637, 50570, 50637, 50575, 50633, 50579, 50631, 50584, 50629, 50589, 50627, 50593, 50624, 50600, 50622, 50606, 50620, 50612, 50618, 50618, 50616, 50625, 50614, 50634, 50612, 50645, 50610, 50659, 50608, 50678, 50606, 50758, 50606, 50783, 50608, 50797, 50610, 50808, 50612, 50816, 50614, 50822, 50616, 50828, 50618, 50835, 50620, 50841, 50622, 50847, 50624, 50853, 50629, 50858, 50635, 50861, 50641, 50864, 50648, 50867, 50654, 50870, 50660, 50872, 50666, 50875, 50670, 50877, 50677, 50880, 50683, 50883, 50689, 50886, 50695, 50889, 50702, 50895, 50710, 50900, 50714, 50905, 50716, 50908, 50720, 50908, 50725, 50911, 50729, 2]],
+                ("xpu", 5): [[2, 0, 50548, 50648, 50551, 50648, 50559, 50641, 50562, 50641, 50567, 50637, 50570, 50637, 50575, 50633, 50579, 50631, 50584, 50629, 50589, 50627, 50593, 50624, 50600, 50622, 50606, 50620, 50612, 50618, 50618, 50616, 50625, 50614, 50634, 50612, 50645, 50610, 50659, 50608, 50678, 50606, 50758, 50606, 50783, 50608, 50797, 50610, 50808, 50612, 50816, 50614, 50822, 50616, 50828, 50618, 50835, 50620, 50841, 50622, 50847, 50624, 50852, 50627, 50858, 50635, 50861, 50641, 50864, 50648, 50867, 50654, 50870, 50660, 50872, 50666, 50875, 50670, 50877, 50677, 50880, 50683, 50883, 50689, 50886, 50695, 50889, 50702, 50892, 50708, 50897, 50714, 50902, 50716, 50905, 50720, 50905, 50725, 50908, 50729, 2]],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(predictions.tolist(), EXPECTED_PREDICTION_IDS)
 
         generated_text = processor.batch_decode(predictions, skip_special_tokens=False)[0]
 
-        EXPECTED_GENERATED_TEXT = "</s><s><loc_279><loc_379><loc_282><loc_379><loc_290><loc_372><loc_293><loc_372><loc_298><loc_368><loc_301><loc_368><loc_306><loc_364><loc_310><loc_362><loc_315><loc_360><loc_320><loc_358><loc_324><loc_355><loc_331><loc_353><loc_337><loc_351><loc_343><loc_349><loc_349><loc_347><loc_356><loc_345><loc_365><loc_343><loc_376><loc_341><loc_390><loc_339><loc_409><loc_337><loc_489><loc_337><loc_514><loc_339><loc_528><loc_341><loc_539><loc_343><loc_547><loc_345><loc_553><loc_347><loc_559><loc_349><loc_566><loc_351><loc_572><loc_353><loc_578><loc_355><loc_584><loc_360><loc_589><loc_366><loc_592><loc_372><loc_595><loc_379><loc_598><loc_385><loc_601><loc_391><loc_603><loc_397><loc_606><loc_401><loc_608><loc_408><loc_611><loc_414><loc_614><loc_420><loc_617><loc_426><loc_620><loc_433><loc_626><loc_441><loc_631><loc_445><loc_636><loc_447><loc_639><loc_451><loc_639><loc_456><loc_642><loc_460></s>"  # fmt: skip
+        EXPECTED_GENERATED_TEXT = Expectations(
+            {
+                (None, None): "</s><s><loc_279><loc_379><loc_282><loc_379><loc_290><loc_372><loc_293><loc_372><loc_298><loc_368><loc_301><loc_368><loc_306><loc_364><loc_310><loc_362><loc_315><loc_360><loc_320><loc_358><loc_324><loc_355><loc_331><loc_353><loc_337><loc_351><loc_343><loc_349><loc_349><loc_347><loc_356><loc_345><loc_365><loc_343><loc_376><loc_341><loc_390><loc_339><loc_409><loc_337><loc_489><loc_337><loc_514><loc_339><loc_528><loc_341><loc_539><loc_343><loc_547><loc_345><loc_553><loc_347><loc_559><loc_349><loc_566><loc_351><loc_572><loc_353><loc_578><loc_355><loc_584><loc_360><loc_589><loc_366><loc_592><loc_372><loc_595><loc_379><loc_598><loc_385><loc_601><loc_391><loc_603><loc_397><loc_606><loc_401><loc_608><loc_408><loc_611><loc_414><loc_614><loc_420><loc_617><loc_426><loc_620><loc_433><loc_626><loc_441><loc_631><loc_445><loc_636><loc_447><loc_639><loc_451><loc_639><loc_456><loc_642><loc_460></s>",
+                ("xpu", 5): "</s><s><loc_279><loc_379><loc_282><loc_379><loc_290><loc_372><loc_293><loc_372><loc_298><loc_368><loc_301><loc_368><loc_306><loc_364><loc_310><loc_362><loc_315><loc_360><loc_320><loc_358><loc_324><loc_355><loc_331><loc_353><loc_337><loc_351><loc_343><loc_349><loc_349><loc_347><loc_356><loc_345><loc_365><loc_343><loc_376><loc_341><loc_390><loc_339><loc_409><loc_337><loc_489><loc_337><loc_514><loc_339><loc_528><loc_341><loc_539><loc_343><loc_547><loc_345><loc_553><loc_347><loc_559><loc_349><loc_566><loc_351><loc_572><loc_353><loc_578><loc_355><loc_583><loc_358><loc_589><loc_366><loc_592><loc_372><loc_595><loc_379><loc_598><loc_385><loc_601><loc_391><loc_603><loc_397><loc_606><loc_401><loc_608><loc_408><loc_611><loc_414><loc_614><loc_420><loc_617><loc_426><loc_620><loc_433><loc_623><loc_439><loc_628><loc_445><loc_633><loc_447><loc_636><loc_451><loc_636><loc_456><loc_639><loc_460></s>",
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(generated_text, EXPECTED_GENERATED_TEXT)
 
         parsed_answer = processor.post_process_generation(
@@ -394,7 +414,12 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
             task="<REFERRING_EXPRESSION_SEGMENTATION>",
             image_size=(self.image2.width, self.image2.height),
         )
-        EXPECTED_PARSED_ANSWER = {'<REFERRING_EXPRESSION_SEGMENTATION>': {'polygons': [[[178, 182, 180, 182, 185, 178, 187, 178, 191, 176, 192, 176, 196, 174, 198, 174, 201, 173, 205, 172, 207, 170, 212, 169, 216, 168, 219, 167, 223, 166, 228, 165, 233, 164, 240, 163, 249, 162, 262, 162, 313, 162, 329, 162, 338, 163, 345, 164, 350, 165, 354, 166, 358, 167, 362, 168, 366, 169, 370, 170, 374, 173, 377, 175, 379, 178, 381, 182, 383, 185, 384, 187, 386, 190, 388, 192, 389, 196, 391, 198, 393, 201, 395, 204, 397, 208, 400, 211, 404, 213, 407, 214, 409, 216, 409, 219, 411, 221]]], 'labels': ['']}}  # fmt: skip
+        EXPECTED_PARSED_ANSWER = Expectations(
+            {
+                (None, None): {'<REFERRING_EXPRESSION_SEGMENTATION>': {'polygons': [[[178, 182, 180, 182, 185, 178, 187, 178, 191, 176, 192, 176, 196, 174, 198, 174, 201, 173, 205, 172, 207, 170, 212, 169, 216, 168, 219, 167, 223, 166, 228, 165, 233, 164, 240, 163, 249, 162, 262, 162, 313, 162, 329, 162, 338, 163, 345, 164, 350, 165, 354, 166, 358, 167, 362, 168, 366, 169, 370, 170, 374, 173, 377, 175, 379, 178, 381, 182, 383, 185, 384, 187, 386, 190, 388, 192, 389, 196, 391, 198, 393, 201, 395, 204, 397, 208, 400, 211, 404, 213, 407, 214, 409, 216, 409, 219, 411, 221]]], 'labels': ['']}},
+                ("xpu", 5): {'<REFERRING_EXPRESSION_SEGMENTATION>': {'polygons': [[[178, 182, 180, 182, 185, 178, 187, 178, 191, 176, 192, 176, 196, 174, 198, 174, 201, 173, 205, 172, 207, 170, 212, 169, 216, 168, 219, 167, 223, 166, 228, 165, 233, 164, 240, 163, 249, 162, 262, 162, 313, 162, 329, 162, 338, 163, 345, 164, 350, 165, 354, 166, 358, 167, 362, 168, 366, 169, 370, 170, 373, 172, 377, 175, 379, 178, 381, 182, 383, 185, 384, 187, 386, 190, 388, 192, 389, 196, 391, 198, 393, 201, 395, 204, 397, 208, 399, 210, 402, 213, 405, 214, 407, 216, 407, 219, 409, 221]]], 'labels': ['']}},
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(parsed_answer, EXPECTED_PARSED_ANSWER)
 
     def test_base_model_batching_inference_sdpa(self):
@@ -621,22 +646,43 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs.to(device=torch_device)
         predictions = model.generate(**inputs, max_new_tokens=100)
 
-        EXPECTED_PREDICTION_IDS = [
-            [2, 0, 0, 0, 47643, 47240, 7487, 47643, 50802, 50337, 50922, 50337, 50922, 50397, 50802, 50397, 4652, 50270, 50372, 50288, 50372, 50288, 50394, 50270, 50394, 495, 2571, 50401, 50455, 50447, 50457, 50447, 50483, 50401, 50482, 4014, 5733, 50446, 50495, 50614, 50493, 50614, 50596, 50446, 50600, 530, 791, 673, 51230, 50640, 51261, 50640, 51261, 50666, 51230, 50666, 5733, 565, 3048, 50389, 50682, 50461, 50684, 50461, 50719, 50389, 50717, 7111, 230, 5061, 33893, 50707, 50668, 50755, 50668, 50755, 50682, 50707, 50682, 10932, 50290, 50708, 50333, 50706, 50334, 50751, 50290, 50753, 4652, 51128, 50704, 51149, 50704, 51149, 50729, 51128, 50729, 2],
-            [2, 0, 0, 102, 2272, 13103, 2258, 42099, 41556, 9181, 11, 760, 9, 10, 5718, 745, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        ]  # fmt: skip
+        EXPECTED_PREDICTION_IDS = Expectations(
+            {
+                (None, None): [
+                    [2, 0, 0, 0, 47643, 47240, 7487, 47643, 50802, 50337, 50922, 50337, 50922, 50397, 50802, 50397, 4652, 50270, 50372, 50288, 50372, 50288, 50394, 50270, 50394, 495, 2571, 50401, 50455, 50447, 50457, 50447, 50483, 50401, 50482, 4014, 5733, 50446, 50495, 50614, 50493, 50614, 50596, 50446, 50600, 530, 791, 673, 51230, 50640, 51261, 50640, 51261, 50666, 51230, 50666, 5733, 565, 3048, 50389, 50682, 50461, 50684, 50461, 50719, 50389, 50717, 7111, 230, 5061, 33893, 50707, 50668, 50755, 50668, 50755, 50682, 50707, 50682, 10932, 50290, 50708, 50333, 50706, 50334, 50751, 50290, 50753, 4652, 51128, 50704, 51149, 50704, 51149, 50729, 51128, 50729, 2],
+                    [2, 0, 0, 102, 2272, 13103, 2258, 42099, 41556, 9181, 11, 760, 9, 10, 5718, 745, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                ],
+                ("xpu", 5): [
+                    [2, 0, 0, 0, 47643, 47240, 7487, 47643, 50802, 50337, 50922, 50337, 50922, 50397, 50802, 50397, 4652, 50270, 50372, 50288, 50372, 50288, 50394, 50270, 50394, 495, 2571, 50401, 50455, 50446, 50457, 50446, 50483, 50401, 50482, 4014, 5733, 50446, 50495, 50614, 50493, 50614, 50596, 50446, 50600, 530, 791, 673, 51230, 50640, 51261, 50640, 51261, 50666, 51230, 50666, 5733, 565, 3048, 50389, 50683, 50461, 50684, 50461, 50719, 50389, 50717, 7111, 230, 5061, 33893, 50707, 50668, 50755, 50668, 50755, 50682, 50707, 50682, 10932, 50290, 50708, 50333, 50706, 50334, 50751, 50290, 50753, 4652, 51128, 50704, 51149, 50704, 51149, 50729, 51128, 50729, 2],
+                    [2, 0, 102, 2272, 512, 9181, 11, 760, 9, 10, 5718, 745, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                ],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(predictions.tolist(), EXPECTED_PREDICTION_IDS)
 
         generated_texts = processor.batch_decode(predictions, skip_special_tokens=False)
 
-        EXPECTED_GENERATED_TEXTS = [
-            "</s><s><s><s>中新中<loc_533><loc_68><loc_653><loc_68><loc_653><loc_128><loc_533><loc_128>88<loc_1><loc_103><loc_19><loc_103><loc_19><loc_125><loc_1><loc_125>DAT<loc_132><loc_186><loc_178><loc_188><loc_178><loc_214><loc_132><loc_213>STOP<loc_177><loc_226><loc_345><loc_224><loc_345><loc_327><loc_177><loc_331>KUO<loc_961><loc_371><loc_992><loc_371><loc_992><loc_397><loc_961><loc_397>OPTUS<loc_120><loc_413><loc_192><loc_415><loc_192><loc_450><loc_120><loc_448>OD COUKT<loc_438><loc_399><loc_486><loc_399><loc_486><loc_413><loc_438><loc_413>yes<loc_21><loc_439><loc_64><loc_437><loc_65><loc_482><loc_21><loc_484>88<loc_859><loc_435><loc_880><loc_435><loc_880><loc_460><loc_859><loc_460></s>",
-            "</s><s><s>a green volkswagen beetle parked in front of a yellow building</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
-        ]  # fmt: skip
+        EXPECTED_GENERATED_TEXTS = Expectations(
+            {
+                (None, None): [
+                    "</s><s><s><s>中新中<loc_533><loc_68><loc_653><loc_68><loc_653><loc_128><loc_533><loc_128>88<loc_1><loc_103><loc_19><loc_103><loc_19><loc_125><loc_1><loc_125>DAT<loc_132><loc_186><loc_178><loc_188><loc_178><loc_214><loc_132><loc_213>STOP<loc_177><loc_226><loc_345><loc_224><loc_345><loc_327><loc_177><loc_331>KUO<loc_961><loc_371><loc_992><loc_371><loc_992><loc_397><loc_961><loc_397>OPTUS<loc_120><loc_413><loc_192><loc_415><loc_192><loc_450><loc_120><loc_448>OD COUKT<loc_438><loc_399><loc_486><loc_399><loc_486><loc_413><loc_438><loc_413>yes<loc_21><loc_439><loc_64><loc_437><loc_65><loc_482><loc_21><loc_484>88<loc_859><loc_435><loc_880><loc_435><loc_880><loc_460><loc_859><loc_460></s>",
+                    "</s><s><s>a green volkswagen beetle parked in front of a yellow building</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
+                ],
+                ("xpu", 5): [
+                    "</s><s><s><s>中新中<loc_533><loc_68><loc_653><loc_68><loc_653><loc_128><loc_533><loc_128>88<loc_1><loc_103><loc_19><loc_103><loc_19><loc_125><loc_1><loc_125>DAT<loc_132><loc_186><loc_177><loc_188><loc_177><loc_214><loc_132><loc_213>STOP<loc_177><loc_226><loc_345><loc_224><loc_345><loc_327><loc_177><loc_331>KUO<loc_961><loc_371><loc_992><loc_371><loc_992><loc_397><loc_961><loc_397>OPTUS<loc_120><loc_414><loc_192><loc_415><loc_192><loc_450><loc_120><loc_448>OD COUKT<loc_438><loc_399><loc_486><loc_399><loc_486><loc_413><loc_438><loc_413>yes<loc_21><loc_439><loc_64><loc_437><loc_65><loc_482><loc_21><loc_484>88<loc_859><loc_435><loc_880><loc_435><loc_880><loc_460><loc_859><loc_460></s>",
+                    "</s><s>a green car parked in front of a yellow building</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
+                ],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(generated_texts, EXPECTED_GENERATED_TEXTS)
 
         parsed_answer = processor.post_process_generation(
             generated_texts[0], task="<OCR_WITH_REGION>", image_size=(images[0].width, images[0].height)
         )
-        EXPECTED_PARSED_ANSWER = {'<OCR_WITH_REGION>': {'quad_boxes': [[693, 60, 849, 60, 849, 112, 693, 112], [1, 90, 25, 90, 25, 109, 1, 109], [172, 163, 232, 165, 232, 187, 172, 187], [230, 198, 449, 196, 449, 286, 230, 290], [1249, 325, 1290, 325, 1290, 348, 1249, 348], [156, 362, 250, 363, 250, 394, 156, 392], [570, 349, 632, 349, 632, 362, 570, 362], [27, 385, 83, 383, 85, 422, 27, 424], [1117, 381, 1144, 381, 1144, 403, 1117, 403]], 'labels': ['中新中', '88', 'DAT', 'STOP', 'KUO', 'OPTUS', 'OD COUKT', 'yes', '88']}}  # fmt: skip
+        EXPECTED_PARSED_ANSWER = Expectations(
+            {
+                (None, None): {'<OCR_WITH_REGION>': {'quad_boxes': [[693, 60, 849, 60, 849, 112, 693, 112], [1, 90, 25, 90, 25, 109, 1, 109], [172, 163, 232, 165, 232, 187, 172, 187], [230, 198, 449, 196, 449, 286, 230, 290], [1249, 325, 1290, 325, 1290, 348, 1249, 348], [156, 362, 250, 363, 250, 394, 156, 392], [570, 349, 632, 349, 632, 362, 570, 362], [27, 385, 83, 383, 85, 422, 27, 424], [1117, 381, 1144, 381, 1144, 403, 1117, 403]], 'labels': ['中新中', '88', 'DAT', 'STOP', 'KUO', 'OPTUS', 'OD COUKT', 'yes', '88']}},
+                ("xpu", 5): {'<OCR_WITH_REGION>': {'quad_boxes': [[693, 60, 849, 60, 849, 112, 693, 112], [1, 90, 25, 90, 25, 109, 1, 109], [172, 163, 230, 165, 230, 187, 172, 187], [230, 198, 449, 196, 449, 286, 230, 290], [1249, 325, 1290, 325, 1290, 348, 1249, 348], [156, 363, 250, 363, 250, 394, 156, 392], [570, 349, 632, 349, 632, 362, 570, 362], [27, 385, 83, 383, 85, 422, 27, 424], [1117, 381, 1144, 381, 1144, 403, 1117, 403]], 'labels': ['中新中', '88', 'DAT', 'STOP', 'KUO', 'OPTUS', 'OD COUKT', 'yes', '88']}},
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(parsed_answer, EXPECTED_PARSED_ANSWER)
