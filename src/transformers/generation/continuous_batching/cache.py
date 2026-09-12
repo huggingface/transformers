@@ -745,6 +745,7 @@ class PagedAttentionMemoryHandler:
         - group_size: the size (in layers) of an attention group
         - reserved_bytes: memory claimed by fixed-size allocations outside the M/N equation, like the linear
             attention state pools
+        - tp_size: the tensor parallel size the KV heads are sharded over (1 when they are not)
         """
         self.config = config
         self.cb_config = continuous_batching_config
