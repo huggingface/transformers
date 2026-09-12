@@ -1735,7 +1735,7 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, PPDocLayoutV2Model
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -2053,7 +2053,7 @@ class PPDocLayoutV3ForObjectDetection(PPDocLayoutV3PreTrainedModel):
         ```python
         >>> from transformers import AutoModelForObjectDetection, AutoImageProcessor
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 

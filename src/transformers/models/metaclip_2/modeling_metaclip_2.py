@@ -684,7 +684,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
 
     ```python
     >>> from PIL import Image
-    >>> import httpx
+    >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2Model
 
@@ -770,7 +770,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2Model
 
@@ -816,7 +816,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2Model
 
@@ -902,7 +902,7 @@ class MetaClip2VisionModel(MetaClip2PreTrainedModel):
 
     ```python
     >>> from PIL import Image
-    >>> import httpx
+    >>> from huggingface_hub.utils import httpx
     >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2VisionModel
 
@@ -949,7 +949,7 @@ class MetaClip2VisionModel(MetaClip2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2VisionModel
 
@@ -1024,7 +1024,7 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
 
     ```python
     >>> from PIL import Image
-    >>> import httpx
+    >>> from huggingface_hub.utils import httpx
     >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2VisionModelWithProjection
 
@@ -1070,7 +1070,7 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2VisionModelWithProjection
 
