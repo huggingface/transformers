@@ -1,4 +1,4 @@
-# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,21 +14,14 @@
 """Feature extractor for the Qwen3-TTS single-codebook tokenizer."""
 
 import copy
-import math
 from typing import Any
 
 import numpy as np
 
-from ...audio_utils import mel_filter_bank, spectrogram, window_function
+from ...audio_utils import AudioInput, make_list_of_audio, mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
-from ...utils.import_utils import is_torch_available
-
-
-if is_torch_available():
-    import torch
-    import torch.nn.functional as F
 
 
 logger = logging.get_logger(__name__)
@@ -39,10 +32,15 @@ class Qwen3TTSTokenizerSingleCodebookFeatureExtractor(SequenceFeatureExtractor):
     Constructs a Qwen3-TTS single-codebook feature extractor.
 
     This class inherits from [`SequenceFeatureExtractor`]. It pads waveforms with an inner
-    [`SequenceFeatureExtractor`] (the Xcodec2 pattern) and computes two mel spectrograms by hand:
+    [`SequenceFeatureExtractor`] and computes two spectrograms from the same 16 kHz audio:
 
-    - 128-bin Whisper-style log-mel features for the VQ encoder
-    - 80-bin reference mels for the DiT decoder
+    - 128-bin Whisper-style log-mel features (`input_features`) for the encoder, computed on the waveform
+      zero-padded to a multiple of `hop_length * 2 * audio_vq_ds_rate` samples so that every speech code covers
+      the same number of samples;
+    - 80-bin reference mels (`ref_mels`) for the decoder, computed on the peak-normalised waveform.
+
+    The tokenizer encodes 16 kHz audio and decodes 24 kHz audio, hence `sampling_rate` differs from
+    `Qwen3TTSTokenizerSingleCodebookConfig.output_sample_rate`.
 
     Args:
         feature_size (`int`, *optional*, defaults to 128):
@@ -58,9 +56,9 @@ class Qwen3TTSTokenizerSingleCodebookFeatureExtractor(SequenceFeatureExtractor):
         dither (`float`, *optional*, defaults to 0.0):
             Optional dither added before the encoder STFT.
         audio_vq_ds_rate (`int`, *optional*, defaults to 2):
-            VQ downsample rate. Waveforms are padded to `hop_length * 2 * audio_vq_ds_rate`.
+            Downsample rate of the quantizer. Waveforms are padded to `hop_length * 2 * audio_vq_ds_rate` samples.
         return_attention_mask (`bool`, *optional*, defaults to `True`):
-            Whether to return spectrogram and waveform masks.
+            Whether to return `input_features_mask`.
         ref_num_mel_bins (`int`, *optional*, defaults to 80):
             Number of reference-mel bins.
         ref_n_fft (`int`, *optional*, defaults to 1024):
@@ -73,16 +71,11 @@ class Qwen3TTSTokenizerSingleCodebookFeatureExtractor(SequenceFeatureExtractor):
             Minimum reference-mel frequency.
         ref_mel_fmax (`float`, *optional*, defaults to 8000.0):
             Maximum reference-mel frequency.
+        ref_peak_db (`float`, *optional*, defaults to -6.0):
+            Peak level in dBFS the waveform is normalised to before the reference mel is computed.
     """
 
-    model_input_names = [
-        "input_features",
-        "input_features_mask",
-        "input_values",
-        "padding_mask",
-        "ref_mel_features",
-        "ref_mel_attention_mask",
-    ]
+    model_input_names = ["input_features", "input_features_mask", "ref_mels"]
 
     def __init__(
         self,
@@ -100,6 +93,7 @@ class Qwen3TTSTokenizerSingleCodebookFeatureExtractor(SequenceFeatureExtractor):
         ref_win_length=640,
         ref_mel_fmin=0.0,
         ref_mel_fmax=8000.0,
+        ref_peak_db=-6.0,
         **kwargs,
     ):
         super().__init__(
@@ -113,14 +107,15 @@ class Qwen3TTSTokenizerSingleCodebookFeatureExtractor(SequenceFeatureExtractor):
         self.n_fft = n_fft
         self.dither = dither
         self.audio_vq_ds_rate = audio_vq_ds_rate
-        self.waveform_pad_multiple = hop_length * 2 * audio_vq_ds_rate
         self.ref_num_mel_bins = ref_num_mel_bins
         self.ref_n_fft = ref_n_fft
         self.ref_hop_length = ref_hop_length
         self.ref_win_length = ref_win_length
         self.ref_mel_fmin = ref_mel_fmin
         self.ref_mel_fmax = ref_mel_fmax
+        self.ref_peak_db = ref_peak_db
 
+        # `self.pad` is reserved for the spectrograms, so the waveforms get their own padder.
         self.waveform_padder = SequenceFeatureExtractor(
             feature_size=1,
             sampling_rate=sampling_rate,
@@ -147,23 +142,12 @@ class Qwen3TTSTokenizerSingleCodebookFeatureExtractor(SequenceFeatureExtractor):
             mel_scale="slaney",
         )
 
-    def _batchify_audio(self, raw_speech) -> list[np.ndarray]:
-        is_batched = (
-            isinstance(raw_speech, (list, tuple))
-            and len(raw_speech) > 0
-            and isinstance(raw_speech[0], (np.ndarray, list, tuple))
-        )
-        if is_batched:
-            audio_list = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
-        else:
-            audio_list = [np.asarray(raw_speech, dtype=np.float32)]
-
-        for audio in audio_list:
-            if audio.ndim > 1:
-                raise ValueError(f"Expected mono audio of shape (length,) but got shape {audio.shape}")
-        return audio_list
+    @property
+    def waveform_pad_multiple(self) -> int:
+        return self.hop_length * 2 * self.audio_vq_ds_rate
 
     def _extract_encoder_log_mel(self, waveform: np.ndarray) -> np.ndarray:
+        """Whisper log-mel features of shape `(num_frames, feature_size)`."""
         log_spec = spectrogram(
             waveform,
             window_function(self.n_fft, "hann"),
@@ -177,53 +161,34 @@ class Qwen3TTSTokenizerSingleCodebookFeatureExtractor(SequenceFeatureExtractor):
         log_spec = log_spec[:, :-1]
         log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
         log_spec = (log_spec + 4.0) / 4.0
-        return log_spec
+        return log_spec.T
 
     def _extract_ref_mel(self, waveform: np.ndarray) -> np.ndarray:
+        """BigVGAN-style log-mel of the peak-normalised waveform, of shape `(num_frames, ref_num_mel_bins)`."""
+        peak = np.abs(waveform).max()
+        if peak > 0:
+            waveform = waveform * (10 ** (self.ref_peak_db / 20) / peak)
+
         pad = (self.ref_n_fft - self.ref_hop_length) // 2
         pad_mode = "reflect" if waveform.shape[-1] > pad else "constant"
-        if is_torch_available():
-            audio = torch.from_numpy(np.asarray(waveform, dtype=np.float32)).unsqueeze(0)
-            audio = F.pad(audio.unsqueeze(1), (pad, pad), mode=pad_mode).squeeze(1)
-            window = torch.hann_window(self.ref_win_length)
-            spec = torch.stft(
-                audio,
-                self.ref_n_fft,
-                hop_length=self.ref_hop_length,
-                win_length=self.ref_win_length,
-                window=window,
-                center=False,
-                pad_mode="reflect",
-                normalized=False,
-                onesided=True,
-                return_complex=True,
-            )
-            spec = torch.sqrt(torch.view_as_real(spec).pow(2).sum(-1) + 1e-9)
-            spec = spec.squeeze(0)
-            mel_basis = torch.from_numpy(self.ref_mel_filters).float()
-            if mel_basis.shape[0] == spec.shape[0]:
-                spec = torch.matmul(mel_basis.T, spec)
-            else:
-                spec = torch.matmul(mel_basis, spec)
-            spec = torch.log(torch.clamp(spec, min=1e-5))
-            return spec.transpose(0, 1).numpy()
-
-        padded = np.pad(waveform, (pad, pad), mode=pad_mode)
-        spec = spectrogram(
-            padded,
-            window_function(self.ref_win_length, "hann"),
+        waveform = np.pad(waveform, (pad, pad), mode=pad_mode)
+        window_pad = (self.ref_n_fft - self.ref_win_length) // 2
+        window = np.pad(window_function(self.ref_win_length, "hann"), (window_pad, window_pad))
+        complex_spec = spectrogram(
+            waveform,
+            window,
             frame_length=self.ref_n_fft,
             hop_length=self.ref_hop_length,
-            power=1.0,
+            power=None,
             center=False,
-            mel_filters=self.ref_mel_filters,
         )
-        spec = np.log(np.clip(spec, a_min=1e-5, a_max=None))
-        return spec.T
+        magnitude = np.sqrt(np.abs(complex_spec) ** 2 + 1e-9)
+        mel = self.ref_mel_filters.T @ magnitude
+        return np.log(np.maximum(mel, 1e-5)).T
 
     def __call__(
         self,
-        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        raw_speech: AudioInput,
         padding: bool | str | PaddingStrategy = True,
         max_length: int | None = None,
         truncation: bool = False,
@@ -232,6 +197,23 @@ class Qwen3TTSTokenizerSingleCodebookFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: int | None = None,
         **kwargs,
     ) -> BatchFeature:
+        r"""
+        Args:
+            raw_speech (`np.ndarray`, `torch.Tensor`, `list[float]`, `list[np.ndarray]`, `list[torch.Tensor]`, `list[list[float]]`):
+                Mono audio at `sampling_rate`, a single sequence or a batch of sequences.
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
+                Padding strategy applied to the waveforms and to both spectrograms.
+            max_length (`int`, *optional*):
+                Maximum waveform length in samples. Spectrograms are padded or truncated to the matching frame count.
+            truncation (`bool`, *optional*, defaults to `False`):
+                Whether to truncate waveforms longer than `max_length`.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                Framework of the returned tensors, `"pt"` or `"np"`.
+            return_attention_mask (`bool`, *optional*):
+                Whether to return `input_features_mask`. Defaults to `self.return_attention_mask`.
+            sampling_rate (`int`, *optional*):
+                Sampling rate of `raw_speech`. Passing it guards against silent resampling errors.
+        """
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
@@ -248,64 +230,55 @@ class Qwen3TTSTokenizerSingleCodebookFeatureExtractor(SequenceFeatureExtractor):
         if return_attention_mask is None:
             return_attention_mask = self.return_attention_mask
 
-        audio_list = self._batchify_audio(raw_speech)
+        audio_list = [np.asarray(audio, dtype=np.float32) for audio in make_list_of_audio(raw_speech)]
+        for audio in audio_list:
+            if audio.ndim != 1:
+                raise ValueError(f"Expected mono audio of shape (length,) but got shape {audio.shape}")
+
         padded_waveforms = self.waveform_padder.pad(
             BatchFeature({"audio": audio_list}),
+            padding=padding,
             max_length=max_length,
             truncation=truncation,
-            padding=padding,
-            return_attention_mask=True,
             pad_to_multiple_of=self.waveform_pad_multiple,
+            return_attention_mask=True,
             return_tensors="np",
         )
-        padding_mask = np.asarray(padded_waveforms.pop("attention_mask"))
-        input_values = np.asarray(padded_waveforms["audio"])
-        if input_values.ndim == 1:
-            input_values = input_values[None, :]
+        input_values = padded_waveforms["audio"]
+        padding_mask = padded_waveforms["attention_mask"]
 
         encoder_mels = []
         ref_mels = []
-        for i, original_audio in enumerate(audio_list):
-            original_length = int(original_audio.shape[0])
-            vq_length = math.ceil(original_length / self.waveform_pad_multiple) * self.waveform_pad_multiple
-            encoder_waveform = input_values[i, :vq_length]
-            encoder_mels.append(self._extract_encoder_log_mel(encoder_waveform).T)
-            ref_mels.append(self._extract_ref_mel(input_values[i, :original_length]))
+        for waveform, mask in zip(input_values, padding_mask):
+            valid_length = int(mask.sum())
+            encoder_length = -(-valid_length // self.waveform_pad_multiple) * self.waveform_pad_multiple
+            encoder_mels.append(self._extract_encoder_log_mel(waveform[:encoder_length]))
+            ref_mels.append(self._extract_ref_mel(waveform[:valid_length]))
 
-        padded_mel = self.pad(
+        max_frames = max_length // self.hop_length if max_length is not None else None
+        padded_encoder_mels = self.pad(
             BatchFeature({"input_features": encoder_mels}),
             padding=padding,
-            max_length=max_length,
+            max_length=max_frames,
             truncation=truncation,
             return_attention_mask=return_attention_mask,
-            return_tensors=None,
         )
-        input_features = np.stack([np.asarray(mel).T for mel in padded_mel["input_features"]], axis=0)
-        input_features_mask = padded_mel.get("attention_mask")
-        if input_features_mask is not None:
-            input_features_mask = np.asarray(input_features_mask)
-
-        max_ref_length = max(mel.shape[0] for mel in ref_mels)
-        ref_mel_features = np.stack(
-            [
-                np.pad(mel, ((0, max_ref_length - mel.shape[0]), (0, 0)), constant_values=self.padding_value)
-                for mel in ref_mels
-            ]
-        )
-        ref_mel_attention_mask = np.stack(
-            [np.pad(np.ones(mel.shape[0], dtype=np.int64), (0, max_ref_length - mel.shape[0])) for mel in ref_mels]
+        padded_ref_mels = self.pad(
+            BatchFeature({"input_features": ref_mels}),
+            padding=padding,
+            max_length=max_frames,
+            truncation=truncation,
+            return_attention_mask=False,
         )
 
         encoded_inputs = BatchFeature(
             {
-                "input_features": input_features,
-                "input_features_mask": input_features_mask,
-                "input_values": input_values,
-                "padding_mask": padding_mask,
-                "ref_mel_features": ref_mel_features,
-                "ref_mel_attention_mask": ref_mel_attention_mask,
+                "input_features": np.stack(padded_encoder_mels["input_features"]).transpose(0, 2, 1),
+                "ref_mels": np.stack(padded_ref_mels["input_features"]),
             }
         )
+        if return_attention_mask:
+            encoded_inputs["input_features_mask"] = np.stack(padded_encoder_mels["attention_mask"])
         if return_tensors is not None:
             encoded_inputs = encoded_inputs.convert_to_tensors(return_tensors)
         return encoded_inputs
