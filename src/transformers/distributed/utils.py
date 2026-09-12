@@ -173,6 +173,9 @@ def initialize_distributed_mesh(
         tuple(mesh_shape),
         mesh_dim_names=tuple(mesh_dim_names),
     )
+    # A flattened sub-mesh, so an all-reduce over every rank is one collective instead of one per dimension.
+    if len(mesh_dim_names) > 1:
+        device_mesh._flatten("_".join(mesh_dim_names))
     return device_map, device_mesh
 
 
