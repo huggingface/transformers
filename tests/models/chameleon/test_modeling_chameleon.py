@@ -228,6 +228,10 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip("Test expects an error raised when pixels are passed but this class has no images")
+    def test_generate_from_multimodal_encoder_outputs(self):
+        pass
+
     @unittest.skip("Chameleon forces some token ids to be -inf!")
     def test_batching_equivalence(self):
         pass

@@ -1088,7 +1088,7 @@ class InklingModel(InklingPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        **lm_kwargs: Unpack[TransformersKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | InklingModelOutputWithPast:
         r"""
         audio_input_ids (`torch.LongTensor` of shape `(num_audios, max_num_frames, n_mel_bins)`, *optional*):
@@ -1172,7 +1172,7 @@ class InklingModel(InklingPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            **lm_kwargs,
+            **kwargs,
         )
 
         return InklingModelOutputWithPast(

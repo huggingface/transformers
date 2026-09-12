@@ -2043,7 +2043,8 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        **lm_kwargs: Unpack[TransformersKwargs],
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma3nModelOutputWithPast:
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -2111,9 +2112,12 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
             per_layer_inputs = None
 
         # Merge text and images
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, return_dict=True)
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -2154,7 +2158,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
-            **lm_kwargs,
+            **kwargs,
         )
 
         return Gemma3nModelOutputWithPast(
@@ -2162,7 +2166,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
             past_key_values=outputs.past_key_values if use_cache else None,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
             audio_hidden_states=audio_features if input_features is not None else None,
         )
 
@@ -2231,7 +2235,8 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **lm_kwargs: Unpack[TransformersKwargs],
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma3nCausalLMOutputWithPast:
         r"""
         input_features_mask (torch.Tensor, *optional*, defaults to None):
@@ -2293,8 +2298,9 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             labels=labels,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             return_dict=True,
-            **lm_kwargs,
+            **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
@@ -2308,7 +2314,7 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.config.get_text_config().vocab_size, **lm_kwargs)
+            loss = self.loss_function(logits, labels, self.config.get_text_config().vocab_size, **kwargs)
 
         return Gemma3nCausalLMOutputWithPast(
             loss=loss,

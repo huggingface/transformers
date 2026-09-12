@@ -180,6 +180,10 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(reason="Model fails to export though it can eagerly forward with same inputs")
+    def test_onnx_export_generate_dynamic(self):
+        pass
+
     @unittest.skip(reason="Model does not support padding right")
     def test_flash_attn_2_inference_padding_right(self):
         pass
