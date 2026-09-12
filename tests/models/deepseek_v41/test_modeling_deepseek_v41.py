@@ -360,8 +360,8 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_fp8_native_checkpoint_load(self):
         """Load a native-format quantized checkpoint replicating the released layout:
         fp8 e4m3 weights + ue8m0 block scales for attention/shared experts/engram.wkv,
-        PACKED FP4 routed experts (e2m1 nibbles in int8, per-row 16-channel ue8m0
-        scales), fp8 engram tables, BF16 compressor/indexer/embed, F32 mHC params.
+        PACKED FP4 routed experts (e2m1 nibbles in int8, per-row 32-channel ue8m0
+        scales — the released MXFP4 [1, 32] block), fp8 engram tables, BF16 compressor/indexer/embed, F32 mHC params.
         Found by the cross-engine audit: the `wo_a` grouped projection and the engram
         tables must survive the load, and the fp4 experts must unpack exactly."""
         from safetensors.torch import save_file
@@ -442,9 +442,11 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
                 )
             elif ".experts." in name and param.ndim == 2:
                 # routed experts: packed fp4 like the release — two e2m1 nibbles per
-                # int8 byte (even index in the low nibble), [rows, in/16] ue8m0 scales
+                # int8 byte (even index in the low nibble), one ue8m0 scale per row
+                # per 32 fp4 channels (the released MXFP4 [1, 32] block: scales
+                # [2304, 160] over an unpacked in-dim of 5120)
                 out_dim, in_dim = param.shape
-                groups = param.float().view(out_dim, in_dim // 16, 16)
+                groups = param.float().view(out_dim, in_dim // 32, 32)
                 amax = groups.abs().amax(-1).clamp_min(1e-4)
                 scale = torch.exp2(torch.ceil(torch.log2(amax / 6.0)))
                 q = (groups / scale.unsqueeze(-1)).clamp(-6, 6)

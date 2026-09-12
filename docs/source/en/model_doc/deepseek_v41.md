@@ -106,7 +106,7 @@ size (tiny test configs) skip the quantization.
 
 The released `DeepSeek-V4.1-Flash` checkpoint ships mixed-precision weights: attention projections, the shared
 experts, `engram.wkv` and the engram tables in FP8 (e4m3, 32×32 blocks, ue8m0 scales), **routed experts packed as
-FP4** (e2m1 nibbles in an int8 container, per-row 16-channel ue8m0 scales), the compressor / indexer projections,
+FP4** (e2m1 nibbles in an int8 container, one ue8m0 scale per row per 32 fp4 channels), the compressor / indexer projections,
 embeddings and head in bf16, and the mHC / sink / gate-bias parameters in fp32. `from_pretrained` accepts this
 layout as-is on CPU (weights are dequantized to the requested `dtype`) and on GPU (kept quantized when supported):
 the fp8 quantizer's `.scale` → `weight_scale_inv` mapping and its FP4-aware dequantize op handle every piece,
