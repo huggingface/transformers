@@ -2110,6 +2110,7 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
         ("neucodec", "NeuCodecModel"),
         ("pocket_tts_audio_tokenizer", "PocketTTSAudioTokenizerModel"),
         ("qwen3_tts_tokenizer_multi_codebook", "Qwen3TTSTokenizerMultiCodebookModel"),
+        ("qwen3_tts_tokenizer_single_codebook", "Qwen3TTSTokenizerSingleCodebookModel"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
         ("xcodec2", "Xcodec2Model"),
     ]
