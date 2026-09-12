@@ -702,6 +702,11 @@ class StaticIndexedLayer(StaticLayer):
             self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
 
 
+def _cat_fp8(tensor: torch.Tensor, other: torch.Tensor, dim: int = -2) -> torch.Tensor:
+    """Concatenate two FP8 tensors, as `torch.cat` is not implemented for FP8 dtypes on all backends."""
+    return torch.cat([tensor.view(torch.uint8), other.view(torch.uint8)], dim=dim).view(tensor.dtype)
+
+
 class QuantizedLayer(DynamicLayer):
     """
     A quantized layer similar to what is described in the [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache paper](https://huggingface.co/papers/2402.02750).
@@ -888,6 +893,86 @@ class HQQQuantizedLayer(QuantizedLayer):
         quant_tensor, meta = qtensor
         tensor = self.quantizer.dequantize(quant_tensor, meta)
         return tensor
+
+
+class Fp8QuantizedLayer(QuantizedLayer):
+    """
+    A quantized layer storing the key and value states in 8-bit floating point.
+
+    Contrary to the integer backends, FP8 uses a single scale per tensor, which allows new tokens to be
+    appended to the quantized states directly. This layer therefore needs neither a full-precision residual
+    cache, nor a re-quantization of the whole cache every `residual_length` tokens. The scale is calibrated
+    during the first `update` call and then kept fixed.
+
+    The states are dequantized in `update`, i.e. before attention is computed, so that every attention
+    implementation keeps working unchanged. They are nonetheless stored as a single contiguous FP8 tensor, so
+    that attention backends supporting FP8 inputs can later consume them directly.
+    """
+
+    fp8_dtype = torch.float8_e4m3fn
+
+    def __init__(self):
+        # The base class options are all specific to group-wise integer quantization, so they are left to
+        # their default values and unused (`nbits` is only informative here).
+        super().__init__(nbits=8, residual_length=0)
+
+        self._fp8_max = torch.finfo(self.fp8_dtype).max
+        # Calibrated on the first `update` call, then frozen
+        self._key_scale = None
+        self._value_scale = None
+
+    def _quantize(self, tensor, axis=None, scale=None):
+        """Quantize `tensor` to FP8, calibrating the scale on its amplitude if it is not provided. The `axis`
+        argument is unused, as the scale is per-tensor."""
+        if scale is None:
+            # `clamp` guards against an all-zeros tensor, which would give a null scale
+            scale = (tensor.abs().amax().float() / self._fp8_max).clamp(min=torch.finfo(torch.float32).tiny)
+        return (tensor.float() / scale).to(self.fp8_dtype), scale
+
+    def _dequantize(self, qtensor):
+        quant_tensor, scale = qtensor
+        return (quant_tensor.float() * scale).to(self.dtype)
+
+    def update(
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Update the key and value caches in-place, and return the necessary keys and value states.
+
+        Args:
+            key_states (`torch.Tensor`): The new key states to cache.
+            value_states (`torch.Tensor`): The new value states to cache.
+
+        Returns:
+            tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
+        """
+        self.cumulative_length += key_states.shape[-2]
+
+        # Lazy initialization, which is also where the scales are calibrated
+        if not self.is_initialized:
+            self.lazy_initialization(key_states, value_states)
+            self._quantized_keys, self._key_scale = self._quantize(key_states.contiguous())
+            self._quantized_values, self._value_scale = self._quantize(value_states.contiguous())
+            return key_states, value_states
+
+        new_keys, _ = self._quantize(key_states.contiguous(), scale=self._key_scale)
+        new_values, _ = self._quantize(value_states.contiguous(), scale=self._value_scale)
+        self._quantized_keys = _cat_fp8(self._quantized_keys, new_keys)
+        self._quantized_values = _cat_fp8(self._quantized_values, new_values)
+
+        keys_to_return = self._dequantize((self._quantized_keys, self._key_scale))
+        values_to_return = self._dequantize((self._quantized_values, self._value_scale))
+        return keys_to_return, values_to_return
+
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        """Reorders this layer's cache for beam search. The scale being per-tensor, the FP8 states can be
+        reordered as-is, without any dequantization."""
+        if not self.is_initialized:
+            return
+
+        beam_idx = beam_idx.to(self._quantized_keys.device)
+        self._quantized_keys = self._quantized_keys.index_select(0, beam_idx)
+        self._quantized_values = self._quantized_values.index_select(0, beam_idx)
 
 
 class LinearAttentionCacheLayerMixin(ABC):
@@ -1916,7 +2001,7 @@ class QuantizedCache(Cache):
 
     Args:
         backend (`str`):
-            The quantization backend to use. One of `("quanto", "hqq").
+            The quantization backend to use. One of `("quanto", "hqq", "fp8")`.
         config (`PreTrainedConfig`):
             The config of the model for which this Cache will be used.
         nbits (`int`, *optional*, defaults to 4):
@@ -1928,7 +2013,9 @@ class QuantizedCache(Cache):
         q_group_size (`int`, *optional*, defaults to 64):
             Quantization is done per-channel according to a set `q_group_size` for both keys and values.
         residual_length (`int`, *optional*, defaults to 128):
-            Maximum capacity for the original precision cache
+            Maximum capacity for the original precision cache.
+
+    The last five arguments are specific to the group-wise integer backends, and unused by `fp8`.
     """
 
     def __init__(
@@ -1945,8 +2032,21 @@ class QuantizedCache(Cache):
             layer_class = QuantoQuantizedLayer
         elif backend == "hqq":
             layer_class = HQQQuantizedLayer
+        elif backend == "fp8":
+            layer_class = Fp8QuantizedLayer
         else:
             raise ValueError(f"Unknown quantization backend `{backend}`")
+
+        # The `fp8` backend quantizes per-tensor, so it does not use any of the group-wise options
+        layer_kwargs = {}
+        if backend != "fp8":
+            layer_kwargs = {
+                "nbits": nbits,
+                "axis_key": axis_key,
+                "axis_value": axis_value,
+                "q_group_size": q_group_size,
+                "residual_length": residual_length,
+            }
 
         config = config.get_text_config(decoder=True)
         layer_types, _ = get_layer_types_and_kwargs(config)
@@ -1956,10 +2056,7 @@ class QuantizedCache(Cache):
                 "`QuantizedCache` is only supported for models with only full attention layers. We found the following invalid layer "
                 f"types: {invalid_layer_types}"
             )
-        layers = [
-            layer_class(nbits, axis_key, axis_value, q_group_size, residual_length)
-            for _ in range(config.num_hidden_layers)
-        ]
+        layers = [layer_class(**layer_kwargs) for _ in range(config.num_hidden_layers)]
         super().__init__(layers=layers)
 
 
