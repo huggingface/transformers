@@ -31,8 +31,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
+from ...utils.hub import cached_file
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..auto import AutoTokenizer
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3RMSNorm
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4RotaryEmbedding
 from .configuration_deepseek_v41 import DeepseekV41Config, DeepseekV41TextConfig
@@ -223,7 +223,74 @@ class DeepseekV41GroupedLinear(nn.Linear):
         return y.reshape(*input_shape, self.n_groups, -1)
 
 
-class DeepseekV41CSACache(DynamicSlidingWindowLayer):
+# Sentinel in the engram token history: an n-gram never reaches across it (the
+# sequence start, a pad, an image span). Any negative value is safe — compressed ids
+# are non-negative and the sentinel is replaced by `engram_pad_id` before hashing.
+ENGRAM_DEAD = -1
+
+
+class DeepseekV41EngramHistoryLayer:
+    r"""Cache-layer mixin carrying the engram's n-gram look-back: the last
+    `max_ngram_size - 1` compressed token ids of every batch row, `ENGRAM_DEAD` where an
+    n-gram must not reach. Same trick as Qwen4-Exp's token context in `conv_states`,
+    minus the linear-attention layer it rides on there.
+
+    The history is a property of the *sequence* (hashed once per forward for every
+    engram layer), so it is parked on ONE cache layer: the first
+    :class:`DeepseekV41CSACache`, the only V4.1-owned layer class and therefore the
+    only one whose batch hooks we control. Mixed in ahead of the base layer so the
+    layer's `reorder_cache` / `batch_repeat_interleave` / `batch_select_indices` /
+    `reset` / `crop` chains reach it: beam search, `num_return_sequences` and
+    rollbacks permute the look-back together with the KV, with no model-side hook.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.engram_context: torch.Tensor | None = None
+
+    def update_engram_context(self, compressed: torch.Tensor, context_len: int) -> torch.Tensor:
+        """Return `[B, context_len + S]`: the stored look-back (`ENGRAM_DEAD` on the
+        first call) followed by `compressed`; keep the last `context_len` ids for the
+        next call — everything while past recording is on, so `crop` can rewind."""
+        if self.engram_context is None:
+            self.engram_context = compressed.new_full((compressed.shape[0], context_len), ENGRAM_DEAD)
+        full = torch.cat([self.engram_context, compressed], dim=1)
+        self.engram_context = full if getattr(self, "record_past", False) else full[:, -context_len:]
+        return full[:, -(context_len + compressed.shape[1]) :]
+
+    def reset(self) -> None:
+        super().reset()
+        self.engram_context = None
+
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        if self.engram_context is not None:
+            self.engram_context = self.engram_context.index_select(0, beam_idx.to(self.engram_context.device))
+
+    def batch_repeat_interleave(self, repeats: int) -> None:
+        super().batch_repeat_interleave(repeats)
+        if self.engram_context is not None:
+            self.engram_context = self.engram_context.repeat_interleave(repeats, dim=0)
+
+    def batch_select_indices(self, indices: torch.Tensor) -> None:
+        super().batch_select_indices(indices)
+        if self.engram_context is not None:
+            self.engram_context = self.engram_context[indices, ...]
+
+    def crop(self, tokens_to_remove: int) -> None:
+        length = self.get_seq_length()
+        super().crop(tokens_to_remove)
+        removed = length - self.get_seq_length()
+        if removed and self.engram_context is not None:
+            if not getattr(self, "record_past", False):
+                raise RuntimeError(
+                    "The engram token history keeps only its look-back and cannot be rewound. Call "
+                    "`activate_past_recording` before `crop`, or reset the cache."
+                )
+            self.engram_context = self.engram_context[:, :-removed]
+
+
+class DeepseekV41CSACache(DeepseekV41EngramHistoryLayer, DynamicSlidingWindowLayer):
     r"""Cache layer for a V4.1 **KV-source** layer (CSA2). On top of the shared-KV
     sliding-window ring every layer keeps, it holds the group state of the shared
     compressed branch:
@@ -893,12 +960,17 @@ class EngramLayout:
     """Bucket layout of the n-gram hash tables: a position is hashed as
     `max_ngram_size - 1` n-grams (2..N-gram), each split over `n_heads` heads; every
     (n-gram size, head) pair owns a disjoint prime-sized bucket range — the primes are
-    drawn in order above `engram_vocab_size` and never reused."""
+    drawn in order above `engram_vocab_size` and never reused. `primes` is
+    `[L][n-gram-1][heads]` (the per-step modulus is over all heads of one n-gram size);
+    `offsets` is `[L][n_cols]`, PER LAYER over the flat (n-gram, head) order: each
+    layer's table is addressed from its own start, and the ranges inside it are
+    disjoint because the primes are never reused."""
 
     max_ngram_size: int
     layer_ids: tuple
     num_embeddings: tuple
     primes: tuple
+    offsets: tuple
     n_heads: int
     head_dim: int
 
@@ -918,11 +990,19 @@ class EngramLayout:
                     sizes.append(current)
                 per_ngram.append(tuple(sizes))
             primes.append(tuple(per_ngram))
+        offsets = []
+        for layer in primes:
+            row, total = [], 0
+            for prime in (p for per in layer for p in per):
+                row.append(total)
+                total += prime
+            offsets.append(tuple(row))
         return cls(
             max_ngram_size=config.engram_max_ngram_size,
             layer_ids=layer_ids,
             num_embeddings=tuple(config.engram_num_embeddings),
             primes=tuple(primes),
+            offsets=tuple(offsets),
             n_heads=config.engram_n_heads,
             head_dim=config.engram_head_dim,
         )
@@ -983,94 +1063,98 @@ def compute_hash_multipliers(layer_ids: tuple, max_ngram_size: int, compressed_v
     return torch.stack(rows)
 
 
-class DeepseekV41NgramHashState:
+class DeepseekV41NgramHashState(nn.Module):
     """Maps each position to the hash ids of the n-grams ending there — once per
     forward, for all engram layers.
 
     Ids go through the compressed table, then each position is hashed with the
     `max_ngram_size - 1` tokens before it; look-back stops at the start of the sequence
-    and at any DEAD token (an image-span token), so an n-gram never spans one. The
-    absolute-position history buffer carries all of this across the prefill / chunked
-    prefill / decode split (a request resumed mid-sequence reconstructs its look-back
-    from the positions it writes, exactly like the reference's position-indexed
-    cache)."""
+    and at any DEAD token (a pad, an image-span token), so an n-gram never spans one.
+    Across the prefill / chunked prefill / decode split the look-back is read from and
+    written to the cache (:class:`DeepseekV41EngramHistoryLayer`), so it follows the
+    KV through beam reorders and batch expansion; without a cache every call starts
+    from an empty look-back.
 
-    DEAD = -1
+    The prime buckets and per-layer multipliers depend only on the config and are
+    non-persistent buffers (rebuilt by `_init_weights` after the meta-device load, like
+    `inv_freq`); the compressed token map is the tokenizer's and is filled by
+    `bind_tokenizer` — until then the module refuses to hash."""
 
-    def __init__(self, config: DeepseekV41TextConfig, tokenizer):
+    def __init__(self, config: DeepseekV41TextConfig):
+        super().__init__()
         self.layout = EngramLayout.from_config(config)
+        self.max_ngram_size = self.layout.max_ngram_size
+        self.compressed_vocab_size = config.engram_compressed_vocab_size
+        self.engram_pad_id = config.engram_pad_id
+        self.pad_id: int | None = None  # compressed id of `engram_pad_id`, known once bound
+        for name, table in self.hash_tables().items():
+            self.register_buffer(name, table, persistent=False)
+        self.register_buffer("token_map", None, persistent=False)
+
+    def hash_tables(self) -> dict[str, torch.Tensor]:
+        """The config-derived tables as fresh tensors: `primes` [L, n-gram-1, heads],
+        `offsets` [L, n_cols], `multipliers` [L, max_ngram_size]."""
+        return {
+            "primes": torch.tensor(self.layout.primes),
+            "offsets": torch.tensor(self.layout.offsets),
+            "multipliers": compute_hash_multipliers(
+                self.layout.layer_ids, self.max_ngram_size, self.compressed_vocab_size
+            ),
+        }
+
+    def bind_tokenizer(self, tokenizer):
         token_map, vocab_size = build_compressed_token_map(tokenizer)
-        if vocab_size != config.engram_compressed_vocab_size:
+        if vocab_size != self.compressed_vocab_size:
             raise ValueError(
                 f"The tokenizer-derived compressed vocabulary size ({vocab_size}) does not match "
-                f"`engram_compressed_vocab_size` ({config.engram_compressed_vocab_size}); the hash "
+                f"`engram_compressed_vocab_size` ({self.compressed_vocab_size}); the hash "
                 "multipliers would silently rehash the whole engram table."
             )
-        self.pad_id = token_map[config.engram_pad_id]
-        self.max_ngram_size = self.layout.max_ngram_size
-        # Primes as [L, n-gram-1, heads] (the per-step modulus is over all heads of one
-        # n-gram size). Bucket offsets are PER LAYER over the flat (n-gram, head) order:
-        # each layer's table is addressed from its own start, and the ranges inside it
-        # are disjoint because the primes are drawn in order and never reused.
-        self.primes = torch.tensor(self.layout.primes)  # [L, n-gram-1, heads]
-        offsets = []
-        for layer in self.layout.primes:
-            flat = [p for per in layer for p in per]
-            row, total = [], 0
-            for p in flat:
-                row.append(total)
-                total += p
-            offsets.append(row)
-        self.offsets = torch.tensor(offsets)  # [L, n_cols]
-        self.multipliers = compute_hash_multipliers(self.layout.layer_ids, self.max_ngram_size, vocab_size)
-        self.token_map = torch.tensor(token_map)
-        self.history: torch.Tensor | None = None
+        self.pad_id = token_map[self.engram_pad_id]
+        self.token_map = torch.tensor(token_map, device=self.primes.device)
 
-    def _to(self, device: torch.device):
-        for name in ("primes", "offsets", "multipliers", "token_map", "history"):
-            tensor = getattr(self, name)
-            if tensor is not None and tensor.device != device:
-                setattr(self, name, tensor.to(device))
-
-    def __call__(
-        self, input_ids: torch.Tensor, position_ids: torch.Tensor, token_mask: torch.Tensor | None
+    def forward(
+        self, input_ids: torch.Tensor, token_mask: torch.Tensor | None, past_key_values: Cache | None
     ) -> torch.Tensor:
-        """Returns `[B, S, n_engram_layers, n_hash_cols]` hash ids."""
-        batch, seq_len = input_ids.shape
-        device = input_ids.device
-        self._to(device)
-
-        max_pos = int(position_ids.max().item()) + 1
-        if self.history is None or self.history.shape[0] < batch or self.history.shape[1] < max_pos:
-            # Geometric growth: a decode step advances max_pos by one, so a fixed-size
-            # increment would reallocate and copy O(T) on every step.
-            shape = (
-                max(batch, 2 * self.history.shape[0] if self.history is not None else 0),
-                max(max_pos, 2 * self.history.shape[1] if self.history is not None else 0),
+        """Returns `[B, S, n_engram_layers, n_hash_cols]` hash ids. `token_mask` is
+        `[B, S]`, False marking DEAD tokens."""
+        if self.token_map is None:
+            raise ValueError(
+                "The engram layers need the tokenizer to build their n-gram hash state "
+                "(compressed token map). Call `model.model.bind_tokenizer(tokenizer)` on a "
+                "`DeepseekV41ForCausalLM` (or `model.bind_tokenizer(tokenizer)` on a "
+                "`DeepseekV41TextModel`), or load the model with `from_pretrained` from a "
+                "checkpoint that ships its tokenizer (it binds automatically)."
             )
-            grown = torch.full(shape, self.DEAD, dtype=torch.long, device=device)
-            if self.history is not None:
-                grown[: min(self.history.shape[0], shape[0]), : self.history.shape[1]] = self.history[
-                    : shape[0], : shape[1]
-                ]
-            self.history = grown
-
+        context_len = self.max_ngram_size - 1
         compressed = self.token_map[input_ids]
         if token_mask is not None:
-            compressed = torch.where(token_mask, compressed, torch.full_like(compressed, self.DEAD))
-        self.history.scatter_(1, position_ids.long(), compressed)
+            compressed = compressed.masked_fill(~token_mask, ENGRAM_DEAD)
+        if past_key_values is None:
+            empty = compressed.new_full((compressed.shape[0], context_len), ENGRAM_DEAD)
+            history = torch.cat([empty, compressed], dim=1)
+        else:
+            layer = next((l for l in past_key_values.layers if isinstance(l, DeepseekV41EngramHistoryLayer)), None)
+            if layer is None:
+                raise ValueError(
+                    "The engram n-gram look-back lives on a `shared_compressed_attention` cache layer "
+                    "(a KV-source layer); this cache has none."
+                )
+            history = layer.update_engram_context(compressed, context_len)
 
-        positions = position_ids.long()
-        tokens, blocked = [], torch.zeros_like(positions, dtype=torch.bool)
+        # Look-back windows over [context | current]: once a shift hits DEAD, that
+        # position's longer n-grams are blocked too and hash the pad id instead.
+        seq_len = compressed.shape[1]
+        tokens, blocked = [], torch.zeros_like(compressed, dtype=torch.bool)
         for shift in range(self.max_ngram_size):
-            source = self.history.gather(1, (positions - shift).clamp_min(0))
-            blocked = blocked | (positions < shift) | (source == self.DEAD)
+            source = history[:, context_len - shift : context_len - shift + seq_len]
+            blocked = blocked | (source == ENGRAM_DEAD)
             tokens.append(torch.where(blocked, torch.full_like(source, self.pad_id), source))
         tokens = torch.stack(tokens, dim=-1)  # [B, S, max_ngram_size]
 
         # XOR the multiplied ids one look-back at a time: after step i the running value
         # is the hash of the (i+1)-gram, landing in its own prime bucket range.
-        products = tokens.unsqueeze(2) * self.multipliers.to(device)  # [B, S, L, max_ngram_size]
+        products = tokens.unsqueeze(2) * self.multipliers  # [B, S, L, max_ngram_size]
         rolling, hashes = products[..., 0], []
         for i in range(1, self.max_ngram_size):
             rolling = torch.bitwise_xor(rolling, products[..., i])
@@ -1249,6 +1333,12 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):  # trf-ignore: TRF001
             init.ones_(module.embed.scale)
             init.ones_(module.q_weight)
             init.ones_(module.k_weight)
+        elif isinstance(module, DeepseekV41NgramHashState):
+            # Config-derived hash tables are non-persistent buffers: like `inv_freq`, the
+            # meta-device load leaves them empty. The token map is the tokenizer's
+            # (`bind_tokenizer` fills it) and is never touched here.
+            for name, table in module.hash_tables().items():
+                init.copy_(getattr(module, name), table)
         elif isinstance(module, DeepseekV41RotaryEmbedding):
             # `from_pretrained` builds on the meta device, so the inv_freq buffers
             # computed in __init__ never materialize — rebuild them here.
@@ -1260,6 +1350,35 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):  # trf-ignore: TRF001
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        """Loads as usual, then binds the checkpoint's own tokenizer to the engram hash
+        state (the compressed token map is tokenizer-derived, and the forward must stay
+        free of hub / disk access). Checkpoints without a tokenizer — e.g. weights saved
+        on their own — load unbound; `bind_tokenizer` is then the caller's job."""
+        loaded = super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        model = loaded[0] if isinstance(loaded, tuple) else loaded  # `output_loading_info=True`
+        text_model = model.base_model  # the text backbone owns the hash state
+        if getattr(text_model, "engram_hash_state", None) is not None and pretrained_model_name_or_path is not None:
+            hub_kwargs = {
+                key: kwargs[key]
+                for key in ("cache_dir", "force_download", "local_files_only", "token", "revision", "subfolder")
+                if key in kwargs
+            }
+            has_tokenizer = cached_file(
+                pretrained_model_name_or_path,
+                "tokenizer_config.json",
+                **hub_kwargs,
+                _raise_exceptions_for_gated_repo=False,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+            )
+            if has_tokenizer is not None:
+                from ..auto import AutoTokenizer
+
+                text_model.bind_tokenizer(AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **hub_kwargs))
+        return loaded
+
 
 @auto_docstring
 class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
@@ -1270,7 +1389,7 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
         self.norm = DeepseekV41RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = DeepseekV41RotaryEmbedding(config)
         self.engram_layout = EngramLayout.from_config(config)
-        self.engram_hash_state: DeepseekV41NgramHashState | None = None
+        self.engram_hash_state = DeepseekV41NgramHashState(config) if config.engram_layer_ids else None
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
@@ -1280,27 +1399,13 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
         self.embed = value
 
     def bind_tokenizer(self, tokenizer):
-        """Build the engram hash state (tokenizer-derived compressed token map, prime
-        bucket layout, per-layer hash multipliers). The hashes must be replicated
-        exactly or the pretrained tables are meaningless. Called automatically on the
-        first forward when the model was loaded from a hub checkpoint; call it
-        explicitly otherwise."""
-        self.engram_hash_state = DeepseekV41NgramHashState(self.config, tokenizer)
+        """Give the engram hash state its tokenizer (the compressed token map). The
+        hashes must be replicated exactly or the pretrained tables are meaningless.
+        `from_pretrained` binds the checkpoint's own tokenizer; call this explicitly
+        when the model was built any other way."""
+        if self.engram_hash_state is not None:
+            self.engram_hash_state.bind_tokenizer(tokenizer)
         return self
-
-    def _ensure_hash_state(self, device: torch.device):
-        if self.engram_layout is None or not self.engram_layout.layer_ids:
-            return
-        if self.engram_hash_state is None:
-            if not getattr(self.config, "_name_or_path", ""):
-                raise ValueError(
-                    "The engram layers need the tokenizer to build their n-gram hash state "
-                    "(compressed token map + hash multipliers). Call "
-                    "`model.model.bind_tokenizer(tokenizer)` on a `DeepseekV41ForCausalLM` "
-                    "(or `model.bind_tokenizer(tokenizer)` on a `DeepseekV41TextModel`), "
-                    "or load the model from a hub checkpoint (it binds automatically)."
-                )
-            self.bind_tokenizer(AutoTokenizer.from_pretrained(self.config._name_or_path))
 
     _can_record_outputs = {
         "router_logits": OutputRecorder(DeepseekV41TopKRouter, index=0),
@@ -1355,16 +1460,16 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
             "main": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="main"),
             "compress": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="compress"),
         }
-        self._ensure_hash_state(inputs_embeds.device)
-        # Pads (attention_mask == 0) are hashed as DEAD so n-grams never span them.
-        # Only a 2D mask carries per-token liveness; generate()'s per-layer-type mask
-        # dict has no 2D form to read it from.
-        live_mask = (
-            attention_mask.bool() if isinstance(attention_mask, torch.Tensor) and attention_mask.dim() == 2 else None
-        )
-        hash_ids = (
-            self.engram_hash_state(input_ids, position_ids, live_mask) if self.engram_hash_state is not None else None
-        )
+        hash_ids = None
+        if self.engram_hash_state is not None:
+            # Pads (attention_mask == 0) are hashed as DEAD so n-grams never span them.
+            # Only a 2D mask carries per-token liveness; generate()'s per-layer-type
+            # mask dict has no 2D form to read it from. The mask spans the whole
+            # sequence, the hashes only the current chunk.
+            live_mask = None
+            if isinstance(attention_mask, torch.Tensor) and attention_mask.dim() == 2:
+                live_mask = attention_mask[:, -input_ids.shape[1] :].bool()
+            hash_ids = self.engram_hash_state(input_ids, live_mask, past_key_values)
 
         shared: dict = {}
         # One-hot initial mix: the first site collapses stream 0 only.
@@ -1458,17 +1563,6 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
-
-    def _reorder_cache(self, past_key_values: "Cache", beam_idx: torch.LongTensor) -> "Cache":
-        """Beam-search support: the cache layers' `reorder_cache` permutes the
-        sliding-window and group state, and the engram n-gram history (which lives
-        on the model, not the cache) must follow the beams too — otherwise a beam
-        hashes its next tokens against another beam's predecessor history."""
-        past_key_values.reorder_cache(beam_idx)
-        hash_state = self.model.engram_hash_state
-        if hash_state is not None and hash_state.history is not None:
-            hash_state.history = hash_state.history.index_select(0, beam_idx.to(hash_state.history.device))
-        return past_key_values
 
 
 __all__ = [
