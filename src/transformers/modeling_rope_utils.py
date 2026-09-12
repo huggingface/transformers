@@ -843,7 +843,24 @@ class RotaryEmbeddingConfigMixin:
         else:
             rope_parameters_dict = {"full_attention": rope_parameters_dict}
 
-        for rope_parameters in rope_parameters_dict.values():
+        head_dims = []
+        if getattr(self, "is_heterogeneous", False):
+            try:
+                for layer_cfg in self.per_layer_config:
+                    h_dim = getattr(layer_cfg, "head_dim", None)
+                    if h_dim is not None:
+                        head_dims.append(h_dim)
+            except (AttributeError, RuntimeError):
+                pass
+        else:
+            try:
+                h_dim = getattr(self, "head_dim", None)
+                if h_dim is not None:
+                    head_dims.append(h_dim)
+            except (AttributeError, RuntimeError):
+                pass
+
+        for layer_type, rope_parameters in rope_parameters_dict.items():
             # skip when set to `None`, possibly a NoPE layer
             if rope_parameters is None:
                 continue
@@ -857,6 +874,17 @@ class RotaryEmbeddingConfigMixin:
                 logger.warning(
                     f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"
                 )
+
+            for head_dim in head_dims:
+                if head_dim > 4:
+                    partial_rotary_factor = rope_parameters.get("partial_rotary_factor", 1.0)
+                    dim = int(head_dim * partial_rotary_factor)
+                    if dim % 2 != 0:
+                        raise ValueError(
+                            f"The rotary dimension ({dim}) must be an even number, but got `head_dim`={head_dim} "
+                            f"with `partial_rotary_factor`={partial_rotary_factor} for `{layer_type}`. "
+                            "RoPE requires an even dimension."
+                        )
 
     def _validate_axial_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
         self._validate_default_rope_parameters(rope_parameters, ignore_keys=ignore_keys)
