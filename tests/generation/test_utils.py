@@ -15,6 +15,7 @@
 
 import collections
 import copy
+import dataclasses
 import gc
 import inspect
 import os
@@ -65,6 +66,7 @@ if is_torch_available():
     import torch
     import torch.nn.functional as F
     from safetensors.torch import load_file, save_file
+    from torch import nn
     from torch.nn.attention import SDPBackend, sdpa_kernel
 
     from transformers import (
@@ -75,9 +77,11 @@ if is_torch_available():
         BartForConditionalGeneration,
         BartTokenizer,
         DataCollatorWithFlattening,
+        GenerationMixin,
         GPT2LMHeadModel,
         GPT2Tokenizer,
         ImageGPTForCausalImageModeling,
+        PreTrainedConfig,
         SpeechEncoderDecoderModel,
     )
     from transformers.cache_utils import (
@@ -99,13 +103,18 @@ if is_torch_available():
         GenerateDecoderOnlyOutput,
         GenerateEncoderDecoderOutput,
         GenerationConfig,
+        GenerationMode,
+        GenerationState,
+        LogitsProcessor,
         LogitsProcessorList,
         MaxLengthCriteria,
         MinLengthLogitsProcessor,
+        PreparedGeneration,
         PromptLookupCandidateGenerator,
         StoppingCriteria,
         StoppingCriteriaList,
         SynthIDTextWatermarkingConfig,
+        UnbatchedClassifierFreeGuidanceLogitsProcessor,
         WatermarkDetector,
         WatermarkingConfig,
     )
@@ -114,8 +123,79 @@ if is_torch_available():
         AssistedCandidateGeneratorDifferentTokenizers,
         DFlashTokenCandidateGenerator,
     )
-    from transformers.generation.utils import ALL_CACHE_NAMES, DeferredStopCheck, _speculative_sampling
+    from transformers.generation.utils import (
+        ALL_CACHE_NAMES,
+        DeferredStopCheck,
+        _speculative_sampling,
+        _undo_generation_steps,
+    )
     from transformers.modeling_layers import MtpModel
+    from transformers.modeling_outputs import CausalLMOutputWithPast
+
+    class MultiCodebookToyConfig(PreTrainedConfig):
+        model_type = "multi_codebook_toy"
+
+        def __init__(
+            self,
+            vocab_size=16,
+            num_codebooks=3,
+            hidden_size=8,
+            num_hidden_layers=1,
+            num_attention_heads=1,
+            pad_token_id=15,
+            eos_token_id=14,
+            bos_token_id=0,
+            **kwargs,
+        ):
+            self.vocab_size = vocab_size
+            self.num_codebooks = num_codebooks
+            self.hidden_size = hidden_size
+            self.num_hidden_layers = num_hidden_layers
+            self.num_attention_heads = num_attention_heads
+            super().__init__(pad_token_id=pad_token_id, eos_token_id=eos_token_id, bos_token_id=bos_token_id, **kwargs)
+
+    class MultiCodebookToyModel(PreTrainedModel, GenerationMixin):
+        """
+        Generates one frame of `num_codebooks` tokens per step: `input_ids` are `(batch, seq_len, num_codebooks)`.
+        `forward` also accepts a 2-D text prompt, for tests that override `_init_sequences` to generate frames from
+        text. The model keeps no cache of its own; when `generate` creates one it is passed through untouched. Used
+        to test the N-D path of `generate`.
+        """
+
+        config: MultiCodebookToyConfig
+        _supported_generation_modes = (GenerationMode.GREEDY_SEARCH, GenerationMode.SAMPLE)
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.embed = nn.Embedding(config.num_codebooks * config.vocab_size, config.hidden_size)
+            self.lm_head = nn.Linear(config.hidden_size, config.num_codebooks * config.vocab_size)
+            self.register_buffer(
+                "codebook_offsets", torch.arange(config.num_codebooks) * config.vocab_size, persistent=False
+            )
+            self.post_init()
+
+        def forward(self, input_ids, attention_mask=None, **kwargs):
+            if input_ids.ndim == 2:  # text prompt: embed with the first codebook table
+                hidden_states = self.embed(input_ids)
+            else:  # frames: sum of the per-codebook embeddings
+                hidden_states = self.embed(input_ids + self.codebook_offsets).sum(dim=2)
+            return CausalLMOutputWithPast(logits=self.lm_head(hidden_states))
+
+        def _get_next_token_logits(self, outputs, model_kwargs, device):
+            return (
+                super()._get_next_token_logits(outputs, model_kwargs, device).view(-1, self.config.vocab_size)
+            )  # (batch * num_codebooks, vocab_size)
+
+        def _select_next_tokens(self, next_token_scores, generation_config, outputs, model_kwargs, state):
+            flat = super()._select_next_tokens(next_token_scores, generation_config, outputs, model_kwargs, state)
+            return flat.view(-1, self.config.num_codebooks)  # (batch, num_codebooks)
+
+    class ScriptedMultiCodebookModel(MultiCodebookToyModel):
+        """Ignores the scores and emits `self.schedule[step]`, a `(batch, num_codebooks)` tensor, at each step."""
+
+        def _select_next_tokens(self, next_token_scores, generation_config, outputs, model_kwargs, state):
+            return self.schedule[state.step].to(next_token_scores.device)
+
 
 from unittest.mock import patch
 
@@ -3020,6 +3100,38 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertTrue(n_matches.item() == 2)
         self.assertTrue(validated_tokens.tolist()[0] == [1, 4, 8])
 
+    def test_mask_finished_tokens_broadcasts_over_token_shape(self):
+        pad = torch.tensor(9)
+        unfinished = torch.tensor([1, 0])
+        # one token per step
+        mask = GenerationMixin()._mask_finished_tokens
+        self.assertListEqual(mask(torch.tensor([3, 4]), unfinished, pad).tolist(), [3, 9])
+        # one frame of 3 codebooks per step
+        frames = torch.tensor([[3, 4, 5], [6, 7, 8]])
+        self.assertListEqual(mask(frames, unfinished, pad).tolist(), [[3, 4, 5], [9, 9, 9]])
+
+    def test_undo_generation_steps_slices_time_dimension(self):
+        frames = torch.arange(2 * 4 * 3).view(2, 4, 3)
+        sequences, scores = _undo_generation_steps(1, frames, (1, 2, 3, 4))
+        self.assertEqual(sequences.shape, (2, 3, 3))
+        self.assertTrue(torch.equal(sequences, frames[:, :3]))
+        self.assertEqual(scores, (1, 2, 3))
+        # zero steps leaves everything alone
+        sequences, scores = _undo_generation_steps(0, frames, (1, 2))
+        self.assertTrue(torch.equal(sequences, frames))
+        self.assertEqual(scores, (1, 2))
+
+    @require_torch_accelerator  # the host buffers are pinned and a torch.Event is created on the sequences' device
+    def test_deferred_stop_check_buffer_matches_token_shape(self):
+        frames = torch.zeros(2, 5, 3, dtype=torch.long, device=torch_device)
+        stop_check = DeferredStopCheck(frames, max_length=None, cache=None, cache_is_returned=False)
+        _, tokens_buffer, _ = stop_check.slots[0]
+        self.assertEqual(tuple(tokens_buffer.shape), (2, 3))
+        tokens = torch.zeros(2, 5, dtype=torch.long, device=torch_device)
+        stop_check_2d = DeferredStopCheck(tokens, max_length=None, cache=None, cache_is_returned=False)
+        _, tokens_buffer_2d, _ = stop_check_2d.slots[0]
+        self.assertEqual(tuple(tokens_buffer_2d.shape), (2,))
+
     def test_speculative_sampling_target_distribution(self):
         """
         Asserts that the target distribution is preserved.
@@ -3221,6 +3333,417 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertTrue(torch.isfinite(p_prime).all())
         self.assertAlmostEqual(p_prime.sum().item(), 1.0, places=5)
 
+    def test_generation_state_defaults(self):
+        state = GenerationState(unfinished_sequences=torch.ones(2, dtype=torch.long), cur_len=3)
+        self.assertEqual(state.step, 0)
+        self.assertEqual(state.extras, {})
+        state.extras["durations"] = [1]
+        other = GenerationState(unfinished_sequences=torch.ones(2, dtype=torch.long), cur_len=3)
+        self.assertEqual(other.extras, {})  # no shared mutable default
+
+        prepared = PreparedGeneration(
+            generation_config=GenerationConfig(), generation_mode=GenerationMode.SAMPLE, generation_mode_kwargs={}
+        )
+        self.assertIsNone(prepared.decoding_method)
+        self.assertIsNone(prepared.model_kwargs)
+        required = {f.name for f in dataclasses.fields(PreparedGeneration) if f.default is dataclasses.MISSING}
+        self.assertSetEqual(required, {"generation_config", "generation_mode", "generation_mode_kwargs"})
+
+
+@require_torch
+class MultiCodebookGenerationTest(unittest.TestCase):
+    def _model(self, cls=MultiCodebookToyModel, **config_kwargs):
+        torch.manual_seed(0)
+        return cls(MultiCodebookToyConfig(**config_kwargs)).to(torch_device).eval()
+
+    def test_greedy_frames_shape_and_max_new_tokens(self):
+        model = self._model(eos_token_id=None)
+        prompt = torch.tensor([[[0, 0, 0]], [[1, 2, 3]]], device=torch_device)
+        out = model.generate(prompt, max_new_tokens=4, do_sample=False, use_cache=False)
+        self.assertEqual(tuple(out.shape), (2, 5, 3))
+        self.assertTrue(torch.equal(out[:, :1], prompt))
+        self.assertTrue(((out >= 0) & (out < model.config.vocab_size)).all())
+        self.assertFalse(torch.equal(out[0], out[1]))
+
+    def test_sample_frames_shape(self):
+        model = self._model(eos_token_id=None)
+        prompt = torch.zeros(2, 1, 3, dtype=torch.long, device=torch_device)
+        out = model.generate(prompt, max_new_tokens=4, do_sample=True, use_cache=False)
+        self.assertEqual(tuple(out.shape), (2, 5, 3))
+        self.assertTrue(((out >= 0) & (out < model.config.vocab_size)).all())
+
+    def test_eos_frame_stops_row_and_pads_all_codebooks(self):
+        eos, pad = 14, 15
+        model = self._model(ScriptedMultiCodebookModel, eos_token_id=eos, pad_token_id=pad)
+        model.schedule = [
+            torch.tensor([[1, 1, 1], [1, 1, 1]]),
+            torch.tensor([[eos, eos, eos], [eos, 2, 2]]),  # row 0 done; row 1 has EOS in one codebook only
+            torch.tensor([[3, 3, 3], [eos, eos, eos]]),  # row 0 must be padded; row 1 done
+            torch.tensor([[4, 4, 4], [4, 4, 4]]),  # never reached
+        ]
+        prompt = torch.zeros(2, 1, 3, dtype=torch.long, device=torch_device)
+        out = model.generate(prompt, max_new_tokens=10, do_sample=False, use_cache=False)
+        expected = torch.tensor(
+            [
+                [[0, 0, 0], [1, 1, 1], [eos, eos, eos], [pad, pad, pad]],
+                [[0, 0, 0], [1, 1, 1], [eos, 2, 2], [eos, eos, eos]],
+            ],
+            device=torch_device,
+        )
+        self.assertTrue(torch.equal(out, expected))
+
+    def test_state_extras_reach_output_and_nothing_is_stored_on_the_model(self):
+        @dataclasses.dataclass
+        class DurationsOutput(GenerateDecoderOnlyOutput):
+            durations: list[int] | None = None
+
+        class DurationsModel(MultiCodebookToyModel):
+            def _update_model_kwargs_with_next_tokens(self, next_tokens, outputs, model_kwargs, state):
+                state.extras["durations"] = state.extras.get("durations", []) + [int(next_tokens.shape[1])]
+                return model_kwargs
+
+            def _build_generate_output(self, sequences, state, generation_config, model_kwargs, **kwargs):
+                return DurationsOutput(sequences=sequences, durations=state.extras["durations"])
+
+        model = self._model(DurationsModel, eos_token_id=None)
+        attributes_before = set(vars(model))
+        prompt = torch.zeros(1, 1, 3, dtype=torch.long, device=torch_device)
+        out = model.generate(prompt, max_new_tokens=3, do_sample=False, use_cache=False)
+        self.assertEqual(out.durations, [3, 3, 3])
+        self.assertEqual(tuple(out.sequences.shape), (1, 4, 3))
+        self.assertSetEqual(set(vars(model)), attributes_before)
+
+    def test_build_generate_output_must_return_model_output_or_tensor(self):
+        class DictOutputModel(MultiCodebookToyModel):
+            def _build_generate_output(self, sequences, state, generation_config, model_kwargs, **kwargs):
+                return {"sequences": sequences}
+
+        model = self._model(DictOutputModel, eos_token_id=None)
+        prompt = torch.zeros(1, 1, 3, dtype=torch.long, device=torch_device)
+        with self.assertRaisesRegex(TypeError, "_build_generate_output"):
+            model.generate(prompt, max_new_tokens=2, do_sample=False, use_cache=False)
+
+    def test_mask_finished_tokens_hook_pads_finished_rows(self):
+        # `_mask_finished_tokens` is a hook: a frame model pads finished rows with its own token, not the text pad
+        class CodebookPadModel(ScriptedMultiCodebookModel):
+            def _mask_finished_tokens(self, next_tokens, unfinished_sequences, pad_token_id):
+                return super()._mask_finished_tokens(next_tokens, unfinished_sequences, 7)
+
+        eos = 14
+        model = self._model(CodebookPadModel, eos_token_id=eos, pad_token_id=15)
+        model.schedule = [
+            torch.tensor([[eos, eos, eos], [1, 2, 3]]),  # row 0 finishes at step 0
+            torch.tensor([[4, 5, 6], [1, 2, 3]]),
+            torch.tensor([[4, 5, 6], [eos, eos, eos]]),
+        ]
+        prompt = torch.zeros(2, 1, 3, dtype=torch.long, device=torch_device)
+        out = model.generate(prompt, max_new_tokens=3, do_sample=False, use_cache=False)
+        self.assertListEqual(out[0, 2:].tolist(), [[7, 7, 7], [7, 7, 7]])  # padded with 7, not 15
+        self.assertListEqual(out[1].tolist(), [[0, 0, 0], [1, 2, 3], [1, 2, 3], [eos] * 3])  # row 1 untouched
+
+    def test_build_generate_output_may_return_a_list(self):
+        class AudioListModel(MultiCodebookToyModel):
+            def _build_generate_output(self, sequences, state, generation_config, model_kwargs, **kwargs):
+                return [sequences[i] for i in range(sequences.shape[0])]
+
+        model = self._model(AudioListModel, eos_token_id=None)
+        prompt = torch.zeros(2, 1, 3, dtype=torch.long, device=torch_device)
+        out = model.generate(prompt, max_new_tokens=2, do_sample=False, use_cache=False)
+        self.assertIsInstance(out, list)
+        self.assertEqual(len(out), 2)
+
+    def test_overrides_step_hooks(self):
+        self.assertTrue(self._model(MultiCodebookToyModel)._overrides_step_hooks())  # overrides _select_next_tokens
+
+        class PlainModel(PreTrainedModel, GenerationMixin):
+            config: MultiCodebookToyConfig
+
+        self.assertFalse(PlainModel(MultiCodebookToyConfig())._overrides_step_hooks())
+
+        class SelectingMixin(GenerationMixin):
+            def _select_next_tokens(self, next_token_scores, generation_config, outputs, model_kwargs, state):
+                return super()._select_next_tokens(next_token_scores, generation_config, outputs, model_kwargs, state)
+
+        class Overriding(SelectingMixin, PreTrainedModel, GenerationMixin):  # mixin-first: the override still counts
+            config: MultiCodebookToyConfig
+
+        self.assertTrue(Overriding(MultiCodebookToyConfig())._overrides_step_hooks())
+
+    def test_stateful_hook_models_never_run_the_deferred_stop_check(self):
+        eos = 14
+
+        class CountingModel(ScriptedMultiCodebookModel):
+            def _update_model_kwargs_with_next_tokens(self, next_tokens, outputs, model_kwargs, state):
+                state.extras["calls"] = state.extras.get("calls", 0) + 1
+                self.last_state = state
+                return super()._update_model_kwargs_with_next_tokens(
+                    next_tokens, outputs=outputs, model_kwargs=model_kwargs, state=state
+                )
+
+        model = self._model(CountingModel, eos_token_id=eos)
+        model.schedule = [torch.tensor([[eos] * 3, [eos] * 3])] + [torch.tensor([[1, 2, 3], [1, 2, 3]])] * 4
+        prompt = torch.zeros(2, 1, 3, dtype=torch.long, device=torch_device)
+        with patch.object(DeferredStopCheck, "is_supported", staticmethod(lambda *args, **kwargs: True)):
+            out = model.generate(prompt, max_new_tokens=5, do_sample=False, use_cache=False)
+        self.assertEqual(out.shape[1] - 1, 1)
+        self.assertEqual(model.last_state.extras["calls"], 1)  # the extra deferred step never reached the hook
+
+    def test_cached_decoding_feeds_only_the_last_frame(self):
+        seen_lengths = []
+
+        class RecordingModel(MultiCodebookToyModel):
+            def forward(self, input_ids, attention_mask=None, **kwargs):
+                seen_lengths.append(int(input_ids.shape[1]))
+                return super().forward(input_ids, attention_mask=attention_mask, **kwargs)
+
+        model = self._model(RecordingModel, eos_token_id=None)
+        prompt = torch.zeros(2, 2, 3, dtype=torch.long, device=torch_device)
+        out = model.generate(prompt, max_new_tokens=4, do_sample=False)  # default: use_cache=True
+        self.assertEqual(tuple(out.shape), (2, 6, 3))
+        # prefill sees the whole prompt, every decode step sees only the newly appended frame
+        self.assertEqual(seen_lengths, [2, 1, 1, 1])
+
+    def test_stopping_criteria_receive_state_and_model_kwargs(self):
+        class StopAfterThreeSteps(StoppingCriteria):
+            def __call__(self, input_ids, scores, **kwargs):
+                self.received_kwargs = set(kwargs)
+                return torch.full((input_ids.shape[0],), kwargs["state"].step >= 3, device=input_ids.device)
+
+        criterion = StopAfterThreeSteps()
+        model = self._model(eos_token_id=None)
+        prompt = torch.zeros(1, 1, 3, dtype=torch.long, device=torch_device)
+        out = model.generate(
+            prompt,
+            max_new_tokens=10,
+            do_sample=False,
+            use_cache=False,
+            stopping_criteria=StoppingCriteriaList([criterion]),
+        )
+        self.assertEqual(tuple(out.shape), (1, 4, 3))
+        self.assertIn("state", criterion.received_kwargs)
+        self.assertIn("model_kwargs", criterion.received_kwargs)
+
+    def test_legacy_stopping_criterion_without_kwargs_still_works(self):
+        class LegacyCriteria(StoppingCriteria):
+            def __call__(self, input_ids, scores):
+                return torch.zeros(input_ids.shape[0], dtype=torch.bool, device=input_ids.device)
+
+        model = self._model(eos_token_id=None)
+        prompt = torch.zeros(1, 1, 3, dtype=torch.long, device=torch_device)
+        out = model.generate(
+            prompt,
+            max_new_tokens=2,
+            do_sample=False,
+            use_cache=False,
+            stopping_criteria=StoppingCriteriaList([LegacyCriteria()]),
+        )
+        self.assertEqual(tuple(out.shape), (1, 3, 3))
+
+
+@require_torch
+class PrepareGenerationTest(unittest.TestCase):
+    def test_prepare_then_dispatch_equals_generate(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        input_ids = torch.tensor([[1, 2, 3, 4]], device=torch_device)
+
+        prepared = model._prepare_generation(input_ids, max_new_tokens=5, do_sample=False)
+        self.assertIsInstance(prepared, PreparedGeneration)
+        self.assertIsNone(prepared.deprecated_mode_repo)
+        self.assertIs(prepared.sequences, prepared.input_ids)
+        manual = prepared.decoding_method(
+            model,
+            prepared.input_ids,
+            logits_processor=prepared.logits_processor,
+            stopping_criteria=prepared.stopping_criteria,
+            generation_config=prepared.generation_config,
+            **prepared.generation_mode_kwargs,
+            **prepared.model_kwargs,
+        )
+        generated = model.generate(input_ids, max_new_tokens=5, do_sample=False)
+        self.assertTrue(torch.equal(manual, generated))
+
+    def test_prepare_static_cache_memo_attribute_is_configurable(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        for attr in ("_previous_max_cache_length", "_previous_max_negative_cache_length"):
+            if hasattr(model, attr):
+                delattr(model, attr)
+
+        model._prepare_static_cache("static", batch_size=1, max_cache_len=10, prefill_chunk_size=None, model_kwargs={})
+        model._prepare_static_cache(
+            "static",
+            batch_size=1,
+            max_cache_len=20,
+            prefill_chunk_size=None,
+            model_kwargs={},
+            max_cache_length_attr="_previous_max_negative_cache_length",
+        )
+        self.assertEqual(model._previous_max_cache_length, 10)
+        self.assertEqual(model._previous_max_negative_cache_length, 20)
+
+        # the memo is per attribute: a shorter positive request keeps the positive ceiling, not the negative one
+        model._prepare_static_cache("static", batch_size=1, max_cache_len=5, prefill_chunk_size=None, model_kwargs={})
+        self.assertEqual(model._previous_max_cache_length, 10)
+
+    def test_sequences_not_passed_to_legacy_sample_override(self):
+        class LegacySampleModel(MultiCodebookToyModel):
+            def _sample(
+                self,
+                input_ids,
+                logits_processor,
+                stopping_criteria,
+                generation_config,
+                synced_gpus=False,
+                streamer=None,
+                **model_kwargs,
+            ):
+                self.received_model_kwargs = set(model_kwargs)
+                return input_ids
+
+        torch.manual_seed(0)
+        model = LegacySampleModel(MultiCodebookToyConfig(eos_token_id=None)).to(torch_device)
+        prompt = torch.zeros(1, 1, 3, dtype=torch.long, device=torch_device)
+        model.generate(prompt, max_new_tokens=2, do_sample=False, use_cache=False)
+        self.assertNotIn("sequences", model.received_model_kwargs)
+
+    def test_init_sequences_empty_start_from_text_prompt(self):
+        class TextPromptToFramesModel(MultiCodebookToyModel):
+            def _init_sequences(self, input_ids, model_kwargs):
+                return input_ids.new_empty((input_ids.shape[0], 0, self.config.num_codebooks))
+
+        torch.manual_seed(0)
+        model = TextPromptToFramesModel(MultiCodebookToyConfig(eos_token_id=None)).to(torch_device).eval()
+        text_prompt = torch.tensor([[0, 3, 5], [0, 2, 2]], device=torch_device)
+        out = model.generate(text_prompt, max_new_tokens=4, do_sample=False, use_cache=False)
+        # the prompt is not part of the output and `max_new_tokens` counts generated frames only
+        self.assertEqual(tuple(out.shape), (2, 4, 3))
+
+    def test_init_sequences_with_beam_search_raises(self):
+        class UnrestrictedFramesModel(MultiCodebookToyModel):
+            _supported_generation_modes = None
+
+            def _init_sequences(self, input_ids, model_kwargs):
+                return input_ids.new_empty((input_ids.shape[0], 0, self.config.num_codebooks))
+
+        torch.manual_seed(0)
+        model = UnrestrictedFramesModel(MultiCodebookToyConfig(eos_token_id=None)).to(torch_device)
+        text_prompt = torch.tensor([[0, 3, 5]], device=torch_device)
+        with self.assertRaisesRegex(ValueError, "_init_sequences"):
+            model.generate(text_prompt, max_new_tokens=2, num_beams=2, do_sample=False, use_cache=False)
+
+    def test_init_sequences_empty_start_sizes_the_cache_for_the_prompt(self):
+        class TextPromptToFramesModel(MultiCodebookToyModel):
+            def _init_sequences(self, input_ids, model_kwargs):
+                return input_ids.new_empty((input_ids.shape[0], 0, self.config.num_codebooks))
+
+        torch.manual_seed(0)
+        model = TextPromptToFramesModel(MultiCodebookToyConfig(eos_token_id=None)).to(torch_device)
+        text_prompt = torch.tensor([[0, 3, 5, 1, 2]], device=torch_device)  # prompt length 5
+        with patch.object(model, "_prepare_cache_for_generation", wraps=model._prepare_cache_for_generation) as spy:
+            model._prepare_generation(text_prompt, max_new_tokens=4, do_sample=False)
+        max_cache_length = (
+            spy.call_args.args[4] if len(spy.call_args.args) > 4 else spy.call_args.kwargs["max_cache_length"]
+        )
+        # the cache must hold the 5 prefilled prompt positions plus the 4 generated frames, minus the last one
+        self.assertEqual(max_cache_length, 5 + 4 - 1)
+
+    def test_classifier_free_guidance_processor_factory(self):
+        class BatchedCfgMarker(LogitsProcessor):
+            def __call__(self, input_ids, scores):
+                return scores
+
+        class BatchedCfgModel(MultiCodebookToyModel):
+            def _get_classifier_free_guidance_processor(
+                self, generation_config, model_kwargs, negative_prompt_ids, negative_prompt_attention_mask
+            ):
+                return BatchedCfgMarker()
+
+        config = MultiCodebookToyConfig()
+        generation_config = GenerationConfig(guidance_scale=2.0)
+
+        default_model = MultiCodebookToyModel(config)
+        processors = default_model._get_logits_processor(
+            generation_config, input_ids_seq_length=1, device="cpu", model_kwargs={}
+        )
+        self.assertTrue(any(isinstance(p, UnbatchedClassifierFreeGuidanceLogitsProcessor) for p in processors))
+
+        batched_model = BatchedCfgModel(config)
+        processors = batched_model._get_logits_processor(
+            generation_config, input_ids_seq_length=1, device="cpu", model_kwargs={}
+        )
+        self.assertIsInstance(processors[0], BatchedCfgMarker)
+        self.assertFalse(any(isinstance(p, UnbatchedClassifierFreeGuidanceLogitsProcessor) for p in processors))
+
+        # no guidance -> no CFG processor at all
+        processors = default_model._get_logits_processor(
+            GenerationConfig(), input_ids_seq_length=1, device="cpu", model_kwargs={}
+        )
+        self.assertFalse(any(isinstance(p, UnbatchedClassifierFreeGuidanceLogitsProcessor) for p in processors))
+
+    def test_beam_search_and_assisted_decoding_share_state_output_and_hooks(self):
+        base_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        records = {}
+
+        class RecordingModel(base_model.__class__):
+            def _update_model_kwargs_with_next_tokens(self, next_tokens, outputs, model_kwargs, state):
+                records.setdefault("next_tokens_shapes", []).append(tuple(next_tokens.shape))
+                records.setdefault("hook_states", []).append((state.step, state.cur_len))
+                return model_kwargs
+
+            def _build_generate_output(self, sequences, state, generation_config, model_kwargs, **kwargs):
+                records["state"] = state
+                records["has_beam_indices"] = kwargs.get("beam_indices") is not None
+                return super()._build_generate_output(sequences, state, generation_config, model_kwargs, **kwargs)
+
+        class RecordState(StoppingCriteria):
+            def __call__(self, input_ids, scores, **kwargs):
+                records["criteria_saw_state"] = "state" in kwargs and "model_kwargs" in kwargs
+                return torch.zeros(input_ids.shape[0], dtype=torch.bool, device=input_ids.device)
+
+        model = RecordingModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        input_ids = torch.tensor([[1, 2, 3, 4]], device=torch_device)
+
+        # beam search
+        records.clear()
+        out = model.generate(
+            input_ids,
+            max_new_tokens=3,
+            num_beams=2,
+            do_sample=False,
+            return_dict_in_generate=True,
+            stopping_criteria=StoppingCriteriaList([RecordState()]),
+        )
+        self.assertIsInstance(out, GenerateBeamDecoderOnlyOutput)
+        self.assertTrue(records["has_beam_indices"])
+        self.assertTrue(records["criteria_saw_state"])
+        self.assertEqual(records["state"].step, 3)  # the criterion never stops, so `max_new_tokens` steps are taken
+        self.assertEqual(records["state"].cur_len, input_ids.shape[1] + records["state"].step)
+        self.assertTrue(all(shape == (2,) for shape in records["next_tokens_shapes"]))  # batch_size * num_beams
+        # the hook sees the post-append `(step, cur_len)`, as in `_sample`
+        self.assertEqual(records["hook_states"], [(1, 5), (2, 6), (3, 7)])
+
+        # assisted decoding (prompt lookup needs no assistant model)
+        records.clear()
+        out = model.generate(
+            input_ids,
+            max_new_tokens=3,
+            prompt_lookup_num_tokens=2,
+            do_sample=False,
+            return_dict_in_generate=True,
+            stopping_criteria=StoppingCriteriaList([RecordState()]),
+        )
+        self.assertIsInstance(out, GenerateDecoderOnlyOutput)
+        self.assertFalse(records["has_beam_indices"])
+        self.assertTrue(records["criteria_saw_state"])
+        self.assertEqual(records["state"].cur_len, out.sequences.shape[1])
+        self.assertTrue(all(len(shape) == 2 and shape[0] == 1 for shape in records["next_tokens_shapes"]))
+        self.assertEqual(sum(shape[1] for shape in records["next_tokens_shapes"]), 3)
+        # several tokens may be accepted per step: `cur_len` must count every token appended so far, this step included
+        appended_so_far = 0
+        for (step, cur_len), shape in zip(records["hook_states"], records["next_tokens_shapes"]):
+            appended_so_far += shape[1]
+            self.assertEqual(cur_len, input_ids.shape[1] + appended_so_far)
+        self.assertEqual([step for step, _ in records["hook_states"]], list(range(1, len(records["hook_states"]) + 1)))
+
 
 global_rng = random.Random()
 
@@ -3262,6 +3785,37 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
 @pytest.mark.generate
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase):
+    def test_greedy_generate_matches_reference_loop(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        input_ids = torch.tensor([[1, 2, 3, 4]], device=torch_device)
+
+        generated = model.generate(input_ids, max_new_tokens=5, do_sample=False)
+
+        reference = input_ids
+        for _ in range(5):
+            next_token_logits = model(reference).logits[:, -1].float()
+            reference = torch.cat([reference, next_token_logits.argmax(-1)[:, None]], dim=-1)
+        self.assertTrue(torch.equal(generated, reference))
+
+    def test_sample_generate_return_dict_lengths(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        input_ids = torch.tensor([[1, 2, 3]], device=torch_device)
+        out = model.generate(
+            input_ids,
+            max_new_tokens=4,
+            min_new_tokens=4,
+            do_sample=True,
+            return_dict_in_generate=True,
+            output_scores=True,
+            output_logits=True,
+            output_hidden_states=True,
+        )
+        self.assertEqual(out.sequences.shape, (1, 7))
+        self.assertEqual(len(out.scores), 4)
+        self.assertEqual(len(out.logits), 4)
+        self.assertEqual(len(out.hidden_states), 4)
+        self.assertTrue(torch.equal(out.sequences[:, :3], input_ids))
+
     def test_generation_config_defaults(self):
         "Tests that we can set config value to a global default. See https://github.com/huggingface/transformers/issues/42762"
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
@@ -3294,6 +3848,87 @@ class GenerationIntegrationTests(unittest.TestCase):
             model.generation_config.cache_implementation = "dynamic"
             model.generation_config.use_cache = None
             model.save_pretrained(tmpdirname)
+
+    def test_default_step_hooks_match_legacy_behaviour(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        input_ids = torch.tensor([[1, 2, 3], [4, 5, 6]], device=torch_device)
+        outputs = model(input_ids)
+        state = GenerationState(unfinished_sequences=torch.ones(2, dtype=torch.long, device=torch_device), cur_len=3)
+
+        # _init_sequences / _get_next_token_logits
+        self.assertIs(model._init_sequences(input_ids, {}), input_ids)
+        logits = model._get_next_token_logits(outputs, {}, device=input_ids.device)
+        self.assertEqual(logits.dtype, torch.float32)
+        torch.testing.assert_close(logits, outputs.logits[:, -1].float())
+        self.assertNotEqual(logits.untyped_storage().data_ptr(), outputs.logits.untyped_storage().data_ptr())
+
+        # _select_next_tokens: greedy
+        config = GenerationConfig(do_sample=False)
+        next_tokens = model._select_next_tokens(logits, config, outputs, {}, state)
+        self.assertTrue(torch.equal(next_tokens, logits.argmax(-1)))
+        # _select_next_tokens: sampling returns a (batch,) tensor within the vocabulary
+        sampled = model._select_next_tokens(logits, GenerationConfig(do_sample=True), outputs, {}, state)
+        self.assertEqual(sampled.shape, (2,))
+        self.assertTrue(((sampled >= 0) & (sampled < logits.shape[-1])).all())
+
+        # _append_next_tokens / _update_model_kwargs_with_next_tokens
+        appended = model._append_next_tokens(input_ids, next_tokens)
+        self.assertTrue(torch.equal(appended, torch.cat([input_ids, next_tokens[:, None]], dim=-1)))
+        model_kwargs = {"attention_mask": torch.ones_like(input_ids)}
+        self.assertIs(
+            model._update_model_kwargs_with_next_tokens(next_tokens, outputs, model_kwargs, state), model_kwargs
+        )
+
+        # _build_generate_output
+        self.assertIs(
+            model._build_generate_output(appended, state, GenerationConfig(return_dict_in_generate=False), {}),
+            appended,
+        )
+        out = model._build_generate_output(
+            appended,
+            state,
+            GenerationConfig(return_dict_in_generate=True),
+            {"past_key_values": "cache"},
+            scores=(logits,),
+        )
+        self.assertIsInstance(out, GenerateDecoderOnlyOutput)
+        self.assertIs(out.sequences, appended)
+        self.assertEqual(out.past_key_values, "cache")
+        self.assertEqual(len(out.scores), 1)
+        beam_out = model._build_generate_output(
+            appended,
+            state,
+            GenerationConfig(return_dict_in_generate=True),
+            {},
+            sequences_scores=torch.zeros(2),
+            beam_indices=torch.zeros(2, 1, dtype=torch.long),
+        )
+        self.assertIsInstance(beam_out, GenerateBeamDecoderOnlyOutput)
+        self.assertEqual(beam_out.beam_indices.shape, (2, 1))
+
+        # encoder-decoder variants
+        encoder_decoder = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(
+            torch_device
+        )
+        decoder_ids = torch.tensor([[2, 0], [2, 0]], device=torch_device)
+        out = encoder_decoder._build_generate_output(
+            decoder_ids, state, GenerationConfig(return_dict_in_generate=True), {}, cross_attentions=("cross",)
+        )
+        self.assertIsInstance(out, GenerateEncoderDecoderOutput)
+        self.assertEqual(out.cross_attentions, ("cross",))
+        beam_out = encoder_decoder._build_generate_output(
+            decoder_ids,
+            state,
+            GenerationConfig(return_dict_in_generate=True),
+            {},
+            sequences_scores=torch.zeros(2),
+            beam_indices=torch.zeros(2, 1, dtype=torch.long),
+        )
+        self.assertIsInstance(beam_out, GenerateBeamEncoderDecoderOutput)
+        with self.assertRaises(ValueError):
+            encoder_decoder._build_generate_output(
+                decoder_ids, state, GenerationConfig(return_dict_in_generate=True), {}, sequences_scores=torch.zeros(2)
+            )
 
     @require_torch_accelerator
     def test_generate_with_inputs_on_cpu(self):

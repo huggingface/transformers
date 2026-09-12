@@ -73,6 +73,16 @@ We document here all output types.
 
 [[autodoc]] generation.GenerateBeamEncoderDecoderOutput
 
+## Decoding loop state
+
+[`~generation.GenerationState`] is the state the decoding loop shares with the per-step hooks of
+[`~generation.GenerationMixin`] and with the stopping criteria; [`~generation.PreparedGeneration`] is what
+[`~generation.GenerationMixin.generate`] builds before dispatching a decoding loop.
+
+[[autodoc]] generation.GenerationState
+
+[[autodoc]] generation.PreparedGeneration
+
 ## LogitsProcessor
 
 A [`LogitsProcessor`] can be used to modify the prediction scores of a language model head for

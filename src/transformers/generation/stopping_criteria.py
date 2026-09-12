@@ -1,8 +1,11 @@
+import functools
+import inspect
 import json
 import time
 import warnings
 from abc import ABC
 from collections import OrderedDict
+from collections.abc import Callable
 from copy import deepcopy
 
 import numpy as np
@@ -21,13 +24,16 @@ STOP_STRING_EMBEDDING_CACHE = OrderedDict()
 
 STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, *token_shape)`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
+
+            Sequences may carry more than one token per position (e.g. one frame of codebook tokens); criteria that
+            look at token values must then decide what a finished position means.
         scores (`tuple(torch.FloatTensor)`):
             Prediction scores of a language modeling head, as a tuple with one tensor per generation step, each of
             shape `(batch_size, config.vocab_size)`. These can be scores for each vocabulary token before SoftMax or
@@ -36,6 +42,14 @@ STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
             passed.
         kwargs (`dict[str, Any]`, *optional*):
             Additional stopping criteria specific kwargs.
+            model_kwargs (`dict[str, Any]`, *optional*):
+                The keyword arguments passed to the model's `forward` at this step (attention mask, cache, encoder
+                outputs, model-specific inputs), provided by `generate`'s decoding loops.
+            state ([`~generation.GenerationState`], *optional*):
+                The loop state (`unfinished_sequences`, `cur_len`, `step`, `extras`), provided by `generate`'s decoding
+                loops. Criteria receive whichever of these their `__call__` accepts, either by name or via `**kwargs`;
+                legacy criteria that accept neither get neither. In assisted decoding the candidate check may pass
+                sequences longer than `state.cur_len`.
 
     Return:
         `torch.BoolTensor`. (`torch.BoolTensor` of shape `(batch_size, 1)`):
@@ -43,6 +57,33 @@ STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
             `False` indicates we should continue.
 
 """
+
+
+@functools.cache
+def _accepted_kwarg_names(func: Callable) -> tuple[str, ...] | None:
+    """
+    Names of the parameters of `func` that can be passed as keyword arguments, or `None` if it accepts arbitrary
+    `**kwargs`.
+    """
+    parameters = inspect.signature(func).parameters.values()
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters):
+        return None
+    keyword_kinds = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    return tuple(p.name for p in parameters if p.kind in keyword_kinds)
+
+
+def _accepted_kwargs(criteria: Callable, kwargs: dict) -> dict:
+    """Filters `kwargs` down to what `criteria` can receive, so that legacy criteria keep working."""
+    call = type(criteria).__call__
+    # `StoppingCriteria` instances define `__call__` in Python; plain functions, lambdas and partials do not, so
+    # their own signature is inspected instead (uncached, as they are rarely reused across calls)
+    if inspect.isfunction(call):
+        accepted = _accepted_kwarg_names(call)
+    else:
+        accepted = _accepted_kwarg_names.__wrapped__(criteria)
+    if accepted is None:
+        return kwargs
+    return {key: value for key, value in kwargs.items() if key in accepted}
 
 
 class StoppingCriteria(ABC):
@@ -562,13 +603,16 @@ class EosTokenCriteria(StoppingCriteria):
     ) -> torch.BoolTensor:
         r"""
         Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, *token_shape)`):
                 Indices of input sequence tokens in the vocabulary.
 
                 Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
+
+                For `(batch_size, sequence_length, *token_shape)` inputs, a position counts as EOS only if every
+                token of the position is an EOS token.
             scores (`tuple(torch.FloatTensor)`):
                 Prediction scores of a language modeling head, as a tuple with one tensor per generation step, each of
                 shape `(batch_size, config.vocab_size)`. These can be scores for each vocabulary token before SoftMax
@@ -588,8 +632,12 @@ class EosTokenCriteria(StoppingCriteria):
 
         """
         self.eos_token_id = self.eos_token_id.to(input_ids.device)
-        is_done = torch.isin(input_ids[:, -new_token_length:], self.eos_token_id).any(dim=-1)
-        return is_done
+        is_eos = torch.isin(input_ids[:, -new_token_length:], self.eos_token_id)
+        if is_eos.ndim > 2:
+            # `input_ids` is `(batch_size, seq_len, *token_shape)` (e.g. one frame of codebook tokens per step): a
+            # position is EOS only if every token of the frame is EOS
+            is_eos = is_eos.flatten(2).all(dim=2)
+        return is_eos.any(dim=1)
 
 
 class ConfidenceCriteria(StoppingCriteria):
@@ -622,7 +670,7 @@ class StoppingCriteriaList(list):
     ) -> torch.BoolTensor:
         is_done = torch.full((input_ids.shape[0],), False, device=input_ids.device, dtype=torch.bool)
         for criteria in self:
-            is_done = is_done | criteria(input_ids, scores, **kwargs)
+            is_done = is_done | criteria(input_ids, scores, **_accepted_kwargs(criteria, kwargs))
         return is_done
 
     @property

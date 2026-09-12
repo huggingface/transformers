@@ -96,6 +96,8 @@ else:
     ]
     _import_structure["utils"] = [
         "GenerationMixin",
+        "GenerationState",
+        "PreparedGeneration",
         "GenerateBeamDecoderOnlyOutput",
         "GenerateBeamEncoderDecoderOutput",
         "GenerateDecoderOnlyOutput",
@@ -199,6 +201,8 @@ if TYPE_CHECKING:
             GenerateDecoderOnlyOutput,
             GenerateEncoderDecoderOutput,
             GenerationMixin,
+            GenerationState,
+            PreparedGeneration,
         )
         from .watermarking import (
             BayesianDetectorConfig,
