@@ -172,8 +172,6 @@ class DistributedMixin:
         if device_mesh is not None:
             model.config.distributed_config = distributed_config
             model._device_mesh = device_mesh
-            # The Trainer mirrors these into accelerate's `ParallelismConfig`; without them accelerate
-            # sees unaccounted ranks and falls back to DDP, which rejects the DTensor parameters.
             model._tp_size = distributed_config.tp_size
             model._fsdp_size = distributed_config.fsdp_size
 
