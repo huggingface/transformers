@@ -437,6 +437,7 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
 
         tokenizer = tiny_word_tokenizer()
         config = self._tie_free_config(self._engram_config(tokenizer))
+        torch.manual_seed(0)
         model = self.model_tester.causal_lm_class(config).eval()
         model.model.bind_tokenizer(tokenizer)
         inputs = torch.randint(0, len(tokenizer) - 1, (2, 9))
@@ -458,8 +459,8 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertTrue(torch.allclose(decoded, one_shot, atol=1e-4))
 
         # End to end: beam search with engram layers enabled runs through the plain
-        # cache reorder path.
-        beams = model.generate(inputs, max_new_tokens=4, num_beams=2, do_sample=False)
+        # cache reorder path (`min_new_tokens` so a random-weight EOS cannot cut it short).
+        beams = model.generate(inputs, max_new_tokens=4, min_new_tokens=4, num_beams=2, do_sample=False)
         self.assertEqual(tuple(beams.shape), (2, 13))
 
     @staticmethod
