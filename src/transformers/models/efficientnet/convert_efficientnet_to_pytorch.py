@@ -20,12 +20,12 @@ import json
 import os
 from io import BytesIO
 
-import httpx
 import numpy as np
 import PIL
 import tensorflow.keras.applications.efficientnet as efficientnet
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 from tensorflow.keras.preprocessing import image
 

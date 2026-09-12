@@ -26,8 +26,8 @@ from pathlib import Path
 # huggingface_hub reads HUGGINGFACE_CO_STAGING at import time and hardcodes hub-ci.huggingface.co.
 _staging_mode = os.environ.pop("HUGGINGFACE_CO_STAGING", None)
 
-import httpx  # noqa: E402
 from huggingface_hub import hf_hub_download, snapshot_download  # noqa: E402
+from huggingface_hub.utils import httpx  # noqa: E402
 
 from transformers.testing_utils import _run_pipeline_tests, _run_staging  # noqa: E402
 from transformers.utils.import_utils import is_mistral_common_available  # noqa: E402

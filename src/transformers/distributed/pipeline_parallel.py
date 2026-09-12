@@ -95,7 +95,8 @@ class PipelineStage:
 
         # Shared P2P: one isend/irecv with the adjacent rank.
         is_send = operation.startswith("send")
-        peer_rank = dest if is_send else src
+        peer_group_rank = dest if is_send else src
+        peer_rank = dist.get_global_rank(self.pp_group, peer_group_rank)
         op = dist.P2POp(dist.isend if is_send else dist.irecv, tensor, peer_rank, group=self.pp_group)
         # Wait for the communication to complete.
         for req in dist.batch_isend_irecv([op]):
@@ -155,7 +156,7 @@ class PipelineStage:
         if self.pp_size <= 1:
             return tensor
 
-        last_rank = self.pp_size - 1
+        last_rank = dist.get_global_rank(self.pp_group, self.pp_size - 1)
         comm_device = torch.device("cpu") if self.comm_on_cpu else device
         # Logits are always (batch, seq_len, vocab_size).
         logits_ndim = 3

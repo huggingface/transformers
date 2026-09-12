@@ -219,7 +219,7 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
         ```python
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, VipLlavaForConditionalGeneration
 
