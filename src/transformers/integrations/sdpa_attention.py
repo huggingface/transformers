@@ -2,6 +2,7 @@ import torch
 
 from ..utils import is_torch_npu_available, is_torch_xpu_available, logging
 from ..utils.import_utils import is_torch_greater_or_equal
+from .paged_dispatch import is_paged_call
 
 
 logger = logging.get_logger(__name__)
@@ -88,6 +89,13 @@ def sdpa_attention_forward(
     position_bias: torch.Tensor | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
+    if is_paged_call(kwargs):
+        from .sdpa_paged import sdpa_attention_paged_forward
+
+        return sdpa_attention_paged_forward(
+            module, query, key, value, attention_mask, dropout=dropout, scaling=scaling, **kwargs
+        )
+
     if kwargs.get("output_attentions", False):
         logger.warning_once(
             "`sdpa` attention does not support `output_attentions=True`."

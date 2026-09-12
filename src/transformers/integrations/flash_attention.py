@@ -2,6 +2,7 @@ import torch
 
 from ..modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
 from ..utils import logging
+from .paged_dispatch import is_paged_call
 
 
 logger = logging.get_logger(__name__)
@@ -37,6 +38,13 @@ def flash_attention_forward(
     s_aux: torch.Tensor | None = None,  # alias: learnable attention sink
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
+    if is_paged_call(kwargs):
+        from .flash_paged import paged_attention_forward
+
+        if s_aux is not None:
+            kwargs["s_aux"] = s_aux
+        return paged_attention_forward(module, query, key, value, attention_mask, **kwargs)
+
     if kwargs.get("output_attentions", False):
         logger.warning_once(
             "Flash Attention does not support `output_attentions=True`."
