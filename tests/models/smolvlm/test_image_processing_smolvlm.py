@@ -302,9 +302,7 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         for backend_name in backend_names[1:]:
             encoding = encodings[backend_name]
             self._assert_tensors_equivalence(reference.pixel_values, encoding.pixel_values)
-            self._assert_tensors_equivalence(
-                reference.pixel_attention_mask.float(), encoding.pixel_attention_mask.float()
-            )
+            self._assert_masks_equivalence(reference.pixel_attention_mask, encoding.pixel_attention_mask)
             self.assertEqual(reference.rows, encoding.rows)
             self.assertEqual(reference.cols, encoding.cols)
 
@@ -340,9 +338,7 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         for backend_name in backend_names[1:]:
             encoding = encodings[backend_name]
             self._assert_tensors_equivalence(reference.pixel_values, encoding.pixel_values, atol=3e-1)
-            self._assert_tensors_equivalence(
-                reference.pixel_attention_mask.float(), encoding.pixel_attention_mask.float()
-            )
+            self._assert_masks_equivalence(reference.pixel_attention_mask, encoding.pixel_attention_mask)
             self.assertEqual(reference.rows, encoding.rows)
             self.assertEqual(reference.cols, encoding.cols)
 

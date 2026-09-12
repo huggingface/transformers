@@ -302,9 +302,9 @@ class Idefics3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self._assert_tensors_equivalence(
                 encodings[reference_backend].pixel_values, encodings[backend_name].pixel_values
             )
-            self._assert_tensors_equivalence(
-                encodings[reference_backend].pixel_attention_mask.float(),
-                encodings[backend_name].pixel_attention_mask.float(),
+            self._assert_masks_equivalence(
+                encodings[reference_backend].pixel_attention_mask,
+                encodings[backend_name].pixel_attention_mask,
             )
             self.assertEqual(encodings[reference_backend].rows, encodings[backend_name].rows)
             self.assertEqual(encodings[reference_backend].cols, encodings[backend_name].cols)
@@ -341,9 +341,9 @@ class Idefics3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self._assert_tensors_equivalence(
                 encodings[reference_backend].pixel_values, encodings[backend_name].pixel_values, atol=3e-1
             )
-            self._assert_tensors_equivalence(
-                encodings[reference_backend].pixel_attention_mask.float(),
-                encodings[backend_name].pixel_attention_mask.float(),
+            self._assert_masks_equivalence(
+                encodings[reference_backend].pixel_attention_mask,
+                encodings[backend_name].pixel_attention_mask,
             )
             self.assertEqual(encodings[reference_backend].rows, encodings[backend_name].rows)
             self.assertEqual(encodings[reference_backend].cols, encodings[backend_name].cols)
