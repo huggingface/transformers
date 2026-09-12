@@ -247,4 +247,15 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
             output_batch[0, inputs_batch["input_ids"].shape[1] :], skip_special_tokens=True
         )
 
-        self.assertEqual(decoded_single, decoded_batch)
+        EXPECTED_SINGLE = Expectations(
+            {
+                ("cuda", None): "The image depicts two cats resting on a bright pink blanket spread over a piece of furniture, likely a couch. The cat on the left is lying on",
+            }
+        ).get_expectation()  # fmt: skip
+        EXPECTED_BATCH = Expectations(
+            {
+                ("cuda", None): "I see two cats lying on a pink blanket. One cat is on the left side, and the other is on the right side. There are two",
+            }
+        ).get_expectation()  # fmt: skip
+        self.assertEqual(decoded_single, EXPECTED_SINGLE)
+        self.assertEqual(decoded_batch, EXPECTED_BATCH)
