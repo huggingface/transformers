@@ -146,15 +146,53 @@ The text config is unwrapped in `__init__`; instantiating with a [`DeepseekV41Te
 
 ## Usage
 
+The released checkpoint (476 GiB on disk: fp8 attention, packed-fp4 routed experts, two ~98 GB fp8 engram tables)
+loads through the standard path — no custom loader:
+
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tok = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash")
-model = AutoModelForCausalLM.from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash", dtype="bfloat16")
-inputs = tok("Hello, my dog is cute", return_tensors="pt")
+model = AutoModelForCausalLM.from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash", dtype="bfloat16", device_map="auto")
+inputs = tok("Hello, my dog is cute", return_tensors="pt").to(model.device)
 out = model.generate(**inputs, max_new_tokens=20)
 print(tok.decode(out[0], skip_special_tokens=True))
 ```
+
+`device_map="auto"` spreads the decoder layers over the available accelerators with the fp8 / fp4 weights kept
+quantized (`dequantize=False` on CUDA) and runs them through the fp8 kernels. The two engram tables are
+`_no_placement_params`: on accelerators that cannot hold a 98 GB table they stay in host RAM (the row gather runs
+there and only the rows move), on ones that can they are placed like any other weight. On 8×H100 80 GB this
+loads in ~6 minutes, uses ~41 GiB per GPU, and reproduces the eager reference token-for-token; a single process
+spanning several devices is routed to the Triton fp8 kernels (the DeepGEMM path binds to one CUDA context), at
+roughly 0.4–1 s per generated token.
+
+The sibling-standard fast path is expert parallelism — one process per GPU under `torchrun`, `DistributedConfig`
+with `enable_expert_parallel=True`. It uses `base_model_ep_plan`: the routed experts are sharded along the expert
+axis (`grouped_gemm`), the gate routes (`ep_router`), and the engram tables are `nn.Embedding`s sharded along the
+embedding dim (`colwise_gather_output`, like Qwen4-Exp's n-gram table) so each rank holds `head_dim / tp_size`
+channels of every row — whole 32-channel scale blocks, so the fp8 dequantization stays rank-local:
+
+```python
+import os
+from transformers import AutoModelForCausalLM
+from transformers.distributed.configuration_utils import DistributedConfig
+
+model = AutoModelForCausalLM.from_pretrained(
+    "deepseek-ai/DeepSeek-V4.1-Flash",
+    dtype="bfloat16",
+    distributed_config=DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"]), enable_expert_parallel=True),
+)
+```
+
+```bash
+torchrun --nproc-per-node 8 your_script.py
+```
+
+Per-rank memory under EP is the replicated attention (~17 GB fp8) + `experts / tp_size` (~36 GB on 8 ranks) +
+`tables / tp_size` (~24 GB on 8 ranks): about 77 GB, which does not leave room on an 80 GB H100 — use 141 GB
+H200 / 192 GB B200 parts, or 16 ranks. (Verified numerically on CPU with 2 ranks: EP logits equal the
+single-process ones exactly.)
 
 > [!NOTE]
 > The model runs **eager attention only** (`_supports_flash_attn = _supports_sdpa = _supports_flex_attn = False`):
@@ -171,8 +209,12 @@ print(tok.decode(out[0], skip_special_tokens=True))
   on the layer, top-level `embed` / `head`) are mapped by the `deepseek_v41_text` entry of
   `conversion_mapping.py` — a rename set plus the per-expert `w1` / `w3` → `gate_up_proj` (`MergeModulelist` +
   `Concatenate`) and `w2` → `down_proj` merges. The mapping is keyed by the text `model_type`, so it also applies
-  to a bare [`DeepseekV41TextModel`]; the wrapper's `model.` prefix is the loader's. Engram keys
-  (`engram.embed.*`, `engram.wkv`, `engram.{q,k}_weight`) are kept verbatim.
+  to a bare [`DeepseekV41TextModel`]; the wrapper's `model.` prefix is the loader's. The engram's per-layer
+  `engram.wkv` / `engram.{q,k}_weight` keep their names; its hash table moves from `layers.N.engram.embed.*` to
+  the model-level `engram_tables.N.*` (a no-split [`DeepseekV41EngramEmbedding`] whose `weight` /
+  `weight_scale_inv` are `_no_placement_params`: a no-split decoder layer that held the table would be split
+  into parameter-level `device_map` entries, which carry no accelerate hooks). The fp8 quantizer's global
+  `.scale` → `weight_scale_inv` rename is why the table's scales carry that name.
 * **Recorded `hidden_states`.** The residual stream is `hc_mult` parallel copies, so `output_hidden_states`
   records the *collapsed* per-block inputs (each layer's `input_layernorm` input, plus the initial embedding
   collapse and the final normalized state) in the standard `[batch, seq, hidden]` shape.
