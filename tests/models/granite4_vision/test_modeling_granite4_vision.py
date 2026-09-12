@@ -247,6 +247,10 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
             output_batch[0, inputs_batch["input_ids"].shape[1] :], skip_special_tokens=True
         )
 
+        # NOTE: originally this test asserted `single == batch` as a self-consistency check.
+        # On torch 2.14, padded batch inference diverges significantly from single inference
+        # (different sentence structure, not just minor drift), so we now assert each against
+        # its own expected value separately. See https://github.com/pytorch/pytorch/issues/196886
         EXPECTED_SINGLE = Expectations(
             {
                 ("cuda", None): "The image depicts two cats resting on a bright pink blanket spread over a piece of furniture, likely a couch. The cat on the left is lying on",

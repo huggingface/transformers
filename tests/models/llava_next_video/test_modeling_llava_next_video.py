@@ -478,6 +478,10 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         output_single = model.generate(**inputs_single, do_sample=False, max_new_tokens=50)
         decoded_batched = self.processor.decode(output_batched[0], skip_special_tokens=True)
         decoded_single = self.processor.decode(output_single[0], skip_special_tokens=True)
+        # NOTE: originally this test asserted `batched == single` as a self-consistency check.
+        # On torch 2.14, padded batch inference diverges significantly from single inference
+        # (different sentence structure, not just minor drift), so we now assert each against
+        # its own expected value separately. See https://github.com/pytorch/pytorch/issues/196886
         EXPECTED_BATCHED = Expectations(
             {
                 ("cuda", None): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a book while another child is attempting to read the same book. The child who is reading the book seems to be struggling with the content, possibly due to",
