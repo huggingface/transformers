@@ -163,20 +163,11 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
     @staticmethod
     def _tie_free_config(config):
         """The indexer's per-head scores are ReLU-rectified, so a key every head
-            scores negatively gets an EXACT 0.0 — and with few heads that happens
-                # These assert one uniform key length for every layer; V4.1's sliding ring caps
-        # storage at `sliding_window - 1`, so compressed-source layers keep a different
-        # length than plain layers. DeepSeek-V3.2 skips the same tests.
-        @unittest.skip("V4.1's per-layer KV lengths differ (window-capped ring + compressed entries).")
-        def test_greedy_generate_dict_outputs_use_cache(self):
-            pass
-
-        @unittest.skip("V4.1's per-layer KV lengths differ (window-capped ring + compressed entries).")
-        def test_beam_search_generate_dict_outputs_use_cache(self):
-            pass
-            checks we select every visible block instead, keeping the comparison
-            deterministic (DSA's cross-backend tests are skipped upstream for the
-            same reason — see the deepseek_v32 test file)."""
+        scores negatively gets an EXACT 0.0 — and with few heads that happens
+        often enough for top-k ties to make the selection order-dependent. This config
+        selects every visible block instead, keeping the comparison
+        deterministic (DSA's cross-backend tests are skipped upstream for the
+        same reason — see the deepseek_v32 test file)."""
         config = copy.deepcopy(config)
         config.index_topk = 64
         config.candidate_topk_blocks = 8

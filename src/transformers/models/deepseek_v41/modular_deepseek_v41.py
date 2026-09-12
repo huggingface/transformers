@@ -17,7 +17,6 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 import torch.nn.functional as F
-from sympy import isprime
 from torch import nn
 
 from ... import initialization as init
@@ -723,8 +722,8 @@ class DeepseekV41TopKRouter(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, image_mask: torch.Tensor | None = None):
         flat = hidden_states.reshape(-1, hidden_states.shape[-1]).float()
-        scores = F.linear(flat, self.weight.float()) / self.gate_temp
-        scores = self.score_fn(scores)
+        logits = F.linear(flat, self.weight.float()) / self.gate_temp
+        scores = self.score_fn(logits)
         bias = self.bias
         if image_mask is not None and image_mask.any():
             bias = torch.where(image_mask.reshape(-1, 1), self.bias_vl, self.bias)
@@ -733,7 +732,8 @@ class DeepseekV41TopKRouter(nn.Module):
         if self.norm_topk_prob and self.top_k > 1:
             # `+1e-20` on the sum — NOT `rms_norm_eps`; matches training.
             weights = weights / (weights.sum(dim=-1, keepdim=True) + 1e-20)
-        return weights * self.routed_scaling_factor, indices
+        # `logits` first so `OutputRecorder(..., index=0)` records router logits.
+        return logits, weights * self.routed_scaling_factor, indices
 
 
 class DeepseekV41Expert(nn.Module):
@@ -780,7 +780,7 @@ class DeepseekV41SparseMoeBlock(nn.Module):
     def forward(self, hidden_states: torch.Tensor, image_mask: torch.Tensor | None = None) -> torch.Tensor:
         shape = hidden_states.shape
         flat = hidden_states.reshape(-1, shape[-1])
-        weights, indices = self.gate(hidden_states, image_mask)
+        _, weights, indices = self.gate(hidden_states, image_mask)
         y = torch.zeros_like(flat, dtype=torch.float32)
         # eager dispatch loop: per-expert host reads are inherent to it (spec-grade,
         # not a serving path) — the counts stay a tensor (TRF056).
@@ -868,9 +868,22 @@ class DeepseekV41Engram(nn.Module):
         return out.to(hidden_streams.dtype)
 
 
+def _is_prime(n: int) -> bool:
+    if n < 2:
+        return False
+    if n % 2 == 0:
+        return n == 2
+    i = 3
+    while i * i <= n:
+        if n % i == 0:
+            return False
+        i += 2
+    return True
+
+
 def _find_next_prime(start: int, seen: set) -> int:
     candidate = start + 1
-    while not isprime(candidate) or candidate in seen:
+    while not _is_prime(candidate) or candidate in seen:
         candidate += 1
     return candidate
 
@@ -1208,6 +1221,11 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):  # trf-ignore: TRF001
         "bias",
         "bias_vl",
     ]
+    # The two engram tables are ~98 GB each in the released checkpoint: like
+    # Qwen4-Exp's n-gram table, they are excluded from `device_map` placement so
+    # `device_map="auto"` does not offload the whole model around them. The lookup
+    # runs wherever the table lives (a pure row gather) and moves the rows over.
+    _no_placement_params = ["engram.embed.weight", "engram.embed.scale"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1285,7 +1303,7 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
             self.bind_tokenizer(AutoTokenizer.from_pretrained(self.config._name_or_path))
 
     _can_record_outputs = {
-        "router_logits": OutputRecorder(DeepseekV41TopKRouter),
+        "router_logits": OutputRecorder(DeepseekV41TopKRouter, index=0),
         # The residual stream is `hc_mult` parallel copies; the recorded
         # `hidden_states` are the collapsed per-block inputs (each layer's
         # `attn_norm` in/out, plus the initial embedding collapse).
@@ -1400,6 +1418,7 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         shift_labels: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
@@ -1421,7 +1440,9 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             **kwargs,
         )
-        logits = self.lm_head(outputs.last_hidden_state).float()
+        # Only compute the logits that are needed, and do not upcast them unless the loss needs it
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(outputs.last_hidden_state[:, slice_indices, :])
         loss = None
         if labels is not None or shift_labels is not None:
             # `shift_labels` carries already-aligned targets (sequence / context
