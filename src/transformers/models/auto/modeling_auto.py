@@ -2046,6 +2046,7 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
         ("higgs_audio_v2_tokenizer", "HiggsAudioV2TokenizerModel"),
         ("neucodec", "NeuCodecModel"),
         ("qwen3_tts_tokenizer_multi_codebook", "Qwen3TTSTokenizerMultiCodebookModel"),
+        ("qwen3_tts_tokenizer_single_codebook", "Qwen3TTSTokenizerSingleCodebookModel"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
         ("xcodec2", "Xcodec2Model"),
     ]
