@@ -183,9 +183,14 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
             encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 
         backend_names = list(encodings.keys())
-        reference_encoding = encodings[backend_names[0]].images[0][0]
+        reference_backend = backend_names[0]
+        reference_encoding = encodings[reference_backend].images[0][0]
         for backend_name in backend_names[1:]:
             self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].images[0][0])
+            # `images` is a nested list, the remaining keys are tensors and must match too
+            self._assert_encodings_equivalence(
+                encodings[reference_backend], encodings[backend_name], reference_backend, backend_name
+            )
 
     def test_backends_equivalence_batched(self):
         """Override to handle Fuyu's custom output structure"""

@@ -362,8 +362,8 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         backend_names = list(encodings.keys())
         reference_backend = backend_names[0]
         reference_pixel_values = encodings[reference_backend].pixel_values
-        reference_mask = encodings[reference_backend].pixel_attention_mask.float()
+        reference_mask = encodings[reference_backend].pixel_attention_mask
 
         for backend_name in backend_names[1:]:
             self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)
-            self._assert_tensors_equivalence(reference_mask, encodings[backend_name].pixel_attention_mask.float())
+            self._assert_masks_equivalence(reference_mask, encodings[backend_name].pixel_attention_mask)
