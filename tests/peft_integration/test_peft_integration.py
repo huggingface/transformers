@@ -381,6 +381,48 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     if param.requires_grad:
                         self.assertTrue(param.grad is not None)
 
+    # Requires https://github.com/huggingface/peft/pull/3197
+    @require_peft_greater_or_equal("0.20.0")
+    def test_peft_from_pretrained_restores_modules_to_save(self):
+        from peft import LoraConfig
+
+        cases = [
+            # A model with no classification head, ...
+            (AutoModel, "hf-internal-testing/tiny-random-BertModel"),
+            # ..., and another model with a classification head.
+            (
+                AutoModelForSequenceClassification,
+                "hf-internal-testing/tiny-random-BertForSequenceClassification",
+            ),
+        ]
+        sentinel = 0.1234
+
+        for auto_class, model_id in cases:
+            with self.subTest(model=model_id):
+                with tempfile.TemporaryDirectory() as base_model_dir, tempfile.TemporaryDirectory() as adapter_dir:
+                    auto_class.from_pretrained(model_id).save_pretrained(base_model_dir)
+                    model = AutoModelForSequenceClassification.from_pretrained(base_model_dir)
+                    model.add_adapter(
+                        LoraConfig(
+                            init_lora_weights=False,
+                            r=4,
+                            modules_to_save=["classifier"],
+                            task_type="SEQ_CLS",
+                        )
+                    )
+                    with torch.no_grad():
+                        model.classifier.modules_to_save.default.weight.fill_(sentinel)
+
+                    model.save_pretrained(adapter_dir)
+                    reloaded = AutoModelForSequenceClassification.from_pretrained(adapter_dir).to(torch_device)
+
+                self.assertTrue(
+                    torch.allclose(
+                        reloaded.classifier.modules_to_save.default.weight,
+                        torch.full_like(reloaded.classifier.modules_to_save.default.weight, sentinel),
+                    )
+                )
+
     def test_peft_add_adapter_training_gradient_checkpointing(self):
         """
         Simple test that tests if `add_adapter` works as expected when training with
