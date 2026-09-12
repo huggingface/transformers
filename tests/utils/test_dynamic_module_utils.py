@@ -222,6 +222,18 @@ def test_get_cached_module_file_local_cache_key_includes_transitive_import_sourc
     assert cached_a != cached_b
 
 
+def _skip_if_symlinks_unsupported(directory: Path):
+    # Building the hub-cache layout below requires creating symlinks, which
+    # Windows denies without Developer Mode or elevation (OSError WinError
+    # 1314) and some restricted filesystems deny on any platform.
+    target = directory / "symlink_capability_target.txt"
+    target.touch()
+    try:
+        (directory / "symlink_capability_link").symlink_to(target)
+    except OSError as e:
+        pytest.skip(f"Platform/filesystem cannot create symlinks ({e})")
+
+
 def _build_symlinked_hub_cache(repo_root: Path, files: dict[str, str], revision: str = "abc123") -> Path:
     blobs = repo_root / "blobs"
     snapshot = repo_root / "snapshots" / revision
@@ -239,6 +251,7 @@ def test_get_cached_module_file_local_handles_symlinked_hub_cache(monkeypatch, t
     # In a real hub cache the snapshot files are symlinks into a content-addressed ``blobs/`` dir,
     # so relative-import discovery must follow the named ``*.py`` symlinks in the snapshot dir rather
     # than their opaque blob targets
+    _skip_if_symlinks_unsupported(tmp_path)
     modules_cache = tmp_path / "hf_modules_cache"
     monkeypatch.setattr(dynamic_module_utils, "HF_MODULES_CACHE", str(modules_cache))
 
