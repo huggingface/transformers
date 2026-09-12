@@ -291,8 +291,8 @@ messages = [
     {"role": "user", "content": "How many cats does it take to change a light bulb?"},
 ]
 model_inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(model.device)
-input_length = model_inputs.shape[1]
-generated_ids = model.generate(model_inputs, do_sample=True, max_new_tokens=50)
+input_length = model_inputs["input_ids"].shape[1]
+generated_ids = model.generate(**model_inputs, do_sample=True, max_new_tokens=50)
 print(tokenizer.batch_decode(generated_ids[:, input_length:], skip_special_tokens=True)[0])
 "Arr, matey! According to me beliefs, 'twas always one cat to hold the ladder and another to climb up it an’ change the light bulb, but if yer looking to save some catnip, maybe yer can
 ```

@@ -17,6 +17,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import transformers
 from transformers import (
@@ -24,6 +25,7 @@ from transformers import (
     VIDEO_PROCESSOR_MAPPING,
     AutoConfig,
     AutoVideoProcessor,
+    InternVLConfig,
     LlavaOnevisionConfig,
     LlavaOnevisionVideoProcessor,
 )
@@ -145,6 +147,28 @@ class AutoVideoProcessorTest(unittest.TestCase):
             "Can't load video processor for 'hf-internal-testing/config-no-model'.",
         ):
             _ = AutoVideoProcessor.from_pretrained("hf-internal-testing/config-no-model")
+
+    def test_unavailable_backend_error_mentions_missing_dependency(self):
+        # Without torchvision, `VIDEO_PROCESSOR_MAPPING` resolves to `None` while
+        # `type(config) in VIDEO_PROCESSOR_MAPPING` stays True, so the mapping value must not be
+        # dereferenced unguarded. InternVL is such a case: its image processor is
+        # `GotOCRImageProcessor`, no `GotOCRVideoProcessor` exists to infer from, and the class
+        # stays `None`.
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            with open(Path(tmpdirname) / "preprocessor_config.json", "w") as fp:
+                json.dump({"image_processor_type": "GotOCRImageProcessor"}, fp)
+            with open(Path(tmpdirname) / "config.json", "w") as fp:
+                json.dump({"model_type": "internvl"}, fp)
+
+            with (
+                patch.dict(VIDEO_PROCESSOR_MAPPING._extra_content, {InternVLConfig: None}),
+                patch(
+                    "transformers.models.auto.video_processing_auto.is_torchvision_available",
+                    return_value=False,
+                ),
+            ):
+                with self.assertRaisesRegex(ValueError, "requires `torchvision` to be installed"):
+                    AutoVideoProcessor.from_pretrained(tmpdirname)
 
     def test_from_pretrained_dynamic_video_processor(self):
         # If remote code is not set, we will time out when asking whether to load the model.

@@ -943,9 +943,9 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
         set_seed(42)
         seq_len = 20000
         sampling_rate = 16000
-        input_features = torch.rand((2, seq_len))
+        audio_array = torch.rand((2, seq_len))
 
-        return self.processor(audio=[input_features.tolist()], sampling_rate=sampling_rate, return_tensors="pt").to(
+        return self.processor(audio=audio_array.tolist(), sampling_rate=sampling_rate, return_tensors="pt").to(
             torch_device
         )
 

@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 [VibeVoice](https://huggingface.co/papers/2508.19205) is a novel framework for synthesizing high-fidelity, long-form speech with multiple speakers by employing a next-token diffusion approach within a Large Language Model (LLM) structure. It's designed to capture the authentic conversational "vibe" and is particularly suited for generating audio content like podcasts and multi-participant audiobooks.
 
-Two model checkpoint are available at:
+Two model checkpoints are available at:
 - [vibevoice/VibeVoice-1.5B-hf](https://huggingface.co/vibevoice/VibeVoice-1.5B-hf)
 - [vibevoice/VibeVoice-7B-hf](https://huggingface.co/vibevoice/VibeVoice-7B-hf)
 
@@ -41,7 +41,7 @@ This model was contributed by [Eric Bezzam](https://huggingface.co/bezzam).
 
 The VibeVoice framework integrates three key components:
 1. **Continuous Speech Tokenizers:** Specialized [acoustic](./vibevoice_acoustic_tokenizer) and [semantic](./vibevoice_semantic_tokenizer) tokenizers, where the acoustic tokenizer uses a $\sigma$-VAE to achieve ultra-low compression (7.5 tokens/sec, 3200x) for scalability and fidelity, and the semantic tokenizer uses an ASR proxy task for content-centric feature extraction.
-2. **Large Language Model (LLM):** Use Qwen2.5 (in 1.5B and 7B versions) as its core sequence model.
+2. **Large Language Model (LLM):** Uses Qwen2.5 (in 1.5B and 7B versions) as its core sequence model.
 3. **Token-Level Diffusion Head:** conditioned on the LLM's hidden state and responsible for predicting the continuous VAE features in a streaming fashion.
 
 The original VibeVoice-1.5B checkpoint is available under the [Microsoft](https://huggingface.co/microsoft/VibeVoice-1.5B) organization on Hugging Face.
@@ -149,7 +149,7 @@ print(f"Saved output to {fn}")
 
 ### Generating a podcast from a script
 
-Below is an example to generate a conversation between two speakers, whose voices are cloned by providing a refence audio for each unique role ID in the chat template.
+Below is an example to generate a conversation between two speakers, whose voices are cloned by providing a reference audio for each unique role ID in the chat template.
 
 The example below also used the `monitor_progress` option to track the generation progress.
 
@@ -470,7 +470,7 @@ inputs = processor.apply_chat_template(
     conversation, tokenize=True, return_dict=True, add_generation_prompt=True,
 ).to(model.device, model.dtype)
 
-compile_config = CompileConfig(mode="default" dynamic=False)
+compile_config = CompileConfig(mode="default", dynamic=False)
 
 generate_kwargs = dict(
     **inputs,

@@ -243,7 +243,8 @@ class ImagesKwargs(TypedDict, total=False):
         do_resize (`bool`, *optional*):
             Whether to resize the image.
         size (`dict[str, int]`, *optional*):
-            Resize the shorter side of the input to `size["shortest_edge"]`.
+            Resize using one of the supported size dictionaries. Pixel-area bounds use
+            `{"min_pixels": int, "max_pixels": int}`.
         default_to_square (`bool`, *optional*, defaults to `self.default_to_square`):
             Whether to default to a square when resizing, if size is an int.
         crop_size (`dict[str, int]`, *optional*):

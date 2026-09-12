@@ -24,7 +24,9 @@ from unittest.mock import MagicMock, patch
 
 import torch
 from huggingface_hub import snapshot_download
+from parameterized import parameterized
 
+from tests.test_memory_cleanup_mixin import MemoryCleanupTestCase
 from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig
 from transformers.integrations.hub_kernels import (
     _HUB_KERNEL_MAPPING,
@@ -39,7 +41,6 @@ from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 from transformers.monkey_patching import clear_patch_mapping, get_patch_mapping, register_patch_mapping
 from transformers.testing_utils import (
     TestCasePlus,
-    cleanup,
     require_kernels,
     require_rocm,
     require_torch_accelerator,
@@ -58,9 +59,10 @@ if is_kernels_available():
 
 @require_kernels
 @slow
-class TestHubKernels(TestCasePlus):
+class TestHubKernels(MemoryCleanupTestCase):
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
         cls.model_id = "unsloth/Llama-3.2-1B-Instruct"
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_id)
         cls.model_kernelized = AutoModelForCausalLM.from_pretrained(
@@ -73,28 +75,16 @@ class TestHubKernels(TestCasePlus):
 
     @classmethod
     def tearDownClass(cls):
-        for attr in [
-            "model_kernelized",
-            "model_not_kernelized",
-            "tokenizer",
-        ]:
-            if hasattr(cls, attr):
-                try:
-                    delattr(cls, attr)
-                except Exception as e:
-                    print(f"Could not delete attribute {attr}: {e}")
-
-        # Clear any temporary kernel module cache entries populated by tests
-        try:
-            keys_to_remove = [
-                k for k, v in list(_KERNEL_MODULE_MAPPING.items()) if v is None or isinstance(v, types.ModuleType)
-            ]
-            for k in keys_to_remove:
-                _KERNEL_MODULE_MAPPING.pop(k, None)
-        except Exception as e:
-            print(f"Could not clear kernel module cache: {e}")
+        # Clear any temporary kernel module cache entries populated by tests; the mixin drops the two models.
+        keys_to_remove = [
+            k for k, v in list(_KERNEL_MODULE_MAPPING.items()) if v is None or isinstance(v, types.ModuleType)
+        ]
+        for k in keys_to_remove:
+            _KERNEL_MODULE_MAPPING.pop(k, None)
+        super().tearDownClass()
 
     def setUp(self):
+        super().setUp()
         self._pre_test_patch_mapping = get_patch_mapping()
 
     def tearDown(self):
@@ -102,8 +92,7 @@ class TestHubKernels(TestCasePlus):
         clear_patch_mapping()
         if self._pre_test_patch_mapping:
             register_patch_mapping(self._pre_test_patch_mapping)
-        # Free accelerator memory/cache and trigger GC
-        cleanup(torch_device, gc_collect=True)
+        super().tearDown()
 
     @require_torch_accelerator
     def test_forward(self):
@@ -253,6 +242,50 @@ class TestHubKernels(TestCasePlus):
         output = model.generate(tokenized_input, max_new_tokens=10, do_sample=False)
         output = self.tokenizer.decode(output[0], skip_special_tokens=True)
         self.assertTrue(output in EXPECTED_OUTPUT)
+
+        del model
+
+    def test_kernels_mapping_functions_registration(self):
+        kernel_config = KernelConfig(
+            kernel_mapping={"rotary_pos_emb": ("kernels-community/rotary:apply_rotary_transformers", {"version": 2})}
+        )
+
+        # Functions would previously raise if not properly handled
+        model = AutoModelForCausalLM.from_pretrained(
+            "unsloth/Llama-3.2-1B-Instruct", use_kernels=True, device_map=torch_device, kernel_config=kernel_config
+        )
+
+        # Sanity checks making sure it is really been found / registered under the model
+        self.assertIn("rotary_pos_emb", model.kernel_config.registered_layer_names.values())
+        self.assertTrue(any(name.endswith(".rotary_pos_emb") for name in model.kernel_config.registered_layer_names))
+
+        del model
+
+    def test_kernels_mapping_no_inherit(self):
+        kernel_config = KernelConfig(
+            kernel_mapping={
+                "RMSNorm": (
+                    "kernels-community/layer-norm:LlamaRMSNorm",
+                    {"version": 1},
+                )
+            },
+            # Force to only inherit the mapping ^
+            inherit_mapping=False,
+        )
+
+        model = AutoModelForCausalLM.from_pretrained(
+            "unsloth/Llama-3.2-1B-Instruct", use_kernels=True, device_map=torch_device, kernel_config=kernel_config
+        )
+        first_rms_norm = model.model.layers[0].input_layernorm
+        first_self_attn = model.model.layers[0].self_attn
+
+        # RoPE should still be registered under attn
+        self.assertIn("rotary_pos_emb", getattr(first_self_attn, "_kernel_funcs", {}))
+        first_rope = first_self_attn._kernel_funcs["rotary_pos_emb"]
+
+        # Check kernelization by fwd matching
+        self.assertIsNot(first_rms_norm.forward.__func__, type(first_rms_norm).forward)  # exchanged
+        self.assertIs(first_rope.forward.__func__, type(first_rope).forward)  # not exchanged
 
         del model
 
@@ -547,6 +580,110 @@ class TestKernelUtilities(TestCasePlus):
         exported = torch.export.export(Wrapper(), inputs)
         self.assertTrue(torch.equal(exported.module()(*inputs), torch_result))
 
+    def test_fallback_resolves_function_from_package_root(self):
+        """The package-root implementation takes precedence over the nested-module fallback."""
+        package = types.ModuleType("optional_backend")
+        optimized_function = MagicMock(return_value="optimized")
+        package.optimized_function = optimized_function
+        torch_function = MagicMock(return_value="torch")
+
+        with (
+            patch(
+                "transformers.integrations.hub_kernels.use_kernel_forward_from_hub",
+                return_value=lambda function: function,
+            ),
+            patch(
+                "transformers.integrations.hub_kernels.importlib.import_module",
+                return_value=package,
+            ) as import_module,
+        ):
+            wrapped = use_kernel_func_from_hub_with_fallback(
+                func_name="optimized_function",
+                package="optional_backend",
+                internal_path="ops.kernel",
+            )(torch_function)
+
+        self.assertEqual(wrapped(), "optimized")
+        import_module.assert_called_once_with("optional_backend")
+
+    @parameterized.expand(
+        [
+            (
+                "explicit_path",
+                "optimized_function",
+                "optional_backend",
+                "ops.kernel",
+                "optional_backend.ops.kernel",
+            ),
+            (
+                "mapped_path",
+                "chunk_gated_delta_rule",
+                "fla",
+                None,
+                "fla.ops.gated_delta_rule",
+            ),
+        ]
+    )
+    def test_fallback_imports_nested_module(
+        self,
+        case_name,
+        func_name,
+        package_name,
+        internal_path,
+        internal_module_name,
+    ):
+        """A nested implementation can be resolved from an explicit or registered module path."""
+        package = types.ModuleType(package_name)
+        internal_module = types.ModuleType(internal_module_name)
+        optimized_function = MagicMock(return_value="optimized")
+        setattr(internal_module, func_name, optimized_function)
+        torch_function = MagicMock(return_value="torch")
+
+        with (
+            patch(
+                "transformers.integrations.hub_kernels.use_kernel_forward_from_hub",
+                return_value=lambda function: function,
+            ),
+            patch(
+                "transformers.integrations.hub_kernels.importlib.import_module",
+                side_effect=[package, internal_module],
+            ) as import_module,
+        ):
+            wrapped = use_kernel_func_from_hub_with_fallback(
+                func_name=func_name,
+                package=package_name,
+                internal_path=internal_path,
+            )(torch_function)
+
+        self.assertEqual(wrapped(), "optimized")
+        self.assertEqual(
+            [call.args[0] for call in import_module.call_args_list],
+            [package_name, internal_module_name],
+        )
+
+    def test_fallback_uses_torch_when_nested_module_is_missing(self):
+        """The reference implementation remains available when the nested module cannot be imported."""
+        package = types.ModuleType("optional_backend")
+        torch_function = MagicMock(return_value="torch")
+
+        with (
+            patch(
+                "transformers.integrations.hub_kernels.use_kernel_forward_from_hub",
+                return_value=lambda function: function,
+            ),
+            patch(
+                "transformers.integrations.hub_kernels.importlib.import_module",
+                side_effect=[package, ImportError],
+            ),
+        ):
+            wrapped = use_kernel_func_from_hub_with_fallback(
+                func_name="optimized_function",
+                package="optional_backend",
+                internal_path="ops.kernel",
+            )(torch_function)
+
+        self.assertEqual(wrapped(), "torch")
+
 
 @require_kernels
 class TestAttentionKernelRegistration(TestCasePlus):
@@ -653,24 +790,12 @@ class TestAttentionKernelRegistration(TestCasePlus):
 
 
 @require_kernels
-class TestUseKernelsLifecycle(TestCasePlus):
+class TestUseKernelsLifecycle(MemoryCleanupTestCase):
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
         cls.model_id = "unsloth/Llama-3.2-1B-Instruct"
         cls.model = AutoModelForCausalLM.from_pretrained(cls.model_id, use_kernels=False, device_map=torch_device)
-
-    @classmethod
-    def tearDownClass(cls):
-        # Delete large objects to drop references early
-        if hasattr(cls, "model"):
-            try:
-                del cls.model
-            except Exception as e:
-                print(f"Could not delete model: {e}")
-
-    def tearDown(self):
-        # Free accelerator memory/cache and trigger GC
-        cleanup(torch_device, gc_collect=True)
 
     def test_setting_use_kernels_twice_does_not_rekernelize(self):
         with (

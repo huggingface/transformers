@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import os
+from datetime import timedelta
 from typing import TYPE_CHECKING, TypeGuard
 
 from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging
@@ -98,7 +99,12 @@ def _ensure_torch_distributed(device_type: str | None = None):
                 getattr(torch, device_type).set_device(local_rank)
                 device_id = torch.device(device_type, local_rank)
             torch.distributed.init_process_group(
-                backend=backend, rank=rank, world_size=world_size, device_id=device_id
+                backend=backend,
+                rank=rank,
+                world_size=world_size,
+                device_id=device_id,
+                # Sharded loading takes tens of minutes with high rank skew; the default 10-minute watchdog is too short
+                timeout=timedelta(hours=2),
             )
         except Exception as e:
             raise OSError(

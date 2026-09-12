@@ -41,33 +41,58 @@ if _staging_mode is not None:
 
 
 URLS_FOR_TESTING_DATA = [
-    # TODO: copy those to our hf-internal-testing dataset and fix all tests using them
-    "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_formula_rec_001.png",
-    "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo2.jpg",
-    "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/doc_test.jpg",
-    "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png",
-    "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg",
-    "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg",
-    "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png",
-    "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png",
-    "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/table_recognition.jpg",
-    "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
-    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
-    "https://llava-vl.github.io/static/images/view.jpg",
-    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
-    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg",
-    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
-    "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav",
-    "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3",
-    "https://huggingface.co/datasets/raushan-testing-hf/images_test/resolve/main/picsum_237_200x300.jpg",
-    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4",
-    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
-    "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png",
-    "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/two_dogs.jpg",
-    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
-    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4",
-    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4",
-    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+    # Synthetic, CC0 fixtures generated for the test suite: no third-party licensed media.
+    # Source generators live in the dataset repo; see its README.
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/mandarin_voxcpm_zh.wav",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mr_quiller.flac",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/throat_clearing.wav",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/voice_sample.wav",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/azure_slide_1.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/azure_slide_2.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/azure_slide_3.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/azure_slide_4.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/chmv2_example.tif",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dog_sam.png",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoice_docquery_a.png",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoicehome_template.png",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/lavis_confusing_pictures.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_v1_5_radar.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/mgp_str_ticket.png",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/orion.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_chart_parsing_02.png",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_doc_test.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_formula_rec_001.png",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_rec_001.png",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_img_rot180_demo.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_layout_demo.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_table_recognition.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/pokemon.jpeg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/promptda_arkit_depth.png",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/promptda_image.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen2_vl_demo_small.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen_vl_demo.jpeg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/skyline_chicago.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/video_llama3_sora.png",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/video/assisted_generation_gif_1_1080p.mov",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/bee.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/coco_sample.png",
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav",
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_200x300.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/receipt_00008.png",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/two_dogs.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tiny_video.mp4",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tiny_video.mp4",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg",
     # we should rely on this single dataset for our tests
     "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png",
@@ -82,7 +107,6 @@ URLS_FOR_TESTING_DATA = [
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/coco_annotations.txt",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/coco_panoptic_annotations.txt",
-    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/coco_panoptic/000000039769.png",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000139.jpg",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000285.jpg",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000632.jpg",
@@ -97,7 +121,67 @@ URLS_FOR_TESTING_DATA = [
     "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.png",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000077595.jpg",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000136466.jpg",
+    # mirrored into hf-internal-testing so the suite no longer fetches them from third parties
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/Ch6Ae9DT6Ko_00-04-03_00-04-31.wav",
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/belinda.wav",
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/dogs_barking_in_sync_with_the_music.wav",
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/en-Alice_woman.wav",
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/en-Carter_man.wav",
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/en-Frank_man.wav",
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav",
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/macron.wav",
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama2.mp3",
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/song_1.mp3",
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/song_2.mp3",
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/vibevoice_tts_german.wav",
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/zs_medium.wav",
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/zs_short.wav",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/ai2d-demo-2.png",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/ai2d-demo.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/candy.JPG",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/car.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/car.png",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/compel-neg.png",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_17_150x500.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_231_200x300.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_200x200.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_400x300.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_247_200x200.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/snowman.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/snowman.png",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/temple-bar-dublin-world-famous-irish-pub.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/unsplash_1552053831-71594a27632d.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/unsplash_1617258683320-61900b281ced.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/vla_pi0.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/Cooking_cake.mp4",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/archery.mp4",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/concert.mp4",
 ]
+
+
+# `url_to_local_path` and `download_test_file` both key on the URL basename, so two prefetched URLs
+# sharing one basename make whichever is downloaded first silently shadow the other. Fail loudly
+# instead: a shadowed fixture shows up as a baffling assertion error much later.
+def _check_basename_collisions(urls):
+    seen = {}
+    collisions = {}
+    for url in urls:
+        basename = url.split("/")[-1]
+        if basename in seen and seen[basename] != url:
+            collisions.setdefault(basename, {seen[basename]}).add(url)
+        seen[basename] = url
+    if collisions:
+        details = "\n".join(
+            f"  {name}:\n" + "\n".join(f"    {u}" for u in sorted(urls)) for name, urls in sorted(collisions.items())
+        )
+        raise ValueError(
+            "Two testing-data URLs share a basename and would shadow each other locally.\n"
+            f"{details}\n"
+            "Rename one of the fixtures, or drop one from URLS_FOR_TESTING_DATA and fetch it at test time."
+        )
+
+
+_check_basename_collisions(URLS_FOR_TESTING_DATA)
 
 
 def url_to_local_path(url, return_url_if_not_found=True):
@@ -181,7 +265,7 @@ def download_test_file(url):
             print(f"Error downloading {filename} from HuggingFace Hub: {e}")
             raise
     else:
-        # Use httpx for non-HF URLs (COCO, Britannica, etc.)
+        # Use httpx for the few remaining non-HF URLs
         max_retries = 3
         for attempt in range(max_retries):
             try:

@@ -48,6 +48,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -423,7 +424,9 @@ class GlmOcrIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
                     },
                     {"type": "text", "text": "What kind of dog is this?"},
                 ],
@@ -435,7 +438,9 @@ class GlmOcrIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/coco_sample.png"
+                        ),
                     },
                     {"type": "text", "text": "What kind of dog is this?"},
                 ],
@@ -452,7 +457,7 @@ class GlmOcrIntegrationTest(unittest.TestCase):
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         )
-        expected_input_ids = [151331, 151333, 151336, 198, 151339, 151343, 151343, 151343, 151343, 151343, 151343, 151343, 151343, 151343, 151343, 151343, 151343]  # fmt: skip
+        expected_input_ids = [59248, 59250, 59253, 10, 59256, 59280, 59280, 59280, 59280, 59280, 59280, 59280, 59280, 59280, 59280, 59280, 59280]  # fmt: skip
         assert expected_input_ids == inputs.input_ids[0].tolist()[:17]
 
         expected_pixel_slice = torch.tensor(
@@ -476,9 +481,11 @@ class GlmOcrIntegrationTest(unittest.TestCase):
         torch.manual_seed(42)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat. Specifically"
+        EXPECTED_DECODED_TEXT = (
+            "This is a Pallas cat, a small wild cat native to the mountainous regions of Central Asia."
+        )
         self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
+            self.processor.decode(output[0][inputs.input_ids.shape[1] :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
@@ -497,11 +504,11 @@ class GlmOcrIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat. Specifically",
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture has a stocky body, thick fur, and a face that's"
+            "This is a Pallas cat, a small wild cat native to the mountainous regions of Central Asia.",
+            "This is a Pallas cat, a small wild cat native to the mountainous regions of Central Asia.",
         ]  # fmt: skip
         self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
+            self.processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
@@ -536,10 +543,10 @@ class GlmOcrIntegrationTest(unittest.TestCase):
         torch.manual_seed(42)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = ["\n012345Describe this video.\n<think>Got it, let's analyze the video. First, the scene is an indoor tennis court. There are two players: one in a white shirt"]  # fmt: skip
+        EXPECTED_DECODED_TEXT = ["A tennis player is preparing to hit the ball on a tennis court."]  # fmt: skip
 
         self.assertEqual(
-            processor.batch_decode(output, skip_special_tokens=True),
+            processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
@@ -559,9 +566,8 @@ class GlmOcrIntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-
-                (None, None): ["\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat. Specifically",
-                               "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat, specifically"
+                (None, None): ["This is a Pallas cat, also known as the Pallasian cat. It is a medium-sized wild cat with a thick fur coat and a",
+                               "This is a Pallas cat, also known as the Pallasian cat. It is a medium-sized carnivorous mammal with a thick fur"
                               ],
                 ("xpu", None): ["\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks",
                                 "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat, specifically a Pallas"
@@ -571,7 +577,7 @@ class GlmOcrIntegrationTest(unittest.TestCase):
         # fmt: on
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
 
-        decoded_text = self.processor.batch_decode(output, skip_special_tokens=True)
+        decoded_text = self.processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
         self.assertEqual(decoded_text, EXPECTED_DECODED_TEXT)
 
     @slow
@@ -597,11 +603,11 @@ class GlmOcrIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat. Specifically",
-            "\nWho are you?\n<think>Got it, let's look at the user's question: \"Who are you?\" This is a common question when someone is just starting a conversation"
+            "This is a Pallas cat, a small wild cat native to the mountainous regions of Central Asia.",
+            "I'm a humanoid robot named Ai.",
         ]  # fmt: skip
         self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
+            self.processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
@@ -625,11 +631,11 @@ class GlmOcrIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat. Specifically",
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. Wait, the animals here are cats, not dogs. The question is about a dog, but",
+            "This is a Pallas cat, a small wild cat native to the mountainous regions of Central Asia.",
+            "This is cat.",
         ]  # fmt: skip
         self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
+            self.processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
