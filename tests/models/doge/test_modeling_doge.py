@@ -336,6 +336,23 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_save_load_fast_init_from_base(self):
         pass
 
+    def test_sdpa_decoder_is_causal(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = inputs["input_ids"]
+        other_input_ids = input_ids.clone()
+        other_input_ids[:, -1] = (input_ids[:, -1] + 1) % config.vocab_size
+        model = DogeForCausalLM._from_config(config, attn_implementation="sdpa").to(torch_device).eval()
+        cases = {
+            "no mask": {"use_cache": False},
+            "all-ones mask": {"attention_mask": torch.ones_like(input_ids), "use_cache": False},
+            "with cache": {"use_cache": True},
+        }
+        for name, kwargs in cases.items():
+            with self.subTest(name), torch.no_grad():
+                torch.testing.assert_close(
+                    model(input_ids, **kwargs).logits[:, :-1], model(other_input_ids, **kwargs).logits[:, :-1]
+                )
+
     def test_tp_plan_matches_params(self):
         """Need to overwrite as the plan contains keys that are valid but depend on some configs flags and cannot
         be valid all at the same time"""
@@ -373,8 +390,7 @@ class DogeIntegrationTest(unittest.TestCase):
         """
         EXPECTED_TEXT = Expectations(
             {
-                (None, None): "Here's everything I know about dogs. Dogs is the best animal in the world. It is a very popular and popular dog in the United States. It is a very popular",
-                ("cuda", 8): "Here's everything I know about dogs. Dogs is the best animal in the world. It is a very popular and popular breed for dogs. It is a very popular and popular",
+                (None, None): "Here's everything I know about dogs. Dogs is the best animal in the world, and they are the most common pets. Dogs are known for their unique personalities and behaviors,",
             }
         ).get_expectation()  # fmt: skip
 

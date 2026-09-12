@@ -576,6 +576,8 @@ class DogeModel(DogePreTrainedModel):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             position_ids=position_ids,
+            # Always materialize the mask: the dynamic mask is added onto it in `prepare_dynamic_mask`.
+            allow_is_causal_skip=False,
         )
 
         hidden_states = inputs_embeds
