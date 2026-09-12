@@ -1037,6 +1037,65 @@ def _build_checkpoint_conversion_mapping():
                 ],  # we want the loading to add this shard operation here. Though we can't shard after concats and merge, needs to be first
             ),
         ],
+        "deepseek_v41_text": [
+            # The released DeepSeek-V4.1 checkpoints ship in DeepSeek-native naming (no
+            # `model.` prefix; `embed` / `layers` / `norm` / `head` at the top level;
+            # `attn.wq_a`, `ffn.experts.E.w1`, raw `hc_*` layer params). Keyed by the
+            # text backbone's `model_type` so the same set applies to a bare
+            # DeepseekV41TextModel (whose `config.model_type` the wrapper
+            # DeepseekV41ForCausalLM also carries once it unwraps the composite config);
+            # the `model.` prefix of the wrapper is added / stripped by the loader's
+            # `base_model_prefix` step, not by these rules. The engram's per-layer
+            # `wkv` / `{q,k}_weight` keep their names; its ~98 GB hash table moves from
+            # the decoder layer to the model-level `engram_tables[<layer>]` ModuleDict
+            # (keyed by layer index) so it can be excluded from `device_map` placement.
+            WeightRenaming(source_patterns=r"^layers\.(\d+)\.engram\.embed\.", target_patterns=r"engram_tables.\1."),
+            WeightRenaming(source_patterns=r"\.attn\.", target_patterns=r".self_attn."),
+            WeightRenaming(source_patterns=r"\.ffn\.", target_patterns=r".mlp."),
+            WeightRenaming(source_patterns=r"^embed\.weight$", target_patterns="embed_tokens.weight"),
+            WeightRenaming(source_patterns=r"^head\.weight$", target_patterns="lm_head.weight"),
+            WeightRenaming(source_patterns=r"\.attn_norm\.", target_patterns=r".input_layernorm."),
+            WeightRenaming(source_patterns=r"\.ffn_norm\.", target_patterns=r".post_attention_layernorm."),
+            WeightRenaming(source_patterns=r"\.hc_attn_fn$", target_patterns=r".attn_hc.fn"),
+            WeightRenaming(source_patterns=r"\.hc_attn_base$", target_patterns=r".attn_hc.base"),
+            WeightRenaming(source_patterns=r"\.hc_attn_scale$", target_patterns=r".attn_hc.scale"),
+            WeightRenaming(source_patterns=r"\.hc_ffn_fn$", target_patterns=r".ffn_hc.fn"),
+            WeightRenaming(source_patterns=r"\.hc_ffn_base$", target_patterns=r".ffn_hc.base"),
+            WeightRenaming(source_patterns=r"\.hc_ffn_scale$", target_patterns=r".ffn_hc.scale"),
+            WeightRenaming(source_patterns=r"\.attn_sink$", target_patterns=r".sinks"),
+            WeightRenaming(source_patterns=r"\.wq_a\.", target_patterns=r".q_a_proj."),
+            WeightRenaming(source_patterns=r"\.q_norm\.", target_patterns=r".q_a_norm."),
+            # `wq_b` exists on both the attention and its indexer; `wkv` on the attention,
+            # its compressor and the engram (the engram one is deliberately left alone).
+            WeightRenaming(source_patterns=r"\.wq_b\.", target_patterns=r".q_b_proj."),
+            WeightRenaming(source_patterns=r"\.self_attn\.wkv\.", target_patterns=r".self_attn.kv_proj."),
+            WeightRenaming(source_patterns=r"\.compressor\.wkv\.", target_patterns=r".compressor.kv_proj."),
+            WeightRenaming(source_patterns=r"\.compressor\.wgate\.", target_patterns=r".compressor.gate_proj."),
+            WeightRenaming(source_patterns=r"\.compressor\.norm\.", target_patterns=r".compressor.kv_norm."),
+            WeightRenaming(source_patterns=r"\.indexer\.wk\.", target_patterns=r".indexer.k_proj."),
+            WeightRenaming(source_patterns=r"\.wo_a\.", target_patterns=r".o_a_proj."),
+            WeightRenaming(source_patterns=r"\.wo_b\.", target_patterns=r".o_b_proj."),
+            WeightRenaming(source_patterns=r"\.gate\.bias$", target_patterns=r".gate.e_score_correction_bias"),
+            WeightRenaming(source_patterns=r"\.gate\.bias_vl$", target_patterns=r".gate.e_score_correction_bias_vl"),
+            WeightRenaming(source_patterns=r"\.shared_experts\.w1\.", target_patterns=r".shared_experts.gate_proj."),
+            WeightRenaming(source_patterns=r"\.shared_experts\.w2\.", target_patterns=r".shared_experts.down_proj."),
+            WeightRenaming(source_patterns=r"\.shared_experts\.w3\.", target_patterns=r".shared_experts.up_proj."),
+            # Routed experts: per-expert `w1` (gate) / `w3` (up) stacked over the expert axis
+            # and concatenated [gate; up] → `gate_up_proj`; `w2` → `down_proj`. The same
+            # (unanchored) rules also carry the fp8 quantizer's renamed `*.weight_scale_inv`
+            # companions of the packed-fp4 release into `gate_up_proj_scale_inv` /
+            # `down_proj_scale_inv`.
+            WeightConverter(
+                source_patterns=[r"\.experts.*.w1.weight", r"\.experts.*.w3.weight"],
+                target_patterns=r"\.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns=r"\.experts.*.w2.weight",
+                target_patterns=r"\.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
         "qwen2_moe": [
             WeightConverter(
                 source_patterns=[

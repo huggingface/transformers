@@ -51,6 +51,40 @@ SPECIAL_CASES_TO_ALLOW = {
     "Glm4MoeConfig": ["n_routed_experts"],
     "Glm4MoeLiteConfig": ["n_routed_experts"],
     "Glm4vMoeTextConfig": ["n_routed_experts"],
+    # DeepSeek-V4.1: attrs accepted for released-checkpoint config parity that the
+    # text backbone does not consume directly. `rope_scaling`/`qk_rope_head_dim` are
+    # folded into `rope_parameters` by the config's `__post_init__`; the `dspark_*` /
+    # `num_nextn_predict_layers` fields cover the MTP draft head (follow-up scope);
+    # the vision fields have no vision tower in this PR; the rest are router /
+    # generation-time flags with no eager-forward role.
+    "DeepseekV41TextConfig": [
+        "attention_bias",
+        "dspark_block_size",
+        "dspark_markov_rank",
+        "dspark_n_routed_experts",
+        "dspark_num_experts_per_tok",
+        "dspark_target_layer_ids",
+        "n_shared_experts",
+        "num_key_value_heads",
+        "num_nextn_predict_layers",
+        "output_router_logits",
+        "qk_rope_head_dim",
+        "rope_scaling",
+        "router_aux_loss_coef",
+        "router_jitter_noise",
+        "topk_method",
+    ],
+    # The composite holds the vision section for the released config.json; no vision
+    # tower ships in this PR.
+    "DeepseekV41Config": ["vision_config"],
+    "DeepseekV41VisionConfig": [
+        "downsample_ratio",
+        "intermediate_size",
+        "max_image_tokens",
+        "max_wh_ratio",
+        "min_pixels",
+        "patch_size",
+    ],
     "Mistral4Config": ["n_routed_experts"],
     "SolarOpenConfig": ["n_routed_experts"],
     "FunAsrNanoEncoderConfig": [
