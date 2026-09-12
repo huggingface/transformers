@@ -30,6 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, DynamicSlidingWindowLayer
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
+from ...integrations.moe import use_experts_implementation
 from ...masking_utils import create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -75,6 +76,55 @@ class DeepseekV41UnweightedRMSNorm(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return x * torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.eps).to(x.dtype)
+
+
+class DeepseekV41HyperConnection(nn.Module):
+    r"""One mHC site of V4.1's **single-pass** hyper-connections. Same `(fn, base,
+    scale)` parametrization and the same `pre` / `post` / `comb` mapping as V4 (one
+    projection of the normalized flattened stream; `comb` Sinkhorn-projected onto the
+    doubly-stochastic manifold), with one difference in who consumes `pre`: V4 collapses
+    the streams with the `pre` of the site that computed it, V4.1 feeds it to the NEXT
+    site (attention collapses with the previous site's `pre`, the FFN with the
+    attention's, the final norm with the last FFN's). The module therefore returns
+    `(pre, post, comb)` and leaves the collapse / expand to the decoder layer."""
+
+    def __init__(self, config: DeepseekV41TextConfig):
+        super().__init__()
+        self.hc_mult = config.hc_mult
+        self.hc_sinkhorn_iters = config.hc_sinkhorn_iters
+        self.hc_eps = config.hc_eps
+        self.input_norm = DeepseekV41UnweightedRMSNorm(eps=config.rms_norm_eps)
+        mix = (2 + self.hc_mult) * self.hc_mult
+        self.fn = nn.Parameter(torch.empty(mix, self.hc_mult * config.hidden_size))
+        self.base = nn.Parameter(torch.empty(mix))
+        # 3 = number of outputs from the mHC mapping: `pre` (input projection
+        # weights), `post` (sublayer output projection weights), `comb` (the
+        # H×H residual combine matrix that gets Sinkhorn-projected onto the
+        # doubly-stochastic manifold). Each output gets its own learned scale.
+        self.scale = nn.Parameter(torch.empty(3))
+
+    def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """`(pre, post, comb)` of this site — `pre` is for the NEXT site's collapse (see
+        the class docstring). Normalization is over the whole flattened hc·D stream
+        (one statistic per token); `comb` is Sinkhorn-projected onto the
+        doubly-stochastic manifold for `hc_sinkhorn_iters` steps."""
+        hc = self.hc_mult
+        # fp32 from the start — the reference upcasts before normalizing, so a
+        # bf16/fp16 model must not round the stream before the mix projection.
+        flat = self.input_norm(hidden_streams.flatten(start_dim=2).float())
+        pre_w, post_w, comb_w = F.linear(flat, self.fn.float()).split([hc, hc, hc * hc], dim=-1)
+        pre_b, post_b, comb_b = self.base.float().split([hc, hc, hc * hc])
+        pre_scale, post_scale, comb_scale = self.scale.float().unbind(0)
+
+        pre = torch.sigmoid(pre_w * pre_scale + pre_b) + self.hc_eps
+        post = 2 * torch.sigmoid(post_w * post_scale + post_b)
+        comb_logits = comb_w.view(*comb_w.shape[:-1], hc, hc) * comb_scale + comb_b.view(hc, hc)
+        comb = torch.softmax(comb_logits, dim=-1) + self.hc_eps
+        comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
+        for _ in range(self.hc_sinkhorn_iters - 1):
+            comb = comb / (comb.sum(dim=-1, keepdim=True) + self.hc_eps)
+            comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
+        return pre, post, comb
 
 
 class DeepseekV41RotaryEmbedding(nn.Module):
@@ -161,8 +211,8 @@ class DeepseekV41GroupedLinear(nn.Linear):
     The stacked attention output is `num_heads * head_dim`-dim (32768 for the released
     model) — a direct projection to `hidden_size` would dominate the per-token cost.
     Instead the heads are split into `o_groups` groups, each projected independently
-    to `o_lora_rank`, then mixed to `hidden_size` by `wo_b`. This module owns the
-    per-group block (`wo_a`)."""
+    to `o_lora_rank`, then mixed to `hidden_size` by `o_b_proj`. This module owns the
+    per-group block (`o_a_proj`)."""
 
     def __init__(self, in_features_per_group: int, out_features: int, n_groups: int, bias: bool = False):
         super().__init__(in_features_per_group, out_features, bias=bias)
@@ -191,7 +241,7 @@ class DeepseekV41CSACache(DynamicSlidingWindowLayer):
         shared state; consumer layers hold plain sliding layers and read this one.
       * `compressed_kv["indexer"]` — the running *indexer keys* (one per complete
         group, at `index_head_dim`), derived from the same pooled latents by the
-        source's indexer (`wk` + `k_norm`): the whole group scores against one key set.
+        source's indexer (`k_proj` + `k_norm`): the whole group scores against one key set.
       * `entry_count["compressor"]` — groups emitted so far, so
         `entry_count * compress_ratio` is the absolute position of the next group's
         first source token.
@@ -302,9 +352,9 @@ class DeepseekV41Compressor(nn.Module):
         super().__init__()
         self.compress_ratio = config.compress_ratios[layer_idx]
         self.head_dim = config.head_dim
-        self.wkv = nn.Linear(config.hidden_size, self.head_dim, bias=False)
-        self.wgate = nn.Linear(config.hidden_size, self.head_dim, bias=False) if self.compress_ratio > 1 else None
-        self.norm = DeepseekV41RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.kv_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
+        self.gate_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False) if self.compress_ratio > 1 else None
+        self.kv_norm = DeepseekV41RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self, hidden_states: torch.Tensor, cache_layer: DeepseekV41CSACache | None
@@ -312,17 +362,17 @@ class DeepseekV41Compressor(nn.Module):
         """Returns the pre-RoPE latents of the groups completing in this call (`None`
         while a group is still filling — decode steps between group boundaries), plus
         the absolute position of the first returned group."""
-        if self.wgate is None:  # ratio 1: every token is a group, no pooling
-            latent = self.norm(self.wkv(hidden_states))
+        if self.gate_proj is None:  # ratio 1: every token is a group, no pooling
+            latent = self.kv_norm(self.kv_proj(hidden_states))
             first_group_position = 0 if cache_layer is None else cache_layer.entry_count["compressor"]
             return latent, first_group_position
 
-        # Pooling math runs in fp32 (the reference stores `wkv` fp32 above ratio 1);
+        # Pooling math runs in fp32 (the reference stores `kv_proj` fp32 above ratio 1);
         # upcast the weight explicitly so a half-precision model does not crash.
-        kv = nn.functional.linear(hidden_states.float(), self.wkv.weight.float())
+        kv = nn.functional.linear(hidden_states.float(), self.kv_proj.weight.float())
         # The gate is computed in fp32 regardless of the storage dtype (the released
-        # checkpoint stores `wgate` in BF16).
-        gate = nn.functional.linear(hidden_states.float(), self.wgate.weight.float())
+        # checkpoint stores `gate_proj` in BF16).
+        gate = nn.functional.linear(hidden_states.float(), self.gate_proj.weight.float())
         if cache_layer is None:
             usable = (kv.shape[1] // self.compress_ratio) * self.compress_ratio
             chunk_kv, chunk_gate, first_group_position = kv[:, :usable], gate[:, :usable], 0
@@ -336,7 +386,7 @@ class DeepseekV41Compressor(nn.Module):
         kv = chunk_kv.view(chunk_kv.shape[0], n_groups, self.compress_ratio, -1)
         gate = chunk_gate.view(chunk_gate.shape[0], n_groups, self.compress_ratio, -1)
         latent = (kv * gate.softmax(dim=2, dtype=torch.float32)).sum(dim=2)
-        return self.norm(latent.to(hidden_states.dtype)), first_group_position
+        return self.kv_norm(latent.to(hidden_states.dtype)), first_group_position
 
 
 _FP4_MAX = 6.0  # float4_e2m1fn max
@@ -458,11 +508,11 @@ class DeepseekV41Indexer(nn.Module):
     top `index_topk` groups per query; the resulting per-query block bias is published
     to the group's other layers ("Reuse" mode).
 
-    Key sharing: the keys are `k_norm(wk(latent))` of the *compressor latent* — only a
+    Key sharing: the keys are `k_norm(k_proj(latent))` of the *compressor latent* — only a
     layer that also owns its compressor (`kv_source_layer_ids`) can produce them
     (`owns_k`); every later index source ("Reindex" mode) rescores with its own weights
     against the keys published by its group's source. Queries come from the attention's
-    low-rank residual (`q_norm(wq_a(x))`) through `wq_b`, rotated with the compress
+    low-rank residual (`q_a_norm(q_a_proj(x))`) through `q_b_proj`, rotated with the compress
     rope. The candidate source layer additionally publishes the two-level-top-k
     candidate mask that constrains all later index sources."""
 
@@ -480,11 +530,11 @@ class DeepseekV41Indexer(nn.Module):
         self.index_topk = config.index_topk
         self.softmax_scale = self.head_dim**-0.5
         self.heads_scaling = self.num_heads**-0.5
-        self.wq_b = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
+        self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
         self.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
         self.rotary_emb = DeepseekV41RotaryEmbedding(config)
         if self.owns_k:
-            self.wk = nn.Linear(config.head_dim, self.head_dim, bias=False)
+            self.k_proj = nn.Linear(config.head_dim, self.head_dim, bias=False)
             self.k_norm = DeepseekV41RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
@@ -507,7 +557,7 @@ class DeepseekV41Indexer(nn.Module):
         #    same values into the main cache.
         if self.owns_k:
             if latent is not None:
-                k = self.k_norm(self.wk(latent))
+                k = self.k_norm(self.k_proj(latent))
                 positions = first_group_position + ratio * torch.arange(latent.shape[1], device=k.device)
                 cos, sin = self.rotary_emb(
                     k, position_ids=positions.unsqueeze(0).expand(batch, -1), layer_type="compress"
@@ -534,7 +584,7 @@ class DeepseekV41Indexer(nn.Module):
 
         # 2. Score the queries against the shared keys.
         cos_q, sin_q = self.rotary_emb(hidden_states, position_ids=position_ids, layer_type="compress")
-        q = self.wq_b(q_residual).view(batch, seq_len, self.num_heads, self.head_dim)
+        q = self.q_b_proj(q_residual).view(batch, seq_len, self.num_heads, self.head_dim)
         q = apply_rotary_pos_emb(q, cos_q, sin_q)
         # QAT semantics: the indexer query is FP4-quantized too, so the top-k
         # selection matches the trained quantized scoring.
@@ -599,7 +649,7 @@ def eager_attention_forward(
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    sinks = module.attn_sink.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
+    sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
     combined_logits = torch.cat([attn_weights, sinks.float()], dim=-1)
     combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
     probs = F.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)
@@ -634,10 +684,10 @@ class DeepseekV41Attention(nn.Module):
     when the layer has a compressed branch, the *shared* compressed KV of its group.
 
     - Q and the output projection are low-rank; the output projection is grouped
-      (block-diagonal `wo_a` over `o_groups`, then the mixing `wo_b`).
-    - K=V is a single latent (`wkv` + `kv_norm`); the attention output's rope slice is
+      (block-diagonal `o_a_proj` over `o_groups`, then the mixing `o_b_proj`).
+    - K=V is a single latent (`kv_proj` + `kv_norm`); the attention output's rope slice is
       inverse-rotated so the shared rotated cache works.
-    - Per-head learnable attention sink (`attn_sink`), like gpt-oss.
+    - Per-head learnable attention sink (`sinks`), like gpt-oss.
     - **KV sharing (CSA2)**: only `kv_source_layer_ids` layers own a
       :class:`DeepseekV41Compressor` — the layers in between read the source's
       compressed cache through the per-forward `shared` dict ("Reuse" mode). Index
@@ -661,18 +711,18 @@ class DeepseekV41Attention(nn.Module):
         self.is_causal = True
         self.scaling = self.head_dim**-0.5
 
-        self.wq_a = nn.Linear(config.hidden_size, config.q_lora_rank, bias=False)
-        self.q_norm = DeepseekV41RMSNorm(config.q_lora_rank, eps=config.rms_norm_eps)
-        self.wq_b = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
-        self.wkv = nn.Linear(config.hidden_size, self.head_dim, bias=False)
+        self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=False)
+        self.q_a_norm = DeepseekV41RMSNorm(config.q_lora_rank, eps=config.rms_norm_eps)
+        self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
+        self.kv_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
         self.kv_norm = DeepseekV41RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.wo_a = DeepseekV41GroupedLinear(
+        self.o_a_proj = DeepseekV41GroupedLinear(
             self.num_heads * self.head_dim // config.o_groups,
             config.o_groups * config.o_lora_rank,
             config.o_groups,
         )
-        self.wo_b = nn.Linear(config.o_groups * config.o_lora_rank, config.hidden_size, bias=False)
-        self.attn_sink = nn.Parameter(torch.empty(self.num_heads))
+        self.o_b_proj = nn.Linear(config.o_groups * config.o_lora_rank, config.hidden_size, bias=False)
+        self.sinks = nn.Parameter(torch.empty(self.num_heads))
 
         self.is_kv_source = layer_idx in config.kv_source_layer_ids
         self.is_index_source = layer_idx in config.index_source_layer_ids
@@ -700,11 +750,11 @@ class DeepseekV41Attention(nn.Module):
         batch, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings[self.rope_layer_type]
 
-        q_residual = self.q_norm(self.wq_a(hidden_states))
-        q = self.wq_b(q_residual).view(batch, seq_len, self.num_heads, self.head_dim)
+        q_residual = self.q_a_norm(self.q_a_proj(hidden_states))
+        q = self.q_b_proj(q_residual).view(batch, seq_len, self.num_heads, self.head_dim)
         q = apply_rotary_pos_emb(q, cos, sin).transpose(1, 2)  # [B, H, S, D]
 
-        kv = self.kv_norm(self.wkv(hidden_states))
+        kv = self.kv_norm(self.kv_proj(hidden_states))
         kv = apply_rotary_pos_emb(kv, cos, sin).view(batch, seq_len, 1, self.head_dim).transpose(1, 2)
         # QAT semantics: the window KV cache stores FP8-quantized values (one ue8m0
         # scale per 32 channels, RoPE tail included) — part of the model, applied
@@ -790,33 +840,38 @@ class DeepseekV41Attention(nn.Module):
         # output before the grouped projection mixes the heads.
         attn_output = apply_rotary_pos_emb(attn_output, cos, sin, inverse=True)
         grouped = attn_output.reshape(batch, seq_len, self.config.o_groups, -1)
-        output = self.wo_b(self.wo_a(grouped).flatten(2))
+        output = self.o_b_proj(self.o_a_proj(grouped).flatten(2))
         return output, attn_weights
 
 
 class DeepseekV41TopKRouter(nn.Module):
-    """MoE gate. The correction bias (`bias`) steers expert *selection* only; the
-    routing weights come from the unbiased scores. Image-span tokens switch to a
-    separate `bias_vl` (training `noaux_tc_for_vl`)."""
+    """MoE gate. The correction bias (`e_score_correction_bias`) steers expert
+    *selection* only; the routing weights come from the unbiased scores. Image-span
+    tokens switch to a separate `e_score_correction_bias_vl` (training
+    `noaux_tc_for_vl`). Both are persistent fp32 buffers, like V4's."""
 
-    def __init__(self, config: DeepseekV41TextConfig, n_experts: int, n_activated: int):
+    def __init__(self, config: DeepseekV41TextConfig):
         super().__init__()
-        self.top_k = n_activated
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.score_fn = ACT2FN[config.scoring_func]
         self.gate_temp = config.gate_temp
         self.norm_topk_prob = config.norm_topk_prob
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.weight = nn.Parameter(torch.empty(n_experts, config.hidden_size))
-        self.bias = nn.Parameter(torch.empty(n_experts, dtype=torch.float32))
-        self.bias_vl = nn.Parameter(torch.empty(n_experts, dtype=torch.float32))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
+        self.e_score_correction_bias_vl = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
-    def forward(self, hidden_states: torch.Tensor, image_mask: torch.Tensor | None = None):
-        flat = hidden_states.reshape(-1, hidden_states.shape[-1]).float()
+    def forward(
+        self, hidden_states: torch.Tensor, image_mask: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        flat = hidden_states.reshape(-1, self.hidden_dim).float()
         logits = F.linear(flat, self.weight.float()) / self.gate_temp
         scores = self.score_fn(logits)
-        bias = self.bias
+        bias = self.e_score_correction_bias
         if image_mask is not None and image_mask.any():
-            bias = torch.where(image_mask.reshape(-1, 1), self.bias_vl, self.bias)
+            bias = torch.where(image_mask.reshape(-1, 1), self.e_score_correction_bias_vl, bias)
         indices = (scores + bias).topk(self.top_k, dim=-1)[1]
         weights = scores.gather(1, indices)
         if self.norm_topk_prob and self.top_k > 1:
@@ -826,61 +881,103 @@ class DeepseekV41TopKRouter(nn.Module):
         return logits, weights * self.routed_scaling_factor, indices
 
 
-class DeepseekV41Expert(nn.Module):
-    """One SwiGLU expert (`w1` gate / `w3` up / `w2` down). The clamps come from
-    training: they keep fp8/fp4 activations in range — up on both sides, gate above."""
+class DeepseekV41MLP(nn.Module):
+    """The shared expert: a SwiGLU MLP with the training-time clamps that keep fp8/fp4
+    activations in range (`up` on both sides, `gate` from above), computed in fp32."""
 
     def __init__(self, config: DeepseekV41TextConfig):
         super().__init__()
-        inter = config.moe_intermediate_size
-        self.w1 = nn.Linear(config.hidden_size, inter, bias=False)
-        self.w2 = nn.Linear(inter, config.hidden_size, bias=False)
-        self.w3 = nn.Linear(config.hidden_size, inter, bias=False)
+        self.gate_proj = nn.Linear(config.hidden_size, config.moe_intermediate_size, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, config.moe_intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.moe_intermediate_size, config.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
-        self.swiglu_limit = config.swiglu_limit
+        self.limit = config.swiglu_limit
 
-    def forward(self, x: torch.Tensor, weight: torch.Tensor | None = None) -> torch.Tensor:
-        dtype = x.dtype
-        gate = self.w1(x).float()
-        up = self.w3(x).float()
-        if self.swiglu_limit > 0:
-            up = torch.clamp(up, min=-self.swiglu_limit, max=self.swiglu_limit)
-            gate = torch.clamp(gate, max=self.swiglu_limit)
-        y = self.act_fn(gate) * up
-        if weight is not None:
-            y = weight * y
-        return self.w2(y.to(dtype))
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        gate, up = self.gate_proj(x).float(), self.up_proj(x).float()
+        if self.limit > 0:
+            up = up.clamp(min=-self.limit, max=self.limit)
+            gate = gate.clamp(max=self.limit)
+        return self.down_proj((self.act_fn(gate) * up).to(x.dtype))
+
+
+@use_experts_implementation
+class DeepseekV41Experts(nn.Module):
+    """Routed experts as 3D tensors: `gate_up_proj[e]` = `[w1; w3]` (gate rows first),
+    `down_proj[e]` = `w2`. Same clamped SwiGLU as the shared expert; the routing
+    weight multiplies the fp32 activation BEFORE the down projection (the reference's
+    order — `w2(weight * act)`, not `weight * w2(act)`)."""
+
+    def __init__(self, config: DeepseekV41TextConfig):
+        super().__init__()
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.limit = config.swiglu_limit
+
+    def forward(
+        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
+    ) -> torch.Tensor:
+        """Eager dispatch: returns the fp32 accumulator (the block adds the shared
+        expert in fp32 before casting back, as the reference does)."""
+        inter = self.intermediate_dim
+        final = torch.zeros_like(hidden_states, dtype=torch.float32)
+        with torch.no_grad():
+            mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
+            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            # Token-major order (`mask[e].T` is [tokens, top_k]), and gate / up as two
+            # GEMMs over the halves of the fused weight: both keep the accumulation
+            # order of the reference's per-expert `w1` / `w3` loop (one fused GEMM or a
+            # top_k-major row order rounds differently at some shapes).
+            token_idx, top_k_pos = torch.where(mask[expert_idx].T)
+            current_state = hidden_states[token_idx]
+            weight = self.gate_up_proj[expert_idx]
+            gate, up = F.linear(current_state, weight[:inter]), F.linear(current_state, weight[inter:])
+            current = self._clamped_swiglu(gate, up) * top_k_weights[token_idx, top_k_pos, None]
+            current = F.linear(current.to(current_state.dtype), self.down_proj[expert_idx])
+            final.index_add_(0, token_idx, current.float())
+        return final
+
+    def _clamped_swiglu(self, gate: torch.Tensor, up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate.float(), up.float()
+        if self.limit > 0:
+            up = up.clamp(min=-self.limit, max=self.limit)
+            gate = gate.clamp(max=self.limit)
+        return self.act_fn(gate) * up
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        # Lives on the class (like V4 / gpt-oss) so the batched_mm / grouped_mm backends
+        # swapped in by `@use_experts_implementation` apply the same clamp + SiLU on their
+        # packed gate_up output.
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self._clamped_swiglu(gate, up).to(gate_up.dtype)
 
 
 class DeepseekV41SparseMoeBlock(nn.Module):
-    """Top-k routed experts plus one shared expert every token goes through. Eager
-    dispatch loops over the experts that received tokens — spec-grade, not a serving
-    path."""
+    """Top-k routed experts plus one shared expert every token goes through."""
 
     def __init__(self, config: DeepseekV41TextConfig, layer_idx: int):
         super().__init__()
         # DSpark draft layers (M2) have their own expert counts; this block is only
         # ever built for backbone layers.
-        self.n_experts = config.n_routed_experts
-        n_activated = config.num_experts_per_tok
-        self.gate = DeepseekV41TopKRouter(config, self.n_experts, n_activated)
-        self.experts = nn.ModuleList([DeepseekV41Expert(config) for _ in range(self.n_experts)])
-        self.shared_experts = DeepseekV41Expert(config)
+        self.gate = DeepseekV41TopKRouter(config)
+        self.experts = DeepseekV41Experts(config)
+        self.shared_experts = DeepseekV41MLP(config)
 
     def forward(self, hidden_states: torch.Tensor, image_mask: torch.Tensor | None = None) -> torch.Tensor:
         shape = hidden_states.shape
         flat = hidden_states.reshape(-1, shape[-1])
         _, weights, indices = self.gate(hidden_states, image_mask)
-        y = torch.zeros_like(flat, dtype=torch.float32)
-        # eager dispatch loop: per-expert host reads are inherent to it (spec-grade,
-        # not a serving path) — the counts stay a tensor (TRF056).
-        counts = torch.bincount(indices.flatten(), minlength=self.n_experts)
-        for i in range(self.n_experts):
-            if counts[i] == 0:
-                continue
-            idx, top = torch.where(indices == i)
-            y[idx] += self.experts[i](flat[idx], weights[idx, top, None]).float()
-        y += self.shared_experts(flat).float()
+        # routed + shared summed in fp32 (eager experts return fp32; the batched_mm /
+        # grouped_mm backends return the model dtype), then one cast back.
+        y = self.experts(flat, indices, weights).float() + self.shared_experts(flat).float()
         return y.to(hidden_states.dtype).view(shape)
 
 
@@ -1172,56 +1269,24 @@ class DeepseekV41DecoderLayer(GradientCheckpointingLayer):
     r"""A V4.1 block: the residual stream is `hc_mult` parallel copies (hyper-
     connections), with the engram lookup injected at its layers before the block.
 
-    The single-pass mHC mapping computes all three coefficient sets (pre / post / comb)
-    from ONE projection of the flattened stream — but the `pre` a site computes is
-    consumed by the *next* site: attention collapses with the previous site's mix and
-    the FFN with the attention's. The mHC parameters are raw layer attributes
-    (`hc_attn_fn` / `hc_attn_base` / `hc_attn_scale`, fp32), matching the checkpoint."""
+    Single-pass mHC: each site's :class:`DeepseekV41HyperConnection` returns
+    `(pre, post, comb)`, but the `pre` a site computes is consumed by the *next* site —
+    attention collapses with `pre_mix` (the previous site's), the FFN with the
+    attention site's, and the layer hands its FFN `pre` on."""
 
     def __init__(self, config: DeepseekV41TextConfig, layer_idx: int):
         super().__init__()
         self.layer_idx = layer_idx
-        self.hc_mult = hc_mult = config.hc_mult
-        self.hc_sinkhorn_iters = config.hc_sinkhorn_iters
-        self.hc_eps = config.hc_eps
-        self.attn = DeepseekV41Attention(config, layer_idx)
-        self.ffn = DeepseekV41SparseMoeBlock(config, layer_idx)
-        self.attn_norm = DeepseekV41RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.ffn_norm = DeepseekV41RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = DeepseekV41Attention(config, layer_idx)
+        self.mlp = DeepseekV41SparseMoeBlock(config, layer_idx)
+        self.input_layernorm = DeepseekV41RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = DeepseekV41RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         # CODEPATH: DeepSeek-V4.1-Flash ships n-gram hash tables on layers 1 and 14
         # (engram_layer_ids=[1, 14]); every other checkpoint — and the tiny test
         # configs — sets engram_layer_ids=[] and takes the None side (no engram path).
         self.engram = DeepseekV41Engram(config, layer_idx) if layer_idx in config.engram_layer_ids else None
-        self.hc_input_norm = DeepseekV41UnweightedRMSNorm(eps=config.rms_norm_eps)
-        mix_hc = (2 + hc_mult) * hc_mult
-        hc_dim = hc_mult * config.hidden_size
-        self.hc_attn_fn = nn.Parameter(torch.empty(mix_hc, hc_dim, dtype=torch.float32))
-        self.hc_attn_base = nn.Parameter(torch.empty(mix_hc, dtype=torch.float32))
-        self.hc_attn_scale = nn.Parameter(torch.empty(3, dtype=torch.float32))
-        self.hc_ffn_fn = nn.Parameter(torch.empty(mix_hc, hc_dim, dtype=torch.float32))
-        self.hc_ffn_base = nn.Parameter(torch.empty(mix_hc, dtype=torch.float32))
-        self.hc_ffn_scale = nn.Parameter(torch.empty(3, dtype=torch.float32))
-
-    def hc_mixes(self, hidden_streams: torch.Tensor, fn: torch.Tensor, scale: torch.Tensor, base: torch.Tensor):
-        """One projection of the normalized flattened stream → (pre, post, comb), with
-        `comb` Sinkhorn-projected onto the doubly-stochastic manifold. Normalization is
-        over the whole flattened hc·D stream (one statistic per token)."""
-        hc = self.hc_mult
-        # fp32 from the start — the reference upcasts before normalizing, so a
-        # bf16/fp16 model must not round the stream before the mix projection.
-        flat = self.hc_input_norm(hidden_streams.flatten(start_dim=2).float())
-        mixes = F.linear(flat, fn.float())
-        pre = torch.sigmoid(mixes[..., :hc] * scale[0].float() + base[:hc].float()) + self.hc_eps
-        post = 2 * torch.sigmoid(mixes[..., hc : 2 * hc] * scale[1].float() + base[hc : 2 * hc].float())
-        comb_logits = (mixes[..., 2 * hc :] * scale[2].float() + base[2 * hc :].float()).view(
-            *mixes.shape[:-1], hc, hc
-        )
-        comb = torch.softmax(comb_logits, dim=-1) + self.hc_eps
-        comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
-        for _ in range(self.hc_sinkhorn_iters - 1):
-            comb = comb / (comb.sum(dim=-1, keepdim=True) + self.hc_eps)
-            comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
-        return pre, post, comb
+        self.attn_hc = DeepseekV41HyperConnection(config)
+        self.ffn_hc = DeepseekV41HyperConnection(config)
 
     @staticmethod
     def hc_collapse(hidden_streams: torch.Tensor, pre: torch.Tensor) -> torch.Tensor:
@@ -1250,19 +1315,15 @@ class DeepseekV41DecoderLayer(GradientCheckpointingLayer):
             hidden_streams = self.engram(hidden_streams, hash_ids[:, :, self.engram.layer_hash_index, :], token_mask)
 
         residual = hidden_streams
-        attn_pre, attn_post, attn_comb = self.hc_mixes(
-            hidden_streams, self.hc_attn_fn, self.hc_attn_scale, self.hc_attn_base
-        )
+        attn_pre, attn_post, attn_comb = self.attn_hc(hidden_streams)
         collapsed = self.hc_collapse(hidden_streams, pre_mix)
-        attn_output, _ = self.attn(self.attn_norm(collapsed), shared=shared, **kwargs)
+        attn_output, _ = self.self_attn(self.input_layernorm(collapsed), shared=shared, **kwargs)
         hidden_streams = self.hc_expand(attn_output, residual, attn_post, attn_comb)
 
         residual = hidden_streams
-        ffn_pre, ffn_post, ffn_comb = self.hc_mixes(
-            hidden_streams, self.hc_ffn_fn, self.hc_ffn_scale, self.hc_ffn_base
-        )
+        ffn_pre, ffn_post, ffn_comb = self.ffn_hc(hidden_streams)
         collapsed = self.hc_collapse(hidden_streams, attn_pre)
-        ffn_output = self.ffn(self.ffn_norm(collapsed))
+        ffn_output = self.mlp(self.post_attention_layernorm(collapsed))
         hidden_streams = self.hc_expand(ffn_output, residual, ffn_post, ffn_comb)
         return hidden_streams, ffn_pre
 
@@ -1295,21 +1356,21 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):  # trf-ignore: TRF001
         r"^aligner\..*",
         r"^image_(start|end|newline)$",
     ]
-    # fp32-critical parameters: exactly the tensors the released checkpoint stores
-    # in F32 — the raw mHC parameters, the attention sinks and the gate biases
-    # (`bias` / `bias_vl`; every other linear is bias-free). The norms and the
-    # ratio-2 compressor gate ship BF16 and stay in the model dtype (the reference
-    # upcasts them at load; the forward computes in fp32 either way).
-    _keep_in_fp32_modules_strict = [
-        "hc_attn_fn",
-        "hc_attn_base",
-        "hc_attn_scale",
-        "hc_ffn_fn",
-        "hc_ffn_base",
-        "hc_ffn_scale",
-        "attn_sink",
-        "bias",
-        "bias_vl",
+    # fp32-critical parameters: exactly the tensors the released checkpoint stores in
+    # F32 — the mHC sites and the attention sinks. The router's correction biases are
+    # F32 too, but they are fp32 buffers from construction. The norms and the ratio-2
+    # compressor gate ship BF16 and stay in the model dtype (the reference upcasts
+    # them at load; the forward computes in fp32 either way).
+    _keep_in_fp32_modules_strict = ["attn_hc", "ffn_hc", "sinks"]
+    # The released checkpoint ships these projections in BF16 with no companion
+    # `.scale` (every other linear is fp8 / packed fp4). Listed here (non-strict) so
+    # the FP8 quantizer's `get_modules_to_not_convert` auto-skips them, like V4;
+    # non-strict has no dtype effect at BF16, so they stay BF16.
+    _keep_in_fp32_modules = [
+        "self_attn.compressor.kv_proj",
+        "self_attn.compressor.gate_proj",
+        "self_attn.indexer.k_proj",
+        "self_attn.indexer.weights_proj",
     ]
     # The two engram tables are ~98 GB each in the released checkpoint: like
     # Qwen4-Exp's n-gram table, they are excluded from `device_map` placement so
@@ -1323,22 +1384,28 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):  # trf-ignore: TRF001
         std = self.config.initializer_range
         if isinstance(module, DeepseekV41TopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
-            init.zeros_(module.bias)
-            init.zeros_(module.bias_vl)
+            init.zeros_(module.e_score_correction_bias)
+            init.zeros_(module.e_score_correction_bias_vl)
+        elif isinstance(module, DeepseekV41Experts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, DeepseekV41Attention):
-            init.zeros_(module.attn_sink)
-        elif isinstance(module, DeepseekV41DecoderLayer):
-            init.normal_(module.hc_attn_fn, mean=0.0, std=std)
-            init.zeros_(module.hc_attn_base)
-            init.ones_(module.hc_attn_scale)
-            init.normal_(module.hc_ffn_fn, mean=0.0, std=std)
-            init.zeros_(module.hc_ffn_base)
-            init.ones_(module.hc_ffn_scale)
+            init.zeros_(module.sinks)
+        elif isinstance(module, DeepseekV41HyperConnection):
+            init.normal_(module.fn, mean=0.0, std=std)
+            init.zeros_(module.base)
+            init.ones_(module.scale)
         elif isinstance(module, DeepseekV41Engram):
             init.normal_(module.embed.weight, mean=0.0, std=std)
             init.ones_(module.embed.scale)
             init.ones_(module.q_weight)
             init.ones_(module.k_weight)
+        elif isinstance(module, DeepseekV41NgramHashState):
+            # Config-derived hash tables are non-persistent buffers: like `inv_freq`, the
+            # meta-device load leaves them empty. The token map is the tokenizer's
+            # (`bind_tokenizer` fills it) and is never touched here.
+            for name, table in module.hash_tables().items():
+                init.copy_(getattr(module, name), table)
         elif isinstance(module, DeepseekV41RotaryEmbedding):
             # `from_pretrained` builds on the meta device, so the inv_freq buffers
             # computed in __init__ never materialize — rebuild them here.
@@ -1355,7 +1422,7 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):  # trf-ignore: TRF001
 class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
     def __init__(self, config: DeepseekV41TextConfig):
         super().__init__(config)
-        self.embed = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList([DeepseekV41DecoderLayer(config, i) for i in range(config.num_hidden_layers)])
         self.norm = DeepseekV41RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = DeepseekV41RotaryEmbedding(config)
@@ -1364,10 +1431,10 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.embed
+        return self.embed_tokens
 
     def set_input_embeddings(self, value: nn.Module):
-        self.embed = value
+        self.embed_tokens = value
 
     def bind_tokenizer(self, tokenizer):
         """Build the engram hash state (tokenizer-derived compressed token map, prime
@@ -1396,8 +1463,8 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
         "router_logits": OutputRecorder(DeepseekV41TopKRouter, index=0),
         # The residual stream is `hc_mult` parallel copies; the recorded
         # `hidden_states` are the collapsed per-block inputs (each layer's
-        # `attn_norm` in/out, plus the initial embedding collapse).
-        "hidden_states": OutputRecorder(DeepseekV41RMSNorm, layer_name="attn_norm"),
+        # `input_layernorm` in/out, plus the initial embedding collapse).
+        "hidden_states": OutputRecorder(DeepseekV41RMSNorm, layer_name="input_layernorm"),
         "attentions": DeepseekV41Attention,
     }
 
@@ -1419,7 +1486,7 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
         if inputs_embeds is None:
-            inputs_embeds = self.embed(input_ids)
+            inputs_embeds = self.embed_tokens(input_ids)
         elif self.engram_layout:
             # The engram hashes token ids; there is no way to recover them from embeddings.
             raise ValueError("engram layers require `input_ids` (the hash state cannot consume `inputs_embeds`)")
@@ -1478,8 +1545,81 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
         return MoeModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 
+def load_balancing_loss_func(
+    gate_logits: torch.Tensor | tuple[torch.Tensor] | None,
+    num_experts: int | None = None,
+    top_k=2,
+    attention_mask: torch.Tensor | None = None,
+) -> torch.Tensor | int:
+    r"""
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
+
+    Args:
+        gate_logits:
+            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
+            shape [batch_size X sequence_length, num_experts].
+        num_experts:
+            Number of experts
+        top_k:
+            The number of experts to route per-token, can be also interpreted as the `top-k` routing
+            parameter.
+        attention_mask (`torch.Tensor`, *optional*):
+            The attention_mask used in forward function
+            shape [batch_size X sequence_length] if not None.
+
+    Returns:
+        The auxiliary loss.
+    """
+    if gate_logits is None or not isinstance(gate_logits, tuple):
+        return 0
+
+    # Accumulate assignment counts and probability sums layer by layer, normalizing at the end,
+    # so peak memory stays O(seq_len * num_experts) regardless of the number of layers.
+    compute_device = gate_logits[0].device
+    tokens_per_expert_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
+    router_prob_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
+    total_rows = 0.0
+
+    if attention_mask is not None:
+        # The same flat mask applies to every layer's [batch_size * sequence_length] rows.
+        flat_mask = attention_mask.reshape(-1).to(device=compute_device, dtype=torch.float32)
+
+    for layer_gate in gate_logits:
+        routing_weights = torch.nn.functional.softmax(layer_gate.to(compute_device), dim=-1)
+        _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+        if attention_mask is None:
+            # Count of top-k assignments per expert
+            tokens_per_expert_sum = (
+                tokens_per_expert_sum + torch.bincount(selected_experts.reshape(-1), minlength=num_experts).float()
+            )
+            # Sum of routing probabilities per expert
+            router_prob_sum = router_prob_sum + routing_weights.float().sum(dim=0)
+            total_rows = total_rows + routing_weights.shape[0]
+        else:
+            # Same reductions, weighted by the attention mask to exclude padding tokens
+            tokens_per_expert_sum = tokens_per_expert_sum + torch.zeros(
+                num_experts, dtype=torch.float32, device=compute_device
+            ).scatter_add_(0, selected_experts.reshape(-1), flat_mask.repeat_interleave(top_k))
+            router_prob_sum = router_prob_sum + (routing_weights.float() * flat_mask.unsqueeze(-1)).sum(dim=0)
+            total_rows = total_rows + flat_mask.sum()
+
+    tokens_per_expert = tokens_per_expert_sum / total_rows
+    router_prob_per_expert = router_prob_sum / total_rows
+
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    return overall_loss * num_experts
+
+
 @auto_docstring
 class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     # The released checkpoint's config.json is composite (top-level `quantization_config`,
     # `text_config`, `vision_config`) with `architectures: [DeepseekV41ForCausalLM]`, so this
     # class must accept the composite config: `get_hf_quantizer` only sees `quantization_config`
@@ -1490,9 +1630,15 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
     config_class = DeepseekV41Config
 
     def __init__(self, config):
-        super().__init__(config.get_text_config())
+        super().__init__(config)
         self.model = DeepseekV41TextModel(self.config)
+        self.vocab_size = self.config.vocab_size
         self.lm_head = nn.Linear(self.config.hidden_size, self.config.vocab_size, bias=False)
+        self.router_aux_loss_coef = self.config.router_aux_loss_coef
+        self.num_experts = self.config.n_routed_experts
+        self.num_experts_per_tok = self.config.num_experts_per_tok
+
+        # Initialize weights and apply final processing
         self.post_init()
 
     @merge_with_config_defaults
@@ -1507,6 +1653,7 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
+        output_router_logits: bool | None = None,
         shift_labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
@@ -1521,6 +1668,9 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
             parallel training, where the shift must happen before sharding). When given, they take
             precedence over `labels` for the loss.
         """
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1528,6 +1678,7 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
         # Only compute the logits that are needed, and do not upcast them unless the loss needs it
@@ -1540,8 +1691,21 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
             loss = self.loss_function(
                 logits=logits, labels=labels, vocab_size=self.config.vocab_size, shift_labels=shift_labels
             )
+
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits,
+                self.num_experts,
+                self.num_experts_per_tok,
+                attention_mask,
+            )
+            if loss is not None:
+                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+
         return MoeCausalLMOutputWithPast(
             loss=loss,
+            aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,

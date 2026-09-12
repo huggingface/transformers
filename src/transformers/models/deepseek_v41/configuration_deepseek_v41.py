@@ -214,8 +214,21 @@ class DeepseekV41TextConfig(PreTrainedConfig):
     base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
     # `num_local_experts` is the standard MoE attr name (read by FP8 / TP integrations).
-    # `intermediate_size` is what the shared-expert MLP base class reads.
+    # `intermediate_size` is what the fused experts base class reads.
     attribute_map = {"num_local_experts": "n_routed_experts", "intermediate_size": "moe_intermediate_size"}
+
+    base_model_ep_plan = {
+        # EP only, like V4 (the runtime picks one plan, and V4.1 is MoE): route on the
+        # gate, run the routed experts as a grouped-GEMM kernel sharded along the expert
+        # axis, all-reduce the experts' output. Attention stays replicated for the same
+        # reason as V4 (one shared KV head broadcast to every query head). Unlike V4,
+        # the indexer is NOT head-sharded: its per-head scores are reduced inside
+        # `DeepseekV41Indexer.forward` (no `scorer` submodule to all-reduce on).
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
 
     # --- attention / rope --------------------------------------------------------------
     vocab_size: int = 129280
