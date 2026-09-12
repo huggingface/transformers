@@ -210,9 +210,6 @@ class EdgeTamVisionModel(Sam2VisionModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        # original_sizes is returned by the processor for post-processing only and should not be
-        # forwarded to the timm backbone, which does not accept it.
-        kwargs.pop("original_sizes", None)
         # Forward through backbone
         backbone_output = self.backbone(pixel_values, **kwargs)
         intermediate_hidden_states = backbone_output.last_hidden_state
@@ -245,6 +242,12 @@ class EdgeTamModel(Sam2Model):
 
     def get_input_embeddings(self):
         raise NotImplementedError("Can't get input embeddings from timm wrapper model")
+
+    def get_image_features(self, pixel_values, **kwargs):
+        # original_sizes is returned by the processor for post-processing only and must not
+        # reach the timm backbone (FeatureListNet) which does not accept it.
+        kwargs.pop("original_sizes", None)
+        return super().get_image_features(pixel_values, **kwargs)
 
 
 __all__ = [

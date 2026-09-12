@@ -477,9 +477,6 @@ class EdgeTamVisionModel(EdgeTamPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        # original_sizes is returned by the processor for post-processing only and should not be
-        # forwarded to the timm backbone, which does not accept it.
-        kwargs.pop("original_sizes", None)
         # Forward through backbone
         backbone_output = self.backbone(pixel_values, **kwargs)
         intermediate_hidden_states = backbone_output.last_hidden_state
@@ -1240,6 +1237,9 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
         pixel_values (`torch.FloatTensor`):
             Input pixel values of shape `(batch_size, num_channels, height, width)`.
         """
+        # original_sizes is returned by the processor for post-processing only and must not
+        # reach the timm backbone (FeatureListNet) which does not accept it.
+        kwargs.pop("original_sizes", None)
         vision_outputs: EdgeTamVisionEncoderOutput = self.vision_encoder(pixel_values, return_dict=True, **kwargs)
 
         feature_maps = vision_outputs.fpn_hidden_states
