@@ -18,6 +18,12 @@ from dataclasses import asdict, dataclass
 from typing import Literal
 
 
+# How the expert outputs get back to the tokens that need them, mapped to the parallel style the experts take.
+# `all-reduce` runs the whole batch on every rank and needs no style of its own. A new backend such as DeepEP is a
+# new entry here plus the matching style in `ParallelInterface`, not a new flag.
+EXPERTS_DISPATCH_STRATEGIES = {"all-reduce": None, "all-to-all": "ep_dispatch_experts"}
+
+
 @dataclass
 class DistributedConfig:
     """
@@ -34,6 +40,12 @@ class DistributedConfig:
             Reserved for sequence parallelism. Not wired up yet.
         enable_expert_parallel (`bool`, *optional*, defaults to `False`):
             Route MoE models through the expert-parallel path (``base_model_ep_plan``).
+        experts_dispatch (`str`, *optional*, defaults to `"all-reduce"`):
+            How the expert outputs get back to the tokens that need them. `"all-reduce"` runs the whole batch on
+            every rank and all-reduces the expert outputs. `"all-to-all"` sends each token to the rank that owns its
+            experts instead, so each rank trains on its own part of the batch and the parameters that are not
+            expert-parallel are sharded with FSDP2 across every rank. Anything but `"all-reduce"` requires
+            `enable_expert_parallel`.
         fsdp_size (`int`, *optional*):
             Number of devices for FSDP (data parallelism). If `None` and `tp_size` is set, defaults to 1.
         fsdp_cpu_offload (`bool`, *optional*, defaults to `False`):
@@ -48,10 +60,17 @@ class DistributedConfig:
     tp_plan: dict[str, str] | Literal["auto"] | None = None
     enable_sequence_parallel: bool = False
     enable_expert_parallel: bool = False
+    experts_dispatch: str = "all-reduce"
     fsdp_size: int | None = None
     fsdp_cpu_offload: bool = False
     fsdp_mixed_precision: bool = False
     pp_size: int | None = None
+
+    @property
+    def dispatches_tokens(self) -> bool:
+        """Whether each rank routes and trains on its own part of the batch, which is every strategy but the
+        `all-reduce` default."""
+        return self.experts_dispatch != "all-reduce"
 
     def __post_init__(self):
         if self.tp_plan is None and self.tp_size is None and self.fsdp_size is None and self.pp_size is None:
@@ -73,11 +92,18 @@ class DistributedConfig:
         elif self.tp_size is None:
             self.tp_size = 1
 
-        if self.tp_size > 1 and self.fsdp_size > 1 and self.pp_size > 1:
+        if self.experts_dispatch not in EXPERTS_DISPATCH_STRATEGIES:
             raise ValueError(
-                "FSDP+TP+PP is not supported yet. "
-                "Use DistributedConfig(fsdp_size=N) or DistributedConfig(tp_size=N) or DistributedConfig(pp_size=N), not all three. "
-                "Only 1D support is available for now."
+                f"Unknown `experts_dispatch={self.experts_dispatch!r}`, expected one of "
+                f"{sorted(EXPERTS_DISPATCH_STRATEGIES)}."
+            )
+        if self.dispatches_tokens and not self.enable_expert_parallel:
+            raise ValueError(f"`experts_dispatch={self.experts_dispatch!r}` requires `enable_expert_parallel=True`.")
+
+        if self.pp_size > 1 and (self.tp_size > 1 or self.fsdp_size > 1):
+            raise ValueError(
+                "Pipeline parallelism cannot be combined with tensor or FSDP parallelism yet. "
+                "Use DistributedConfig(pp_size=N) on its own, or DistributedConfig(tp_size=N, fsdp_size=M)."
             )
 
     @classmethod

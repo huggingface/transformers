@@ -43,7 +43,7 @@ from torch.autograd.graph import save_on_cpu
 from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
-from transformers.distributed.utils import is_dtensor
+from transformers.distributed.utils import is_dtensor, prefetch_checkpoint_shards
 
 from . import initialization as init
 from .configuration_utils import PreTrainedConfig
@@ -4371,6 +4371,8 @@ class PreTrainedModel(
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
         expected_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys
 
+        prefetch_checkpoint_shards(checkpoint_files, model.state_dict())
+
         if logger.level >= logging.WARNING:
             verify_tp_plan(expected_keys, getattr(model, "_tp_plan", None))
 
@@ -4610,6 +4612,14 @@ class PreTrainedModel(
         """
         # if None, the model didn't undergo tensor parallel sharding
         return self._tp_size
+
+    @property
+    def fsdp_size(self):
+        """
+        Returns the model's FSDP sharding degree.
+        """
+        # if None, the model didn't undergo FSDP sharding
+        return self._fsdp_size
 
     @property
     def supports_pp_plan(self):

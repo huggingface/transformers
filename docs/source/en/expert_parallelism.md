@@ -50,4 +50,59 @@ Launch your inference script with [torchrun](https://pytorch.org/docs/stable/ela
 torchrun --nproc-per-node 8 your_script.py
 ```
 
+## Token dispatch
+
+By default, every expert parallel rank runs the whole batch, keeps only the experts it owns, and all-reduces expert outputs after every MoE layer. Dense layers then do `tp_size` times the same work, and the all-reduce moves full activations. Set `experts_dispatch="all-to-all"` to send each token to the rank that owns its experts. Each rank trains on its own batch shard, and a lot less data is required to travel between GPUs/nodes during large-scale training.
+
+```py
+from transformers import AutoModelForCausalLM
+from transformers.distributed import DistributedConfig
+
+distributed_config = DistributedConfig(
+    tp_size=8,
+    enable_expert_parallel=True,
+    experts_dispatch="all-to-all",
+)
+```
+
+Each rank trains on its own part of the batch. At every MoE layer it routes its tokens, sends each (token, expert) pair to the rank that owns the expert with an all-to-all, runs its local experts, and gets the results back with a second all-to-all. Only the routed tokens travel.
+
+For the rest of the model:
+
+- The parameters outside the experts are data-parallel across the whole group, so they are sharded with [FSDP2](./fsdp) across every rank (`fsdp` and `tp` together when both are set), and FSDP2 reduces their gradients.
+- The experts stay sharded across `tp`, and across `fsdp` too when `fsdp_size > 1`. With `fsdp_size=1` they are outside FSDP2, so `fsdp_mixed_precision` and `fsdp_cpu_offload` do not apply to them.
+- The [`Trainer`] gives each rank its own training batches and counts tokens across all of them. Evaluation is unchanged from plain expert parallelism: every `tp` rank sees the same batches.
+- Training needs a sized (map-style) dataset, `dispatch_batches=False`, and `train_sampling_strategy="random"`. Iterable datasets and other sampling strategies are rejected.
+
+## Combining with FSDP2
+
+Without token dispatch, expert parallelism only shards the experts. Everything else (attention, embeddings, norms) and its optimizer state is replicated on every expert-parallel rank, which limits how large a model you can train. Add [FSDP2](./fsdp) on a second mesh dimension with `fsdp_size`, and keep using `tp_size` for the expert parallel width (`tp_size` is the EP size).
+
+```py
+from transformers import AutoModelForCausalLM
+from transformers.distributed import DistributedConfig
+
+distributed_config = DistributedConfig(
+    tp_size=4,  # expert parallel size
+    fsdp_size=2,  # data parallel shards
+    enable_expert_parallel=True,
+)
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B", distributed_config=distributed_config)
+```
+
+The model is loaded on a 2D `(fsdp, tp)` device mesh, and `tp_size * fsdp_size` must equal the number of processes. The expert parallel plan shards the experts across `tp`, then FSDP2 shards every parameter, experts included, across `fsdp` and owns their gradient reduction. Each `fsdp` rank trains on its own part of the batch. With `experts_dispatch="all-to-all"` the non-expert parameters are data-parallel across the whole mesh rather than replicated across `tp`, so FSDP2 shards them across `fsdp` and `tp` together.
+
+Load the model as usual, then train with [`Trainer`]. It takes the gradient norm across both meshes and gives each mesh its own optimizer param group. [`~Trainer.save_model`] gathers sharded weights into a regular checkpoint. This requires `accelerate>=1.12` so the `Trainer` can mirror `tp_size` and `fsdp_size` into [`~Accelerate.ParallelismConfig`].
+
+The table below compares EP-only training with 2D EP+FSDP2 on 8xH100 GPUs. The workload is full fine-tuning of Qwen3-30B-A3B in bf16 at sequence length 2048. More FSDP shards cut peak memory, and tokens/s drop some because FSDP2 all-gathers and reduce-scatters the experts across `fsdp`.
+
+| configuration | tokens/s/GPU | peak memory/GPU |
+|---|---|---|
+| `tp_size=8` | 3485 | 38.6 GB |
+| `tp_size=4, fsdp_size=2` | 2900 | 34.2 GB |
+| `tp_size=2, fsdp_size=4` | 2830 | 32.3 GB |
+
+> [!WARNING]
+> Resuming from a checkpoint is not supported yet for models sharded at load time, so the [`Trainer`] only accepts `save_only_model=True` or `save_strategy="no"` for them.
+
 [[autodoc]] DistributedConfig

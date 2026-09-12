@@ -22,6 +22,18 @@ from ..utils import is_torch_available, is_torch_distributed_available, is_torch
 
 logger = logging.get_logger(__name__)
 
+# What one seek costs, expressed as the number of bytes a sequential read gets through in the same
+# time. Skipping the other ranks' shards trades bytes for seeks, so this is what decides whether the
+# trade pays. Measured at 12 MiB on a cross-region Lustre mount (50 ms per seek, 0.24 GiB/s per
+# stream); a local NVMe is far below that, where the effect is only to fall back more readily.
+_SEEK_COST_BYTES = 12 * 2**20
+
+# How much a rank may warm by asking the kernel to read ahead, which costs almost nothing but is
+# only advice: past a few GiB the kernel drops most of it, the pages are not there when the loader
+# asks for them, and the load pays for the miss. Beyond this, warming reads the bytes itself.
+# Measured: 1.3 and 4.4 GiB of readahead land, 7.5, 8 and 29.7 GiB do not.
+_READAHEAD_MAX_TOTAL_BYTES = 5 * 2**30
+
 
 if TYPE_CHECKING:
     from torch.distributed.tensor import DTensor
@@ -57,6 +69,171 @@ def _get_torch_distributed_world_size() -> int:
     if not _is_torch_distributed_initialized():
         return 1
     return torch.distributed.get_world_size()
+
+
+def _merge(spans: list[tuple[int, int]], path: str) -> list[tuple[str, int, int]]:
+    """Sort byte ranges of one file and join the ones that touch or overlap."""
+    merged = []
+    for start, end in sorted(spans):
+        # Bridging a gap costs its bytes and saves a seek, so bridge when the gap is the cheaper one.
+        if merged and start <= merged[-1][2] + _SEEK_COST_BYTES:
+            merged[-1] = (path, merged[-1][1], max(merged[-1][2], end))
+        else:
+            merged.append((path, start, end))
+    return merged
+
+
+def _rank_byte_spans(checkpoint_files: list[str], meta_state_dict: dict) -> tuple[list, list]:
+    """Byte spans of the checkpoint this rank will read, merged per file.
+
+    A rank slices every sharded parameter down to its own shard, so it reads `1 / world` of those
+    bytes and all of the rest. Returns `(own, common)`, both lists of `(path, start, end)`: the common
+    spans come out identical on every rank, so local ranks can share them out between them.
+    """
+    import json
+    import re
+    import struct
+
+    owned_experts = _owned_expert_range(meta_state_dict)
+    own, common = [], []
+    for path in checkpoint_files:
+        with open(path, "rb") as f:
+            header_length = struct.unpack("<Q", f.read(8))[0]
+            header = json.loads(f.read(header_length))
+        base = 8 + header_length
+        mine, whole = [], []
+        for name, meta in header.items():
+            if name == "__metadata__":
+                continue
+            start, end = (base + offset for offset in meta["data_offsets"])
+            param = meta_state_dict.get(name)
+            expert = re.search(r"\.experts\.(\d+)\.", name)
+            # A checkpoint that stores one tensor per expert names them in a way the packed parameter
+            # does not match, so they never resolve above. The rank still only wants the experts it
+            # owns, and consecutive experts sit next to each other on disk, so keeping those and
+            # dropping the rest leaves a few long runs.
+            if expert and owned_experts:
+                if owned_experts[0] <= int(expert.group(1)) < owned_experts[1]:
+                    mine.append((start, end))
+                continue
+            # Sharding on dim 0 is the only kind that keeps a rank's share contiguous on disk, and only
+            # when the checkpoint stores the parameter whole rather than one piece per expert. Slice
+            # those; read everything else in full, which covers what the rank needs and then some.
+            rows = meta["shape"][0] if meta["shape"] else 0
+            owned = _dim_0_range(param) if is_dtensor(param) and rows == param.shape[0] else None
+            if owned:
+                row_bytes = (end - start) // rows
+                start, end = start + owned[0] * row_bytes, start + owned[1] * row_bytes
+                mine.append((start, end))
+            else:
+                whole.append((start, end))
+        own += _merge(mine, path)
+        common += _merge(whole, path)
+    return own, common
+
+
+def _dim_0_range(param: DTensor) -> tuple[int, int] | None:
+    """The `[start, end)` rows of dim 0 this rank holds, or `None` if that is not well defined.
+
+    It is not well defined when a mesh dim splits some other dimension, when the split is strided so
+    a rank's rows are not one run, or when this rank is not a member of the parameter's mesh at all,
+    which happens to the ranks outside an expert-parallel group.
+    """
+    from .sharding_utils import DtensorShardOperation
+
+    shards = [placement for placement in param.placements if placement.is_shard()]
+    contiguous_on_dim_0 = bool(shards) and all(
+        placement.dim in (0, -param.ndim) and not getattr(placement, "split_factor", 0) for placement in shards
+    )
+    if not contiguous_on_dim_0 or param.device_mesh.get_coordinate() is None:
+        return None
+    operation = DtensorShardOperation(param)
+    return operation._axis0_offset, operation._axis0_offset + operation._axis0_local_size
+
+
+def _owned_expert_range(meta_state_dict: dict) -> tuple[int, int] | None:
+    """The `[start, end)` experts this rank holds, or `None` if it cannot be determined.
+
+    Every expert parameter is sharded the same way, so one of them answers for all of them.
+    """
+    for name, param in meta_state_dict.items():
+        if ".experts." in name and is_dtensor(param) and param.ndim == 3:
+            return _dim_0_range(param)
+    return None
+
+
+def _all_ranks_agree(value: bool) -> bool:
+    """`value` on every rank, once every rank has answered."""
+    if not _is_torch_distributed_initialized():
+        return value
+    device_type = torch._C._get_accelerator().type
+    index = None if device_type == "cpu" else getattr(torch, device_type).current_device()
+    agreed = torch.tensor([value], dtype=torch.uint8, device=torch.device(device_type, index))
+    torch.distributed.all_reduce(agreed, op=torch.distributed.ReduceOp.MIN)
+    return bool(agreed.item())
+
+
+def prefetch_checkpoint_shards(checkpoint_files: list[str], meta_state_dict: dict | None = None) -> None:
+    """Warm the page cache for the checkpoint shards before the per-tensor loading pass, opt-in via
+    `HF_SHARD_PREFETCH=<read threads per rank>`.
+
+    The per-tensor read pattern of sharded loading reads a network filesystem at well under 1 GiB/s
+    while large sequential reads sustain many times that; warming the page cache first makes the
+    actual load run at memory speed. Given `model`, a rank warms the byte spans of its own shard and
+    shares the rest out with the other ranks on the node, which on a model sharded across several
+    nodes leaves each node warming a fraction of the checkpoint. Otherwise local ranks split the
+    shard list between them and warm it whole.
+    """
+    prefetch_threads = int(os.environ.get("HF_SHARD_PREFETCH", "0"))
+    if not checkpoint_files or not prefetch_threads:
+        return
+    import functools
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+    local_world = int(os.environ.get("LOCAL_WORLD_SIZE", "1"))
+
+    def _warm(job, bufsize=16 * 2**20, readahead=False):
+        path, start, end = job
+        if readahead:
+            fd = os.open(path, os.O_RDONLY)
+            try:
+                os.posix_fadvise(fd, start, end - start, os.POSIX_FADV_WILLNEED)
+            finally:
+                os.close(fd)
+            return
+        with open(path, "rb", buffering=0) as f:
+            f.seek(start)
+            left = end - start
+            while left:
+                chunk = f.read(min(bufsize, left))
+                if not chunk:
+                    return
+                left -= len(chunk)
+
+    whole = [(path, 0, os.path.getsize(path)) for path in checkpoint_files][local_rank::local_world]
+    own, common = ([], []) if meta_state_dict is None else _rank_byte_spans(checkpoint_files, meta_state_dict)
+    jobs = own + common[local_rank::local_world]
+    # Reading only this rank's shard saves bytes and costs seeks. Price the seeks in bytes and keep
+    # whichever plan reads less. Both sides are the node's read divided by its ranks, so the
+    # comparison holds even when there are fewer shards than local ranks and this rank was dealt none.
+    cost = sum(end - start for _, start, end in jobs) + len(jobs) * _SEEK_COST_BYTES
+    take_spans = bool(jobs) and cost < sum(os.path.getsize(path) for path in checkpoint_files) / local_world
+    # The two plans divide the checkpoint up differently, so ranks that disagree leave parts of it
+    # cold: take the spans only where every rank does.
+    if not _all_ranks_agree(take_spans):
+        jobs = whole
+    described = f"{sum(end - start for _, start, end in jobs) / 2**30:.1f} GiB in {len(jobs)} spans"
+
+    # Handing the whole plan to the kernel is nearly free, but only while it is small enough to be
+    # honoured; a rank warming tens of GiB has to read them, or the pages will not be there.
+    readahead = sum(end - start for _, start, end in jobs) <= _READAHEAD_MAX_TOTAL_BYTES
+    prefetch_start = time.time()
+    with ThreadPoolExecutor(max_workers=prefetch_threads) as pool:
+        list(pool.map(functools.partial(_warm, readahead=readahead), jobs))
+    _distributed_barrier()
+    logger.warning_once(f"Prefetched {described} in {time.time() - prefetch_start:.0f}s")
 
 
 def is_local_dist_rank_0() -> bool:
@@ -193,11 +370,17 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
         device_map = torch.device(device_type)
 
     fsdp_size = distributed_config.fsdp_size
+    tp_size = distributed_config.tp_size
 
+    # `fsdp` is the outer dimension so that the `tp` ranks of a group are contiguous, which is what
+    # the expert all-to-all and the TP collectives want.
     dims, names = [], []
     if fsdp_size > 1:
         dims.append(fsdp_size)
         names.append("fsdp")
+    if tp_size > 1:
+        dims.append(tp_size)
+        names.append("tp")
 
     # Build the N-dimensional device mesh
     mesh = torch.distributed.init_device_mesh(device_type, tuple(dims), mesh_dim_names=tuple(names))

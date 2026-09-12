@@ -17,7 +17,7 @@ from types import SimpleNamespace
 
 import torch
 import torch.nn as nn
-from torch.distributed.tensor.placement_types import Shard
+from torch.distributed.tensor.placement_types import Replicate, Shard
 
 from transformers import PreTrainedConfig, PreTrainedModel
 from transformers.conversion_mapping import (
@@ -35,6 +35,7 @@ from transformers.core_model_loading import (
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
+    Transpose,
     VisionFuseAndPermuteForRope,
     VisionUnfuseAndPermuteForRope,
     WeightConverter,
@@ -243,6 +244,35 @@ class DummyRoot(PreTrainedModel):
 
 
 class TestConvertAndLoadStateDict(unittest.TestCase):
+    def test_dtensor_sharding_follows_transposed_checkpoint_dimensions(self):
+        target = torch.arange(48).reshape(2, 6, 4).float()
+        source = target.transpose(1, 2).contiguous()
+        converter = WeightConverter("experts.weight", "experts.weight", operations=[Transpose(1, 2, check_dims=True)])
+        source_dim_mapping = converter.get_source_dim_mapping(source, target)
+
+        self.assertEqual(source_dim_mapping, {1: 2, 2: 1})
+        self.assertIsNone(converter.get_source_dim_mapping(target, target))
+        non_transpose_converter = WeightConverter("experts.weight", "experts.weight", operations=[Chunk(dim=0)])
+        self.assertIsNone(non_transpose_converter.get_source_dim_mapping(source, target))
+        for rank in range(2):
+            shard_op = _make_dtensor_shard_op(
+                FakeMesh(shape=(2,), rank=rank),
+                [Shard(1)],
+                param_shape=target.shape,
+                local_shape=(2, 3, 4),
+                source_dim_mapping=source_dim_mapping,
+            )
+            source_shard = shard_op.shard_tensor(source)
+            torch.testing.assert_close(source_shard.transpose(1, 2), target[:, rank * 3 : (rank + 1) * 3])
+
+    def test_transpose_source_dim_mapping_rejects_invalid_dimensions(self):
+        source_shape = (2, 4, 6)
+        target_shape = (2, 6, 4)
+
+        for invalid_dim in (-4, 3):
+            with self.subTest(invalid_dim=invalid_dim), self.assertRaisesRegex(IndexError, "Dimension out of range"):
+                Transpose(1, invalid_dim).get_source_dim_mapping(source_shape, target_shape)
+
     def test_dtensor_shard_aware_mixtral_conversion_uses_only_local_experts(self):
         """Integration test: FSDP-sharded expert loading + WeightConverter.
 
@@ -333,6 +363,26 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             converted["model.layers.0.experts.gate_up_proj.weight"],
             torch.tensor([[[0.0, 1.0], [2.0, 3.0], [4.0, 5.0], [6.0, 7.0]]]),
         )
+
+    def test_rope_permute_is_sharded_after_conversion(self):
+        """`PermuteForRope` interleaves rows and takes the head size from `tensor.shape[0]`, so on a shard it
+        permutes with the local row count and silently produces the wrong weights. Those parameters are converted in
+        full and sharded afterwards (`shards_after_conversion`). A transpose only moves axes, so the target shard maps
+        to a source slice and shard-on-read still applies to it (#48373); the transpose cases below pin that boundary."""
+        transpose = WeightConverter("router.weight", "gate.weight", operations=[Transpose(0, 1)])
+        permute = WeightConverter("q.weight", "q.weight", operations=[PermuteForRope()])
+        experts = WeightConverter("w13", "gate_up", operations=[Transpose(1, 2, check_dims=True)])
+        merge = WeightConverter(["w1", "w3"], "gate_up", operations=[MergeModulelist(dim=0), Concatenate(dim=1)])
+        self.assertFalse(transpose.shards_after_conversion([Shard(0)], ndim=2))
+        self.assertFalse(transpose.shards_after_conversion([Replicate(), Shard(1)], ndim=2))
+        self.assertFalse(transpose.shards_after_conversion([Replicate()], ndim=2))
+        self.assertTrue(permute.shards_after_conversion([Shard(0)], ndim=2))
+        self.assertFalse(permute.shards_after_conversion([Shard(1)], ndim=2))
+        # Qwen3-VL-MoE transposes the two inner dims of the experts, which expert parallelism shards on dim 0
+        self.assertFalse(experts.shards_after_conversion([Shard(0)], ndim=3))
+        self.assertFalse(experts.shards_after_conversion([Shard(0), Shard(2)], ndim=3))
+        self.assertFalse(merge.shards_after_conversion([Shard(0)], ndim=3))
+        self.assertFalse(WeightRenaming("q.weight", "q.weight").shards_after_conversion([Shard(0)], ndim=2))
 
     def test_moe_and_qkv_conversion(self):
         model = DummyRoot(PreTrainedConfig())
