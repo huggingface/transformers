@@ -137,7 +137,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    supports_continuous_batching: bool = False
+    supports_continuous_batching: bool = True
 
     def __init__(self, min_length: int, eos_token_id: int | list[int] | torch.Tensor, device: str = "cpu"):
         if not isinstance(min_length, int) or min_length < 0:
@@ -353,7 +353,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    supports_continuous_batching = False
+    supports_continuous_batching = True
 
     def __init__(self, penalty: float, prompt_ignore_length: int | None = None):
         if not isinstance(penalty, float) or not (penalty > 0):
@@ -1112,6 +1112,8 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
     ```
     """
 
+    supports_continuous_batching = True
+
     def __init__(self, ngram_size: int):
         if not isinstance(ngram_size, int) or ngram_size <= 0:
             raise ValueError(f"`ngram_size` has to be a strictly positive integer, but is {ngram_size}")
@@ -1272,6 +1274,8 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
     The full name of Donald is Donald Duck. He is
     ```
     """
+
+    supports_continuous_batching = True
 
     def __init__(self, sequence_bias: list[list[list[int] | float]]):
         # After _convert_list_arguments_into_dict(), becomes dict[tuple[int, ...], float]
@@ -1585,6 +1589,8 @@ class ForcedBOSTokenLogitsProcessor(LogitsProcessor):
     ```
     """
 
+    supports_continuous_batching = True
+
     def __init__(self, bos_token_id: int):
         self.bos_token_id = bos_token_id
 
@@ -1631,6 +1637,8 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
     A sequence: 1, 2, 3, 4, 5, 6, 7,<|endoftext|>
     ```
     """
+
+    supports_continuous_batching = True
 
     def __init__(self, max_length: int, eos_token_id: int | list[int] | torch.Tensor, device: str = "cpu"):
         self.max_length = max_length
@@ -1847,6 +1855,8 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     tensor(11.2027)
     ```
     """
+
+    supports_continuous_batching = True
 
     def __init__(self, begin_suppress_tokens, begin_index, device: str = "cpu"):
         self.begin_suppress_tokens = torch.tensor(list(begin_suppress_tokens), device=device)

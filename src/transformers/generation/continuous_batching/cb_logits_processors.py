@@ -91,6 +91,8 @@ class ContinuousBatchingLogitsProcessorList:
         self._retrieve_processors_kwargs()
         # Static boolean to know if there is any logits processing to do. Helps with torch.compile().
         self.do_processing = len(self.logits_processor) > 0
+        # Supported classic processors other than the input-independent warpers need each request's exact token history.
+        self.requires_full_history = any(self._requires_full_history(processor) for processor in self.logits_processor)
 
     def __repr__(self) -> str:
         return f"ContinuousBatchingLogitsProcessorList(logits_processor={self.logits_processor}, tensors_required={self.tensors_required})"
@@ -101,6 +103,15 @@ class ContinuousBatchingLogitsProcessorList:
         self.supported_keys = {}
         self.ignored_keys = set()
         self.do_processing = False
+        self.requires_full_history = False
+
+    @staticmethod
+    def _requires_full_history(processor) -> bool:
+        return (
+            not isinstance(processor, ContinuousBatchingLogitsProcessor)
+            and not isinstance(processor, tuple(CLASSIC_TO_CB_PROCESSORS_MAP))
+            and getattr(processor, "supports_continuous_batching", None) is True
+        )
 
     def _convert_to_per_request_processors(self) -> None:
         """Replaces the compatible logits processors with their per-request versions."""
@@ -210,6 +221,34 @@ class ContinuousBatchingLogitsProcessorList:
                 current_arg_id += 1
             else:
                 scores = processor(input_ids, scores)
+        return scores
+
+    def apply_with_full_history(
+        self,
+        input_ids: list[torch.LongTensor],
+        scores: torch.FloatTensor,
+        logits_processor_args: torch.Tensor,
+    ) -> torch.FloatTensor:
+        """Apply processors while preserving the exact token history of every request."""
+        if len(input_ids) != scores.size(0):
+            raise ValueError(f"Expected {scores.size(0)} token histories, but received {len(input_ids)}.")
+
+        current_arg_id = 0
+        for processor in self.logits_processor:
+            if isinstance(processor, ContinuousBatchingLogitsProcessor):
+                scores = processor(scores, logits_processor_args[current_arg_id])
+                current_arg_id += 1
+                continue
+
+            if self._requires_full_history(processor):
+                processed_scores = [
+                    processor(request_input_ids.unsqueeze(0), request_scores.unsqueeze(0))
+                    for request_input_ids, request_scores in zip(input_ids, scores)
+                ]
+                scores = torch.cat(processed_scores, dim=0)
+            else:
+                current_input_ids = torch.stack([request_input_ids[-1] for request_input_ids in input_ids])
+                scores = processor(current_input_ids, scores)
         return scores
 
 

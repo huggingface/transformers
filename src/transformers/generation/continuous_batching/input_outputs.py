@@ -297,6 +297,18 @@ class ContinuousBatchingIOs:
         """Get the cumulative sequence lengths for the current batch."""
         return self.cumulative_seqlens_q, self.cumulative_seqlens_k
 
+    def get_token_histories(self, device: torch.device) -> list[torch.LongTensor]:
+        """Return the complete token history for each request that will produce a new token."""
+        return [
+            torch.tensor(
+                future_state.state.initial_tokens + future_state.state.generated_tokens,
+                dtype=torch.long,
+                device=device,
+            )
+            for future_state in self.requests_in_batch
+            if future_state.has_new_token
+        ]
+
     def carry_over_tokens(
         self, input_ids: torch.Tensor, carry_over_ids: torch.Tensor, prev_output_ids: torch.Tensor
     ) -> None:
