@@ -546,14 +546,11 @@ class Glm4vIntegrationTest(unittest.TestCase):
             padding=True,
         ).to(torch_device)
 
-        # This model on the hub has `do_sample=True`.
-        torch.manual_seed(42)
-
         # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
         EXPECTED_DECODED_TEXT = [
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat. Specifically",
+            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks",
             "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. Wait, the animals here are cats, not dogs. The question is about a dog, but",
         ]  # fmt: skip
         self.assertEqual(
