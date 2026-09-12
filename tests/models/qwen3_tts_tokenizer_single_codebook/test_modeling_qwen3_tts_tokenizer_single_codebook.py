@@ -22,32 +22,27 @@ from ...test_modeling_common import ModelTesterMixin
 
 
 if is_torch_available():
-    import numpy as np
     import torch
 
-    from transformers.models.qwen3_tts_tokenizer_single_codebook import (
-        Qwen3TTSTokenizerSingleCodebookConfig,
-        Qwen3TTSTokenizerSingleCodebookFeatureExtractor,
-        Qwen3TTSTokenizerSingleCodebookModel,
-    )
+    from transformers import Qwen3TTSTokenizerSingleCodebookConfig, Qwen3TTSTokenizerSingleCodebookModel
 
 
 @require_torch
 class Qwen3TTSTokenizerSingleCodebookModelTester:
-    def __init__(self, parent, batch_size=2, feature_length=16, raw_audio_length=10):
+    def __init__(self, parent, batch_size=2, feature_length=24, short_feature_length=16):
         self.parent = parent
         self.batch_size = batch_size
         self.feature_length = feature_length
-        self.raw_audio_length = raw_audio_length
+        self.short_feature_length = short_feature_length
 
         self.encoder_config = {
             "num_mel_bins": 16,
             "hidden_size": 16,
-            "encoder_layers": 1,
+            "encoder_layers": 2,
             "encoder_attention_heads": 2,
             "encoder_ffn_dim": 32,
-            "max_source_positions": 32,
-            "num_layers_before_quantizer": 1,
+            "max_source_positions": 64,
+            "n_window": 4,
         }
         self.quantizer_config = {
             "hidden_size": 16,
@@ -58,52 +53,56 @@ class Qwen3TTSTokenizerSingleCodebookModelTester:
         self.decoder_config = {
             "dit_config": {
                 "hidden_size": 16,
-                "num_hidden_layers": 1,
+                "num_hidden_layers": 2,
                 "num_attention_heads": 2,
                 "ff_mult": 1,
                 "emb_dim": 16,
                 "head_dim": 8,
-                "repeats": 1,
+                "repeats": 2,
                 "num_embeds": 16,
                 "mel_dim": 8,
                 "block_size": 4,
-                "look_ahead_layers": [],
-                "look_backward_layers": [],
+                "look_ahead_layers": [1],
+                "look_backward_layers": [0],
                 "enc_emb_dim": 8,
                 "enc_dim": 8,
-                "enc_channels": [8],
-                "enc_kernel_sizes": [1],
-                "enc_dilations": [1],
+                "enc_channels": [8, 8, 8],
+                "enc_kernel_sizes": [3, 3, 1],
+                "enc_dilations": [1, 1, 1],
                 "enc_attention_channels": 4,
                 "enc_se_channels": 4,
             },
             "bigvgan_config": {
                 "mel_dim": 8,
-                "upsample_initial_channel": 8,
+                "upsample_initial_channel": 16,
                 "resblock_kernel_sizes": [3],
                 "resblock_dilation_sizes": [[1, 3, 5]],
-                "upsample_rates": [2],
-                "upsample_kernel_sizes": [4],
-                "resblock_causal_modes": ["hybrid"],
+                "upsample_rates": [2, 2],
+                "upsample_kernel_sizes": [4, 4],
+                "resblock_causal_modes": ["full_causal", "hybrid"],
             },
         }
+        # 2 mel frames per code (`repeats`) times the vocoder upsampling
+        self.decode_upsample_rate = 2 * 2 * 2
 
     def get_config(self):
         return Qwen3TTSTokenizerSingleCodebookConfig(
             encoder_config=self.encoder_config,
             quantizer_config=self.quantizer_config,
             decoder_config=self.decoder_config,
+            decode_upsample_rate=self.decode_upsample_rate,
         )
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
-        input_features = torch.zeros(
+        input_features = torch.randn(
             self.batch_size,
             config.encoder_config.num_mel_bins,
             self.feature_length,
             device=torch_device,
         )
         input_features_mask = torch.ones(self.batch_size, self.feature_length, dtype=torch.long, device=torch_device)
+        input_features_mask[-1, self.short_feature_length :] = 0
         inputs_dict = {
             "input_features": input_features,
             "input_features_mask": input_features_mask,
@@ -142,7 +141,7 @@ class Qwen3TTSTokenizerSingleCodebookModelTest(ModelTesterMixin, unittest.TestCa
             "test_multi_gpu_data_parallel_forward",
         )
         if any(name in self._testMethodName for name in _no_forward_tests):
-            self.skipTest("Qwen3TTSTokenizerSingleCodebookModel uses custom encode/decode methods")
+            self.skipTest("Qwen3TTSTokenizerSingleCodebookModel exposes encode/decode only, no forward")
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -166,30 +165,6 @@ class Qwen3TTSTokenizerSingleCodebookModelTest(ModelTesterMixin, unittest.TestCa
                 f"Mismatch in key: {key}",
             )
 
-    def test_feature_extractor_outputs_model_inputs(self):
-        feature_extractor = Qwen3TTSTokenizerSingleCodebookFeatureExtractor(audio_vq_ds_rate=2)
-        raw_audio = [
-            np.zeros(321, dtype=np.float32),
-            np.zeros(640, dtype=np.float32),
-        ]
-
-        inputs = feature_extractor(raw_audio, sampling_rate=16000, return_tensors="pt")
-
-        self.assertEqual(inputs["input_features"].shape[0], 2)
-        self.assertEqual(inputs["input_features"].shape[1], feature_extractor.feature_size)
-        self.assertEqual(inputs["input_features_mask"].shape[0], 2)
-        self.assertEqual(inputs["input_values"].shape, (2, 640))
-        self.assertEqual(inputs["padding_mask"].sum(dim=-1).tolist(), [321, 640])
-        self.assertEqual(inputs["ref_mel_features"].shape[0], 2)
-        self.assertEqual(inputs["ref_mel_features"].shape[-1], feature_extractor.ref_num_mel_bins)
-        self.assertTrue((inputs["input_features_mask"].sum(dim=-1) > 0).all())
-        self.assertTrue((inputs["ref_mel_attention_mask"].sum(dim=-1) > 0).all())
-
-        serialized = feature_extractor.to_dict()
-        self.assertNotIn("waveform_padder", serialized)
-        self.assertNotIn("mel_filters", serialized)
-        self.assertNotIn("ref_mel_filters", serialized)
-
     def test_encode(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         model = Qwen3TTSTokenizerSingleCodebookModel(config).eval().to(torch_device)
@@ -197,68 +172,109 @@ class Qwen3TTSTokenizerSingleCodebookModelTest(ModelTesterMixin, unittest.TestCa
         with torch.no_grad():
             outputs = model.encode(**inputs_dict)
 
-        self.assertEqual(outputs.audio_codes.shape[0], 2)
-        self.assertEqual(outputs.audio_codes.ndim, 2)
-        self.assertIsNotNone(outputs.audio_codes_mask)
-        self.assertFalse(hasattr(outputs, "xvectors") and outputs.xvectors is not None)
+        # one code per `downsample_rate` frames of the stride-2 convolution output
+        expected_lengths = [
+            ((length - 1) // 2 + 1) // config.quantizer_config.downsample_rate
+            for length in inputs_dict["input_features_mask"].sum(-1).tolist()
+        ]
+        self.assertEqual(outputs.audio_codes.shape, (self.model_tester.batch_size, max(expected_lengths)))
+        self.assertEqual(outputs.audio_codes_mask.sum(-1).tolist(), expected_lengths)
+        self.assertTrue((outputs.audio_codes < config.quantizer_config.codebook_size).all())
 
-    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel has no standard forward")
+    def test_encode_padded_item_matches_unpadded(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        model = Qwen3TTSTokenizerSingleCodebookModel(config).eval().to(torch_device)
+        # random codebook so that codes depend on the encoder output
+        model.quantizer.vq.codebook.embed.normal_()
+
+        short_length = self.model_tester.short_feature_length
+        with torch.no_grad():
+            batched = model.encode(**inputs_dict)
+            single = model.encode(inputs_dict["input_features"][-1:, :, :short_length])
+
+        num_codes = int(batched.audio_codes_mask[-1].sum())
+        self.assertEqual(single.audio_codes.shape[1], num_codes)
+        torch.testing.assert_close(batched.audio_codes[-1, :num_codes], single.audio_codes[0])
+
+    def test_decode(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        model = Qwen3TTSTokenizerSingleCodebookModel(config).eval().to(torch_device)
+        dit_config = config.decoder_config.dit_config
+        batch_size = self.model_tester.batch_size
+
+        with torch.no_grad():
+            encoded = model.encode(**inputs_dict)
+            audio_codes = encoded.audio_codes.masked_fill(~encoded.audio_codes_mask, -1)
+            xvectors = torch.randn(batch_size, dit_config.enc_emb_dim, device=torch_device)
+            ref_mels = torch.randn(batch_size, 10, dit_config.mel_dim, device=torch_device)
+            outputs = model.decode(audio_codes, xvectors=xvectors, ref_mels=ref_mels, num_steps=2)
+
+        code_lengths = encoded.audio_codes_mask.sum(-1)
+        expected_samples = int(code_lengths.max()) * config.decode_upsample_rate
+        self.assertEqual(outputs.audio_values.shape, (batch_size, expected_samples))
+        # the decoded waveform is zero past every item's own duration
+        short_samples = int(code_lengths[-1]) * config.decode_upsample_rate
+        self.assertLess(short_samples, expected_samples)
+        self.assertTrue((outputs.audio_values[-1, short_samples:] == 0).all())
+        self.assertTrue((outputs.audio_values[0] != 0).any())
+
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel exposes encode/decode only, no forward")
     def test_capture_outputs_decorator(self):
         pass
 
-    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel has no standard forward")
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel exposes encode/decode only, no forward")
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel has no standard forward")
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel exposes encode/decode only, no forward")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Batching equivalence is not applicable for variable-length codec outputs")
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel exposes encode/decode only, no forward")
     def test_batching_equivalence(self):
         pass
 
-    @unittest.skip(reason="No standard model outputs equivalence for codec models")
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel exposes encode/decode only, no forward")
     def test_model_outputs_equivalence(self):
         pass
 
-    @unittest.skip(reason="No standard get_input_embeddings for codec model")
+    @unittest.skip(reason="Codec model has no input embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="No standard generate() for codec model")
+    @unittest.skip(reason="Codec model has no generate()")
     def test_generate_without_input_ids(self):
         pass
 
-    @unittest.skip(reason="Composite model - base model prefix test not applicable")
+    @unittest.skip(reason="Composite model with encoder, quantizer and decoder; there is no base model prefix")
     def test_model_base_model_prefix(self):
         pass
 
-    @unittest.skip(reason="Determinism is not guaranteed across runs for codec models")
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel exposes encode/decode only, no forward")
     def test_determinism(self):
         pass
 
-    @unittest.skip(reason="Compile not yet supported")
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel exposes encode/decode only, no forward")
     def test_sdpa_can_compile_dynamic(self):
         pass
 
-    @unittest.skip(reason="Compile not yet supported")
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel exposes encode/decode only, no forward")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip(reason="Flash attention right-padding equivalence is not applicable")
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel exposes encode/decode only, no forward")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
-    @unittest.skip(reason="No standard forward - all_tensors test not applicable")
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel exposes encode/decode only, no forward")
     def test_all_tensors_are_parameter_or_buffer(self):
         pass
 
-    @unittest.skip(reason="Codec encode/decode model does not use a single main input")
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel exposes encode/decode only, no forward")
     def test_model_main_input_name(self):
         pass
 
-    @unittest.skip(reason="Composite config attn implementation is not propagated uniformly across sub-configs")
+    @unittest.skip(reason="The DiT and BigVGAN sub-models always run with sdpa; their block-causal mask is boolean")
     def test_config_attn_implementation_setter(self):
         pass
 
@@ -266,27 +282,19 @@ class Qwen3TTSTokenizerSingleCodebookModelTest(ModelTesterMixin, unittest.TestCa
     def test_tied_weights_keys(self):
         pass
 
-    @unittest.skip(reason="Codebook buffers are not reinitializable on meta device")
-    def test_can_init_all_missing_weights(self):
-        pass
-
-    @unittest.skip(reason="Codebook buffers are not reinitializable on meta device")
-    def test_init_weights_can_init_buffers(self):
-        pass
-
-    @unittest.skip(reason="No standard forward - left padding test not applicable")
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel exposes encode/decode only, no forward")
     def test_left_padding_compatibility(self):
         pass
 
-    @unittest.skip(reason="No standard forward - torch fx not applicable")
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel exposes encode/decode only, no forward")
     def test_torch_fx(self):
         pass
 
-    @unittest.skip(reason="No standard forward - torch fx not applicable")
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel exposes encode/decode only, no forward")
     def test_torch_fx_output_loss(self):
         pass
 
-    @unittest.skip(reason="No standard forward - sdpa dispatch not applicable")
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel exposes encode/decode only, no forward")
     def test_sdpa_can_dispatch_composite_models(self):
         pass
 
@@ -294,25 +302,25 @@ class Qwen3TTSTokenizerSingleCodebookModelTest(ModelTesterMixin, unittest.TestCa
     def test_attn_implementation_composite_models(self):
         pass
 
-    @unittest.skip(reason="Torch export is not supported for this codec model")
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel exposes encode/decode only, no forward")
     def test_torch_export(self):
         pass
 
-    @unittest.skip(reason="Gradient checkpointing training coverage is not applicable for this codec model")
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel exposes encode/decode only, no forward")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="Gradient checkpointing training coverage is not applicable for this codec model")
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel exposes encode/decode only, no forward")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Gradient checkpointing training coverage is not applicable for this codec model")
+    @unittest.skip(reason="Qwen3TTSTokenizerSingleCodebookModel exposes encode/decode only, no forward")
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
 
 @require_torch
 class Qwen3TTSTokenizerSingleCodebookIntegrationTest(unittest.TestCase):
-    @unittest.skip(reason="No public 25 Hz checkpoint")
+    @unittest.skip(reason="No public Qwen3-TTS-Tokenizer-25Hz checkpoint (QwenLM/Qwen3-TTS#34)")
     def test_parity_with_original(self):
         pass
