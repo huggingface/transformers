@@ -943,10 +943,13 @@ class DeepseekV41SparseMoeBlock(nn.Module):
 
 class DeepseekV41EngramEmbedding(nn.Module):
     """The n-gram hash table: fp8 rows with per-row / per-32-channel E8M0 scales in the
-    checkpoint, dequantized on lookup. When the model is loaded in a float dtype the
-    fp8 values are represented exactly (e4m3 ⊂ bf16/fp32), so the table is a plain
-    embedding and the scales are unused. ~98 GB per table in the released checkpoint —
-    memory-map friendly (pure row gather)."""
+    checkpoint, dequantized on lookup. The scales are `weight_scale_inv`, the name the
+    FP8 quantizer gives every checkpoint `.scale` (and that `FP8Linear` uses), so a
+    `dequantize=False` load lands them here. When the model is loaded in a float dtype
+    (`dequantize=True`, or a bf16 checkpoint) the quantizer has already folded the
+    scales into the rows, the table is a plain embedding and `weight_scale_inv` is
+    unused. ~98 GB per table in the released checkpoint — memory-map friendly (pure
+    row gather)."""
 
     def __init__(self, num_embeddings: int, head_dim: int, block_size: int = 32):
         super().__init__()
@@ -954,7 +957,7 @@ class DeepseekV41EngramEmbedding(nn.Module):
         self.head_dim = head_dim
         self.block_size = block_size
         self.weight = nn.Parameter(torch.empty(num_embeddings, head_dim))
-        self.scale = nn.Parameter(torch.empty(num_embeddings, head_dim // block_size))
+        self.weight_scale_inv = nn.Parameter(torch.empty(num_embeddings, head_dim // block_size))
 
     def forward(self, hash_ids: torch.Tensor) -> torch.Tensor:
         # The table is in `_no_placement_params`: under `device_map` it stays wherever
@@ -964,7 +967,7 @@ class DeepseekV41EngramEmbedding(nn.Module):
         ids = hash_ids.to(table_device)
         values = F.embedding(ids, self.weight)
         if self.weight.dtype == torch.float8_e4m3fn:
-            scales = F.embedding(ids, self.scale).float()
+            scales = F.embedding(ids, self.weight_scale_inv).float()
             values = values.float().unflatten(-1, (-1, self.block_size)) * scales.unsqueeze(-1)
             values = values.flatten(-2)
         return values.to(hash_ids.device)
@@ -1353,6 +1356,9 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):  # trf-ignore: TRF001
         r"^aligner\..*",
         r"^image_(start|end|newline)$",
     ]
+    # The engram tables' `weight_scale_inv` only exists as a parameter under
+    # `dequantize=False`; a dequantized (or bf16) load has folded it into the rows.
+    _keys_to_ignore_on_load_missing = [r"engram_tables\.\d+\.weight_scale_inv$"]
     # fp32-critical parameters: exactly the tensors the released checkpoint stores in
     # F32 — the mHC sites, the attention sinks and the router's correction biases
     # (fp32 buffers from construction; listed so `from_pretrained(dtype=...)` keeps
@@ -1382,7 +1388,7 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):  # trf-ignore: TRF001
     # not fit an accelerator it is skipped by the device-map inference and loads into
     # host RAM with no offload hook — the model-level gather runs there and moves only
     # the rows. On an accelerator large enough to hold it, it is placed normally.
-    _no_placement_params = ["weight", "scale"]
+    _no_placement_params = ["weight", "weight_scale_inv"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1403,7 +1409,7 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):  # trf-ignore: TRF001
             init.ones_(module.scale)
         elif isinstance(module, DeepseekV41EngramEmbedding):
             init.normal_(module.weight, mean=0.0, std=std)
-            init.ones_(module.scale)
+            init.ones_(module.weight_scale_inv)
         elif isinstance(module, DeepseekV41Engram):
             init.ones_(module.q_weight)
             init.ones_(module.k_weight)

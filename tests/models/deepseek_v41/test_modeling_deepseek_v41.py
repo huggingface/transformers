@@ -613,8 +613,8 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
                 dequantized[name] = (
                     (q.to(torch.float8_e4m3fn).float() * scale.unsqueeze(-1)).reshape(rows, dim).to(torch.bfloat16)
                 )
-            elif "engram_tables" in name and name.endswith(".scale"):
-                continue  # written by the branch above; the model's (unused-in-bf16) scale must not overwrite it
+            elif "engram_tables" in name and name.endswith(".weight_scale_inv"):
+                continue  # the `.scale` sibling is written by the branch above (the quantizer renames it)
             elif name.endswith(fp8_suffixes):
                 weight, scale, deq = quantize_fp8(tensor)
                 # the checkpoint keeps the param's own name for the fp8 tensor and
