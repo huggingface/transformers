@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 
 import torch
 
@@ -110,6 +111,16 @@ class ParakeetRNNTGenerateOutput(ModelOutput):
     hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
 
 
+@dataclass
+class ParakeetGenerationState:
+    encoder_finished: torch.BoolTensor | None = None
+    symbols_at_frame: torch.LongTensor | None = None
+    step_durations: list[torch.Tensor] = field(default_factory=list)
+
+
+_PARAKEET_GENERATION_STATE = ContextVar("parakeet_generation_state", default=None)
+
+
 class EncoderExhaustedCriteria(StoppingCriteria):
     """Stops generation when all batch elements have walked past their encoder output length."""
 
@@ -132,6 +143,66 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
     frame, mirroring NeMo's greedy RNN-T decoding. The duration-aware [`ParakeetTDTGenerationMixin`] extends this
     by advancing the frame pointer by a predicted duration instead.
     """
+
+    def _generation_state(self):
+        return _PARAKEET_GENERATION_STATE.get()
+
+    @property
+    def _encoder_finished(self):
+        state = self._generation_state()
+        return None if state is None else state.encoder_finished
+
+    @_encoder_finished.setter
+    def _encoder_finished(self, value):
+        state = self._generation_state()
+        if state is None:
+            state = ParakeetGenerationState()
+            _PARAKEET_GENERATION_STATE.set(state)
+        state.encoder_finished = value
+
+    @_encoder_finished.deleter
+    def _encoder_finished(self):
+        state = self._generation_state()
+        if state is not None:
+            state.encoder_finished = None
+
+    @property
+    def _symbols_at_frame(self):
+        state = self._generation_state()
+        return None if state is None else state.symbols_at_frame
+
+    @_symbols_at_frame.setter
+    def _symbols_at_frame(self, value):
+        state = self._generation_state()
+        if state is None:
+            state = ParakeetGenerationState()
+            _PARAKEET_GENERATION_STATE.set(state)
+        state.symbols_at_frame = value
+
+    @_symbols_at_frame.deleter
+    def _symbols_at_frame(self):
+        state = self._generation_state()
+        if state is not None:
+            state.symbols_at_frame = None
+
+    @property
+    def _step_durations(self):
+        state = self._generation_state()
+        return None if state is None else state.step_durations
+
+    @_step_durations.setter
+    def _step_durations(self, value):
+        state = self._generation_state()
+        if state is None:
+            state = ParakeetGenerationState()
+            _PARAKEET_GENERATION_STATE.set(state)
+        state.step_durations = value
+
+    @_step_durations.deleter
+    def _step_durations(self):
+        state = self._generation_state()
+        if state is not None:
+            state.step_durations = []
 
     def _get_stopping_criteria(self, *args, **kwargs):
         criteria = super()._get_stopping_criteria(*args, **kwargs)
@@ -249,23 +320,28 @@ class ParakeetRNNTGenerationMixin(GenerationMixin):
 
     def generate(self, inputs=None, generation_config=None, **kwargs):
         # TODO @eustlb: this is temporary — we're going to modularize generate to allow doing this cleanly.
+        generation_state = ParakeetGenerationState()
+        generation_state_token = _PARAKEET_GENERATION_STATE.set(generation_state)
         self._encoder_finished = None
         self._symbols_at_frame = None
         self._step_durations = []
 
-        outputs = super().generate(inputs=inputs, generation_config=generation_config, **kwargs)
+        try:
+            outputs = super().generate(inputs=inputs, generation_config=generation_config, **kwargs)
 
-        durations = torch.stack(self._step_durations, dim=1)  # (batch, steps)
-        # Prepend a zero duration for the decoder_start_token_id that generate() prepends to sequences
-        durations = torch.cat(
-            [torch.zeros(durations.shape[0], 1, dtype=durations.dtype, device=durations.device), durations], dim=1
-        )
-        del self._encoder_finished, self._symbols_at_frame, self._step_durations
+            durations = torch.stack(self._step_durations, dim=1)  # (batch, steps)
+            # Prepend a zero duration for the decoder_start_token_id that generate() prepends to sequences
+            durations = torch.cat(
+                [torch.zeros(durations.shape[0], 1, dtype=durations.dtype, device=durations.device), durations],
+                dim=1,
+            )
 
-        return ParakeetRNNTGenerateOutput(
-            sequences=outputs.sequences if isinstance(outputs, ModelOutput) else outputs,
-            durations=durations,
-        )
+            return ParakeetRNNTGenerateOutput(
+                sequences=outputs.sequences if isinstance(outputs, ModelOutput) else outputs,
+                durations=durations,
+            )
+        finally:
+            _PARAKEET_GENERATION_STATE.reset(generation_state_token)
 
 
 class ParakeetTDTGenerationMixin(ParakeetRNNTGenerationMixin):
