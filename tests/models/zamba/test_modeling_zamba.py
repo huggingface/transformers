@@ -325,6 +325,43 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_mamba_mixer_uses_configured_associative_scan(self):
+        from transformers.models.zamba import modeling_zamba
+
+        config = ZambaConfig(
+            hidden_size=8,
+            num_hidden_layers=3,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            n_mamba_heads=2,
+            use_mamba_kernels=False,
+            use_associative_scan=True,
+        )
+        mixer = modeling_zamba.ZambaMambaMixer(config, layer_idx=0)
+        captured_kwargs = {}
+
+        def fake_causal_conv1d_fn(hidden_states, *args, **kwargs):
+            return hidden_states
+
+        def fake_mamba_selective_scan(hidden_states, *args, **kwargs):
+            captured_kwargs.update(kwargs)
+            return torch.zeros_like(hidden_states)
+
+        original_causal_conv1d_fn = modeling_zamba.causal_conv1d_fn
+        original_mamba_selective_scan = modeling_zamba.mamba_selective_scan
+        try:
+            modeling_zamba.causal_conv1d_fn = fake_causal_conv1d_fn
+            modeling_zamba.mamba_selective_scan = fake_mamba_selective_scan
+
+            output = mixer(torch.zeros(1, 2, 8))
+
+            self.assertEqual(output.shape, (1, 2, 8))
+            self.assertTrue(mixer.use_associative_scan)
+            self.assertTrue(captured_kwargs["use_associative_scan"])
+        finally:
+            modeling_zamba.causal_conv1d_fn = original_causal_conv1d_fn
+            modeling_zamba.mamba_selective_scan = original_mamba_selective_scan
+
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
