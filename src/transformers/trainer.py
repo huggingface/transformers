@@ -2130,7 +2130,17 @@ class Trainer:
             loss_scale = self.accelerator.num_processes
             if (pc := getattr(self.accelerator, "parallelism_config", None)) is not None:
                 loss_scale //= pc.tp_size
-            loss *= loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
+            loss_scale = loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
+            unwrapped_model = self.accelerator.unwrap_model(model)
+            router_aux_loss_coef = getattr(getattr(unwrapped_model, "config", None), "router_aux_loss_coef", None)
+            aux_loss = getattr(outputs, "aux_loss", None)
+            if aux_loss is not None and router_aux_loss_coef is not None:
+                # The token-normalized primary loss needs data-parallel compensation,
+                # while DDP already averages this rank-local auxiliary contribution.
+                aux_contribution = router_aux_loss_coef * aux_loss.to(loss.device)
+                loss = (loss - aux_contribution) * loss_scale + aux_contribution
+            else:
+                loss *= loss_scale
 
         return (loss, outputs) if return_outputs else loss
 
