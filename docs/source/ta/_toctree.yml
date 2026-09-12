@@ -1,0 +1,8 @@
+- sections:
+  - local: index
+    title: டிரான்ஸ்ஃபார்மர்ஸ்
+  - local: installation
+    title: நிறுவல்
+  - local: quicktour
+    title: விரைவாக தொடங்க
+  title: தொடக்கம்
