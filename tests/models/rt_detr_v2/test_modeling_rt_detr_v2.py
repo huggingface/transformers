@@ -264,8 +264,6 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     )
     is_encoder_decoder = True
 
-    test_missing_keys = False
-
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -305,6 +303,40 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_rt_detr_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_rt_detr_object_detection_head_model(*config_and_inputs)
+
+    def test_save_load_cross_model_classes(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/48722 (same class of bug as
+        # RT-DETR): `RTDetrV2ForObjectDetection` nests the base model under `model`, so `RTDetrV2Model` must
+        # strip the prefix when loading detection checkpoints, and the head must add it back for base ones.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        head_model = RTDetrV2ForObjectDetection(config)
+        base_model = RTDetrV2Model(config)
+        base_keys = {f"model.{k}" for k in base_model.state_dict()}
+        head_only_keys = {k for k in head_model.state_dict() if k not in base_keys}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            head_model.save_pretrained(tmp_dir)
+            loaded_base_model, loading_info = RTDetrV2Model.from_pretrained(tmp_dir, output_loading_info=True)
+
+        self.assertFalse(loading_info["missing_keys"])
+        # no base model weight may show up as unexpected (names in the report may be touched by registered
+        # renamings, so we only check they never collide with base keys; equality is verified below)
+        self.assertFalse(set(loading_info["unexpected_keys"]) & base_keys)
+        head_state_dict = {k.removeprefix("model."): v for k, v in head_model.state_dict().items()}
+        for key, value in loaded_base_model.state_dict().items():
+            self.assertTrue(torch.equal(value, head_state_dict[key]))
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_model.save_pretrained(tmp_dir)
+            loaded_head_model, loading_info = RTDetrV2ForObjectDetection.from_pretrained(
+                tmp_dir, output_loading_info=True
+            )
+
+        self.assertFalse(loading_info["unexpected_keys"])
+        self.assertTrue(set(loading_info["missing_keys"]) <= head_only_keys)
+        head_state_dict = loaded_head_model.state_dict()
+        for key, value in base_model.state_dict().items():
+            self.assertTrue(torch.equal(value, head_state_dict[f"model.{key}"]))
 
     @unittest.skip(reason="RTDetrV2 does not use inputs_embeds")
     def test_inputs_embeds(self):

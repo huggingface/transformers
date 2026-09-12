@@ -25,6 +25,7 @@ from transformers import (
     PPDocLayoutV2Config,
     PPDocLayoutV2ForObjectDetection,
     PPDocLayoutV2ImageProcessor,
+    PPDocLayoutV2Model,
     is_torch_available,
 )
 from transformers.image_utils import load_image
@@ -312,7 +313,6 @@ class PPDocLayoutV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     pipeline_model_mapping = {"object-detection": PPDocLayoutV2ForObjectDetection} if is_torch_available() else {}
     is_encoder_decoder = True
 
-    test_missing_keys = False
     test_inputs_embeds = False
     test_resize_embeddings = False
 
@@ -330,6 +330,40 @@ class PPDocLayoutV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_pp_doclayout_v2_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_pp_doclayout_v2_object_detection_head_model(*config_and_inputs)
+
+    def test_save_load_cross_model_classes(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/48722 (same class of bug as
+        # RT-DETR): `PPDocLayoutV2ForObjectDetection` nests the base model under `model`, so `PPDocLayoutV2Model`
+        # must strip the prefix when loading detection checkpoints, and the head must add it back for base ones.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        head_model = PPDocLayoutV2ForObjectDetection(config)
+        base_model = PPDocLayoutV2Model(config)
+        base_keys = {f"model.{k}" for k in base_model.state_dict()}
+        head_only_keys = {k for k in head_model.state_dict() if k not in base_keys}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            head_model.save_pretrained(tmp_dir)
+            loaded_base_model, loading_info = PPDocLayoutV2Model.from_pretrained(tmp_dir, output_loading_info=True)
+
+        self.assertFalse(loading_info["missing_keys"])
+        # no base model weight may show up as unexpected (names in the report may be touched by registered
+        # renamings, so we only check they never collide with base keys; equality is verified below)
+        self.assertFalse(set(loading_info["unexpected_keys"]) & base_keys)
+        head_state_dict = {k.removeprefix("model."): v for k, v in head_model.state_dict().items()}
+        for key, value in loaded_base_model.state_dict().items():
+            self.assertTrue(torch.equal(value, head_state_dict[key]))
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_model.save_pretrained(tmp_dir)
+            loaded_head_model, loading_info = PPDocLayoutV2ForObjectDetection.from_pretrained(
+                tmp_dir, output_loading_info=True
+            )
+
+        self.assertFalse(loading_info["unexpected_keys"])
+        self.assertTrue(set(loading_info["missing_keys"]) <= head_only_keys)
+        head_state_dict = loaded_head_model.state_dict()
+        for key, value in base_model.state_dict().items():
+            self.assertTrue(torch.equal(value, head_state_dict[f"model.{key}"]))
 
     @unittest.skip(reason="PPDocLayoutV2 does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
