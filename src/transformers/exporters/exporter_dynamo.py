@@ -52,7 +52,14 @@ from ..utils import logging
 from ..utils.import_utils import is_detectron2_available, is_torch_available, torch_compilable_check
 from .base import HfExporter
 from .configs import DynamoConfig
-from .utils import apply_patches, patch_attributes, prepare_for_export, register_patch
+from .utils import (
+    apply_patches,
+    export_patch_scope,
+    patch_attribute,
+    patch_attributes,
+    prepare_for_export,
+    register_patch,
+)
 
 
 if is_torch_available():
@@ -84,6 +91,7 @@ class DynamoExporter(HfExporter):
     min_versions = {"torch": "2.11.0"}
     tested_versions = {"torch": "2.12.0"}
 
+    @export_patch_scope()
     def export(
         self,
         model: PreTrainedModel,
@@ -96,8 +104,24 @@ class DynamoExporter(HfExporter):
             raise TypeError(f"Expected config to be a DynamoConfig or dict, got {type(config)}")
 
         model, sample_inputs, output_flags = prepare_for_export(model, sample_inputs)
+        return self._export_prepared(model, sample_inputs, config, output_flags=output_flags)
 
-        dynamic_shapes = config.dynamic_shapes
+    @export_patch_scope()
+    def _export_prepared(
+        self,
+        model: PreTrainedModel | torch.nn.Module,
+        sample_inputs: MutableMapping[str, Any],
+        config: DynamoConfig,
+        *,
+        output_flags: dict[str, Any] | None = None,
+        dynamic_shapes: dict[str, Any] | None = None,
+        patch_exclusions: tuple[str, ...] = (),
+    ) -> ExportedProgram:
+        """Capture an already-prepared model and input ABI with ``torch.export``."""
+        if output_flags is None:
+            output_flags = {}
+        if dynamic_shapes is None:
+            dynamic_shapes = config.dynamic_shapes
         if config.dynamic and dynamic_shapes is None:
             logger.warning_once(
                 "`dynamic=True` with no explicit `dynamic_shapes` marks every input axis `Dim.AUTO`, so "
@@ -111,7 +135,7 @@ class DynamoExporter(HfExporter):
         register_cache_pytrees_for_model(model)
 
         with (
-            apply_patches("dynamo"),
+            apply_patches("dynamo", exclude=patch_exclusions),
             reset_model_state(model),
             patch_model_config(model, output_flags),
             patch_forward_signature(model, sample_inputs),
@@ -149,16 +173,17 @@ def patch_model_config(model: PreTrainedModel, output_flags: dict[str, Any]):
     Originals are restored on exit. Flags whose value is `None`, or that the config doesn't
     declare, are silently skipped — useful for submodels that don't accept every parent flag.
     """
-    config_patches = []
-    for flag, value in output_flags.items():
-        if value is None or not hasattr(model, "config") or not hasattr(model.config, flag):
-            continue
-        config_patches.append((model.config, flag, lambda _original, v=value: v))
-    for module in model.modules():
-        if hasattr(module, "config") and hasattr(module.config, "use_mamba_kernels"):
-            config_patches.append((module.config, "use_mamba_kernels", lambda _original: False))
-    with patch_attributes(config_patches):
-        yield
+    with export_patch_scope():
+        config_patches = []
+        for flag, value in output_flags.items():
+            if value is None or not hasattr(model, "config") or not hasattr(model.config, flag):
+                continue
+            config_patches.append((model.config, flag, lambda _original, v=value: v))
+        for module in model.modules():
+            if hasattr(module, "config") and hasattr(module.config, "use_mamba_kernels"):
+                config_patches.append((module.config, "use_mamba_kernels", lambda _original: False))
+        with patch_attributes(config_patches):
+            yield
 
 
 @contextmanager
@@ -171,20 +196,18 @@ def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any]):
     mismatches the `dynamic_shapes` dict. This patch replaces the forward with a
     minimal signature containing only the keys present in `inputs`.
     """
-    original_forward = model.forward
+    with export_patch_scope():
+        original_forward = model.forward
 
-    def _flat_forward(**kwargs):
-        return original_forward(**kwargs)
+        def _flat_forward(**kwargs):
+            return original_forward(**kwargs)
 
-    _flat_forward.__signature__ = inspect.Signature(
-        [inspect.Parameter(k, inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None) for k in inputs]
-    )
+        _flat_forward.__signature__ = inspect.Signature(
+            [inspect.Parameter(k, inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None) for k in inputs]
+        )
 
-    try:
-        model.forward = _flat_forward
-        yield
-    finally:
-        model.forward = original_forward
+        with patch_attribute(model, "forward", lambda _original: _flat_forward):
+            yield
 
 
 # ── Stage 2: Model patches ────────────────────────────────────────────────────
@@ -585,6 +608,7 @@ def _pytree_unflatten(values, context: Any) -> Any:
     return _unflatten_from_context(context, list(values))
 
 
+@export_patch_scope()
 def register_pytree_node(object_cls: type):
     """Register a single class (e.g. a `Cache` subclass like `StaticCache`) as a torch.export pytree
     node, so `torch.export.load` can unflatten it as a graph input without needing the original model."""
@@ -607,6 +631,7 @@ def _iter_subclasses(cls: type):
         yield from _iter_subclasses(subclass)
 
 
+@export_patch_scope()
 def register_cache_pytrees_for_model(model: PreTrainedModel):
     """Register all relevant cache types as pytree nodes for torch.export."""
     # All transformers Cache subclasses
@@ -698,16 +723,12 @@ def reset_model_state(model: torch.nn.Module):
     FakeTensors that `torch.export` plants into these attributes during the trace are
     discarded by the restore.
     """
-    originals = [
-        (module, attr, getattr(module, attr))
-        for module in model.modules()
-        for attr in _STATEFUL_CACHE_ATTRS
-        if hasattr(module, attr)
-    ]
-    for module, attr, _ in originals:
-        setattr(module, attr, None)
-    try:
-        yield
-    finally:
-        for module, attr, original in originals:
-            setattr(module, attr, original)
+    with export_patch_scope():
+        patches = [
+            (module, attr, lambda _original: None)
+            for module in model.modules()
+            for attr in _STATEFUL_CACHE_ATTRS
+            if hasattr(module, attr)
+        ]
+        with patch_attributes(patches):
+            yield

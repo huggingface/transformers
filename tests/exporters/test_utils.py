@@ -34,6 +34,7 @@ Everything below targets one of those gaps.
 """
 
 import unittest
+from contextlib import contextmanager
 from unittest import mock
 
 from transformers.exporters import utils as exporter_utils
@@ -170,6 +171,151 @@ class RegistrationTest(unittest.TestCase):
         self.assertNotIn("stub_exporter", AUTO_EXPORTER_MAPPING)
 
 
+@require_torch
+class ExecutorchTensorPatchesTest(unittest.TestCase):
+    @contextmanager
+    def _patches_with_restoration(self):
+        targets = ((torch, "reshape"), (torch.Tensor, "reshape"), (torch.Tensor, "view"), (torch.Tensor, "expand"))
+        originals = [getattr(owner, name) for owner, name in targets]
+        try:
+            with exporter_utils.apply_patches("executorch"):
+                for (owner, name), original in zip(targets, originals):
+                    self.assertIsNot(getattr(owner, name), original)
+                yield
+        finally:
+            for (owner, name), original in zip(targets, originals):
+                self.assertIs(getattr(owner, name), original)
+
+    def _check_strict_export(self, operation, sample, expected_clones, reference=None):
+        class Model(nn.Module):
+            def forward(self, x):
+                return operation(x)
+
+        with self._patches_with_restoration():
+            program = torch.export.export(
+                Model(),
+                (sample[:3],),
+                dynamic_shapes={"x": {0: torch.export.Dim("rows", min=2, max=6)}},
+                strict=True,
+            )
+        self.assertTrue(program.range_constraints)
+        clones = [node for node in program.graph.nodes if node.target == torch.ops.aten.clone.default]
+        self.assertEqual(len(clones), expected_clones)
+        for node in clones:
+            self.assertEqual(node.kwargs.get("memory_format"), torch.contiguous_format)
+        exported = program.module()
+        for rows in (2, 5):
+            x = sample[:rows]
+            # Native view needs contiguous input; the patch accepts either layout.
+            expected = (reference or operation)(x.contiguous())
+            actual = exported(x)
+            torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+            self.assertTrue(actual.is_contiguous())
+            self.assertNotIn(0, actual.stride())
+            self.assertEqual(actual.data_ptr() == x.data_ptr(), expected_clones == 0)
+        return program
+
+    def test_shape_argument_forms(self):
+        operations = {
+            "functional_tuple": lambda x: torch.reshape(x, (2, -1)),
+            "functional_list": lambda x: torch.reshape(x, [2, -1]),
+            "functional_keywords": lambda x: torch.reshape(input=x, shape=(2, -1)),
+            "reshape_varargs": lambda x: x.reshape(2, -1),
+            "reshape_tuple": lambda x: x.reshape((2, -1)),
+            "reshape_list": lambda x: x.reshape([2, -1]),
+            "reshape_keyword": lambda x: x.reshape(shape=(2, -1)),
+            "reshape_size": lambda x: x.reshape(x.shape),
+            "reshape_single_dim": lambda x: x.reshape(-1),
+            "view_varargs": lambda x: x.view(2, -1),
+            "view_tuple": lambda x: x.view((2, -1)),
+            "view_list": lambda x: x.view([2, -1]),
+            "view_keyword": lambda x: x.view(size=(2, -1)),
+            "view_size": lambda x: x.view(x.shape),
+            "view_single_dim": lambda x: x.view(-1),
+            "expand_varargs": lambda x: x.expand(2, -1, -1),
+            "expand_tuple": lambda x: x.expand((2, -1, -1)),
+            "expand_list": lambda x: x.expand([2, -1, -1]),
+            "expand_keyword": lambda x: x.expand(size=(2, -1, -1)),
+            "expand_symbolic": lambda x: x.expand(x.shape[0], -1, -1),
+            "expand_no_broadcast": lambda x: x.expand(x.shape),
+        }
+        x = torch.randn(3, 4)
+        expected = {name: operation(x) for name, operation in operations.items()}
+        with self._patches_with_restoration():
+            for name, operation in operations.items():
+                with self.subTest(operation=name):
+                    actual = operation(x)
+                    torch.testing.assert_close(actual, expected[name])
+                    self.assertTrue(actual.is_contiguous())
+
+    def test_strict_reshape_and_view(self):
+        sample = torch.randn(5, 2, 4)
+        operations = {
+            "functional_keywords": lambda x: torch.reshape(input=x, shape=(x.shape[0], -1)),
+            "reshape_keyword": lambda x: x.reshape(shape=(x.shape[0], -1)),
+            "view_keyword": lambda x: x.view(size=(x.shape[0], -1)),
+        }
+        for name, operation in operations.items():
+            with self.subTest(operation=name):
+                self._check_strict_export(operation, sample.transpose(1, 2), 1)
+        self._check_strict_export(lambda x: x.view(x.shape[0], -1), sample, 0)
+
+    def test_strict_view_dtype_overloads(self):
+        sample = torch.randn(5, 2, 4, dtype=torch.float32)
+        for dtype in (torch.int16, torch.int32, torch.int64):
+            with self.subTest(dtype=dtype):
+                program = self._check_strict_export(lambda x: x.view(dtype), sample, 0)
+                self.assertIn(torch.ops.aten.view.dtype, [node.target for node in program.graph.nodes])
+        self._check_strict_export(lambda x: x.view(dtype=torch.int64), sample.transpose(1, 2), 1)
+
+    def test_strict_expand(self):
+        sample = torch.randn(5, 4)
+        self._check_strict_export(lambda x: x.expand(size=(x.shape[0], -1, -1)), sample, 1)
+        self._check_strict_export(lambda x: x.expand(x.shape), sample, 0)
+
+    def test_strict_internal_transpose_and_broadcast(self):
+        def operation(x):
+            transposed = x.transpose(1, 2)
+            reshaped = transposed.reshape(x.shape[0], -1)
+            return reshaped.unsqueeze(1).expand(-1, 2, -1).view(x.shape[0], -1)
+
+        def reference(x):
+            return x.transpose(1, 2).reshape(x.shape[0], -1).unsqueeze(1).repeat(1, 2, 1).reshape(x.shape[0], -1)
+
+        self._check_strict_export(operation, torch.randn(5, 2, 4), 2, reference)
+
+    def test_empty_shape_forms(self):
+        x = torch.tensor(1.0)
+        operations = (
+            lambda: torch.reshape(x, ()),
+            lambda: x.reshape([]),
+            lambda: x.reshape(shape=()),
+            lambda: x.view(()),
+            lambda: x.view(size=[]),
+            lambda: x.expand(()),
+            lambda: x.expand(size=[]),
+        )
+        with self._patches_with_restoration():
+            for operation in operations:
+                torch.testing.assert_close(operation(), x)
+            for operation in (x.reshape, x.view, x.expand):
+                with self.assertRaises(TypeError):
+                    operation()
+
+    def test_restoration_after_strict_export_failure(self):
+        class InvalidShape(nn.Module):
+            def forward(self, x):
+                return x.reshape(5)
+
+        with self.assertRaisesRegex(RuntimeError, "invalid for input"):
+            with self._patches_with_restoration():
+                torch.export.export(InvalidShape(), (torch.randn(3, 4),), strict=True)
+
+        # Native view must reject non-contiguous inputs again after the failed capture.
+        with self.assertRaises(RuntimeError):
+            torch.randn(2, 3).t().view(-1)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Registry edge cases the happy-path exports don't exercise
 # ─────────────────────────────────────────────────────────────────────────────
@@ -195,7 +341,7 @@ class PatchRegistryEdgeCasesTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "factory boom"):
             with patch_attributes(
                 [
-                    (a, "method", lambda original: (lambda: "a-patched")),
+                    (a, "method", lambda original: lambda: "a-patched"),
                     (b, "method", _bad_factory),
                 ]
             ):

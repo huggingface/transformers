@@ -55,7 +55,9 @@ from .utils import (
     apply_fx_node_fixes,
     apply_patches,
     duplicate_leaf_tensors,
+    export_patch_scope,
     get_leaf_tensors,
+    patch_attribute,
     register_fx_node_fix,
     register_patch,
 )
@@ -102,6 +104,7 @@ class OnnxExporter(DynamoExporter):
     required_packages = ["torch", "onnx", "onnxscript"]
     tested_versions = {"torch": "2.12.0", "onnx": "1.21.0", "onnxscript": "0.7.0"}
 
+    @export_patch_scope()
     def export(
         self,
         model: PreTrainedModel,
@@ -110,7 +113,7 @@ class OnnxExporter(DynamoExporter):
     ) -> ONNXProgram:
         if isinstance(config, dict):
             config = OnnxConfig(**config)
-        elif type(config) is not OnnxConfig:
+        elif not isinstance(config, OnnxConfig):
             raise TypeError(f"Expected config to be an OnnxConfig or dict, got {type(config)}")
 
         with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("onnx"):
@@ -146,22 +149,20 @@ def patch_model_outputs(model):
     `(inputs_names, outputs_names)` lists.
     """
 
-    inputs_names: list[str] = []
-    outputs_names: list[str] = []
-    original_forward = model.forward
+    with export_patch_scope():
+        inputs_names: list[str] = []
+        outputs_names: list[str] = []
+        original_forward = model.forward
 
-    @functools.wraps(original_forward)
-    def patched_forward(*args, **kwargs):
-        outputs = get_leaf_tensors(duplicate_leaf_tensors(original_forward(*args, **kwargs)))
-        inputs_names.extend(get_leaf_tensors(kwargs).keys())
-        outputs_names.extend(outputs.keys())
-        return outputs
+        @functools.wraps(original_forward)
+        def patched_forward(*args, **kwargs):
+            outputs = get_leaf_tensors(duplicate_leaf_tensors(original_forward(*args, **kwargs)))
+            inputs_names.extend(get_leaf_tensors(kwargs).keys())
+            outputs_names.extend(outputs.keys())
+            return outputs
 
-    try:
-        model.forward = patched_forward
-        yield inputs_names, outputs_names
-    finally:
-        model.forward = original_forward
+        with patch_attribute(model, "forward", lambda _original: patched_forward):
+            yield inputs_names, outputs_names
 
 
 def disambiguate_io_names(inputs_names: list[str], outputs_names: list[str]) -> tuple[list[str], list[str]]:
