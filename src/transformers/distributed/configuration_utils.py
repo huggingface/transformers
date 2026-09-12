@@ -76,7 +76,7 @@ class DistributedConfig:
         if self.fsdp_size > 1 and (self.tp_size > 1 or self.pp_size > 1):
             raise ValueError(
                 "Combining FSDP with tensor or pipeline parallelism is not supported yet. "
-                "Use FSDP alone, or combine tensor and pipeline parallelism."
+                "Use FSDP alone, or combine TP and PP."
             )
 
     @classmethod
