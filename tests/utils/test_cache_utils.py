@@ -205,6 +205,14 @@ def _skip_on_failed_cache_prerequisites(test, cache_implementation):
                 test.skipTest("Offloaded static caches require exactly 1 accelerator")
 
 
+def _set_sliding_window(config, cache_implementation):
+    """
+    Sets the sliding window on `config`, from which the cache layer types are inferred: the sliding cache
+    implementations need one to build sliding layers, and the other ones must not have one.
+    """
+    config.sliding_window = 256 if cache_implementation in ["sliding_window", "hybrid", "hybrid_chunked"] else None
+
+
 class CacheIntegrationTest(unittest.TestCase):
     """Fast cache integration tests that share the same small model"""
 
@@ -215,12 +223,17 @@ class CacheIntegrationTest(unittest.TestCase):
         cls.model = AutoModelForCausalLM.from_pretrained(
             "HuggingFaceTB/SmolLM2-135M-Instruct", device_map="auto", dtype=torch.float16
         )
-        cls.model.config.sliding_window = 256  # hack to enable the use of caches with sliding windows
+
+    def setUp(self):
+        # The model is shared across tests, so the sliding window one of them opts into through
+        # `_set_sliding_window` must not leak into the next one. `SmolLM2` has no sliding window of its own.
+        self.model.config.sliding_window = None
 
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_batched(self, cache_implementation):
         """Sanity check: caches' `.update` function expects batched inputs"""
         _skip_on_failed_cache_prerequisites(self, cache_implementation)
+        _set_sliding_window(self.model.config, cache_implementation)
 
         EXPECTED_GENERATION = ["A sequence: 1, 2, 3, 4, 5, 6, 7, 8,", "A sequence: A, B, C, D, E, F, G, H"]
 
@@ -250,6 +263,7 @@ class CacheIntegrationTest(unittest.TestCase):
         (an output sequence contains multiple beam indices).
         """
         _skip_on_failed_cache_prerequisites(self, cache_implementation)
+        _set_sliding_window(self.model.config, cache_implementation)
         if cache_implementation == "offloaded_hybrid_chunked":
             # TODO (joao, cyril): something is off with `offloaded_hybrid_chunked`: the
             # output sequence (and the corresponding beam scores, if we add `output_scores=True`) are significantly
@@ -324,10 +338,37 @@ class CacheIntegrationTest(unittest.TestCase):
 
         # Check that something is actually quantized
 
+    def test_quantized_cache_config_is_not_mutated(self):
+        """
+        Tests that `generate` does not consume the entries of the `cache_config` it is given, which would silently
+        change the cache of any subsequent call sharing that dict.
+        """
+        if not is_optimum_quanto_available():
+            self.skipTest("Quanto is not available")
+
+        inputs = self.tokenizer(["The cat"], return_tensors="pt").to(self.model.device)
+        cache_config = {"backend": "quanto", "nbits": 4, "q_group_size": 16, "residual_length": 4}
+        expected_cache_config = cache_config.copy()
+
+        for _ in range(2):
+            gen_out = self.model.generate(
+                **inputs,
+                do_sample=False,
+                max_new_tokens=3,
+                return_dict_in_generate=True,
+                cache_implementation="quantized",
+                cache_config=cache_config,
+                disable_compile=True,
+            )
+            self.assertIsInstance(gen_out.past_key_values, QuantizedCache)
+            self.assertEqual(len(gen_out.past_key_values.layers), self.model.config.num_hidden_layers)
+            self.assertEqual(cache_config, expected_cache_config)
+
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_extra_left_padding(self, cache_implementation):
         """Tests that adding extra left-padding does not affect the generation with the cache"""
         _skip_on_failed_cache_prerequisites(self, cache_implementation)
+        _set_sliding_window(self.model.config, cache_implementation)
 
         EXPECTED_GENERATION = ["The cat's whiskers are also a sign of anxiety."]
 
@@ -672,9 +713,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
         model_id = "hf-internal-testing/tiny-random-GPTJForCausalLM"
         pipe = pipeline("text-generation", model=model_id, dtype=torch.bfloat16)
-        pipe.model.config.sliding_window = (
-            256 if cache_implementation in ["sliding_window", "hybrid", "hybrid_chunked"] else None
-        )
+        _set_sliding_window(pipe.model.config, cache_implementation)
         out = pipe(
             "hello world",
             cache_implementation=cache_implementation,

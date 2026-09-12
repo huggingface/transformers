@@ -773,6 +773,27 @@ class QuantizedLayer(DynamicLayer):
     @abstractmethod
     def _dequantize(self, q_tensor): ...
 
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        """Reorders this layer's cache for beam search."""
+        if not self.is_initialized:
+            return
+
+        # The quantized states cannot be indexed, so they are dequantized, reordered and quantized back
+        dequant_keys = self._dequantize(self._quantized_keys)
+        dequant_values = self._dequantize(self._quantized_values)
+        beam_idx = beam_idx.to(dequant_keys.device)
+        self._quantized_keys = self._quantize(dequant_keys.index_select(0, beam_idx).contiguous(), axis=self.axis_key)
+        self._quantized_values = self._quantize(
+            dequant_values.index_select(0, beam_idx).contiguous(), axis=self.axis_value
+        )
+
+        # The residual cache is emptied whenever it is flushed into the quantized states, and holds nothing to
+        # reorder then. `super().reorder_cache` cannot be used to guard against it, as it checks the sequence
+        # length, which counts the quantized tokens as well.
+        if self.keys.numel() > 0:
+            self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
+            self.values = self.values.index_select(0, beam_idx.to(self.values.device))
+
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
         return self.cumulative_length
