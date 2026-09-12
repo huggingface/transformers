@@ -137,7 +137,7 @@ def find_bad_commit(target_test, start_commit, end_commit):
     }
 
     is_pr_ci = os.environ.get("GITHUB_EVENT_NAME") in ["issue_comment", "pull_request"]
-    flake_runs = 1 if is_pr_ci else 4
+    flake_runs = 1 if is_pr_ci else 1
 
     # For PR comment CI, we "assume" all tests at `end_commit` passed, so any failing test during a PR CI run is
     # "a new failing test", and we can perform more detailed checks with this script.
