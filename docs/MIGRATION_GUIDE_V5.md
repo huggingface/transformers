@@ -554,6 +554,8 @@ Linked PRs:
 - If `generate` doesn't receive any KV Cache argument, the default cache class used is now defined by the model (as opposed to always being `DynamicCache`) (https://github.com/huggingface/transformers/pull/41505)
 - Generation parameters are no longer accessible via model's config. If generation parameters are serialized in `config.json` for any old model, it will be loaded back into model's generation config. Users are expected to access or modify generation parameters only with `model.generation_config.do_sample = True`. 
 
+- `DynamicCache.key_cache`, `DynamicCache.value_cache`, `DynamicCache.from_legacy_cache()` and `DynamicCache.to_legacy_cache()` were removed in v5. Use the surviving public API instead: `get_seq_length`, `update`, `crop`, `from_batch_splits`, `reset`, or the new `CacheLayerMixin`. (https://github.com/huggingface/transformers/pull/48479)
+
 ## Trainer
 
 ### Removing arguments without deprecation cycle in `TrainingArguments` due to low usage
