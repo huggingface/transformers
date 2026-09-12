@@ -958,21 +958,29 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
     @parameterized.expand(
         [
-            # (loaded_attn_implementation, supports_flash_attn, expect_flash_after_switch)
-            ("sdpa", True, True),  # flash-capable model on a non-flash impl -> auto-switched to a paged flash impl
-            ("paged|sdpa", True, False),  # an explicit paged request is respected: no flash upgrade
-            ("sdpa", False, False),  # _supports_flash_attn=False opts out: stays on paged|sdpa
+            # (loaded_attn_implementation, supports_flash_attn, expected_after_switch)
+            ("sdpa", True, None),  # flash-capable model on a non-flash impl -> auto-switched to flash
+            ("flash_attention_2", True, None),  # already flash -> left exactly as loaded
+            ("paged|sdpa", True, "paged|sdpa"),  # an explicit paged request is respected: no flash upgrade
+            ("sdpa", False, "sdpa"),  # no flash available: sdpa serves the engine unpaged
+            ("eager", False, "paged|eager"),  # eager is the one that still has to be paged
         ]
     )
     @slow
     def test_switch_to_cb_friendly_attn(
-        self, attn_implementation: str, supports_flash_attn: bool, expect_flash_after_switch: bool
+        self, attn_implementation: str, supports_flash_attn: bool, expected_after_switch: str | None
     ) -> None:
-        """Continuous batching switches to a paged (ideally flash) attention and restores the original on stop."""
+        """Continuous batching prefers flash, and only pages what it has to.
+
+        `flash_attention_*` and `sdpa` reach the paged kernel from the forward kwargs, so the model keeps the
+        implementation it was loaded with and stays usable for an ordinary forward while the engine runs. Only
+        `eager` still gets the `paged|` prefix, since every model brings its own eager forward.
+        `expected_after_switch` of `None` means "whatever flash resolved to".
+        """
         flash_available = is_flash_attn_2_available(kernels_fallback_ok=True)
         flash_available |= is_flash_attn_3_available(kernels_fallback_ok=True)
 
-        if expect_flash_after_switch and not flash_available:
+        if expected_after_switch is None and not flash_available:
             self.skipTest("Flash attention is unavailable, cannot test the auto-switch to flash.")
 
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
@@ -985,16 +993,68 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             continuous_batching_config=ContinuousBatchingConfig(num_blocks=8, block_size=32, use_cuda_graph=False)
         )
         switched_attn_impl = model.config._attn_implementation
-        self.assertTrue(switched_attn_impl.startswith("paged|"), f"Expected a paged impl, got {switched_attn_impl}")
-        is_flash = is_flash_attention_requested(requested_attention_implementation=switched_attn_impl)
-        self.assertEqual(is_flash, expect_flash_after_switch)
-        if not expect_flash_after_switch:
-            self.assertEqual(switched_attn_impl, "paged|sdpa")
+        if expected_after_switch is None:
+            is_flash = is_flash_attention_requested(requested_attention_implementation=switched_attn_impl)
+            self.assertTrue(is_flash, f"Expected a flash impl, got {switched_attn_impl}")
+            # left unpaged, so an ordinary forward on this model still works
+            self.assertFalse(
+                switched_attn_impl.startswith("paged|"), f"Expected an unpaged flash impl, got {switched_attn_impl}"
+            )
+        else:
+            self.assertEqual(switched_attn_impl, expected_after_switch)
 
         # Starting then stopping the manager restores the original attention implementation
         manager.start()
         manager.stop(block=True)
         self.assertEqual(model.config._attn_implementation, original_attn_impl)
+
+    @parameterized.expand([("flash_attention_2",), ("sdpa",)])
+    @slow
+    def test_forward_and_backward_while_the_engine_runs(self, attn_implementation: str) -> None:
+        """The model stays trainable while continuous batching generates from it.
+
+        The engine reaches the paged kernel through the forward kwargs, so it has no reason to move the model off
+        the implementation it was loaded with, and an ordinary forward is still an ordinary forward. Without
+        that, the training forward lands in the paged kernel with no paged cache.
+        """
+        if attn_implementation == "flash_attention_2" and not (
+            is_flash_attn_2_available(kernels_fallback_ok=True) or is_flash_attn_3_available(kernels_fallback_ok=True)
+        ):
+            self.skipTest("Flash attention is unavailable.")
+
+        model_id = "Qwen/Qwen2.5-0.5B-Instruct"
+        tokenizer, model = get_tokenizer_and_model(model_id, attn_implementation, torch_device, torch.bfloat16)
+        # The engine upgrades a non-flash implementation to flash when the model supports it, which would test the
+        # flash path twice
+        model._supports_flash_attn = attn_implementation != "sdpa"
+        attn_impl_before = model.config._attn_implementation
+
+        # block_size has to stay a multiple of 256: this test generates, so it reaches `flash_attn_with_kvcache`
+        manager = model.init_continuous_batching(
+            continuous_batching_config=ContinuousBatchingConfig(num_blocks=8, block_size=256, use_cuda_graph=False)
+        )
+        self.assertEqual(model.config._attn_implementation, attn_impl_before)
+        manager.start()
+        try:
+            manager.add_request(tokenizer.encode("The capital of France is"), request_id="gen", max_new_tokens=5)
+            self.assertIsNotNone(manager.get_result(timeout=60))
+
+            # The model the engine is decoding from also takes a training step
+            batch = tokenizer(["A training batch."], return_tensors="pt").to(torch_device)
+            batch["labels"] = batch["input_ids"].clone()
+            model.train()
+            loss = model(**batch).loss
+            loss.backward()
+            self.assertTrue(torch.isfinite(loss).item())
+            self.assertTrue(any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.parameters()))
+            model.zero_grad(set_to_none=True)
+            model.eval()
+
+            # and the engine keeps working afterwards
+            manager.add_request(tokenizer.encode("Name a cat breed:"), request_id="after", max_new_tokens=5)
+            self.assertIsNotNone(manager.get_result(timeout=60))
+        finally:
+            manager.stop(block=True)
 
     # FIXME: Qwen2.5-0.5B-Instruct is not here because it's  broken (it uses a repetition penalty logits processor)
     # TODO: replace gemma2 with a tiny version of GPT-OSS? That way we can test sliding window AND attention sink
