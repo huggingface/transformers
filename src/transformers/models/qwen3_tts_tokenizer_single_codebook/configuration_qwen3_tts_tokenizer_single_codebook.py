@@ -31,33 +31,33 @@ class Qwen3TTSTokenizerSingleCodebookDiTConfig(PreTrainedConfig):
     ff_mult (`int`, *optional*, defaults to 2):
         The multiplier for the feedforward layer in each transformer block.
     emb_dim (`int`, *optional*, defaults to 512):
-        The dimension of the embedding layer.
-    block_size (`int`, *optional*, defaults to 64):
-        Number of tokens (frames) in each processing block.
+        The dimension of the codec embedding layer.
+    block_size (`int`, *optional*, defaults to 24):
+        Number of mel frames in each block of the block-causal attention mask.
     look_ahead_layers (`list[int]`, *optional*, defaults to `[10]`):
-        Number of transformer layers that are permitted to attend to future blocks
+        Indices of the transformer layers that may attend to the next block.
     look_backward_layers (`list[int]`, *optional*, defaults to `[0, 20]`):
-        Number of transformer layers that attend to past blocks beyond the current block boundary
+        Indices of the transformer layers that may attend to the previous block.
     repeats (`int`, *optional*, defaults to 2):
-        The number of times the codec embeddings are repeated.
+        Number of mel frames generated per speech code.
     num_embeds (`int`, *optional*, defaults to 8193):
         The number of unique embeddings in the codec.
     mel_dim (`int`, *optional*, defaults to 80):
         The dimension of the mel-spectrogram.
     enc_emb_dim (`int`, *optional*, defaults to 192):
-        The dimension of the pre-trained speaker embedding.
+        The dimension of the speaker embedding (`xvectors`) passed to the decoder.
     enc_dim (`int`, *optional*, defaults to 128):
-        The dimension of the encoder output.
+        The output dimension of the reference-mel speaker encoder.
     enc_channels (`list[int]`, *optional*, defaults to `[256, 256, 256, 256, 768]`):
-        A list of output channels for each TDNN/SERes2Net layer in the encoder.
+        A list of output channels for each TDNN/SERes2Net layer in the reference-mel speaker encoder.
     enc_kernel_sizes (`list[int]`, *optional*, defaults to `[5, 3, 3, 3, 1]`):
-        A list of kernel sizes for each layer in the encoder.
+        A list of kernel sizes for each layer in the reference-mel speaker encoder.
     enc_dilations (`list[int]`, *optional*, defaults to `[1, 2, 3, 4, 1]`):
-        A list of dilations for each layer in the encoder.
+        A list of dilations for each layer in the reference-mel speaker encoder.
     enc_attention_channels (`int`, *optional*, defaults to 64):
         The number of attention channels in the SqueezeExcitationBlock.
     enc_res2net_scale (`int`, *optional*, defaults to 2):
-        The scale of the Res2Net block in the encoder.
+        The scale of the Res2Net block in the reference-mel speaker encoder.
     enc_se_channels (`int`, *optional*, defaults to 64):
         The number of output channels after squeeze in the SqueezeExcitationBlock.
     """
@@ -144,39 +144,10 @@ class Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig(PreTrainedConfig):
 @strict
 class Qwen3TTSTokenizerSingleCodebookDecoderConfig(PreTrainedConfig):
     r"""
-    dit_config ([`DiT_Args`], *optional*):
-        Configuration class for the Diffusion Transformer (DiT) module responsible for generating mel-spectrograms.
-    bigvgan_config ([`BigVGAN_Args`], *optional*):
-        Configuration class for the BigVGAN module responsible for converting mel-spectrograms to waveforms.
-
-    Example:
-
-    ```python
-    >>> from transformers import Qwen3TTSTokenizerSingleCodebookDecoderModel, DiT_Args, BigVGAN_Args
-
-    >>> # Initialize DiT configuration
-    >>> dit_config = DiT_Args(
-    ...     dim=1024,
-    ...     depth=22,
-    ...     heads=16,
-    ...     ff_mult=2
-    ... )
-
-    >>> # Initialize BigVGAN configuration
-    >>> bigvgan_config = BigVGAN_Args(
-    ...     mel_dim=80,
-    ...     upsample_rates=[5,3,2,2,2,2]
-    ... )
-
-    >>> # Initialize main configuration
-    >>> config = Qwen3TTSTokenizerSingleCodebookDecoderConfig(dit_config, bigvgan_config)
-
-    >>> # Initialize model with config
-    >>> model = Qwen3TTSTokenizerSingleCodebookDecoder(config)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
+    dit_config (`dict`, *optional*):
+        Configuration of the diffusion transformer that generates mel-spectrograms from speech codes.
+    bigvgan_config (`dict`, *optional*):
+        Configuration of the BigVGAN vocoder that turns mel-spectrograms into a waveform.
     """
 
     model_type = "qwen3_tts_tokenizer_single_codebook_decoder"
@@ -206,12 +177,13 @@ class Qwen3TTSTokenizerSingleCodebookDecoderConfig(PreTrainedConfig):
 @strict
 class Qwen3TTSTokenizerSingleCodebookEncoderConfig(PreTrainedConfig):
     r"""
-    hidden_size (`int`, *optional*, defaults to 1024):
-        Dimensionality of the encoder layers. Whisper-family checkpoints store this as `d_model`.
+    encoder_layers (`int`, *optional*, defaults to 6):
+        Number of transformer layers kept from the Whisper-style encoder. The original checkpoint has more
+        layers, but only the layers that precede the quantizer take part in tokenization.
     max_source_positions (`int`, *optional*, defaults to 1500):
         The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
-    num_layers_before_quantizer (`int`, *optional*, defaults to 1):
-        Number of encoder layers run before the sibling quantizer.
+    n_window (`int`, *optional*, defaults to 100):
+        Number of post-convolution frames per attention window. Frames only attend within their own window.
     """
 
     model_type = "qwen3_tts_tokenizer_single_codebook_encoder"
@@ -224,11 +196,10 @@ class Qwen3TTSTokenizerSingleCodebookEncoderConfig(PreTrainedConfig):
     }
 
     num_mel_bins: int = 128
-    encoder_layers: int = 1
-    encoder_attention_heads: int = 16
-    encoder_ffn_dim: int = 4096
-    encoder_layerdrop: float | int = 0.0
-    hidden_size: int = 1024
+    encoder_layers: int = 6
+    encoder_attention_heads: int = 20
+    encoder_ffn_dim: int = 5120
+    hidden_size: int = 1280
     dropout: float | int = 0.0
     attention_dropout: float | int = 0.0
     activation_function: str = "gelu"
@@ -236,19 +207,17 @@ class Qwen3TTSTokenizerSingleCodebookEncoderConfig(PreTrainedConfig):
     scale_embedding: bool = False
     initializer_range: float = 0.02
     max_source_positions: int = 1500
-    num_layers_before_quantizer: int = 1
+    n_window: int = 100
 
 
 @auto_docstring
 @strict
 class Qwen3TTSTokenizerSingleCodebookQuantizerConfig(PreTrainedConfig):
     r"""
-    hidden_size (`int`, *optional*, defaults to 1024):
-        Encoder hidden size entering the quantizer.
-    codebook_size (`int`, *optional*, defaults to 512):
+    codebook_size (`int`, *optional*, defaults to 32768):
         Number of vectors in the single codebook.
-    codebook_dim (`int`, *optional*, defaults to 512):
-        Dimension of each codebook vector.
+    codebook_dim (`int`, *optional*, defaults to 1280):
+        Dimension of each codebook vector. A projection is added when it differs from `hidden_size`.
     downsample_rate (`int`, *optional*, defaults to 2):
         Stride of the convolution applied before quantization.
     """
@@ -256,9 +225,9 @@ class Qwen3TTSTokenizerSingleCodebookQuantizerConfig(PreTrainedConfig):
     model_type = "qwen3_tts_tokenizer_single_codebook_quantizer"
     base_config_key = "quantizer_config"
 
-    hidden_size: int = 1024
-    codebook_size: int = 512
-    codebook_dim: int = 512
+    hidden_size: int = 1280
+    codebook_size: int = 32768
+    codebook_dim: int = 1280
     downsample_rate: int = 2
 
 
@@ -267,19 +236,19 @@ class Qwen3TTSTokenizerSingleCodebookQuantizerConfig(PreTrainedConfig):
 class Qwen3TTSTokenizerSingleCodebookConfig(PreTrainedConfig):
     r"""
     encoder_config (`dict`, *optional*):
-        Configuration of the Whisper-family encoder.
+        Configuration of the Whisper-style encoder.
     quantizer_config (`dict`, *optional*):
-        Configuration of the sibling vector quantizer.
+        Configuration of the vector quantizer.
     decoder_config (`dict`, *optional*):
         Configuration of the DiT and BigVGAN decoder.
-    input_sample_rate (`int`, *optional*, defaults to 24000):
-        Sample rate of the input audio.
+    input_sample_rate (`int`, *optional*, defaults to 16000):
+        Sample rate of the audio the encoder log-mel features are computed from.
     output_sample_rate (`int`, *optional*, defaults to 24000):
         Sample rate of the decoded waveform.
-    encode_downsample_rate (`int`, *optional*, defaults to 200):
-        Frames of input audio represented by one code.
-    decode_upsample_rate (`int`, *optional*, defaults to 200):
-        Samples of output audio produced from one code.
+    encode_downsample_rate (`int`, *optional*, defaults to 640):
+        Number of input audio samples represented by one speech code.
+    decode_upsample_rate (`int`, *optional*, defaults to 960):
+        Number of output audio samples produced from one speech code.
     """
 
     model_type = "qwen3_tts_tokenizer_single_codebook"
@@ -292,10 +261,10 @@ class Qwen3TTSTokenizerSingleCodebookConfig(PreTrainedConfig):
     encoder_config: dict | PreTrainedConfig | None = None
     quantizer_config: dict | PreTrainedConfig | None = None
     decoder_config: dict | PreTrainedConfig | None = None
-    input_sample_rate: int = 24000
+    input_sample_rate: int = 16000
     output_sample_rate: int = 24000
-    encode_downsample_rate: int = 200
-    decode_upsample_rate: int = 200
+    encode_downsample_rate: int = 640
+    decode_upsample_rate: int = 960
 
     def __post_init__(self, **kwargs):
         if self.encoder_config is None:

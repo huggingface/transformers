@@ -244,6 +244,10 @@ processor.save_audio(audio, "output_cloned.wav")
 
 [[autodoc]] Qwen3TTSTokenizerSingleCodebookEncoderConfig
 
+## Qwen3TTSTokenizerSingleCodebookQuantizerConfig
+
+[[autodoc]] Qwen3TTSTokenizerSingleCodebookQuantizerConfig
+
 ## Qwen3TTSTokenizerSingleCodebookDecoderConfig
 
 [[autodoc]] Qwen3TTSTokenizerSingleCodebookDecoderConfig
@@ -257,6 +261,11 @@ processor.save_audio(audio, "output_cloned.wav")
 [[autodoc]] Qwen3TTSTokenizerSingleCodebookModel
     - encode
     - decode
+
+## Qwen3TTSTokenizerSingleCodebookQuantizer
+
+[[autodoc]] Qwen3TTSTokenizerSingleCodebookQuantizer
+    - encode
 
 ## Qwen3TTSTokenizerSingleCodebookDecoderBigVGANModel
 
