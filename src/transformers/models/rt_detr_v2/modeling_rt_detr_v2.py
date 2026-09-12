@@ -1484,7 +1484,7 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, RTDetrV2Model
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1820,7 +1820,7 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
         ```python
         >>> from transformers import RTDetrV2ImageProcessor, RTDetrV2ForObjectDetection
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 

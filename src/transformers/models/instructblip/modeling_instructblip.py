@@ -1217,7 +1217,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         >>> from transformers import InstructBlipProcessor, InstructBlipForConditionalGeneration
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> model = InstructBlipForConditionalGeneration.from_pretrained("Salesforce/instructblip-vicuna-7b")

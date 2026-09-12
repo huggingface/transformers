@@ -19,8 +19,8 @@ from dataclasses import astuple, dataclass, fields
 from io import BytesIO
 from typing import Any, Union
 
-import httpx
 import numpy as np
+from huggingface_hub.utils import httpx
 
 from .utils import (
     ExplicitEnum,

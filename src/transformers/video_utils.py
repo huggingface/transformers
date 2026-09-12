@@ -21,8 +21,8 @@ from io import BytesIO
 from typing import NewType, Union
 from urllib.parse import urlparse
 
-import httpx
 import numpy as np
+from huggingface_hub.utils import httpx
 
 from .image_transforms import PaddingMode, to_channel_dimension_format
 from .image_utils import ChannelDimension, infer_channel_dimension_format, is_valid_image
