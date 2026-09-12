@@ -60,11 +60,12 @@ visible groups in absolute positions), so chunked prefill, decode and one-shot p
 
 ### Manifold-Constrained Hyper-Connections (mHC)
 
-The residual stream is carried as `hc_mult` parallel copies. Each attention / FFN site mixes the streams with a
-row-normalized (Sinkhorn-projected) mixing matrix; the site's pre-mix is computed one site ahead, so the pipeline
-crosses layer boundaries exactly as in the released implementation. The raw layer parameters (`hc_attn_fn`,
-`hc_attn_base`, `hc_attn_scale`, `hc_ffn_*`) and the attention sinks stay in `float32` — matching the released
-checkpoint's dtypes (`_keep_in_fp32_modules_strict`).
+The residual stream is carried as `hc_mult` parallel copies. Each attention / FFN site (`attn_hc` / `ffn_hc`, a
+`DeepseekV41HyperConnection` with the same `fn` / `base` / `scale` parametrization as V4) mixes the streams with a
+row-normalized (Sinkhorn-projected) mixing matrix; unlike V4, the site's pre-mix is consumed one site *ahead*
+(single-pass mHC), so the pipeline crosses layer boundaries exactly as in the released implementation. The mHC
+sites and the attention sinks stay in `float32` — matching the released checkpoint's dtypes
+(`_keep_in_fp32_modules_strict`).
 
 ### Engram
 
@@ -73,17 +74,33 @@ position is hashed with its `engram_max_ngram_size - 1` predecessor tokens (mult
 multipliers, folded into prime-sized buckets), and each of the `engram_n_heads` heads reads one embedding row per
 n-gram size. The hash is a pure function of `(tokenizer, config)` — no learned table is involved in the id mapping.
 
-The state therefore needs the **tokenizer** to build its compressed token map. Bind one explicitly, or rely on the
-auto-binding from `config._name_or_path` on the first forward:
+The state therefore needs the **tokenizer** to build its compressed token map. `from_pretrained` binds the
+checkpoint's own tokenizer after loading (nothing is fetched in the forward pass); bind one explicitly when the
+model was built any other way or the checkpoint ships no tokenizer:
 
 ```python
 model.model.bind_tokenizer(tokenizer)  # explicit
 # or: model = DeepseekV41ForCausalLM.from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash")
-#    (the tokenizer is fetched from the same repo id on first use)
+#    (the repo's tokenizer is bound at load time)
 ```
 
 Tokens masked out of n-grams (image spans) are hashed as a DEAD sentinel; look-back stops at them, so an n-gram
-never spans one.
+never spans one. Across forward calls (chunked prefill, decode) the look-back lives on the cache — the first
+`shared_compressed_attention` layer (`DeepseekV41CSACache` via the `DeepseekV41EngramHistoryLayer` mixin) — so it
+follows the KV through beam reorders, `num_return_sequences` and `reset`.
+
+### Mixture of experts
+
+The routed experts are one fused `DeepseekV41Experts` module per layer (`gate_up_proj` `[E, 2·inter, hidden]` with
+the gate rows first, `down_proj` `[E, hidden, inter]`), dispatched through the shared experts interface: the default
+`experts_implementation` is `grouped_mm` (falls back to `batched_mm` / `eager`; `from_pretrained(...,
+experts_implementation="eager")` or `model.set_experts_implementation(...)` select one). The eager path is the
+reference math — fp32 clamped SwiGLU (`up` clamped on both sides, `gate` from above), routing weight applied to the
+activation *before* the down projection, fp32 accumulation over experts and the shared expert (`shared_experts`, a
+clamped `DeepseekV41MLP`). The router (`gate`) keeps its expert-selection correction biases as fp32 buffers
+(`e_score_correction_bias`, and `e_score_correction_bias_vl` for image-span tokens); `output_router_logits=True`
+records the pre-activation gate logits per layer and adds the Mixtral load-balancing auxiliary loss
+(`router_aux_loss_coef`).
 
 ## Quantization
 
@@ -106,12 +123,21 @@ size (tiny test configs) skip the quantization.
 
 The released `DeepSeek-V4.1-Flash` checkpoint ships mixed-precision weights: attention projections, the shared
 experts, `engram.wkv` and the engram tables in FP8 (e4m3, 32×32 blocks, ue8m0 scales), **routed experts packed as
-FP4** (e2m1 nibbles in an int8 container, one ue8m0 scale per row per 32 fp4 channels), the compressor / indexer projections,
-embeddings and head in bf16, and the mHC / sink / gate-bias parameters in fp32. `from_pretrained` accepts this
-layout as-is on CPU (weights are dequantized to the requested `dtype`) and on GPU (kept quantized when supported):
-the fp8 quantizer's `.scale` → `weight_scale_inv` mapping and its FP4-aware dequantize op handle every piece,
-including the packed experts and the per-row-scaled engram tables (dequantized into the embedding at load, so the
-lookup stays a plain row gather).
+FP4** (e2m1 nibbles in an int8 container, one ue8m0 scale per row per 32 fp4 channels), the compressor / indexer
+projections, embeddings and head in bf16, and the mHC / sink / gate-bias parameters in fp32. `from_pretrained`
+accepts this layout as-is:
+
+* with `dequantize=True` (the default on CPU) every tensor is dequantized to the requested `dtype` — the fp8
+  quantizer's `.scale` → `weight_scale_inv` mapping and its FP4-aware dequantize op run *before* the per-expert
+  `w1` / `w3` / `w2` tensors are merged into the fused `gate_up_proj` / `down_proj`, and the per-row-scaled engram
+  tables are dequantized into the embedding (the lookup stays a plain row gather);
+* with `dequantize=False` (GPU) the attention projections become `FP8Linear` / `FP8GroupedLinear` (the grouped
+  `o_a_proj`) and the routed experts an `FP8Experts` holding the packed int8 `gate_up_proj` / `down_proj` with their
+  `[1, 32]` ue8m0 scales (`gate_up_proj_scale_inv` / `down_proj_scale_inv`). `FP8Experts` sizes that packed layout
+  from `text_config.expert_dtype`, which the composite config hoists from the released config.json's
+  `quantization_config.expert_dtype = "fp4"`. The bf16 projections without a `.scale` (`compressor.kv_proj`,
+  `compressor.gate_proj`, `indexer.k_proj`, `indexer.weights_proj`) are auto-skipped by the quantizer
+  (`_keep_in_fp32_modules`), like V4's.
 
 `DeepseekV41ForCausalLM` takes the composite [`DeepseekV41Config`] (`config_class`) because the released
 config.json nests the text backbone under `text_config` and puts `quantization_config` at the top level — pointing
@@ -139,10 +165,17 @@ print(tok.decode(out[0], skip_special_tokens=True))
 
 ## Implementation notes
 
-* **Checkpoint-native naming.** The released checkpoint uses the reference implementation's names (`wq_a`, `ffn.experts.E.w1`, `engram.embed.weight`, `hc_attn_fn` on the layer, top-level `embed` / `norm` / `head`). The modules keep
-  those names verbatim; `from_pretrained` only applies the four top-level renames registered centrally in
-  `conversion_mapping.py` (`layers.*` → `model.layers.*`, `embed.weight` → `model.embed.weight`,
-  `norm.weight` → `model.norm.weight`, `head.weight` → `lm_head.weight`).
+* **Naming.** The modules follow the Transformers conventions (`self_attn.q_a_proj` / `kv_proj` / `o_a_proj` /
+  `sinks`, `mlp.gate` / `experts.gate_up_proj` / `shared_experts.gate_proj`, `attn_hc.fn`, `embed_tokens`,
+  `lm_head`); the released checkpoint's DeepSeek-native names (`attn.wq_a`, `ffn.experts.E.w1`, raw `hc_attn_fn`
+  on the layer, top-level `embed` / `head`) are mapped by the `deepseek_v41_text` entry of
+  `conversion_mapping.py` — a rename set plus the per-expert `w1` / `w3` → `gate_up_proj` (`MergeModulelist` +
+  `Concatenate`) and `w2` → `down_proj` merges. The mapping is keyed by the text `model_type`, so it also applies
+  to a bare [`DeepseekV41TextModel`]; the wrapper's `model.` prefix is the loader's. Engram keys
+  (`engram.embed.*`, `engram.wkv`, `engram.{q,k}_weight`) are kept verbatim.
+* **Recorded `hidden_states`.** The residual stream is `hc_mult` parallel copies, so `output_hidden_states`
+  records the *collapsed* per-block inputs (each layer's `input_layernorm` input, plus the initial embedding
+  collapse and the final normalized state) in the standard `[batch, seq, hidden]` shape.
 * **Cache.** KV-source layers get a [`DeepseekV41CSACache`] layer (sliding-window ring + partial-group buffer +
   shared compressed KV / indexer keys); consumer layers read the source's cache through a per-forward `shared` dict.
   `DynamicCache(config=…)` builds the right layers from `config.layer_types` — the new

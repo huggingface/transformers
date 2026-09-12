@@ -287,6 +287,25 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
                     torch.equal(model.model(inputs).last_hidden_state, text_model(inputs).last_hidden_state)
                 )
 
+    def test_router_logits_and_aux_loss(self):
+        """`output_router_logits` records one pre-activation logit tensor per layer (the
+        gate's `[tokens, n_routed_experts]` output, not the top-k weights) and turns on
+        the Mixtral load-balancing aux loss, which is added to the LM loss scaled by
+        `router_aux_loss_coef`."""
+        config = self.model_tester.get_config()
+        model = self.model_tester.causal_lm_class(config).eval()
+        inputs = torch.randint(0, config.vocab_size, (2, 7))
+        with torch.no_grad():
+            plain = model(inputs, labels=inputs)
+            out = model(inputs, labels=inputs, output_router_logits=True)
+        self.assertIsNone(plain.aux_loss)
+        self.assertEqual(len(out.router_logits), config.num_hidden_layers)
+        for layer_logits in out.router_logits:
+            self.assertEqual(tuple(layer_logits.shape), (2 * 7, config.n_routed_experts))
+        self.assertTrue(torch.isfinite(out.aux_loss))
+        self.assertGreater(out.aux_loss.item(), 0.0)
+        self.assertTrue(torch.allclose(out.loss, plain.loss + config.router_aux_loss_coef * out.aux_loss))
+
     def test_config_validation(self):
         # index source without a compressed branch
         with self.assertRaises(ValueError):
