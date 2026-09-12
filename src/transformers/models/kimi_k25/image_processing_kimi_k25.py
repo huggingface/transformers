@@ -169,7 +169,7 @@ class Kimi_K25ImageProcessor(TorchvisionBackend):
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             height, width = stacked_images.shape[-2:]
             if do_resize:
                 (resized_height, resized_width), (pad_height, pad_width) = navit_resize(
@@ -186,13 +186,13 @@ class Kimi_K25ImageProcessor(TorchvisionBackend):
                     resample=resample,
                 )
                 stacked_images = self.pad(stacked_images, pad_size=SizeDict(height=pad_height, width=pad_width))
-            resized_images_grouped[shape] = stacked_images
+            resized_images_grouped[key] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         processed_grids = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             resized_height, resized_width = stacked_images.shape[-2:]
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
@@ -203,8 +203,8 @@ class Kimi_K25ImageProcessor(TorchvisionBackend):
                 patch_size=patch_size,
             )
 
-            processed_images_grouped[shape] = patches
-            processed_grids[shape] = [[1, grid_h, grid_w]] * len(stacked_images)
+            processed_images_grouped[key] = patches
+            processed_grids[key] = [[1, grid_h, grid_w]] * len(stacked_images)
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_grids_ordered = reorder_images(processed_grids, grouped_images_index)

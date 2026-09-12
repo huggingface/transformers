@@ -134,9 +134,9 @@ class VitMatteImageProcessor(TorchvisionBackend):
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         grouped_trimaps, grouped_trimaps_index = group_images_by_shape(trimaps, disable_grouping=disable_grouping)
         processed_images_grouped = {}
-        for shape in grouped_images:
-            stacked_images = grouped_images[shape]
-            stacked_trimaps = grouped_trimaps[shape]
+        for key in grouped_images:
+            stacked_images = grouped_images[key]
+            stacked_trimaps = grouped_trimaps[key]
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
@@ -147,7 +147,7 @@ class VitMatteImageProcessor(TorchvisionBackend):
             stacked_images = torch.cat([stacked_images, stacked_trimaps], dim=1)
             if do_pad:
                 stacked_images = self._pad_image(stacked_images, size_divisor)
-            processed_images_grouped[shape] = stacked_images
+            processed_images_grouped[key] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 

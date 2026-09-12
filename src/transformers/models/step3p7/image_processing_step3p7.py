@@ -249,14 +249,14 @@ class Step3p7ImageProcessor(TorchvisionBackend):
             grouped_patches, grouped_index = group_images_by_shape(
                 nested_patches, is_nested=True, disable_grouping=disable_grouping
             )
-            for shape, stacked_patches in grouped_patches.items():
+            for key, stacked_patches in grouped_patches.items():
                 resized = self.resize(
                     stacked_patches, SizeDict(height=patch_size, width=patch_size), resample=resample
                 )
-                grouped_patches[shape] = self.rescale_and_normalize(
+                grouped_patches[key] = self.rescale_and_normalize(
                     resized, do_rescale, rescale_factor, do_normalize, image_mean, image_std
                 )
-            nested_pixel_values_local = reorder_images(grouped_patches, grouped_index, is_nested=True)
+            nested_pixel_values_local = reorder_images(grouped_patches, grouped_index)
             # Flatten back to (total_patches, C, H, W): `Step3p7Model.get_image_features` slices this
             # flat tensor per image using `num_local_patches`.
             result["pixel_values_local"] = torch.stack(

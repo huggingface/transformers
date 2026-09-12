@@ -206,7 +206,7 @@ class ZoeDepthImageProcessor(TorchvisionBackend):
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_rescale:
                 stacked_images = self.rescale(stacked_images, rescale_factor)
             if do_pad:
@@ -215,7 +215,7 @@ class ZoeDepthImageProcessor(TorchvisionBackend):
                 stacked_images = self.resize(stacked_images, size, keep_aspect_ratio, ensure_multiple_of, resample)
             if do_normalize:
                 stacked_images = self.normalize(stacked_images, image_mean, image_std)
-            resized_images_grouped[shape] = stacked_images
+            resized_images_grouped[key] = stacked_images
         processed_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)

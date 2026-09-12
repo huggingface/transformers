@@ -227,11 +227,11 @@ class MiniCPMV4_6ImageProcessor(TorchvisionBackend):
             # Group patches by shape and batch rescale + normalize
             grouped_patches, grouped_index = group_images_by_shape(image_patches, disable_grouping=disable_grouping)
             processed_grouped = {}
-            for shape, stacked in grouped_patches.items():
+            for key, stacked in grouped_patches.items():
                 stacked = self.rescale_and_normalize(
                     stacked.float(), do_rescale, rescale_factor, do_normalize, image_mean, image_std
                 )
-                processed_grouped[shape] = stacked
+                processed_grouped[key] = stacked
             processed_patches = reorder_images(processed_grouped, grouped_index)
 
             image_pv = [self.reshape_by_patch(processed_patches[0], patch_size)]
