@@ -329,46 +329,65 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
         with self.assertRaises(ValueError):
             DeepseekV41TextConfig(num_hidden_layers=4, candidate_source_layer_id=1)
 
-    def test_engram_hash_state(self):
-        """The engram n-gram hash state is a pure function of (tokenizer, config):
-        rebuilt states produce identical hashes, and a DEAD token (image span) breaks
-        the n-gram look-back for exactly the `max_ngram_size - 1` positions after it."""
-        from transformers.models.deepseek_v41.modeling_deepseek_v41 import (
-            DeepseekV41NgramHashState,
-            build_compressed_token_map,
-        )
+    def _engram_config(self, tokenizer, layer_ids=(1, 2)):
+        """The tester config with tiny engram tables on `layer_ids`, hashed through
+        `tokenizer`. `vocab_size` is pinned to the tokenizer: `generate` samples the
+        full vocab and the hash state's token map only covers the tokenizer."""
+        from transformers.models.deepseek_v41.modeling_deepseek_v41 import build_compressed_token_map
 
-        tokenizer = tiny_word_tokenizer()
         _, compressed_vocab = build_compressed_token_map(tokenizer)
-
         config = self.model_tester.get_config()
-        config.engram_layer_ids = [1, 2]
-        config.engram_num_embeddings = [700, 700]
+        config.vocab_size = len(tokenizer)
+        config.engram_layer_ids = list(layer_ids)
+        config.engram_num_embeddings = [700] * len(layer_ids)
         config.engram_vocab_size = 64
         config.engram_n_heads = 2
         config.engram_head_dim = 16
         config.engram_max_ngram_size = 4
         config.engram_pad_id = 8
         config.engram_compressed_vocab_size = compressed_vocab
+        return config
 
-        state = DeepseekV41NgramHashState(config, tokenizer)
-        ids = torch.randint(0, len(tokenizer), (1, 12))
-        positions = torch.arange(12).unsqueeze(0)
-        hashes = state(ids, positions, None)
+    def test_engram_hash_state(self):
+        """The engram n-gram hash state is a pure function of (tokenizer, config):
+        rebuilt states produce identical hashes, and a DEAD token (image span) breaks
+        the n-gram look-back for exactly the `max_ngram_size - 1` positions after it."""
+        from transformers.models.deepseek_v41.modeling_deepseek_v41 import DeepseekV41NgramHashState
+
+        tokenizer = tiny_word_tokenizer()
+        config = self._engram_config(tokenizer)
+
+        state = DeepseekV41NgramHashState(config)
+        state.bind_tokenizer(tokenizer)
+        # Non-pad ids only: pad hashes like a blocked look-back, which would let the
+        # inequalities below coincide by chance.
+        ids = torch.randint(0, len(tokenizer) - 1, (1, 12))
+        hashes = state(ids, None, None)
 
         # Rebuild: multipliers and prime buckets must be reproducible.
-        hashes_rebuilt = DeepseekV41NgramHashState(config, tokenizer)(ids, positions, None)
-        self.assertTrue(torch.equal(hashes, hashes_rebuilt))
+        rebuilt = DeepseekV41NgramHashState(config)
+        rebuilt.bind_tokenizer(tokenizer)
+        self.assertTrue(torch.equal(hashes, rebuilt(ids, None, None)))
 
         # A DEAD token at position 5 changes the hashes of positions 5..8 (its
         # n-grams) but not position 9+ (whose 4-grams no longer reach it).
         # `token_mask` is live-True (False marks tokens outside any n-gram).
-        live = torch.ones_like(positions, dtype=torch.bool)
+        live = torch.ones_like(ids, dtype=torch.bool)
         live[0, 5] = False
-        masked = state(ids, positions, live)
+        masked = state(ids, live, None)
         self.assertFalse(torch.equal(hashes[0, 5:9], masked[0, 5:9]))
         self.assertTrue(torch.equal(hashes[0, 9:], masked[0, 9:]))
         self.assertTrue(torch.equal(hashes[0, :5], masked[0, :5]))
+
+        # The look-back crosses forward calls only through the cache: chunked
+        # hashing through one must equal the one-shot hashes, and without a cache the
+        # second chunk starts from an empty look-back.
+        from transformers import DynamicCache
+
+        cache = DynamicCache(config=config)
+        chunked = torch.cat([state(ids[:, :7], None, cache), state(ids[:, 7:], None, cache)], dim=1)
+        self.assertTrue(torch.equal(hashes, chunked))
+        self.assertFalse(torch.equal(hashes[:, 7:], state(ids[:, 7:], None, None)))
 
     def test_csacache_reorder_follows_group_state(self):
         """`generate` with beams calls `reorder_cache` every step; the sliding ring is
@@ -395,44 +414,39 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertEqual(layer.buffer_kv["compressor"].shape[0], 2)
 
     def test_beam_reorder_follows_engram_history(self):
-        """The engram n-gram history lives on the model, not the cache: beam search
-        must permute it together with the cache (found by the cross-engine audit —
-        the CSA-layer reorder tests ran with engram disabled and missed it)."""
-        from transformers.models.deepseek_v41.modeling_deepseek_v41 import build_compressed_token_map
+        """The engram n-gram look-back lives on the cache: `cache.reorder_cache` alone
+        must permute it (beam search has no model-side hook), and a decode step after
+        the reorder must match a one-shot forward of the reordered sequences (found by
+        the cross-engine audit — the CSA-layer reorder tests ran with engram disabled
+        and missed the history)."""
+        from transformers.models.deepseek_v41.modeling_deepseek_v41 import DeepseekV41EngramHistoryLayer
 
         tokenizer = tiny_word_tokenizer()
-        config = self.model_tester.get_config()
-        config.engram_layer_ids = [1, 2]
-        config.engram_num_embeddings = [700, 700]
-        config.engram_vocab_size = 64
-        config.engram_n_heads = 2
-        config.engram_head_dim = 16
-        config.engram_pad_id = 8
-        _, compressed_vocab = build_compressed_token_map(tokenizer)
-        config.engram_compressed_vocab_size = compressed_vocab
-        # `generate` samples over the full vocab; the hash state's token map only
-        # covers the tokenizer, so keep the two aligned in this test.
-        config.vocab_size = len(tokenizer)
-
+        config = self._tie_free_config(self._engram_config(tokenizer))
         model = self.model_tester.causal_lm_class(config).eval()
         model.model.bind_tokenizer(tokenizer)
-        inputs = torch.randint(0, len(tokenizer), (2, 9))
+        inputs = torch.randint(0, len(tokenizer) - 1, (2, 9))
+        # Distinct look-backs per row, so a missed permutation is visible.
+        inputs[1, -1] = (inputs[0, -1] + 1) % (len(tokenizer) - 1)
+        next_tokens = torch.randint(0, len(tokenizer) - 1, (2, 1))
+        beam_idx = torch.tensor([1, 0])
         with torch.no_grad():
-            out = model(inputs, use_cache=True)
-        history = model.model.engram_hash_state.history.clone()
-        self.assertEqual(history.shape[0], 2)
+            cache = model(inputs, use_cache=True).past_key_values
+            layer = next(layer for layer in cache.layers if isinstance(layer, DeepseekV41EngramHistoryLayer))
+            history = layer.engram_context.clone()
+            self.assertEqual(tuple(history.shape), (2, config.engram_max_ngram_size - 1))
 
-        model._reorder_cache(out.past_key_values, torch.tensor([1, 0]))
+            cache.reorder_cache(beam_idx)
+            self.assertTrue(torch.equal(layer.engram_context, history[beam_idx]))
 
-        self.assertTrue(torch.equal(model.model.engram_hash_state.history, history.flip(0)))
+            decoded = model(next_tokens, past_key_values=cache, use_cache=True).logits
+            one_shot = model(torch.cat([inputs[beam_idx], next_tokens], dim=1)).logits[:, -1:]
+        self.assertTrue(torch.allclose(decoded, one_shot, atol=1e-4))
 
-        # End to end: beam search with engram layers enabled must run and stay
-        # deterministic across two runs with the same seed.
-        torch.manual_seed(0)
-        beams1 = model.generate(inputs, max_new_tokens=4, num_beams=2, do_sample=False)
-        torch.manual_seed(0)
-        beams2 = model.generate(inputs, max_new_tokens=4, num_beams=2, do_sample=False)
-        self.assertTrue(torch.equal(beams1, beams2))
+        # End to end: beam search with engram layers enabled runs through the plain
+        # cache reorder path.
+        beams = model.generate(inputs, max_new_tokens=4, num_beams=2, do_sample=False)
+        self.assertEqual(tuple(beams.shape), (2, 13))
 
     @staticmethod
     def _to_native_name(name):
@@ -656,28 +670,58 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertLess((clean - quant).abs().max().item(), 0.35)
 
     def test_engram_forward(self):
-        """The engram layers run end-to-end: bind the tokenizer, forward, decode."""
-        from transformers.models.deepseek_v41.modeling_deepseek_v41 import build_compressed_token_map
-
+        """The engram layers run end-to-end: bind the tokenizer, forward, decode; an
+        unbound model refuses to hash instead of hashing garbage."""
         tokenizer = tiny_word_tokenizer()
-        _, compressed_vocab = build_compressed_token_map(tokenizer)
-
-        config = self.model_tester.get_config()
-        config.vocab_size = 16
-        config.engram_layer_ids = [1, 2]
-        config.engram_num_embeddings = [700, 700]
-        config.engram_vocab_size = 64
-        config.engram_n_heads = 2
-        config.engram_head_dim = 16
-        config.engram_max_ngram_size = 4
-        config.engram_pad_id = 8
-        config.engram_compressed_vocab_size = compressed_vocab
+        config = self._engram_config(tokenizer)
 
         model = self.model_tester.causal_lm_class(config).eval()
-        model.model.bind_tokenizer(tokenizer)
         inputs = torch.randint(0, len(tokenizer), (2, 12))
+        with self.assertRaisesRegex(ValueError, "bind_tokenizer"):
+            model(inputs)
+        model.model.bind_tokenizer(tokenizer)
         with torch.no_grad():
             out = model(inputs, use_cache=True)
             self.assertTrue(torch.isfinite(out.logits).all())
             dec = model(inputs[:, :1], past_key_values=out.past_key_values, use_cache=True)
             self.assertTrue(torch.isfinite(dec.logits).all())
+
+    def test_engram_chunked_prefill_matches_one_shot(self):
+        """With engram layers on, a prompt fed in two chunks must hash — and score —
+        exactly like the one-shot prefill: the n-gram look-back of the second chunk's
+        first `max_ngram_size - 1` positions comes from the cache."""
+        from transformers import DynamicCache
+
+        tokenizer = tiny_word_tokenizer()
+        config = self._tie_free_config(self._engram_config(tokenizer, layer_ids=(1,)))
+        model = self.model_tester.causal_lm_class(config).eval()
+        model.model.bind_tokenizer(tokenizer)
+        inputs = torch.randint(0, len(tokenizer) - 1, (2, 13))
+        split = 7
+        with torch.no_grad():
+            full = model(inputs).logits
+            cache = DynamicCache(config=config)
+            head = model(inputs[:, :split], past_key_values=cache, use_cache=True).logits
+            tail = model(inputs[:, split:], past_key_values=cache, use_cache=True).logits
+        self.assertTrue(torch.allclose(full, torch.cat([head, tail], dim=1), atol=1e-4))
+
+    def test_engram_from_pretrained_binds_tokenizer(self):
+        """`from_pretrained` binds the checkpoint's own tokenizer after the meta-device
+        load (the hash tables are non-persistent buffers, rebuilt by `_init_weights`);
+        a checkpoint without a tokenizer loads unbound and says so."""
+        tokenizer = tiny_word_tokenizer()
+        config = self._engram_config(tokenizer, layer_ids=(1,))
+        model = self.model_tester.causal_lm_class(config).eval()
+        model.model.bind_tokenizer(tokenizer)
+        inputs = torch.randint(0, len(tokenizer), (2, 9))
+        with torch.no_grad():
+            before = model(inputs).logits
+        with tempfile.TemporaryDirectory() as tmp:
+            model.save_pretrained(tmp)
+            unbound = self.model_tester.causal_lm_class.from_pretrained(tmp)
+            self.assertIsNone(unbound.model.engram_hash_state.token_map)
+            tokenizer.save_pretrained(tmp)
+            loaded = self.model_tester.causal_lm_class.from_pretrained(tmp)
+        with torch.no_grad():
+            after = loaded(inputs).logits
+        self.assertTrue(torch.allclose(before, after, atol=1e-5))
