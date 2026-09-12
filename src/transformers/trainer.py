@@ -3421,10 +3421,10 @@ class Trainer:
             )
         elif self.get_tp_size() > 1:
             os.makedirs(output_dir, exist_ok=True)
-            torch.save(self.optimizer.state_dict(), self._sharded_optimizer_file(output_dir))
+            torch.save(self.optimizer.state_dict(), self._get_optimizer_file(output_dir))
         elif self.args.should_save:
             # deepspeed.save_checkpoint above saves model/optim/sched
-            torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
+            torch.save(self.optimizer.state_dict(), self._get_optimizer_file(output_dir))
 
         # Save SCHEDULER & SCALER
         is_deepspeed_custom_scheduler = self.is_deepspeed_enabled and not isinstance(
@@ -3748,14 +3748,18 @@ class Trainer:
         if is_torch_musa_available():
             set_rng_state_for_device("MUSA", torch.musa, checkpoint_rng_state, is_distributed)
 
-    def _sharded_optimizer_file(self, checkpoint: str) -> str:
-        """Path of this rank's optimizer state under tensor parallelism.
+    def _get_optimizer_file(self, checkpoint: str) -> str:
+        """Path of the optimizer state to write or read.
 
-        Each rank holds a different shard of every parameter, so its optimizer state is its own and
-        cannot be read from another rank's file. The shapes match across ranks, so a single shared
-        file loads without error and silently gives every rank rank 0's moments.
+        Under tensor parallelism each rank holds a different shard of every parameter, so its optimizer
+        state is its own and cannot be read from another rank's file. The shapes match across ranks, so
+        a single shared file loads without error and silently gives every rank rank 0's moments.
         """
-        return os.path.join(checkpoint, f"rank{self.args.process_index}-of-{self.args.world_size}-{OPTIMIZER_NAME}")
+        if self.get_tp_size() > 1:
+            return os.path.join(
+                checkpoint, f"rank{self.args.process_index}-of-{self.args.world_size}-{OPTIMIZER_NAME}"
+            )
+        return os.path.join(checkpoint, OPTIMIZER_NAME)
 
     def _load_optimizer_and_scheduler(self, checkpoint: str | None) -> None:
         """If optimizer and scheduler states exist, load them."""
@@ -3849,13 +3853,10 @@ class Trainer:
                         )
                     else:
                         check_torch_load_is_safe()
-                        optimizer_file = (
-                            self._sharded_optimizer_file(checkpoint)
-                            if self.get_tp_size() > 1
-                            else os.path.join(checkpoint, OPTIMIZER_NAME)
-                        )
                         self.optimizer.load_state_dict(
-                            torch.load(optimizer_file, map_location=map_location, weights_only=True)
+                            torch.load(
+                                self._get_optimizer_file(checkpoint), map_location=map_location, weights_only=True
+                            )
                         )
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     check_torch_load_is_safe()
