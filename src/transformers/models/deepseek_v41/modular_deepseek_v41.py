@@ -22,6 +22,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, DynamicSlidingWindowLayer
+from ...generation import GenerationMixin
 from ...integrations.moe import use_experts_implementation
 from ...masking_utils import create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -35,12 +36,7 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoTokenizer
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3RMSNorm
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection, DeepseekV4RotaryEmbedding
-from ..mixtral.modeling_mixtral import (
-    MixtralExperts,
-    MixtralForCausalLM,
-    MixtralTopKRouter,
-    load_balancing_loss_func,
-)
+from ..mixtral.modeling_mixtral import MixtralExperts, MixtralTopKRouter, load_balancing_loss_func
 from .configuration_deepseek_v41 import DeepseekV41Config, DeepseekV41TextConfig
 
 
@@ -1439,14 +1435,19 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
 
 
 @auto_docstring
-class DeepseekV41ForCausalLM(MixtralForCausalLM):
+class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     # The released checkpoint's config.json is composite (top-level `quantization_config`,
     # `text_config`, `vision_config`) with `architectures: [DeepseekV41ForCausalLM]`, so this
     # class must accept the composite config: `get_hf_quantizer` only sees `quantization_config`
     # on the config produced from `config_class` — pointing it at the bare text config silently
     # dropped the FP8 quantization config and fp8 tensors then failed to load. The text config
-    # is unwrapped in `__init__` (same pattern as `MllamaForCausalLM`); a text config passed
-    # directly is returned unchanged by `get_text_config()`.
+    # is unwrapped in `__init__` (same pattern as `MllamaForCausalLM`; explicit bases rather
+    # than `MixtralForCausalLM`, whose inlined `__init__` would drop the unwrap); a text config
+    # passed directly is returned unchanged by `get_text_config()`.
     config_class = DeepseekV41Config
 
     def __init__(self, config):

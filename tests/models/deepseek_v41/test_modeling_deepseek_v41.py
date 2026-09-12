@@ -219,7 +219,7 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertTrue(torch.allclose(ground_truth, torch.cat(decoded, dim=1), atol=1e-4))
 
     def test_save_load_round_trip(self):
-        """save→load must be exact, pinning the checkpoint-native weight naming."""
+        """save→load must be exact."""
         config = self.model_tester.get_config()
         model = self.model_tester.causal_lm_class(config).eval()
         inputs = torch.randint(0, config.vocab_size, (1, 6))
@@ -231,6 +231,61 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
         with torch.no_grad():
             after = reloaded(inputs).logits
         self.assertTrue(torch.allclose(before, after, atol=1e-5))
+
+    def _native_state_dict(self, model, config):
+        """The model's weights under the released checkpoint's names: DeepSeek-native
+        module names, no `model.` prefix, per-expert `w1` (gate) / `w3` (up) / `w2`."""
+        inter = config.moe_intermediate_size
+        native = {}
+        for name, tensor in model.state_dict().items():
+            native_name = self._to_native_name(name)
+            if name.endswith("mlp.experts.gate_up_proj"):
+                for e, weight in enumerate(tensor):
+                    base = native_name[: -len("gate_up_proj")]
+                    native[f"{base}{e}.w1.weight"] = weight[:inter].contiguous()
+                    native[f"{base}{e}.w3.weight"] = weight[inter:].contiguous()
+            elif name.endswith("mlp.experts.down_proj"):
+                for e, weight in enumerate(tensor):
+                    native[f"{native_name[: -len('down_proj')]}{e}.w2.weight"] = weight.contiguous()
+            else:
+                native[native_name] = tensor.contiguous()
+        return native
+
+    def test_native_checkpoint_names_load(self):
+        """A checkpoint in the released naming (`layers.0.attn.wq_a`, `ffn.experts.E.w1`,
+        raw `hc_attn_fn`, top-level `embed` / `head`, `gate.bias_vl`, ...) loads into the
+        HF-named modules through the `deepseek_v41_text` conversion mapping with no
+        missing / unexpected keys, for the CausalLM wrapper AND the bare text model, and
+        reproduces the source model's logits exactly."""
+        from safetensors.torch import save_file
+
+        config = self.model_tester.get_config()
+        model = self.model_tester.causal_lm_class(config).eval()
+        native = self._native_state_dict(model, config)
+        self.assertIn("layers.0.attn.wq_a.weight", native)
+        self.assertIn("layers.0.ffn.experts.3.w2.weight", native)
+        self.assertIn("layers.0.ffn.gate.bias_vl", native)
+        self.assertIn("layers.0.hc_attn_fn", native)
+        self.assertIn("layers.1.attn.compressor.wgate.weight", native)
+        self.assertFalse({k for k in native if k.startswith("model.") or "self_attn" in k or "_hc." in k})
+
+        inputs = torch.randint(0, config.vocab_size, (1, 6))
+        with tempfile.TemporaryDirectory() as tmp:
+            save_file(native, os.path.join(tmp, "model.safetensors"))
+            config.save_pretrained(tmp)
+            loaded, info = self.model_tester.causal_lm_class.from_pretrained(tmp, output_loading_info=True)
+            self.assertFalse({k: v for k, v in info.items() if v}, info)
+            with torch.no_grad():
+                self.assertTrue(torch.equal(model(inputs).logits, loaded(inputs).logits))
+
+            # the bare text model reads the same file (the `model.` prefix is the loader's)
+            text_model, info = self.model_tester.base_model_class.from_pretrained(tmp, output_loading_info=True)
+            self.assertEqual(set(info["unexpected_keys"]), {"lm_head.weight"}, info)
+            self.assertFalse(info["missing_keys"], info)
+            with torch.no_grad():
+                self.assertTrue(
+                    torch.equal(model.model(inputs).last_hidden_state, text_model(inputs).last_hidden_state)
+                )
 
     def test_config_validation(self):
         # index source without a compressed branch
@@ -348,13 +403,54 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
         beams2 = model.generate(inputs, max_new_tokens=4, num_beams=2, do_sample=False)
         self.assertTrue(torch.equal(beams1, beams2))
 
+    @staticmethod
+    def _to_native_name(name):
+        """HF parameter name → released-checkpoint name (the reverse of the
+        `deepseek_v41_text` conversion mapping, minus the expert merge)."""
+        for hf, native in (
+            ("model.layers.", "layers."),
+            ("model.embed_tokens.", "embed."),
+            ("model.norm.", "norm."),
+            ("lm_head.", "head."),
+            (".self_attn.", ".attn."),
+            (".mlp.", ".ffn."),
+            (".input_layernorm.", ".attn_norm."),
+            (".post_attention_layernorm.", ".ffn_norm."),
+            (".attn_hc.fn", ".hc_attn_fn"),
+            (".attn_hc.base", ".hc_attn_base"),
+            (".attn_hc.scale", ".hc_attn_scale"),
+            (".ffn_hc.fn", ".hc_ffn_fn"),
+            (".ffn_hc.base", ".hc_ffn_base"),
+            (".ffn_hc.scale", ".hc_ffn_scale"),
+            (".attn.sinks", ".attn.attn_sink"),
+            (".q_a_proj.", ".wq_a."),
+            (".q_a_norm.", ".q_norm."),
+            (".q_b_proj.", ".wq_b."),
+            (".attn.kv_proj.", ".attn.wkv."),
+            (".compressor.kv_proj.", ".compressor.wkv."),
+            (".compressor.gate_proj.", ".compressor.wgate."),
+            (".compressor.kv_norm.", ".compressor.norm."),
+            (".indexer.k_proj.", ".indexer.wk."),
+            (".o_a_proj.", ".wo_a."),
+            (".o_b_proj.", ".wo_b."),
+            (".gate.e_score_correction_bias_vl", ".gate.bias_vl"),
+            (".gate.e_score_correction_bias", ".gate.bias"),
+            (".shared_experts.gate_proj.", ".shared_experts.w1."),
+            (".shared_experts.up_proj.", ".shared_experts.w3."),
+            (".shared_experts.down_proj.", ".shared_experts.w2."),
+        ):
+            name = name.replace(hf, native)
+        return name
+
     def test_fp8_native_checkpoint_load(self):
-        """Load a native-format quantized checkpoint replicating the released layout:
-        fp8 e4m3 weights + ue8m0 block scales for attention/shared experts/engram.wkv,
-        PACKED FP4 routed experts (e2m1 nibbles in int8, per-row 32-channel ue8m0
-        scales — the released MXFP4 [1, 32] block), fp8 engram tables, BF16 compressor/indexer/embed, F32 mHC params.
-        Found by the cross-engine audit: the `wo_a` grouped projection and the engram
-        tables must survive the load, and the fp4 experts must unpack exactly."""
+        """Load a native-format quantized checkpoint replicating the released layout AND
+        names: fp8 e4m3 weights + ue8m0 block scales for attention / shared experts /
+        engram.wkv, PACKED FP4 routed experts (per expert `w1` / `w2` / `w3`: e2m1
+        nibbles in int8, per-row 32-channel ue8m0 scales — the released MXFP4 [1, 32]
+        block), fp8 engram tables, BF16 compressor / indexer / embed, F32 mHC params and
+        gate biases. The `wo_a` grouped projection and the engram tables must survive
+        the load, and the per-expert fp4 tensors must land exactly in the fused
+        `gate_up_proj` / `down_proj`."""
         from safetensors.torch import save_file
 
         from transformers.models.deepseek_v41 import DeepseekV41Config
@@ -373,6 +469,26 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
                 deq.reshape(out_dim, in_dim),
             )
 
+        def quantize_fp4(weight):
+            # packed fp4 like the release — two e2m1 nibbles per int8 byte (even index in
+            # the low nibble), one ue8m0 scale per row per 32 fp4 channels (the released
+            # MXFP4 [1, 32] block: scales [2304, 160] over an unpacked in-dim of 5120)
+            out_dim, in_dim = weight.shape
+            groups = weight.float().view(out_dim, in_dim // 32, 32)
+            amax = groups.abs().amax(-1).clamp_min(1e-4)
+            scale = torch.exp2(torch.ceil(torch.log2(amax / 6.0)))
+            q = (groups / scale.unsqueeze(-1)).clamp(-6, 6)
+            grid = torch.tensor([0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0])
+            codes = torch.bucketize(q.abs(), torch.tensor([0.25, 0.75, 1.25, 1.75, 2.5, 3.5, 5.0]))
+            values = grid[codes] * torch.where(q < 0, -1.0, 1.0)
+            nibbles = codes.to(torch.uint8) | ((q < 0).to(torch.uint8) << 3)
+            packed = nibbles[..., 0::2] | (nibbles[..., 1::2] << 4)
+            return (
+                packed.reshape(out_dim, in_dim // 2).to(torch.int8),
+                scale.to(torch.float8_e8m0fnu),
+                (values * scale.unsqueeze(-1)).reshape(out_dim, in_dim),
+            )
+
         tokenizer = tiny_word_tokenizer()
         _, compressed_vocab = build_compressed_token_map(tokenizer)
         config = self.model_tester.get_config()
@@ -386,101 +502,75 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
 
         model = self.model_tester.causal_lm_class(config).to(torch.bfloat16).eval()
         model.model.bind_tokenizer(tokenizer)
+        inter = config.moe_intermediate_size
+        # the released checkpoint's quantized set: attention projections (incl. the
+        # grouped wo_a), indexer.wq_b, engram.wkv and the SHARED experts are fp8-block;
+        # the ROUTED experts are packed fp4. Compressor, indexer.wk / weights_proj, gate,
+        # embed and head stay bf16; mHC / sinks / gate biases f32.
+        fp8_suffixes = (
+            "self_attn.q_a_proj.weight",
+            "self_attn.q_b_proj.weight",
+            "self_attn.kv_proj.weight",
+            "self_attn.o_a_proj.weight",
+            "self_attn.o_b_proj.weight",
+            "indexer.q_b_proj.weight",
+            "engram.wkv.weight",
+            "shared_experts.gate_proj.weight",
+            "shared_experts.up_proj.weight",
+            "shared_experts.down_proj.weight",
+        )
+        f32_leaves = ("fn", "base", "scale", "sinks", "e_score_correction_bias", "e_score_correction_bias_vl")
         native, dequantized = {}, {}
-        for name, param in model.named_parameters():
-            native_name = name
-            for a, b in [
-                ("model.layers.", "layers."),
-                ("model.embed.", "embed."),
-                ("model.norm.", "norm."),
-                ("lm_head.", "head."),
-            ]:
-                native_name = native_name.replace(a, b)
-            # the released checkpoint's quantized set: attention projections (incl.
-            # the grouped wo_a), indexer.wq_b, engram.wkv and the SHARED experts are
-            # fp8-block; the ROUTED experts are packed fp4 (e2m1 nibbles in an int8
-            # container, one ue8m0 scale per row per 16 channels). Compressor,
-            # indexer.wk/weights_proj, gate, embed and head stay bf16/f32.
-            is_fp8 = (
-                param.ndim == 2
-                and any(
-                    name.endswith(f".{suffix}")
-                    for suffix in (
-                        "attn.wq_a.weight",
-                        "attn.wq_b.weight",
-                        "attn.wkv.weight",
-                        "attn.wo_a.weight",
-                        "attn.wo_b.weight",
-                        "indexer.wq_b.weight",
-                        "engram.wkv.weight",
-                        "w1.weight",
-                        "w2.weight",
-                        "w3.weight",
-                    )
-                )
-                and ".experts." not in name
-            )
-            if name.endswith("engram.embed.weight"):
-                rows, dim = param.shape
-                blocks = param.float().view(rows, dim // 32, 32)
+        for name, tensor in model.state_dict().items():
+            native_name = self._to_native_name(name)
+            if name.endswith("mlp.experts.gate_up_proj"):
+                fused = []
+                for e, weight in enumerate(tensor):
+                    halves = []
+                    for w_name, half in (("w1", weight[:inter]), ("w3", weight[inter:])):
+                        packed, scale, deq = quantize_fp4(half)
+                        base = native_name[: -len("gate_up_proj")] + f"{e}.{w_name}"
+                        native[base + ".weight"], native[base + ".scale"] = packed, scale
+                        halves.append(deq)
+                    fused.append(torch.cat(halves, dim=0))
+                dequantized[name] = torch.stack(fused).to(torch.bfloat16)
+            elif name.endswith("mlp.experts.down_proj"):
+                fused = []
+                for e, weight in enumerate(tensor):
+                    packed, scale, deq = quantize_fp4(weight)
+                    base = native_name[: -len("down_proj")] + f"{e}.w2"
+                    native[base + ".weight"], native[base + ".scale"] = packed, scale
+                    fused.append(deq)
+                dequantized[name] = torch.stack(fused).to(torch.bfloat16)
+            elif name.endswith("engram.embed.weight"):
+                rows, dim = tensor.shape
+                blocks = tensor.float().view(rows, dim // 32, 32)
                 amax = blocks.abs().amax(-1).clamp_min(1e-4)
                 scale = torch.exp2(torch.ceil(torch.log2(amax / 448.0)))
                 q = (blocks / scale.unsqueeze(-1)).clamp(-448, 448)
-                native["layers.1.engram.embed.weight"] = q.reshape(rows, dim).to(torch.float8_e4m3fn)
-                native["layers.1.engram.embed.scale"] = scale.to(torch.float8_e8m0fnu)
+                native[native_name] = q.reshape(rows, dim).to(torch.float8_e4m3fn)
+                native[native_name[: -len(".weight")] + ".scale"] = scale.to(torch.float8_e8m0fnu)
                 dequantized[name] = (
                     (q.to(torch.float8_e4m3fn).float() * scale.unsqueeze(-1)).reshape(rows, dim).to(torch.bfloat16)
                 )
-            elif ".experts." in name and param.ndim == 2:
-                # routed experts: packed fp4 like the release — two e2m1 nibbles per
-                # int8 byte (even index in the low nibble), one ue8m0 scale per row
-                # per 32 fp4 channels (the released MXFP4 [1, 32] block: scales
-                # [2304, 160] over an unpacked in-dim of 5120)
-                out_dim, in_dim = param.shape
-                groups = param.float().view(out_dim, in_dim // 32, 32)
-                amax = groups.abs().amax(-1).clamp_min(1e-4)
-                scale = torch.exp2(torch.ceil(torch.log2(amax / 6.0)))
-                q = (groups / scale.unsqueeze(-1)).clamp(-6, 6)
-                grid = torch.tensor([0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0])
-                codes = torch.bucketize(q.abs(), torch.tensor([0.25, 0.75, 1.25, 1.75, 2.5, 3.5, 5.0]))
-                values = grid[codes] * torch.where(q < 0, -1.0, 1.0)
-                nibbles = codes.to(torch.uint8) | ((q < 0).to(torch.uint8) << 3)
-                packed = nibbles[..., 0::2] | (nibbles[..., 1::2] << 4)
-                native[native_name] = packed.reshape(out_dim, in_dim // 2).to(torch.int8)
-                native[native_name[: -len(".weight")] + ".scale"] = scale.to(torch.float8_e8m0fnu)
-                dequantized[name] = (values * scale.unsqueeze(-1)).reshape(out_dim, in_dim).to(torch.bfloat16)
-            elif is_fp8:
-                weight, scale, deq = quantize_fp8(param.data)
+            elif name.endswith("engram.embed.scale"):
+                continue  # written by the branch above; the model's (unused-in-bf16) scale must not overwrite it
+            elif name.endswith(fp8_suffixes):
+                weight, scale, deq = quantize_fp8(tensor)
                 # the checkpoint keeps the param's own name for the fp8 tensor and
                 # stores the block scales as a `.scale` SIBLING of it
                 native[native_name] = weight
                 native[native_name[: -len(".weight")] + ".scale"] = scale
                 dequantized[name] = deq.to(torch.bfloat16)
-            elif name.endswith("engram.embed.scale"):
-                # the checkpoint's table scale was written by the branch above;
-                # the model's (unused-in-bf16) scale param must not overwrite it
-                continue
+            elif name.split(".")[-1] in f32_leaves or name.endswith(("q_weight", "k_weight")):
+                native[native_name] = tensor.to(torch.float32)
             else:
-                native[native_name] = param.data.to(torch.bfloat16) if param.dtype.is_floating_point else param.data
-        # F32 tensors stay F32 (the checkpoint's mHC / sink / bias dtypes)
-        for name, param in model.named_parameters():
-            if name.split(".")[-1] in (
-                "hc_attn_fn",
-                "hc_attn_base",
-                "hc_attn_scale",
-                "hc_ffn_fn",
-                "hc_ffn_base",
-                "hc_ffn_scale",
-                "attn_sink",
-                "bias",
-                "bias_vl",
-                "q_weight",
-                "k_weight",
-            ):
-                native_name = name
-                for a, b in [("model.layers.", "layers.")]:
-                    native_name = native_name.replace(a, b)
-                native[native_name] = param.data.to(torch.float32)
+                native[native_name] = tensor.to(torch.bfloat16) if tensor.dtype.is_floating_point else tensor
+        # the file must be in the released naming: no HF names leak through
+        self.assertFalse({k for k in native if "self_attn" in k or "gate_up_proj" in k or k.startswith("model.")})
+        self.assertIn("layers.0.ffn.experts.0.w1.scale", native)
+        self.assertIn("layers.0.hc_attn_fn", native)
+        self.assertIn("layers.0.ffn.gate.bias_vl", native)
 
         with tempfile.TemporaryDirectory() as tmp:
             save_file(native, os.path.join(tmp, "model.safetensors"))
@@ -498,19 +588,34 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
             loaded = self.model_tester.causal_lm_class.from_pretrained(tmp, dtype=torch.bfloat16)
             loaded.model.bind_tokenizer(tokenizer)
 
-        # 1. untouched tensors load verbatim (BF16/F32 modules survive the fp8 path)
-        ref = dict(model.named_parameters())
-        got = dict(loaded.named_parameters())
-        for name in ("model.embed.weight", "model.layers.0.ffn.gate.weight", "model.layers.0.hc_attn_fn"):
+        # 1. untouched tensors load verbatim (BF16/F32 modules survive the fp8 path);
+        #    the gate biases come back as the fp32 buffers they are
+        ref = model.state_dict()
+        got = loaded.state_dict()
+        for name in (
+            "model.embed_tokens.weight",
+            "model.layers.0.mlp.gate.weight",
+            "model.layers.0.attn_hc.fn",
+            "model.layers.1.self_attn.compressor.gate_proj.weight",
+            "model.layers.0.mlp.gate.e_score_correction_bias_vl",
+        ):
             self.assertTrue(torch.allclose(ref[name].float(), got[name].float(), atol=1e-3), name)
+        self.assertEqual(got["model.layers.0.mlp.gate.e_score_correction_bias"].dtype, torch.float32)
+        self.assertEqual(got["model.layers.0.attn_hc.fn"].dtype, torch.float32)
         # 2. fp8 tensors dequantize to exactly what we packed (scales applied once)
         for name, deq in dequantized.items():
             self.assertTrue(torch.allclose(deq.float(), got[name].float(), atol=5e-2), name)
-        # 3. the grouped wo_a specifically: dequantized and reshapeable
-        wo_a = got["model.layers.0.attn.wo_a.weight"]
-        self.assertEqual(wo_a.dtype, torch.bfloat16)
-        wo_a.view(config.o_groups, -1, config.hidden_size)
-        # 4. end-to-end: fp8-loaded logits track the bf16 original
+        # 3. the fused experts: every per-expert fp4 tensor lands exactly in its slice
+        for layer in range(config.num_hidden_layers):
+            for proj in ("gate_up_proj", "down_proj"):
+                name = f"model.layers.{layer}.mlp.experts.{proj}"
+                self.assertEqual(got[name].shape, ref[name].shape, name)
+                self.assertTrue(torch.equal(got[name], dequantized[name]), name)
+        # 4. the grouped o_a_proj specifically: dequantized and reshapeable
+        o_a_proj = got["model.layers.0.self_attn.o_a_proj.weight"]
+        self.assertEqual(o_a_proj.dtype, torch.bfloat16)
+        o_a_proj.view(config.o_groups, -1, config.hidden_size)
+        # 5. end-to-end: fp8-loaded logits track the bf16 original
         # stay inside the tiny tokenizer's range: the engram hashes map ids through
         # build_compressed_token_map, whose lookup has one row per tokenizer entry
         inputs = torch.randint(0, len(tokenizer), (2, 9))

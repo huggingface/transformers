@@ -1625,20 +1625,19 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
     # class must accept the composite config: `get_hf_quantizer` only sees `quantization_config`
     # on the config produced from `config_class` — pointing it at the bare text config silently
     # dropped the FP8 quantization config and fp8 tensors then failed to load. The text config
-    # is unwrapped in `__init__` (same pattern as `MllamaForCausalLM`); a text config passed
-    # directly is returned unchanged by `get_text_config()`.
+    # is unwrapped in `__init__` (same pattern as `MllamaForCausalLM`; explicit bases rather
+    # than `MixtralForCausalLM`, whose inlined `__init__` would drop the unwrap); a text config
+    # passed directly is returned unchanged by `get_text_config()`.
     config_class = DeepseekV41Config
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__(config.get_text_config())
         self.model = DeepseekV41TextModel(self.config)
         self.vocab_size = self.config.vocab_size
         self.lm_head = nn.Linear(self.config.hidden_size, self.config.vocab_size, bias=False)
         self.router_aux_loss_coef = self.config.router_aux_loss_coef
         self.num_experts = self.config.n_routed_experts
         self.num_experts_per_tok = self.config.num_experts_per_tok
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     @merge_with_config_defaults

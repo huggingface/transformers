@@ -579,6 +579,13 @@ class DeepseekV41Config(PreTrainedConfig):
                 self.text_config = text_cls(**text_kwargs)
             else:
                 self.text_config = text_cls()
+        # The released config.json declares the routed experts' storage format
+        # (`expert_dtype: "fp4"`, packed e2m1) under the top-level `quantization_config`,
+        # which `FineGrainedFP8Config` does not keep — but `FP8Experts` reads it from the
+        # TEXT config to size its packed `gate_up_proj` / `down_proj`. Hoist it.
+        quantization_config = kwargs.get("quantization_config")
+        if isinstance(quantization_config, dict) and "expert_dtype" in quantization_config:
+            self.text_config.expert_dtype = quantization_config["expert_dtype"]
         super().__post_init__(**kwargs)
 
 
