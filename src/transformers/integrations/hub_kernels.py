@@ -296,6 +296,18 @@ if is_kernels_available():
                     ),
                 },
             },
+            # Inference only: the kernel has no backward. Tested on CUDA and ROCm; XPU builds
+            # but is untested.
+            "WeatherNext2Attention": {
+                device: {
+                    Mode.INFERENCE: LayerRepository(
+                        repo_id="kernels-community/weathernext2-banded-attention",
+                        layer_name="WeatherNext2Attention",
+                        version=1,
+                    ),
+                }
+                for device in ("cuda", "rocm", "xpu")
+            },
             "EsmFold2TriangleMultiplication": {
                 "cuda": {
                     Mode.INFERENCE: LayerRepository(
