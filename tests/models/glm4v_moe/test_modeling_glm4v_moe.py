@@ -73,7 +73,7 @@ class Glm4vMoeVisionText2TextModelTester:
             "output_channels": 64,
             "hidden_act": "silu",
             "max_position_embeddings": 512,
-            "rope_parameters": {"type": "default", "mrope_section": [2, 2], "partial_rotary_factor": 1.0},
+            "rope_parameters": {"type": "default", "mrope_section": [2, 1, 1], "partial_rotary_factor": 1.0},
             "rope_theta": 10000,
             "tie_word_embeddings": True,
             "bos_token_id": 0,

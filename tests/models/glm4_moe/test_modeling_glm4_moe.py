@@ -20,7 +20,6 @@ import torch
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
-    cleanup,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -28,6 +27,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -64,11 +64,7 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch_accelerator
 @slow
-class Glm4MoeIntegrationTest(unittest.TestCase):
-    def tearDown(self):
-        # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
-        cleanup(torch_device, gc_collect=False)
-
+class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @slow
     @require_torch_accelerator
     @pytest.mark.torch_compile_test
