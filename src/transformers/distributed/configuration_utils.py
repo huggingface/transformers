@@ -100,10 +100,10 @@ class DistributedConfig:
         if self.dispatches_tokens and not self.enable_expert_parallel:
             raise ValueError(f"`experts_dispatch={self.experts_dispatch!r}` requires `enable_expert_parallel=True`.")
 
-        if self.pp_size > 1 and (self.tp_size > 1 or self.fsdp_size > 1):
+        if self.fsdp_size > 1 and self.pp_size > 1:
             raise ValueError(
-                "Pipeline parallelism cannot be combined with tensor or FSDP parallelism yet. "
-                "Use DistributedConfig(pp_size=N) on its own, or DistributedConfig(tp_size=N, fsdp_size=M)."
+                "Combining FSDP with pipeline parallelism is not supported yet. "
+                "Use DistributedConfig(tp_size=N, fsdp_size=M), or combine TP and PP."
             )
 
     @classmethod

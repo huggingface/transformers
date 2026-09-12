@@ -782,8 +782,7 @@ class Trainer:
         model_fsdp_size = getattr(self.model, "fsdp_size", None) or 1
         if model_tp_size > 1:
             # Sharded at load time (tensor/expert parallelism, optionally with FSDP2 on a second mesh
-            # dimension): accelerate has to know both sizes, or it sees unaccounted ranks and wraps
-            # the DTensor model in DDP, which raises.
+            # dimension): accelerate has to know both sizes.
             if not is_accelerate_available("1.12.0"):
                 raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
             if args.get("parallelism_config") is None:

@@ -197,7 +197,7 @@ def apply_fully_sharded_data_parallelism(
     Apply FSDP2 (fully_shard) to a model.
 
     Torch availability, distributed initialization and the version requirement
-    are asserted upstream by `initialize_fully_sharded_data_parallelism`.
+    are asserted upstream by `initialize_distributed_mesh`.
 
     With expert-parallel token dispatch `fsdp_mesh` spans the expert-parallel ranks, which the experts are already
     sharded across: the experts are fully sharded across `expert_mesh` in their own group, and passed to FSDP2 as
