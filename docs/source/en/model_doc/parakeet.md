@@ -241,6 +241,50 @@ Timestamped tokens: [[{'token': 'm', 'start': 0.24, 'end': 0.48}, {'token': 'ist
 </hfoption>
 </hfoptions>
 
+### Long-form audio with local attention
+
+The default attention pattern lets every frame attend to every other one, so the relative positional term is a
+`(batch, heads, frames, 2 * frames - 1)` tensor. That is what puts a ceiling on the input length - roughly
+`max_position_embeddings` subsampled frames, or about seven minutes of audio for the released checkpoints.
+
+`change_attention_model` switches the encoder to a sliding window instead, matching NeMo's method of the same
+name. Each frame then attends to `att_context_size = [left, right]` neighbours, the positional table covers the
+window rather than the sequence, and compute and memory become linear in the input length - hour-long audio
+fits. The two patterns share the same weights, so this is an inference-time switch with nothing to re-load:
+
+```python
+import torch
+from transformers import AutoProcessor, ParakeetForCTC
+
+model_id = "nvidia/parakeet-ctc-0.6b"
+processor = AutoProcessor.from_pretrained(model_id)
+model = ParakeetForCTC.from_pretrained(model_id, dtype=torch.float32).eval()
+
+model.change_attention_model(self_attention_model="rel_pos_local_attn", att_context_size=[256, 256])
+
+inputs = processor(long_audio_array, sampling_rate=16000, return_tensors="pt")
+predicted_ids = model.generate(**inputs)
+print(processor.batch_decode(predicted_ids, skip_special_tokens=True))
+```
+
+The same switch can be made up front through the config, which is what you want when the checkpoint is always
+used this way:
+
+```python
+model = ParakeetForCTC.from_pretrained(
+    model_id,
+    encoder_config={"attention_type": "rel_pos_local_attn", "attention_context_size": [256, 256]},
+)
+```
+
+Call `model.change_attention_model(self_attention_model="rel_pos")` to go back.
+
+A window wide enough to span the whole input reproduces the full-attention result exactly, so `att_context_size`
+is a quality/length trade-off rather than a different model: the checkpoints were trained with full attention,
+and a narrow window will move the transcription. `[256, 256]` is NeMo's documented setting for these models.
+`config.local_attention_chunk_size` controls how many query frames are processed per iteration; it trades peak
+memory against iteration count and does not change the output.
+
 ### Making The Model Go Brrr
 
 Parakeet supports full-graph compilation with graph capture (CUDA graphs on NVIDIA GPUs, and the equivalent mechanism on other accelerators)! This optimization is most effective when you know the maximum audio length you want to transcribe. The key idea is using static input shapes to avoid recompilation. For example, if you know your audio will be under 30 seconds, you can use the processor to pad all inputs to 30 seconds, preparing consistent input features and attention masks. See the example below!

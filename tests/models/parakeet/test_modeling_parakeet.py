@@ -355,6 +355,134 @@ class ParakeetEncoderModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
+@require_torch
+class ParakeetLocalAttentionTest(unittest.TestCase):
+    """Sliding-window attention (`attention_type="rel_pos_local_attn"`)."""
+
+    def _encoder(self, seq_length=512, batch_size=2, **config_kwargs):
+        torch.manual_seed(0)
+        config = ParakeetEncoderConfig(
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            intermediate_size=64,
+            subsampling_conv_channels=16,
+            dropout=0.0,
+            dropout_positions=0.0,
+            layerdrop=0.0,
+            activation_dropout=0.0,
+            attention_dropout=0.0,
+            **config_kwargs,
+        )
+        model = ParakeetEncoder(config).to(torch_device).eval()
+        input_features = floats_tensor([batch_size, seq_length, config.num_mel_bins])
+        attention_mask = random_attention_mask([batch_size, seq_length])
+        return model, input_features, attention_mask
+
+    def _run(self, model, input_features, attention_mask):
+        with torch.no_grad():
+            out = model(input_features, attention_mask=attention_mask)
+        return out.last_hidden_state, out.attention_mask.bool()
+
+    def test_wide_window_matches_full_attention(self):
+        """A window at least as wide as the sequence attends to everything, so it must match `rel_pos`."""
+        model, input_features, attention_mask = self._encoder()
+        full, valid = self._run(model, input_features, attention_mask)
+
+        num_frames = full.shape[1]
+        model.change_attention_model(
+            self_attention_model="rel_pos_local_attn", att_context_size=[num_frames, num_frames]
+        )
+        local, _ = self._run(model, input_features, attention_mask)
+
+        # Padding frames are excluded on the key side only under local attention, so they are allowed to differ;
+        # they are masked out of every downstream consumer.
+        torch.testing.assert_close(full[valid], local[valid], rtol=1e-4, atol=1e-4)
+
+    def test_chunk_size_does_not_change_output(self):
+        model, input_features, attention_mask = self._encoder()
+        model.change_attention_model(self_attention_model="rel_pos_local_attn", att_context_size=[16, 16])
+
+        model.config.local_attention_chunk_size = 1024
+        reference, _ = self._run(model, input_features, attention_mask)
+        for chunk_size in (7, 16, 33):
+            model.config.local_attention_chunk_size = chunk_size
+            chunked, _ = self._run(model, input_features, attention_mask)
+            torch.testing.assert_close(reference, chunked, rtol=1e-5, atol=1e-5, msg=f"chunk_size={chunk_size}")
+
+    def test_narrow_window_restricts_attention(self):
+        """Guards against the window silently being a no-op."""
+        model, input_features, attention_mask = self._encoder()
+        full, valid = self._run(model, input_features, attention_mask)
+
+        model.change_attention_model(self_attention_model="rel_pos_local_attn", att_context_size=[2, 2])
+        local, _ = self._run(model, input_features, attention_mask)
+        self.assertGreater((full[valid] - local[valid]).abs().max().item(), 1e-3)
+
+    def test_sequence_longer_than_max_position_embeddings(self):
+        """The point of the window: the positional table no longer grows with the input."""
+        model, input_features, attention_mask = self._encoder(seq_length=1024, max_position_embeddings=16)
+        num_frames = 1024 // model.config.subsampling_factor
+        self.assertGreater(num_frames, model.config.max_position_embeddings)
+
+        model.change_attention_model(self_attention_model="rel_pos_local_attn", att_context_size=[8, 8])
+        hidden_states, _ = self._run(model, input_features, attention_mask)
+        self.assertEqual(hidden_states.shape[1], num_frames)
+        self.assertTrue(torch.isfinite(hidden_states).all())
+
+        position_embeddings = model.encode_positions(
+            hidden_states, torch.arange(8, -9, -1, device=hidden_states.device)
+        )
+        self.assertEqual(position_embeddings.shape[1], 17)
+
+    def test_change_attention_model_round_trip(self):
+        model, input_features, attention_mask = self._encoder()
+        before, valid = self._run(model, input_features, attention_mask)
+
+        model.change_attention_model(self_attention_model="rel_pos_local_attn", att_context_size=[8, 8])
+        self.assertEqual(model.config.attention_type, "rel_pos_local_attn")
+        self.assertEqual(model.config.attention_context_size, [8, 8])
+
+        model.change_attention_model(self_attention_model="rel_pos")
+        self.assertEqual(model.config.attention_type, "rel_pos")
+        after, _ = self._run(model, input_features, attention_mask)
+        torch.testing.assert_close(before, after)
+
+    def test_change_attention_model_validation(self):
+        model, _, _ = self._encoder(seq_length=128)
+        with self.assertRaises(ValueError):
+            model.change_attention_model(self_attention_model="unknown")
+        with self.assertRaises(ValueError):
+            model.change_attention_model(self_attention_model="rel_pos_local_attn")
+        with self.assertRaises(ValueError):
+            model.change_attention_model(self_attention_model="rel_pos_local_attn", att_context_size=[8])
+        with self.assertRaises(ValueError):
+            model.change_attention_model(self_attention_model="rel_pos_local_attn", att_context_size=[-1, 8])
+
+    def test_config_requires_context_size(self):
+        with self.assertRaises(ValueError):
+            ParakeetEncoderConfig(attention_type="rel_pos_local_attn")
+        with self.assertRaises(ValueError):
+            ParakeetEncoderConfig(attention_type="not_an_attention_type")
+
+    def test_ctc_model_delegates_to_encoder(self):
+        torch.manual_seed(0)
+        config = ParakeetCTCConfig(
+            vocab_size=32,
+            encoder_config=ParakeetEncoderConfig(
+                hidden_size=32,
+                num_hidden_layers=2,
+                num_attention_heads=4,
+                intermediate_size=64,
+                subsampling_conv_channels=16,
+            ),
+        )
+        model = ParakeetForCTC(config).to(torch_device).eval()
+        model.change_attention_model(self_attention_model="rel_pos_local_attn", att_context_size=[16, 16])
+        self.assertEqual(model.encoder.config.attention_type, "rel_pos_local_attn")
+        self.assertEqual(model.encoder.config.attention_context_size, [16, 16])
+
+
 class ParakeetForCTCModelTester:
     def __init__(self, parent, encoder_kwargs=None, is_training=True, vocab_size=128, pad_token_id=0):
         if encoder_kwargs is None:

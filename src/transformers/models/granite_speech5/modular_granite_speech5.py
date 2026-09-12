@@ -340,6 +340,9 @@ class GraniteSpeech5Encoder(ParakeetEncoder):
     config: GraniteSpeech5EncoderConfig
     base_model_prefix = "encoder"
 
+    def change_attention_model(self, *args, **kwargs):
+        raise AttributeError("Not applicable to GraniteSpeech5: it does not use Parakeet's sliding-window attention.")
+
     def __init__(self, config: GraniteSpeech5EncoderConfig):
         GraniteSpeech5PreTrainedModel.__init__(self, config)
         self.gradient_checkpointing = False
@@ -444,6 +447,9 @@ class GraniteSpeech5ForCTC(ParakeetForCTC):
         "ctc_head.weight": "encoder.out.weight",
         "ctc_head.bias": "encoder.out.bias",
     }
+
+    def change_attention_model(self, *args, **kwargs):
+        raise AttributeError("Not applicable to GraniteSpeech5: it does not use Parakeet's sliding-window attention.")
 
     def __init__(self, config: GraniteSpeech5CTCConfig):
         super().__init__(config)

@@ -82,9 +82,11 @@ class ParakeetEncoderRelPositionalEncoding(nn.Module):
         return inv_freq.to(device)
 
     @torch.no_grad()
-    def forward(self, hidden_states: torch.Tensor):
-        seq_length = hidden_states.shape[1]
-        position_ids = torch.arange(seq_length - 1, -seq_length, -1, device=hidden_states.device)
+    def forward(self, hidden_states: torch.Tensor, position_ids: torch.Tensor | None = None):
+        if position_ids is None:
+            # Every relative distance the sequence can span, from `seq_length - 1` down to `-(seq_length - 1)`.
+            seq_length = hidden_states.shape[1]
+            position_ids = torch.arange(seq_length - 1, -seq_length, -1, device=hidden_states.device)
         inv_freq_expanded = (
             self.inv_freq[None, :, None].float().expand(hidden_states.shape[0], -1, 1).to(hidden_states.device)
         )
@@ -325,33 +327,119 @@ class ParakeetEncoderAttention(nn.Module):
         relative_key_states = self.relative_k_proj(position_embeddings)
         relative_key_states = relative_key_states.view(batch_size, -1, self.config.num_attention_heads, self.head_dim)
 
-        # terms (b) and (d)
-        matrix_bd = query_states_with_bias_v @ relative_key_states.permute(0, 2, 3, 1)
-        matrix_bd = self._rel_shift(matrix_bd)
-        matrix_bd = matrix_bd[..., :seq_length]
-        matrix_bd = matrix_bd * self.scaling
+        if self.config.attention_type == "rel_pos_local_attn":
+            # `attention_mask` is the padding mask here, not a full `(batch, 1, query, key)` mask - see
+            # `ParakeetEncoder.forward`. Attention weights are not materialised for the whole sequence, so none
+            # are returned.
+            attn_output = self._local_attention_forward(
+                attention_interface=attention_interface,
+                query_states_with_bias_u=query_states_with_bias_u,
+                query_states_with_bias_v=query_states_with_bias_v,
+                key_states=key_states,
+                value_states=value_states,
+                relative_key_states=relative_key_states,
+                attention_mask=attention_mask,
+                **kwargs,
+            )
+            attn_weights = None
+        else:
+            # terms (b) and (d)
+            matrix_bd = query_states_with_bias_v @ relative_key_states.permute(0, 2, 3, 1)
+            matrix_bd = self._rel_shift(matrix_bd)
+            matrix_bd = matrix_bd[..., :seq_length]
+            matrix_bd = matrix_bd * self.scaling
 
-        if attention_mask is not None:
-            # here the original codebase uses -10000.0 rather than float("-inf") and then manual masked fill with 0.0s
-            # see: https://github.com/NVIDIA-NeMo/NeMo/blob/8cfedd7203462cb251a914e700e5605444277561/nemo/collections/asr/parts/submodules/multi_head_attention.py#L320-L340
-            # we rather went for a straight-forward approach with float("-inf")
-            matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), float("-inf"))
+            if attention_mask is not None:
+                # here the original codebase uses -10000.0 rather than float("-inf") and then manual masked fill with 0.0s
+                # see: https://github.com/NVIDIA-NeMo/NeMo/blob/8cfedd7203462cb251a914e700e5605444277561/nemo/collections/asr/parts/submodules/multi_head_attention.py#L320-L340
+                # we rather went for a straight-forward approach with float("-inf")
+                matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), float("-inf"))
 
-        # will compute matrix_ac - terms (a) and (c) - and add matrix_bd
-        attn_output, attn_weights = attention_interface(
-            self,
-            query=query_states_with_bias_u,
-            key=key_states,
-            value=value_states,
-            attention_mask=matrix_bd,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
+            # will compute matrix_ac - terms (a) and (c) - and add matrix_bd
+            attn_output, attn_weights = attention_interface(
+                self,
+                query=query_states_with_bias_u,
+                key=key_states,
+                value=value_states,
+                attention_mask=matrix_bd,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
+                **kwargs,
+            )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
+
+    def _local_attention_forward(
+        self,
+        attention_interface: Callable,
+        query_states_with_bias_u: torch.Tensor,
+        query_states_with_bias_v: torch.Tensor,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        relative_key_states: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        """Sliding-window attention over `config.attention_context_size`, walked one chunk of queries at a time.
+
+        The full-sequence path builds terms (b) and (d) as a `(batch, heads, seq, 2 * seq - 1)` tensor, which is
+        what makes long inputs impossible rather than merely slow. Here the positional term is instead a
+        `(batch, heads, chunk, left + right + 1)` tensor gathered into place, so peak memory follows the window
+        rather than the sequence. Queries outside a chunk's window are dropped by the mask, which makes this
+        arithmetically the same attention as the full-sequence path restricted to the window - the relative
+        position of a key is what indexes `relative_key_states` either way.
+        """
+        left_context, right_context = self.config.attention_context_size
+        chunk_size = self.config.local_attention_chunk_size
+        seq_length = query_states_with_bias_u.shape[2]
+        device = query_states_with_bias_u.device
+
+        # (batch, heads, left + right + 1, head_dim); entry `m` holds relative position `left_context - m`
+        relative_key_states = relative_key_states.transpose(1, 2)
+
+        padding_mask = attention_mask[:, 0, 0, :] if attention_mask is not None else None
+
+        attn_output = []
+        for chunk_start in range(0, seq_length, chunk_size):
+            chunk_end = min(chunk_start + chunk_size, seq_length)
+            window_start = max(0, chunk_start - left_context)
+            window_end = min(seq_length, chunk_end + right_context)
+
+            query_positions = torch.arange(chunk_start, chunk_end, device=device)
+            key_positions = torch.arange(window_start, window_end, device=device)
+            relative_positions = query_positions[:, None] - key_positions[None, :]
+            in_window = (relative_positions <= left_context) & (relative_positions >= -right_context)
+            gather_index = (left_context - relative_positions).clamp_(0, left_context + right_context)
+            gather_index = gather_index[None, None].expand(*query_states_with_bias_v.shape[:2], -1, -1)
+
+            # terms (b) and (d), gathered from the window-sized table onto the (query, key) grid
+            matrix_bd = query_states_with_bias_v[:, :, chunk_start:chunk_end] @ relative_key_states.transpose(-2, -1)
+            matrix_bd = matrix_bd.gather(-1, gather_index)
+            matrix_bd = matrix_bd * self.scaling
+
+            chunk_mask = in_window[None, None]
+            if padding_mask is not None:
+                # Masking keys alone matches NeMo: rows of padding queries stay finite (and are discarded
+                # downstream) rather than turning into an all-masked softmax.
+                chunk_mask = chunk_mask & padding_mask[:, None, None, window_start:window_end]
+            matrix_bd = matrix_bd.masked_fill_(chunk_mask.logical_not(), float("-inf"))
+
+            chunk_output, _ = attention_interface(
+                self,
+                query=query_states_with_bias_u[:, :, chunk_start:chunk_end],
+                key=key_states[:, :, window_start:window_end],
+                value=value_states[:, :, window_start:window_end],
+                attention_mask=matrix_bd,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
+                **kwargs,
+            )
+            attn_output.append(chunk_output)
+
+        # each chunk output is (batch, chunk, heads, head_dim)
+        return torch.cat(attn_output, dim=1)
 
     def _rel_shift(self, attention_scores):
         """Relative position shift for Shaw et al. style attention. See appendix B of https://huggingface.co/papers/1901.02860."""
@@ -605,7 +693,20 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
 
         hidden_states = self.subsampling(input_features, attention_mask)
         hidden_states = hidden_states * self.input_scale
-        position_embeddings = self.encode_positions(hidden_states)
+
+        is_local_attention = self.config.attention_type == "rel_pos_local_attn"
+        position_ids = None
+        if is_local_attention:
+            # One table covering just the window, so it no longer grows with the input.
+            left_context, right_context = self.config.attention_context_size
+            position_ids = torch.arange(left_context, -right_context - 1, -1, device=hidden_states.device)
+            if kwargs.get("output_attentions"):
+                logger.warning_once(
+                    "`output_attentions=True` returns no attention weights under "
+                    '`attention_type="rel_pos_local_attn"`: the weights are never materialised over the full '
+                    "sequence, which is what keeps memory linear in the input length."
+                )
+        position_embeddings = self.encode_positions(hidden_states, position_ids)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         position_embeddings = nn.functional.dropout(
@@ -615,9 +716,14 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         output_mask = None
         if attention_mask is not None:
             output_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
-            attention_mask = output_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
-            attention_mask = attention_mask & attention_mask.transpose(1, 2)
-            attention_mask = attention_mask.unsqueeze(1)
+            if is_local_attention:
+                # A `(batch, 1, seq, seq)` mask is itself quadratic, so local attention gets the padding mask and
+                # applies the window itself. The convolution module reads it the same way either shape.
+                attention_mask = output_mask[:, None, None, :]
+            else:
+                attention_mask = output_mask.unsqueeze(1).expand(-1, hidden_states.shape[1], -1)
+                attention_mask = attention_mask & attention_mask.transpose(1, 2)
+                attention_mask = attention_mask.unsqueeze(1)
 
         for encoder_layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
@@ -639,6 +745,56 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
             last_hidden_state=hidden_states,
             attention_mask=output_mask.int() if attention_mask is not None and output_attention_mask else None,
         )
+
+    def change_attention_model(
+        self,
+        self_attention_model: str | None = None,
+        att_context_size: list[int] | None = None,
+    ):
+        """Switch between full-sequence and sliding-window self-attention, mirroring NeMo's method of the same name.
+
+        Both patterns read the same weights, so this only rewrites `config.attention_type` and
+        `config.attention_context_size` - there is nothing to re-load or re-train. Switching to
+        `"rel_pos_local_attn"` is what allows inputs longer than `config.max_position_embeddings` subsampled
+        frames, since the positional table then covers the window instead of the whole sequence.
+
+        Args:
+            self_attention_model (`str`, *optional*):
+                `"rel_pos"` for full-sequence attention or `"rel_pos_local_attn"` for sliding-window attention.
+                Left unchanged when `None`.
+            att_context_size (`list[int]`, *optional*):
+                Frames attended to on either side, as `[left, right]`. Left unchanged when `None`.
+
+        Example:
+
+        ```python
+        >>> from transformers import ParakeetForCTC
+
+        >>> model = ParakeetForCTC.from_pretrained("nvidia/parakeet-ctc-0.6b")
+        >>> model.change_attention_model(self_attention_model="rel_pos_local_attn", att_context_size=[256, 256])
+        ```
+        """
+        if self_attention_model is None:
+            self_attention_model = self.config.attention_type
+        if att_context_size is None:
+            att_context_size = self.config.attention_context_size
+
+        if self_attention_model not in ("rel_pos", "rel_pos_local_attn"):
+            raise ValueError(
+                "`self_attention_model` must be one of 'rel_pos' or 'rel_pos_local_attn', got "
+                f"'{self_attention_model}'."
+            )
+        if self_attention_model == "rel_pos_local_attn":
+            if att_context_size is None:
+                raise ValueError("`att_context_size` is required when switching to 'rel_pos_local_attn'.")
+            att_context_size = list(att_context_size)
+            if len(att_context_size) != 2 or min(att_context_size) < 0:
+                raise ValueError(
+                    f"`att_context_size` must be `[left, right]` with both values >= 0, got {att_context_size}."
+                )
+
+        self.config.attention_type = self_attention_model
+        self.config.attention_context_size = att_context_size
 
 
 @dataclass
@@ -701,6 +857,19 @@ class ParakeetForCTC(ParakeetPreTrainedModel, GenerationMixin):
         self.ctc_head = ParakeetEncoderCTCHead(config.encoder_config.hidden_size, config.vocab_size, kernel_size=1)
 
         self.post_init()
+
+    def change_attention_model(
+        self,
+        self_attention_model: str | None = None,
+        att_context_size: list[int] | None = None,
+    ):
+        """Switch the encoder between full-sequence and sliding-window self-attention.
+
+        See [`~ParakeetEncoder.change_attention_model`].
+        """
+        self.encoder.change_attention_model(
+            self_attention_model=self_attention_model, att_context_size=att_context_size
+        )
 
     @auto_docstring
     @can_return_tuple
@@ -938,6 +1107,19 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
         self.max_symbols_per_step = config.max_symbols_per_step  # used in generation
 
         self.post_init()
+
+    def change_attention_model(
+        self,
+        self_attention_model: str | None = None,
+        att_context_size: list[int] | None = None,
+    ):
+        """Switch the encoder between full-sequence and sliding-window self-attention.
+
+        See [`~ParakeetEncoder.change_attention_model`].
+        """
+        self.encoder.change_attention_model(
+            self_attention_model=self_attention_model, att_context_size=att_context_size
+        )
 
     @can_return_tuple
     def get_audio_features(
