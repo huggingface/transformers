@@ -21,7 +21,7 @@
     title: Entraînement distribué avec 🤗 Accelerate
   - local: in_translation
     title: Chargement et entraînement des adaptateurs avec 🤗 PEFT
-  - local: in_translation
+  - local: model_sharing
     title: Partager un modèle
   - local: in_translation
     title: Génération avec LLMs
