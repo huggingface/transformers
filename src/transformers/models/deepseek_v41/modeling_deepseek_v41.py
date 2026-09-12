@@ -258,7 +258,7 @@ class DeepseekV41EngramHistoryLayer:
         next call — everything while past recording is on, so `crop` can rewind."""
         if self.engram_context is None:
             self.engram_context = compressed.new_full((compressed.shape[0], context_len), ENGRAM_DEAD)
-        full = torch.cat([self.engram_context, compressed], dim=1)
+        full = torch.cat([self.engram_context.to(compressed.device), compressed], dim=1)
         self.engram_context = full if getattr(self, "record_past", False) else full[:, -context_len:]
         return full[:, -(context_len + compressed.shape[1]) :]
 
@@ -645,6 +645,8 @@ class DeepseekV41Indexer(nn.Module):
             if cache_layer is not None:
                 shared["index_k"] = cache_layer.compressed_kv["indexer"]
         index_k = shared.get("index_k")
+        if index_k is not None:
+            index_k = index_k.to(hidden_states.device)  # source group may sit on another device
         compressed_len = 0 if index_k is None else index_k.shape[2]
         if compressed_len == 0:
             return
@@ -678,7 +680,7 @@ class DeepseekV41Indexer(nn.Module):
                 index_scores, compress_lens, self.candidate_topk_blocks, self.candidate_block_size
             )
         elif self.uses_candidates and shared.get("candidates") is not None:
-            index_scores = index_scores.masked_fill(~shared["candidates"], float("-inf"))
+            index_scores = index_scores.masked_fill(~shared["candidates"].to(index_scores.device), float("-inf"))
 
         # 5. Top-k per query. Early queries can have fewer visible groups than
         #    `index_topk`, so some picks come back with a -inf score; clamp those into
@@ -872,14 +874,16 @@ class DeepseekV41Attention(nn.Module):
                 shared["compress_kv"] = cache_layer.compressed_kv["compressor"]
             compressed_kv = shared.get("compress_kv")
             if compressed_kv is not None:
-                kv = torch.cat([kv, compressed_kv], dim=2)
+                kv = torch.cat([kv, compressed_kv.to(kv.device)], dim=2)  # source may be on another device
 
         # The compressed branch concatenated extra entries onto the KV axis after the
         # model-level mask was built: extend the mask with the indexer's per-query
         # block bias instead of zero-padding (which would attend everywhere).
         if isinstance(attention_mask, torch.Tensor) and kv.shape[2] > attention_mask.shape[-1]:
             if block_bias is not None:
-                attention_mask = torch.cat([attention_mask, block_bias.to(attention_mask.dtype)], dim=-1)
+                attention_mask = torch.cat(
+                    [attention_mask, block_bias.to(attention_mask.device, attention_mask.dtype)], dim=-1
+                )
             else:
                 # A compressed branch with no index source in this forward (legal but
                 # unusual schedule): mask every compressed entry off instead of
@@ -1064,22 +1068,31 @@ class DeepseekV41EngramEmbedding(nn.Module):
         self.scale = nn.Parameter(torch.empty(num_embeddings, head_dim // block_size))
 
     def forward(self, hash_ids: torch.Tensor) -> torch.Tensor:
-        values = F.embedding(hash_ids, self.weight)
+        # The table is in `_no_placement_params`: under `device_map` it stays wherever
+        # it fits (typically host RAM) while the ids arrive on the layer's device. Run
+        # the gather where the table lives and move only the rows (Qwen4-Exp pattern).
+        table_device = self.weight.device if self.weight.device.type != "meta" else hash_ids.device
+        ids = hash_ids.to(table_device)
+        values = F.embedding(ids, self.weight)
         if self.weight.dtype == torch.float8_e4m3fn:
-            scales = F.embedding(hash_ids, self.scale).float()
+            scales = F.embedding(ids, self.scale).float()
             values = values.float().unflatten(-1, (-1, self.block_size)) * scales.unsqueeze(-1)
             values = values.flatten(-2)
-        return values
+        return values.to(hash_ids.device)
 
 
 class DeepseekV41Engram(nn.Module):
     """Writes an n-gram lookup into the residual stream, gated by how well it matches.
 
-    The hash ids fetch `n_hash_cols` rows; `wkv` turns them into one key per hc stream
-    plus a shared value. The gate is a sigmoid of the signed sqrt of a normalized dot
-    product between the stream and the key (weights `q_weight * k_weight`, used only as
-    a product). Hash ids are computed once per forward by
-    :class:`DeepseekV41NgramHashState` and passed in per engram layer."""
+    `wkv` turns the gathered rows (`n_hash_cols` of them per token) into one key per hc
+    stream plus a shared value. The gate is a sigmoid of the signed sqrt of a
+    normalized dot product between the stream and the key (weights
+    `q_weight * k_weight`, used only as a product). The hash ids are computed and the
+    rows gathered once per forward by the model (:class:`DeepseekV41NgramHashState` +
+    the model-level :class:`DeepseekV41EngramEmbedding` tables) and passed in per
+    engram layer — the ~98 GB tables must live outside the decoder layer so the layer
+    stays a no-split unit under `device_map` while the table is excluded from
+    placement."""
 
     def __init__(self, config: DeepseekV41TextConfig, layer_idx: int):
         super().__init__()
@@ -1089,9 +1102,6 @@ class DeepseekV41Engram(nn.Module):
         self.eps = config.rms_norm_eps
         self.clamp_value = 1e-6
         n_hash_cols = (config.engram_max_ngram_size - 1) * config.engram_n_heads
-        self.embed = DeepseekV41EngramEmbedding(
-            config.engram_num_embeddings[self.layer_hash_index], config.engram_head_dim
-        )
         self.wkv = nn.Linear(
             n_hash_cols * config.engram_head_dim,
             config.hidden_size * (config.hc_mult + 1),
@@ -1101,12 +1111,15 @@ class DeepseekV41Engram(nn.Module):
         self.k_weight = nn.Parameter(torch.empty(config.hc_mult, config.hidden_size))
 
     def forward(
-        self, hidden_streams: torch.Tensor, hash_ids: torch.Tensor, token_mask: torch.Tensor | None
+        self, hidden_streams: torch.Tensor, rows: torch.Tensor, token_mask: torch.Tensor | None
     ) -> torch.Tensor:
-        """hidden_streams: [B, S, hc, D]; hash_ids: [B, S, n_hash_cols]; token_mask:
-        [B, S], False shuts the gate so those positions pass through untouched."""
-        # The dequantized fp8 rows are exact in any dtype; cast to the consumer's.
-        kv = self.wkv(self.embed(hash_ids).flatten(-2).to(self.wkv.weight.dtype))
+        """hidden_streams: [B, S, hc, D]; rows: [B, S, n_hash_cols, head_dim] gathered
+        table rows; token_mask: [B, S], False shuts the gate so those positions pass
+        through untouched."""
+        # The dequantized fp8 rows are exact in any dtype; cast to the stream's dtype
+        # (NOT the weight's: under `dequantize=False` `wkv` is an FP8Linear whose
+        # weight is float8, and its input must stay bf16).
+        kv = self.wkv(rows.flatten(-2).to(hidden_streams.dtype))
         key, value = kv.split([self.hc_mult * self.hidden_size, self.hidden_size], dim=-1)
         key = key.float().unflatten(-1, (self.hc_mult, self.hidden_size))
         weight = self.q_weight.float() * self.k_weight.float()  # only ever used as a product
@@ -1274,9 +1287,13 @@ class DeepseekV41NgramHashState(nn.Module):
         self.compressed_vocab_size = config.engram_compressed_vocab_size
         self.engram_pad_id = config.engram_pad_id
         self.pad_id: int | None = None  # compressed id of `engram_pad_id`, known once bound
-        for name, table in self.hash_tables().items():
-            self.register_buffer(name, table, persistent=False)
-        self.register_buffer("token_map", None, persistent=False)
+        tables = self.hash_tables()
+        self.primes = nn.Buffer(tables["primes"], persistent=False)
+        self.offsets = nn.Buffer(tables["offsets"], persistent=False)
+        self.multipliers = nn.Buffer(tables["multipliers"], persistent=False)
+        # Filled by `bind_tokenizer` (tokenizer-derived); empty until then. A buffer so
+        # it follows `.to()` / device_map like the config tables.
+        self.token_map = nn.Buffer(torch.empty(0, dtype=torch.long), persistent=False)
 
     def hash_tables(self) -> dict[str, torch.Tensor]:
         """The config-derived tables as fresh tensors: `primes` [L, n-gram-1, heads],
@@ -1305,7 +1322,7 @@ class DeepseekV41NgramHashState(nn.Module):
     ) -> torch.Tensor:
         """Returns `[B, S, n_engram_layers, n_hash_cols]` hash ids. `token_mask` is
         `[B, S]`, False marking DEAD tokens."""
-        if self.token_map is None:
+        if self.token_map.numel() == 0:
             raise ValueError(
                 "The engram layers need the tokenizer to build their n-gram hash state "
                 "(compressed token map). Call `model.model.bind_tokenizer(tokenizer)` on a "
@@ -1389,14 +1406,15 @@ class DeepseekV41DecoderLayer(GradientCheckpointingLayer):
         self,
         hidden_streams: torch.Tensor,
         pre_mix: torch.Tensor,
-        hash_ids: torch.Tensor | None,
+        engram_rows: torch.Tensor | None,
         token_mask: torch.Tensor | None,
         shared: dict,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        # hidden_streams: [B, S, hc, hidden]
-        if self.engram is not None and hash_ids is not None:
-            hidden_streams = self.engram(hidden_streams, hash_ids[:, :, self.engram.layer_hash_index, :], token_mask)
+        # hidden_streams: [B, S, hc, hidden]; engram_rows: this layer's gathered table
+        # rows [B, S, n_hash_cols, head_dim] (None on non-engram layers)
+        if self.engram is not None and engram_rows is not None:
+            hidden_streams = self.engram(hidden_streams, engram_rows, token_mask)
 
         residual = hidden_streams
         attn_pre, attn_post, attn_comb = self.attn_hc(hidden_streams)
@@ -1422,7 +1440,13 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):  # trf-ignore: TRF001
     config_class = DeepseekV41TextConfig
 
     base_model_prefix = "model"
-    _no_split_modules = ["DeepseekV41DecoderLayer"]
+    # `DeepseekV41EngramEmbedding` is no-split so `_no_placement_params` can exclude
+    # its whole table (see below) instead of splitting it into offloaded pieces.
+    _no_split_modules = ["DeepseekV41DecoderLayer", "DeepseekV41EngramEmbedding"]
+    # `past_key_values` as everywhere; `shared` is the per-forward CSA2 group-state dict
+    # that every layer must see as ONE object (accelerate's hooks would otherwise hand
+    # each layer a device-moved copy, losing the source layers' writes).
+    _skip_keys_device_placement = ["past_key_values", "shared"]
     # Eager-only, same reasons as V4: FA caps head_dim at 256 (V4.1 uses 512); SDPA has
     # no per-head sink term; the compressed branch concatenates entries onto the KV axis
     # inside the block, after the model-level mask was built.
@@ -1441,11 +1465,18 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):  # trf-ignore: TRF001
         r"^image_(start|end|newline)$",
     ]
     # fp32-critical parameters: exactly the tensors the released checkpoint stores in
-    # F32 — the mHC sites and the attention sinks. The router's correction biases are
-    # F32 too, but they are fp32 buffers from construction. The norms and the ratio-2
-    # compressor gate ship BF16 and stay in the model dtype (the reference upcasts
-    # them at load; the forward computes in fp32 either way).
-    _keep_in_fp32_modules_strict = ["attn_hc", "ffn_hc", "sinks"]
+    # F32 — the mHC sites, the attention sinks and the router's correction biases
+    # (fp32 buffers from construction; listed so `from_pretrained(dtype=...)` keeps
+    # them fp32, as V4 does). The norms and the ratio-2 compressor gate ship BF16 and
+    # stay in the model dtype (the reference upcasts them at load; the forward
+    # computes in fp32 either way).
+    _keep_in_fp32_modules_strict = [
+        "attn_hc",
+        "ffn_hc",
+        "sinks",
+        "e_score_correction_bias",
+        "e_score_correction_bias_vl",
+    ]
     # The released checkpoint ships these projections in BF16 with no companion
     # `.scale` (every other linear is fp8 / packed fp4). Listed here (non-strict) so
     # the FP8 quantizer's `get_modules_to_not_convert` auto-skips them, like V4;
@@ -1456,11 +1487,13 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):  # trf-ignore: TRF001
         "self_attn.indexer.k_proj",
         "self_attn.indexer.weights_proj",
     ]
-    # The two engram tables are ~98 GB each in the released checkpoint: like
-    # Qwen4-Exp's n-gram table, they are excluded from `device_map` placement so
-    # `device_map="auto"` does not offload the whole model around them. The lookup
-    # runs wherever the table lives (a pure row gather) and moves the rows over.
-    _no_placement_params = ["engram.embed.weight", "engram.embed.scale"]
+    # The two engram tables are ~98 GB each in the released checkpoint. Like
+    # Qwen4-Exp's n-gram table they are excluded from `device_map` placement (names are
+    # relative to the no-split `DeepseekV41EngramEmbedding` module): when a table does
+    # not fit an accelerator it is skipped by the device-map inference and loads into
+    # host RAM with no offload hook — the model-level gather runs there and moves only
+    # the rows. On an accelerator large enough to hold it, it is placed normally.
+    _no_placement_params = ["weight", "scale"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1479,9 +1512,10 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):  # trf-ignore: TRF001
             init.normal_(module.fn, mean=0.0, std=std)
             init.zeros_(module.base)
             init.ones_(module.scale)
+        elif isinstance(module, DeepseekV41EngramEmbedding):
+            init.normal_(module.weight, mean=0.0, std=std)
+            init.ones_(module.scale)
         elif isinstance(module, DeepseekV41Engram):
-            init.normal_(module.embed.weight, mean=0.0, std=std)
-            init.ones_(module.embed.scale)
             init.ones_(module.q_weight)
             init.ones_(module.k_weight)
         elif isinstance(module, DeepseekV41NgramHashState):
@@ -1536,11 +1570,24 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
     def __init__(self, config: DeepseekV41TextConfig):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
+        # CODEPATH: DeepSeek-V4.1-Flash ships engram layers ([1, 14]) and takes the
+        # hash-state path; tiny test configs set engram_layer_ids=[] and take None.
+        # The ~98 GB tables are model-level (keyed by layer index, `engram_tables["1"]`)
+        # rather than inside their decoder layer: a no-split layer holding a
+        # `_no_placement_params` tensor gets split down to parameter-level device-map
+        # entries, which carry no accelerate hooks. Registered BEFORE `layers` so the
+        # device-map inference always has a later accelerator to test against.
+        self.engram_hash_state = DeepseekV41NgramHashState(config) if config.engram_layer_ids else None
+        self.engram_tables = nn.ModuleDict(
+            {
+                str(layer_idx): DeepseekV41EngramEmbedding(config.engram_num_embeddings[k], config.engram_head_dim)
+                for k, layer_idx in enumerate(config.engram_layer_ids)
+            }
+        )
         self.layers = nn.ModuleList([DeepseekV41DecoderLayer(config, i) for i in range(config.num_hidden_layers)])
         self.norm = DeepseekV41RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = DeepseekV41RotaryEmbedding(config)
         self.engram_layout = EngramLayout.from_config(config)
-        self.engram_hash_state = DeepseekV41NgramHashState(config) if config.engram_layer_ids else None
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
@@ -1611,7 +1658,7 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
             "main": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="main"),
             "compress": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="compress"),
         }
-        hash_ids = None
+        engram_rows: dict[int, torch.Tensor] = {}
         if self.engram_hash_state is not None:
             # Pads (attention_mask == 0) are hashed as DEAD so n-grams never span them.
             # Only a 2D mask carries per-token liveness; generate()'s per-layer-type
@@ -1621,7 +1668,15 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
             if isinstance(attention_mask, torch.Tensor) and attention_mask.dim() == 2:
                 live_mask = attention_mask[:, -input_ids.shape[1] :].bool()
             hash_ids = self.engram_hash_state(input_ids, live_mask, past_key_values)
+            # Gather each engram layer's rows here, where the tables live (host RAM under
+            # `device_map`); the layers receive dense rows on their own device.
+            for k, layer_idx in enumerate(self.config.engram_layer_ids):
+                engram_rows[layer_idx] = self.engram_tables[str(layer_idx)](hash_ids[:, :, k, :])
 
+        # `shared` carries the CSA2 group state between layers within ONE forward. It is
+        # passed as a keyword and listed in `_skip_keys_device_placement` so accelerate's
+        # hooks hand every layer the same dict instead of a per-layer copy (writes by a
+        # source layer must be visible to its consumers); readers move what they use.
         shared: dict = {}
         # One-hot initial mix: the first site collapses stream 0 only.
         pre_mix = hidden_states.new_zeros(*hidden_states.shape[:-1], dtype=torch.float32)
@@ -1630,9 +1685,9 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
             hidden_states, pre_mix = layer(
                 hidden_states,
                 pre_mix,
-                hash_ids,
+                engram_rows.get(layer.layer_idx),
                 None,
-                shared,
+                shared=shared,
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 attention_mask=causal_mask,

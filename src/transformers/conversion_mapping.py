@@ -1045,8 +1045,13 @@ def _build_checkpoint_conversion_mapping():
             # DeepseekV41TextModel (whose `config.model_type` the wrapper
             # DeepseekV41ForCausalLM also carries once it unwraps the composite config);
             # the `model.` prefix of the wrapper is added / stripped by the loader's
-            # `base_model_prefix` step, not by these rules. The engram keys
-            # (`engram.embed.*`, `engram.wkv`, `engram.{q,k}_weight`) are kept verbatim.
+            # `base_model_prefix` step, not by these rules. The engram's per-layer
+            # `wkv` / `{q,k}_weight` keep their names; its ~98 GB hash table moves from
+            # the decoder layer to the model-level `engram_tables[<layer>]` ModuleDict
+            # (keyed by layer index) so it can be excluded from `device_map` placement.
+            WeightRenaming(
+                source_patterns=r"^layers\.(\d+)\.engram\.embed\.", target_patterns=r"engram_tables.\1."
+            ),
             WeightRenaming(source_patterns=r"\.attn\.", target_patterns=r".self_attn."),
             WeightRenaming(source_patterns=r"\.ffn\.", target_patterns=r".mlp."),
             WeightRenaming(source_patterns=r"^embed\.weight$", target_patterns="embed_tokens.weight"),
