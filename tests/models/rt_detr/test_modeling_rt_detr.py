@@ -261,8 +261,6 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     is_encoder_decoder = True
 
-    test_missing_keys = False
-
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -525,6 +523,42 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    def test_save_load_cross_model_classes(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/48722: `RTDetrForObjectDetection`
+        # nests the base model under `model`, and `RTDetrModel` used to leave every weight randomly initialized
+        # when loading such a checkpoint. Both cross-loading directions must work.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        head_model = RTDetrForObjectDetection(config)
+        base_model = RTDetrModel(config)
+        # parameters that only exist on the head model (class/bbox prediction heads)
+        base_keys = {f"model.{k}" for k in base_model.state_dict()}
+        head_only_keys = {k for k in head_model.state_dict() if k not in base_keys}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            head_model.save_pretrained(tmp_dir)
+            loaded_base_model, loading_info = RTDetrModel.from_pretrained(tmp_dir, output_loading_info=True)
+
+        self.assertFalse(loading_info["missing_keys"])
+        # no base model weight may show up as unexpected (names in the report may be touched by registered
+        # renamings, so we only check they never collide with base keys; equality is verified below)
+        self.assertFalse(set(loading_info["unexpected_keys"]) & base_keys)
+        head_state_dict = {k.removeprefix("model."): v for k, v in head_model.state_dict().items()}
+        for key, value in loaded_base_model.state_dict().items():
+            self.assertTrue(torch.equal(value, head_state_dict[key]))
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_model.save_pretrained(tmp_dir)
+            loaded_head_model, loading_info = RTDetrForObjectDetection.from_pretrained(
+                tmp_dir, output_loading_info=True
+            )
+
+        self.assertFalse(loading_info["unexpected_keys"])
+        self.assertTrue(set(loading_info["missing_keys"]) <= head_only_keys)
+        self.assertTrue(any(k.startswith("model.decoder.class_embed") for k in loading_info["missing_keys"]))
+        head_state_dict = loaded_head_model.state_dict()
+        for key, value in base_model.state_dict().items():
+            self.assertTrue(torch.equal(value, head_state_dict[f"model.{key}"]))
+
     def test_backbone_selection(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -713,6 +747,21 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return RTDetrImageProcessorPil.from_pretrained(CHECKPOINT) if is_vision_available() else None
+
+    def test_base_model_from_detection_checkpoint(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/48722: detection checkpoints
+        # store every weight under the `model.` prefix, and `RTDetrModel` used to load them with all weights
+        # randomly initialized.
+        base_model, loading_info = RTDetrModel.from_pretrained(CHECKPOINT, output_loading_info=True)
+
+        self.assertFalse(loading_info["missing_keys"])
+        # only the object detection heads are not part of the base model
+        self.assertTrue(all("class_embed" in k or "bbox_embed" in k for k in loading_info["unexpected_keys"]))
+
+        head_model = RTDetrForObjectDetection.from_pretrained(CHECKPOINT)
+        head_state_dict = {k.removeprefix("model."): v for k, v in head_model.state_dict().items()}
+        for key, value in base_model.state_dict().items():
+            self.assertTrue(torch.equal(value, head_state_dict[key]))
 
     def test_inference_object_detection_head(self):
         model = RTDetrForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)

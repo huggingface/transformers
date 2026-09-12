@@ -234,7 +234,7 @@ class PPDocLayoutV3MultiscaleDeformableAttention(nn.Module):
 @auto_docstring
 class PPDocLayoutV3PreTrainedModel(PreTrainedModel):
     config: PPDocLayoutV3Config
-    base_model_prefix = "pp_doclayout_v3"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = [r"PPDocLayoutV3HybridEncoder", r"PPDocLayoutV3DecoderLayer"]
