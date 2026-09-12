@@ -23,7 +23,7 @@ _import_structure = {
     "mixin": ["DistributedMixin"],
     "utils": [
         "gather_full_state_dict",
-        "initialize_fully_sharded_data_parallelism",
+        "initialize_distributed_mesh",
         "load_optimizer_distributed",
         "save_model_checkpoint_distributed",
         "save_optimizer_distributed",
@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from .mixin import DistributedMixin
     from .utils import (
         gather_full_state_dict,
-        initialize_fully_sharded_data_parallelism,
+        initialize_distributed_mesh,
         load_optimizer_distributed,
         save_model_checkpoint_distributed,
         save_optimizer_distributed,

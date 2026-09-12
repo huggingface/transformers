@@ -17,9 +17,9 @@ import json
 import os
 from io import BytesIO
 
-import httpx
 import torch
 import yaml
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import (
