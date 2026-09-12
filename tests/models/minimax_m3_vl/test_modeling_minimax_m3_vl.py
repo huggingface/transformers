@@ -258,6 +258,18 @@ class MiniMaxM3VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_default_rotary_dim_maps_to_partial_rotary_factor(self):
+        """The inherited M3-VL legacy rotary width must configure partial RoPE by default."""
+        from transformers.models.minimax_m3_vl.configuration_minimax_m3_vl import MiniMaxM3VLTextConfig
+
+        config = MiniMaxM3VLTextConfig()
+        self.assertEqual(config.rotary_dim, 64)
+        self.assertEqual(config.rope_parameters["partial_rotary_factor"], 0.5)
+
+        # An explicit factor remains authoritative for hand-built configurations.
+        config = MiniMaxM3VLTextConfig(rope_parameters={"partial_rotary_factor": 0.25})
+        self.assertEqual(config.rope_parameters["partial_rotary_factor"], 0.25)
+
     @unittest.skip(reason="IDK exactly why, can be adressed later")
     def test_reverse_loading_mapping(self):
         pass
