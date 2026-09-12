@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import random
 import time
 import unittest
 
@@ -24,11 +25,13 @@ from ..test_modeling_common import ids_tensor
 if is_torch_available():
     import torch
 
+    from transformers import RepeatedNGramCriteria as TopLevelRepeatedNGramCriteria
     from transformers.generation import (
         ConfidenceCriteria,
         EosTokenCriteria,
         MaxLengthCriteria,
         MaxTimeCriteria,
+        RepeatedNGramCriteria,
         StoppingCriteriaList,
         StopStringCriteria,
         validate_stopping_criteria,
@@ -92,6 +95,176 @@ class StoppingCriteriaTestCase(unittest.TestCase):
 
         criteria = MaxTimeCriteria(max_time=0.1, initial_timestamp=time.time() - 0.2)
         self.assertTrue(all(criteria(input_ids, scores)))
+
+    def test_repeated_ngram_criteria_fixed_size(self):
+        criteria = RepeatedNGramCriteria(min_ngram_size=2, num_repetitions=3, prompt_length_to_skip=1)
+        input_ids = torch.tensor(
+            [
+                [99, 1, 2, 1, 2, 1, 2],
+                [99, 1, 2, 1, 2, 1, 3],
+            ],
+            device=torch_device,
+        )
+
+        result = criteria(input_ids, scores=None)
+
+        self.assertListEqual(result.tolist(), [True, False])
+        self.assertEqual(result.shape, (2,))
+        self.assertEqual(result.dtype, torch.bool)
+        self.assertEqual(result.device, input_ids.device)
+
+    def test_repeated_ngram_criteria_size_range(self):
+        criteria = RepeatedNGramCriteria(min_ngram_size=2, max_ngram_size=4, num_repetitions=3)
+        min_size_input_ids = torch.tensor([[8, 9, 7, 8, 7, 8, 7, 8]], device=torch_device)
+        max_size_input_ids = torch.tensor(
+            [
+                [1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4],
+                [1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 5],
+            ],
+            device=torch_device,
+        )
+
+        self.assertTrue(criteria(min_size_input_ids, scores=None)[0])
+        self.assertListEqual(criteria(max_size_input_ids, scores=None).tolist(), [True, False])
+
+    def test_repeated_ngram_criteria_thresholds(self):
+        criteria = RepeatedNGramCriteria(min_ngram_size=2, num_repetitions=3)
+
+        one_copy_short = torch.tensor([[1, 2, 1, 2]], device=torch_device)
+        exact_threshold = torch.tensor([[1, 2, 1, 2, 1, 2]], device=torch_device)
+        near_match = torch.tensor([[1, 2, 1, 2, 1, 3]], device=torch_device)
+
+        self.assertFalse(criteria(one_copy_short, scores=None)[0])
+        self.assertTrue(criteria(exact_threshold, scores=None)[0])
+        self.assertFalse(criteria(near_match, scores=None)[0])
+
+    def test_repeated_ngram_criteria_skips_prompt(self):
+        input_ids = torch.tensor([[1, 2, 1, 2, 1, 2]], device=torch_device)
+
+        self.assertTrue(RepeatedNGramCriteria(2, num_repetitions=3)(input_ids, scores=None)[0])
+        self.assertFalse(
+            RepeatedNGramCriteria(2, num_repetitions=3, prompt_length_to_skip=input_ids.shape[1])(
+                input_ids, scores=None
+            )[0]
+        )
+
+    def test_repeated_ngram_criteria_min_new_tokens(self):
+        input_ids = torch.tensor([[9, 8, 1, 2, 1, 2, 1, 2]], device=torch_device)
+
+        self.assertFalse(RepeatedNGramCriteria(2, num_repetitions=3, min_new_tokens=9)(input_ids, scores=None)[0])
+        self.assertTrue(RepeatedNGramCriteria(2, num_repetitions=3, min_new_tokens=8)(input_ids, scores=None)[0])
+
+    def test_repeated_ngram_criteria_large_range(self):
+        block = torch.arange(1000, device=torch_device)
+        input_ids = torch.cat((block, block)).unsqueeze(0)
+        criteria = RepeatedNGramCriteria(min_ngram_size=1, max_ngram_size=1000, num_repetitions=2)
+
+        self.assertTrue(criteria(input_ids, scores=None)[0])
+
+        input_ids[0, -1] = -1
+        self.assertFalse(criteria(input_ids, scores=None)[0])
+
+    def test_repeated_ngram_criteria_empty_batch(self):
+        input_ids = torch.empty((0, 2000), dtype=torch.long, device=torch_device)
+        criteria = RepeatedNGramCriteria(min_ngram_size=1, max_ngram_size=1000, num_repetitions=2)
+
+        result = criteria(input_ids, scores=None)
+
+        self.assertEqual(result.shape, (0,))
+        self.assertEqual(result.dtype, torch.bool)
+        self.assertEqual(result.device, input_ids.device)
+
+    def test_repeated_ngram_criteria_is_stateless(self):
+        criteria = RepeatedNGramCriteria(min_ngram_size=2, max_ngram_size=4, num_repetitions=3)
+        input_ids = torch.tensor(
+            [
+                [1, 2, 1, 2, 1, 2],
+                [1, 2, 3, 4, 5, 6],
+            ],
+            device=torch_device,
+        )
+
+        first_result = criteria(input_ids, scores=None)
+        reordered_result = criteria(input_ids.flip(dims=(0,)), scores=None)
+
+        self.assertListEqual(first_result.tolist(), [True, False])
+        self.assertListEqual(reordered_result.tolist(), [False, True])
+
+    def test_repeated_ngram_criteria_validation(self):
+        invalid_kwargs = [
+            {"min_ngram_size": 0},
+            {"min_ngram_size": 2, "max_ngram_size": 1},
+            {"min_ngram_size": 2, "num_repetitions": 1},
+            {"min_ngram_size": 2, "prompt_length_to_skip": -1},
+            {"min_ngram_size": 2, "min_new_tokens": -1},
+        ]
+
+        for kwargs in invalid_kwargs:
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                RepeatedNGramCriteria(**kwargs)
+
+    def test_repeated_ngram_criteria_matches_python_reference(self):
+        rng = random.Random(0)
+
+        for _ in range(100):
+            min_ngram_size = rng.randint(1, 4)
+            max_ngram_size = rng.randint(min_ngram_size, 6)
+            num_repetitions = rng.randint(2, 4)
+            prompt_length = rng.randint(0, 5)
+            generated_length = rng.randint(0, 30)
+            min_new_tokens = rng.randint(0, 20)
+            prompt = [rng.randrange(10) for _ in range(prompt_length)]
+            generated = [rng.randrange(10) for _ in range(generated_length)]
+
+            largest_injectable_size = min(max_ngram_size, generated_length // num_repetitions)
+            if largest_injectable_size >= min_ngram_size and rng.choice([False, True]):
+                ngram_size = rng.randint(min_ngram_size, largest_injectable_size)
+                block = [rng.randrange(10) for _ in range(ngram_size)]
+                generated[-ngram_size * num_repetitions :] = block * num_repetitions
+
+            expected = False
+            if generated_length >= min_new_tokens:
+                for ngram_size in range(min_ngram_size, max_ngram_size + 1):
+                    repeated_length = ngram_size * num_repetitions
+                    if generated_length < repeated_length:
+                        continue
+                    suffix = generated[-repeated_length:]
+                    if all(
+                        suffix[start : start + ngram_size] == suffix[:ngram_size]
+                        for start in range(ngram_size, repeated_length, ngram_size)
+                    ):
+                        expected = True
+                        break
+
+            input_ids = torch.tensor([prompt + generated], dtype=torch.long, device=torch_device)
+            criteria = RepeatedNGramCriteria(
+                min_ngram_size=min_ngram_size,
+                max_ngram_size=max_ngram_size,
+                num_repetitions=num_repetitions,
+                prompt_length_to_skip=prompt_length,
+                min_new_tokens=min_new_tokens,
+            )
+
+            self.assertEqual(bool(criteria(input_ids, scores=None)[0]), expected)
+
+    def test_repeated_ngram_criteria_top_level_export(self):
+        self.assertIs(TopLevelRepeatedNGramCriteria, RepeatedNGramCriteria)
+
+    def test_repeated_ngram_criteria_compile(self):
+        if not hasattr(torch, "compile"):
+            self.skipTest("torch.compile is not available")
+
+        input_ids = torch.tensor([[1, 2, 3, 1, 2, 3, 1, 2, 3]], device=torch_device)
+        for max_ngram_size in [None, 4]:
+            with self.subTest(max_ngram_size=max_ngram_size):
+                criteria = RepeatedNGramCriteria(
+                    min_ngram_size=3,
+                    max_ngram_size=max_ngram_size,
+                    num_repetitions=3,
+                )
+                compiled_criteria = torch.compile(criteria, backend="eager", fullgraph=True)
+
+                self.assertTrue(compiled_criteria(input_ids, scores=None)[0])
 
     def test_eos_token_criteria(self):
         criteria = EosTokenCriteria(eos_token_id=0)
