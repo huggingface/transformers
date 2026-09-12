@@ -33,11 +33,18 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.hub import cached_file
+from ...utils.import_utils import is_torch_distributed_available
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3RMSNorm
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection, DeepseekV4RotaryEmbedding
 from ..mixtral.modeling_mixtral import MixtralExperts, MixtralTopKRouter, load_balancing_loss_func
 from .configuration_deepseek_v41 import DeepseekV41Config, DeepseekV41TextConfig
+
+
+if is_torch_distributed_available():
+    from torch.distributed.tensor import DTensor, Shard
+else:  # the engram table's TP path is only reachable with torch.distributed
+    DTensor = Shard = None
 
 
 def eager_attention_forward(
@@ -941,7 +948,7 @@ class DeepseekV41SparseMoeBlock(nn.Module):
         return y.to(hidden_states.dtype).view(shape)
 
 
-class DeepseekV41EngramEmbedding(nn.Module):
+class DeepseekV41EngramEmbedding(nn.Embedding):
     """The n-gram hash table: fp8 rows with per-row / per-32-channel E8M0 scales in the
     checkpoint, dequantized on lookup. The scales are `weight_scale_inv`, the name the
     FP8 quantizer gives every checkpoint `.scale` (and that `FP8Linear` uses), so a
@@ -949,28 +956,40 @@ class DeepseekV41EngramEmbedding(nn.Module):
     (`dequantize=True`, or a bf16 checkpoint) the quantizer has already folded the
     scales into the rows, the table is a plain embedding and `weight_scale_inv` is
     unused. ~98 GB per table in the released checkpoint — memory-map friendly (pure
-    row gather)."""
+    row gather).
+
+    An `nn.Embedding` so tensor parallelism shards it along the embedding dim
+    (`colwise_gather_output`, like Qwen4-Exp's n-gram table): each rank holds
+    `head_dim / tp_size` channels of every row — whole 32-channel scale blocks, so the
+    per-block dequantization stays rank-local before the output gather."""
 
     def __init__(self, num_embeddings: int, head_dim: int, block_size: int = 32):
-        super().__init__()
-        self.num_embeddings = num_embeddings
-        self.head_dim = head_dim
+        super().__init__(num_embeddings, head_dim)
         self.block_size = block_size
-        self.weight = nn.Parameter(torch.empty(num_embeddings, head_dim))
         self.weight_scale_inv = nn.Parameter(torch.empty(num_embeddings, head_dim // block_size))
 
     def forward(self, hash_ids: torch.Tensor) -> torch.Tensor:
-        # The table is in `_no_placement_params`: under `device_map` it stays wherever
-        # it fits (typically host RAM) while the ids arrive on the layer's device. Run
-        # the gather where the table lives and move only the rows (Qwen4-Exp pattern).
-        table_device = self.weight.device if self.weight.device.type != "meta" else hash_ids.device
+        weight, scale = self.weight, self.weight_scale_inv
+        mesh = None
+        if DTensor is not None and isinstance(weight, DTensor):
+            # TP: gather on the local shards, hand back a Shard(-1) DTensor for the output gather
+            mesh, weight, scale = weight.device_mesh, weight.to_local(), scale.to_local()
+        if DTensor is not None and isinstance(hash_ids, DTensor):
+            hash_ids = hash_ids.to_local()
+        # Under `device_map` the table is in `_no_placement_params` and stays wherever it
+        # fits (typically host RAM) while the ids arrive on the layer's device: run the
+        # gather where the table lives and move only the rows (Qwen4-Exp pattern).
+        table_device = weight.device if weight.device.type != "meta" else hash_ids.device
         ids = hash_ids.to(table_device)
-        values = F.embedding(ids, self.weight)
-        if self.weight.dtype == torch.float8_e4m3fn:
-            scales = F.embedding(ids, self.weight_scale_inv).float()
+        values = F.embedding(ids, weight)
+        if weight.dtype == torch.float8_e4m3fn:
+            scales = F.embedding(ids, scale).float()
             values = values.float().unflatten(-1, (-1, self.block_size)) * scales.unsqueeze(-1)
             values = values.flatten(-2)
-        return values.to(hash_ids.device)
+        values = values.to(hash_ids.device)
+        if mesh is not None:
+            values = DTensor.from_local(values, mesh, [Shard(-1)], run_check=False)
+        return values
 
 
 class DeepseekV41Engram(nn.Module):

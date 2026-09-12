@@ -228,6 +228,10 @@ class DeepseekV41TextConfig(PreTrainedConfig):
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
+        # The ~98 GB engram tables are `nn.Embedding`s sharded along the embedding dim
+        # (whole 32-channel scale blocks per rank) and gathered, like Qwen4-Exp's
+        # n-gram table: each rank holds `head_dim / tp_size` channels of every row.
+        "engram_tables.*": "colwise_gather_output",
     }
 
     # --- attention / rope --------------------------------------------------------------
