@@ -28,6 +28,7 @@ from packaging import version
 from typing_extensions import dataclass_transform
 
 from . import __version__
+from .backbone_utils import consolidate_backbone_kwargs_to_config
 from .dynamic_module_utils import custom_object_save
 from .generation.configuration_utils import GenerationConfig
 from .integrations.heterogeneity import HeterogeneousConfigMixin
@@ -142,6 +143,83 @@ def wrap_init_to_accept_kwargs(cls: dataclass):
     return cls
 
 
+class SubConfigSpec:
+    def __init__(
+        self,
+        config_class,
+        model_type: str | None = None,
+        init_kwargs: dict | None = None,
+    ):
+        self.init_kwargs = init_kwargs if init_kwargs is not None else {}
+        self.config_class = config_class
+
+        # we can have `AutoConfig` with a default model-type (eg. LLaVA), or the subconfig
+        # is already a specific class (eg. Qwen2VLVisionConfig) which has a `model_type` attr
+        if model_type is None and not hasattr(config_class, "model_type"):
+            raise ValueError(
+                "You have to provide either a valid `model_type` or an specific `config_class` "
+                f"to init subconfigs correctly, but got model_type={model_type} and config_class={config_class}"
+            )
+        self.model_type = model_type if model_type is not None else config_class.model_type
+
+    def get_config_class(self, model_type: str | None = None):
+        # Avoid circular imports - we only need the static mapping here to map from `string` to config class
+        from transformers.models.auto.configuration_auto import CONFIG_MAPPING
+
+        if model_type not in CONFIG_MAPPING:
+            raise ValueError(
+                f"Unrecognized model type for subconfig: {model_type}. Should contain one of {', '.join(CONFIG_MAPPING.keys())}"
+            )
+        return CONFIG_MAPPING[model_type]
+
+    def create_subconfig(self, key, subconfig=None, **kwargs):
+        """
+        Construct a subconfig class either from provided input or from spec defaults.
+        In case the provided input is a `dict` without `model_type`, we fallback
+        to spec's default model-type.
+        Provided input can only be one of - [`PreTrainedConfig`, `dict`, `None`]
+        """
+        # early exit if sub-config is already a config instance
+        if isinstance(subconfig, PreTrainedConfig):
+            return subconfig
+
+        # Vision model backbones have their own utility for BC/Timm
+        if key == "backbone_config":
+            backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+                backbone_config=subconfig,
+                default_config_type=self.model_type,
+                default_config_kwargs=self.init_kwargs,
+                **kwargs,
+            )
+            return backbone_config
+
+        model_type = subconfig.get("model_type", self.model_type)
+        if model_type is None:
+            raise ValueError(f"Cannot resolve `{key}`: no model_type given and no default in `sub_configs_defaults`.")
+        subconfig_cls = self.get_config_class(model_type)
+
+        # Copy the dict to not mutate it in-place
+        if isinstance(subconfig, dict):
+            pass
+        elif subconfig is None:
+            subconfig = self.init_kwargs
+            logger.info(f"`{key}` is None, initializing {subconfig_cls.__name__} with default values.")
+        else:
+            raise TypeError(f"`{key}` must be a `dict`, `PreTrainedConfig`, or `None`, got `{type(subconfig)}`")
+
+        return subconfig_cls(**subconfig)
+
+    @property
+    def default_config(self):
+        return self.get_config_class(self.model_type)(**self.init_kwargs)
+
+
+# a small helper for BC - substitutes a class attribute
+class classproperty(property):
+    def __get__(self, owner_self, owner_cls):
+        return self.fget(owner_cls)
+
+
 @dataclass_transform(kw_only_default=True)
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
@@ -162,10 +240,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
     - **model_type** (`str`) -- An identifier for the model type, serialized into the JSON file, and used to recreate
       the correct object in [`~transformers.AutoConfig`].
-    - **has_no_defaults_at_init** (`bool`) -- Whether the config class can be initialized without providing input arguments.
-      Some configurations requires inputs to be defined at init and have no default values, usually these are composite configs,
-      (but not necessarily) such as [`~transformers.EncoderDecoderConfig`] or [`~RagConfig`]. They have to be initialized from
-      two or more configs of type [`~transformers.PreTrainedConfig`].
     - **keys_to_ignore_at_inference** (`list[str]`) -- A list of keys to ignore by default when looking at dictionary
       outputs of the model during inference.
     - **attribute_map** (`dict[str, str]`) -- A dict that maps model specific attribute names to the standardized
@@ -243,8 +317,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
     # They are not supposed to be set/changed by users. Each field is set when
     # creating a model class
     base_config_key: ClassVar[str] = ""
-    sub_configs: ClassVar[dict[str, type["PreTrainedConfig"]]] = {}
-    has_no_defaults_at_init: ClassVar[bool] = False
+    sub_configs_defaults: ClassVar[dict[str, SubConfigSpec]] = {}
+
     keys_to_ignore_at_inference: ClassVar[list[str]] = []
     attribute_map: ClassVar[dict[str, str]] = {}
     base_model_tp_plan: ClassVar[dict[str, Any] | None] = None
@@ -276,6 +350,13 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
     problem_type: Literal["regression", "single_label_classification", "multi_label_classification"] | None = None
 
     def __post_init__(self, **kwargs):
+        # Initialize sub-configs with fallback to defaults if `None` is set
+        if self.sub_configs_defaults:
+            for key, specs in self.sub_configs_defaults.items():
+                subconfig = getattr(self, key)
+                subconfig = specs.create_subconfig(key, subconfig, **kwargs)
+                setattr(self, key, subconfig)
+
         # BC for the `torch_dtype` argument instead of the simpler `dtype`
         # Do not warn, as it would otherwise always be triggered since most configs on the hub have `torch_dtype`
         if (torch_dtype := kwargs.pop("torch_dtype", None)) is not None:
@@ -370,6 +451,13 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             # remote code has an init defined, but some model are not
             # See https://huggingface.co/hmellor/Ilama-3.2-1B/blob/main/configuration_ilama.py
             cls = wrap_init_to_accept_kwargs(cls)
+
+    @classproperty
+    def sub_configs(cls):
+        """Backwards compatible `ClassVar` which is now superseded by more fine-grained `sub_configs_defaults`"""
+        if cls.sub_configs_defaults:
+            return {key: specs.config_class for key, specs in cls.sub_configs_defaults.items()}
+        return {}
 
     @property
     def name_or_path(self) -> str | None:
@@ -1029,10 +1117,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
         # Get the default config dict (from a fresh PreTrainedConfig instance)
         default_config_dict = PreTrainedConfig().to_dict()
-
-        # get class specific config dict
-        class_config_dict = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
-
+        class_config_dict = self.default_config_fields()
         serializable_config_dict = {}
 
         # Only serialize values that differ from the default config,
@@ -1293,6 +1378,35 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         user-specific module/session."""
         return cls.is_remote_code() or not cls.__module__.startswith("transformers.")
 
+    @classmethod
+    def default_config_fields(cls):
+        """
+        Gets default values for each annotated fields in a dataclass, used to save diff-dict.
+        For configs that are created in v4 with custom `__init__`, it will return
+        an empty dict, thus saving all keys in `self.__dict__`. For newer config, it will
+        return keys that have defaults declared as a fields, rather than in `__post_init__`,
+        which filters out only these specific fields from serialized json file.
+        """
+        default_config_fields = {}
+        for f in fields(cls):
+            default_value = None
+            if f.default is not MISSING:
+                default_value = f.default
+            elif f.default_factory is not MISSING:
+                default_value = f.default_factory
+
+            if default_value is not None:
+                default_config_fields[f.name] = default_value
+
+        if cls.sub_configs_defaults:
+            for key, specs in cls.sub_configs_defaults.items():
+                default_subconfig_class = specs.get_config_class(specs.model_type)
+                subconfig_default_fields = default_subconfig_class.default_config_fields()
+                subconfig_default_fields.update(specs.init_kwargs)
+                default_config_fields[key] = subconfig_default_fields
+
+        return default_config_fields
+
     def _get_generation_parameters(self) -> dict[str, Any]:
         """
         Checks if there are generation parameters in `PreTrainedConfig` instance. Note that
@@ -1300,7 +1414,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         if there are any.
         """
         generation_params = {}
-        default_config = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
+        default_config = self.default_config_fields()
         for key in GenerationConfig._get_default_generation_params().keys():
             if key == "use_cache":
                 continue  # common key for most models

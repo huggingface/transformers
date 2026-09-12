@@ -19,7 +19,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import BackboneConfigMixin
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 
 
@@ -206,7 +206,9 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     _out_features: list[str] | None = None
     _out_indices: list[int] | None = None
     reshape_hidden_states: bool = True
-    sub_configs = {"head_config": Sapiens2HeadConfig}
+    sub_configs_defaults = {
+        "head_config": SubConfigSpec(config_class=Sapiens2HeadConfig),
+    }
     use_mask_token: bool = False
     rms_norm_eps: float = 1e-6
     normalize_backbone_outputs: bool = True
@@ -220,6 +222,11 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     head_config: Sapiens2HeadConfig | dict | None = None
 
     def __post_init__(self, **kwargs):
+        self.stage_names = ["stem"] + [f"stage{i}" for i in range(1, self.num_hidden_layers + 1)]
+        self.set_output_features_output_indices(
+            out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
+        )
+        super().__post_init__(**kwargs)
         if self.num_key_value_heads_per_layer is None:
             self.num_key_value_heads_per_layer = [
                 self.num_attention_heads
@@ -230,15 +237,9 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
                 else self.num_key_value_attention_heads
                 for layer_index in range(self.num_hidden_layers)
             ]
-        if isinstance(self.head_config, dict):
-            self.head_config = Sapiens2HeadConfig(**self.head_config)
+
         if self.head_config is not None:
             self.head_config._init_scale_final_input_size(image_size=self.image_size, patch_size=self.patch_size)
-        self.stage_names = ["stem"] + [f"stage{i}" for i in range(1, self.num_hidden_layers + 1)]
-        self.set_output_features_output_indices(
-            out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
-        )
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Sapiens2Config", "Sapiens2HeadConfig"]

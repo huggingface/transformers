@@ -18,8 +18,11 @@ from typing import ClassVar
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring
-from ..auto.configuration_auto import AutoConfig
+from ...utils import auto_docstring, logging
+from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/musicgen-small")
@@ -52,6 +55,22 @@ class MusicgenDecoderConfig(PreTrainedConfig):
     is_decoder: bool = False
     add_cross_attention: bool = False
     cross_attention_hidden_size: int | None = None
+
+    def validate_token_ids(self):
+        # override: MusicGen init an embedding layer with `vocab_size+1`
+        text_config = self.get_text_config(decoder=True)
+        vocab_size = getattr(text_config, "vocab_size", None)
+        if vocab_size is not None:
+            # Check for all special tokens, e..g. pad_token_id, image_token_id, audio_token_id
+            for name in text_config:
+                value = getattr(text_config, name)
+                if name.endswith("_token_id") and isinstance(value, int) and not 0 <= value <= vocab_size:
+                    # Can't be an exception until we can load configs that fail validation: several configs on the Hub
+                    # store invalid special tokens, e.g. `pad_token_id=-1`
+                    logger.warning_once(
+                        f"Model config: {name} must be `None` or an integer within the vocabulary (between 0 "
+                        f"and {vocab_size}), got {value}. This may result in unexpected behavior."
+                    )
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
@@ -115,11 +134,10 @@ class MusicgenConfig(PreTrainedConfig):
         "audio_encoder": AutoConfig,
         "decoder": MusicgenDecoderConfig,
     }
-    has_no_defaults_at_init: ClassVar[bool] = True
 
-    text_encoder: dict | PreTrainedConfig = None
-    audio_encoder: dict | PreTrainedConfig = None
-    decoder: dict | PreTrainedConfig = None
+    text_encoder: dict | PreTrainedConfig | None = None
+    audio_encoder: dict | PreTrainedConfig | None = None
+    decoder: dict | PreTrainedConfig | None = None
     initializer_factor: float = 0.02
 
     def __post_init__(self, **kwargs):
@@ -127,17 +145,13 @@ class MusicgenConfig(PreTrainedConfig):
             text_encoder_model_type = self.text_encoder.pop("model_type")
             self.text_encoder = AutoConfig.for_model(text_encoder_model_type, **self.text_encoder)
         elif self.text_encoder is None:
-            raise ValueError(
-                f"A configuration of type {self.model_type} cannot be instantiated because text_encoder is not passed"
-            )
+            self.text_encoder = CONFIG_MAPPING["t5"]()
 
         if isinstance(self.audio_encoder, dict):
             audio_encoder_model_type = self.audio_encoder.pop("model_type")
             self.audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **self.audio_encoder)
         elif self.audio_encoder is None:
-            raise ValueError(
-                f"A configuration of type {self.model_type} cannot be instantiated because audio_encoder is not passed"
-            )
+            self.text_encoder = CONFIG_MAPPING["encodec"]()
 
         if isinstance(self.decoder, dict):
             self.decoder = MusicgenDecoderConfig(**self.decoder)

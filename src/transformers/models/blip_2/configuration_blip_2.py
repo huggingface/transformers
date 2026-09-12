@@ -15,10 +15,10 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...utils import auto_docstring, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -147,7 +147,11 @@ class Blip2Config(PreTrainedConfig):
     attribute_map = {
         "image_token_id": "image_token_index",
     }
-    sub_configs = {"text_config": AutoConfig, "qformer_config": Blip2QFormerConfig, "vision_config": Blip2VisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="opt"),
+        "vision_config": SubConfigSpec(config_class=Blip2VisionConfig),
+        "qformer_config": SubConfigSpec(config_class=Blip2QFormerConfig),
+    }
 
     vision_config: dict | PreTrainedConfig | None = None
     qformer_config: dict | PreTrainedConfig | None = None
@@ -159,29 +163,10 @@ class Blip2Config(PreTrainedConfig):
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = CONFIG_MAPPING["opt"]()
-            logger.info("text_config is None. Initializing the text config with default values (`OPTConfig`).")
-        elif isinstance(self.text_config, dict):
-            text_model_type = self.text_config.get("model_type", "opt")
-            self.text_config = CONFIG_MAPPING[text_model_type](**self.text_config)
-
-        if self.qformer_config is None:
-            self.qformer_config = Blip2QFormerConfig()
-            logger.info("qformer_config is None. Initializing the Blip2QFormerConfig with default values.")
-        elif isinstance(self.qformer_config, dict):
-            self.qformer_config = Blip2QFormerConfig(**self.qformer_config)
-
-        if self.vision_config is None:
-            self.vision_config = Blip2VisionConfig()
-            logger.info("`vision_config` is `None`. initializing the `Blip2VisionConfig` with default values.")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = Blip2VisionConfig(**self.vision_config)
-
+        super().__post_init__(**kwargs)
+        self.is_encoder_decoder = self.text_config.is_encoder_decoder
         self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
         self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
-        kwargs["is_encoder_decoder"] = self.text_config.is_encoder_decoder
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Blip2Config", "Blip2QFormerConfig", "Blip2VisionConfig"]

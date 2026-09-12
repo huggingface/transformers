@@ -19,7 +19,8 @@ import tempfile
 from pathlib import Path
 
 from transformers import is_torch_available
-from transformers.utils import direct_transformers_import
+from transformers.testing_utils import CaptureLogger
+from transformers.utils import direct_transformers_import, logging
 
 from .utils.test_configuration_utils import config_common_kwargs
 
@@ -177,12 +178,18 @@ class ConfigTester:
         self.parent.assertEqual(len(config.label2id), 3)
 
     def check_config_can_be_init_without_params(self):
-        if self.config_class.has_no_defaults_at_init:
-            with self.parent.assertRaises(ValueError):
-                config = self.config_class()
-        else:
+        logging.warning_once.cache_clear()
+        logger = logging.get_logger("transformers.configuration_utils")
+
+        with CaptureLogger(logger) as cl:
             config = self.config_class()
-            self.parent.assertIsNotNone(config)
+        self.parent.assertEqual("", cl.out)
+        self.parent.assertIsNotNone(config)
+
+        with CaptureLogger(logger) as cl:
+            config = self.config_class(**self.inputs_dict)
+        self.parent.assertEqual("", cl.out)
+        self.parent.assertIsNotNone(config)
 
     def check_config_arguments_init(self):
         if self.config_class.sub_configs:

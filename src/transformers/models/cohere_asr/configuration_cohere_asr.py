@@ -14,9 +14,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="CohereLabs/cohere-transcribe-03-2026")
@@ -34,30 +34,34 @@ class CohereAsrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "cohere_asr"
-    sub_configs = {"encoder_config": AutoConfig}
-
-    _default_encoder_config_kwargs = {
-        "hidden_size": 1280,
-        "num_hidden_layers": 48,
-        "num_attention_heads": 8,
-        "intermediate_size": 5120,
-        "hidden_act": "silu",
-        "attention_bias": True,
-        "convolution_bias": True,
-        "conv_kernel_size": 9,
-        "subsampling_factor": 8,
-        "subsampling_conv_channels": 256,
-        "num_mel_bins": 128,
-        "subsampling_conv_kernel_size": 3,
-        "subsampling_conv_stride": 2,
-        "dropout": 0.0,
-        "dropout_positions": 0.0,
-        "layerdrop": 0.0,
-        "activation_dropout": 0.0,
-        "attention_dropout": 0.0,
-        "max_position_embeddings": 5000,
-        "scale_input": False,
-        "initializer_range": 0.02,
+    sub_configs_defaults = {
+        "encoder_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="parakeet_encoder",
+            init_kwargs={
+                "hidden_size": 1280,
+                "num_hidden_layers": 48,
+                "num_attention_heads": 8,
+                "intermediate_size": 5120,
+                "hidden_act": "silu",
+                "attention_bias": True,
+                "convolution_bias": True,
+                "conv_kernel_size": 9,
+                "subsampling_factor": 8,
+                "subsampling_conv_channels": 256,
+                "num_mel_bins": 128,
+                "subsampling_conv_kernel_size": 3,
+                "subsampling_conv_stride": 2,
+                "dropout": 0.0,
+                "dropout_positions": 0.0,
+                "layerdrop": 0.0,
+                "activation_dropout": 0.0,
+                "attention_dropout": 0.0,
+                "max_position_embeddings": 5000,
+                "scale_input": False,
+                "initializer_range": 0.02,
+            },
+        ),
     }
 
     encoder_config: dict | PreTrainedConfig | None = None
@@ -86,15 +90,8 @@ class CohereAsrConfig(PreTrainedConfig):
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
-
         if isinstance(self.encoder_config, dict):
-            self.encoder_config["model_type"] = self.encoder_config.get("model_type", "parakeet_encoder")
-            self.encoder_config = CONFIG_MAPPING[self.encoder_config["model_type"]](
-                **{**self._default_encoder_config_kwargs, **self.encoder_config}
-            )
-        elif self.encoder_config is None:
-            self.encoder_config = CONFIG_MAPPING["parakeet_encoder"](**self._default_encoder_config_kwargs)
-
+            self.encoder_config = {**self.sub_configs_defaults["encoder_config"].init_kwargs, **self.encoder_config}
         super().__post_init__(**kwargs)
 
 

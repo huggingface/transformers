@@ -15,19 +15,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
-from ..chinese_clip.configuration_chinese_clip import ChineseCLIPVisionConfig
-from ..clip.configuration_clip import CLIPVisionConfig
-from ..siglip.configuration_siglip import SiglipVisionConfig
-
-
-VISION_MODEL_CONFIGS = {
-    "clip_vision_model": CLIPVisionConfig,
-    "chinese_clip_vision_model": ChineseCLIPVisionConfig,
-    "siglip_vision_model": SiglipVisionConfig,
-}
 
 
 @auto_docstring
@@ -40,10 +30,7 @@ class VisionTextDualEncoderConfig(PreTrainedConfig):
     >>> from transformers import ViTConfig, BertConfig, VisionTextDualEncoderConfig, VisionTextDualEncoderModel
 
     >>> # Initializing a BERT and ViT configuration
-    >>> config_vision = ViTConfig()
-    >>> config_text = BertConfig()
-
-    >>> config = VisionTextDualEncoderConfig.from_vision_text_configs(config_vision, config_text, projection_dim=512)
+    >>> config = VisionTextDualEncoderConfig(projection_dim=512)
 
     >>> # Initializing a BERT and ViT model (with random weights)
     >>> model = VisionTextDualEncoderModel(config=config)
@@ -61,34 +48,15 @@ class VisionTextDualEncoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "vision-text-dual-encoder"
-    sub_configs = {"vision_config": AutoConfig, "text_config": AutoConfig}
-    has_no_defaults_at_init = True
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="bert"),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="vit"),
+    }
 
+    text_config: PreTrainedConfig | dict | None = None
+    vision_config: PreTrainedConfig | dict | None = None
     projection_dim: int = 512
     logit_scale_init_value: int | float = 2.6592
-
-    def __post_init__(self, **kwargs):
-        if "vision_config" not in kwargs or "text_config" not in kwargs:
-            raise ValueError(
-                f"A configuration of type {self.model_type} cannot be instantiated because not both `vision_config` and"
-                f" `text_config` sub-configurations are passed, but only {kwargs}"
-            )
-        vision_config = kwargs.pop("vision_config")
-        text_config = kwargs.pop("text_config")
-
-        vision_model_type = vision_config.pop("model_type")
-        text_model_type = text_config.pop("model_type")
-
-        vision_config_class = VISION_MODEL_CONFIGS.get(vision_model_type)
-        if vision_config_class is not None:
-            self.vision_config = vision_config_class(**vision_config)
-        else:
-            self.vision_config = AutoConfig.for_model(vision_model_type, **vision_config)
-            if hasattr(self.vision_config, "vision_config"):
-                self.vision_config = self.vision_config.vision_config
-        self.text_config = AutoConfig.for_model(text_model_type, **text_config)
-
-        super().__post_init__(**kwargs)
 
     @classmethod
     def from_vision_text_configs(cls, vision_config: PreTrainedConfig, text_config: PreTrainedConfig, **kwargs):

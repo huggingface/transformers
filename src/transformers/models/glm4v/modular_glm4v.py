@@ -22,7 +22,7 @@ from torch.nn import LayerNorm
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -199,7 +199,10 @@ class Glm4vConfig(PreTrainedConfig):
     ```"""
 
     model_type = "glm4v"
-    sub_configs = {"vision_config": Glm4vVisionConfig, "text_config": Glm4vTextConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=Glm4vVisionConfig),
+        "text_config": SubConfigSpec(config_class=Glm4vTextConfig),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -213,23 +216,12 @@ class Glm4vConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"](**kwargs)
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"](**kwargs)
-
+        super().__post_init__(**kwargs)
         # BC: pre-v5 saves placed `tie_word_embeddings` inside text_config. Forward it to the outer
         # config (where v5's tying logic looks) when the root value is the default. Checked after
         # text_config init so it also covers a text config passed as an already-initialized instance.
         if not self.tie_word_embeddings and getattr(self.text_config, "tie_word_embeddings", False):
             self.tie_word_embeddings = True
-
-        super().__post_init__(**kwargs)
 
 
 # Will be used for both Text and Vision modalities

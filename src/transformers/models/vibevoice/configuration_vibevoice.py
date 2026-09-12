@@ -14,9 +14,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="vibevoice/VibeVoice-1.5B-hf")
@@ -72,11 +72,15 @@ class VibeVoiceConfig(PreTrainedConfig):
     ```"""
 
     model_type = "vibevoice"
-    sub_configs = {
-        "audio_config": AutoConfig,
-        "semantic_model_config": AutoConfig,
-        "text_config": AutoConfig,
-        "diffusion_head_config": VibeVoiceDiffusionHeadConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen2"),
+        "diffusion_head_config": SubConfigSpec(config_class=VibeVoiceDiffusionHeadConfig),
+        "semantic_model_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="vibevoice_acoustic_tokenizer_encoder",
+            init_kwargs={"hidden_size": 128},
+        ),
+        "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="vibevoice_acoustic_tokenizer"),
     }
 
     audio_config: dict | PreTrainedConfig | None = None
@@ -91,38 +95,11 @@ class VibeVoiceConfig(PreTrainedConfig):
     diffusion_loss_weight: float = 0.5
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "vibevoice_acoustic_tokenizer")
-            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer"]()
-
-        if isinstance(self.semantic_model_config, dict):
-            self.semantic_model_config["model_type"] = self.semantic_model_config.get(
-                "model_type", "vibevoice_acoustic_tokenizer_encoder"
-            )
-            self.semantic_model_config = CONFIG_MAPPING[self.semantic_model_config["model_type"]](
-                **self.semantic_model_config
-            )
-        elif self.semantic_model_config is None:
-            self.semantic_model_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer_encoder"](hidden_size=128)
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen2"]()
-
-        if isinstance(self.diffusion_head_config, dict):
-            self.diffusion_head_config = VibeVoiceDiffusionHeadConfig(**self.diffusion_head_config)
-        elif self.diffusion_head_config is None:
-            self.diffusion_head_config = VibeVoiceDiffusionHeadConfig(
-                hidden_size=self.text_config.hidden_size, latent_size=self.audio_config.hidden_size
-            )
-
+        super().__post_init__(**kwargs)
         self.vocab_size = self.text_config.vocab_size
         self.tie_word_embeddings = getattr(self.text_config, "tie_word_embeddings", False)
-        super().__post_init__(**kwargs)
+        self.diffusion_head_config.hidden_size = self.text_config.hidden_size
+        self.diffusion_head_config.latent_size = self.audio_config.hidden_size
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
