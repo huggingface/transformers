@@ -268,6 +268,18 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertIn("layers.0.hc_attn_fn", native)
         self.assertIn("layers.1.attn.compressor.wgate.weight", native)
         self.assertFalse({k for k in native if k.startswith("model.") or "self_attn" in k or "_hc." in k})
+        # the released file also carries the DSpark draft layers, the vision tower, the
+        # aligner and the image delimiters: still ignored once the renames rewrite them
+        native.update(
+            {
+                "mtp.0.attn.wq_a.weight": torch.zeros(4, 4),
+                "mtp.0.ffn.experts.0.w1.weight": torch.zeros(4, 4),
+                "mtp.0.hc_attn_fn": torch.zeros(3, 4),
+                "vision.blocks.0.attn.wo.weight": torch.zeros(4, 4),
+                "aligner.w1.weight": torch.zeros(4, 4),
+                "image_start": torch.zeros(4),
+            }
+        )
 
         inputs = torch.randint(0, config.vocab_size, (1, 6))
         with tempfile.TemporaryDirectory() as tmp:
