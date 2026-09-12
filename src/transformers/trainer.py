@@ -528,15 +528,7 @@ class Trainer:
         ) is ForCausalLMLoss and not getattr(getattr(model_to_inspect, "config", None), "is_encoder_decoder", False)
 
         if self.args.label_smoothing_factor != 0:
-            if getattr(self.model.config, "problem_type", None) == "multi_label_classification":
-                warnings.warn(
-                    "Label smoothing is not compatible with multi-label classification. "
-                    "Disabling label smoothing for this training run.",
-                    UserWarning,
-                )
-                self.label_smoother = None
-            else:
-                self.label_smoother = LabelSmoother(epsilon=self.args.label_smoothing_factor)
+            self.label_smoother = LabelSmoother(epsilon=self.args.label_smoothing_factor)
         else:
             self.label_smoother = None
 
