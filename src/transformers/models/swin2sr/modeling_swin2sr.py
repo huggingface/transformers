@@ -983,7 +983,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
          >>> import torch
          >>> import numpy as np
          >>> from PIL import Image
-         >>> import httpx
+         >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
          >>> from transformers import AutoImageProcessor, Swin2SRForImageSuperResolution

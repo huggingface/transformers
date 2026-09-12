@@ -26,7 +26,6 @@ from pathlib import Path
 from typing import TypedDict
 from uuid import uuid4
 
-import httpx
 from huggingface_hub import (
     _CACHED_NO_EXIST,
     CommitOperationAdd,
@@ -52,6 +51,7 @@ from huggingface_hub.utils import (
     build_hf_headers,
     get_session,
     hf_raise_for_status,
+    httpx,
 )
 
 from . import __version__, logging

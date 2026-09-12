@@ -301,7 +301,7 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         Examples:
         ```python
         >>> import torch
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import TextNetForImageClassification, TextNetImageProcessor
         >>> from PIL import Image
@@ -370,7 +370,7 @@ class TextNetBackbone(BackboneMixin, TextNetPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoImageProcessor, AutoBackbone
