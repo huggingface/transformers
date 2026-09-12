@@ -44,6 +44,7 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.generic import TensorType, can_return_tuple
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
 from ..resnet.modeling_resnet import ResNetConvLayer
 from ..rt_detr.modeling_rt_detr import (
@@ -866,6 +867,8 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
 
         self.num_queries = config.num_queries
 
+    @auto_docstring
+    @capture_outputs
     def forward(
         self,
         inputs_embeds=None,
@@ -898,8 +901,21 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
                 Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
             spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
                 Spatial shapes of the feature maps.
+            spatial_shapes_list (`list[tuple[int, int]]`, *optional*):
+                Spatial shapes of the feature maps as a list, kept alongside `spatial_shapes` so that the deformable
+                attention can index them without a device synchronization.
             level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
                 Indexes for the start of each feature level. In range `[0, sequence_length]`.
+            order_head (`nn.ModuleList`, *optional*):
+                Per-layer projections feeding the relative order global pointer.
+            global_pointer (`PPDocLayoutV3GlobalPointer`, *optional*):
+                Antisymmetric pairwise scorer producing the relative reading order logits.
+            mask_query_head (`PPDocLayoutV3MLPPredictionHead`, *optional*):
+                Prediction head mapping the decoder hidden states to mask queries for the per-layer mask generation.
+            norm (`nn.LayerNorm`, *optional*):
+                Layer norm applied to the decoder hidden states before the mask, classification and order heads.
+            mask_feat (`torch.FloatTensor` of shape `(batch_size, num_prototypes, mask_height, mask_width)`, *optional*):
+                Mask feature map from the encoder, dot-producted with the mask queries to produce the per-layer masks.
         """
         if inputs_embeds is not None:
             hidden_states = inputs_embeds

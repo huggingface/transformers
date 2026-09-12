@@ -1192,6 +1192,13 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
             WeightRenaming(r"encoder.encoder.(\d+).layers", r"encoder.aifi.\1.layers"),
         ],
+        "pp_doclayout_v4": [
+            WeightRenaming("decoder_roor_order_head.", "decoder.successor_order_head."),
+            WeightRenaming("decoder_roor_global_pointer.", "decoder.successor_global_pointer."),
+            WeightRenaming("decoder_order_head.", "decoder.order_head."),
+            WeightRenaming("decoder_global_pointer.", "decoder.global_pointer."),
+            WeightRenaming("s2r_fusion.a", "decoder.s2r_fusion.closure_weight"),
+        ],
         "RfDetrModel": [
             # RfDetrConvEncoder — backbone checkpoint layout + projector stages
             WeightRenaming(r"backbone.0.encoder.encoder", r"backbone.backbone"),
@@ -1776,6 +1783,10 @@ def _build_checkpoint_conversion_mapping():
     mapping["ConditionalDetrForSegmentation"] = mapping["DetrForSegmentation"].copy()
 
     mapping["kimi_k25"] += mapping["qwen2_moe"].copy()
+
+    # The pp_doclayout_v4-specific reading order renames are defined in the mapping literal above; it also
+    # inherits the shared RT-DETR renames, like its PP-DocLayoutV2/V3 siblings.
+    mapping["pp_doclayout_v4"] += mapping["rt_detr"].copy()
 
     mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
     mapping["ernie4_5_moe"] += [

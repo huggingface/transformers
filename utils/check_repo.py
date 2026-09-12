@@ -210,6 +210,7 @@ IGNORE_NON_TESTED = (
         "PPDocLayoutV2ReadingOrder",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
         "PPDocLayoutV2Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
         "PPDocLayoutV3Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV3ForObjectDetection.
+        "PPDocLayoutV4Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV4ForObjectDetection.
         "PPOCRV5MobileRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
         "PPOCRV5MobileRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
         "PPOCRV5ServerRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
@@ -277,6 +278,7 @@ IGNORE_NON_TESTED = (
         "QianfanOCRVisionModel",  # Building part of bigger (tested) model
         "JanusVisionModel",  # Building part of bigger (tested) model
         "PPDocLayoutV3Model",  # Building part of bigger (tested) model
+        "PPDocLayoutV4Model",  # Building part of bigger (tested) model
         "TimesFmModel",  # Building part of bigger (tested) model
         "TimesFm2_5Model",  # Building part of bigger (tested) model
         "CsmDepthDecoderForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
