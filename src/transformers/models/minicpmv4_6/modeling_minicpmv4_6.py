@@ -374,26 +374,53 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
         hidden_states = hidden_states[:, torch.argsort(window_index), :]
         hidden_states = residual + hidden_states
 
-        # Vectorised window merge: reshape (1, batch*seq_per_img, D) → (batch, seq_per_img, D)
-        # and lift per-image (h, w) from target_sizes[0]. This assumes the input batch was
-        # packed with uniform per-image sizes (the standard NaViT preprocessing output).
+        # Window merge: group frames by unique (H, W) for vectorised processing.
+        # Handles both uniform inputs (standard NaViT) and non-uniform inputs from video
+        # processors that stack sub-frames (e.g. stack_frames producing composite frames
+        # at a different aspect ratio than the main frames).
         batch_size = target_sizes.shape[0]
         window_h, window_w = self.window_kernel_size
         embed_dim = hidden_states.shape[-1]
-        seq_per_img = hidden_states.shape[1] // batch_size
-        patch = hidden_states.view(batch_size, seq_per_img, embed_dim)
-        merged_h, merged_w = get_vision_merged_shape(target_sizes, self.window_kernel_size, kwargs=kwargs)
 
-        patch_5d = patch.view(batch_size, merged_h, window_h, merged_w, window_w, embed_dim).permute(0, 1, 3, 2, 4, 5)
-        flat = patch_5d.reshape(batch_size * merged_h * merged_w, window_h * window_w * embed_dim)
-        residual = patch_5d.reshape(batch_size * merged_h * merged_w, window_h * window_w, embed_dim).mean(dim=1)
+        # Build per-image offsets into the packed sequence dimension.
+        seq_lens = (target_sizes[:, 0] * target_sizes[:, 1]).tolist()
+        offsets = [0]
+        for s in seq_lens:
+            offsets.append(offsets[-1] + int(s))
 
-        hidden_state = self.pre_norm(flat)
-        hidden_state = self.linear_1(hidden_state)
-        hidden_state = self.act(hidden_state)
-        hidden_state = self.linear_2(hidden_state)
+        # Group image indices by unique (H, W) → one vectorised MLP call per group.
+        size_groups: dict[tuple[int, int], list[int]] = {}
+        for i, ts in enumerate(target_sizes.tolist()):
+            size_groups.setdefault((ts[0], ts[1]), []).append(i)
 
-        return (hidden_state + residual).unsqueeze(0)
+        # For the uniform case (single group) pop precomputed merged_shape from kwargs
+        # so torch.export callers can supply static values instead of relying on .item().
+        merged_shape = (
+            get_vision_merged_shape(target_sizes, self.window_kernel_size, kwargs=kwargs)
+            if len(size_groups) == 1
+            else None
+        )
+
+        result: list[torch.Tensor] = [None] * batch_size  # type: ignore[list-item]
+        for (h, w), indices in size_groups.items():
+            mh = merged_shape[0] if merged_shape is not None else h // window_h
+            mw = merged_shape[1] if merged_shape is not None else w // window_w
+            n = len(indices)
+            group = torch.cat(
+                [hidden_states[:, offsets[i] : offsets[i + 1], :] for i in indices], dim=0
+            )  # (n, h*w, D)
+            patch_5d = group.view(n, mh, window_h, mw, window_w, embed_dim).permute(0, 1, 3, 2, 4, 5)
+            flat = patch_5d.reshape(n * mh * mw, window_h * window_w * embed_dim)
+            inner_res = patch_5d.reshape(n * mh * mw, window_h * window_w, embed_dim).mean(dim=1)
+            hidden_state = self.pre_norm(flat)
+            hidden_state = self.linear_1(hidden_state)
+            hidden_state = self.act(hidden_state)
+            hidden_state = self.linear_2(hidden_state)
+            merged = (hidden_state + inner_res).view(n, mh * mw, embed_dim)
+            for j, idx in enumerate(indices):
+                result[idx] = merged[j]
+
+        return torch.cat(result).unsqueeze(0)
 
 
 class MiniCPMV4_6VisionPreTrainedModel(PreTrainedModel):
