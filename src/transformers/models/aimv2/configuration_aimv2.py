@@ -100,6 +100,8 @@ class Aimv2TextConfig(PreTrainedConfig):
     max_position_embeddings: int = 77
     hidden_act: str = "silu"
     attention_dropout: float | int = 0.0
+    pad_token_id: int | None = 49407
+    bos_token_id: int | None = 49406
     eos_token_id: int | list[int] | None = 49407
     rms_norm_eps: float = 1e-5
     qkv_bias: bool = False

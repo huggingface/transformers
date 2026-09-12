@@ -431,6 +431,12 @@ class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_default_special_tokens(self):
+        config = Siglip2TextConfig()
+        self.assertEqual(config.bos_token_id, 2)
+        self.assertEqual(config.eos_token_id, 1)
+        self.assertEqual(config.pad_token_id, 0)
+
     @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
