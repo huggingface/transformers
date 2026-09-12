@@ -1049,9 +1049,7 @@ def _build_checkpoint_conversion_mapping():
             # `wkv` / `{q,k}_weight` keep their names; its ~98 GB hash table moves from
             # the decoder layer to the model-level `engram_tables[<layer>]` ModuleDict
             # (keyed by layer index) so it can be excluded from `device_map` placement.
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.engram\.embed\.", target_patterns=r"engram_tables.\1."
-            ),
+            WeightRenaming(source_patterns=r"^layers\.(\d+)\.engram\.embed\.", target_patterns=r"engram_tables.\1."),
             WeightRenaming(source_patterns=r"\.attn\.", target_patterns=r".self_attn."),
             WeightRenaming(source_patterns=r"\.ffn\.", target_patterns=r".mlp."),
             WeightRenaming(source_patterns=r"^embed\.weight$", target_patterns="embed_tokens.weight"),
