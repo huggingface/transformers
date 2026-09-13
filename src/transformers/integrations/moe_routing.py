@@ -96,8 +96,9 @@ def counting_sort_route(expert_ids: torch.Tensor, num_experts: int, num_top_k: i
     _count[grid](ids, counts, num_pairs, num_experts, BLOCK=block)
     _scan[(1,)](counts, starts, offsets, num_experts, BLOCK_E=triton.next_power_of_2(num_experts + 1))
     counts.zero_()
-    _place[grid](ids, starts, counts, perm, ids_grouped, inv_perm, rows, num_pairs, num_experts, num_top_k,
-                 BLOCK=block)
+    _place[grid](
+        ids, starts, counts, perm, ids_grouped, inv_perm, rows, num_pairs, num_experts, num_top_k, BLOCK=block
+    )
     return ids_grouped, perm, offsets, rows, inv_perm
 
 
@@ -109,8 +110,18 @@ def counting_sort_route(expert_ids: torch.Tensor, num_experts: int, num_top_k: i
 
 
 @triton.jit
-def _softmax_topk_fwd(logits_ptr, vals_ptr, idx_ptr, T, E, K: tl.constexpr, NORM: tl.constexpr,
-                      BLOCK_T: tl.constexpr, BLOCK_K: tl.constexpr, BLOCK_E: tl.constexpr):
+def _softmax_topk_fwd(
+    logits_ptr,
+    vals_ptr,
+    idx_ptr,
+    T,
+    E,
+    K: tl.constexpr,
+    NORM: tl.constexpr,
+    BLOCK_T: tl.constexpr,
+    BLOCK_K: tl.constexpr,
+    BLOCK_E: tl.constexpr,
+):
     """The k largest of `softmax(logits)` per token, and where they were, renormalised over the k if asked.
 
     Experts past `E` load as -inf, so they contribute nothing to the softmax sum and are never selected. Each
@@ -148,8 +159,18 @@ def _softmax_topk_fwd(logits_ptr, vals_ptr, idx_ptr, T, E, K: tl.constexpr, NORM
 
 
 @triton.jit
-def _softmax_topk_bwd(logits_ptr, idx_ptr, dvals_ptr, dlogits_ptr, T, E, K: tl.constexpr, NORM: tl.constexpr,
-                      BLOCK_T: tl.constexpr, BLOCK_E: tl.constexpr):
+def _softmax_topk_bwd(
+    logits_ptr,
+    idx_ptr,
+    dvals_ptr,
+    dlogits_ptr,
+    T,
+    E,
+    K: tl.constexpr,
+    NORM: tl.constexpr,
+    BLOCK_T: tl.constexpr,
+    BLOCK_E: tl.constexpr,
+):
     """The gradient of the above, from the saved logits and indices.
 
     Selecting is a gather, so its gradient scatters back to the k positions and the softmax Jacobian carries it
@@ -183,8 +204,7 @@ def _softmax_topk_bwd(logits_ptr, idx_ptr, dvals_ptr, dlogits_ptr, T, E, K: tl.c
         d_probs += tl.where(off_e[None, :] == at[:, None], d_value[:, None], 0.0)
 
     d_logits = probs * (d_probs - tl.sum(probs * d_probs, axis=1)[:, None])
-    tl.store(dlogits_ptr + off_t[:, None] * E + off_e[None, :], d_logits.to(dlogits_ptr.dtype.element_ty),
-             mask=keep)
+    tl.store(dlogits_ptr + off_t[:, None] * E + off_e[None, :], d_logits.to(dlogits_ptr.dtype.element_ty), mask=keep)
 
 
 class _SoftmaxTopK(torch.autograd.Function):
@@ -195,8 +215,16 @@ class _SoftmaxTopK(torch.autograd.Function):
         idx = torch.empty(num_tokens, top_k, dtype=torch.int64, device=logits.device)
         block_t, block_e = 4, triton.next_power_of_2(num_experts)
         _softmax_topk_fwd[(triton.cdiv(num_tokens, block_t),)](
-            logits, vals, idx, num_tokens, num_experts, K=top_k, NORM=norm, BLOCK_T=block_t,
-            BLOCK_K=triton.next_power_of_2(top_k), BLOCK_E=block_e
+            logits,
+            vals,
+            idx,
+            num_tokens,
+            num_experts,
+            K=top_k,
+            NORM=norm,
+            BLOCK_T=block_t,
+            BLOCK_K=triton.next_power_of_2(top_k),
+            BLOCK_E=block_e,
         )
         ctx.save_for_backward(logits, idx)
         ctx.top_k, ctx.norm = top_k, norm
@@ -209,8 +237,16 @@ class _SoftmaxTopK(torch.autograd.Function):
         d_logits = torch.empty_like(logits)
         block_t, block_e = 4, triton.next_power_of_2(num_experts)
         _softmax_topk_bwd[(triton.cdiv(num_tokens, block_t),)](
-            logits, idx, grad_vals.contiguous(), d_logits, num_tokens, num_experts,
-            K=ctx.top_k, NORM=ctx.norm, BLOCK_T=block_t, BLOCK_E=block_e
+            logits,
+            idx,
+            grad_vals.contiguous(),
+            d_logits,
+            num_tokens,
+            num_experts,
+            K=ctx.top_k,
+            NORM=ctx.norm,
+            BLOCK_T=block_t,
+            BLOCK_E=block_e,
         )
         return d_logits, None, None
 

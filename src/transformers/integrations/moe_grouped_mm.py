@@ -40,8 +40,20 @@ if is_triton_available():
     import triton.language as tl
 
     @triton.jit
-    def _grouped_gemm_kernel(a_ptr, b_ptr, c_ptr, offs_ptr, K, N, se, sk, sn,
-                             BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr):
+    def _grouped_gemm_kernel(
+        a_ptr,
+        b_ptr,
+        c_ptr,
+        offs_ptr,
+        K,
+        N,
+        se,
+        sk,
+        sn,
+        BLOCK_M: tl.constexpr,
+        BLOCK_N: tl.constexpr,
+        BLOCK_K: tl.constexpr,
+    ):
         """`c[m] = a[m] @ b[e]` for every row `m` the offsets give to expert `e`, one program per (e, N tile).
 
         Rows past the last offset belong to expert-parallel sentinels. No program covers them, so they keep
@@ -65,13 +77,27 @@ if is_triton_available():
                 a = tl.load(a_row + off_k[None, :], mask=live_m[:, None] & live_k[None, :], other=0.0)
                 b = tl.load(b_base + off_k[:, None] * sk, mask=live_k[:, None] & live_n[None, :], other=0.0)
                 acc = tl.dot(a, b, acc)
-            tl.store(c_ptr + off_m[:, None] * N + off_n[None, :], acc.to(c_ptr.dtype.element_ty),
-                     mask=live_m[:, None] & live_n[None, :])
-
+            tl.store(
+                c_ptr + off_m[:, None] * N + off_n[None, :],
+                acc.to(c_ptr.dtype.element_ty),
+                mask=live_m[:, None] & live_n[None, :],
+            )
 
     @triton.jit
-    def _grouped_dw_kernel(a_ptr, dy_ptr, dw_ptr, offs_ptr, K, N, se, sk, sn,
-                           BLOCK_M: tl.constexpr, BLOCK_K: tl.constexpr, BLOCK_N: tl.constexpr):
+    def _grouped_dw_kernel(
+        a_ptr,
+        dy_ptr,
+        dw_ptr,
+        offs_ptr,
+        K,
+        N,
+        se,
+        sk,
+        sn,
+        BLOCK_M: tl.constexpr,
+        BLOCK_K: tl.constexpr,
+        BLOCK_N: tl.constexpr,
+    ):
         """`dw[e] = a[rows of e].T @ dy[rows of e]`, one program per (expert, K tile, N tile).
 
         The native grouped matmul groups along the rows, so it cannot express a reduction over them: its 2-D
@@ -88,13 +114,16 @@ if is_triton_available():
         for m0 in range(start, end, BLOCK_M):
             off_m = m0 + tl.arange(0, BLOCK_M)
             live_m = off_m < end
-            a = tl.load(a_ptr + off_m[:, None] * K + off_k[None, :],
-                        mask=live_m[:, None] & live_k[None, :], other=0.0)
-            dy = tl.load(dy_ptr + off_m[:, None] * N + off_n[None, :],
-                         mask=live_m[:, None] & live_n[None, :], other=0.0)
+            a = tl.load(a_ptr + off_m[:, None] * K + off_k[None, :], mask=live_m[:, None] & live_k[None, :], other=0.0)
+            dy = tl.load(
+                dy_ptr + off_m[:, None] * N + off_n[None, :], mask=live_m[:, None] & live_n[None, :], other=0.0
+            )
             acc = tl.dot(tl.trans(a), dy, acc)
-        tl.store(dw_ptr + e * se + off_k[:, None] * sk + off_n[None, :] * sn, acc.to(dw_ptr.dtype.element_ty),
-                 mask=live_k[:, None] & live_n[None, :])
+        tl.store(
+            dw_ptr + e * se + off_k[:, None] * sk + off_n[None, :] * sn,
+            acc.to(dw_ptr.dtype.element_ty),
+            mask=live_k[:, None] & live_n[None, :],
+        )
 
 
 # above this many rows per expert on average the native op is faster, by a lot: it is a real GEMM once there
@@ -115,8 +144,20 @@ def _launch_dw(a: torch.Tensor, grad_out: torch.Tensor, offs: torch.Tensor, num_
     dw = torch.empty(num_experts, k_in, n_out, device=a.device, dtype=a.dtype)
     block_k, block_n = min(64, triton.next_power_of_2(k_in)), min(64, triton.next_power_of_2(n_out))
     _grouped_dw_kernel[(num_experts, triton.cdiv(k_in, block_k), triton.cdiv(n_out, block_n))](
-        a, grad_out, dw, offs, k_in, n_out, dw.stride(0), dw.stride(1), dw.stride(2),
-        BLOCK_M=32, BLOCK_K=block_k, BLOCK_N=block_n, num_stages=3, num_warps=4,
+        a,
+        grad_out,
+        dw,
+        offs,
+        k_in,
+        n_out,
+        dw.stride(0),
+        dw.stride(1),
+        dw.stride(2),
+        BLOCK_M=32,
+        BLOCK_K=block_k,
+        BLOCK_N=block_n,
+        num_stages=3,
+        num_warps=4,
     )
     return dw
 
@@ -133,9 +174,20 @@ def _launch(a: torch.Tensor, b: torch.Tensor, offs: torch.Tensor) -> torch.Tenso
     block_n = min(_BLOCK_N, triton.next_power_of_2(n_out))
     deep_k = k_in % 128 == 0
     _grouped_gemm_kernel[(num_experts, triton.cdiv(n_out, block_n))](
-        a, b, out, offs, k_in, n_out, b.stride(0), b.stride(1), b.stride(2),
-        BLOCK_M=_BLOCK_M, BLOCK_N=block_n, BLOCK_K=128 if deep_k else 64,
-        num_stages=3 if deep_k else 4, num_warps=_WARPS,
+        a,
+        b,
+        out,
+        offs,
+        k_in,
+        n_out,
+        b.stride(0),
+        b.stride(1),
+        b.stride(2),
+        BLOCK_M=_BLOCK_M,
+        BLOCK_N=block_n,
+        BLOCK_K=128 if deep_k else 64,
+        num_stages=3 if deep_k else 4,
+        num_warps=_WARPS,
     )
     return out
 
