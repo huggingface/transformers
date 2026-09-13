@@ -157,6 +157,8 @@ class DistributedMixin:
             raise ValueError("Tensor parallelism and `device_map` are mutually exclusive.")
         if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
             raise OSError("FSDP2 requires `torch>=2.7` (distributed checkpoint save/load).")
+        if distributed_config.dispatches_tokens and not is_torch_greater_or_equal("2.7"):
+            raise OSError("Expert-parallel token dispatch requires `torch>=2.7`.")
 
         device_map, device_mesh = initialize_distributed_mesh(distributed_config)
 
@@ -216,7 +218,8 @@ class DistributedMixin:
                 # Every expert-parallel rank trains on its own part of the batch, so the parameters outside the
                 # experts are data-parallel across the whole mesh: FSDP2 shards them across all of it and owns
                 # their gradient reduction. The experts stay sharded across `tp` and, if any, across `fsdp`.
-                trunk_mesh = device_mesh["fsdp_tp"] if device_mesh.ndim > 1 else device_mesh
+                flattened = "_".join(device_mesh.mesh_dim_names)
+                trunk_mesh = device_mesh[flattened] if device_mesh.ndim > 1 else device_mesh
                 expert_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else None
                 model = apply_fully_sharded_data_parallelism(model, trunk_mesh, expert_mesh=expert_mesh)
             elif distributed_config.fsdp_size > 1:
