@@ -23,7 +23,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...masking_utils import create_bidirectional_mask
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -566,11 +566,19 @@ class RemBertModel(RemBertPreTrainedModel):
             past_key_values_length=past_key_values_length,
         )
 
-        attention_mask = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=embedding_output,
-            attention_mask=attention_mask,
-        )
+        if self.config.is_decoder:
+            attention_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=embedding_output,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+            )
+        else:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=embedding_output,
+                attention_mask=attention_mask,
+            )
 
         if encoder_attention_mask is not None:
             encoder_attention_mask = create_bidirectional_mask(
