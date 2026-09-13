@@ -359,8 +359,9 @@ class DynamicIndexedLayer(DynamicLayer):
 
     def prefetch(self):
         super().prefetch()
-        if self.is_indexer_initialized and self.indexer_keys.device != self.device:
-            self.indexer_keys = self.indexer_keys.to(self.device, non_blocking=True)
+        # The indexer keys may be initialized before the main K/V (the indexer runs first), so use their own device
+        if self.is_indexer_initialized and self.indexer_keys.device != self.indexer_device:
+            self.indexer_keys = self.indexer_keys.to(self.indexer_device, non_blocking=True)
 
     def reset(self) -> None:
         super().reset()
@@ -644,8 +645,8 @@ class StaticIndexedLayer(StaticLayer):
         super().__init__(max_cache_len=max_cache_len)
         self.indexer_keys: torch.Tensor | None = None
         self.is_indexer_initialized: bool = False
-        # The indexer update runs independently of (and after) the main K/V `update` in the attention
-        # forward, so it tracks its own cumulative length rather than reusing `self.cumulative_length`.
+        # The indexer update runs independently of the main K/V `update` in the attention forward, so it tracks
+        # its own cumulative length rather than reusing `self.cumulative_length`.
         self.indexer_cumulative_length = torch.tensor(0, dtype=int)
 
     def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
@@ -1458,12 +1459,20 @@ class Cache:
         Return:
             `torch.Tensor`: The updated indexer key states (full cache).
         """
+        # The indexer runs before the K/V `update`, so it may be the first to see a new layer index
+        if self.layer_class_to_replicate is not None:
+            while len(self.layers) <= layer_idx:
+                self.layers.append(self.layer_class_to_replicate())
+
         if not hasattr(self.layers[layer_idx], "update_indexer"):
             raise ValueError(
                 f"Cannot call `update_indexer` on layer {layer_idx} which is a "
                 f"{type(self.layers[layer_idx]).__name__}; it has no indexer key cache "
                 f"(expected a `DynamicIndexedLayer` or `StaticIndexedLayer`)."
             )
+        if self.offloading:
+            # Mirrors `update`: wait for the pending prefetch before reading the (possibly prefetched) indexer keys
+            torch.cuda.default_stream(indexer_key_states.device).wait_stream(self.prefetch_stream)
         return self.layers[layer_idx].update_indexer(indexer_key_states)
 
     def early_initialization(

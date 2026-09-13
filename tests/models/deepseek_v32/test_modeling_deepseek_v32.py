@@ -19,7 +19,7 @@ import pytest
 from parameterized import parameterized
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import (
@@ -218,6 +218,19 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("MoE routing on a tiny randomly-initialized model makes the overfit target unstable.")
     def test_training_overfit(self):
         pass
+
+    @require_torch_accelerator
+    def test_generate_with_offloaded_cache_matches_dynamic(self):
+        """
+        The offloaded cache moves each layer (K/V and indexer keys) to CPU right after its `update` and prefetches
+        it back on a side stream: the DSA indexer has to run before the K/V update and wait for the prefetch.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DeepseekV32ForCausalLM(config).to(torch_device).eval()
+        input_ids = inputs_dict["input_ids"].to(torch_device)
+        default_ids = model.generate(input_ids, max_new_tokens=5, do_sample=False)
+        offloaded_ids = model.generate(input_ids, max_new_tokens=5, do_sample=False, cache_implementation="offloaded")
+        self.assertTrue(torch.equal(default_ids, offloaded_ids))
 
 
 @slow

@@ -238,10 +238,7 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
 
         key_states, value_states = self.expand_kv(k_pass, k_rot)
 
-        # Sparse-attention models cache the expanded K/V, not the compressed latents. TODO (remi-or): fix this with topk
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
+        # Run the indexer before the K/V update: with offloading, `update` then offloads the layer (incl. indexer keys)
         # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
         if self.indexer is not None:
             topk_indices = self.indexer(
@@ -256,6 +253,10 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
             if prev_topk_indices is None:
                 raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
             topk_indices = prev_topk_indices
+
+        # Sparse-attention models cache the expanded K/V, not the compressed latents. TODO (remi-or): fix this with topk
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         sparse_indices = None
         if self.config._attn_implementation in ("eager", "sdpa"):

@@ -189,6 +189,19 @@ class CacheTest(unittest.TestCase):
             keys, _ = cache.update(*_kv(1), layer_idx)
             self.assertEqual(keys.device.type, torch.device(torch_device).type)
 
+    def test_update_indexer_replicates_layers(self):
+        """
+        `update_indexer` can be the first cache method to see a new `layer_idx` (the DSA indexer runs before
+        the K/V `update`), so it must replicate `layer_class_to_replicate` layers as `update` does. It used to
+        raise `IndexError` instead.
+        """
+        cache = Cache(layer_class_to_replicate=DynamicIndexedLayer)
+        indexer_keys = cache.update_indexer(torch.rand(1, 5, 16), 1)
+        self.assertEqual(len(cache.layers), 2)
+        self.assertIsInstance(cache.layers[0], DynamicIndexedLayer)
+        self.assertIsInstance(cache.layers[1], DynamicIndexedLayer)
+        self.assertEqual(indexer_keys.shape, (1, 5, 16))
+
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
     """Function to skip tests on failed cache prerequisites, given a cache implementation"""
