@@ -61,6 +61,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   flash-attn-ci-image:
+    if: false
     name: "PyTorch with Flash Attn [dev]"
     runs-on:
       group: aws-general-8-plus
@@ -103,6 +104,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   latest-torch-deepspeed-docker:
+    if: false
     name: "Latest PyTorch + DeepSpeed"
     runs-on:
       group: aws-general-8-plus
@@ -141,6 +143,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   doc-builder:
+    if: false
     name: "Doc builder"
     runs-on:
       group: aws-general-8-plus
@@ -177,6 +180,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   latest-pytorch-amd:
+    if: false
     name: "Latest PyTorch (AMD) [dev]"
     runs-on:
       group: aws-highcpu-32-priv
@@ -215,6 +219,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   cache-latest-pytorch-amd:
+    if: false
     name: "Cache Latest Pytorch (AMD) Image"
     needs: latest-pytorch-amd
     runs-on:
@@ -246,6 +251,7 @@ jobs:
           echo "Cache populated successfully at ${final_path}"
 
   latest-pytorch-deepspeed-amd:
+    if: false
     name: "PyTorch + DeepSpeed (AMD) [dev]"
     runs-on:
       group: aws-general-8-plus
@@ -284,6 +290,7 @@ jobs:
           slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   latest-quantization-torch-docker:
+    if: false
     name: "Latest Pytorch + Quantization [dev]"
     runs-on:
       group: aws-general-8-plus
