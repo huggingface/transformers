@@ -601,6 +601,10 @@ class DeepseekV41Indexer(nn.Module):
         #    are derived from the PRE-rope latent, before the compressor rotates the
         #    same values into the main cache.
         if self.owns_k:
+            if cache_layer is None:
+                # Without a cache, the shared slot belongs to this source's current
+                # forward only, not to a preceding source layer.
+                shared["index_k"] = None
             if latent is not None:
                 k = self.k_norm(self.k_proj(latent))
                 positions = first_group_position + ratio * torch.arange(latent.shape[1], device=k.device)
@@ -615,9 +619,7 @@ class DeepseekV41Indexer(nn.Module):
                 if cache_layer is not None:
                     cache_layer.update_compressor_states("indexer", k)
                 else:
-                    shared["index_k"] = (
-                        k if shared.get("index_k") is None else torch.cat([shared["index_k"], k], dim=2)
-                    )
+                    shared["index_k"] = k
             # Publish the RUNNING key cache — decode steps between group boundaries emit
             # nothing new but the group still scores against everything emitted so far.
             if cache_layer is not None:
@@ -627,6 +629,9 @@ class DeepseekV41Indexer(nn.Module):
             index_k = index_k.to(hidden_states.device)  # source group may sit on another device
         compressed_len = 0 if index_k is None else index_k.shape[2]
         if compressed_len == 0:
+            shared["topk_idx"] = None
+            if self.is_candidate_source:
+                shared["candidates"] = None
             return
 
         # 2. Score the queries against the shared keys, in query chunks: the score
@@ -770,6 +775,8 @@ class DeepseekV41Attention(nn.Module):
             cache_layer = past_key_values.layers[self.layer_idx] if past_key_values is not None else None
             latent, first_group_position = (None, 0)
             if self.is_kv_source:
+                if cache_layer is None:
+                    shared["compress_kv"] = None
                 latent, first_group_position = self.compressor(hidden_states, cache_layer)
 
             # The indexer consumes the PRE-rope latent; it must run before the latent is
@@ -795,11 +802,7 @@ class DeepseekV41Attention(nn.Module):
                 if cache_layer is not None:
                     cache_layer.update_compressor_states("compressor", rotated)
                 else:
-                    shared["compress_kv"] = (
-                        rotated
-                        if shared.get("compress_kv") is None
-                        else torch.cat([shared["compress_kv"], rotated], dim=2)
-                    )
+                    shared["compress_kv"] = rotated
             if self.is_kv_source and cache_layer is not None:
                 # Publish the RUNNING compressed cache — a decode step between group
                 # boundaries emits nothing new, but the group still attends over

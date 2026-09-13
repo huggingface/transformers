@@ -191,14 +191,17 @@ torchrun --nproc-per-node 8 your_script.py
 
 Per-rank memory under EP is the replicated attention (~17 GB fp8) + `experts / tp_size` (~36 GB on 8 ranks) +
 `tables / tp_size` (~24 GB on 8 ranks): about 77 GB, which does not leave room on an 80 GB H100 — use 141 GB
-H200 / 192 GB B200 parts, or 16 ranks. Measured on 8×H200 (batch 1, greedy): load 432 s, 66 GiB per rank,
+H200 / 192 GB B200 parts. The native quantized engram layout requires `tp_size` to divide
+`engram_head_dim / 32` (8 for the released model); 16-rank EP is not supported by this sharding plan.
+Measured on 8×H200 (batch 1, greedy): load 432 s, 66 GiB per rank,
 prefill 0.36 s for a short prompt and 0.70 s for 1.2k tokens, decode 327 ms/token — on par with `deepseek_v4`
 (DeepSeek-V4-Flash: 373 ms/token on the same harness).
 
-Long prompts: the compressed branch attends only the `index_topk` entries the indexer picks per query (the
-indexer scores in 2 GiB-bounded query chunks), so memory grows with the number of *picked* entries, not with the
-context. Feed long prompts in chunks (`model(chunk, past_key_values=cache)` — the caches carry partial groups and
-the n-gram history, so chunked prefill is exact) and let `generate` continue from the cache; a needle-in-a-haystack
+Long prompts: the compressed branch attends only the `index_topk` entries the indexer picks per query. Its
+attention work uses the selected entries rather than the entire compressed cache, and indexer scoring uses
+bounded query chunks; the KV caches themselves still grow with context length. Feed long prompts in chunks
+(`model(chunk, past_key_values=cache)` carries partial groups and n-gram history) and let `generate` continue
+from the cache; a needle-in-a-haystack
 passcode was retrieved at 262k, 524k and 1,048k prompt tokens on 8×H200 (4096-token chunks: 754 / 595 / 394
 tokens per second of prefill).
 

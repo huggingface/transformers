@@ -238,6 +238,21 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
                     decoded.append(self._output_tensor(model(tok, past_key_values=cache, use_cache=True)))
             self.assertTrue(torch.allclose(ground_truth, torch.cat(decoded, dim=1), atol=1e-4))
 
+    def test_cached_and_uncached_forward_match(self):
+        """KV sources must replace each other's per-forward state, including empty groups."""
+        for ratios, seq_len in (([0, 2, 2, 1, 1], 13), ([0, 1, 1, 2, 2], 1)):
+            config = self._tie_free_config(self.model_tester.get_config())
+            config.compress_ratios = ratios
+            for model_class in self.all_model_classes:
+                with self.subTest(model_class=model_class.__name__, ratios=ratios):
+                    torch.manual_seed(0)
+                    model = model_class(config).eval()
+                    inputs = torch.randint(0, config.vocab_size, (2, seq_len))
+                    with torch.no_grad():
+                        cached = self._output_tensor(model(inputs, use_cache=True))
+                        uncached = self._output_tensor(model(inputs, use_cache=False))
+                    torch.testing.assert_close(uncached, cached, atol=1e-4, rtol=1e-4)
+
     def test_save_load_round_trip(self):
         """save→load must be exact."""
         config = self.model_tester.get_config()
