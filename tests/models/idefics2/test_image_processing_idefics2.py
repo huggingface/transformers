@@ -15,6 +15,7 @@
 import unittest
 
 import numpy as np
+from parameterized import parameterized
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -318,6 +319,35 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             result = image_processing(equal_size_inputs, return_tensors="pt")
             self.assertNotIn("pixel_attention_mask", result)
+
+    @parameterized.expand([("pil",), ("numpy",), ("torch",)])
+    def test_padding_with_text_only_examples(self, input_type):
+        images = [
+            np.arange(8 * 10 * 3, dtype=np.uint8).reshape(8, 10, 3),
+            np.arange(12 * 6 * 3, dtype=np.uint8).reshape(12, 6, 3),
+        ]
+        if input_type == "pil":
+            images = [Image.fromarray(image) for image in images]
+        elif input_type == "torch":
+            images = [torch.from_numpy(image).permute(2, 0, 1) for image in images]
+
+        for backend, image_processing_class in self.image_processing_classes.items():
+            for do_image_splitting in (False, True):
+                image_processor = image_processing_class(do_resize=False, do_image_splitting=do_image_splitting)
+                reference = image_processor([[images[0]], images], return_tensors="pt")
+                for empty_index in range(3):
+                    with self.subTest(backend=backend, splitting=do_image_splitting, empty_index=empty_index):
+                        batch = [[images[0]], images]
+                        batch.insert(empty_index, [])
+                        result = image_processor(batch, return_tensors="pt")
+                        populated_indices = [i for i in range(3) if i != empty_index]
+
+                        torch.testing.assert_close(result.pixel_values[populated_indices], reference.pixel_values)
+                        torch.testing.assert_close(
+                            result.pixel_attention_mask[populated_indices], reference.pixel_attention_mask
+                        )
+                        self.assertEqual(result.pixel_values[empty_index].count_nonzero().item(), 0)
+                        self.assertEqual(result.pixel_attention_mask[empty_index].count_nonzero().item(), 0)
 
     def test_convert_rgb(self):
         for image_processing_class in self.image_processing_classes.values():
