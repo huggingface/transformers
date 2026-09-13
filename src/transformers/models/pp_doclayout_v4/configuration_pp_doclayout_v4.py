@@ -163,12 +163,6 @@ class PPDocLayoutV4Config(PreTrainedConfig):
     s2r_closure_weight_init: float = 0.0
 
     def __post_init__(self, **kwargs):
-        # The anchor generator, the deformable attention reference points and the corner decode are all written
-        # against the quad parameterization (`[center_x, center_y]` plus four `(dx, dy)` corner offsets), so
-        # anything else fails with a shape error deep inside the forward.
-        if self.num_coords != 10:
-            raise ValueError(f"PP-DocLayoutV4 only supports `num_coords=10`, got {self.num_coords}.")
-
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
             backbone_config=self.backbone_config,
             default_config_type="hgnet_v2",
@@ -192,6 +186,11 @@ class PPDocLayoutV4Config(PreTrainedConfig):
         # `num_labels` is only materialized by `PreTrainedConfig.__post_init__`, hence the ordering.
         if self.initializer_bias_prior_prob is None:
             self.initializer_bias_prior_prob = 1 / (self.num_labels + 1)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.num_coords != 10:
+            raise ValueError(f"PP-DocLayoutV4 only supports `num_coords=10`, got {self.num_coords}.")
 
 
 __all__ = ["PPDocLayoutV4Config"]
