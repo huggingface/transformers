@@ -246,6 +246,7 @@ class Qwen3MoeExperts(nn.Module):
         return final_hidden_states
 
 
+@use_kernel_forward_from_hub("TopKRouter")
 class Qwen3MoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
