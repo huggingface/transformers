@@ -21,11 +21,14 @@ HELIX (**H**ierarchical **E**pisodic **L**inear **I**nde**X**) is a decoder-only
 what self-attention is good at while dropping the quadratic bill. Every block braids three sequence mixers
 that read the same residual stream and are summed back into it:
 
-| strand | reads | training cost | decode state |
+| strand | reads | training cost | what it holds at decode time |
 | --- | --- | --- | --- |
-| **L — local** | the last `local_blocks * block_size` tokens, exactly, with a different window per head | `O(N · local_span)` | a ring buffer of `sliding_window` tokens |
-| **R — recurrent** | everything, compressed into a matrix-valued delta-rule state | `O(N · d_k · d_v)` | one `d_k × d_v` matrix per head |
-| **I — index** | `index_topk` memory blocks chosen anywhere in the past by a beam descent over a landmark tree | `O(N · index_topk · block_size)` compute, `O(N log N)` routing | an append-only landmark tree, of which `O(log N)` is touched per step |
+| **L — local** | the last `local_blocks * block_size` tokens, exactly, with a different window per head | `O(N · local_span)` | a `sliding_window`-token ring buffer of keys and values |
+| **R — recurrent** | everything, compressed into a matrix-valued delta-rule state | `O(N · d_k · d_v)` | one `d_k × d_v` matrix and two short convolution states per head |
+| **I — index** | `index_topk` memory blocks chosen anywhere in the past by a beam descent over a landmark tree | `O(N · index_topk · block_size)` attention, `O(N log N)` routing | the whole key/value history plus an append-only landmark tree — of which a step reads `O(index_topk · block_size + branching · log N)` |
+
+Only the layers that run strand I keep the full history; the rest cap their key/value cache at the window,
+so with the default `index_layer_stride=3` two layers in three carry an O(1) cache.
 
 Strands L and I share one set of `q`/`k`/`v` projections and differ only in *which* keys they read; their
 outputs are mixed by a per-token, per-head softmax gate. Strand R has its own projections and its own
@@ -96,8 +99,10 @@ efficiency:
 - **surprise gating** (`use_surprise_gating`): write strength is modulated by how novel a key is against a
   short causal pool of the keys before it, so state capacity goes to unpredictable content. It is a
   depthwise convolution, so it stays parallel over the sequence;
-- **log-bucketed relative block distance** in the index instead of RoPE — retrieved blocks sit at distances
-  never seen in training, and a saturating bucket table extrapolates where a rotary phase does not;
+- **log-bucketed relative block distance** biasing the landmark descent — a saturating table still means
+  something at ranges where a rotary phase has wrapped far past anything seen in training. (The attention
+  *after* the descent reads the rotated keys shared with strand L, so token order inside a retrieved block
+  is preserved; the bias adds the coarse block-level distance the landmarks themselves do not carry);
 - **weight sharing** across the tree's internal levels.
 
 These are design arguments, not measured results. See "What is and isn't verified" below.
@@ -116,7 +121,7 @@ config = HelixConfig(
     num_key_value_heads=4,
     block_size=64,      # memory-block granularity
     local_blocks=4,     # strand L sees 4 previous blocks plus its own
-    index_topk=8,       # strand I retrieves 8 blocks per query block
+    index_topk=8,       # strand I retrieves 8 blocks, shared by every query in the block
     index_layer_stride=3,  # ...on every third layer
 )
 model = HelixForCausalLM(config)
@@ -144,6 +149,26 @@ print(model.generate(input_ids[:, :64], max_new_tokens=16, do_sample=False).shap
   `flash-linear-attention` and `causal-conv1d` when they are installed; the block-gathered attention has no
   fused kernel yet, so absolute throughput is well below what the asymptotics allow.
 
+## Known limitations of this design
+
+These are properties of the architecture, not bugs, and they are the things to weigh before using it.
+
+- **One retrieval serves a whole query block.** That is what makes strand I affordable, but it means
+  `index_topk` has to cover the diversity of everything a `block_size`-token span asks for. Natural text
+  suits this — consecutive tokens usually want related context — but a workload where adjacent tokens each
+  need a *different* distant fact needs a larger `index_topk` or a smaller `block_size`.
+- **Routing is one block stale.** Block `J` is routed from the end of block `J - 1`, which is what keeps it
+  causal and shared. Whatever the routing could not anticipate within that block is covered exactly by
+  strand L, so the staleness never leaves a hole — but it does mean the index cannot react to the token
+  currently being generated.
+- **Landmarks are pooled from rotated keys.** Strands L and I share one key projection, and RoPE is applied
+  before the cache, so a landmark summarizes keys that already carry their absolute rotary phase. Routing
+  is therefore not purely content-addressed; the block-distance bias exists partly to compensate. Pooling
+  pre-rotation would be cleaner but needs a second key cache, which would give back the memory this design
+  is buying.
+- **The recurrent strand still decays over padding.** Padded positions are zeroed on the way in, but the
+  state's decay gate still advances, the same as in other delta-rule and SSM models.
+
 ## What is and isn't verified
 
 Verified in `tests/models/helix/test_modeling_helix.py`, on small random-weight models:
@@ -157,13 +182,20 @@ Verified in `tests/models/helix/test_modeling_helix.py`, on small random-weight 
 - the decode cache has the shape the architecture claims: fixed-size recurrent and convolution states, and
   a windowed key/value cache on `"helix_local"` layers.
 
-Measured in `examples/pytorch/helix/`: the attention-pair count against context length (`scaling.py`) and
-associative-recall accuracy against the number of bindings (`mqar.py`).
+Measured in [`examples/pytorch/helix/`](../../../examples/pytorch/helix), on 4 CPU cores with small models:
+
+* `scaling.py` — the number of query/key products per token is flat in the context length for HELIX
+  (fitted `N^1.00`) and grows for full attention (`N^2.00`); by 32k tokens HELIX forms 32x fewer and, even
+  as an unfused reference implementation against a fused SDPA kernel, runs 1.6x faster.
+* `mqar.py` — on multi-query associative recall with the bindings written ~200 tokens before they are
+  queried, HELIX reaches 30.8% against full attention's 32.0%, while the *same model with the index strand
+  removed* sits at 6.0%, which is chance. That gap is the index strand.
 
 **Not verified:** anything about language-modeling quality at scale. There are no trained HELIX checkpoints.
 The claims above are about complexity, causality and recall mechanics — properties you can check on an
-untrained model — not about perplexity, and the inductive-bias arguments in particular are untested
-hypotheses. Treat this as an architecture proposal with a working, tested reference implementation.
+untrained model or on a synthetic probe — not about perplexity, and the inductive-bias arguments in
+particular are untested hypotheses. Treat this as an architecture proposal with a working, tested reference
+implementation.
 
 ## HelixConfig
 

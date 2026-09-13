@@ -41,10 +41,12 @@ from transformers import HelixConfig, HelixForCausalLM, LlamaConfig, LlamaForCau
 
 def make_batch(batch_size, num_pairs, seq_len, num_keys, num_values, generator, device):
     """
-    Build `k1 v1 ... kn vn <filler...> q1 ? q2 ? ...`.
+    Build `k1 v1 ... kn vn <filler...> q1 v(q1) q2 v(q2) ...`.
 
-    Returns the token ids and a label tensor that is `-100` everywhere except the `?` slots, where it holds
-    the value that was bound to the key immediately before it.
+    Returns the token ids and a label tensor that is `-100` everywhere except the answer slots. The answer
+    is teacher-forced into the input as well, as in the usual MQAR setup, so the query phase has the same
+    key/value shape as the write phase; supervision still only lands on the answer positions, each of which
+    is predicted from the query key immediately before it.
     """
     key_lo, value_lo, filler = 1, 1 + num_keys, 1 + num_keys + num_values
     num_queries = num_pairs
@@ -64,6 +66,7 @@ def make_batch(batch_size, num_pairs, seq_len, num_keys, num_values, generator, 
         order = torch.randperm(num_pairs, generator=generator, device=device)[:num_queries]
         start = seq_len - query_len
         input_ids[row, start::2] = keys[order]
+        input_ids[row, start + 1 :: 2] = values[order]
         labels[row, start + 1 :: 2] = values[order]
     # The label at position t is predicted from position t - 1, which is where the query key sits.
     return input_ids, labels
@@ -85,8 +88,8 @@ def helix_config(vocab_size, seq_len, with_index):
         index_layer_stride=2 if with_index else 10**6,
         landmark_dim=32,
         index_branching=4,
-        index_beam_width=2,
-        index_topk=2,
+        index_beam_width=4,
+        index_topk=8,
         num_recurrent_heads=2,
         recurrent_head_dim=32,
         recurrent_value_head_dim=32,
@@ -164,11 +167,12 @@ def main():
     parser.add_argument("--steps", type=int, default=400)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--eval-batches", type=int, default=4)
-    parser.add_argument("--num-keys", type=int, default=256)
-    parser.add_argument("--num-values", type=int, default=64)
+    parser.add_argument("--num-keys", type=int, default=128)
+    parser.add_argument("--num-values", type=int, default=16)
     parser.add_argument("--lr", type=float, default=3e-3)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--models", nargs="+", default=None, help="substrings selecting which models to run")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -181,9 +185,17 @@ def main():
         "Llama (full attention)": lambda: LlamaForCausalLM(llama_config(vocab_size, args.seq_len)),
     }
 
+    if args.models is not None:
+        builders = {
+            name: build
+            for name, build in builders.items()
+            if any(wanted.lower() in name.lower() for wanted in args.models)
+        }
+
     helix = helix_config(vocab_size, args.seq_len, with_index=True)
     print(f"sequence length {args.seq_len}, widest HELIX local window {helix.local_span} tokens")
-    print(f"bindings are written in the first tokens and queried in the last {2 * max(args.pairs)}\n")
+    print(f"bindings are written in the first tokens and queried in the last {2 * max(args.pairs)}")
+    print(f"chance accuracy is {1 / args.num_values:.1%}\n")
 
     results = {}
     for name, build in builders.items():

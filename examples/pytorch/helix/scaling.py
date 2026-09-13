@@ -24,12 +24,28 @@ Two things are reported per model and context length:
   PyTorch with no fused kernels, so its *absolute* time is not competitive with a fused attention kernel;
   the exponent is the point, not the constant.
 
+Two other modes:
+
+* `--cache` prefills the context and weighs everything the model must then hold to keep generating. This is
+  the number that decides what long-context serving costs. Full attention keeps every key and value on
+  every layer; HELIX keeps a fixed-size recurrent and convolution state everywhere, a window-capped
+  key/value cache on its `"helix_local"` layers, and the full history only on the layers whose index can
+  actually reach into it.
+* `--memory` runs each measurement in a fresh subprocess and reports the transient memory of the forward
+  pass on top of the weights. Note that a memory-efficient attention kernel already keeps *full* attention
+  linear in memory -- what is quadratic there is compute, and what grows without bound at decode time is
+  the cache, which is what `--cache` measures.
+
 Usage:
     python scaling.py --lengths 512 1024 2048 4096
+    python scaling.py --lengths 8192 16384 32768 --cache
 """
 
 import argparse
 import math
+import resource
+import subprocess
+import sys
 import time
 
 import torch
@@ -42,7 +58,7 @@ COMMON = {
     "vocab_size": 256,
     "hidden_size": 256,
     "intermediate_size": 512,
-    "num_hidden_layers": 2,
+    "num_hidden_layers": 4,
     "num_attention_heads": 4,
     "num_key_value_heads": 2,
     "head_dim": 64,
@@ -57,7 +73,7 @@ def build_helix():
             block_size=64,
             local_blocks=3,
             num_window_scales=2,
-            index_layer_stride=1,
+            index_layer_stride=2,
             landmark_dim=64,
             index_branching=8,
             index_beam_width=4,
@@ -112,6 +128,57 @@ def timed(model, length, repeats):
     return (time.perf_counter() - started) / repeats
 
 
+def _proc_memory_mib(field):
+    """Read VmRSS (current) or VmHWM (peak) from /proc, in MiB. Falls back to ru_maxrss elsewhere."""
+    try:
+        with open("/proc/self/status") as handle:
+            for line in handle:
+                if line.startswith(field):
+                    return int(line.split()[1]) / 1024
+    except OSError:
+        pass
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return peak / 1024 if sys.platform != "darwin" else peak / (1024 * 1024)
+
+
+def probe(name, length):
+    """
+    Run one forward in this (fresh) process and print how much memory it added on top of the weights.
+
+    The baseline is resident memory *after* the model is built, so the number is the transient cost of the
+    forward pass itself -- the gathers, masks and score matrices -- which is what the tiling is meant to cap.
+    """
+    model = (build_helix() if name == "HELIX" else build_llama()).eval()
+    input_ids = torch.zeros(1, length, dtype=torch.long)
+    baseline = _proc_memory_mib("VmHWM")
+    with torch.no_grad():
+        model(input_ids, use_cache=False)
+    print(f"{max(_proc_memory_mib('VmHWM') - baseline, 0.0):.1f}")
+
+
+def measure_memory(name, length):
+    """Peak memory of a forward, measured in a subprocess so the numbers do not accumulate."""
+    result = subprocess.run(
+        [sys.executable, __file__, "--probe", name, str(length)], capture_output=True, text=True, check=True
+    )
+    return float(result.stdout.strip().splitlines()[-1])
+
+
+def cache_bytes(model, length):
+    """Total bytes the model must keep after prefilling `length` tokens in order to keep generating."""
+    outputs = model(torch.zeros(1, length, dtype=torch.long), use_cache=True)
+    total = 0
+    for layer in outputs.past_key_values.layers:
+        tensors = [getattr(layer, "keys", None), getattr(layer, "values", None)]
+        for attribute in ("conv_states", "recurrent_states"):
+            tensors += list(getattr(layer, attribute, {}).values())
+        tensors += list(getattr(layer, "landmark_levels", []))
+        tensors.append(getattr(layer, "route_hidden", None))
+        # `leaf_landmarks` is level 0 of `landmark_levels`, so it is already counted.
+        total += sum(t.numel() * t.element_size() for t in tensors if t is not None)
+    return total / (1024 * 1024)
+
+
 def slope(lengths, values):
     """Least-squares exponent of `value ~ length**alpha`."""
     xs = [math.log(v) for v in lengths]
@@ -127,7 +194,14 @@ def main():
     parser.add_argument("--lengths", type=int, nargs="+", default=[512, 1024, 2048, 4096])
     parser.add_argument("--repeats", type=int, default=2)
     parser.add_argument("--skip-timing", action="store_true")
+    parser.add_argument("--memory", action="store_true", help="measure peak memory instead of time")
+    parser.add_argument("--cache", action="store_true", help="measure the decode cache instead of time")
+    parser.add_argument("--probe", nargs=2, metavar=("MODEL", "LENGTH"), help=argparse.SUPPRESS)
     args = parser.parse_args()
+
+    if args.probe:
+        probe(args.probe[0], int(args.probe[1]))
+        return
 
     torch.manual_seed(0)
     models = {"HELIX": (build_helix(), count_helix_pairs), "Llama": (build_llama(), count_llama_pairs)}
@@ -135,21 +209,30 @@ def main():
         model.eval()
 
     pairs = {name: [] for name in models}
-    times = {name: [] for name in models}
-    print(f"{'length':>8}  {'model':6}  {'attention pairs':>18}  {'per token':>10}  {'seconds':>9}")
+    costs = {name: [] for name in models}
+    unit = "cache MiB" if args.cache else "peak MiB" if args.memory else "seconds"
+    print(f"{'length':>8}  {'model':6}  {'attention pairs':>18}  {'per token':>10}  {unit:>9}")
     for length in args.lengths:
         for name, (model, counter) in models.items():
             count = counter(model, length)
             pairs[name].append(count)
-            elapsed = float("nan") if args.skip_timing else timed(model, length, args.repeats)
-            times[name].append(elapsed)
-            print(f"{length:>8}  {name:6}  {count:>18,}  {count / length:>10,.0f}  {elapsed:>9.3f}", flush=True)
+            if args.cache:
+                with torch.no_grad():
+                    cost = cache_bytes(model, length)
+            elif args.memory:
+                cost = measure_memory(name, length)
+            elif args.skip_timing:
+                cost = float("nan")
+            else:
+                cost = timed(model, length, args.repeats)
+            costs[name].append(cost)
+            print(f"{length:>8}  {name:6}  {count:>18,}  {count / length:>10,.0f}  {cost:>9.1f}", flush=True)
 
     print("\nfitted exponent alpha in  quantity ~ N^alpha")
     for name in models:
         line = f"  {name:6}  attention pairs: {slope(args.lengths, pairs[name]):.2f}"
-        if not args.skip_timing:
-            line += f"   wall clock: {slope(args.lengths, times[name]):.2f}"
+        if (args.cache or args.memory or not args.skip_timing) and all(cost > 0 for cost in costs[name]):
+            line += f"   {unit}: {slope(args.lengths, costs[name]):.2f}"
         print(line)
 
 

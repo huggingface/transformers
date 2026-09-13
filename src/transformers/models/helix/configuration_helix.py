@@ -78,11 +78,17 @@ class HelixConfig(PreTrainedConfig):
         index_topk (`int`, *optional*, defaults to 8):
             Number of leaf memory blocks each query block attends to.
         index_max_levels (`int`, *optional*, defaults to 8):
-            Hard cap on the number of tree levels built above the leaves.
+            Number of distinct learned per-level biases in the landmark tree. The tree itself always
+            grows to whatever depth the memory needs; levels beyond this share the last bias.
         index_num_distance_buckets (`int`, *optional*, defaults to 32):
-            Number of logarithmic relative-distance buckets used for strand I's position bias. Strand I
-            uses bucketed relative *block* distance rather than RoPE so that it length-generalizes to
-            distances never seen in training.
+            Number of logarithmic relative *block* distance buckets used to bias the landmark descent.
+            The bucket table saturates, so coarse distance keeps meaning something at ranges where a
+            rotary phase has long since wrapped past anything seen in training.
+        attention_tile_blocks (`int`, *optional*, defaults to 64):
+            Number of query blocks whose attention is computed at once. The gathered keys, values and
+            masks are the largest transient tensors in a block, so this caps peak activation memory
+            independently of the context length. `0` processes the whole sequence in one tile. It has no
+            effect on the result.
         num_recurrent_heads (`int`, *optional*, defaults to 8):
             Number of heads of the delta-rule recurrence.
         recurrent_head_dim (`int`, *optional*, defaults to 128):
@@ -119,7 +125,9 @@ class HelixConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie the input and output embeddings.
         rope_parameters (`RopeParameters`, *optional*):
-            RoPE parameters for strand L. Strand I deliberately does not use RoPE.
+            RoPE parameters. Strands L and I share one set of rotated queries and keys, so a retrieved
+            block keeps its internal token order; strand I adds `index_num_distance_buckets` on top to
+            carry coarse block distance.
         layer_types (`list[str]`, *optional*):
             Per-layer strand schedule, one of `"helix"` (L + R + I) or `"helix_local"` (L + R). Derived
             from `index_layer_stride` when not given.
@@ -173,6 +181,7 @@ class HelixConfig(PreTrainedConfig):
     index_topk: int = 8
     index_max_levels: int = 8
     index_num_distance_buckets: int = 32
+    attention_tile_blocks: int = 64
 
     # strand R
     num_recurrent_heads: int = 8
@@ -252,11 +261,10 @@ class HelixConfig(PreTrainedConfig):
         return windows
 
     def index_num_levels(self, num_blocks: int) -> int:
-        """Number of tree levels built *above* the leaves for a memory of `num_blocks` blocks."""
-        if num_blocks <= 1:
+        """Number of landmark-tree levels built *above* the leaves for a memory of `num_blocks` blocks."""
+        if num_blocks < self.index_branching:
             return 0
-        levels = math.ceil(math.log(num_blocks, self.index_branching))
-        return max(0, min(levels, self.index_max_levels))
+        return int(math.log(num_blocks, self.index_branching))
 
 
 __all__ = ["HelixConfig"]

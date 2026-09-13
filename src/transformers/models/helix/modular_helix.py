@@ -354,6 +354,7 @@ class HelixBraid(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.block_size = config.block_size
         self.local_blocks = config.local_blocks
+        self.tile_blocks = config.attention_tile_blocks
 
         self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -375,9 +376,12 @@ class HelixBraid(nn.Module):
             # every scale, which both saves parameters and biases the tree towards scale invariance.
             self.node_pooler = HelixLandmarkPooler(self.landmark_dim, self.landmark_dim, config.rms_norm_eps)
             self.route_q_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.landmark_dim, bias=False)
-            self.level_bias = nn.Parameter(torch.zeros(self.num_key_value_heads, config.index_max_levels + 1))
-            # Bucketed relative *block* distance instead of RoPE: retrieved blocks sit at distances never seen
-            # in training, and a saturating bucket table extrapolates where a rotary phase does not.
+            self.num_level_biases = config.index_max_levels + 1
+            self.level_bias = nn.Parameter(torch.zeros(self.num_key_value_heads, self.num_level_biases))
+            # The descent scores landmarks, which carry no rotary phase of their own, so coarse distance
+            # comes from a saturating bucket table. It keeps meaning at ranges where a rotary phase has
+            # wrapped far past anything seen in training. (The attention that follows the descent reads the
+            # rotated keys shared with strand L, so token order inside a retrieved block is preserved.)
             self.distance_bias = nn.Parameter(torch.zeros(self.num_key_value_heads, self.num_distance_buckets))
             self.strand_gate = nn.Linear(config.hidden_size, self.num_heads * 2, bias=False)
 
@@ -388,16 +392,24 @@ class HelixBraid(nn.Module):
         return bucket.clamp(max=self.num_distance_buckets - 1)
 
     def _build_landmark_tree(self, leaves: torch.Tensor) -> list[torch.Tensor]:
-        """Leaves first. Level `l + 1` has `n_leaves // branching**(l+1)` nodes, all of them complete."""
+        """
+        Leaves first. Level `l + 1` holds the `n_leaves // branching**(l+1)` nodes that are *complete*; a
+        partially filled node is never materialized, so a node summarizes the same span whether it is built
+        during training over a whole sequence or incrementally while decoding.
+
+        The tree always grows until the top level has fewer than `branching` nodes, which is what lets the
+        descent seed its beam with every top-level node. `index_max_levels` only caps how many distinct
+        learned per-level biases there are, so it can never silently put part of the memory out of reach.
+        """
         levels = [leaves]
         num_leaves = leaves.shape[2]
-        for level in range(1, self.config.index_max_levels + 1):
+        level = 1
+        while num_leaves // self.branching**level >= 1:
             num_nodes = num_leaves // self.branching**level
-            if num_nodes < 1:
-                break
             children = levels[-1][:, :, : num_nodes * self.branching]
             children = children.reshape(*children.shape[:2], num_nodes, self.branching, self.landmark_dim)
             levels.append(self.node_pooler(children))
+            level += 1
         return levels
 
     def _score_nodes(
@@ -440,7 +452,8 @@ class HelixBraid(nn.Module):
         distance = query_block[:, None] - (safe_index + 1) * span
         head_index = torch.arange(kv_heads, device=score.device).view(1, kv_heads, 1, 1)
         score = score + self.distance_bias[head_index, self._distance_bucket(distance)]
-        score = score + self.level_bias[:, level].view(1, kv_heads, 1, 1)
+        # A tree deeper than `index_max_levels` shares the last bias rather than losing those levels.
+        score = score + self.level_bias[:, min(level, self.num_level_biases - 1)].view(1, kv_heads, 1, 1)
 
         path = parent_path + score
         rank = path.masked_fill(~eligible | _duplicate_mask(node_index), NEG_SCORE)
@@ -626,64 +639,83 @@ class HelixBraid(nn.Module):
             token_valid[:, kv_left : kv_left + kv_len] &= padding_mask[:, -kv_len:].bool()
         token_valid = token_valid.view(batch_size, 1, num_blocks, block_size).expand(-1, key_blocks.shape[1], -1, -1)
 
-        local_out = self._local_attention(
-            query_blocks, key_blocks, value_blocks, token_valid, query_block, kv_block_offset
-        )
-
-        if self.has_index:
-            index_out, index_any = self._index_attention(
-                hidden_states,
-                query_blocks,
-                key_blocks,
-                value_blocks,
-                token_valid,
-                query_block,
-                past_key_values,
-                past_len,
-                total_len,
+        # Query blocks are processed a tile at a time. The gathered keys, values and masks are the largest
+        # transient tensors in the block and they are proportional to the number of query blocks in flight,
+        # so tiling turns peak activation memory into a constant while total work stays linear in `N`. It
+        # changes nothing numerically -- tiles never interact.
+        index_state = self._prepare_index(hidden_states, key_blocks, token_valid, past_key_values, past_len)
+        tile = self.tile_blocks or num_query_blocks
+        local_tiles, index_tiles, live_tiles = [], [], []
+        for start in range(0, num_query_blocks, tile):
+            stop = min(start + tile, num_query_blocks)
+            tile_queries, tile_blocks_ids = query_blocks[:, :, start:stop], query_block[start:stop]
+            local_tiles.append(
+                self._local_attention(
+                    tile_queries, key_blocks, value_blocks, token_valid, tile_blocks_ids, kv_block_offset
+                )
             )
-        else:
-            index_out, index_any = None, None
+            if not self.has_index:
+                continue
+            if index_state is None:
+                # Not one memory block has closed yet, so nothing is eligible and strand L covers everything.
+                index_tiles.append(torch.zeros_like(tile_queries))
+                live_tiles.append(tile_queries.new_zeros((*tile_queries.shape[:-1], 1), dtype=torch.bool))
+            else:
+                levels, route_query = index_state
+                attended, live = self._index_attention(
+                    levels,
+                    route_query[:, :, start:stop],
+                    tile_queries,
+                    key_blocks,
+                    value_blocks,
+                    token_valid,
+                    tile_blocks_ids,
+                )
+                index_tiles.append(attended)
+                live_tiles.append(live)
+
+        local_out = torch.cat(local_tiles, dim=2) if len(local_tiles) > 1 else local_tiles[0]
 
         def unpad(blocked: torch.Tensor) -> torch.Tensor:
             flat = blocked.reshape(batch_size, blocked.shape[1], num_query_blocks * block_size, blocked.shape[-1])
             return flat[:, :, left_pad : left_pad + seq_len].transpose(1, 2)
 
         attn_out = unpad(local_out)
-        if index_out is not None:
+        if self.has_index:
             gate = self.strand_gate(hidden_states).view(batch_size, seq_len, self.num_heads, 2).softmax(-1)
-            index_out = unpad(index_out) * unpad(index_any).to(attn_out.dtype)
+            index_out = unpad(torch.cat(index_tiles, dim=2)) * unpad(torch.cat(live_tiles, dim=2)).to(attn_out.dtype)
             attn_out = gate[..., :1] * attn_out + gate[..., 1:] * index_out
 
         return self.o_proj(attn_out.reshape(batch_size, seq_len, -1))
 
-    def _index_attention(
+    def _prepare_index(
         self,
         hidden_states: torch.Tensor,
-        query_blocks: torch.Tensor,
         key_blocks: torch.Tensor,
-        value_blocks: torch.Tensor,
         token_valid: torch.Tensor,
-        query_block: torch.Tensor,
         past_key_values: Cache | None,
         past_len: int,
-        total_len: int,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Strand I: landmark descent, then exact attention over the selected memory blocks."""
-        batch_size, seq_len, _ = hidden_states.shape
+    ) -> tuple[list[torch.Tensor], torch.Tensor] | None:
+        """
+        Bring the episodic memory up to date and project the routing queries. Shared by every tile.
+
+        Returns `None` when no memory block has closed yet. The landmark tree is only rebuilt when a block
+        closes -- once every `block_size` tokens -- so its cost amortizes to `O(num_blocks / block_size)`
+        per generated token.
+        """
+        if not self.has_index:
+            return None
+        batch_size, seq_len, hidden_size = hidden_states.shape
         block_size = self.block_size
-        num_query_blocks = query_block.shape[0]
         kv_heads = key_blocks.shape[1]
+        total_len = past_len + seq_len
         num_leaves = total_len // block_size
         layer_cache = past_key_values.layers[self.layer_idx] if past_key_values is not None else None
-
         if num_leaves == 0:
-            # Not one memory block has closed yet, so nothing is eligible and strand L covers everything.
-            zeros = query_blocks.new_zeros(query_blocks.shape)
-            return zeros, zeros.new_zeros((*zeros.shape[:-1], 1), dtype=torch.bool)
+            return None
 
         cached_leaves = (
-            0 if layer_cache is None or layer_cache.leaf_landmarks is None else (layer_cache.leaf_landmarks.shape[2])
+            0 if layer_cache is None or layer_cache.leaf_landmarks is None else layer_cache.leaf_landmarks.shape[2]
         )
         if layer_cache is not None and num_leaves == cached_leaves and layer_cache.landmark_levels:
             levels = layer_cache.landmark_levels
@@ -699,20 +731,46 @@ class HelixBraid(nn.Module):
 
         # Routing query for block J is the hidden state at the end of block J - 1: strictly in the past for
         # every token of block J, so one gather serves the whole block without leaking anything.
-        route_source = hidden_states.new_zeros(batch_size, num_query_blocks, hidden_states.shape[-1])
-        route_positions = query_block * block_size - 1
-        in_chunk = route_positions - past_len
+        query_lo = (past_len // block_size) * block_size
+        num_query_blocks = (
+            past_len - query_lo + seq_len + -(past_len - query_lo + seq_len) % block_size
+        ) // block_size
+        query_block = torch.arange(num_query_blocks, device=hidden_states.device) + query_lo // block_size
+        route_source = hidden_states.new_zeros(batch_size, num_query_blocks, hidden_size)
+        in_chunk = query_block * block_size - 1 - past_len
         available = in_chunk >= 0
         if available.any():
             route_source[:, available] = hidden_states[:, in_chunk[available]]
         if (~available).any() and layer_cache is not None and layer_cache.route_hidden is not None:
             route_source[:, ~available] = layer_cache.route_hidden.unsqueeze(1)
 
+        if layer_cache is not None:
+            boundary = num_leaves * block_size - 1
+            if boundary >= past_len:
+                layer_cache.route_hidden = hidden_states[:, boundary - past_len]
+
         route_query = (
             self.route_q_proj(route_source)
             .view(batch_size, num_query_blocks, kv_heads, self.landmark_dim)
             .transpose(1, 2)
         )
+        return levels, route_query
+
+    def _index_attention(
+        self,
+        levels: list[torch.Tensor],
+        route_query: torch.Tensor,
+        query_blocks: torch.Tensor,
+        key_blocks: torch.Tensor,
+        value_blocks: torch.Tensor,
+        token_valid: torch.Tensor,
+        query_block: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Strand I: landmark descent, then exact attention over the selected memory blocks."""
+        batch_size, kv_heads = key_blocks.shape[0], key_blocks.shape[1]
+        block_size = self.block_size
+        num_query_blocks = query_block.shape[0]
+
         selected, scores = self._select_memory_blocks(levels, route_query, query_block)
 
         # `topk` still returns candidates even when every one of them was masked out, so clamp before
@@ -737,14 +795,9 @@ class HelixBraid(nn.Module):
         index_out = self._blocked_attention(
             query_blocks, selected_keys, selected_values, selected_valid, None, logit_bias
         )
-        index_any = selected_valid.any(-1).view(batch_size, kv_heads, num_query_blocks, 1, 1)
-        index_any = index_any.repeat_interleave(self.num_key_value_groups, dim=1).expand(-1, -1, -1, block_size, 1)
-
-        if layer_cache is not None:
-            boundary = (total_len // block_size) * block_size - 1
-            if boundary >= past_len:
-                layer_cache.route_hidden = hidden_states[:, boundary - past_len]
-        return index_out, index_any
+        live = selected_valid.any(-1).view(batch_size, kv_heads, num_query_blocks, 1, 1)
+        live = live.repeat_interleave(self.num_key_value_groups, dim=1).expand(-1, -1, -1, block_size, 1)
+        return index_out, live
 
 
 class HelixDecoderLayer(GradientCheckpointingLayer):

@@ -217,6 +217,34 @@ class HelixModelTest(CausalLMModelTest, unittest.TestCase):
         distant = live & (blocks < query_block - model.config.local_blocks)
         self.assertTrue(bool(distant.any()), "the index never selected a block outside the local window")
 
+    def test_landmark_tree_depth_follows_the_memory(self):
+        """
+        The tree must always grow until its top level fits in the descent's seed beam. If it ever stopped
+        short, the nodes above the cut would be unreachable and part of the memory would go silently dark.
+        """
+        model = self._build_helix(dtype=torch.float32)
+        config = model.config
+        braid = next(layer.mixer for layer in model.model.layers if layer.mixer.has_index)
+        for num_blocks in (1, config.index_branching - 1, config.index_branching, 5 * config.index_branching**2):
+            leaves = torch.zeros(1, config.num_key_value_heads, num_blocks, config.landmark_dim)
+            with torch.no_grad():
+                levels = braid._build_landmark_tree(leaves)
+            self.assertEqual(len(levels) - 1, config.index_num_levels(num_blocks), msg=f"{num_blocks} blocks")
+            self.assertLess(levels[-1].shape[2], config.index_branching, msg=f"{num_blocks} blocks")
+
+    def test_tiling_does_not_change_the_result(self):
+        """Query-block tiling is a memory knob, not a modelling one: it must be bitwise inert."""
+        model = self._build_helix()
+        input_ids = torch.randint(0, model.config.vocab_size, (2, 29), device=torch_device)
+        outputs = {}
+        for tile in (0, 1, 3, 64):
+            for layer in model.model.layers:
+                layer.mixer.tile_blocks = tile
+            with torch.no_grad():
+                outputs[tile] = model(input_ids, use_cache=False).logits
+        for tile, logits in outputs.items():
+            torch.testing.assert_close(logits, outputs[0], rtol=0, atol=0, msg=f"tile={tile}")
+
     def test_attention_width_is_independent_of_context_length(self):
         """
         The direct evidence for `O(N)` compute: every query attends over the same number of keys no matter
