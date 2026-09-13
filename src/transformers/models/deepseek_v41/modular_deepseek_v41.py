@@ -55,19 +55,32 @@ def eager_attention_forward(
     attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float | int = 0.0,
+    selected_kv: torch.Tensor | None = None,
+    selected_valid: torch.Tensor | None = None,
     **kwargs,
 ):
-    """Eager shared-KV attention with the per-head learnable sink of V4.1.
+    """Eager shared-KV attention with the per-head learnable sink of V4.1, over up to
+    two KV sources: the sliding window (`key` == `value`, masked by `attention_mask`)
+    and, on compressed layers, the `top_k` compressed entries the indexer picked per
+    query (`selected_kv` `[B, S, top_k, D]`, `selected_valid` `[B, S, top_k]`). Both
+    join one softmax, so this equals attention over the whole compressed cache with a
+    -inf bias on the unpicked entries — without the `[heads, S, T]` scores.
 
     The sink joins the softmax as one extra logit column and is then dropped — i.e. it
     only grows the denominator, matching the reference kernel (where
     `sum_exp += exp(attn_sink - max)` and the output is normalized by it). Rows whose
     every slot is masked still get a finite result thanks to the sink."""
-    # The shared K=V head ([B, 1, T, D]) broadcasts against the query heads in the
+    # The shared K=V head ([B, 1, W, D]) broadcasts against the query heads in the
     # matmuls — no Hx materialization of the KV tensor.
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling  # [B, H, S, W]
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
+    window = attn_weights.shape[-1]
+    if selected_kv is not None:
+        selected_kv = selected_kv.to(query.dtype)
+        picked = torch.einsum("bhsd,bskd->bhsk", query, selected_kv) * scaling  # [B, H, S, top_k]
+        picked = picked.masked_fill(~selected_valid.unsqueeze(1), float("-inf"))
+        attn_weights = torch.cat([attn_weights, picked], dim=-1)
 
     sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
     combined_logits = torch.cat([attn_weights, sinks.float()], dim=-1)
@@ -75,7 +88,9 @@ def eager_attention_forward(
     probs = F.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)
     scores = probs[..., :-1]  # the sink only appears in the denominator
     attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training).to(value.dtype)
-    attn_output = torch.matmul(attn_weights, value)
+    attn_output = torch.matmul(attn_weights[..., :window], value)
+    if selected_kv is not None:
+        attn_output = attn_output + torch.einsum("bhsk,bskd->bhsd", attn_weights[..., window:], selected_kv)
     return attn_output.transpose(1, 2).contiguous(), attn_weights  # [B, S, H, D]
 
 
@@ -541,6 +556,10 @@ class DeepseekV41Indexer(nn.Module):
     rope. The candidate source layer additionally publishes the two-level-top-k
     candidate mask that constrains all later index sources."""
 
+    # Query chunking of the [chunk, heads, T] score tensor: at most this many fp32
+    # elements per chunk (2 GiB). T is the number of compressed groups seen so far.
+    _SCORE_BUDGET = 2**29
+
     def __init__(self, config: DeepseekV41TextConfig, layer_idx: int):
         super().__init__()
         self.layer_idx = layer_idx
@@ -572,8 +591,9 @@ class DeepseekV41Indexer(nn.Module):
         cache_layer: DeepseekV41CSACache | None,
         shared: dict,
     ) -> None:
-        """Publishes `shared["topk_bias"]` (the per-query block bias over the shared
-        compressed KV), and `shared["candidates"]` at the candidate source layer."""
+        """Publishes `shared["topk_idx"]` — the `index_topk` compressed entries each
+        query attends to (`[B, S, top_k]`, `-1` = no entry) — and `shared["candidates"]`
+        at the candidate source layer."""
         batch, seq_len, _ = hidden_states.shape
         ratio = self.compress_ratio
 
@@ -609,49 +629,56 @@ class DeepseekV41Indexer(nn.Module):
         if compressed_len == 0:
             return
 
-        # 2. Score the queries against the shared keys.
+        # 2. Score the queries against the shared keys, in query chunks: the score
+        #    tensor is [chunk, heads, T], and T grows with the context (one entry per
+        #    `ratio` tokens), so a whole-prefill [S, heads, T] would not fit at long
+        #    context. Each chunk publishes its own top-k; only [S, top_k] indices leave.
         cos_q, sin_q = self.rotary_emb(hidden_states, position_ids=position_ids, layer_type="compress")
         q = self.q_b_proj(q_residual).view(batch, seq_len, self.num_heads, self.head_dim)
         q = apply_rotary_pos_emb(q, cos_q, sin_q)
         # QAT semantics: the indexer query is FP4-quantized too, so the top-k
         # selection matches the trained quantized scoring.
-        q = _fake_quant_fp4_block(q, block_size=32)
-        scores = torch.einsum("bshd,btd->bsht", q.float(), index_k[:, 0].float())
-        scores = scores.relu_() * self.softmax_scale
-        weights = self.weights_proj(hidden_states).float() * self.heads_scaling
-        index_scores = (scores * weights.unsqueeze(-1)).sum(dim=2)  # [B, S, T]
-
-        # 3. Visibility: a group becomes visible once the query passed its last token —
-        # in ABSOLUTE positions, so a chunk that starts mid-sequence sees exactly the
-        # groups it could see in a one-shot prefill. `compress_lens` keeps a trailing
-        # axis so every broadcast below is explicit: `masked_fill` expands its result
-        # to the broadcast shape, and a sloppy `[T] >= [B, S]` mask would silently
-        # grow the score tensor.
-        entry_indices = torch.arange(compressed_len, device=index_scores.device).view(1, 1, -1)
+        q = _fake_quant_fp4_block(q, block_size=32).float()
+        keys = index_k[:, 0].float()  # [B, T, idh]
+        weights = self.weights_proj(hidden_states).float() * self.heads_scaling  # [B, S, heads]
+        # Visibility: a group becomes visible once the query passed its last token — in
+        # ABSOLUTE positions, so a chunk that starts mid-sequence sees exactly the groups
+        # it could see in a one-shot prefill. Trailing axis kept for explicit broadcasts.
         compress_lens = (position_ids.long().unsqueeze(-1) + 1) // ratio  # [B, S, 1]
-        index_scores = index_scores.masked_fill(entry_indices >= compress_lens, float("-inf"))
-
-        # 4. Two-level top-k: the candidate source publishes its block mask; every
-        #    later index source scores only inside it.
-        if self.is_candidate_source:
-            shared["candidates"] = select_candidate_blocks(
-                index_scores, compress_lens, self.candidate_topk_blocks, self.candidate_block_size
-            )
-        elif self.uses_candidates and shared.get("candidates") is not None:
-            index_scores = index_scores.masked_fill(~shared["candidates"].to(index_scores.device), float("-inf"))
-
-        # 5. Top-k per query. Early queries can have fewer visible groups than
-        #    `index_topk`, so some picks come back with a -inf score; clamp those into
-        #    the dummy slot past the end (dropped by the slice) — scattering them at
-        #    their raw index would leak future groups into the attention.
+        entry_indices = torch.arange(compressed_len, device=keys.device).view(1, 1, -1)
         top_k = min(self.index_topk, compressed_len)
-        block_bias = index_scores.new_full((batch, 1, seq_len, compressed_len + 1), float("-inf"))
-        if top_k > 0:
-            topk = index_scores.topk(top_k, dim=-1, sorted=False)
-            valid = topk.values > float("-inf")
-            safe = torch.where(valid, topk.indices, torch.full_like(topk.indices, compressed_len))
-            block_bias.scatter_(-1, safe.unsqueeze(1), 0.0)
-        shared["topk_bias"] = block_bias[..., :compressed_len]
+        candidates_prev = shared.get("candidates") if (self.uses_candidates and not self.is_candidate_source) else None
+        if candidates_prev is not None:
+            candidates_prev = candidates_prev.to(keys.device)
+
+        chunk = max(1, min(seq_len, self._SCORE_BUDGET // max(self.num_heads * compressed_len, 1)))
+        topk_idx, candidates_out = [], []
+        for start in range(0, seq_len, chunk):
+            end = min(start + chunk, seq_len)
+            scores = torch.einsum("bshd,btd->bsht", q[:, start:end], keys)
+            scores = scores.relu_() * self.softmax_scale
+            index_scores = (scores * weights[:, start:end].unsqueeze(-1)).sum(dim=2)  # [B, c, T]
+            index_scores = index_scores.masked_fill(entry_indices >= compress_lens[:, start:end], float("-inf"))
+            # Two-level top-k: the candidate source publishes its block mask; every
+            # later index source scores only inside it.
+            if self.is_candidate_source:
+                cand = select_candidate_blocks(
+                    index_scores, compress_lens[:, start:end], self.candidate_topk_blocks, self.candidate_block_size
+                )
+                candidates_out.append(cand)
+            elif candidates_prev is not None:
+                index_scores = index_scores.masked_fill(~candidates_prev[:, start:end], float("-inf"))
+            # Early queries can have fewer visible groups than `index_topk`: those picks
+            # come back with a -inf score and are marked -1 (never attended).
+            if top_k > 0:
+                picked = index_scores.topk(top_k, dim=-1, sorted=False)
+                idx = torch.where(picked.values > float("-inf"), picked.indices, torch.full_like(picked.indices, -1))
+            else:
+                idx = index_scores.new_empty((batch, end - start, 0), dtype=torch.long)
+            topk_idx.append(idx)
+        if self.is_candidate_source:
+            shared["candidates"] = torch.cat(candidates_out, dim=1)
+        shared["topk_idx"] = torch.cat(topk_idx, dim=1)  # [B, S, top_k], -1 = no entry
 
 
 class DeepseekV41Attention(nn.Module):
@@ -738,7 +765,7 @@ class DeepseekV41Attention(nn.Module):
         if past_key_values is not None:  # K == V
             kv = past_key_values.update(kv, kv, self.layer_idx)[0]
 
-        block_bias = None
+        selected_kv = selected_valid = None
         if self.compress_ratio:
             cache_layer = past_key_values.layers[self.layer_idx] if past_key_values is not None else None
             latent, first_group_position = (None, 0)
@@ -751,7 +778,7 @@ class DeepseekV41Attention(nn.Module):
                 self.indexer(
                     hidden_states, q_residual, latent, first_group_position, position_ids, cache_layer, shared
                 )
-            block_bias = shared.get("topk_bias")
+            topk_idx = shared.get("topk_idx")
 
             if latent is not None:
                 positions = first_group_position + self.compress_ratio * torch.arange(
@@ -779,24 +806,17 @@ class DeepseekV41Attention(nn.Module):
                 # everything emitted so far.
                 shared["compress_kv"] = cache_layer.compressed_kv["compressor"]
             compressed_kv = shared.get("compress_kv")
-            if compressed_kv is not None:
-                kv = torch.cat([kv, compressed_kv.to(kv.device)], dim=2)  # source may be on another device
-
-        # The compressed branch concatenated extra entries onto the KV axis after the
-        # model-level mask was built: extend the mask with the indexer's per-query
-        # block bias instead of zero-padding (which would attend everywhere).
-        if isinstance(attention_mask, torch.Tensor) and kv.shape[2] > attention_mask.shape[-1]:
-            if block_bias is not None:
-                attention_mask = torch.cat(
-                    [attention_mask, block_bias.to(attention_mask.device, attention_mask.dtype)], dim=-1
-                )
-            else:
-                # A compressed branch with no index source in this forward (legal but
-                # unusual schedule): mask every compressed entry off instead of
-                # attending all of them.
-                attention_mask = F.pad(
-                    attention_mask, (0, kv.shape[2] - attention_mask.shape[-1]), value=float("-inf")
-                )
+            # Gather ONLY the entries the indexer picked for each query ([B, S, top_k, D]):
+            # attention over the whole compressed cache with a -inf bias is the same
+            # softmax, but its [heads, S, T] scores would not fit at long context. A
+            # compressed branch with no index source in this forward (legal but unusual
+            # schedule) attends no compressed entry.
+            if compressed_kv is not None and topk_idx is not None and topk_idx.shape[-1] > 0:
+                entries = compressed_kv[:, 0].to(kv.device)  # [B, T, D]; source may sit elsewhere
+                topk_idx = topk_idx.to(kv.device)
+                selected_valid = topk_idx >= 0
+                rows = torch.arange(batch, device=kv.device).view(batch, 1, 1)
+                selected_kv = entries[rows, topk_idx.clamp_min(0)]  # [B, S, top_k, D]
 
         attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -810,6 +830,8 @@ class DeepseekV41Attention(nn.Module):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
+            selected_kv=selected_kv,
+            selected_valid=selected_valid,
             **kwargs,
         )
 
