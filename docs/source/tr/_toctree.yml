@@ -6,3 +6,7 @@
   - local: quicktour
     title: Hızlı Başlangıç
   title: Başlarken
+- sections:
+  - local: model_sharing
+    title: Model Paylaşımı
+  title: Öğreticiler
