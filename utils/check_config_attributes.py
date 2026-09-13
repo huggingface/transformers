@@ -63,6 +63,9 @@ SPECIAL_CASES_TO_ALLOW = {
         "patch_size",
         "pooling_kernel_size",
     ],  # Used as meta data for other attributes/properties
+    # Both are consumed inside the config itself: `index_layer_stride` derives `layer_types`, and
+    # `num_window_scales` derives the `local_window_sizes` property the modeling file reads.
+    "HelixConfig": ["index_layer_stride", "num_window_scales"],
     "MiniCPM3Config": ["dim_model_base"],  # Used by the logits_scaling property
     "MiniCPMV4_6Config": ["drop_vision_last_layer"],
     "MiniMaxM3VLTextConfig": ["rotary_dim", "router_jitter_noise"],

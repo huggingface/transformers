@@ -74,6 +74,8 @@ ALLOWED_ATTN_LAYER_TYPES = (
     "hybrid_sliding",  # layers that combine sliding attention + linear-attention-shaped states (zaya1)
     "deepseek_sparse_attention",  # for models with DSA indexer (GLM MoE DSA, DeepSeek V32)
     "qwen_sparse_attention",  # QSA with block-compressed indexer keys (Qwen4-Exp)
+    "helix",  # braided local window + delta-rule recurrence + hierarchical landmark index (helix)
+    "helix_local",  # same braid without the index strand, so the KV cache stays windowed (helix)
     # Recurrent layers (mamba / mamba2 / GDN / minimax-lightning)
     "linear_attention",
 )

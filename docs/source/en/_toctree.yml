@@ -707,6 +707,8 @@
         title: GraniteSWA
       - local: model_doc/helium
         title: Helium
+      - local: model_doc/helix
+        title: HELIX
       - local: model_doc/herbert
         title: HerBERT
       - local: model_doc/hrm_text
