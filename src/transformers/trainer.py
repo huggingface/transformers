@@ -2579,7 +2579,11 @@ class Trainer:
         if self.is_deepspeed_enabled and (deepspeed_config := getattr(self.args, "hf_deepspeed_config", None)):
             return deepspeed_config.config.get("tensor_parallel", {}).get("autotp_size", 1)
 
-        # 3. Default fallback
+        # 3. Fall back to accelerate, for tensor parallelism configured outside `DistributedConfig`
+        if (pc := getattr(self.accelerator, "parallelism_config", None)) is not None:
+            return pc.tp_size
+
+        # 4. Default fallback
         return 1
 
     def _wrap_model(self, model: nn.Module, training: bool = True, dataloader: DataLoader | None = None) -> nn.Module:
