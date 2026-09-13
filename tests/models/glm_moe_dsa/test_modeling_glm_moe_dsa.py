@@ -97,6 +97,18 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
             ["full", "full", "full", "shared", "shared", "shared", "full", "shared"],
         )
 
+    def test_indexer_types_pattern_is_padded_and_validated(self):
+        config = GlmMoeDsaConfig(num_hidden_layers=6, index_topk_pattern="FFSS")
+        self.assertEqual(config.indexer_types, ["full", "full", "shared", "shared", "full", "full"])
+        # A shared first layer has no previous full layer to reuse top-k from; short explicit
+        # `indexer_types` lists and schedules that make layer 0 shared are rejected as well.
+        with self.assertRaises(ValueError):
+            GlmMoeDsaConfig(num_hidden_layers=4, index_topk_pattern="SFFF")
+        with self.assertRaises(ValueError):
+            GlmMoeDsaConfig(num_hidden_layers=4, indexer_types=["full", "shared"])
+        with self.assertRaises(ValueError):
+            GlmMoeDsaConfig(num_hidden_layers=4, index_skip_topk_offset=0, index_topk_freq=2)
+
     # DSA selects tokens with a hard top-k, which is discontinuous: a tiny numerical difference in the
     # indexer scores (attention backend, padding, batching, sequence packing) can flip which tokens are
     # selected and thus change the output, so these exact-equivalence tests do not hold for DSA.

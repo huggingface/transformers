@@ -43,7 +43,8 @@ class GlmMoeDsaConfig(PreTrainedConfig):
     indexer_types (`list[str]`, *optional*):
         Per-layer indexer mode (`"full"` runs the indexer, `"shared"` reuses the previous full
         layer's top-k). Defaults to the pattern derived from `index_topk_freq` /
-        `index_skip_topk_offset` (or `index_topk_pattern`).
+        `index_skip_topk_offset` (or `index_topk_pattern`, padded with `"full"` when shorter than
+        `num_hidden_layers`). The first layer must be `"full"`.
 
     ```python
     >>> from transformers import GlmMoeDsaConfig, GlmMoeDsaModel
@@ -137,15 +138,25 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         if self.indexer_types is None:
             pattern = kwargs.get("index_topk_pattern")
             if pattern is not None:
+                # A short pattern is padded with `"full"`: layers beyond it run their own indexer.
                 self.indexer_types = (
                     [{"F": "full", "S": "shared"}[c] for c in pattern] if isinstance(pattern, str) else list(pattern)
-                )
+                ) + ["full"] * (self.num_hidden_layers - len(pattern))
             else:
                 freq = max(kwargs.get("index_topk_freq", 1), 1)
                 offset = kwargs.get("index_skip_topk_offset", 2)
                 self.indexer_types = [
                     "full" if (max(i - offset + 1, 0) % freq) == 0 else "shared" for i in range(self.num_hidden_layers)
                 ]
+        if (
+            len(self.indexer_types) != self.num_hidden_layers
+            or any(t not in ("full", "shared") for t in self.indexer_types)
+            or self.indexer_types[0] != "full"
+        ):
+            raise ValueError(
+                f"`indexer_types` must have one entry per layer ({self.num_hidden_layers}) with values in "
+                f"('full', 'shared') and start with 'full', got {self.indexer_types}"
+            )
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         # RoPE applies only to the rope slice, so point `head_dim` at it: the inherited (Llama) rotary
         # embedding reads `config.head_dim` and then computes the right frequencies with no override needed.
