@@ -501,8 +501,8 @@ class DeepseekV41VisionConfig(PreTrainedConfig):
     r"""
     Configuration for the DeepSeek-V4.1 vision tower (DeepSeek-ViT with 2D-RoPE and
     pixel-unshuffle downsampling). Field names mirror the `vision_config` section of
-    the released checkpoint. The vision tower / aligner modules ship in a follow-up;
-    this config exists so the composite checkpoint config parses.
+    the released checkpoint. Used by [`DeepseekV41VisionModel`] and the vision
+    component of [`DeepseekV41ForConditionalGeneration`].
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -547,10 +547,9 @@ class DeepseekV41VisionConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V4.1-Flash")
 class DeepseekV41Config(PreTrainedConfig):
     r"""
-    Composite configuration for [`DeepseekV41ForCausalLM`]: the released
-    DeepSeek-V4.1-Flash checkpoints are image-text-to-text models, so the top-level
-    config holds a [`DeepseekV41TextConfig`] (`text_config`) and a
-    [`DeepseekV41VisionConfig`] (`vision_config`).
+    Composite configuration for [`DeepseekV41Model`], [`DeepseekV41ForConditionalGeneration`]
+    and the text-only [`DeepseekV41ForCausalLM`]. It combines a [`DeepseekV41TextConfig`]
+    (`text_config`) and a [`DeepseekV41VisionConfig`] (`vision_config`).
 
     Examples:
 
@@ -575,6 +574,8 @@ class DeepseekV41Config(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"]()
         if isinstance(self.text_config, dict):
             self.text_config = self.sub_configs["text_config"](**self.text_config)
         elif self.text_config is None:

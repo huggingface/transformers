@@ -12,33 +12,46 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
+from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, DynamicSlidingWindowLayer
 from ...generation import GenerationMixin
+from ...image_processing_backends import PilBackend, TorchvisionBackend
+from ...image_processing_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import ChannelDimension, PILImageResampling, SizeDict, infer_channel_dimension_format, is_pil_image
 from ...integrations.moe import use_experts_implementation
 from ...masking_utils import create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.hub import cached_file
 from ...utils.import_utils import is_torch_distributed_available
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3RMSNorm
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection, DeepseekV4RotaryEmbedding
 from ..mixtral.modeling_mixtral import MixtralExperts, MixtralTopKRouter, load_balancing_loss_func
-from .configuration_deepseek_v41 import DeepseekV41Config, DeepseekV41TextConfig
+from ..qwen2_vl.modeling_qwen2_vl import VisionAttention
+from .configuration_deepseek_v41 import DeepseekV41Config, DeepseekV41TextConfig, DeepseekV41VisionConfig
 
 
 if is_torch_distributed_available():
@@ -47,7 +60,7 @@ else:  # the engram table's TP path is only reachable with torch.distributed
     DTensor = Shard = None
 
 
-def eager_attention_forward(
+def eager_attention_forward_dms(
     module: nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
@@ -59,39 +72,26 @@ def eager_attention_forward(
     selected_valid: torch.Tensor | None = None,
     **kwargs,
 ):
-    """Eager shared-KV attention with the per-head learnable sink of V4.1, over up to
-    two KV sources: the sliding window (`key` == `value`, masked by `attention_mask`)
-    and, on compressed layers, the `top_k` compressed entries the indexer picked per
-    query (`selected_kv` `[B, S, top_k, D]`, `selected_valid` `[B, S, top_k]`). Both
-    join one softmax, so this equals attention over the whole compressed cache with a
-    -inf bias on the unpicked entries — without the `[heads, S, T]` scores.
-
-    The sink joins the softmax as one extra logit column and is then dropped — i.e. it
-    only grows the denominator, matching the reference kernel (where
-    `sum_exp += exp(attn_sink - max)` and the output is normalized by it). Rows whose
-    every slot is masked still get a finite result thanks to the sink."""
-    # The shared K=V head ([B, 1, W, D]) broadcasts against the query heads in the
-    # matmuls — no Hx materialization of the KV tensor.
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling  # [B, H, S, W]
+    """Eager shared-KV attention with the text backbone's per-head denominator sink."""
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
     window = attn_weights.shape[-1]
     if selected_kv is not None:
         selected_kv = selected_kv.to(query.dtype)
-        picked = torch.einsum("bhsd,bskd->bhsk", query, selected_kv) * scaling  # [B, H, S, top_k]
+        picked = torch.einsum("bhsd,bskd->bhsk", query, selected_kv) * scaling
         picked = picked.masked_fill(~selected_valid.unsqueeze(1), float("-inf"))
         attn_weights = torch.cat([attn_weights, picked], dim=-1)
-
     sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
     combined_logits = torch.cat([attn_weights, sinks.float()], dim=-1)
     combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
     probs = F.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)
-    scores = probs[..., :-1]  # the sink only appears in the denominator
+    scores = probs[..., :-1]
     attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training).to(value.dtype)
     attn_output = torch.matmul(attn_weights[..., :window], value)
     if selected_kv is not None:
         attn_output = attn_output + torch.einsum("bhsk,bskd->bhsd", attn_weights[..., window:], selected_kv)
-    return attn_output.transpose(1, 2).contiguous(), attn_weights  # [B, S, H, D]
+    return attn_output.transpose(1, 2).contiguous(), attn_weights
 
 
 _FP8_MAX = 448.0  # float8_e4m3fn finite max
@@ -896,7 +896,7 @@ class DeepseekV41Attention(nn.Module):
                 selected_kv = entries[rows, topk_idx.clamp_min(0)]  # [B, S, top_k, D]
 
         attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
+            self.config._attn_implementation, eager_attention_forward_dms
         )
         attn_output, attn_weights = attention_interface(
             self,
@@ -1335,10 +1335,12 @@ class DeepseekV41NgramHashState(nn.Module):
         if self.token_map.numel() == 0:
             raise ValueError(
                 "The engram layers need the tokenizer to build their n-gram hash state "
-                "(compressed token map). Call `model.model.bind_tokenizer(tokenizer)` on a "
-                "`DeepseekV41ForCausalLM` (or `model.bind_tokenizer(tokenizer)` on a "
-                "`DeepseekV41TextModel`), or load the model with `from_pretrained` from a "
-                "checkpoint that ships its tokenizer (it binds automatically)."
+                "(compressed token map). Call `bind_tokenizer(tokenizer)` on the text "
+                "backbone — `model.model.bind_tokenizer(...)` on a "
+                "`DeepseekV41ForCausalLM` / `DeepseekV41ForConditionalGeneration`, "
+                "`model.bind_tokenizer(...)` on a bare `DeepseekV41TextModel` — or load "
+                "the model with `from_pretrained` from a checkpoint that ships its "
+                "tokenizer (it binds automatically)."
             )
         context_len = self.max_ngram_size - 1
         compressed = self.token_map[input_ids]
@@ -1419,10 +1421,13 @@ class DeepseekV41DecoderLayer(GradientCheckpointingLayer):
         engram_rows: torch.Tensor | None,
         token_mask: torch.Tensor | None,
         shared: dict,
+        image_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # hidden_streams: [B, S, hc, hidden]; engram_rows: this layer's gathered table
-        # rows [B, S, n_hash_cols, head_dim] (None on non-engram layers)
+        # rows [B, S, n_hash_cols, head_dim] (None on non-engram layers); token_mask: the
+        # engram gate mask ([B, S], False = DEAD — image spans and pads); image_mask:
+        # [B, S], True inside image spans — switches the router to its VL correction bias.
         if self.engram is not None and engram_rows is not None:
             hidden_streams = self.engram(hidden_streams, engram_rows, token_mask)
 
@@ -1435,9 +1440,15 @@ class DeepseekV41DecoderLayer(GradientCheckpointingLayer):
         residual = hidden_streams
         ffn_pre, ffn_post, ffn_comb = self.ffn_hc(hidden_streams)
         collapsed = self.hc_collapse(hidden_streams, attn_pre)
-        ffn_output = self.mlp(self.post_attention_layernorm(collapsed))
+        ffn_output = self.mlp(self.post_attention_layernorm(collapsed), image_mask=image_mask)
         hidden_streams = self.hc_expand(ffn_output, residual, ffn_post, ffn_comb)
         return hidden_streams, ffn_pre
+
+
+# Checkpoint keys of the vision tower, the aligner and the image delimiter
+# embeddings: modules of the VL classes (DeepseekV41Model /
+# DeepseekV41ForConditionalGeneration), unexpected for the text-only ones.
+_VISION_ONLY_LOAD_PATTERNS = [r"^vision\..*", r"^aligner\..*", r"^image_(start|end|newline)$"]
 
 
 # Deliberate: this base serves BOTH model types. The text backbone chain
@@ -1466,14 +1477,12 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):  # trf-ignore: TRF001
     _can_compile_fullgraph = False
     # The compressor's group-buffer state isn't rewindable across drafts.
     _is_stateful = True
-    # DSpark draft layers, the vision tower, the aligner and the image delimiter
-    # embeddings ship in the checkpoint but their modules land in follow-up PRs.
-    _keys_to_ignore_on_load_unexpected = [
-        r"(^|\.)mtp\..*",
-        r"^vision\..*",
-        r"^aligner\..*",
-        r"^image_(start|end|newline)$",
-    ]
+    # The released checkpoint ships the DSpark draft layers, the vision tower, the
+    # aligner and the image delimiter embeddings. The text-only classes
+    # (DeepseekV41TextModel / DeepseekV41ForCausalLM) own no matching modules, so they
+    # ignore those keys when loading the full checkpoint; the VL classes own them and
+    # drop the vision patterns again in their `post_init` (children re-merge them).
+    _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*", *_VISION_ONLY_LOAD_PATTERNS]
     # The engram tables' `weight_scale_inv` only exists as a parameter under
     # `dequantize=False`; a dequantized (or bf16) load has folded it into the rows.
     _keys_to_ignore_on_load_missing = [r"engram_tables\.\d+\.weight_scale_inv$"]
@@ -1511,8 +1520,17 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):  # trf-ignore: TRF001
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        std = self.config.initializer_range
-        if isinstance(module, DeepseekV41TopKRouter):
+        # `self` may be a VL wrapper whose (composite / vision) config carries no
+        # `initializer_range` of its own — fall back to the text config, then 0.02.
+        std = getattr(self.config, "initializer_range", None) or getattr(
+            self.config.get_text_config(), "initializer_range", 0.02
+        )
+        if isinstance(module, DeepseekV41Model):
+            # Raw `nn.Parameter`s (no module type the generic init recognizes).
+            init.normal_(module.image_start, mean=0.0, std=std)
+            init.normal_(module.image_end, mean=0.0, std=std)
+            init.normal_(module.image_newline, mean=0.0, std=std)
+        elif isinstance(module, DeepseekV41TopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
             init.zeros_(module.e_score_correction_bias)
             init.zeros_(module.e_score_correction_bias_vl)
@@ -1537,6 +1555,11 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):  # trf-ignore: TRF001
             # (`bind_tokenizer` fills it) and is never touched here.
             for name, table in module.hash_tables().items():
                 init.copy_(getattr(module, name), table)
+        elif isinstance(module, DeepseekV41VisionRotaryEmbedding):
+            # `from_pretrained` builds on the meta device, so the inv_freq buffer
+            # computed in `__init__` never materializes — rebuild it (the config-derived
+            # buffer is non-persistent, like the text rotary's).
+            init.copy_(module.inv_freq, module.compute_inv_freq(module.config))
         elif isinstance(module, DeepseekV41RotaryEmbedding):
             # `from_pretrained` builds on the meta device, so the inv_freq buffers
             # computed in __init__ never materialize — rebuild them here.
@@ -1638,15 +1661,28 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        image_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+        r"""
+        image_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Boolean mask, `True` inside image spans (delimiter positions included). The
+            VL wrapper ([`DeepseekV41Model`]) hands it over with the pre-merged
+            `inputs_embeds`: image-span tokens switch the MoE router to its VL
+            correction bias and are hashed as DEAD by the engram. `None` — the
+            text-only path — leaves both at their pre-VL behavior.
+        """
+        # `image_mask` (`[B, S]` bool, True inside image spans) is handed over by the VL
+        # wrapper: it switches the MoE router to its VL correction bias and, inverted,
+        # marks the image-span tokens DEAD for the engram. Text-only callers leave it
+        # `None` and run the exact pre-VL path.
+        if input_ids is None and inputs_embeds is None:
+            raise ValueError("You must specify either input_ids or inputs_embeds")
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        elif self.engram_layout:
+        elif input_ids is None and self.engram_layout:
             # The engram hashes token ids; there is no way to recover them from embeddings.
             raise ValueError("engram layers require `input_ids` (the hash state cannot consume `inputs_embeds`)")
         seq_len = inputs_embeds.shape[1]
@@ -1662,6 +1698,12 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
                 padding_mask = visible.diagonal(offset=source_mask.shape[-1] - seq_len, dim1=-2, dim2=-1).any(1)
             if padding_mask is not None:
                 padding_mask = padding_mask.to(inputs_embeds.device).expand(inputs_embeds.shape[0], -1)
+        if image_mask is not None:
+            if image_mask.shape != inputs_embeds.shape[:2]:
+                raise ValueError(
+                    "`image_mask` must describe the current input chunk, with shape (batch_size, sequence_length)."
+                )
+            image_mask = image_mask.to(device=inputs_embeds.device, dtype=torch.bool)
         if position_ids is None:
             if isinstance(source_mask, torch.Tensor) and source_mask.ndim == 2:
                 position_ids = (source_mask.long().cumsum(-1) - 1)[:, -seq_len:].to(inputs_embeds.device)
@@ -1705,10 +1747,14 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
             "compress": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="compress"),
         }
         engram_rows: dict[int, torch.Tensor] = {}
+        gate_mask = None
         if self.engram_hash_state is not None:
-            # Padding is DEAD in the hash history, including when a precomputed
-            # causal mask supplied the current-token liveness.
-            hash_ids = self.engram_hash_state(input_ids, padding_mask, past_key_values)
+            # Padding and image spans are DEAD for n-gram hashing, but image spans
+            # remain live tokens for attention and compression.
+            gate_mask = padding_mask
+            if image_mask is not None:
+                gate_mask = ~image_mask if gate_mask is None else gate_mask & ~image_mask
+            hash_ids = self.engram_hash_state(input_ids, gate_mask, past_key_values)
             # Gather each engram layer's rows here, where the tables live (host RAM under
             # `device_map`); the layers receive dense rows on their own device.
             for k, layer_idx in enumerate(self.config.engram_layer_ids):
@@ -1727,8 +1773,9 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
                 hidden_states,
                 pre_mix,
                 engram_rows.get(layer.layer_idx),
-                None,
+                gate_mask,
                 shared=shared,
+                image_mask=image_mask,
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 attention_mask=causal_mask,
@@ -1840,10 +1887,1336 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
         )
 
 
+# =====================================================================================
+# Vision tower, aligner and the image-text-to-text wrapper. The ViT is a close cousin
+# of Qwen2-VL's: the same fused qkv attention (reused verbatim from
+# `VisionAttention`), the same axial 2D RoPE — but per-patch row-major positions
+# (Qwen2-VL orders patches by merge window), RMSNorm pre-norms instead of LayerNorm,
+# and a SwiGLU MLP. The aligner plays Qwen2-VL's `PatchMerger`: 3×3 patch windows
+# (zero-padded up to a multiple of 3) unfolded channel-major into one GELU MLP.
+# =====================================================================================
+
+
+class DeepseekV41VisionRMSNorm(nn.Module):
+    """Vision RMSNorm with fp32 statistics and multiplication before casting back.
+
+    The weight follows the model's load dtype; the calculation matches the reference."""
+
+    def __init__(self, hidden_size: int, eps: float = 1e-6):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return (self.weight.to(torch.float32) * hidden_states).to(dtype)
+
+
+class DeepseekV41VisionPatchEmbed(nn.Module):
+    """Patch embedding of the vision tower: one `nn.Linear(3·patch_size², hidden)` on
+    pre-flattened patches (channel-major `(c, ph, pw)` flattening — the layout the
+    image processor emits, identical to a Conv2d weight viewed as a matrix)."""
+
+    def __init__(self, config: DeepseekV41VisionConfig):
+        super().__init__()
+        self.patch_size = config.patch_size
+        self.embed_dim = config.hidden_size
+        self.proj = nn.Linear(3 * config.patch_size**2, config.hidden_size, bias=True)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if hidden_states.dim() == 4:
+            hidden_states = hidden_states.flatten(1)  # [n_patches, 3, p, p] -> [n_patches, 3*p*p]
+        return self.proj(hidden_states)
+
+
+class DeepseekV41VisionRotaryEmbedding(nn.Module):
+    """Axial 2D RoPE of the vision tower: `head_dim // 4` inverse frequencies, each
+    patch position `(h, w)` contributing `h·inv_freq ⊕ w·inv_freq`. The frequencies of
+    the two axes are concatenated then duplicated over the halves, so the standard
+    `rotate_half` application (`apply_rotary_pos_emb_vision`) rotates the whole head —
+    the same layout Qwen2-VL's vision rotary produces, and the same math as the
+    reference's chunk-pair rotation."""
+
+    def __init__(self, config: DeepseekV41VisionConfig):
+        super().__init__()
+        self.config = config
+        self.inv_freq = nn.Buffer(self.compute_inv_freq(config), persistent=False)
+
+    @staticmethod
+    def compute_inv_freq(config: DeepseekV41VisionConfig) -> torch.Tensor:
+        head_dim = config.hidden_size // config.num_attention_heads
+        spatial_dim = head_dim // 2
+        return 1.0 / (config.rope_theta ** (torch.arange(0, spatial_dim, 2, dtype=torch.float32) / spatial_dim))
+
+    @torch.no_grad()
+    def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        # position_ids: (n_patches, 2) — row 0 = h coords, row 1 = w coords, row-major per image
+        freqs = position_ids[..., None].float() * self.inv_freq.float()  # [n, 2, head_dim // 4]
+        cos, sin = freqs.cos(), freqs.sin()
+        cos = torch.cat([cos[:, 0], cos[:, 1]], dim=-1)  # h-freqs | w-freqs -> [n, head_dim // 2]
+        sin = torch.cat([sin[:, 0], sin[:, 1]], dim=-1)
+        cos = torch.cat([cos, cos], dim=-1)  # duplicated halves, for rotate_half
+        sin = torch.cat([sin, sin], dim=-1)
+        return cos.to(x.dtype), sin.to(x.dtype)
+
+
+class DeepseekV41VisionAttention(VisionAttention):
+    """The ViT attention: Qwen2-VL's `VisionAttention` verbatim (fused `qkv` projection
+    with bias, chunk-3 split, full bidirectional attention per image through the
+    `cu_seqlens` splits, `proj` output projection with bias) — the reference's `wqkv` /
+    `wo` under our module names."""
+
+    def __init__(self, config: DeepseekV41VisionConfig) -> None:
+        super().__init__()
+        self.dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+
+
+class DeepseekV41VisionMLP(nn.Module):
+    """SwiGLU MLP of the vision tower: `w1` is the fused `[gate; up]` projection (no
+    bias, gate rows first), `w2` the down projection (no bias)."""
+
+    def __init__(self, config: DeepseekV41VisionConfig):
+        super().__init__()
+        self.w1 = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=False)
+        self.w2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        gate, up = self.w1(x).chunk(2, dim=-1)
+        return self.w2(F.silu(gate) * up)
+
+
+class DeepseekV41VisionBlock(GradientCheckpointingLayer):
+    """A ViT block: RMSNorm pre-norms (fp32 calculation, eps 1e-6), residual attention
+    and MLP, exactly Qwen2-VL's block structure."""
+
+    def __init__(self, config, attn_implementation: str = "sdpa") -> None:
+        super().__init__()
+        self.norm1 = DeepseekV41VisionRMSNorm(config.hidden_size, eps=1e-6)
+        self.norm2 = DeepseekV41VisionRMSNorm(config.hidden_size, eps=1e-6)
+        self.attn = DeepseekV41VisionAttention(config=config)
+        self.mlp = DeepseekV41VisionMLP(config=config)
+
+    @auto_docstring
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        r"""
+        cu_seqlens (`torch.Tensor`):
+            Cumulative sequence lengths — one segment per image, so attention never
+            crosses an image boundary.
+        position_embeddings (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
+            `(cos, sin)` of the 2D RoPE, one entry per patch.
+        """
+        hidden_states = hidden_states + self.attn(
+            self.norm1(hidden_states),
+            cu_seqlens=cu_seqlens,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
+        return hidden_states
+
+
+@auto_docstring
+class DeepseekV41VisionModel(DeepseekV41PreTrainedModel):
+    r"""
+    The DeepSeek-V4.1 vision tower (DeepSeek-ViT): a plain ViT over the patch grid of
+    ONE image at a time — the packed forward processes all images' patches at once, but
+    attention is split per image (`cu_seqlens`) and each patch carries its own row-major
+    2D-RoPE position. No merger: the aligner (`DeepseekV41Aligner`) lives one level up,
+    next to the language model, because its output width is the *text* hidden size.
+    """
+
+    config: DeepseekV41VisionConfig
+    config_class = DeepseekV41VisionConfig
+    input_modalities = ("image",)
+    # The tower is not the text backbone: SDPA works for its plain bidirectional
+    # per-image attention (the eager-only restrictions of the base come from the text
+    # attention's per-head sinks and shared-KV tricks, none of which apply here).
+    _supports_sdpa = True
+    _no_split_modules = ["DeepseekV41VisionBlock"]
+    _can_record_outputs = {
+        "hidden_states": DeepseekV41VisionBlock,
+        "attentions": DeepseekV41VisionAttention,
+    }
+
+    def __init__(self, config: DeepseekV41VisionConfig):
+        super().__init__(config)
+        self.patch_embed = DeepseekV41VisionPatchEmbed(config)
+        self.rotary_pos_emb = DeepseekV41VisionRotaryEmbedding(config)
+        self.blocks = nn.ModuleList([DeepseekV41VisionBlock(config) for _ in range(config.num_hidden_layers)])
+        self.norm = DeepseekV41VisionRMSNorm(config.hidden_size, eps=1e-6)
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        Args:
+            hidden_states (`torch.Tensor` of shape `(total_patches, 3 * patch_size ** 2)`):
+                The flattened patches of all images, concatenated in image order.
+            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+                The temporal, height and width dimensions of the patch grid of each
+                image — `[1, n_vit_h, n_vit_w]` (temporal must be 1: images only).
+        """
+        # Row-major (h, w) position per patch — `spatial_merge_size=1` keeps the raster
+        # order (Qwen2-VL instead orders patches by merge window).
+        position_ids = get_vision_position_ids(grid_thw, 1, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        hidden_states = self.patch_embed(hidden_states)
+        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
+        for blk in self.blocks:
+            hidden_states = blk(
+                hidden_states,
+                cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
+        hidden_states = self.norm(hidden_states)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=None)
+
+
+class DeepseekV41Aligner(nn.Module):
+    """The vision→text bridge (Qwen2-VL's `PatchMerger` role): one ViT image's features
+    `[n_h·n_w, C]` are read back as a grid, zero-padded up to multiples of the 3×3
+    downsample window, unfolded into `[ceil(n_h/3)·ceil(n_w/3), 9·C]` rows in
+    `F.unfold`'s channel-major order, and mapped to `hidden_size` by a two-layer GELU
+    MLP. One row = one LLM image token."""
+
+    def __init__(self, config: DeepseekV41Config):
+        super().__init__()
+        # window side from the vision config, output width from the text config: the
+        # aligner is the vision→text bridge, so it reads both off the composite config
+        self.downsample_ratio = config.vision_config.downsample_ratio
+        in_dim = config.vision_config.hidden_size * self.downsample_ratio**2
+        self.w1 = nn.Linear(in_dim, config.text_config.hidden_size, bias=True)
+        self.w2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=True)
+
+    def forward(self, x: torch.Tensor, n_h: int, n_w: int) -> torch.Tensor:
+        r"""`x`: one image's ViT features `[n_h·n_w, C]`; returns
+        `[ceil(n_h/r)·ceil(n_w/r), hidden]` in reading order."""
+        r = self.downsample_ratio
+        x = x.view(n_h, n_w, -1).permute(2, 0, 1)  # [C, n_h, n_w]
+        x = F.pad(x, (0, -n_w % r, 0, -n_h % r))  # zero-pad up to whole windows
+        # F.unfold's channel-major (c, kh, kw) order decides w1's input layout
+        x = F.unfold(x.unsqueeze(0), r, stride=r).squeeze(0).transpose(0, 1)
+        return self.w2(F.gelu(self.w1(x)))
+
+
+@auto_docstring
+class DeepseekV41Model(DeepseekV41PreTrainedModel):
+    r"""
+    The image-text-to-text backbone of DeepSeek-V4.1, Qwen2-VL-shaped:
+    [`DeepseekV41VisionModel`] (`visual`), the [`DeepseekV41Aligner`] and the three
+    learned delimiter embeddings (`image_start` / `image_end` / `image_newline`) sit
+    next to the text backbone (`language_model`), mirroring the reference's module
+    layout. `get_image_features` runs the tower and the aligner per image;
+    `merge_image_embeddings` scatters the rows into the image-span tokens.
+    """
+
+    config: DeepseekV41Config
+    config_class = DeepseekV41Config
+    # Native checkpoints store these BF16 modules without FP8 block scales.
+    _keep_in_fp32_modules = [*DeepseekV41PreTrainedModel._keep_in_fp32_modules, "visual", "aligner"]
+
+    def __init__(self, config: DeepseekV41Config):
+        super().__init__(config)
+        self.visual = DeepseekV41VisionModel._from_config(config.vision_config)
+        self.aligner = DeepseekV41Aligner(config)
+        # Learned embeddings of the image-span delimiters; the span layout in the text
+        # stream is fixed, so the model scatters them structurally (no token ids).
+        self.image_start = nn.Parameter(torch.empty(config.text_config.hidden_size))
+        self.image_end = nn.Parameter(torch.empty(config.text_config.hidden_size))
+        self.image_newline = nn.Parameter(torch.empty(config.text_config.hidden_size))
+        self.language_model = DeepseekV41TextModel._from_config(config.text_config)
+        self.post_init()
+
+    def post_init(self):
+        super().post_init()
+        # The text backbone's ignore list covers the vision / aligner / delimiter keys
+        # (a text-only load of the full checkpoint must skip them); `post_init` merged
+        # the children's lists back in — here those keys are EXPECTED, so drop them.
+        self._keys_to_ignore_on_load_unexpected -= set(_VISION_ONLY_LOAD_PATTERNS)
+
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(total_patches, 3 * patch_size ** 2)`):
+                The flattened patches of all images, concatenated in image order.
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+                The `[1, n_vit_h, n_vit_w]` patch grid of each image.
+
+        Returns:
+            `BaseModelOutputWithPooling`: `pooler_output` is a tuple with one
+            `[n_llm_h·n_llm_w, text_hidden]` aligner row-set per image, in image order;
+            `last_hidden_state` the ViT features of all patches.
+        """
+        if image_grid_thw is None:
+            raise ValueError("`image_grid_thw` is required with `pixel_values`.")
+        if (image_grid_thw[:, 0] != 1).any():
+            raise ValueError("DeepSeek-V4.1 accepts images only (`image_grid_thw` rows must be `[1, h, w]`).")
+        pixel_values = pixel_values.type(self.visual.dtype)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
+        vit_features = vision_outputs.last_hidden_state
+        features, start = [], 0
+        for _, n_h, n_w in image_grid_thw.tolist():
+            features.append(self.aligner(vit_features[start : start + n_h * n_w], n_h, n_w))
+            start += n_h * n_w
+        vision_outputs.pooler_output = tuple(features)
+        return vision_outputs
+
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor | None, inputs_embeds: torch.FloatTensor | None = None
+    ) -> torch.Tensor:
+        """Find image placeholders from token IDs, or exact image-token embedding matches."""
+        if input_ids is not None and (inputs_embeds is None or input_ids.shape == inputs_embeds.shape[:2]):
+            return input_ids == self.config.image_token_id
+        image_embedding = self.get_input_embeddings()(
+            torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+        )
+        return (inputs_embeds == image_embedding).all(-1)
+
+    def _get_image_spans(
+        self, image_mask: torch.Tensor, image_grid_thw: torch.LongTensor
+    ) -> list[tuple[int, int, int, int]]:
+        """Parse complete image spans in batch order, including adjacent images in one run."""
+        # Transfer only run boundaries, not one scalar per token, from the accelerator.
+        boundaries = torch.diff(F.pad(image_mask.to(torch.int8), (1, 1)), dim=-1).nonzero().tolist()
+        grids = image_grid_thw.tolist()
+        spans = []
+        ratio = self.config.vision_config.downsample_ratio
+        for (row, start), (_, end) in zip(boundaries[::2], boundaries[1::2]):
+            while start < end:
+                if len(spans) == len(grids):
+                    raise ValueError("Image features and image tokens do not match: more spans than images.")
+                temporal, height, width = grids[len(spans)]
+                if temporal != 1 or height <= 0 or width <= 0:
+                    raise ValueError(
+                        "`image_grid_thw` must contain image grids `[1, positive_height, positive_width]`."
+                    )
+                height, width = -(-height // ratio), -(-width // ratio)
+                length = height * (width + 1) + 2
+                if start + length > end:
+                    raise ValueError(
+                        "Image features and image tokens do not match: an image span does not fit its placeholder run."
+                    )
+                spans.append((row, start, height, width))
+                start += length
+        if len(spans) != len(grids):
+            raise ValueError("Image features and image tokens do not match: fewer spans than images.")
+        return spans
+
+    def merge_image_embeddings(
+        self,
+        input_ids: torch.LongTensor | None,
+        inputs_embeds: torch.FloatTensor,
+        image_features: tuple[torch.FloatTensor, ...],
+        image_grid_thw: torch.LongTensor,
+    ) -> tuple[torch.FloatTensor, torch.Tensor]:
+        """Overwrite every image-span position of `inputs_embeds`: the IMAGE slots take
+        the aligner rows in reading order, the delimiters (`IMAGE_START`,
+        one `IMAGE_NEWLINE` per row, `IMAGE_END`) their learned embeddings. Every span
+        position carries `image_token_id` in `input_ids`, so the spans are the
+        contiguous runs of that id; `image_grid_thw` lists the images in the same
+        batch-major order. Returns the scattered `inputs_embeds` and the `[B, S]`
+        `image_mask` (True on every span position, delimiters included)."""
+        special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds).to(inputs_embeds.device)
+        spans = self._get_image_spans(special_image_mask, image_grid_thw)
+        if len(image_features) != len(spans):
+            raise ValueError("Image features and image tokens do not match: one feature tensor is required per image.")
+        if not spans:
+            return inputs_embeds, special_image_mask
+        image_slot_mask = torch.zeros_like(special_image_mask)
+        delimiter_rows = []
+        for (row, start, height, width), features in zip(spans, image_features):
+            if features.shape != (height * width, inputs_embeds.shape[-1]):
+                raise ValueError(
+                    "Image features and image tokens do not match: aligned feature shape does not match its grid."
+                )
+            slots = [start + 1 + i * (width + 1) + j for i in range(height) for j in range(width)]
+            image_slot_mask[row, slots] = True
+            delimiter_rows.extend([self.image_start, *([self.image_newline] * height), self.image_end])
+        features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+        inputs_embeds = inputs_embeds.masked_scatter(image_slot_mask.unsqueeze(-1), features)
+        delimiter_mask = special_image_mask & ~image_slot_mask
+        delimiter_embeds = torch.stack(delimiter_rows).to(inputs_embeds.device, inputs_embeds.dtype)
+        inputs_embeds = inputs_embeds.masked_scatter(delimiter_mask.unsqueeze(-1), delimiter_embeds)
+        return inputs_embeds, special_image_mask
+
+    @property
+    def engram_hash_state(self):
+        # `from_pretrained`'s auto-bind looks for the hash state through `base_model`;
+        # the wrapper is that base model, so delegate to the text backbone.
+        return self.language_model.engram_hash_state
+
+    def bind_tokenizer(self, tokenizer):
+        """Bind the tokenizer to the text backbone's engram hash state (the compressed
+        token map — see [`DeepseekV41TextModel.bind_tokenizer`])."""
+        self.language_model.bind_tokenizer(tokenizer)
+        return self
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        image_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MoeModelOutputWithPast:
+        r"""
+        image_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Boolean mask, `True` inside image spans — normally derived from `pixel_values`
+            (see [`DeepseekV41Model.merge_image_embeddings`]); passing it explicitly runs
+            the same router / engram paths without the vision tower. It must describe
+            the current input chunk, not the cached prefix.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Token embeddings before image replacement. Without `input_ids`, image
+            placeholders are located by matching the image-token embedding. Models
+            with Engram layers still require the real `input_ids` alongside these embeddings.
+        """
+        if input_ids is None and inputs_embeds is None:
+            raise ValueError("You must specify either input_ids or inputs_embeds")
+        if input_ids is None and self.language_model.engram_layout:
+            raise ValueError("engram layers require `input_ids` (the hash state cannot consume `inputs_embeds`)")
+        if inputs_embeds is None:
+            inputs_embeds = self.language_model.embed_tokens(input_ids)
+        if pixel_values is not None:
+            if past_key_values is not None and past_key_values.get_seq_length() > 0:
+                raise ValueError(
+                    "Image inputs must be prefilled in one chunk — pass the image spans with the first forward "
+                    "call (the reference asserts the same: `start_pos == 0`)."
+                )
+            image_features = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            ).pooler_output
+            inputs_embeds, image_mask = self.merge_image_embeddings(
+                input_ids, inputs_embeds, image_features, image_grid_thw
+            )
+        # input_ids still flows to the text model: the engram hash needs the token ids
+        # even though the token stream comes pre-embedded.
+        outputs = self.language_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            image_mask=image_mask,
+            **kwargs,
+        )
+        return outputs
+
+
+@auto_docstring
+class DeepseekV41ForConditionalGeneration(DeepseekV41PreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
+    config_class = DeepseekV41Config
+    _keep_in_fp32_modules = [*DeepseekV41PreTrainedModel._keep_in_fp32_modules, "model.visual", "model.aligner"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = DeepseekV41Model(config)
+        text_config = config.get_text_config()
+        self.vocab_size = text_config.vocab_size
+        self.lm_head = nn.Linear(text_config.hidden_size, text_config.vocab_size, bias=False)
+        self.router_aux_loss_coef = text_config.router_aux_loss_coef
+        self.num_experts = text_config.n_routed_experts
+        self.num_experts_per_tok = text_config.num_experts_per_tok
+        self.post_init()
+
+    def post_init(self):
+        super().post_init()
+        # see DeepseekV41Model.post_init: the vision / aligner / delimiter keys are ours
+        self._keys_to_ignore_on_load_unexpected -= set(_VISION_ONLY_LOAD_PATTERNS)
+
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        next_sequence_length=None,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        is_first_iteration=False,
+        image_mask=None,
+        **kwargs,
+    ):
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            next_sequence_length=next_sequence_length,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
+        if inputs_embeds is not None and is_first_iteration and self.model.language_model.engram_layout:
+            # Generation normally drops IDs when embeddings are supplied. Engram needs
+            # the real IDs too, never an inferred/hash substitute for the embeddings.
+            if input_ids.shape[1] != inputs_embeds.shape[1]:
+                raise ValueError("engram layers require `input_ids` for every supplied input embedding.")
+            model_inputs["input_ids"] = (
+                input_ids[:, -next_sequence_length:] if next_sequence_length is not None else input_ids
+            )
+        if image_mask is not None:
+            current = model_inputs.get("inputs_embeds")
+            if current is None:
+                current = model_inputs["input_ids"]
+            model_inputs["image_mask"] = image_mask[:, -current.shape[1] :]
+        if not is_first_iteration and kwargs.get("use_cache", True):
+            model_inputs.pop("image_grid_thw", None)
+        return model_inputs
+
+    def _update_model_kwargs_for_generation(self, outputs, model_kwargs, is_encoder_decoder=False, num_new_tokens=1):
+        model_kwargs = super()._update_model_kwargs_for_generation(
+            outputs, model_kwargs, is_encoder_decoder=is_encoder_decoder, num_new_tokens=num_new_tokens
+        )
+        if model_kwargs.get("image_mask") is not None:
+            # Generated tokens are text, even when the prompt ends inside an image
+            # span. Also retain prompt masks when generation recomputes without cache.
+            model_kwargs["image_mask"] = F.pad(model_kwargs["image_mask"], (0, num_new_tokens), value=False)
+        return model_kwargs
+
+    def _expand_inputs_for_generation(
+        self,
+        expand_size: int | list[int] = 1,
+        is_encoder_decoder: bool = False,
+        input_ids: torch.LongTensor | None = None,
+        **model_kwargs,
+    ):
+        if isinstance(expand_size, int) and expand_size == 1:
+            return input_ids, model_kwargs
+        inputs_embeds = model_kwargs.get("inputs_embeds")
+        batch_input = inputs_embeds if inputs_embeds is not None else input_ids
+        repeats = [expand_size] * batch_input.shape[0] if isinstance(expand_size, int) else list(expand_size)
+        if len(repeats) != batch_input.shape[0] or any(repeat < 0 for repeat in repeats):
+            raise ValueError("`expand_size` must provide a nonnegative repeat count for every batch row.")
+        visual_inputs = {}
+        grid = model_kwargs.pop("image_grid_thw", None)
+        pixels = model_kwargs.pop("pixel_values", None)
+        if pixels is not None and grid is None:
+            raise ValueError("`image_grid_thw` is required with `pixel_values`.")
+        if grid is not None:
+            mask = self.model.get_placeholder_mask(input_ids, inputs_embeds)
+            spans = self.model._get_image_spans(mask, grid)
+            image_counts = [0] * batch_input.shape[0]
+            patch_counts = [0] * batch_input.shape[0]
+            for (row, _, _, _), (_, height, width) in zip(spans, grid.tolist()):
+                image_counts[row] += 1
+                patch_counts[row] += height * width
+            for key, value, lengths in (
+                ("image_grid_thw", grid, image_counts),
+                ("pixel_values", pixels, patch_counts),
+            ):
+                if value is not None:
+                    # Repeat each row's entire ordered image block, not individual
+                    # patches or images. Text-only rows have zero-length blocks.
+                    chunks = value.split(lengths)
+                    visual_inputs[key] = torch.cat(
+                        [chunk.repeat(repeat, *([1] * (value.ndim - 1))) for chunk, repeat in zip(chunks, repeats)]
+                    )
+        if isinstance(expand_size, int):
+            input_ids, model_kwargs = super()._expand_inputs_for_generation(
+                expand_size=expand_size,
+                is_encoder_decoder=is_encoder_decoder,
+                input_ids=input_ids,
+                **model_kwargs,
+            )
+        else:
+            row_indices = torch.arange(batch_input.shape[0], device=batch_input.device).repeat_interleave(
+                torch.tensor(repeats, device=batch_input.device)
+            )
+            if input_ids is not None:
+                input_ids = input_ids.index_select(0, row_indices.to(input_ids.device))
+            for key, value in model_kwargs.items():
+                if isinstance(value, torch.Tensor):
+                    model_kwargs[key] = value.index_select(0, row_indices.to(value.device))
+            if is_encoder_decoder:
+                raise ValueError("DeepSeek-V4.1 generation uses a decoder-only text backbone.")
+        model_kwargs.update(visual_inputs)
+        return input_ids, model_kwargs
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_router_logits: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        image_mask: torch.Tensor | None = None,
+        shift_labels: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MoeCausalLMOutputWithPast:
+        r"""
+        image_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Boolean mask, `True` inside image spans — normally derived from `pixel_values`
+            (see [`DeepseekV41Model.merge_image_embeddings`]); passing it explicitly runs
+            the same router / engram paths without the vision tower.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or `-100` (see `input_ids` docstring). Tokens with indices set to `-100` are
+            ignored, masked out of the loss computation, and the loss is computed over tokens with labels in
+            `[0, ..., config.vocab_size]`.
+        shift_labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Already-shifted next-token targets, aligned with `logits` (used for sequence and context
+            parallel training, where the shift must happen before sharding). When given, they take
+            precedence over `labels` for the loss.
+        """
+        output_router_logits = (
+            output_router_logits
+            if output_router_logits is not None
+            else self.config.get_text_config().output_router_logits
+        )
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            pixel_values=pixel_values,
+            image_grid_thw=image_grid_thw,
+            image_mask=image_mask,
+            output_router_logits=output_router_logits,
+            **kwargs,
+        )
+        # Only compute the logits that are needed, and do not upcast them unless the loss needs it
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(outputs.last_hidden_state[:, slice_indices, :])
+        loss = None
+        if labels is not None or shift_labels is not None:
+            # `shift_labels` carries already-aligned targets (sequence / context
+            # parallel training); `self.loss_function` shifts plain `labels` itself.
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.get_text_config().vocab_size,
+                shift_labels=shift_labels,
+            )
+
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits,
+                self.num_experts,
+                self.num_experts_per_tok,
+                attention_mask,
+            )
+            if loss is not None:
+                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+
+        return MoeCausalLMOutputWithPast(
+            loss=loss,
+            aux_loss=aux_loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
+        )
+
+
+# =====================================================================================
+# Image processing: the resize plan of the reference `image_processor.py` — upscale to
+# `min_pixels`, round both sides up to whole patches, shrink until the image costs at
+# most `max_image_tokens` LLM tokens, then aspect-fit into the planned box and gray-pad
+# the remainder (very wide images are squeezed instead). Shared by both backends.
+# =====================================================================================
+
+
+def num_image_tokens(n_llm_h: int, n_llm_w: int) -> int:
+    """Tokens one image costs in the text stream: the aligner grid in reading order,
+    one IMAGE_NEW_LINE per row, wrapped in IMAGE_START / IMAGE_END."""
+    return n_llm_h * (n_llm_w + 1) + 2
+
+
+def llm_grid(best_height: int, best_width: int, patch_size: int, downsample_ratio: int) -> tuple[int, int]:
+    """The token grid the aligner produces from a patch grid of this pixel size."""
+    return (
+        math.ceil((best_height // patch_size) / downsample_ratio),
+        math.ceil((best_width // patch_size) / downsample_ratio),
+    )
+
+
+def solve_resize_ratio(height, width, patch_size, downsample_ratio, max_n_token):
+    """The largest aspect-preserving pixel size whose token grid still fits in
+    `max_n_token` (the reference's closed-form solution)."""
+    ratio = height / width
+    max_w_float = math.sqrt((max_n_token - 2) / ratio + 0.25) - 0.5
+    max_h_float = max_w_float * ratio
+    cell = patch_size * downsample_ratio
+    if max_w_float < 1.0:  # very tall: collapse to a single column
+        return (max_n_token - 2) // 2 * cell, cell
+    if max_h_float < 1.0:  # very wide: collapse to a single row
+        return cell, (max_n_token - 3) * cell
+    beta = min(math.floor(max_w_float) * cell / width, math.floor(max_h_float) * cell / height)
+    return math.floor(height * beta / patch_size) * patch_size, math.floor(width * beta / patch_size) * patch_size
+
+
+def safe_resize(height, width, best_height, best_width, patch_size, downsample_ratio, max_n_token):
+    """Shrink the pixel size until the image costs at most `max_n_token` LLM tokens."""
+    n_llm_h, n_llm_w = llm_grid(best_height, best_width, patch_size, downsample_ratio)
+    if num_image_tokens(n_llm_h, n_llm_w) > max_n_token:
+        best_height, best_width = solve_resize_ratio(height, width, patch_size, downsample_ratio, max_n_token)
+        n_llm_h, n_llm_w = llm_grid(best_height, best_width, patch_size, downsample_ratio)
+        if num_image_tokens(n_llm_h, n_llm_w) > max_n_token:
+            raise ValueError(f"The resize plan cannot fit the image in {max_n_token} image tokens.")
+    return n_llm_h, n_llm_w, best_height, best_width
+
+
+def plan_image_grid(width, height, patch_size, downsample_ratio, min_pixels, max_n_token, max_wh_ratio=None):
+    """Resize plan for an image of the given original size — a pure function of its
+    arguments. Returns `(n_llm_h, n_llm_w, best_height, best_width)`."""
+    if width <= 0 or height <= 0 or patch_size <= 0 or downsample_ratio <= 0:
+        raise ValueError("Image dimensions, patch_size and downsample_ratio must be positive.")
+    if min_pixels <= 0 or max_n_token < 4:
+        raise ValueError("min_pixels must be positive and max_image_tokens must be at least 4.")
+    if max_wh_ratio is not None and max_wh_ratio <= 0:
+        raise ValueError("max_wh_ratio must be positive or None.")
+    if max_wh_ratio is not None and width > height * max_wh_ratio:
+        width = height * max_wh_ratio
+    if 0 < width * height < min_pixels:
+        ratio = (min_pixels / (width * height)) ** 0.5
+        width = int(width * ratio)
+        height = int(height * ratio)
+    best_width = math.ceil(width / patch_size) * patch_size
+    best_height = math.ceil(height / patch_size) * patch_size
+    return safe_resize(height, width, best_height, best_width, patch_size, downsample_ratio, max_n_token)
+
+
+def contain_size(height, width, box_height, box_width):
+    """The aspect-preserving fit inside the box, with PIL `ImageOps.contain`'s rounding
+    (one side exact, the other rounded) — the fit both backends apply before padding."""
+    image_ratio, box_ratio = width / height, box_width / box_height
+    if image_ratio > box_ratio:
+        return round(height / width * box_width), box_width
+    if image_ratio < box_ratio:
+        return box_height, round(width / height * box_height)
+    return box_height, box_width
+
+
+class DeepseekV41ImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    patch_size (`int`, *optional*, defaults to `14`):
+        Spatial patch size of the vision encoder.
+    downsample_ratio (`int`, *optional*, defaults to `3`):
+        The aligner's window side: `downsample_ratio²` ViT patches merge into one LLM token.
+    min_pixels (`int`, *optional*, defaults to `295936`):
+        Minimum number of pixels per image (544²); smaller images are upscaled. Carried
+        in `size["shortest_edge"]`.
+    max_image_tokens (`int`, *optional*, defaults to `1024`):
+        Maximum number of image tokens per image; larger images are shrunk until they
+        fit. Carried in `size["longest_edge"]`.
+    max_wh_ratio (`int`, *optional*):
+        Maximum width / height aspect ratio kept by the resize plan; `None` (the
+        default) disables the cap. Images wider than the cap are squeezed into the
+        planned box, aspect ratio not preserved.
+    """
+
+    patch_size: int
+    downsample_ratio: int
+    min_pixels: int
+    max_image_tokens: int
+    max_wh_ratio: int | None
+
+
+@auto_docstring
+class DeepseekV41ImageProcessor(TorchvisionBackend):
+    r"""
+    Builds DeepSeek-V4.1 ViT patches. `size` carries the two plan knobs —
+    `size["shortest_edge"]` is the minimum pixel budget (`min_pixels`, 544²) and
+    `size["longest_edge"]` the maximum number of image tokens (`max_image_tokens`). The
+    plan upscales to the minimum budget, rounds both sides up to whole patches, shrinks
+    under the token budget, then aspect-fits into the planned box and gray-pads
+    (`127`) the remainder, like the reference's `ImageOps.pad`. The output is
+    `pixel_values` `[total_patches, 3·patch_size²]` (row-major patch order, flattened
+    channel-major) plus `image_grid_thw` `[n_images, 3]` = `[1, n_vit_h, n_vit_w]`.
+    """
+
+    do_resize = True
+    resample = PILImageResampling.BICUBIC
+    size = {"shortest_edge": 295936, "longest_edge": 1024}
+    do_rescale = True
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_convert_rgb = True
+    patch_size = 14
+    downsample_ratio = 3
+    max_wh_ratio = None
+    pad_value = 127  # the reference's gray ImageOps.pad fill
+    valid_kwargs = DeepseekV41ImageProcessorKwargs
+    model_input_names = ["pixel_values", "image_grid_thw"]
+
+    def __init__(self, **kwargs: Unpack[DeepseekV41ImageProcessorKwargs]):
+        # `min_pixels` / `max_image_tokens` override the corresponding `size` entries
+        size = kwargs.pop("size", None)
+        size = dict(self.size) if size is None else dict(size)
+        if (min_pixels := kwargs.pop("min_pixels", None)) is not None:
+            size["shortest_edge"] = min_pixels
+        if (max_image_tokens := kwargs.pop("max_image_tokens", None)) is not None:
+            size["longest_edge"] = max_image_tokens
+        super().__init__(size=size, **kwargs)
+
+    def _standardize_kwargs(
+        self,
+        size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
+        min_pixels: int | None = None,
+        max_image_tokens: int | None = None,
+        **kwargs,
+    ) -> dict:
+        if min_pixels is not None or max_image_tokens is not None:
+            size = dict(self.size) if size is None else dict(size)
+            if min_pixels is not None:
+                size["shortest_edge"] = min_pixels
+            if max_image_tokens is not None:
+                size["longest_edge"] = max_image_tokens
+        return super()._standardize_kwargs(size=size, **kwargs)
+
+    def resize(
+        self,
+        images: "torch.Tensor",
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        patch_size: int | None = None,
+        downsample_ratio: int | None = None,
+        max_wh_ratio: int | None = None,
+        **kwargs,
+    ) -> "torch.Tensor":
+        """Resize to the DeepSeek-V4.1 plan (see the class docstring) and pad the
+        aspect-fit remainder with `pad_value`."""
+        if not size.shortest_edge or not size.longest_edge:
+            raise ValueError(
+                f"`size` must carry 'shortest_edge' (min_pixels) and 'longest_edge' (max_image_tokens) but got {size}."
+            )
+        patch_size = patch_size if patch_size is not None else self.patch_size
+        downsample_ratio = downsample_ratio if downsample_ratio is not None else self.downsample_ratio
+        height, width = images.shape[-2:]
+        _, _, best_height, best_width = plan_image_grid(
+            width, height, patch_size, downsample_ratio, size.shortest_edge, size.longest_edge, max_wh_ratio
+        )
+        if max_wh_ratio is not None and width >= max_wh_ratio * height:
+            # very wide: squeeze into the planned box, aspect ratio not preserved
+            return super().resize(images, SizeDict(height=best_height, width=best_width), resample)
+        fitted_height, fitted_width = contain_size(height, width, best_height, best_width)
+        images = super().resize(images, SizeDict(height=fitted_height, width=fitted_width), resample)
+        top = round((best_height - fitted_height) * 0.5)
+        left = round((best_width - fitted_width) * 0.5)
+        return tvF.pad(
+            images,
+            [left, top, best_width - fitted_width - left, best_height - fitted_height - top],
+            fill=self.pad_value,
+        )
+
+    def _prepare_images_structure(self, images, expected_ndims=3):
+        if isinstance(images, (list, tuple)) and images:
+            return [
+                image
+                for item in images
+                for image in self._prepare_images_structure(item, expected_ndims=expected_ndims)
+            ]
+        # The backend already adds a channel axis to individual grayscale arrays;
+        # preserve them until then instead of rejecting them as malformed batches.
+        ndim = 2 if getattr(images, "ndim", None) == 2 else expected_ndims
+        return super()._prepare_images_structure(images, expected_ndims=ndim)
+
+    def process_image(self, image, do_convert_rgb=None, input_data_format=None, **kwargs):
+        if is_pil_image(image):
+            input_data_format = ChannelDimension.FIRST
+        elif image.ndim == 2:
+            input_data_format = ChannelDimension.FIRST
+        elif input_data_format is None:
+            input_data_format = infer_channel_dimension_format(image, num_channels=(1, 3, 4))
+        image = super().process_image(
+            image, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, **kwargs
+        )
+        if do_convert_rgb:
+            if image.shape[0] == 1:
+                image = image.repeat(3, 1, 1)
+            elif image.shape[0] == 4:
+                image = image[:3]
+        return image
+
+    def patchify(self, images: "torch.Tensor", patch_size: int) -> "torch.Tensor":
+        """`[B, C, H, W]` -> `[B, n_h·n_w, C·patch_size²]`: row-major patch order, each
+        patch flattened channel-major `(c, ph, pw)` — the `patch_embed.proj` layout."""
+        batch, channel, height, width = images.shape
+        if height % patch_size or width % patch_size:
+            raise ValueError("Image height and width must be divisible by patch_size when do_resize=False.")
+        grid_h, grid_w = height // patch_size, width // patch_size
+        patches = images.reshape(batch, channel, grid_h, patch_size, grid_w, patch_size)
+        patches = patches.permute(0, 2, 4, 1, 3, 5)  # [B, gh, gw, C, ph, pw]
+        return patches.reshape(batch, grid_h * grid_w, channel * patch_size * patch_size)
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        patch_size: int,
+        downsample_ratio: int,
+        max_wh_ratio: int | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> BatchFeature:
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(
+                    images=stacked_images,
+                    size=size,
+                    resample=resample,
+                    patch_size=patch_size,
+                    downsample_ratio=downsample_ratio,
+                    max_wh_ratio=max_wh_ratio,
+                )
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        processed_grids = {}
+        for shape, stacked_images in grouped_images.items():
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            patches = self.patchify(stacked_images, patch_size=patch_size)
+            processed_images_grouped[shape] = patches
+            processed_grids[shape] = [
+                [1, stacked_images.shape[-2] // patch_size, stacked_images.shape[-1] // patch_size]
+            ] * stacked_images.shape[0]
+
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_grids_ordered = reorder_images(processed_grids, grouped_images_index)
+        pixel_values = processed_images[0] if len(processed_images) == 1 else torch.cat(processed_images, dim=0)
+        image_grid_thw = torch.tensor(processed_grids_ordered, dtype=torch.long)
+
+        return BatchFeature(
+            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
+        )
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
+        """
+        A utility that returns the number of ViT patches for a given image size.
+
+        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
+        without an image input.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of ViT patches per image.
+        """
+        grid_h, grid_w = self.get_image_grid(height, width, images_kwargs)
+        return grid_h * grid_w
+
+    def get_image_grid(self, height: int, width: int, images_kwargs: dict | None = None) -> tuple[int, int]:
+        """Return the ViT grid for an input size, using the same overrides as preprocessing."""
+        images_kwargs = images_kwargs or {}
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        if not images_kwargs.get("do_resize", self.do_resize):
+            if height % patch_size or width % patch_size:
+                raise ValueError("Image height and width must be divisible by patch_size when do_resize=False.")
+            return height // patch_size, width // patch_size
+        size = images_kwargs.get("size", self.size)
+        min_pixels = images_kwargs.get("min_pixels")
+        max_image_tokens = images_kwargs.get("max_image_tokens")
+        _, _, best_height, best_width = plan_image_grid(
+            width,
+            height,
+            patch_size,
+            images_kwargs.get("downsample_ratio", self.downsample_ratio),
+            size["shortest_edge"] if min_pixels is None else min_pixels,
+            size["longest_edge"] if max_image_tokens is None else max_image_tokens,
+            images_kwargs.get("max_wh_ratio", self.max_wh_ratio),
+        )
+        return best_height // patch_size, best_width // patch_size
+
+
+@auto_docstring
+class DeepseekV41ImageProcessorPil(PilBackend):
+    r"""
+    PIL/NumPy backend of [`DeepseekV41ImageProcessor`] — identical preprocessing
+    (plan, gray pad, patch layout), portable to environments without torchvision. The
+    constructor signature and defaults match the torchvision class exactly.
+    """
+
+    do_resize = True
+    resample = PILImageResampling.BICUBIC
+    size = {"shortest_edge": 295936, "longest_edge": 1024}
+    do_rescale = True
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    do_convert_rgb = True
+    patch_size = 14
+    downsample_ratio = 3
+    max_wh_ratio = None
+    pad_value = 127
+    valid_kwargs = DeepseekV41ImageProcessorKwargs
+    model_input_names = ["pixel_values", "image_grid_thw"]
+
+    def __init__(self, **kwargs: Unpack[DeepseekV41ImageProcessorKwargs]):
+        # `min_pixels` / `max_image_tokens` override the corresponding `size` entries
+        size = kwargs.pop("size", None)
+        size = dict(self.size) if size is None else dict(size)
+        if (min_pixels := kwargs.pop("min_pixels", None)) is not None:
+            size["shortest_edge"] = min_pixels
+        if (max_image_tokens := kwargs.pop("max_image_tokens", None)) is not None:
+            size["longest_edge"] = max_image_tokens
+        super().__init__(size=size, **kwargs)
+
+    def _standardize_kwargs(
+        self,
+        size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
+        min_pixels: int | None = None,
+        max_image_tokens: int | None = None,
+        **kwargs,
+    ) -> dict:
+        if min_pixels is not None or max_image_tokens is not None:
+            size = dict(self.size) if size is None else dict(size)
+            if min_pixels is not None:
+                size["shortest_edge"] = min_pixels
+            if max_image_tokens is not None:
+                size["longest_edge"] = max_image_tokens
+        return super()._standardize_kwargs(size=size, **kwargs)
+
+    def resize(
+        self,
+        image: np.ndarray,
+        size: SizeDict,
+        resample: "PILImageResampling | int | None",
+        patch_size: int | None = None,
+        downsample_ratio: int | None = None,
+        max_wh_ratio: int | None = None,
+        **kwargs,
+    ) -> np.ndarray:
+        """Resize to the DeepSeek-V4.1 plan (see the class docstring) and pad the
+        aspect-fit remainder with `pad_value`."""
+        if not size.shortest_edge or not size.longest_edge:
+            raise ValueError(
+                f"`size` must carry 'shortest_edge' (min_pixels) and 'longest_edge' (max_image_tokens) but got {size}."
+            )
+        patch_size = patch_size if patch_size is not None else self.patch_size
+        downsample_ratio = downsample_ratio if downsample_ratio is not None else self.downsample_ratio
+        height, width = image.shape[-2:]
+        _, _, best_height, best_width = plan_image_grid(
+            width, height, patch_size, downsample_ratio, size.shortest_edge, size.longest_edge, max_wh_ratio
+        )
+        if max_wh_ratio is not None and width >= max_wh_ratio * height:
+            return super().resize(image, SizeDict(height=best_height, width=best_width), resample)
+        fitted_height, fitted_width = contain_size(height, width, best_height, best_width)
+        image = super().resize(image, SizeDict(height=fitted_height, width=fitted_width), resample)
+        top = round((best_height - fitted_height) * 0.5)
+        left = round((best_width - fitted_width) * 0.5)
+        return np.pad(
+            image,
+            ((0, 0), (top, best_height - fitted_height - top), (left, best_width - fitted_width - left)),
+            mode="constant",
+            constant_values=self.pad_value,
+        )
+
+    def _prepare_images_structure(self, images, expected_ndims=3):
+        if isinstance(images, (list, tuple)) and images:
+            return [
+                image
+                for item in images
+                for image in self._prepare_images_structure(item, expected_ndims=expected_ndims)
+            ]
+        ndim = 2 if getattr(images, "ndim", None) == 2 else expected_ndims
+        return super()._prepare_images_structure(images, expected_ndims=ndim)
+
+    def process_image(self, image, do_convert_rgb=None, input_data_format=None, **kwargs):
+        if is_pil_image(image):
+            input_data_format = None
+        elif image.ndim == 2:
+            input_data_format = ChannelDimension.FIRST
+        elif input_data_format is None:
+            input_data_format = infer_channel_dimension_format(image, num_channels=(1, 3, 4))
+        image = super().process_image(
+            image, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, **kwargs
+        )
+        if do_convert_rgb:
+            if image.shape[0] == 1:
+                image = np.repeat(image, 3, axis=0)
+            elif image.shape[0] == 4:
+                image = image[:3]
+        return image
+
+    def patchify(self, image: np.ndarray, patch_size: int) -> np.ndarray:
+        """`[C, H, W]` -> `[n_h·n_w, C·patch_size²]`: row-major patch order, each patch
+        flattened channel-major `(c, ph, pw)` — the `patch_embed.proj` layout."""
+        channel, height, width = image.shape
+        if height % patch_size or width % patch_size:
+            raise ValueError("Image height and width must be divisible by patch_size when do_resize=False.")
+        grid_h, grid_w = height // patch_size, width // patch_size
+        patches = image.reshape(channel, grid_h, patch_size, grid_w, patch_size)
+        patches = np.transpose(patches, (1, 3, 0, 2, 4))  # [gh, gw, C, ph, pw]
+        return patches.reshape(grid_h * grid_w, channel * patch_size * patch_size)
+
+    def _preprocess(
+        self,
+        images: list[np.ndarray],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        patch_size: int,
+        downsample_ratio: int,
+        max_wh_ratio: int | None,
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> BatchFeature:
+        all_patches, all_grids = [], []
+        for image in images:
+            if do_resize:
+                image = self.resize(
+                    image,
+                    size=size,
+                    resample=resample,
+                    patch_size=patch_size,
+                    downsample_ratio=downsample_ratio,
+                    max_wh_ratio=max_wh_ratio,
+                )
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std)
+            all_patches.append(self.patchify(image, patch_size=patch_size))
+            all_grids.append([1, image.shape[-2] // patch_size, image.shape[-1] // patch_size])
+
+        pixel_values = np.concatenate(all_patches, axis=0)
+        image_grid_thw = np.array(all_grids, dtype=np.int64)
+
+        return BatchFeature(
+            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
+        )
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
+        """
+        A utility that returns the number of ViT patches for a given image size.
+
+        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
+        without an image input.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of ViT patches per image.
+        """
+        grid_h, grid_w = self.get_image_grid(height, width, images_kwargs)
+        return grid_h * grid_w
+
+    def get_image_grid(self, height: int, width: int, images_kwargs: dict | None = None) -> tuple[int, int]:
+        """Return the ViT grid for an input size, using the same overrides as preprocessing."""
+        images_kwargs = images_kwargs or {}
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        if not images_kwargs.get("do_resize", self.do_resize):
+            if height % patch_size or width % patch_size:
+                raise ValueError("Image height and width must be divisible by patch_size when do_resize=False.")
+            return height // patch_size, width // patch_size
+        size = images_kwargs.get("size", self.size)
+        min_pixels = images_kwargs.get("min_pixels")
+        max_image_tokens = images_kwargs.get("max_image_tokens")
+        _, _, best_height, best_width = plan_image_grid(
+            width,
+            height,
+            patch_size,
+            images_kwargs.get("downsample_ratio", self.downsample_ratio),
+            size["shortest_edge"] if min_pixels is None else min_pixels,
+            size["longest_edge"] if max_image_tokens is None else max_image_tokens,
+            images_kwargs.get("max_wh_ratio", self.max_wh_ratio),
+        )
+        return best_height // patch_size, best_width // patch_size
+
+
+class DeepseekV41ProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: DeepseekV41ImageProcessorKwargs
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+        },
+    }
+
+
+@auto_docstring
+class DeepseekV41Processor(ProcessorMixin):
+    r"""
+    Processor of DeepSeek-V4.1 (image-text-to-text). The tokenizer needs ONE image
+    placeholder token whose id matches the model config's `image_token_id` (129264);
+    each placeholder in the text expands to the full image span
+    `[IMAGE_START] + ([IMAGE]·n_llm_w + [IMAGE_NEW_LINE])·n_llm_h + [IMAGE_END]`,
+    every position carrying that same token id — the model tells the positions apart
+    from `image_grid_thw`, so no per-position token ids are required.
+    """
+
+    valid_processor_kwargs = DeepseekV41ProcessorKwargs
+
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        chat_template=None,
+        image_token=None,
+        image_token_id=None,
+        **kwargs,
+    ):
+        r"""
+        image_token (`str`, *optional*):
+            Existing tokenizer token used for image placeholders. Defaults to the tokenizer's
+            `image_token` when defined, otherwise the released spelling `<｜deepseek_image｜>`.
+        image_token_id (`int`, *optional*):
+            Expected ID of `image_token`. When supplied, it must match the tokenizer.
+        """
+        self.image_token = (
+            getattr(tokenizer, "image_token", None) or "<｜deepseek_image｜>" if image_token is None else image_token
+        )
+        resolved_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        if (
+            resolved_id is None
+            or resolved_id == tokenizer.unk_token_id
+            or tokenizer.convert_ids_to_tokens(resolved_id) != self.image_token
+            or tokenizer.encode(self.image_token, add_special_tokens=False) != [resolved_id]
+            or tokenizer.encode(self.image_token * 2, add_special_tokens=False) != [resolved_id, resolved_id]
+        ):
+            raise ValueError(f"The tokenizer must encode {self.image_token!r} as one existing image token.")
+        if image_token_id is not None and image_token_id != resolved_id:
+            raise ValueError(f"image_token_id={image_token_id} does not match {self.image_token!r} ({resolved_id}).")
+        self.image_token_id = resolved_id
+        # Do not register the image token as special: the released tokenizer deliberately
+        # keeps it as a regular added token, including when decoding with skip_special_tokens.
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        """The expansion of one image placeholder: the whole image span in the same
+        image token (the model rebuilds the layout from `image_grid_thw`)."""
+        _, n_vit_h, n_vit_w = image_inputs["image_grid_thw"][image_idx]
+        n_vit_h, n_vit_w = int(n_vit_h), int(n_vit_w)
+        ratio = kwargs.get("downsample_ratio", self.image_processor.downsample_ratio)
+        n_llm_h, n_llm_w = -(-n_vit_h // ratio), -(-n_vit_w // ratio)
+        return self.image_token * num_image_tokens(n_llm_h, n_llm_w)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """Count image-span tokens and ViT patches for input sizes given as `(height, width)`."""
+        if image_sizes is None:
+            return MultiModalData()
+        images_kwargs = {**kwargs, **kwargs.get("images_kwargs", {})}
+        ratio = images_kwargs.get("downsample_ratio", self.image_processor.downsample_ratio)
+        grids = [self.image_processor.get_image_grid(height, width, images_kwargs) for height, width in image_sizes]
+        return MultiModalData(
+            num_image_tokens=[num_image_tokens(-(-height // ratio), -(-width // ratio)) for height, width in grids],
+            num_image_patches=[height * width for height, width in grids],
+        )
+
+    def post_process_image_text_to_text(
+        self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
+    ):
+        """
+        Post-process the output of the model to decode the text.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape
+                `(batch_size, sequence_length)` or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's
+                `batch_decode` method.
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+                Whether or not to clean up the tokenization spaces in the output. Argument passed to the
+                tokenizer's `batch_decode` method.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode` method.
+
+        Returns:
+            `list[str]`: The decoded text.
+        """
+        return self.tokenizer.batch_decode(
+            generated_outputs,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
+
+
 __all__ = [
     "DeepseekV41PreTrainedModel",
     "DeepseekV41TextModel",
     "DeepseekV41ForCausalLM",
+    "DeepseekV41VisionModel",
+    "DeepseekV41Model",
+    "DeepseekV41ForConditionalGeneration",
+    "DeepseekV41ImageProcessor",
+    "DeepseekV41ImageProcessorPil",
+    "DeepseekV41Processor",
     "DeepseekV41CSACache",
     "DeepseekV41EngramEmbedding",
     "EngramLayout",

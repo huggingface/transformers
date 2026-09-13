@@ -1096,6 +1096,38 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "deepseek_v41": [
+            # The image-text-to-text wrapper reads the same native checkpoint
+            # (model_type `deepseek_v41` — the wrapper keeps the composite config).
+            # Vision-first: the two module renames of the reused Qwen2-VL attention
+            # (`wqkv` -> `qkv`, `wo` -> `proj`) must run before the generic `vision.`
+            # prefix move. The text top-level keys move under `model.language_model.`
+            # (the scoped `deepseek_v41_text` rules of the text backbone then apply
+            # under that prefix), `head` stays at the top level, and the aligner /
+            # delimiter keys map one to one.
+            WeightRenaming(
+                source_patterns=r"^vision\.blocks\.(\d+)\.attn\.wqkv\.",
+                target_patterns=r"model.visual.blocks.\1.attn.qkv.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^vision\.blocks\.(\d+)\.attn\.wo\.",
+                target_patterns=r"model.visual.blocks.\1.attn.proj.",
+            ),
+            WeightRenaming(source_patterns=r"^vision\.", target_patterns="model.visual."),
+            WeightRenaming(source_patterns=r"^aligner\.", target_patterns="model.aligner."),
+            WeightRenaming(source_patterns=r"^image_start$", target_patterns="model.image_start"),
+            WeightRenaming(source_patterns=r"^image_end$", target_patterns="model.image_end"),
+            WeightRenaming(source_patterns=r"^image_newline$", target_patterns="model.image_newline"),
+            WeightRenaming(source_patterns=r"^layers\.", target_patterns="model.language_model.layers."),
+            WeightRenaming(source_patterns=r"^embed\.weight$", target_patterns="model.language_model.embed.weight"),
+            WeightRenaming(source_patterns=r"^norm\.weight$", target_patterns="model.language_model.norm.weight"),
+            WeightRenaming(source_patterns=r"^head\.weight$", target_patterns="lm_head.weight"),
+        ],
+        "deepseek_v41_vision": [
+            WeightRenaming(source_patterns=r"^vision\.", target_patterns=""),
+            WeightRenaming(source_patterns=r"\.attn\.wqkv\.", target_patterns=r".attn.qkv."),
+            WeightRenaming(source_patterns=r"\.attn\.wo\.", target_patterns=r".attn.proj."),
+        ],
         "qwen2_moe": [
             WeightConverter(
                 source_patterns=[

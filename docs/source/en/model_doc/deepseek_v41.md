@@ -23,9 +23,9 @@ projection, and replaces the fixed three-type attention schedule with a **ratio-
 design (CSA2), adds a **two-level indexer** (a candidate pre-filter constrains every later indexer), and introduces
 the **engram** — deterministic n-gram hash lookups injected into the residual stream at a few layers.
 
-This implementation covers the text backbone of `DeepSeek-V4.1-Flash` (and its `-Base` sibling):
-[`DeepseekV41ForCausalLM`]. The MTP draft head (DSpark) and the vision tower ship in the released checkpoint but are
-out of scope here: their keys are ignored on load and the corresponding config sections are accepted but unused.
+The text backbone is available as [`DeepseekV41TextModel`] and [`DeepseekV41ForCausalLM`]. Image-conditioned
+generation uses [`DeepseekV41ForConditionalGeneration`], which combines DeepSeek-ViT, the aligner and the text
+backbone. The MTP draft head (DSpark) remains unsupported and its checkpoint keys are ignored on load.
 
 ## Architecture
 
@@ -102,6 +102,23 @@ clamped `DeepseekV41MLP`). The router (`gate`) keeps its expert-selection correc
 records the pre-activation gate logits per layer and adds the Mixtral load-balancing auxiliary loss
 (`router_aux_loss_coef`).
 
+### Vision tower and image spans
+
+[`DeepseekV41VisionModel`] applies bidirectional attention independently to each image's row-major patch grid.
+It uses axial 2D RoPE, RMSNorm and SwiGLU. The aligner groups patches into channel-major 3×3 windows, zero-pads
+incomplete edge windows, and projects them into the text hidden size through a two-layer GELU MLP.
+
+[`DeepseekV41ImageProcessor`] is the torchvision backend; [`DeepseekV41ImageProcessorPil`] is the PIL backend.
+Both implement the reference resize plan, RGB conversion, gray padding, normalization and patch layout.
+The model receives `pixel_values` as packed patch rows and `image_grid_thw` in image order, with rows `[1, h, w]`.
+Videos are not supported by these image-only classes.
+
+[`DeepseekV41Processor`] expands one image placeholder into
+`[IMAGE_START] + ([IMAGE] * width + [IMAGE_NEWLINE]) * height + [IMAGE_END]`.
+All of these positions carry the same image token ID: **129264**, spelled **`<｜deepseek_image｜>`** in the
+released tokenizer. The model reconstructs delimiter and image-feature positions from each image grid.
+Image spans use the vision routing bias and are excluded from Engram n-grams; they remain live tokens for attention.
+
 ## Quantization
 
 ### QAT fake-quant in the forward pass
@@ -145,6 +162,8 @@ initialization. [`DeepseekV41TextModel`] uses [`DeepseekV41TextConfig`] and pres
 quantized checkpoint. Flat text checkpoints and direct text-config construction remain supported.
 
 ## Usage
+
+### Text-only inference
 
 The released checkpoint (476 GiB on disk: fp8 attention, packed-fp4 routed experts, two ~98 GB fp8 engram tables)
 loads through the standard path — no custom loader:
@@ -205,10 +224,67 @@ from the cache; a needle-in-a-haystack
 passcode was retrieved at 262k, 524k and 1,048k prompt tokens on 8×H200 (4096-token chunks: 754 / 595 / 394
 tokens per second of prefill).
 
+### Image-conditioned generation
+
+The released repository does not include Hugging Face processor configuration files or a Jinja chat template.
+Construct the processor from its vision config and tokenizer; do not assume `AutoProcessor.from_pretrained`
+can recover absent assets. A processor saved with `save_pretrained` can subsequently be loaded with `AutoProcessor`.
+
+Use the release's [Python prompt encoder](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash/tree/main/encoding)
+or `deepseek-recipe` for chat serialization. For the following example, download `encoding/encoding.py` from the
+model repository and put that directory on `PYTHONPATH`:
+
+```bash
+hf download deepseek-ai/DeepSeek-V4.1-Flash --include 'encoding/*' --local-dir ./deepseek-v41
+export PYTHONPATH="./deepseek-v41/encoding:$PYTHONPATH"
+```
+
+```python
+from PIL import Image
+from encoding import encode_messages
+from transformers import (
+    AutoConfig,
+    AutoModelForImageTextToText,
+    AutoTokenizer,
+    DeepseekV41ImageProcessor,
+    DeepseekV41Processor,
+)
+
+model_id = "deepseek-ai/DeepSeek-V4.1-Flash"
+config = AutoConfig.from_pretrained(model_id)
+vision = config.vision_config
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+image_processor = DeepseekV41ImageProcessor(
+    patch_size=vision.patch_size,
+    downsample_ratio=vision.downsample_ratio,
+    min_pixels=vision.min_pixels,
+    max_image_tokens=vision.max_image_tokens,
+    max_wh_ratio=vision.max_wh_ratio,
+)
+processor = DeepseekV41Processor(image_processor=image_processor, tokenizer=tokenizer)
+model = AutoModelForImageTextToText.from_pretrained(
+    model_id, dtype="bfloat16", device_map="auto"
+)
+image = Image.open("image.png").convert("RGB")
+prompt = encode_messages(
+    [{"role": "user", "content": [
+        {"type": "text", "text": "Describe this image."},
+        {"type": "image_url", "image_url": {"url": "image.png"}},
+    ]}],
+    thinking_mode="chat",
+)
+inputs = processor(text=prompt, images=[image], add_special_tokens=False, return_tensors="pt").to(model.device)
+generated = model.generate(**inputs, max_new_tokens=64)
+print(processor.decode(generated[0, inputs.input_ids.shape[1]:], skip_special_tokens=True))
+```
+
+Image spans must be included completely in the initial prefill. Later calls can continue text generation from
+the returned cache. The performance and long-context measurements above were made on the **text-only** path;
+they are not measurements of vision latency or full-checkpoint multimodal accuracy.
+
 > [!NOTE]
-> The model runs **eager attention only** (`_supports_flash_attn = _supports_sdpa = _supports_flex_attn = False`):
-> `head_dim` exceeds what FlashAttention covers, the per-head attention sink needs a custom denominator, and the
-> K=V cache is concatenated with the compressed branch after masking. SDPA / Flash kernels are future work.
+> The **text backbone** runs eager attention only: its large head dimension, denominator sink and compressed
+> branch require a custom attention path. The vision tower supports eager attention and SDPA independently.
 > `StaticCache` / `QuantizedCache` are not supported either — the compressor's group state is dynamic
 > (`DynamicCache`, the default, builds the right layers automatically).
 
@@ -273,6 +349,37 @@ tokens per second of prefill).
 ## DeepseekV41VisionConfig
 
 [[autodoc]] DeepseekV41VisionConfig
+
+## DeepseekV41VisionModel
+
+[[autodoc]] DeepseekV41VisionModel
+    - forward
+
+## DeepseekV41Model
+
+[[autodoc]] DeepseekV41Model
+    - forward
+    - get_image_features
+
+## DeepseekV41ForConditionalGeneration
+
+[[autodoc]] DeepseekV41ForConditionalGeneration
+    - forward
+    - get_image_features
+
+## DeepseekV41ImageProcessor
+
+[[autodoc]] DeepseekV41ImageProcessor
+    - preprocess
+
+## DeepseekV41ImageProcessorPil
+
+[[autodoc]] DeepseekV41ImageProcessorPil
+    - preprocess
+
+## DeepseekV41Processor
+
+[[autodoc]] DeepseekV41Processor
 
 ## DeepseekV41CSACache
 
