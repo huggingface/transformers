@@ -107,6 +107,27 @@ efficiency:
 
 These are design arguments, not measured results. See "What is and isn't verified" below.
 
+## Standalone package
+
+The architecture also ships as a self-contained package with no `transformers` dependency, which is the
+easiest way to try it:
+
+```bash
+pip install helix-lm
+```
+
+```bash
+helix info    # what it is and what it costs
+helix demo    # build a model, generate, verify the decode state
+helix bench   # cost against context length
+helix recall  # train with and without the index strand, and compare
+```
+
+Its source lives in [`helix-lm/`](../../../helix-lm) and is verified to produce bitwise-identical logits to
+the implementation below given the same weights. Use the `transformers` classes here when you want the
+`AutoModel` API, the shared cache machinery and the training integrations; use the package when you want
+HELIX on its own.
+
 ## Usage
 
 ```python

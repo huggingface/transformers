@@ -230,14 +230,24 @@ class HelixConfig(PreTrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
 
-        # Strand L must cover everything strand I cannot see: strand I only reads memory blocks that end
-        # strictly before the query's own block, so the window has to span at least one full block.
-        if self.local_window_sizes[0] < self.block_size:
-            raise ValueError(
-                f"The narrowest per-head window ({self.local_window_sizes[0]}) is smaller than `block_size` "
-                f"({self.block_size}), which would leave a hole in the receptive field. Reduce "
-                f"`num_window_scales` or raise `local_blocks`."
-            )
+        for name, minimum in (
+            ("block_size", 1),
+            ("local_blocks", 0),
+            ("index_topk", 1),
+            ("index_beam_width", 1),
+            ("landmark_dim", 1),
+            ("index_num_distance_buckets", 1),
+            ("num_recurrent_heads", 1),
+            ("recurrent_head_dim", 1),
+            ("recurrent_value_head_dim", 1),
+            ("recurrent_chunk_size", 1),
+            ("conv_kernel_size", 1),
+            # The surprise pool averages the `surprise_kernel_size - 1` positions before the current one,
+            # so a width of 1 would leave it with nothing to average.
+            ("surprise_kernel_size", 2),
+        ):
+            if getattr(self, name) < minimum:
+                raise ValueError(f"`{name}` must be >= {minimum}, got {getattr(self, name)}.")
         # The recurrent state is what carries information between chunks, so a chunk must not exceed a block.
         self.sliding_window = (self.local_blocks + 1) * self.block_size
         # Strand R keeps one convolution state for its q/k/v stream, plus a second one for the causal
@@ -253,6 +263,8 @@ class HelixConfig(PreTrainedConfig):
     @property
     def local_window_sizes(self) -> list[int]:
         """Per-head window length, one entry per query head, narrowest group first."""
+        # Floored at `block_size`: strand I only reads blocks ending strictly before the query's own
+        # block, so the narrowest window must still span a full block or the two would leave a gap.
         heads_per_scale = self.num_attention_heads / self.num_window_scales
         windows = []
         for head in range(self.num_attention_heads):
