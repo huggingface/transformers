@@ -188,8 +188,11 @@ Measured in [`examples/pytorch/helix/`](../../../examples/pytorch/helix), on 4 C
   (fitted `N^1.00`) and grows for full attention (`N^2.00`); by 32k tokens HELIX forms 32x fewer and, even
   as an unfused reference implementation against a fused SDPA kernel, runs 1.6x faster.
 * `mqar.py` — on multi-query associative recall with the bindings written ~200 tokens before they are
-  queried, HELIX reaches 30.8% against full attention's 32.0%, while the *same model with the index strand
-  removed* sits at 6.0%, which is chance. That gap is the index strand.
+  queried, the *same model with the index strand removed* sits at 6.0% against a 6.2% chance floor, and
+  putting the index back takes it to 30.8%. That is the index strand, and it is ~21 standard errors wide.
+  Full attention scores 32.0% on the same budget, which is a statistical tie with HELIX rather than a win
+  either way (z = 0.72). Single seed and well short of saturation, so it establishes that the mechanism
+  works, not that HELIX matches full attention in general.
 
 **Not verified:** anything about language-modeling quality at scale. There are no trained HELIX checkpoints.
 The claims above are about complexity, causality and recall mechanics — properties you can check on an

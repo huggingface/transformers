@@ -87,18 +87,25 @@ Measured with 16 bindings, 128 possible keys, 16 possible values, 256-token sequ
 batch 24 — so chance is 6.2%, and the bindings are written ~200 tokens before they are queried, six times
 further back than HELIX's widest local window of 32 tokens:
 
-| model | recall |
-| --- | ---: |
-| HELIX (L+R+I) | **30.8%** |
-| HELIX no index (L+R) | 6.0% |
-| Llama (full attention) | 32.0% |
-| *chance* | *6.2%* |
+| model | recall | 95% CI |
+| --- | ---: | :---: |
+| HELIX (L+R+I) | **30.8%** | [28.5%, 33.1%] |
+| HELIX no index (L+R) | 6.0% | [4.8%, 7.2%] |
+| Llama (full attention) | 32.0% | [29.7%, 34.3%] |
+| *chance* | *6.2%* | |
 
-This is the result the architecture stands on. Strip the index strand out and the model is **at chance** —
+Read the two gaps separately, because only one of them is real.
+
+**HELIX against its own ablation is the result.** Remove the index strand and the model falls to chance —
 its local window cannot see the bindings and its recurrent state cannot hold them. Put the index back and
-the same model, at the same width and depth, recovers essentially all of what full attention gets, while
-forming a fraction of the attention products.
+the same model, same width, same depth, recalls. That gap is ~21 standard errors; it is not noise.
 
-None of the three is near saturation at this budget; the numbers are a comparison at equal training, not a
-ceiling. What matters is the gap between the two HELIX rows, which is exactly the index strand's
-contribution.
+**HELIX against full attention is a tie, not a win or a loss.** The 1.2-point gap has a standard error of
+1.7 points (z = 0.72 over 1 536 answer tokens), so the intervals overlap and the two are statistically
+indistinguishable here. HELIX captured 95% of the headroom above chance that full attention did.
+
+Two limits on how far that second reading travels. The intervals above cover *evaluation* sampling only —
+each row is a single training run, and seed-to-seed variance is a separate and probably larger source of
+scatter that is not measured here. And none of the three is near saturation at this budget, so this is a
+comparison at equal training, not at the ceiling. Establishing that HELIX matches full attention in general
+would need several seeds and training to convergence.
