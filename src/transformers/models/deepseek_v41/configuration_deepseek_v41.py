@@ -333,8 +333,20 @@ class DeepseekV41TextConfig(PreTrainedConfig):
     default_kv_source_layer_ids = [2, 8, 14, 20]
     default_index_source_layer_ids = [2, 8, 14, 20, 24, 28, 32, 36]
 
+    @classmethod
+    def get_config_dict(cls, pretrained_model_name_or_path, **kwargs):
+        config_dict, kwargs = super().get_config_dict(pretrained_model_name_or_path, **kwargs)
+        # Preserve outer storage metadata before the base loader extracts text_config.
+        if cls.base_config_key in config_dict and "quantization_config" in config_dict:
+            config_dict[cls.base_config_key]["quantization_config"] = config_dict["quantization_config"]
+        return config_dict, kwargs
+
     def __post_init__(self, **kwargs):
         PreTrainedConfig.__post_init__(self, **kwargs)
+        # The normalized quantizer config does not retain packed expert storage metadata.
+        quantization_config = kwargs.get("quantization_config")
+        if isinstance(quantization_config, dict) and "expert_dtype" in quantization_config:
+            self.expert_dtype = quantization_config["expert_dtype"]
         n = self.num_hidden_layers
         n_nextn = self.num_nextn_predict_layers
 

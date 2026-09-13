@@ -134,15 +134,15 @@ accepts this layout as-is:
 * with `dequantize=False` (GPU) the attention projections become `FP8Linear` / `FP8GroupedLinear` (the grouped
   `o_a_proj`) and the routed experts an `FP8Experts` holding the packed int8 `gate_up_proj` / `down_proj` with their
   `[1, 32]` ue8m0 scales (`gate_up_proj_scale_inv` / `down_proj_scale_inv`). `FP8Experts` sizes that packed layout
-  from `text_config.expert_dtype`, which the composite config hoists from the released config.json's
+  from `text_config.expert_dtype`, which the configuration loaders preserve from the released config.json's
   `quantization_config.expert_dtype = "fp4"`. The bf16 projections without a `.scale` (`compressor.kv_proj`,
   `compressor.gate_proj`, `indexer.k_proj`, `indexer.weights_proj`) are auto-skipped by the quantizer
   (`_keep_in_fp32_modules`), like V4's.
 
-`DeepseekV41ForCausalLM` takes the composite [`DeepseekV41Config`] (`config_class`) because the released
-config.json nests the text backbone under `text_config` and puts `quantization_config` at the top level — pointing
-the class at the bare text config would silently drop the quantization config and corrupt the fp8 tensors on load.
-The text config is unwrapped in `__init__`; instantiating with a [`DeepseekV41TextConfig`] directly also works.
+`DeepseekV41ForCausalLM` uses the composite [`DeepseekV41Config`]; its text configuration is unwrapped during
+initialization. [`DeepseekV41TextModel`] uses [`DeepseekV41TextConfig`] and preserves the outer
+`quantization_config` before extracting `text_config`, so the bare backbone also recognizes the released
+quantized checkpoint. Flat text checkpoints and direct text-config construction remain supported.
 
 ## Usage
 
@@ -233,9 +233,13 @@ tokens per second of prefill).
   shared compressed KV / indexer keys); consumer layers read the source's cache through a per-forward `shared` dict.
   `DynamicCache(config=…)` builds the right layers from `config.layer_types` — the new
   `"shared_compressed_attention"` layer type is registered with the cache and masking utilities.
-* **Group state across calls.** The compressor buffers partial groups, so chunked prefill and decode are exact:
-  a prompt fed in chunks produces the same logits as a one-shot prefill, including when a chunk boundary lands
-  inside a group.
+  CSA caches are not croppable: removing tokens cannot rewind the compressor's partial groups or emitted entries.
+  Nonzero rollback requests are rejected before any cache layer is mutated; `crop(0)` retains trim-only behavior.
+* **Padding and group state.** Compression groups contain only live tokens from each batch row. Their first-token
+  RoPE positions, live-token counts and partial groups follow the row through cached calls and beam operations.
+  Chunked prefill and decode use the same groups as one-shot prefill, even when a chunk ends inside a group or
+  contains only padding for some rows. Floating-point reduction and hard top-k boundaries can still affect
+  numerical equivalence.
 * **Top-k ties.** The indexer's per-head scores are ReLU-rectified, so keys every head scores negatively tie at
   exactly 0.0 and `torch.topk` may order them by layout. Like DeepSeek-V3.2, cross-backend output-equivalence
   guarantees do not hold for this model; the equivalence tests in `tests/models/deepseek_v41` select all visible
@@ -243,10 +247,10 @@ tokens per second of prefill).
 * **Stale indexer keys on incomplete-group decode steps (reference deviation).** The reference reassigns the
   shared indexer key cache only when a latent is emitted, but scores against it unconditionally: on decode steps
   where no group completes, a layer scores its queries against the *last publisher's* keys — typically layer 20's,
-  since it owns the last index-source slot. This implementation (and vLLM, MLX and llama.cpp) instead always
-  publishes the owner layer's running key cache, so those steps read the correct owner keys. The parity harness is
-  blind to the difference (its tiny config saturates the top-k: `index_topk` exceeds the compressed length), so
-  this is a documented deviation, not an asserted equivalence.
+  since it owns the last index-source slot. This implementation republishes the owning layer's running cache.
+  The same reference fix is proposed in [DeepSeek's model PR #12](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash/discussions/12).
+  [Discussion #41](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash/discussions/41) provides a reduced-model CPU
+  reproduction and states its kernel-adaptation and numerical-validation limits.
 
 ## DeepseekV41Config
 

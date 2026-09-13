@@ -1627,6 +1627,10 @@ class Cache:
         minimal working size. This means that `crop(0)` will not necessarily always be a no-op, as it may still remove useless states
         (i.e. states that are not needed for the next `forward`) from the Cache.
         """
+        # Refuse unsupported rollback before any preceding layer is mutated.
+        # Zero still dispatches trim-only operations on recorded working state.
+        if tokens_to_remove != 0 and not self.is_croppable:
+            raise RuntimeError("This cache does not support rollback of its states.")
         for layer_idx in range(len(self.layers)):
             self.layers[layer_idx].crop(tokens_to_remove)
 

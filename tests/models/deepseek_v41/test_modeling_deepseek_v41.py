@@ -253,6 +253,82 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
                         uncached = self._output_tensor(model(inputs, use_cache=False))
                     torch.testing.assert_close(uncached, cached, atol=1e-4, rtol=1e-4)
 
+    def test_compressed_attention_ignores_padding(self):
+        config = self._tie_free_config(self.model_tester.get_config())
+        for model_class in self.all_model_classes:
+            torch.manual_seed(0)
+            model = model_class(config).eval()
+            inputs = torch.randint(1, config.vocab_size, (2, 13))
+            mask = torch.ones_like(inputs)
+            mask[0, :7] = 0
+            mask[1, :1] = 0
+            changed_padding = inputs.clone()
+            changed_padding[mask == 0] = (changed_padding[mask == 0] + 1) % config.vocab_size
+            for use_cache in (False, True):
+                with self.subTest(model=model_class.__name__, use_cache=use_cache), torch.no_grad():
+                    padded = self._output_tensor(model(inputs, attention_mask=mask, use_cache=use_cache))
+                    changed = self._output_tensor(model(changed_padding, attention_mask=mask, use_cache=use_cache))
+                    torch.testing.assert_close(padded[mask.bool()], changed[mask.bool()], atol=1e-5, rtol=1e-5)
+                    for row, start in ((0, 7), (1, 1)):
+                        unpadded = self._output_tensor(model(inputs[row : row + 1, start:], use_cache=use_cache))
+                        torch.testing.assert_close(padded[row : row + 1, start:], unpadded, atol=1e-4, rtol=1e-4)
+
+    def test_padded_chunked_decode_and_beam_state(self):
+        from transformers import DynamicCache
+
+        config = self._tie_free_config(self.model_tester.get_config())
+        torch.manual_seed(0)
+        model = self.model_tester.causal_lm_class(config).eval()
+        inputs = torch.randint(1, config.vocab_size, (2, 13))
+        mask = torch.ones_like(inputs)
+        mask[0, :7] = 0
+        mask[1, :1] = 0
+        order = torch.tensor([1, 0, 1])
+        new_tokens = torch.randint(1, config.vocab_size, (3, 3))
+        with torch.no_grad():
+            for operation in ("reorder", "repeat_select"):
+                with self.subTest(operation=operation):
+                    cache = DynamicCache(config=config)
+                    # One row contains no live token in the first chunk; the other
+                    # has a different partial-group boundary.
+                    first = model(inputs[:, :5], attention_mask=mask[:, :5], past_key_values=cache).logits
+                    second = model(inputs[:, 5:], attention_mask=mask, past_key_values=cache).logits
+                    full = model(inputs, attention_mask=mask, use_cache=False).logits
+                    joined = torch.cat([first, second], dim=1)
+                    torch.testing.assert_close(joined[mask.bool()], full[mask.bool()], atol=1e-4, rtol=1e-4)
+                    if operation == "reorder":
+                        cache.reorder_cache(order)
+                    else:
+                        cache.batch_repeat_interleave(2)
+                        cache.batch_select_indices(torch.tensor([2, 0, 3]))
+                    continued_mask = torch.cat([mask[order], torch.ones_like(new_tokens)], dim=-1)
+                    actual = model(new_tokens, attention_mask=continued_mask, past_key_values=cache).logits
+                    for row, source_row in enumerate(order.tolist()):
+                        prefix = inputs[source_row][mask[source_row].bool()].unsqueeze(0)
+                        expected = model(
+                            torch.cat([prefix, new_tokens[row : row + 1]], dim=-1), use_cache=False
+                        ).logits[:, -3:]
+                        torch.testing.assert_close(actual[row : row + 1], expected, atol=1e-4, rtol=1e-4)
+
+    def test_precomputed_mask_preserves_compressed_token_liveness(self):
+        config = self._tie_free_config(self.model_tester.get_config())
+        torch.manual_seed(0)
+        model = self.model_tester.causal_lm_class(config).eval()
+        inputs = torch.randint(1, config.vocab_size, (2, 9))
+        mask = torch.ones_like(inputs)
+        mask[0, :3] = 0
+        mask[1] = 0
+        indices = torch.arange(inputs.shape[1])
+        causal = (indices[:, None] >= indices) & (indices[:, None] - indices < config.sliding_window)
+        visible = causal[None, None] & mask[:, None, None, :].bool()
+        additive = torch.where(visible, 0.0, torch.finfo(torch.float32).min)
+        with torch.no_grad():
+            expected = model(inputs, attention_mask=mask, use_cache=False).logits
+            for prepared in (additive, {"sliding_attention": additive}, visible):
+                actual = model(inputs, attention_mask=prepared, use_cache=False).logits
+                torch.testing.assert_close(actual[mask.bool()], expected[mask.bool()], atol=1e-4, rtol=1e-4)
+                self.assertTrue(torch.isfinite(actual).all())
+
     def test_save_load_round_trip(self):
         """save→load must be exact."""
         config = self.model_tester.get_config()
@@ -448,6 +524,71 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertTrue(torch.equal(layer.compressed_kv["indexer"], kv[:, :, :3].flip(0)))
         self.assertEqual(layer.buffer_kv["compressor"].shape[0], 2)
 
+    def test_csa_crop_refusal_preserves_continuation(self):
+        """Refused rollback must leave CSA and preceding sliding layers usable."""
+        from transformers import DynamicCache
+
+        tokenizer = tiny_word_tokenizer()
+        config = self._tie_free_config(self._engram_config(tokenizer))
+        torch.manual_seed(0)
+        model = self.model_tester.causal_lm_class(config).eval()
+        model.model.bind_tokenizer(tokenizer)
+        inputs = torch.tensor([[0, 1, 2, 3, 4, 5, 6], [6, 5, 4, 3, 2, 1, 0]])
+        next_tokens = torch.tensor([[7, 0, 1], [1, 0, 7]])
+        with torch.no_grad():
+            expected = model(torch.cat([inputs, next_tokens], dim=1), use_cache=False).logits[:, -3:]
+            for record_past in (False, True):
+                for layer_only in (False, True):
+                    with self.subTest(record_past=record_past, layer_only=layer_only):
+                        cache = DynamicCache(config=config)
+                        if record_past:
+                            cache.activate_past_recording()
+                        model(inputs, past_key_values=cache, use_cache=True)
+                        target = cache.layers[config.kv_source_layer_ids[0]] if layer_only else cache
+                        for tokens_to_remove in (-1, inputs.shape[1] - 1):
+                            with self.assertRaises(RuntimeError):
+                                target.crop(tokens_to_remove)
+                            self.assertEqual(
+                                [layer.get_seq_length() for layer in cache.layers],
+                                [inputs.shape[1]] * config.num_hidden_layers,
+                            )
+                        self.assertFalse(cache.is_croppable)
+                        actual = model(next_tokens, past_key_values=cache, use_cache=True).logits
+                        torch.testing.assert_close(actual, expected, atol=1e-4, rtol=1e-4)
+
+    def test_csa_zero_crop_preserves_continuation(self):
+        """Trim-only crop preserves compressed groups and bounded engram history."""
+        from transformers import DynamicCache
+
+        tokenizer = tiny_word_tokenizer()
+        config = self._tie_free_config(self._engram_config(tokenizer))
+        torch.manual_seed(0)
+        model = self.model_tester.causal_lm_class(config).eval()
+        model.model.bind_tokenizer(tokenizer)
+        cache = DynamicCache(config=config)
+        source = cache.layers[config.kv_source_layer_ids[0]]
+        source.crop(0)
+        self.assertEqual(source.get_seq_length(), 0)
+        for tokens_to_remove in (-1, 1):
+            with self.assertRaises(RuntimeError):
+                source.crop(tokens_to_remove)
+            self.assertEqual(source.get_seq_length(), 0)
+        cache.activate_past_recording()
+        inputs = torch.tensor([[0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2]])
+        next_tokens = torch.tensor([[3, 4, 5]])
+        with torch.no_grad():
+            expected = model(torch.cat([inputs, next_tokens], dim=1), use_cache=False).logits[:, -3:]
+            model(inputs, past_key_values=cache, use_cache=True)
+            cache.crop(0)
+            self.assertEqual(
+                [layer.get_seq_length() for layer in cache.layers],
+                [inputs.shape[1]] * config.num_hidden_layers,
+            )
+            self.assertEqual(source.engram_context.shape[1], config.engram_max_ngram_size - 1)
+            self.assertEqual(cache.layers[0].keys.shape[-2], config.sliding_window - 1)
+            actual = model(next_tokens, past_key_values=cache, use_cache=True).logits
+        torch.testing.assert_close(actual, expected, atol=1e-4, rtol=1e-4)
+
     def test_beam_reorder_follows_engram_history(self):
         """The engram n-gram look-back lives on the cache: `cache.reorder_cache` alone
         must permute it (beam search has no model-side hook), and a decode step after
@@ -532,9 +673,10 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
         block), fp8 engram tables, BF16 compressor / indexer / embed, F32 mHC params and
         gate biases. The `wo_a` grouped projection and the engram tables must survive
         the load, and the per-expert fp4 tensors must land exactly in the fused
-        `gate_up_proj` / `down_proj`."""
+        `gate_up_proj` / `down_proj`, for both the wrapper and bare text backbone."""
         from safetensors.torch import save_file
 
+        from transformers import FineGrainedFP8Config
         from transformers.models.deepseek_v41 import DeepseekV41Config
         from transformers.models.deepseek_v41.modeling_deepseek_v41 import build_compressed_token_map
 
@@ -656,19 +798,31 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             save_file(native, os.path.join(tmp, "model.safetensors"))
-            composite = DeepseekV41Config(
-                text_config=config.to_dict(),
-                quantization_config={
-                    "quant_method": "fp8",
-                    "activation_scheme": "dynamic",
-                    "weight_block_size": [32, 32],
-                    "scale_fmt": "ue8m0",
-                    "expert_dtype": "fp4",  # routed experts ship packed fp4, like the release
-                },
-            )
+            composite = DeepseekV41Config(text_config=config.to_dict())
+            # Keep the storage metadata exclusively at the top level, as in the
+            # release, rather than serializing the constructor's hoisted expert_dtype.
+            composite.quantization_config = {
+                "quant_method": "fp8",
+                "activation_scheme": "dynamic",
+                "weight_block_size": [32, 32],
+                "scale_fmt": "ue8m0",
+                "expert_dtype": "fp4",
+            }
             composite.save_pretrained(tmp)
-            loaded = self.model_tester.causal_lm_class.from_pretrained(tmp, dtype=torch.bfloat16)
+            loaded = self.model_tester.causal_lm_class.from_pretrained(
+                tmp, dtype=torch.bfloat16, quantization_config=FineGrainedFP8Config(dequantize=True)
+            )
             loaded.model.bind_tokenizer(tokenizer)
+            text_model, info = self.model_tester.base_model_class.from_pretrained(
+                tmp,
+                dtype=torch.bfloat16,
+                quantization_config=FineGrainedFP8Config(dequantize=True),
+                use_cache=False,
+                output_loading_info=True,
+            )
+            text_model.bind_tokenizer(tokenizer)
+            self.assertEqual(set(info["unexpected_keys"]), {"lm_head.weight"}, info)
+            self.assertFalse(info["missing_keys"], info)
 
         # 1. untouched tensors load verbatim (BF16/F32 modules survive the fp8 path);
         #    the gate biases come back as the fp32 buffers they are
@@ -705,6 +859,24 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
             clean = model(inputs).logits.float()
             quant = loaded(inputs).logits.float()
         self.assertLess((clean - quant).abs().max().item(), 0.35)
+        # The bare backbone must detect quantization before extracting text_config.
+        text_weights = text_model.state_dict()
+        for name, deq in dequantized.items():
+            torch.testing.assert_close(text_weights[name.removeprefix("model.")], deq, atol=5e-2, rtol=0)
+        reference_state = {
+            name.removeprefix("model."): dequantized.get(name, tensor)
+            for name, tensor in ref.items()
+            if name.startswith("model.")
+        }
+        reference = self.model_tester.base_model_class.from_pretrained(
+            None, config=config, state_dict=reference_state, dtype=torch.bfloat16
+        )
+        reference.bind_tokenizer(tokenizer)
+        with torch.no_grad():
+            expected = reference(inputs, use_cache=False).last_hidden_state
+            text_output = text_model(inputs)
+        torch.testing.assert_close(text_output.last_hidden_state, expected, atol=1e-4, rtol=1e-4)
+        self.assertIsNone(text_output.past_key_values)
 
     def test_engram_forward(self):
         """The engram layers run end-to-end: bind the tokenizer, forward, decode; an

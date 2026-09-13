@@ -301,8 +301,8 @@ class DeepseekV41EngramHistoryLayer:
     :class:`DeepseekV41CSACache`, the only V4.1-owned layer class and therefore the
     only one whose batch hooks we control. Mixed in ahead of the base layer so the
     layer's `reorder_cache` / `batch_repeat_interleave` / `batch_select_indices` /
-    `reset` / `crop` chains reach it: beam search, `num_return_sequences` and
-    rollbacks permute the look-back together with the KV, with no model-side hook.
+    `reset` chains reach it: beam search and `num_return_sequences` permute the
+    look-back together with the KV, with no model-side hook.
     """
 
     def __init__(self, **kwargs):
@@ -312,11 +312,11 @@ class DeepseekV41EngramHistoryLayer:
     def update_engram_context(self, compressed: torch.Tensor, context_len: int) -> torch.Tensor:
         """Return `[B, context_len + S]`: the stored look-back (`ENGRAM_DEAD` on the
         first call) followed by `compressed`; keep the last `context_len` ids for the
-        next call — everything while past recording is on, so `crop` can rewind."""
+        next call. CSA cannot rewind, even when sliding-window past recording is on."""
         if self.engram_context is None:
             self.engram_context = compressed.new_full((compressed.shape[0], context_len), ENGRAM_DEAD)
         full = torch.cat([self.engram_context.to(compressed.device), compressed], dim=1)
-        self.engram_context = full if getattr(self, "record_past", False) else full[:, -context_len:]
+        self.engram_context = full[:, -context_len:]
         return full[:, -(context_len + compressed.shape[1]) :]
 
     def reset(self) -> None:
@@ -338,18 +338,6 @@ class DeepseekV41EngramHistoryLayer:
         if self.engram_context is not None:
             self.engram_context = self.engram_context[indices, ...]
 
-    def crop(self, tokens_to_remove: int) -> None:
-        length = self.get_seq_length()
-        super().crop(tokens_to_remove)
-        removed = length - self.get_seq_length()
-        if removed and self.engram_context is not None:
-            if not getattr(self, "record_past", False):
-                raise RuntimeError(
-                    "The engram token history keeps only its look-back and cannot be rewound. Call "
-                    "`activate_past_recording` before `crop`, or reset the cache."
-                )
-            self.engram_context = self.engram_context[:, :-removed]
-
 
 class DeepseekV41CSACache(DeepseekV41EngramHistoryLayer, DynamicSlidingWindowLayer):
     r"""Cache layer for a V4.1 **KV-source** layer (CSA2). On top of the shared-KV
@@ -366,9 +354,9 @@ class DeepseekV41CSACache(DeepseekV41EngramHistoryLayer, DynamicSlidingWindowLay
       * `compressed_kv["indexer"]` — the running *indexer keys* (one per complete
         group, at `index_head_dim`), derived from the same pooled latents by the
         source's indexer (`k_proj` + `k_norm`): the whole group scores against one key set.
-      * `entry_count["compressor"]` — groups emitted so far, so
-        `entry_count * compress_ratio` is the absolute position of the next group's
-        first source token.
+      * `entry_count["compressor"]` / `token_count["compressor"]` — per-row
+        completed groups and live source tokens. Padding never advances either
+        sequence; partial groups retain their source positions across calls.
 
     The compress ratio is passed per call by the compressor (it is a per-layer config
     value, not a per-layer-type one, so it cannot be resolved at cache-construction
@@ -376,51 +364,88 @@ class DeepseekV41CSACache(DeepseekV41EngramHistoryLayer, DynamicSlidingWindowLay
     """
 
     _layer_type = "shared_compressed_attention"
+    is_croppable = False
 
     def __init__(self, config: "DeepseekV41TextConfig", **kwargs):
         super().__init__(sliding_window=config.sliding_window)
         self.buffer_kv: dict[str, torch.Tensor | None] = {"compressor": None}
         self.buffer_gate: dict[str, torch.Tensor | None] = {"compressor": None}
+        self.buffer_positions: dict[str, torch.Tensor | None] = {"compressor": None}
+        self.buffer_lengths: dict[str, torch.Tensor | None] = {"compressor": None}
         self.compressed_kv: dict[str, torch.Tensor | None] = {"compressor": None, "indexer": None}
-        # Only the compressor counter is read (group positions); indexer keys are
-        # appended without needing a position anchor.
-        self.entry_count: dict[str, int] = {"compressor": 0}
+        self.entry_count: dict[str, torch.Tensor | None] = {"compressor": None}
+        self.token_count: dict[str, torch.Tensor | None] = {"compressor": None}
+
+    def crop(self, tokens_to_remove: int) -> None:
+        # KV and engram updates already retain their needed look-back, so a
+        # trim-only crop is also a no-op before lazy initialization.
+        if tokens_to_remove != 0:
+            raise RuntimeError("DeepseekV41CSACache cannot roll back compressed states.")
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
-        # The base class permutes only the sliding-window keys; the group state
-        # (partial-group buffers, shared compressed KV, indexer keys) is per-batch-row
-        # and must follow the beams too, or beams silently attend each other's groups.
         super().reorder_cache(beam_idx)
-        for name, tensor in self.compressed_kv.items():
-            if tensor is not None:
-                self.compressed_kv[name] = tensor.index_select(0, beam_idx.to(tensor.device))
-        for attr in ("buffer_kv", "buffer_gate"):
-            buffer = getattr(self, attr)
-            for name, tensor in buffer.items():
+        for attr in (
+            "compressed_kv",
+            "buffer_kv",
+            "buffer_gate",
+            "buffer_positions",
+            "buffer_lengths",
+            "entry_count",
+            "token_count",
+        ):
+            state = getattr(self, attr)
+            for name, tensor in state.items():
                 if tensor is not None:
-                    buffer[name] = tensor.index_select(0, beam_idx.to(tensor.device))
+                    state[name] = tensor.index_select(0, beam_idx.to(tensor.device))
 
     def batch_repeat_interleave(self, repeats: int) -> None:
         super().batch_repeat_interleave(repeats)
-        for name, tensor in self.compressed_kv.items():
-            if tensor is not None:
-                self.compressed_kv[name] = tensor.repeat_interleave(repeats, dim=0)
-        for attr in ("buffer_kv", "buffer_gate"):
-            buffer = getattr(self, attr)
-            for name, tensor in buffer.items():
+        for attr in (
+            "compressed_kv",
+            "buffer_kv",
+            "buffer_gate",
+            "buffer_positions",
+            "buffer_lengths",
+            "entry_count",
+            "token_count",
+        ):
+            state = getattr(self, attr)
+            for name, tensor in state.items():
                 if tensor is not None:
-                    buffer[name] = tensor.repeat_interleave(repeats, dim=0)
+                    state[name] = tensor.repeat_interleave(repeats, dim=0)
 
     def batch_select_indices(self, indices: torch.Tensor) -> None:
         super().batch_select_indices(indices)
-        for name, tensor in self.compressed_kv.items():
-            if tensor is not None:
-                self.compressed_kv[name] = tensor[indices, ...]
-        for attr in ("buffer_kv", "buffer_gate"):
-            buffer = getattr(self, attr)
-            for name, tensor in buffer.items():
+        for attr in (
+            "compressed_kv",
+            "buffer_kv",
+            "buffer_gate",
+            "buffer_positions",
+            "buffer_lengths",
+            "entry_count",
+            "token_count",
+        ):
+            state = getattr(self, attr)
+            for name, tensor in state.items():
                 if tensor is not None:
-                    buffer[name] = tensor[indices, ...]
+                    state[name] = tensor.index_select(0, indices.to(tensor.device))
+
+    def reset(self) -> None:
+        self.keys = self.values = None
+        self.is_initialized = False
+        super().reset()
+        for attr in (
+            "compressed_kv",
+            "buffer_kv",
+            "buffer_gate",
+            "buffer_positions",
+            "buffer_lengths",
+            "entry_count",
+            "token_count",
+        ):
+            state = getattr(self, attr)
+            for name in state:
+                state[name] = None
 
     def update(self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs):
         """Sliding-window K=V update: return everything seen so far (the attention
@@ -434,34 +459,35 @@ class DeepseekV41CSACache(DeepseekV41EngramHistoryLayer, DynamicSlidingWindowLay
         self.values = self.keys
         return full, full
 
-    def store_compression_weights(
-        self, name: str, kv: torch.Tensor, gate: torch.Tensor | None, compress_ratio: int
-    ) -> tuple[torch.Tensor, torch.Tensor | None, int]:
-        r"""Concatenate the newly projected `(kv, gate)` with the buffer, peel off the
-        longest group-aligned prefix, keep the remainder buffered, and return
-        `(chunk_kv, chunk_gate, first_group_position)` — the absolute position of the
-        first group's first source token. `gate` is `None` at ratio 1 (no pooling:
-        every token is its own group)."""
-        first_group_position = self.entry_count[name] * compress_ratio
-        buffered_kv, buffered_gate = self.buffer_kv[name], self.buffer_gate[name]
-        if buffered_kv is not None and buffered_kv.shape[1]:
-            kv = torch.cat([buffered_kv, kv], dim=1)
-            if gate is not None:
-                gate = torch.cat([buffered_gate, gate], dim=1)
-        usable = (kv.shape[1] // compress_ratio) * compress_ratio
-        self.buffer_kv[name] = kv[:, usable:]
-        self.buffer_gate[name] = None if gate is None else gate[:, usable:]
-        return kv[:, :usable], None if gate is None else gate[:, :usable], first_group_position
+    def update_compressor_states(
+        self, name: str, compressed: torch.Tensor, group_counts: torch.Tensor, compress_ratio: int
+    ) -> torch.Tensor:
+        """Write each row's new groups immediately after its own previous groups.
 
-    def update_compressor_states(self, name: str, compressed: torch.Tensor) -> torch.Tensor:
-        r"""Append freshly emitted entries to `compressed_kv[name]`, bump the group
-        count, and return the running tensor."""
-        if self.compressed_kv[name] is None:
-            self.compressed_kv[name] = compressed
-        elif compressed.shape[2] > 0:
-            self.compressed_kv[name] = torch.cat([self.compressed_kv[name], compressed], dim=2)
+        Capacity follows physical sequence length, avoiding a device-to-host
+        synchronization to find the longest live row. Unused trailing slots are
+        excluded by the per-query completed-group counts.
+        """
+        capacity = self.cumulative_length // compress_ratio
+        previous = self.compressed_kv[name]
+        if previous is None:
+            updated = compressed.new_zeros(compressed.shape[0], 1, capacity, compressed.shape[-1])
+        elif capacity > previous.shape[2]:
+            updated = F.pad(previous, (0, 0, 0, capacity - previous.shape[2]))
+        else:
+            # Inference can fill unused slots without copying the running cache;
+            # keep previous forward graphs intact when gradients are enabled.
+            updated = previous.clone() if torch.is_grad_enabled() else previous
+        slots = torch.arange(compressed.shape[2], device=compressed.device).unsqueeze(0)
+        valid = slots < group_counts.unsqueeze(-1)
+        destinations = torch.where(valid, self.entry_count["compressor"].unsqueeze(-1) + slots, 0)
+        updates = compressed.masked_fill(~valid[:, None, :, None], 0)
+        # New groups occupy previously unused zero slots. Invalid rows add zero
+        # at slot zero rather than overwriting a live entry or requiring a dummy slot.
+        updated.scatter_add_(2, destinations[:, None, :, None].expand_as(updates), updates)
+        self.compressed_kv[name] = updated
         if name == "compressor":
-            self.entry_count[name] += compressed.shape[2]
+            self.entry_count[name] = self.entry_count[name] + group_counts
         return self.compressed_kv[name]
 
 
@@ -481,36 +507,87 @@ class DeepseekV41Compressor(nn.Module):
         self.kv_norm = DeepseekV41RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
-        self, hidden_states: torch.Tensor, cache_layer: DeepseekV41CSACache | None
-    ) -> tuple[torch.Tensor | None, int]:
-        """Returns the pre-RoPE latents of the groups completing in this call (`None`
-        while a group is still filling — decode steps between group boundaries), plus
-        the absolute position of the first returned group."""
-        if self.gate_proj is None:  # ratio 1: every token is a group, no pooling
-            latent = self.kv_norm(self.kv_proj(hidden_states))
-            first_group_position = 0 if cache_layer is None else cache_layer.entry_count["compressor"]
-            return latent, first_group_position
+        self,
+        hidden_states: torch.Tensor,
+        cache_layer: DeepseekV41CSACache | None,
+        position_ids: torch.Tensor,
+        token_mask: torch.Tensor | None,
+    ) -> tuple[torch.Tensor | None, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Pool complete groups of live tokens; retain partial groups per row.
 
-        # Pooling math runs in fp32 (the reference stores `kv_proj` fp32 above ratio 1);
-        # upcast the weight explicitly so a half-precision model does not crash.
-        kv = nn.functional.linear(hidden_states.float(), self.kv_proj.weight.float())
-        # The gate is computed in fp32 regardless of the storage dtype (the released
-        # checkpoint stores `gate_proj` in BF16).
-        gate = nn.functional.linear(hidden_states.float(), self.gate_proj.weight.float())
-        if cache_layer is None:
-            usable = (kv.shape[1] // self.compress_ratio) * self.compress_ratio
-            chunk_kv, chunk_gate, first_group_position = kv[:, :usable], gate[:, :usable], 0
+        Returns latents, their first-token RoPE positions, newly completed group
+        counts, and the live-token count at each current query.
+        """
+        batch, seq_len, _ = hidden_states.shape
+        ratio = self.compress_ratio
+        positions = position_ids.expand(batch, -1)
+        live = torch.ones_like(positions, dtype=torch.bool) if token_mask is None else token_mask.bool()
+        previous_count = positions.new_zeros(batch)
+        if cache_layer is not None:
+            if cache_layer.token_count["compressor"] is not None:
+                previous_count = cache_layer.token_count["compressor"]
+            if cache_layer.entry_count["compressor"] is None:
+                cache_layer.entry_count["compressor"] = positions.new_zeros(batch)
+        query_lengths = previous_count.unsqueeze(-1) + live.long().cumsum(-1)
+
+        if self.gate_proj is None:
+            kv = self.kv_proj(hidden_states)
+            gate = None
         else:
-            chunk_kv, chunk_gate, first_group_position = cache_layer.store_compression_weights(
-                "compressor", kv, gate, self.compress_ratio
+            # Pooling and its gate use fp32, including when weights are stored in bf16.
+            kv = F.linear(hidden_states.float(), self.kv_proj.weight.float())
+            gate = F.linear(hidden_states.float(), self.gate_proj.weight.float())
+
+        if cache_layer is not None and cache_layer.buffer_kv["compressor"] is not None:
+            buffered = cache_layer.buffer_kv["compressor"]
+            buffer_live = torch.arange(buffered.shape[1], device=kv.device).unsqueeze(0) < cache_layer.buffer_lengths[
+                "compressor"
+            ].unsqueeze(-1)
+            kv = torch.cat([buffered, kv], dim=1)
+            if gate is not None:
+                gate = torch.cat([cache_layer.buffer_gate["compressor"], gate], dim=1)
+            positions = torch.cat([cache_layer.buffer_positions["compressor"], positions], dim=1)
+            live = torch.cat([buffer_live, live], dim=1)
+
+        length = kv.shape[1]
+        counts = live.long().sum(-1)
+        group_counts = counts // ratio
+        # Stable compaction without sorting projected KV or synchronizing on a
+        # data-dependent output size. Invalid input indices go to a discarded slot.
+        destinations = torch.where(live, live.long().cumsum(-1) - 1, length)
+        order = positions.new_zeros(batch, length + 1)
+        order.scatter_(1, destinations, torch.arange(length, device=kv.device).expand(batch, -1))
+        n_groups = length // ratio
+        if cache_layer is not None:
+            n_groups = min(n_groups, cache_layer.cumulative_length // ratio)
+            remainder = counts % ratio
+            tail_slots = (group_counts.unsqueeze(-1) * ratio + torch.arange(ratio - 1, device=kv.device)).clamp_max(
+                length
             )
-        if chunk_kv.shape[1] == 0:
-            return None, first_group_position
-        n_groups = chunk_kv.shape[1] // self.compress_ratio
-        kv = chunk_kv.view(chunk_kv.shape[0], n_groups, self.compress_ratio, -1)
-        gate = chunk_gate.view(chunk_gate.shape[0], n_groups, self.compress_ratio, -1)
-        latent = (kv * gate.softmax(dim=2, dtype=torch.float32)).sum(dim=2)
-        return self.kv_norm(latent.to(hidden_states.dtype)), first_group_position
+            tail_indices = order.gather(1, tail_slots)
+            cache_layer.buffer_kv["compressor"] = kv.gather(1, tail_indices.unsqueeze(-1).expand(-1, -1, kv.shape[-1]))
+            cache_layer.buffer_gate["compressor"] = (
+                None if gate is None else gate.gather(1, tail_indices.unsqueeze(-1).expand(-1, -1, gate.shape[-1]))
+            )
+            cache_layer.buffer_positions["compressor"] = positions.gather(1, tail_indices)
+            cache_layer.buffer_lengths["compressor"] = remainder
+            cache_layer.token_count["compressor"] = query_lengths[:, -1]
+
+        group_indices = order[:, : n_groups * ratio]
+        group_positions = positions.gather(1, group_indices[:, ::ratio])
+        if n_groups == 0:
+            return None, group_positions, group_counts, query_lengths
+        grouped_kv = kv.gather(1, group_indices.unsqueeze(-1).expand(-1, -1, kv.shape[-1]))
+        valid = torch.arange(n_groups, device=kv.device).unsqueeze(0) < group_counts.unsqueeze(-1)
+        if gate is None:
+            latent = grouped_kv
+        else:
+            grouped_gate = gate.gather(1, group_indices.unsqueeze(-1).expand(-1, -1, gate.shape[-1]))
+            grouped_kv = grouped_kv.reshape(batch, n_groups, ratio, -1)
+            grouped_gate = grouped_gate.reshape(batch, n_groups, ratio, -1)
+            latent = (grouped_kv * grouped_gate.softmax(dim=2, dtype=torch.float32)).sum(dim=2)
+        latent = latent.masked_fill(~valid.unsqueeze(-1), 0)
+        return self.kv_norm(latent.to(hidden_states.dtype)), group_positions, group_counts, query_lengths
 
 
 def select_candidate_blocks(
@@ -586,7 +663,7 @@ class DeepseekV41Indexer(nn.Module):
         hidden_states: torch.Tensor,
         q_residual: torch.Tensor,
         latent: torch.Tensor | None,
-        first_group_position: int,
+        group_positions: torch.Tensor | None,
         position_ids: torch.Tensor,
         cache_layer: DeepseekV41CSACache | None,
         shared: dict,
@@ -607,17 +684,14 @@ class DeepseekV41Indexer(nn.Module):
                 shared["index_k"] = None
             if latent is not None:
                 k = self.k_norm(self.k_proj(latent))
-                positions = first_group_position + ratio * torch.arange(latent.shape[1], device=k.device)
-                cos, sin = self.rotary_emb(
-                    k, position_ids=positions.unsqueeze(0).expand(batch, -1), layer_type="compress"
-                )
+                cos, sin = self.rotary_emb(k, position_ids=group_positions, layer_type="compress")
                 k = apply_rotary_pos_emb(k, cos, sin)
                 # QAT semantics: indexer keys are FP4-quantized (ue8m0 scale per 32
                 # channels) before they land in the shared key cache.
                 k = _fake_quant_fp4_block(k, block_size=32)
                 k = k.unsqueeze(1)  # [B, 1, G, idh]
                 if cache_layer is not None:
-                    cache_layer.update_compressor_states("indexer", k)
+                    cache_layer.update_compressor_states("indexer", k, shared["group_counts"], ratio)
                 else:
                     shared["index_k"] = k
             # Publish the RUNNING key cache — decode steps between group boundaries emit
@@ -646,10 +720,9 @@ class DeepseekV41Indexer(nn.Module):
         q = _fake_quant_fp4_block(q, block_size=32).float()
         keys = index_k[:, 0].float()  # [B, T, idh]
         weights = self.weights_proj(hidden_states).float() * self.heads_scaling  # [B, S, heads]
-        # Visibility: a group becomes visible once the query passed its last token — in
-        # ABSOLUTE positions, so a chunk that starts mid-sequence sees exactly the groups
-        # it could see in a one-shot prefill. Trailing axis kept for explicit broadcasts.
-        compress_lens = (position_ids.long().unsqueeze(-1) + 1) // ratio  # [B, S, 1]
+        # Counts follow live tokens, independently of padding offsets or custom
+        # RoPE coordinates. A pooled entry becomes visible only after its last token.
+        compress_lens = shared["compress_lens"].to(keys.device).unsqueeze(-1)
         entry_indices = torch.arange(compressed_len, device=keys.device).view(1, 1, -1)
         top_k = min(self.index_topk, compressed_len)
         candidates_prev = shared.get("candidates") if (self.uses_candidates and not self.is_candidate_source) else None
@@ -735,9 +808,8 @@ class DeepseekV41Attention(nn.Module):
         self.is_index_source = layer_idx in config.index_source_layer_ids
         self.compressor = DeepseekV41Compressor(config, layer_idx) if self.is_kv_source else None
         self.indexer = DeepseekV41Indexer(config, layer_idx) if self.is_index_source else None
-        # The compress-rope cos/sin here are evaluated at the LATENT positions
-        # (first_group_position + ratio*k), which are only known after the compressor
-        # runs; the model-level rotary cannot precompute them in `position_embeddings`.
+        # Latent RoPE positions come from each complete group's first live token,
+        # including partial groups carried across cached calls.
         # Only kv-source layers own one (shared by their group).
         self.compress_rotary = DeepseekV41RotaryEmbedding(config) if self.is_kv_source else None  # trf-ignore: TRF050
 
@@ -754,6 +826,7 @@ class DeepseekV41Attention(nn.Module):
         # model-level kwargs straight in, and it must stay available to the attention
         # interface below (padding-free paths read it from kwargs).
         position_ids = kwargs["position_ids"]
+        padding_mask = kwargs.pop("padding_mask", None)
         batch, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings[self.rope_layer_type]
 
@@ -773,34 +846,35 @@ class DeepseekV41Attention(nn.Module):
         selected_kv = selected_valid = None
         if self.compress_ratio:
             cache_layer = past_key_values.layers[self.layer_idx] if past_key_values is not None else None
-            latent, first_group_position = (None, 0)
+            latent = group_positions = None
             if self.is_kv_source:
                 if cache_layer is None:
                     shared["compress_kv"] = None
-                latent, first_group_position = self.compressor(hidden_states, cache_layer)
+                latent, group_positions, group_counts, query_lengths = self.compressor(
+                    hidden_states, cache_layer, position_ids, padding_mask
+                )
+                shared["group_counts"] = group_counts
+                shared["compress_lens"] = query_lengths // self.compress_ratio
+                if padding_mask is not None:
+                    shared["compress_lens"] = shared["compress_lens"].masked_fill(~padding_mask, 0)
 
             # The indexer consumes the PRE-rope latent; it must run before the latent is
             # rotated into the main compressed cache.
             if self.is_index_source:
-                self.indexer(
-                    hidden_states, q_residual, latent, first_group_position, position_ids, cache_layer, shared
-                )
+                self.indexer(hidden_states, q_residual, latent, group_positions, position_ids, cache_layer, shared)
             topk_idx = shared.get("topk_idx")
 
             if latent is not None:
-                positions = first_group_position + self.compress_ratio * torch.arange(
-                    latent.shape[1], device=latent.device
-                )
-                cos_c, sin_c = self.compress_rotary(
-                    latent, position_ids=positions.unsqueeze(0).expand(batch, -1), layer_type="compress"
-                )
+                cos_c, sin_c = self.compress_rotary(latent, position_ids=group_positions, layer_type="compress")
                 rotated = apply_rotary_pos_emb(latent, cos_c, sin_c)
                 # QAT semantics: the compressed KV cache stores FP4-quantized latents
                 # (e2m1 grid, one e4m3 scale per 16 channels).
                 rotated = _fake_quant_fp4_block(rotated, block_size=16, e4m3_scales=True)
                 rotated = rotated.unsqueeze(1)  # [B, 1, G, hd]
                 if cache_layer is not None:
-                    cache_layer.update_compressor_states("compressor", rotated)
+                    cache_layer.update_compressor_states(
+                        "compressor", rotated, shared["group_counts"], self.compress_ratio
+                    )
                 else:
                     shared["compress_kv"] = rotated
             if self.is_kv_source and cache_layer is not None:
@@ -1575,10 +1649,37 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
         elif self.engram_layout:
             # The engram hashes token ids; there is no way to recover them from embeddings.
             raise ValueError("engram layers require `input_ids` (the hash state cannot consume `inputs_embeds`)")
+        seq_len = inputs_embeds.shape[1]
+        padding_mask = None
+        source_mask = next(iter(attention_mask.values())) if isinstance(attention_mask, dict) else attention_mask
+        if isinstance(source_mask, torch.Tensor):
+            if source_mask.ndim == 2:
+                padding_mask = source_mask[:, -seq_len:].bool()
+            elif source_mask.ndim == 4:
+                # A causal mask's current-token diagonal retains key liveness even
+                # after padding has been folded into an additive mask.
+                visible = source_mask if source_mask.dtype == torch.bool else source_mask == 0
+                padding_mask = visible.diagonal(offset=source_mask.shape[-1] - seq_len, dim1=-2, dim2=-1).any(1)
+            if padding_mask is not None:
+                padding_mask = padding_mask.to(inputs_embeds.device).expand(inputs_embeds.shape[0], -1)
         if position_ids is None:
-            past_seen = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen
-            position_ids = position_ids.unsqueeze(0).expand(inputs_embeds.shape[0], -1)
+            if isinstance(source_mask, torch.Tensor) and source_mask.ndim == 2:
+                position_ids = (source_mask.long().cumsum(-1) - 1)[:, -seq_len:].to(inputs_embeds.device)
+                position_ids = position_ids.masked_fill(~padding_mask, 0)
+            else:
+                past_seen = past_key_values.get_seq_length() if past_key_values is not None else 0
+                # CODEPATH: DeepSeek-V4.1-Flash has KV sources [2, 8, 14, 20].
+                # Custom sliding-only configs have none and use the physical cache length.
+                if past_key_values is not None and self.config.kv_source_layer_ids:
+                    source_cache = past_key_values.layers[self.config.kv_source_layer_ids[0]]
+                    count = source_cache.token_count["compressor"]
+                    if count is not None:
+                        past_seen = count.to(inputs_embeds.device).unsqueeze(-1)
+                if padding_mask is None:
+                    position_ids = torch.arange(seq_len, device=inputs_embeds.device).unsqueeze(0) + past_seen
+                else:
+                    position_ids = (padding_mask.long().cumsum(-1) - 1 + past_seen).masked_fill(~padding_mask, 0)
+                position_ids = position_ids.expand(inputs_embeds.shape[0], -1)
         if isinstance(attention_mask, dict):
             # `generate()` may pass a per-layer-type mask dict; both V4.1 layer types
             # attend over the same sliding window, so any of them works.
@@ -1591,6 +1692,12 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
                 past_key_values=past_key_values,
                 position_ids=position_ids,
             )
+        if causal_mask is not None and causal_mask.dtype == torch.bool:
+            causal_mask = torch.where(
+                causal_mask,
+                inputs_embeds.new_zeros(()),
+                inputs_embeds.new_full((), torch.finfo(inputs_embeds.dtype).min),
+            )
 
         hidden_states = inputs_embeds.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
         position_embeddings = {
@@ -1599,14 +1706,9 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
         }
         engram_rows: dict[int, torch.Tensor] = {}
         if self.engram_hash_state is not None:
-            # Pads (attention_mask == 0) are hashed as DEAD so n-grams never span them.
-            # Only a 2D mask carries per-token liveness; generate()'s per-layer-type
-            # mask dict has no 2D form to read it from. The mask spans the whole
-            # sequence, the hashes only the current chunk.
-            live_mask = None
-            if isinstance(attention_mask, torch.Tensor) and attention_mask.dim() == 2:
-                live_mask = attention_mask[:, -input_ids.shape[1] :].bool()
-            hash_ids = self.engram_hash_state(input_ids, live_mask, past_key_values)
+            # Padding is DEAD in the hash history, including when a precomputed
+            # causal mask supplied the current-token liveness.
+            hash_ids = self.engram_hash_state(input_ids, padding_mask, past_key_values)
             # Gather each engram layer's rows here, where the tables live (host RAM under
             # `device_map`); the layers receive dense rows on their own device.
             for k, layer_idx in enumerate(self.config.engram_layer_ids):
@@ -1630,6 +1732,7 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 attention_mask=causal_mask,
+                padding_mask=padding_mask,
                 past_key_values=past_key_values,
             )
         # Final collapse with the last site's pre mix, then the shared norm.
