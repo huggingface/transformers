@@ -258,14 +258,6 @@ class Qwen3MoeTopKRouter(nn.Module):
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
-        # HF_MOE_FUSED_ROUTER=1 does the softmax, the top-k and the renormalisation in one kernel: the three
-        # library calls below are 0.77 ms of a 15.5 ms Qwen3-30B-A3B decode step at tp4 to read 65 KB
-        from ...integrations.moe_routing import fused_softmax_topk, fused_softmax_topk_available
-
-        if fused_softmax_topk_available(router_logits):
-            router_scores, router_indices = fused_softmax_topk(router_logits, self.top_k, self.norm_topk_prob)
-            return router_logits, router_scores, router_indices
-
         router_probs = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
         router_top_value, router_indices = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
         if self.norm_topk_prob:
