@@ -570,12 +570,16 @@ class DogeModel(DogePreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
+        # Doge merges the causal mask into its dynamic mask (`prepare_dynamic_mask`) and always passes a non-None
+        # mask to the attention function, so sdpa can never rely on its `is_causal` flag: the causal mask must
+        # always be materialized, otherwise future tokens leak into the attention under sdpa.
         causal_mask = mask_function(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             position_ids=position_ids,
+            allow_is_causal_skip=False,
         )
 
         hidden_states = inputs_embeds

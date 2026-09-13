@@ -336,6 +336,45 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_save_load_fast_init_from_base(self):
         pass
 
+    def test_sdpa_does_not_attend_to_future_tokens(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/48748
+        # Doge merges the causal mask into its dynamic mask and always passes a non-None mask to the attention
+        # function, so sdpa cannot rely on its `is_causal` flag. If the causal mask is not materialized (the
+        # `allow_is_causal_skip` optimization), sdpa attends to future tokens while eager does not.
+        config, input_ids, *_ = self.model_tester.prepare_config_and_inputs()
+        input_ids = input_ids[:1, :]  # single row, no padding -> causal mask would be skipped under sdpa
+
+        perturbed_ids = input_ids.clone()
+        perturbed_ids[0, -1] = (perturbed_ids[0, -1] + 1) % config.vocab_size
+
+        for impl in ["eager", "sdpa"]:
+            set_seed(0)  # identical weights across implementations
+            model = DogeForCausalLM(config)
+            model.set_attn_implementation(impl)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                logits = model(input_ids=input_ids).logits
+                perturbed_logits = model(input_ids=perturbed_ids).logits
+            # logits at positions before the last one must not depend on the last token
+            self.assertTrue(
+                torch.allclose(logits[:, :-1], perturbed_logits[:, :-1], atol=1e-5),
+                f"{impl} attention attends to future tokens",
+            )
+
+            set_seed(0)
+            reference_model = DogeForCausalLM(config)
+            reference_model.set_attn_implementation("eager")
+            reference_model.to(torch_device)
+            reference_model.eval()
+            with torch.no_grad():
+                reference_logits = reference_model(input_ids=input_ids).logits
+            self.assertTrue(
+                torch.allclose(logits, reference_logits, atol=1e-4),
+                f"{impl} logits diverge from eager logits",
+            )
+
+
     def test_tp_plan_matches_params(self):
         """Need to overwrite as the plan contains keys that are valid but depend on some configs flags and cannot
         be valid all at the same time"""
