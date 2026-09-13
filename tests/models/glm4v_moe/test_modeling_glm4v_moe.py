@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch GLM-4.5V model."""
 
 import copy
+import tempfile
 import unittest
 
 from transformers import (
@@ -35,6 +36,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -286,16 +288,18 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
 @require_torch
 @slow
-class Glm4vMoeIntegrationTest(unittest.TestCase):
+class Glm4vMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.model = None
+        cls.offload_dir = None
 
     @classmethod
     def get_model(cls):
         if cls.model is None:
+            cls.offload_dir = tempfile.TemporaryDirectory()
             cls.model = Glm4vMoeForConditionalGeneration.from_pretrained(
-                "zai-org/GLM-4.5V", dtype="auto", device_map="auto"
+                "zai-org/GLM-4.5V", dtype="auto", device_map="auto", offload_folder=cls.offload_dir.name
             )
         return cls.model
 
@@ -303,10 +307,13 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
     def tearDownClass(cls):
         if hasattr(cls, "model"):
             del cls.model
+        if cls.offload_dir is not None:
+            cls.offload_dir.cleanup()
+            cls.offload_dir = None
         cleanup(torch_device, gc_collect=True)
 
     def setUp(self):
-        cleanup(torch_device, gc_collect=True)
+        super().setUp()
         self.processor = AutoProcessor.from_pretrained(
             "zai-org/GLM-4.5V", size={"shortest_edge": 10800, "longest_edge": 10800}
         )
@@ -356,9 +363,6 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
                 ],
             }
         ]
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     def test_small_model_integration_test(self):
         inputs = self.processor.apply_chat_template(
@@ -433,24 +437,26 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
     @require_flash_attn
     @require_torch_accelerator
     def test_small_model_integration_test_batch_flashatt2(self):
-        model = Glm4vMoeForConditionalGeneration.from_pretrained(
-            "zai-org/GLM-4.5V",
-            dtype=torch.bfloat16,
-            attn_implementation="flash_attention_2",
-            device_map="auto",
-        )
-        batch_messages = [self.message, self.message2, self.message_wo_image]
-        inputs = self.processor.apply_chat_template(
-            batch_messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            return_tensors="pt",
-            padding=True,
-        ).to(torch_device)
+        with tempfile.TemporaryDirectory() as offload_dir:
+            model = Glm4vMoeForConditionalGeneration.from_pretrained(
+                "zai-org/GLM-4.5V",
+                dtype=torch.bfloat16,
+                attn_implementation="flash_attention_2",
+                device_map="auto",
+                offload_folder=offload_dir,
+            )
+            batch_messages = [self.message, self.message2, self.message_wo_image]
+            inputs = self.processor.apply_chat_template(
+                batch_messages,
+                tokenize=True,
+                add_generation_prompt=True,
+                return_dict=True,
+                return_tensors="pt",
+                padding=True,
+            ).to(torch_device)
 
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=3)
+            # it should not matter whether two images are the same size or not
+            output = model.generate(**inputs, max_new_tokens=3)
 
         EXPECTED_DECODED_TEXT = [
             "\nWhat kind of dog is this?\n<think>Got it",
