@@ -19,13 +19,19 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_torch, require_torch_accelerator, require_torch_multi_accelerator, slow
 
 
 if is_torch_available():
     import torch
 
-    from transformers import DeepseekV41ForCausalLM, DeepseekV41TextConfig, DeepseekV41TextModel
+    from transformers import (
+        AutoModelForCausalLM,
+        AutoTokenizer,
+        DeepseekV41ForCausalLM,
+        DeepseekV41TextConfig,
+        DeepseekV41TextModel,
+    )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -741,3 +747,66 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
         with torch.no_grad():
             after = loaded(inputs).logits
         self.assertTrue(torch.allclose(before, after, atol=1e-5))
+
+
+@require_torch_accelerator
+@slow
+class DeepseekV41IntegrationTest(unittest.TestCase):
+    """End-to-end checks on the published DeepSeek-V4.1-Flash checkpoint (476 GiB on disk:
+    fp8 attention, packed-fp4 routed experts, two ~98 GB fp8 engram tables), through the
+    standard loading path — the fp8 quantizer keeps the weights quantized on CUDA and the
+    engram tables stay in host RAM when no accelerator can hold them. The expected tokens
+    were reproduced on 4×H100 (with CPU offload), 8×H100 and, under expert parallelism,
+    8×H200; they match the eager fp32 reference harness token-for-token. Run manually::
+
+        RUN_SLOW=1 pytest tests/models/deepseek_v41/test_modeling_deepseek_v41.py::DeepseekV41IntegrationTest -s
+        RUN_SLOW=1 torchrun --nproc-per-node 8 -m pytest ... -k expert_parallel
+    """
+
+    model_id = "deepseek-ai/DeepSeek-V4.1-Flash"
+    # The repo ships no chat template; this is `encoding.encode_messages([user], "chat")`
+    # for "Say hello and tell me what model you are." (bos, <|User|>, ..., <|Assistant|>, </think>).
+    prompt_ids = [0, 128803, 63006, 44388, 305, 4575, 678, 1205, 2645, 440, 477, 16, 128804, 128822]
+    expected_ids = [19923, 3, 342, 4571, 22651, 4374, 1465, 14, 411, 7703, 22896, 5572, 513, 22651, 4374, 1465]
+    expected_text = "Hello! I'm DeepSeek, an AI assistant created by DeepSeek"
+
+    def _generate(self, model):
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        inputs = torch.tensor([self.prompt_ids], device=model.device)
+        with torch.no_grad():
+            out = model.generate(inputs, max_new_tokens=16, do_sample=False)
+        new = out[0, inputs.shape[1] :].tolist()
+        self.assertEqual(tokenizer.decode(new), self.expected_text)
+        self.assertEqual(new, self.expected_ids)
+
+    @require_torch_multi_accelerator
+    def test_v41_flash_fp8_generation(self):
+        """`device_map="auto"` over the available accelerators: fp8 / fp4 weights kept
+        quantized (dequantize=False on CUDA), engram tables excluded from placement."""
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map="auto")
+        self._generate(model)
+
+    @require_torch_multi_accelerator
+    def test_v41_flash_expert_parallel_generation(self):
+        """Expert parallelism (one process per accelerator, launched with torchrun):
+        `base_model_ep_plan` shards the fp4 experts along the expert axis and the engram
+        tables along their embedding dim. Needs >= 141 GB per rank on 8 ranks."""
+        import os
+
+        if "WORLD_SIZE" not in os.environ:
+            self.skipTest("launch with torchrun to run the expert-parallel test")
+        from transformers.distributed.configuration_utils import DistributedConfig
+
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id,
+            dtype=torch.bfloat16,
+            distributed_config=DistributedConfig(tp_size=int(os.environ["WORLD_SIZE"]), enable_expert_parallel=True),
+        )
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        inputs = torch.tensor([self.prompt_ids], device=model.device)
+        with torch.no_grad():
+            out = model.generate(inputs, max_new_tokens=16, do_sample=False)
+        # The DeepGEMM / dynamic-activation-quant kernels are not bit-identical to the
+        # Triton path: check the answer, not the exact ids.
+        text = tokenizer.decode(out[0, inputs.shape[1] :], skip_special_tokens=True)
+        self.assertTrue(text.startswith("Hello! I'm"), text)
