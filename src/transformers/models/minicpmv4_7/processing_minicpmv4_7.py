@@ -16,16 +16,17 @@ import numpy as np
 import torch
 
 from ...image_utils import ImageInput, make_flat_list_of_images
-from ...processing_utils import BatchFeature, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import BatchFeature, ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput, make_batched_videos
+from ..minicpmv4_6.processing_minicpmv4_6 import MiniCPMV4_6Processor, MiniCPMV4_6ProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
 
 
-class MiniCPMV4_7ProcessorKwargs(ProcessingKwargs, total=False):
+class MiniCPMV4_7ProcessorKwargs(MiniCPMV4_6ProcessorKwargs, total=False):
     _defaults = {
         "common_kwargs": {
             "return_tensors": "pt",
@@ -41,28 +42,8 @@ class MiniCPMV4_7ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 @auto_docstring
-class MiniCPMV4_7Processor(ProcessorMixin):
+class MiniCPMV4_7Processor(MiniCPMV4_6Processor):
     valid_processor_kwargs = MiniCPMV4_7ProcessorKwargs
-
-    def __init__(self, image_processor=None, video_processor=None, tokenizer=None, chat_template=None, **kwargs):
-        super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template, **kwargs)
-        self.slice_mode = self.image_processor.slice_mode
-        self.video_slice_mode = self.video_processor.slice_mode
-        self.default_use_image_id = self.image_processor.use_image_id
-        self.image_token_divisor = 4 if self.image_processor.downsample_mode == "4x" else 16
-        self.video_token_divisor = 4 if self.video_processor.downsample_mode == "4x" else 16
-
-        self.image_token = tokenizer.image_token
-        self.video_token = tokenizer.video_token
-        self.image_token_id = tokenizer.image_token_id
-        self.video_token_id = tokenizer.video_token_id
-
-        self.image_start_token = tokenizer.image_start_token
-        self.image_end_token = tokenizer.image_end_token
-        self.slice_start_token = tokenizer.slice_start_token
-        self.slice_end_token = tokenizer.slice_end_token
-        self.image_id_start_token = tokenizer.image_id_start_token
-        self.image_id_end_token = tokenizer.image_id_end_token
 
     @auto_docstring
     def __call__(
@@ -150,27 +131,13 @@ class MiniCPMV4_7Processor(ProcessorMixin):
 
         return BatchFeature(data, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion)
 
-    def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwargs):
-        if text is None:
-            raise ValueError("You have to specify `text` input to process.")
-        super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
-
     def _process_images(self, images, mrope_tgt_sizes_per_sample, sample_ids, **kwargs):
-        img_downsample = kwargs.get("downsample_mode", self.image_processor.downsample_mode)
-        image_token_divisor = 4 if img_downsample == "4x" else 16
-        processed_images = self.image_processor(images, **kwargs)
-
-        image_replacements = []
+        processed_images, image_replacements = MiniCPMV4_6Processor._process_images(self, images, **kwargs)
         images = make_flat_list_of_images(images)
         for idx in range(len(images)):
-            replacement_text = self.replace_image_token(
-                processed_images, image_idx=idx, image_token_divisor=image_token_divisor
-            )
-            image_replacements.append(replacement_text)
             if idx < len(sample_ids):
                 img_target_sizes = self._image_target_sizes(processed_images, idx)
                 mrope_tgt_sizes_per_sample[sample_ids[idx]].extend(img_target_sizes.tolist())
-
         return processed_images, image_replacements
 
     @staticmethod
@@ -181,35 +148,10 @@ class MiniCPMV4_7Processor(ProcessorMixin):
         end_idx = cum_patches[image_idx]
         return image_inputs["target_sizes"][start_idx:end_idx]
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
-        img_target_sizes = self._image_target_sizes(image_inputs, image_idx)
-        num_tokens_per_patch = img_target_sizes.prod(-1) // kwargs["image_token_divisor"]
-        num_rows, num_cols = image_inputs["grids"][image_idx]
-
-        image_placeholder = (
-            self.image_start_token + self.image_token * int(num_tokens_per_patch[0]) + self.image_end_token
-        )
-
-        if self.slice_mode and num_rows > 0 and num_cols > 0:
-            per_slice_tokens = int(num_tokens_per_patch[1]) if len(num_tokens_per_patch) > 1 else 0
-            slice_placeholder = self.slice_start_token + self.image_token * per_slice_tokens + self.slice_end_token
-            slices = [slice_placeholder * num_cols for _ in range(num_rows)]
-            image_placeholder += "\n".join(slices)
-
-        return image_placeholder
-
     def _process_videos(self, videos, mrope_tgt_sizes_per_sample, sample_ids, **kwargs):
-        vid_downsample = kwargs.get("downsample_mode", self.video_processor.downsample_mode)
-        video_token_divisor = 4 if vid_downsample == "4x" else 16
-        processed_videos = self.video_processor(videos, **kwargs)
-
-        video_replacements = []
+        processed_videos, video_replacements = MiniCPMV4_6Processor._process_videos(self, videos, **kwargs)
         videos = make_batched_videos(videos)
         for idx in range(len(videos)):
-            replacement_text = self.replace_video_token(
-                processed_videos, video_idx=idx, video_token_divisor=video_token_divisor
-            )
-            video_replacements.append(replacement_text)
             if idx < len(sample_ids):
                 for frame_ts, _, _ in self._iter_video_frames(processed_videos, idx):
                     mrope_tgt_sizes_per_sample[sample_ids[idx]].extend(frame_ts.tolist())
@@ -235,47 +177,11 @@ class MiniCPMV4_7Processor(ProcessorMixin):
             grid_rows, grid_cols = video_grids[frame_start_idx]
             yield video_target_sizes[start_idx:end_idx], grid_rows, grid_cols
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
-        video_placeholder = ""
-        for frame_ts, grid_rows, grid_cols in self._iter_video_frames(video_inputs, video_idx):
-            frame_tokens = frame_ts.prod(-1) // kwargs["video_token_divisor"]
-            if len(frame_tokens) == 0:
-                continue
-
-            frame_placeholder = self.image_start_token + self.video_token * int(frame_tokens[0]) + self.image_end_token
-            if self.video_slice_mode and grid_rows > 0 and grid_cols > 0:
-                per_slice_tokens = int(frame_tokens[1]) if len(frame_tokens) > 1 else 0
-                slice_placeholder = self.slice_start_token + self.video_token * per_slice_tokens + self.slice_end_token
-                slices = [slice_placeholder * grid_cols for _ in range(grid_rows)]
-                frame_placeholder += "\n".join(slices)
-            video_placeholder += frame_placeholder
-        return video_placeholder
-
     def _sample_ids_per_visual(self, text, token) -> list[int]:
         """Map each visual input to the index of the sample it belongs to, following the order of `token` in `text`."""
         if text is None:
             return []
         return [sample_idx for sample_idx, sample in enumerate(text) for _ in range(sample.count(token))]
-
-    def _prepend_local_ids(self, text, replacements, token):
-        """Prepend local (per-sample) image/video ID tokens to each replacement string."""
-        new_replacements = []
-        global_idx = 0
-        for sample in text:
-            n_tokens = sample.count(token)
-            for local_idx in range(n_tokens):
-                prefix = f"{self.image_id_start_token}{local_idx}{self.image_id_end_token}"
-                new_replacements.append(prefix + replacements[global_idx])
-                global_idx += 1
-        return new_replacements
-
-    def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
-        texts = self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
-        return [t.strip() for t in texts]
-
-    @property
-    def unused_input_names(self) -> list[str]:
-        return ["num_patches_per_image", "grids", "grids_videos", "num_patches_per_frame", "num_frames_per_video"]
 
 
 __all__ = ["MiniCPMV4_7Processor"]
