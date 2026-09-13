@@ -284,11 +284,6 @@ class ModernBertAttention(nn.Module):
         self.config = config
         self.layer_idx = layer_idx
 
-        if config.hidden_size % config.num_attention_heads != 0:
-            raise ValueError(
-                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention heads ({config.num_attention_heads})"
-            )
-
         self.attention_dropout = config.attention_dropout
         self.deterministic_flash_attn = config.deterministic_flash_attn
         self.head_dim = config.hidden_size // config.num_attention_heads

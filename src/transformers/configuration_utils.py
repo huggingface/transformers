@@ -349,6 +349,22 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         if per_layer_config is not None:
             self.per_layer_config = per_layer_config
 
+        # `head_dim` is standardised onto the config. Models used to derive it inline as
+        # `hidden_size // num_attention_heads`, each one re-deriving it and each one carrying its own
+        # `hidden_size % num_attention_heads` guard against the truncation that division hides. Models
+        # that size the head independently of the hidden size -- T5's `d_kv`, GLM's explicit head_dim --
+        # either declare the field or map it through `attribute_map`, so setting a default here never
+        # overwrites a real value. Same expression the modeling code already used, so nothing changes
+        # numerically; it just lives in one place and is visible on the config.
+        # Heterogeneous configs carry a head_dim per layer and raise on the global read, so they are
+        # left alone -- there is no single value to default them to.
+        if not getattr(self, "is_heterogeneous", False):
+            if getattr(self, "head_dim", None) is None:
+                hidden_size = getattr(self, "hidden_size", None)
+                num_heads = getattr(self, "num_attention_heads", None)
+                if isinstance(hidden_size, int) and isinstance(num_heads, int) and num_heads > 0:
+                    self.head_dim = hidden_size // num_heads
+
         # TODO: to support models whose input embedding module is not named `embed_tokens` (e.g. GPT-NeoX's `embed_in`).
         if getattr(self, "tie_word_embeddings", False) and self.base_model_tp_plan is not None:
             self.base_model_tp_plan = {

@@ -101,11 +101,6 @@ class Gemma2Config(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.hidden_size % self.num_attention_heads != 0:
-            raise ValueError(
-                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({self.num_attention_heads})."
-            )
 
 
 __all__ = ["Gemma2Config"]
