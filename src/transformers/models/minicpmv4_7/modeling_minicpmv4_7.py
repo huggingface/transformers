@@ -48,6 +48,21 @@ from ..auto import AutoModel
 from .configuration_minicpmv4_7 import MiniCPMV4_7Config, MiniCPMV4_7VisionConfig
 
 
+class MiniCPMV4_7PreTrainedModel(PreTrainedModel):
+    config_class = MiniCPMV4_7Config
+    base_model_prefix = "model"
+    input_modalities = ("image", "video", "text")
+    supports_gradient_checkpointing = True
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _no_split_modules = [
+        "MiniCPMV4_7VisionEmbeddings",
+        "MiniCPMV4_7VisionEncoderLayer",
+        "MiniCPMV4_7ViTWindowAttentionMerger",
+    ]
+    _is_stateful = True
+
+
 class MiniCPMV4_7VisionEmbeddings(nn.Module):
     """
     This is a modified version of `siglip.modelign_siglip.SiglipVisionEmbeddings` to enable images of variable
@@ -572,21 +587,6 @@ class MiniCPMV4_7Merger(nn.Module):
             processed_features.append(hidden_state)
 
         return processed_features
-
-
-class MiniCPMV4_7PreTrainedModel(PreTrainedModel):
-    config_class = MiniCPMV4_7Config
-    base_model_prefix = "model"
-    input_modalities = ("image", "video", "text")
-    supports_gradient_checkpointing = True
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _no_split_modules = [
-        "MiniCPMV4_7VisionEmbeddings",
-        "MiniCPMV4_7VisionEncoderLayer",
-        "MiniCPMV4_7ViTWindowAttentionMerger",
-    ]
-    _is_stateful = True
 
 
 # ---------------------------------------------------------------------------
@@ -1260,7 +1260,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
             When set to `"4x"` the intermediate `vit_merger` is skipped so that each image keeps
             `4×` more visual tokens. Default `"16x"` mode applies the full merge pipeline.
         """
-        downsample_mode = downsample_mode or self.config.downsample_mode
+        downsample_mode = downsample_mode if downsample_mode else self.config.downsample_mode
         use_vit_merger = downsample_mode != "4x"
         pixel_values = pixel_values.to(dtype=self.vision_tower.dtype)
 
@@ -1393,6 +1393,34 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         )
         return output
 
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Extract video features: repack frames into NaViT format, then vision encoder + merger."
+    )
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        target_sizes_videos: torch.IntTensor,
+        downsample_mode: str | None = None,
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(1, channels, patch_size, seq_len)`):
+            NaViT-packed pixel patches for all video frames. The video processor concatenates
+            every frame's patches along the last dimension into a single sequence with dim-0 = 1,
+            identical to the image packing format.
+        target_sizes_videos (`torch.IntTensor` of shape `(num_patches, 2)`):
+            Height and width (in patches) of each visual unit.
+        downsample_mode (`str`, *optional*):
+            When set to `"4x"` the intermediate `vit_merger` is skipped so that each frame keeps
+            `4×` more visual tokens. Default `"16x"` mode applies the full merge pipeline.
+        """
+        num_frames = pixel_values_videos.shape[0]
+        pixel_values = pixel_values_videos.permute(1, 2, 0, 3).reshape(
+            1, pixel_values_videos.shape[1], pixel_values_videos.shape[2], -1
+        )
+        target_sizes = target_sizes_videos.repeat(num_frames, 1)
+        return self.get_image_features(pixel_values, target_sizes, downsample_mode=downsample_mode)
+
     def get_vision_position_ids(
         self,
         start_position: int,
@@ -1498,39 +1526,12 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
             .expand(batch_size, -1)
         )
 
-    @can_return_tuple
-    @auto_docstring(
-        custom_intro="Extract video features: repack frames into NaViT format, then vision encoder + merger."
-    )
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.FloatTensor,
-        target_sizes_videos: torch.IntTensor,
-        downsample_mode: str | None = None,
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(1, channels, patch_size, seq_len)`):
-            NaViT-packed pixel patches for all video frames. The video processor concatenates
-            every frame's patches along the last dimension into a single sequence with dim-0 = 1,
-            identical to the image packing format.
-        target_sizes_videos (`torch.IntTensor` of shape `(num_patches, 2)`):
-            Height and width (in patches) of each visual unit.
-        downsample_mode (`str`, *optional*):
-            When set to `"4x"` the intermediate `vit_merger` is skipped so that each frame keeps
-            `4×` more visual tokens. Default `"16x"` mode applies the full merge pipeline.
-        """
-        num_frames = pixel_values_videos.shape[0]
-        pixel_values = pixel_values_videos.permute(1, 2, 0, 3).reshape(
-            1, pixel_values_videos.shape[1], pixel_values_videos.shape[2], -1
-        )
-        target_sizes = target_sizes_videos.repeat(num_frames, 1)
-        return self.get_image_features(pixel_values, target_sizes, downsample_mode=downsample_mode)
-
 
 class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: MiniCPMV4_7Config):
+        # Parent would build a MiniCPMV4_6Model; bypass it to build the 4.7 model instead.
         super().__init__(config)
         self.model = MiniCPMV4_7Model(config)
         self.vocab_size = config.text_config.vocab_size
@@ -1665,6 +1666,33 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
             model_inputs["mm_token_type_ids"] = mm_token_type_ids
         return model_inputs
 
+    def _expand_inputs_for_generation(
+        self,
+        expand_size: int = 1,
+        is_encoder_decoder: bool = False,
+        input_ids: torch.LongTensor | None = None,
+        **model_kwargs,
+    ) -> tuple[torch.LongTensor, dict[str, Any]]:
+        ts_keys = ("target_sizes", "target_sizes_videos")
+        mrope_keys = ("image_bounds", "target_sizes_mrope", "special_token_ids", "mm_token_type_ids")
+        saved = {k: model_kwargs.pop(k) for k in (*ts_keys, *mrope_keys) if model_kwargs.get(k) is not None}
+
+        expanded_position_ids = None
+        if (pos := model_kwargs.get("position_ids")) is not None and pos.ndim == 3:
+            expanded_position_ids = model_kwargs.pop("position_ids").repeat_interleave(expand_size, dim=1)
+
+        input_ids, model_kwargs = super()._expand_inputs_for_generation(
+            expand_size=expand_size,
+            is_encoder_decoder=is_encoder_decoder,
+            input_ids=input_ids,
+            **model_kwargs,
+        )
+
+        if expanded_position_ids is not None:
+            model_kwargs["position_ids"] = expanded_position_ids
+        model_kwargs.update(saved)
+        return input_ids, model_kwargs
+
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # Overwritten -- canvas M-RoPE needs 4D position ids [text, T, H, W].
         text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
@@ -1693,33 +1721,6 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
             return torch.cat([text_positions.unsqueeze(0), mrope_positions], dim=0)
 
         return text_positions
-
-    def _expand_inputs_for_generation(
-        self,
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        ts_keys = ("target_sizes", "target_sizes_videos")
-        mrope_keys = ("image_bounds", "target_sizes_mrope", "special_token_ids", "mm_token_type_ids")
-        saved = {k: model_kwargs.pop(k) for k in (*ts_keys, *mrope_keys) if model_kwargs.get(k) is not None}
-
-        expanded_position_ids = None
-        if (pos := model_kwargs.get("position_ids")) is not None and pos.ndim == 3:
-            expanded_position_ids = model_kwargs.pop("position_ids").repeat_interleave(expand_size, dim=1)
-
-        input_ids, model_kwargs = super()._expand_inputs_for_generation(
-            expand_size=expand_size,
-            is_encoder_decoder=is_encoder_decoder,
-            input_ids=input_ids,
-            **model_kwargs,
-        )
-
-        if expanded_position_ids is not None:
-            model_kwargs["position_ids"] = expanded_position_ids
-        model_kwargs.update(saved)
-        return input_ids, model_kwargs
 
 
 __all__ = ["MiniCPMV4_7PreTrainedModel", "MiniCPMV4_7Model", "MiniCPMV4_7ForConditionalGeneration"]

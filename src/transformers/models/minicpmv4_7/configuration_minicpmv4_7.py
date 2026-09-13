@@ -107,6 +107,7 @@ class MiniCPMV4_7Config(PreTrainedConfig):
     downsample_mode: str = "16x"
     merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
     merger_times: int = 1
+
     # Special tokens used by canvas M-RoPE (set by convert / from tokenizer).
     image_start_id: int | None = None
     image_end_id: int | None = None
@@ -129,6 +130,9 @@ class MiniCPMV4_7Config(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen3_5_text"]()
 
+        super().__post_init__(**kwargs)
+
+        # Keep the `language_model.` prefix inheritance for tp/ep plans from `text_config`.
         if getattr(self.text_config, "base_model_tp_plan", None):
             self.base_model_tp_plan = {
                 f"language_model.{k}": v for k, v in self.text_config.base_model_tp_plan.items()
@@ -143,8 +147,6 @@ class MiniCPMV4_7Config(PreTrainedConfig):
             }
         if ep_plan:
             self.base_model_ep_plan = {f"language_model.{k}": v for k, v in ep_plan.items()}
-
-        super().__post_init__(**kwargs)
 
     def get_mrope_special_token_ids(self) -> dict:
         return {
