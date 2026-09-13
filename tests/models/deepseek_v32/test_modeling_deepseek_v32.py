@@ -151,6 +151,11 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = DeepseekV32ModelTester
     model_split_percents = [0.5, 0.7, 0.8]
 
+    def _get_attention_shape(self, batch_size, seq_length, config):
+        # This model caches the compressed MLA latents (`k_pass` as keys, `k_rot` as values) like DeepSeek-V3;
+        # the shared DSA branch in `test_utils` still expects expanded K/V (the case for HY-V4, AXK2, GLM5-Next).
+        return (batch_size, 1, seq_length, config.kv_lora_rank), (batch_size, 1, seq_length, config.qk_rope_head_dim)
+
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = DeepseekV32ForCausalLM if is_torch_available() else None
 
