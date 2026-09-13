@@ -204,6 +204,11 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
 
     def __init__(self, config: GlmMoeDsaConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        # The MLA latent norms use the configured eps rather than the inherited default (1e-6)
+        self.q_a_layernorm = (
+            GlmMoeDsaRMSNorm(config.q_lora_rank, eps=config.rms_norm_eps) if self.q_lora_rank is not None else None
+        )
+        self.kv_a_layernorm = GlmMoeDsaRMSNorm(config.kv_lora_rank, eps=config.rms_norm_eps)
         # Refer: https://arxiv.org/abs/2603.12201 for more details.
         self.skip_topk = config.indexer_types[layer_idx] == "shared"
         self.indexer = None if self.skip_topk else GlmMoeDsaIndexer(config, layer_idx)

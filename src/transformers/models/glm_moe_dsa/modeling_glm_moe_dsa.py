@@ -344,7 +344,10 @@ class GlmMoeDsaAttention(nn.Module):
             if self.q_lora_rank is not None
             else None
         )
-        self.q_a_layernorm = GlmMoeDsaRMSNorm(config.q_lora_rank) if self.q_lora_rank is not None else None
+        # The MLA latent norms use the configured eps rather than the inherited default (1e-6)
+        self.q_a_layernorm = (
+            GlmMoeDsaRMSNorm(config.q_lora_rank, eps=config.rms_norm_eps) if self.q_lora_rank is not None else None
+        )
         self.q_b_proj = (
             nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
             if self.q_lora_rank is not None
@@ -356,7 +359,7 @@ class GlmMoeDsaAttention(nn.Module):
             config.kv_lora_rank + config.qk_rope_head_dim,
             bias=config.attention_bias,
         )
-        self.kv_a_layernorm = GlmMoeDsaRMSNorm(config.kv_lora_rank)
+        self.kv_a_layernorm = GlmMoeDsaRMSNorm(config.kv_lora_rank, eps=config.rms_norm_eps)
         self.kv_b_proj = nn.Linear(
             config.kv_lora_rank,
             self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
