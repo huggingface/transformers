@@ -23,7 +23,7 @@ import time
 import unittest
 from unittest.mock import MagicMock
 
-import httpx
+from huggingface_hub.utils import httpx
 
 from transformers.cli.serve import Serve
 from transformers.cli.serving.chat_completion import ChatCompletionHandler
