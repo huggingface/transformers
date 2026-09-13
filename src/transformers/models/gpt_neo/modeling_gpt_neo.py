@@ -90,7 +90,7 @@ class GPTNeoSelfAttention(nn.Module):
         """
         Splits hidden_size dim into attn_head_size and num_heads
         """
-        new_shape = tensor.size()[:-1] + (num_heads, attn_head_size)
+        new_shape = tensor.size()[:-1] + (-1, attn_head_size)
         tensor = tensor.view(new_shape)
         return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
 
@@ -99,7 +99,7 @@ class GPTNeoSelfAttention(nn.Module):
         Merges attn_head_size dim and num_attn_heads dim into hidden_size
         """
         tensor = tensor.permute(0, 2, 1, 3).contiguous()
-        new_shape = tensor.size()[:-2] + (num_heads * attn_head_size,)
+        new_shape = tensor.size()[:-2] + (-1,)
         return tensor.view(new_shape)
 
     def _attn(self, query, key, value, attention_mask=None):
@@ -200,9 +200,9 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
 
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
-        query = query.transpose(1, 2).view(bsz, query_length, self.num_heads, self.head_dim)
-        key = key.transpose(1, 2).view(bsz, tgt_len, self.num_heads, self.head_dim)
-        value = value.transpose(1, 2).view(bsz, tgt_len, self.num_heads, self.head_dim)
+        query = query.transpose(1, 2).view(bsz, query_length, -1, self.head_dim)
+        key = key.transpose(1, 2).view(bsz, tgt_len, -1, self.head_dim)
+        value = value.transpose(1, 2).view(bsz, tgt_len, -1, self.head_dim)
 
         attn_dropout = self.config.attention_dropout if self.training else 0.0
 
@@ -244,7 +244,7 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
 
-        attn_weights_reshaped = attn_output.reshape(bsz, query_length, self.num_heads * self.head_dim)
+        attn_weights_reshaped = attn_output.reshape(bsz, query_length, -1)
         attn_output = self.out_proj(attn_weights_reshaped)
         attn_output = self.resid_dropout(attn_output)
 
@@ -374,6 +374,8 @@ class GPTNeoPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class GPTNeoModel(GPTNeoPreTrainedModel):
+    _input_embed_layer = "wte"
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -517,6 +519,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 )
 class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config):
         super().__init__(config)

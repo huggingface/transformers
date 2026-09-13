@@ -102,7 +102,7 @@ class BarkSelfAttention(nn.Module):
         """
         Splits hidden_size dim into attn_head_size and num_heads
         """
-        new_shape = tensor.size()[:-1] + (num_heads, attn_head_size)
+        new_shape = tensor.size()[:-1] + (-1, attn_head_size)
         tensor = tensor.view(new_shape)
         return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
 

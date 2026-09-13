@@ -47,6 +47,14 @@ class GPTNeoConfig(PreTrainedConfig):
 
     model_type = "gpt_neo"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "h.*.attn.attention.q_proj": "colwise",
+        "h.*.attn.attention.k_proj": "colwise",
+        "h.*.attn.attention.v_proj": "colwise",
+        "h.*.attn.attention.out_proj": "rowwise",
+        "h.*.mlp.c_fc": "colwise",
+        "h.*.mlp.c_proj": "rowwise",
+    }
     attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
     vocab_size: int = 50257
