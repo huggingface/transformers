@@ -82,17 +82,12 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
-            audio_config = dict(self.audio_config)
-            model_type = audio_config.setdefault("model_type", "whisper")
-            self.audio_config = CONFIG_MAPPING[model_type](**audio_config)
+            self.audio_config = CONFIG_MAPPING["whisper"](**self.audio_config)
         elif self.audio_config is None:
             self.audio_config = CONFIG_MAPPING["whisper"](**self._default_audio_config_kwargs)
 
         if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](
-                **{**self._default_text_config_kwargs, **self.text_config}
-            )
+            self.text_config = CONFIG_MAPPING["qwen3"](**{**self._default_text_config_kwargs, **self.text_config})
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen3"](**self._default_text_config_kwargs)
 

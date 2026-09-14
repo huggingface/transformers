@@ -106,17 +106,12 @@ class MossTranscribeDiarizeConfig(GlmAsrConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
-            audio_config = dict(self.audio_config)
-            model_type = audio_config.setdefault("model_type", "whisper")
-            self.audio_config = CONFIG_MAPPING[model_type](**audio_config)
+            self.audio_config = CONFIG_MAPPING["whisper"](**self.audio_config)
         elif self.audio_config is None:
             self.audio_config = CONFIG_MAPPING["whisper"](**self._default_audio_config_kwargs)
 
         if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](
-                **{**self._default_text_config_kwargs, **self.text_config}
-            )
+            self.text_config = CONFIG_MAPPING["qwen3"](**{**self._default_text_config_kwargs, **self.text_config})
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen3"](**self._default_text_config_kwargs)
 
@@ -380,10 +375,9 @@ class MossTranscribeDiarizeMultiModalProjector(AudioFlamingo3MultiModalProjector
 
 class MossTranscribeDiarizePreTrainedModel(GlmAsrPreTrainedModel):
     config_class = MossTranscribeDiarizeConfig
-    _no_split_modules = None
+    _no_split_modules = ["Qwen3DecoderLayer", "MossTranscribeDiarizeEncoderLayer"]
 
 
-# TODO: whisperencoder issues with modular converter
 class MossTranscribeDiarizeEncoder(WhisperEncoder):
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor) -> torch.LongTensor:
         """Computes the output length of the convolutional layers."""
