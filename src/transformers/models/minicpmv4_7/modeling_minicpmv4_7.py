@@ -594,13 +594,6 @@ class MiniCPMV4_7Merger(nn.Module):
 
 # ---------------------------------------------------------------------------
 # Canvas M-RoPE helpers
-#
-# MiniCPM-V 4.7 always assigns spatial "canvas" M-RoPE positions when multimodal
-# inputs are present (no `mrope_mode` switch, unlike the reference 4.6 prototype).
-# The public API mirrors Qwen2-VL (`get_vision_position_ids` / `get_rope_index` /
-# `compute_3d_position_ids`); these module-level private helpers implement the
-# canvas-specific geometry (thumbnail + slices + merged video frames) that Qwen
-# does not have. They are intentionally *not* a standalone `mrope_*.py` module.
 # ---------------------------------------------------------------------------
 
 
