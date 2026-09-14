@@ -19,10 +19,10 @@ from .audio_processing_musicgen_melody import MusicgenMelodyAudioProcessorMixin
 
 
 class MusicgenMelodyAudioProcessorNumpy(MusicgenMelodyAudioProcessorMixin, NumpyAudioBackend):
-    def compute_features(self, audio, **kwargs):
-        waveform = self._pad_for_fft(audio)
+    def compute_features(self, audio, *, spectrogram_config, n_fft, dither, **kwargs):
+        waveform = self._pad_for_fft(audio, n_fft=n_fft)
         # normalized power spectrogram, matching `torchaudio.transforms.Spectrogram(normalized=True)`
-        spec = self._waveform_to_spectrum(waveform, spectrogram_config=self.power_spectrogram_config)
+        spec = self._waveform_to_spectrum(waveform, spectrogram_config=self.power_spectrogram_config, dither=dither)
 
         raw_chroma = np.matmul(self.chroma_filters, spec)
         # inf-norm over the chroma axis, as `F.normalize(p=inf, dim=-2, eps=1e-6)` does

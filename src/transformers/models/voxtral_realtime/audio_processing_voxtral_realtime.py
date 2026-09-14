@@ -51,14 +51,12 @@ class VoxtralRealtimeAudioProcessorMixin:
     global_log_mel_max = 1.5
     valid_kwargs = VoxtralRealtimeAudioProcessorKwargs
 
-    def _log_compress(self, features, *, spectrogram_config, **kwargs):
+    def _log_compress(self, features, *, spectrogram_config, global_log_mel_max, **kwargs):
         # Voxtral uses a *fixed* `global_log_mel_max` as the upper bound (rather than the
         # per-utterance amax that the base `clip_max_offset` field expects), so we don't set
         # the post-log fields on `spectrogram_config` and handle the whole rescale here.
         features = super()._log_compress(features, spectrogram_config=spectrogram_config, **kwargs)
-        spec_max = (
-            self.global_log_mel_max if self.global_log_mel_max is not None else self._amax_over_features(features)
-        )
+        spec_max = global_log_mel_max if global_log_mel_max is not None else self._amax_over_features(features)
         features = _clamp_min(features, spec_max - 8.0)
         return (features + 4.0) / 4.0
 

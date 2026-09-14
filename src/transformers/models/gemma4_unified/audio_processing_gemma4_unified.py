@@ -45,19 +45,19 @@ class Gemma4UnifiedAudioProcessorMixin:
     audio_samples_per_token = 640
     valid_kwargs = Gemma4UnifiedAudioProcessorKwargs
 
-    def compute_features(self, audio, **kwargs):
-        return [self._chunk_waveform(waveform) for waveform in audio]
+    def compute_features(self, audio, *, audio_samples_per_token, **kwargs):
+        return [self._chunk_waveform(waveform, audio_samples_per_token=audio_samples_per_token) for waveform in audio]
 
 
 class Gemma4UnifiedAudioProcessor(Gemma4UnifiedAudioProcessorMixin, TorchAudioBackend):
-    def _chunk_waveform(self, waveform):
+    def _chunk_waveform(self, waveform, *, audio_samples_per_token):
         """Chunk a 1-D waveform into fixed-length frames of `audio_samples_per_token`
         samples, zero-padding the tail so the last (partial) frame is kept."""
-        pad_len = (-waveform.shape[-1]) % self.audio_samples_per_token
+        pad_len = (-waveform.shape[-1]) % audio_samples_per_token
         if pad_len:
             waveform = torch.nn.functional.pad(waveform, (0, pad_len))
-        num_tokens = waveform.shape[-1] // self.audio_samples_per_token
-        return waveform.reshape(num_tokens, self.audio_samples_per_token).to(torch.float32)
+        num_tokens = waveform.shape[-1] // audio_samples_per_token
+        return waveform.reshape(num_tokens, audio_samples_per_token).to(torch.float32)
 
 
 __all__ = ["Gemma4UnifiedAudioProcessor"]

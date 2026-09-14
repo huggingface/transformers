@@ -83,17 +83,17 @@ class Xcodec2AudioProcessorMixin:
     feature_padding_value = 1.0
     valid_kwargs = Xcodec2AudioProcessorKwargs
 
-    def _downmix_to_mono(self, audio_el):
+    def _downmix_to_mono(self, audio_el, **kwargs):
         # the legacy FE appends one zero sample to every waveform before padding
-        return self._pad_axis(super()._downmix_to_mono(audio_el), 0, 1, axis=-1)
+        return self._pad_axis(super()._downmix_to_mono(audio_el, **kwargs), 0, 1, axis=-1)
 
-    def _pad_semantic_waveform(self, waveform):
+    def _pad_semantic_waveform(self, waveform, *, hop_length):
         # half a codec hop of zeros on both sides, so the fbank frames line up with the codec frames
-        half_hop = self.hop_length // 2
+        half_hop = hop_length // 2
         return self._pad_axis(waveform, half_hop, half_hop, axis=-1)
 
-    def _pad_feature_single(self, feature, max_length):
-        return self._pad_axis(feature, 0, max_length - feature.shape[0], axis=0, value=self.feature_padding_value)
+    def _pad_feature_single(self, feature, max_length, *, feature_padding_value, **kwargs):
+        return self._pad_axis(feature, 0, max_length - feature.shape[0], axis=0, value=feature_padding_value)
 
     def _finalize_output(
         self,
@@ -102,7 +102,13 @@ class Xcodec2AudioProcessorMixin:
         padding=True,
         max_length=None,
         truncation=False,
+        pad_to_multiple_of=None,
         semantic_waveforms=None,
+        *,
+        spectrogram_config,
+        hop_length,
+        stride,
+        feature_padding_value,
         **kwargs,
     ):
         audio_values = output["audio_values"]
@@ -113,25 +119,31 @@ class Xcodec2AudioProcessorMixin:
             if semantic_waveforms is None:
                 # XCodec2's fbank sees the truncated clip rounded up to whole codec hops.
                 valid_length = min(
-                    (end - start + self.hop_length - 1) // self.hop_length * self.hop_length,
+                    (end - start + hop_length - 1) // hop_length * hop_length,
                     padded_length,
                 )
                 waveform = audio_values[i, 0, :valid_length]
             else:
                 # NeuCodec's semantic branch remains independent of acoustic truncation.
                 waveform = semantic_waveforms[i]
-                valid_length = (waveform.shape[-1] + self.hop_length - 1) // self.hop_length * self.hop_length
+                valid_length = (waveform.shape[-1] + hop_length - 1) // hop_length * hop_length
                 waveform = self._pad_axis(waveform, 0, valid_length - waveform.shape[-1], axis=-1)
-            waveform = self._pad_semantic_waveform(waveform)
-            features.append(self._standardize_frames(self.compute_features([waveform])[0]))
+            waveform = self._pad_semantic_waveform(waveform, hop_length=hop_length)
+            features.append(
+                self._standardize_frames(
+                    self.compute_features([waveform], spectrogram_config=spectrogram_config, **kwargs)[0]
+                )
+            )
 
-        features, frame_ranges = self._pad_features(features, padding, max_length, truncation, self.stride)
+        features, frame_ranges = self._pad_features(
+            features, padding, max_length, truncation, stride, feature_padding_value=feature_padding_value, **kwargs
+        )
         batch = self._stack(features)
         mask = self._get_mask(frame_ranges, batch.shape[1])
 
         batch_size, num_frames, num_mel_bins = batch.shape
-        output["audio_features"] = batch.reshape(batch_size, num_frames // self.stride, num_mel_bins * self.stride)
-        stride_groups = mask.reshape(batch_size, num_frames // self.stride, self.stride)
+        output["audio_features"] = batch.reshape(batch_size, num_frames // stride, num_mel_bins * stride)
+        stride_groups = mask.reshape(batch_size, num_frames // stride, stride)
         output["audio_features_mask"] = _array_namespace(mask).amin(stride_groups, -1)
         return output
 

@@ -14,7 +14,6 @@
 
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_processing_utils import BaseAudioProcessor
 from ...processing_utils import AudioKwargs
 
 
@@ -63,31 +62,34 @@ class Qwen3ASRAudioProcessorMixin:
     min_length = 8000
     n_window = 50
     valid_kwargs = Qwen3ASRAudioProcessorKwargs
-    # `_finalize_output` reads the merged `n_window`, so it is a genuine per-call knob.
-    per_call_kwargs = BaseAudioProcessor.per_call_kwargs | {"n_window"}
 
     def _padded_frame_count(self, padded_length, spectrogram_config) -> int:
         # The legacy FE strides the sample-level mask by hop_length and trims the tail column
         return int(padded_length // spectrogram_config.stft_config.hop_length)
 
-    def _finalize_output(self, output, audio_ranges=None, n_window=None, **kwargs):
-        if n_window is None:
-            n_window = self.n_window
+    def _finalize_output(self, output, audio_ranges=None, *, n_window, padding_side, padding_value, **kwargs):
         multiple = 2 * n_window if n_window else 0
         if multiple > 1:
             features = output["audio_features"]
             remainder = features.shape[-1] % multiple
             if remainder:
                 padded_length = features.shape[-1] + multiple - remainder
-                output["audio_features"] = self._pad_waveform(features, padded_length)
+                output["audio_features"] = self._pad_waveform(
+                    features, padded_length, padding_side=padding_side, padding_value=padding_value
+                )
                 if "audio_features_mask" in output:
-                    output["audio_features_mask"] = self._pad_waveform(output["audio_features_mask"], padded_length)
+                    output["audio_features_mask"] = self._pad_waveform(
+                        output["audio_features_mask"],
+                        padded_length,
+                        padding_side=padding_side,
+                        padding_value=padding_value,
+                    )
         return output
 
-    def _downmix_to_mono(self, audio_el):
-        audio_el = super()._downmix_to_mono(audio_el)
-        if self.min_length and audio_el.shape[-1] < self.min_length:
-            audio_el = self._pad_waveform(audio_el, self.min_length)
+    def _downmix_to_mono(self, audio_el, *, min_length, padding_side, padding_value, **kwargs):
+        audio_el = super()._downmix_to_mono(audio_el, **kwargs)
+        if min_length and audio_el.shape[-1] < min_length:
+            audio_el = self._pad_waveform(audio_el, min_length, padding_side=padding_side, padding_value=padding_value)
         return audio_el
 
 

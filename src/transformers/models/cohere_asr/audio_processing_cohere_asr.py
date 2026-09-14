@@ -76,59 +76,76 @@ class CohereAsrAudioProcessorMixin:
     min_energy_window_samples: int = 1600
     valid_kwargs = CohereAsrAudioProcessorKwargs
 
-    def _dither_waveform(self, audio, audio_ranges=None):
-        if self.dither <= 0 or audio_ranges is None:
+    def _dither_waveform(self, audio, audio_ranges=None, *, dither):
+        if dither <= 0 or audio_ranges is None:
             return audio
         noise = _array_namespace(audio).zeros_like(audio)
         for i, (start, end) in enumerate(audio_ranges):
             valid_samples = min(end - start, audio.shape[1])
             if valid_samples > 0:
                 noise[i, :valid_samples] = self._seeded_noise(valid_samples, valid_samples, audio)
-        return audio + self.dither * noise
+        return audio + dither * noise
 
     def _seeded_noise(self, length, seed, like):
         raise NotImplementedError
 
-    def _finalize_output(self, output, audio_ranges=None, **kwargs):
+    def _finalize_output(self, output, audio_ranges=None, *, spectrogram_config, **kwargs):
         if audio_ranges is None or "audio_features" not in output:
             return output
         audio_lengths = np.asarray([end - start for start, end in audio_ranges])
-        frame_counts = self._valid_frame_counts(audio_lengths, self.spectrogram_config)
+        frame_counts = self._valid_frame_counts(audio_lengths, spectrogram_config)
         output["audio_features"] = self._standardize_features(output["audio_features"], frame_counts, eps=1e-5)
         return output
 
     def _preprocess_audio_like_inputs(self, audio, *args, sampling_rate=None, **kwargs):
-        prepared = self._prepare_audio_like_inputs(audio=audio, sampling_rate=sampling_rate)
-        chunked, audio_chunk_index = self._split_audio_chunks(prepared)
+        prepared = self._prepare_audio_like_inputs(audio=audio, sampling_rate=sampling_rate, **kwargs)
+        chunked, audio_chunk_index = self._split_audio_chunks(
+            prepared,
+            max_audio_clip_s=kwargs["max_audio_clip_s"],
+            overlap_chunk_second=kwargs["overlap_chunk_second"],
+            min_energy_window_samples=kwargs["min_energy_window_samples"],
+        )
         result = self._preprocess(chunked, *args, **kwargs)
         result["audio_chunk_index"] = audio_chunk_index
         return result
 
-    def _split_audio_chunks(self, prepared_audio):
+    def _split_audio_chunks(
+        self, prepared_audio, *, max_audio_clip_s, overlap_chunk_second, min_energy_window_samples
+    ):
         """Split audio longer than ``max_audio_clip_s - overlap_chunk_second`` at the
         quietest window. Returns (chunks, [(sample_idx, chunk_idx or None)])."""
-        threshold_s = max(0.0, self.max_audio_clip_s - self.overlap_chunk_second)
+        threshold_s = max(0.0, max_audio_clip_s - overlap_chunk_second)
         chunked, chunk_index = [], []
         for sample_idx, waveform in enumerate(prepared_audio):
             if waveform.shape[0] / self.sampling_rate <= threshold_s:
                 chunked.append(waveform)
                 chunk_index.append((sample_idx, None))
                 continue
-            for chunk_idx, chunk in enumerate(self._split_single_audio(waveform)):
+            for chunk_idx, chunk in enumerate(
+                self._split_single_audio(
+                    waveform,
+                    max_audio_clip_s=max_audio_clip_s,
+                    overlap_chunk_second=overlap_chunk_second,
+                    min_energy_window_samples=min_energy_window_samples,
+                )
+            ):
                 chunked.append(chunk)
                 chunk_index.append((sample_idx, chunk_idx))
         return chunked, chunk_index
 
-    def _split_single_audio(self, waveform):
+    def _split_single_audio(self, waveform, *, max_audio_clip_s, overlap_chunk_second, min_energy_window_samples):
         """Cut into ``max_audio_clip_s`` chunks, each ending at the quietest window within the
         final ``overlap_chunk_second`` so the boundary lands in silence rather than mid-word."""
-        chunk_size = max(1, int(round(self.max_audio_clip_s * self.sampling_rate)))
-        context = max(1, int(round(self.overlap_chunk_second * self.sampling_rate)))
+        chunk_size = max(1, int(round(max_audio_clip_s * self.sampling_rate)))
+        context = max(1, int(round(overlap_chunk_second * self.sampling_rate)))
         total = waveform.shape[0]
         chunks, start = [], 0
         while start + chunk_size < total:
             split = self._find_split_point_energy(
-                waveform, max(start, start + chunk_size - context), start + chunk_size
+                waveform,
+                max(start, start + chunk_size - context),
+                start + chunk_size,
+                min_energy_window_samples=min_energy_window_samples,
             )
             split = max(start + 1, min(split, total))
             chunks.append(waveform[start:split])
@@ -136,11 +153,11 @@ class CohereAsrAudioProcessorMixin:
         chunks.append(waveform[start:total])
         return chunks
 
-    def _find_split_point_energy(self, waveform, start_idx: int, end_idx: int) -> int:
+    def _find_split_point_energy(self, waveform, start_idx: int, end_idx: int, *, min_energy_window_samples) -> int:
         """Start of the quietest non-overlapping ``min_energy_window_samples`` window in
         ``waveform[start_idx:end_idx]``, or the midpoint when the span is too short to scan."""
         segment = waveform[start_idx:end_idx]
-        size = self.min_energy_window_samples
+        size = min_energy_window_samples
         if segment.shape[0] <= size:
             return (start_idx + end_idx) // 2
         xp = _array_namespace(segment)

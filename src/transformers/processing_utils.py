@@ -299,9 +299,7 @@ class ImagesKwargs(TypedDict, total=False):
 
     do_convert_rgb: bool | None
     do_resize: bool | None
-    size: Annotated[
-        int | list[int] | tuple[int, ...] | dict[str, int | None] | SizeDict | None, image_size_validator
-    ]
+    size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int | None] | SizeDict | None, image_size_validator]
     default_to_square: bool | None
     crop_size: Annotated[
         int | list[int] | tuple[int, ...] | dict[str, int | None] | SizeDict | None, image_size_validator
@@ -380,9 +378,7 @@ class VideosKwargs(TypedDict, total=False):
 
     do_convert_rgb: bool | None
     do_resize: bool | None
-    size: Annotated[
-        int | list[int] | tuple[int, ...] | dict[str, int | None] | SizeDict | None, image_size_validator
-    ]
+    size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int | None] | SizeDict | None, image_size_validator]
     default_to_square: bool | None
     resample: Annotated[Union["PILImageResampling", int] | None, resampling_validator]
     do_rescale: bool | None
@@ -433,7 +429,6 @@ class AudioKwargs(TypedDict, total=False):
             feature-level padding (`False`).
         add_channel_dim (`bool`, *optional*):
             Whether to insert a channel axis into the batched waveform, giving `(batch, channels, samples)`.
-            Config only — not accepted by `__call__`; see `per_call_kwargs`.
         padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding
             index) among:
@@ -474,9 +469,9 @@ class AudioKwargs(TypedDict, total=False):
     spectrogram_config: dict | SpectrogramConfig | None
     do_extract_spectrogram: bool | None
     do_batch_spectrogram: bool | None
-    # TODO: remove `add_channel_dim` — from here and from `BaseAudioProcessor.per_call_kwargs`'s exclusion —
-    # once the six codec models that set it (dia, dac, encodec, xcodec2, vibevoice_acoustic_tokenizer,
-    # kyutai_speech_to_text) align their modeling with the library's batch layout.
+    # TODO: remove `add_channel_dim` once the six codec models that set it (dia, dac, encodec, xcodec2,
+    # vibevoice_acoustic_tokenizer, kyutai_speech_to_text) align their modeling with the library's
+    # batch layout.
     add_channel_dim: bool | None
     padding: Annotated[bool | str | PaddingStrategy | None, padding_validator]
     max_length: Annotated[int | None, positive_int]

@@ -59,15 +59,15 @@ class ClvpAudioProcessorMixin:
 
 
 class ClvpAudioProcessor(ClvpAudioProcessorMixin, TorchAudioBackend):
-    def _log_compress(self, features, *, spectrogram_config, **kwargs):
+    def _log_compress(self, features, *, spectrogram_config, mel_norms, **kwargs):
         # Compute log and mel_norms division in float64 before casting to float32
         # to match the legacy feature extractor's precision (same recipe as the numpy sibling).
         mel_floor = spectrogram_config.mel_floor
         features = torch.log(
             torch.maximum(torch.tensor(mel_floor, dtype=features.dtype, device=features.device), features)
         )
-        if self.mel_norms is not None:
-            mel_norms = torch.as_tensor(self.mel_norms, dtype=features.dtype, device=features.device)[:, None]
+        if mel_norms is not None:
+            mel_norms = torch.as_tensor(mel_norms, dtype=features.dtype, device=features.device)[:, None]
             features = features / mel_norms
         return features.to(torch.float32)
 

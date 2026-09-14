@@ -74,15 +74,15 @@ class MusicgenMelodyAudioProcessorMixin:
         filters = librosa.filters.chroma(sr=self.sampling_rate, n_fft=self.n_fft, tuning=0, n_chroma=self.n_chroma)
         self.chroma_filters = self._astype(self._as_backend_array(filters), "float32")
 
-    def _pad_for_fft(self, waveform):
-        if waveform.shape[-1] >= self.n_fft:
+    def _pad_for_fft(self, waveform, *, n_fft):
+        if waveform.shape[-1] >= n_fft:
             return waveform
-        pad = self.n_fft - waveform.shape[-1]
+        pad = n_fft - waveform.shape[-1]
         return self._pad_axis(waveform, pad // 2, pad // 2 + pad % 2, axis=-1)
 
 
 class MusicgenMelodyAudioProcessor(MusicgenMelodyAudioProcessorMixin, TorchAudioBackend):
-    def compute_features(self, audio, **kwargs):
+    def compute_features(self, audio, *, n_fft, hop_length, **kwargs):
         import torch
         import torchaudio
 
@@ -90,8 +90,8 @@ class MusicgenMelodyAudioProcessor(MusicgenMelodyAudioProcessorMixin, TorchAudio
         device = waveform.device
 
         # Pad if too short for FFT
-        if waveform.shape[-1] < self.n_fft:
-            pad = self.n_fft - waveform.shape[-1]
+        if waveform.shape[-1] < n_fft:
+            pad = n_fft - waveform.shape[-1]
             rest = 0 if pad % 2 == 0 else 1
             waveform = torch.nn.functional.pad(waveform, (pad // 2, pad // 2 + rest), "constant", 0)
 
@@ -100,9 +100,9 @@ class MusicgenMelodyAudioProcessor(MusicgenMelodyAudioProcessorMixin, TorchAudio
 
         # Power spectrogram (normalized)
         spec_transform = torchaudio.transforms.Spectrogram(
-            n_fft=self.n_fft,
-            win_length=self.n_fft,
-            hop_length=self.hop_length,
+            n_fft=n_fft,
+            win_length=n_fft,
+            hop_length=hop_length,
             power=2,
             center=True,
             pad=0,

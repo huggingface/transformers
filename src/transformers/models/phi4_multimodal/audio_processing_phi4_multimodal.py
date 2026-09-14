@@ -66,16 +66,20 @@ class Phi4MultimodalAudioProcessorMixin:
     audio_feat_stride = 1
     valid_kwargs = Phi4MultimodalAudioProcessorKwargs
 
-    def _compute_audio_embed_size(self, audio_frames):
-        integer = audio_frames // self.audio_compression_rate
-        result = integer + (audio_frames % self.audio_compression_rate > 0)
+    def _compute_audio_embed_size(self, audio_frames, *, audio_compression_rate, audio_downsample_rate):
+        integer = audio_frames // audio_compression_rate
+        result = integer + (audio_frames % audio_compression_rate > 0)
 
-        integer = result // self.audio_downsample_rate
-        return integer + (result % self.audio_downsample_rate > 0)
+        integer = result // audio_downsample_rate
+        return integer + (result % audio_downsample_rate > 0)
 
-    def _finalize_output(self, output, **kwargs):
-        feature_lengths = output["audio_features_mask"].sum(-1) * self.audio_feat_stride
-        output["audio_embed_sizes"] = self._compute_audio_embed_size(feature_lengths)
+    def _finalize_output(self, output, *, audio_feat_stride, audio_compression_rate, audio_downsample_rate, **kwargs):
+        feature_lengths = output["audio_features_mask"].sum(-1) * audio_feat_stride
+        output["audio_embed_sizes"] = self._compute_audio_embed_size(
+            feature_lengths,
+            audio_compression_rate=audio_compression_rate,
+            audio_downsample_rate=audio_downsample_rate,
+        )
         return output
 
 

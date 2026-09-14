@@ -36,13 +36,13 @@ class VibevoiceAcousticTokenizerAudioProcessorMixin:
     eps = 1e-6
     valid_kwargs = VibevoiceAcousticTokenizerAudioProcessorKwargs
 
-    def _downmix_to_mono(self, audio_el):
-        audio_el = super()._downmix_to_mono(audio_el)
+    def _downmix_to_mono(self, audio_el, *, target_dB_FS, eps, **kwargs):
+        audio_el = super()._downmix_to_mono(audio_el, **kwargs)
         rms = (audio_el**2).mean() ** 0.5
-        audio_el = audio_el * (10 ** (self.target_dB_FS / 20) / (rms + self.eps))
+        audio_el = audio_el * (10 ** (target_dB_FS / 20) / (rms + eps))
         max_val = abs(audio_el).max()
         if max_val > 1.0:
-            audio_el = audio_el / (max_val + self.eps)
+            audio_el = audio_el / (max_val + eps)
         return audio_el
 
 

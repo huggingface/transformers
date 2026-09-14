@@ -76,13 +76,15 @@ class AudioSpectrogramTransformerAudioProcessorMixin:
     max_length_frames = 1024
     valid_kwargs = AudioSpectrogramTransformerAudioProcessorKwargs
 
-    def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
-        return super()._pad_features(features, "max_length", self.max_length_frames, True, pad_to_multiple_of)
+    def _pad_features(
+        self, features, padding, max_length, truncation, pad_to_multiple_of, *, max_length_frames, **kwargs
+    ):
+        return super()._pad_features(features, "max_length", max_length_frames, True, pad_to_multiple_of, **kwargs)
 
-    def _finalize_output(self, output, **kwargs):
+    def _finalize_output(self, output, *, do_normalize, ast_mean, ast_std, **kwargs):
         features = output.pop("audio_features")
-        if self.do_normalize:
-            features = (features - self.ast_mean) / (self.ast_std * 2)
+        if do_normalize:
+            features = (features - ast_mean) / (ast_std * 2)
         output["audio_values"] = features
         return output
 

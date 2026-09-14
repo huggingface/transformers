@@ -63,15 +63,15 @@ class SeamlessM4tAudioProcessorMixin:
 
 
 class SeamlessM4tAudioProcessor(SeamlessM4tAudioProcessorMixin, TorchAudioBackend):
-    def compute_features(self, audio, **kwargs):
+    def compute_features(self, audio, *, spectrogram_config, **kwargs):
         features = []
         for waveform in audio:
             waveform = waveform.squeeze()
-            f = super().compute_features([waveform], spectrogram_config=self.spectrogram_config)
+            f = super().compute_features([waveform], spectrogram_config=spectrogram_config, **kwargs)
             features.append(f[0].transpose(-2, -1))
         return features
 
-    def _finalize_features(self, features, feature_lengths):
+    def _finalize_features(self, features, feature_lengths, **kwargs):
         # bit-exact with the legacy FE: numpy reductions use pairwise summation, whose
         # accumulation order differs from torch's float32 `mean`/`var`. The legacy features are
         normalized = []
@@ -81,23 +81,23 @@ class SeamlessM4tAudioProcessor(SeamlessM4tAudioProcessorMixin, TorchAudioBacken
             normalized.append(torch.from_numpy(x))
         return normalized
 
-    def _finalize_output(self, output, feature_ranges=None, **kwargs):
+    def _finalize_output(self, output, feature_ranges=None, *, stride, **kwargs):
         features = output["audio_features"]
         batch_size, num_frames, num_channels = features.shape
 
-        remainder = num_frames % self.stride
+        remainder = num_frames % stride
         if remainder != 0:
             features = features[:, : num_frames - remainder, :]
             num_frames = num_frames - remainder
 
-        output["audio_features"] = features.reshape(batch_size, num_frames // self.stride, num_channels * self.stride)
+        output["audio_features"] = features.reshape(batch_size, num_frames // stride, num_channels * stride)
 
         if "audio_features_mask" in output:
             mask = output["audio_features_mask"]
             if remainder != 0:
                 mask = mask[:, :num_frames]
             indices = torch.arange(0, num_frames)
-            output["audio_features_mask"] = mask[:, indices % self.stride == 1]
+            output["audio_features_mask"] = mask[:, indices % stride == 1]
 
         return output
 

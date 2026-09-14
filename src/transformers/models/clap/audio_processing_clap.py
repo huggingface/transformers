@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from dataclasses import replace
+from typing import Annotated
 
 import numpy as np
 import torch
@@ -20,6 +21,18 @@ import torch
 from ...audio_processing_backends import TorchAudioBackend
 from ...processing_utils import AudioKwargs
 from ...utils import PaddingStrategy
+from ...utils.type_validators import padding_validator
+
+
+# CLAP's legacy spelling of `padding` names the *fill method* for short audio rather than the target
+# length, so `repeatpad`/`repeat`/`pad` are legal values here and `_resolve_padding_strategy`
+# translates them. The base validator knows only the three length strategies and rejects them, which
+# it did silently until the `Annotated` validators were activated. Widen it for this model rather
+# than teaching the shared validator a CLAP-only vocabulary.
+def clap_padding_validator(value: bool | str | PaddingStrategy | None = None):
+    if value in ("repeatpad", "repeat", "pad"):
+        return
+    padding_validator(value)
 
 
 class ClapAudioProcessorKwargs(AudioKwargs, total=False):
@@ -28,10 +41,14 @@ class ClapAudioProcessorKwargs(AudioKwargs, total=False):
         Strategy used to truncate audio longer than `max_length`.
     padding_mode (`str`, *optional*, defaults to `"repeatpad"`):
         Strategy used to pad audio shorter than `max_length`.
+    padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*):
+        As the base field, and additionally accepts CLAP's legacy fill-method spellings
+        `"repeatpad"`, `"repeat"` and `"pad"`.
     """
 
     truncation_mode: str
     padding_mode: str
+    padding: Annotated[bool | str | PaddingStrategy | None, clap_padding_validator]
 
 
 class ClapAudioProcessorMixin:
@@ -81,44 +98,48 @@ class ClapAudioProcessorMixin:
         # `rand_trunc` crops the waveform in `pad`; `fusion` keeps it whole and crops the mel instead.
         self.truncation = self.truncation_mode == "rand_trunc"
 
-    def _resolve_padding_strategy(self, padding=False, max_length=None):
+    def _resolve_padding_strategy(self, padding=False, max_length=None, *, padding_value, **kwargs):
         if padding in ("repeatpad", "repeat", "pad"):
-            # legacy spelling: `padding` named the fill method for short audio, not the target length
-            self.padding_mode, padding = padding, True
+            padding = True
         if padding is True and max_length is not None:
             return PaddingStrategy.MAX_LENGTH
-        return super()._resolve_padding_strategy(padding=padding, max_length=max_length)
+        return super()._resolve_padding_strategy(padding=padding, max_length=max_length, padding_value=padding_value)
 
-    def pad(self, audio, *args, **kwargs):
+    def pad(self, audio, padding=True, *args, padding_mode, **kwargs):
         self._is_longer_flags = []
-        return super().pad(audio, *args, **kwargs)
+        if padding in ("repeatpad", "repeat", "pad"):
+            # legacy spelling: `padding` named the fill method for short audio, not the target length
+            padding_mode = padding
+        return super().pad(audio, padding, *args, padding_mode=padding_mode, **kwargs)
 
-    def _stack_waveforms(self, audio):
+    def _stack_waveforms(self, audio, **kwargs):
         # one mel per clip, so the clips stay a list rather than a (batch, samples) array
         return audio
 
-    def _pad_waveform(self, audio, max_length):
+    def _pad_waveform(self, audio, max_length, *, padding_mode, **kwargs):
         """Tile short audio before the base class zero-pads whatever remains."""
-        if self.padding_mode in ("repeat", "repeatpad") and audio.shape[-1] < max_length:
-            n_repeat = max_length // audio.shape[-1] + (self.padding_mode == "repeat")
+        if padding_mode in ("repeat", "repeatpad") and audio.shape[-1] < max_length:
+            n_repeat = max_length // audio.shape[-1] + (padding_mode == "repeat")
             audio = self._concat_last([audio] * n_repeat)[..., :max_length]
-        return super()._pad_waveform(audio, max_length)
+        return super()._pad_waveform(audio, max_length, **kwargs)
 
-    def _truncate_waveform(self, audio_el, max_length):
+    def _truncate_waveform(self, audio_el, max_length, **kwargs):
         """Random crop to `max_length` (rand_trunc mode), remembering which clips were longer."""
         overflow = audio_el.shape[-1] - max_length
         self._is_longer_flags.append(overflow > 0)
         idx = np.random.randint(0, overflow + 1) if overflow > 0 else 0
         return audio_el[..., idx : idx + max_length]
 
-    def compute_features(self, audio, **kwargs):
+    def compute_features(self, audio, *, spectrogram_config, truncation_mode, max_length, **kwargs):
         """One (1, frames, 64) mel per clip in `rand_trunc` mode; four views per clip in `fusion` mode."""
         if not isinstance(audio, list):
             audio = list(audio) if audio.ndim == 2 else [audio]
-        mels = super().compute_features(audio)
-        if self.truncation_mode != "fusion":
+        mels = super().compute_features(audio, spectrogram_config=spectrogram_config, **kwargs)
+        if truncation_mode != "fusion":
             return [mel[None] for mel in mels]
-        chunk_frames = self.max_length // self.spectrogram_config.stft_config.hop_length + 1
+        # the *merged* `max_length`, not `self.max_length`: `pad` has already used the per-call value,
+        # and reading the instance here made the two disagree whenever a caller passed one (issue 39)
+        chunk_frames = max_length // spectrogram_config.stft_config.hop_length + 1
         self._is_longer_flags = [mel.shape[0] > chunk_frames for mel in mels]
         return [
             self._random_mel_fusion(mel, chunk_frames) if mel.shape[0] > chunk_frames else self._stack([mel] * 4)
@@ -139,10 +160,10 @@ class ClapAudioProcessorMixin:
         )
         return self._as_backend_array(shrunk[0, 0])
 
-    def _finalize_output(self, output, audio_ranges=None, **kwargs):
+    def _finalize_output(self, output, audio_ranges=None, *, truncation_mode, **kwargs):
         """`is_longer` stands in for the padding mask: it tells HTSAT which clips carry fusion crops."""
         is_longer = self._is_longer_flags or [False] * len(audio_ranges)
-        if self.truncation_mode == "fusion" and not any(is_longer):
+        if truncation_mode == "fusion" and not any(is_longer):
             is_longer[np.random.randint(0, len(is_longer))] = True
         output["is_longer"] = [[longer] for longer in is_longer]
         return output

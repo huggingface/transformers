@@ -24,7 +24,7 @@ class NeuCodecAudioProcessorMixin(Xcodec2AudioProcessorMixin):
         # of any `max_length` truncation applied to the acoustic branch.
         return super()._preprocess(audio, *args, semantic_waveforms=audio, **kwargs)
 
-    def _pad_semantic_waveform(self, waveform):
+    def _pad_semantic_waveform(self, waveform, *, hop_length):
         # NeuCodec's reference feeds the hop-rounded clip straight to the fbank, without XCodec2's
         # half-hop context: https://github.com/neuphonic/neucodec/blob/ed3e6cd/neucodec/model.py#L128
         return waveform

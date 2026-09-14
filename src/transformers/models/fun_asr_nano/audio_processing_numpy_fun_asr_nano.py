@@ -19,22 +19,22 @@ from .audio_processing_fun_asr_nano import FunAsrNanoAudioProcessorMixin
 
 
 class FunAsrNanoAudioProcessorNumpy(FunAsrNanoAudioProcessorMixin, NumpyAudioBackend):
-    def _apply_lfr(self, features):
+    def _apply_lfr(self, features, *, num_frames_lfr, stride_lfr):
         """See the torch sibling: stack `num_frames_lfr` frames, hop by `stride_lfr`, repeating
         the edge frames rather than zero-padding."""
         num_input_frames = features.shape[0]
-        left_pad = (self.num_frames_lfr - 1) // 2
-        right_pad = self.num_frames_lfr - 1 - left_pad
+        left_pad = (num_frames_lfr - 1) // 2
+        right_pad = num_frames_lfr - 1 - left_pad
         padded = np.concatenate(
             [np.repeat(features[0:1], left_pad, axis=0), features, np.repeat(features[-1:], right_pad, axis=0)],
             axis=0,
         )
-        num_output_frames = -(-num_input_frames // self.stride_lfr)
-        required = (num_output_frames - 1) * self.stride_lfr + self.num_frames_lfr
+        num_output_frames = -(-num_input_frames // stride_lfr)
+        required = (num_output_frames - 1) * stride_lfr + num_frames_lfr
         if required > padded.shape[0]:
             padded = np.concatenate([padded, np.repeat(padded[-1:], required - padded.shape[0], axis=0)], axis=0)
-        windows = np.lib.stride_tricks.sliding_window_view(padded, self.num_frames_lfr, axis=0)
-        windows = windows[:: self.stride_lfr].transpose(0, 2, 1)
+        windows = np.lib.stride_tricks.sliding_window_view(padded, num_frames_lfr, axis=0)
+        windows = windows[::stride_lfr].transpose(0, 2, 1)
         return windows.reshape(num_output_frames, -1)
 
 

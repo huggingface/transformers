@@ -150,8 +150,8 @@ class NumpyAudioBackend(BaseAudioProcessor):
             out = np.where(mask, out, 0.0).astype(audio.dtype, copy=False)
         return out
 
-    def _dither_waveform(self, audio, audio_ranges=None):
-        return audio + (self.dither * np.random.randn(*audio.shape)).astype(audio.dtype)
+    def _dither_waveform(self, audio, audio_ranges=None, *, dither):
+        return audio + (dither * np.random.randn(*audio.shape)).astype(audio.dtype)
 
     def _stft_framed(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
         frames = frames * window
@@ -171,7 +171,7 @@ class NumpyAudioBackend(BaseAudioProcessor):
         frames = self._frame_waveform(audio, window, frame_length, hop_length, n_fft, stft_cfg)
         return self._stft_framed(frames, window, frame_length, n_fft, stft_cfg)
 
-    def _spectrum_magnitude(self, stft_out, power, spectrogram_config=None):
+    def _spectrum_magnitude(self, stft_out, power, spectrogram_config=None, **kwargs):
         # computation_dtype signals that upstream FE used float64 magnitudes
         if spectrogram_config and spectrogram_config.computation_dtype:
             return np.abs(stft_out, dtype=np.float64) ** power
@@ -326,7 +326,7 @@ class NumpyAudioBackend(BaseAudioProcessor):
             return fbank.numpy()
 
         waveform = np.squeeze(waveform)
-        features = self.compute_features([waveform], spectrogram_config=self.spectrogram_config)
+        features = self.compute_features([waveform], spectrogram_config=self.spectrogram_config, dither=self.dither)
         return features[0].T
 
 
@@ -436,9 +436,9 @@ class TorchAudioBackend(BaseAudioProcessor):
             audio = audio.masked_fill(~mask, 0.0)
         return audio
 
-    def _dither_waveform(self, audio, audio_ranges=None):
+    def _dither_waveform(self, audio, audio_ranges=None, *, dither):
         noise = torch.randn(audio.shape, dtype=audio.dtype, device=audio.device)
-        return audio + self.dither * noise
+        return audio + dither * noise
 
     def _stft_framed(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
         frames = frames * window
@@ -481,7 +481,7 @@ class TorchAudioBackend(BaseAudioProcessor):
             return magnitudes
         return magnitudes.float()
 
-    def _spectrum_magnitude(self, stft_out, power, spectrogram_config=None):
+    def _spectrum_magnitude(self, stft_out, power, spectrogram_config=None, **kwargs):
         # TODO(audio-processor): reinstate the contiguity fix once the perf/parity trade-off is
         # decided. `torch.stft` returns a non-contiguous tensor and `abs() ** power` keeps that
         # layout, so the downstream `mel_filters.T @ magnitudes` matmul can fall onto a slow

@@ -67,13 +67,22 @@ class GraniteSpeechAudioProcessorMixin:
             logmel = logmel[:, :-1]
         return logmel.reshape(logmel.shape[0], -1, 2 * logmel.shape[-1])
 
-    def _finalize_output(self, output, audio_ranges=None, **kwargs):
-        hop_length = self.spectrogram_config.stft_config.hop_length
-        effective_window_size = self.projector_window_size // self.projector_downsample_rate
+    def _finalize_output(
+        self,
+        output,
+        audio_ranges=None,
+        *,
+        spectrogram_config,
+        projector_window_size,
+        projector_downsample_rate,
+        **kwargs,
+    ):
+        hop_length = spectrogram_config.stft_config.hop_length
+        effective_window_size = projector_window_size // projector_downsample_rate
         audio_embed_sizes = []
         for start, end in audio_ranges:
             mel_length = (end - start) // hop_length + 1
-            nblocks = math.ceil((mel_length // 2) / self.projector_window_size)
+            nblocks = math.ceil((mel_length // 2) / projector_window_size)
             audio_embed_sizes.append(nblocks * effective_window_size)
         output["audio_embed_sizes"] = audio_embed_sizes
         output["audio_features_mask"] = self._embed_mask(audio_embed_sizes)

@@ -58,7 +58,7 @@ class InklingAudioProcessorMixin:
         audio = self._pad_axis(audio, max(n_fft - hop, 0), right_pad, axis=-1)
         return super()._waveform_to_spectrum(audio, spectrogram_config=spectrogram_config, **kwargs)
 
-    def _spectrum_magnitude(self, stft_out, power, spectrogram_config=None):
+    def _spectrum_magnitude(self, stft_out, power, spectrogram_config=None, **kwargs):
         # The legacy extractor clamps at 1e-10 *inside* the sqrt
         # (`magnitudes.pow(2).sum(-1).clamp_min(1e-10).sqrt()`), not at the config's `mel_floor`
         # after it. Moving the clamp or using `mel_floor` here breaks bit-equality.

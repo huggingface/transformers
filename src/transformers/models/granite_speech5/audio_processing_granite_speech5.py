@@ -82,24 +82,26 @@ class GraniteSpeech5AudioProcessorMixin:
 
 
 class GraniteSpeech5AudioProcessor(GraniteSpeech5AudioProcessorMixin, TorchAudioBackend):
-    def _compute_deltas(self, features):
+    def _compute_deltas(self, features, *, delta_win_length):
         """First-difference filter over time, matching ``torchaudio.functional.compute_deltas``.
 
         For a window of ``2n + 1`` the filter is ``sum(k * x[t+k]) / (n(n+1)(2n+1)/3)`` over
         ``k`` in ``[-n, n]``, with the signal replicate-padded at both ends. Implemented here
         rather than called from torchaudio, which the backends deliberately do not depend on.
         """
-        n = (self.delta_win_length - 1) // 2
+        n = (delta_win_length - 1) // 2
         denominator = n * (n + 1) * (2 * n + 1) / 3
         padded = torch.nn.functional.pad(features, (n, n), mode="replicate")
         kernel = torch.arange(-n, n + 1, dtype=features.dtype, device=features.device)
         kernel = kernel.expand(features.shape[-2], 1, -1)
         return torch.nn.functional.conv1d(padded, kernel, groups=features.shape[-2]) / denominator
 
-    def _finalize_output(self, output, audio_ranges=None, **kwargs):
+    def _finalize_output(
+        self, output, audio_ranges=None, *, frame_stacking, delta_win_length, spectrogram_config, **kwargs
+    ):
         # (batch, n_mels, frames), already floored and rescaled by the spectrogram config.
         logmel = output.pop("audio_features")
-        stacking = self.frame_stacking
+        stacking = frame_stacking
 
         # The legacy extractor derives its frame count from the waveform as `len // hop` -- one
         # fewer than the centered STFT actually emits -- rounds that up to a whole stacking
@@ -111,13 +113,13 @@ class GraniteSpeech5AudioProcessor(GraniteSpeech5AudioProcessorMixin, TorchAudio
         else:
             logmel = logmel[..., :num_frames]
 
-        logmel = torch.cat((logmel, self._compute_deltas(logmel)), dim=-2)
+        logmel = torch.cat((logmel, self._compute_deltas(logmel, delta_win_length=delta_win_length)), dim=-2)
         logmel = logmel.transpose(-1, -2)
         batch_size = logmel.shape[0]
         output["audio_features"] = logmel.reshape(batch_size, -1, stacking * logmel.shape[-1])
 
         if audio_ranges is not None:
-            hop = self.spectrogram_config.stft_config.hop_length
+            hop = spectrogram_config.stft_config.hop_length
             lengths = torch.tensor(
                 [-(-((end - start) // hop) // stacking) for start, end in audio_ranges],
                 device=logmel.device,

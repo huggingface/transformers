@@ -69,8 +69,8 @@ class FunAsrNanoAudioProcessorMixin:
     stride_lfr = 6
     valid_kwargs = FunAsrNanoAudioProcessorKwargs
 
-    def _finalize_features(self, features, feature_lengths):
-        return [self._apply_lfr(feature) for feature in features]
+    def _finalize_features(self, features, feature_lengths, *, num_frames_lfr, stride_lfr, **kwargs):
+        return [self._apply_lfr(feature, num_frames_lfr=num_frames_lfr, stride_lfr=stride_lfr) for feature in features]
 
     def _finalize_output(self, output, **kwargs):
         if "audio_features_mask" in output:
@@ -79,21 +79,21 @@ class FunAsrNanoAudioProcessorMixin:
 
 
 class FunAsrNanoAudioProcessor(FunAsrNanoAudioProcessorMixin, TorchAudioBackend):
-    def _apply_lfr(self, features):
+    def _apply_lfr(self, features, *, num_frames_lfr, stride_lfr):
         """Low frame rate: stack `num_frames_lfr` mel frames, hop by `stride_lfr`.
 
         Edges are handled by repeating the first and last frame rather than zero-padding, so a
         stacked window never mixes real audio with silence.
         """
         num_input_frames = features.shape[0]
-        left_pad = (self.num_frames_lfr - 1) // 2
-        right_pad = self.num_frames_lfr - 1 - left_pad
+        left_pad = (num_frames_lfr - 1) // 2
+        right_pad = num_frames_lfr - 1 - left_pad
         padded = torch.cat([features[0:1].expand(left_pad, -1), features, features[-1:].expand(right_pad, -1)], dim=0)
-        num_output_frames = -(-num_input_frames // self.stride_lfr)
-        required = (num_output_frames - 1) * self.stride_lfr + self.num_frames_lfr
+        num_output_frames = -(-num_input_frames // stride_lfr)
+        required = (num_output_frames - 1) * stride_lfr + num_frames_lfr
         if required > padded.shape[0]:
             padded = torch.cat([padded, padded[-1:].expand(required - padded.shape[0], -1)], dim=0)
-        windows = padded.unfold(0, self.num_frames_lfr, self.stride_lfr).transpose(1, 2)
+        windows = padded.unfold(0, num_frames_lfr, stride_lfr).transpose(1, 2)
         return windows.reshape(num_output_frames, -1)
 
 

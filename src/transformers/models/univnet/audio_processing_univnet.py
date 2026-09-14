@@ -108,10 +108,10 @@ class UnivNetAudioProcessorMixin:
         audio = self._reflect_pad(audio, pad_amount)
         return super()._waveform_to_spectrum(audio, spectrogram_config=spectrogram_config, **kwargs)
 
-    def _log_compress(self, features, *, spectrogram_config, **kwargs):
+    def _log_compress(self, features, *, spectrogram_config, do_normalize, normalize_min, normalize_max, **kwargs):
         features = super()._log_compress(features, spectrogram_config=spectrogram_config, **kwargs)
-        if self.do_normalize:
-            features = 2 * ((features - self.normalize_min) / (self.normalize_max - self.normalize_min)) - 1
+        if do_normalize:
+            features = 2 * ((features - normalize_min) / (normalize_max - normalize_min)) - 1
         return features
 
 
@@ -122,11 +122,11 @@ class UnivNetAudioProcessor(UnivNetAudioProcessorMixin, TorchAudioBackend):
             return torch.nn.functional.pad(audio[None], (pad_amount, pad_amount), mode="reflect")[0]
         return torch.nn.functional.pad(audio, (pad_amount, pad_amount), mode="reflect")
 
-    def _spectrum_magnitude(self, stft_out, power, spectrogram_config=None):
+    def _spectrum_magnitude(self, stft_out, power, spectrogram_config=None, *, magnitude_floor, **kwargs):
         # round-trip through complex64/float32 like the legacy FE, so the float64 magnitudes
         # match bit-exactly (the numpy sibling stays in float64 throughout)
         stft_out = stft_out.to(torch.complex64)
-        presqrt = stft_out.real**2 + stft_out.imag**2 + self.magnitude_floor
+        presqrt = stft_out.real**2 + stft_out.imag**2 + magnitude_floor
         return presqrt.double().sqrt().float().double()
 
     def _project_to_mel(self, features, *, spectrogram_config, **kwargs):

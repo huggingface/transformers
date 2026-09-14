@@ -46,11 +46,11 @@ class ParakeetAudioProcessorMixin:
         "transpose_features": True,
     }
 
-    def _finalize_output(self, output, audio_ranges=None, **kwargs):
+    def _finalize_output(self, output, audio_ranges=None, *, spectrogram_config, **kwargs):
         if audio_ranges is None or "audio_features" not in output:
             return output
         audio_lengths = np.asarray([end - start for start, end in audio_ranges])
-        frame_counts = self._valid_frame_counts(audio_lengths, self.spectrogram_config)
+        frame_counts = self._valid_frame_counts(audio_lengths, spectrogram_config)
         output["audio_features"] = self._standardize_features(output["audio_features"], frame_counts, eps=1e-5)
         return output
 

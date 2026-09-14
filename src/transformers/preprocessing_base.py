@@ -282,13 +282,6 @@ class PreprocessingMixin(PushToHubMixin):
     _file_type_label: str
 
     # --- Optional overrides ---
-    # Names within `valid_kwargs` that `__call__` accepts. `None` means "every valid kwarg", which is what
-    # image and video processors use. Audio processors narrow it: `valid_kwargs` is the *config* surface
-    # (materialised onto the instance, serialised by `to_dict`), and only an explicit subset of it is a
-    # per-call knob. Passing a config-only name to `__call__` raises instead of being silently dropped.
-    # See docs/adr/0007-per-call-kwargs-allowlist.md.
-    per_call_kwargs: set[str] | None = None
-
     _excluded_dict_keys: set[str] = set()
     # Drop None-valued attrs whose class default is None from to_dict(). On by default for the
     # modern processor classes; legacy FeatureExtractionMixin opts out to keep full serialization.
@@ -339,10 +332,13 @@ class PreprocessingMixin(PushToHubMixin):
 
     @property
     def _call_kwargs_names(self) -> list[str]:
-        """Valid kwarg names `__call__` accepts, in `valid_kwargs` order."""
-        if self.per_call_kwargs is None:
-            return self._valid_kwargs_names
-        return [name for name in self._valid_kwargs_names if name in self.per_call_kwargs]
+        """Valid kwarg names `__call__` accepts — every declared one.
+
+        `valid_kwargs` is both the config surface and the call surface; the two cannot drift because
+        the value the caller passes is the value the hook receives. See
+        docs/adr/0010-thread-merged-kwargs.md, which supersedes the `per_call_kwargs` allowlist.
+        """
+        return self._valid_kwargs_names
 
     def _set_attributes(self, **kwargs):
         """Standardize instance attributes for all valid kwargs (e.g. coerce dicts to their canonical form)."""
@@ -370,19 +366,7 @@ class PreprocessingMixin(PushToHubMixin):
         defaults from `self`, standardize and validate them, then dispatch to the modality-specific
         `_preprocess_*_like_inputs` implementation via `_preprocess_like_inputs`.
         """
-        # Reject config-only kwargs: names that configure the processor but that no read site consults
-        # per call, so accepting them would silently drop the caller's value.
-        call_kwargs_names = self._call_kwargs_names
-        config_only = [name for name in kwargs if name in self._valid_kwargs_names and name not in call_kwargs_names]
-        if config_only:
-            raise ValueError(
-                f"{', '.join(sorted(config_only))} configure{'s' if len(config_only) == 1 else ''} "
-                f"{self.__class__.__name__} and cannot be passed to `__call__`; set "
-                f"{'it' if len(config_only) == 1 else 'them'} at init or via `from_pretrained` instead. "
-                f"Kwargs accepted per call: {', '.join(call_kwargs_names)}."
-            )
-
-        for kwarg_name in call_kwargs_names:
+        for kwarg_name in self._call_kwargs_names:
             if kwargs.get(kwarg_name) is None:
                 kwargs[kwarg_name] = getattr(self, kwarg_name, None)
 

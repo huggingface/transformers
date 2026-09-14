@@ -19,9 +19,9 @@ from .audio_processing_granite_speech5 import GraniteSpeech5AudioProcessorMixin
 
 
 class GraniteSpeech5AudioProcessorNumpy(GraniteSpeech5AudioProcessorMixin, NumpyAudioBackend):
-    def _compute_deltas(self, features):
+    def _compute_deltas(self, features, *, delta_win_length):
         """See the torch sibling: torchaudio's delta filter, implemented natively."""
-        n = (self.delta_win_length - 1) // 2
+        n = (delta_win_length - 1) // 2
         denominator = n * (n + 1) * (2 * n + 1) / 3
         padded = np.pad(features, ((0, 0), (0, 0), (n, n)), mode="edge")
         kernel = np.arange(-n, n + 1, dtype=features.dtype)
@@ -30,9 +30,11 @@ class GraniteSpeech5AudioProcessorNumpy(GraniteSpeech5AudioProcessorMixin, Numpy
         windows = np.lib.stride_tricks.sliding_window_view(padded, kernel.size, axis=-1)
         return (windows * kernel).sum(-1) / denominator
 
-    def _finalize_output(self, output, audio_ranges=None, **kwargs):
+    def _finalize_output(
+        self, output, audio_ranges=None, *, frame_stacking, delta_win_length, spectrogram_config, **kwargs
+    ):
         logmel = output.pop("audio_features")
-        stacking = self.frame_stacking
+        stacking = frame_stacking
 
         num_frames = stacking * -(-(logmel.shape[-1] - 1) // stacking)
         if logmel.shape[-1] < num_frames:
@@ -40,13 +42,13 @@ class GraniteSpeech5AudioProcessorNumpy(GraniteSpeech5AudioProcessorMixin, Numpy
         else:
             logmel = logmel[..., :num_frames]
 
-        logmel = np.concatenate((logmel, self._compute_deltas(logmel)), axis=-2)
+        logmel = np.concatenate((logmel, self._compute_deltas(logmel, delta_win_length=delta_win_length)), axis=-2)
         logmel = np.swapaxes(logmel, -1, -2)
         batch_size = logmel.shape[0]
         output["audio_features"] = logmel.reshape(batch_size, -1, stacking * logmel.shape[-1])
 
         if audio_ranges is not None:
-            hop = self.spectrogram_config.stft_config.hop_length
+            hop = spectrogram_config.stft_config.hop_length
             lengths = np.array([-(-((end - start) // hop) // stacking) for start, end in audio_ranges])
             max_frames = output["audio_features"].shape[1]
             output["audio_features_mask"] = (np.arange(max_frames)[None, :] < lengths[:, None]).astype(np.int64)
