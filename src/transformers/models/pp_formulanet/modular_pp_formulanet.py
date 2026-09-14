@@ -83,6 +83,7 @@ class PPFormulaNetVisionConfig(SLANeXtVisionConfig):
         The hidden size of the decoder that the encoder features are projected to.
     """
 
+    model_type = "pp_formulanet_vision"
     post_conv_in_channels: int = 256
     post_conv_out_channels: int = 1024
     post_conv_mid_channels: int = 512
@@ -92,6 +93,7 @@ class PPFormulaNetVisionConfig(SLANeXtVisionConfig):
 @auto_docstring(checkpoint="PaddlePaddle/PP-FormulaNet_plus-L_safetensors")
 @strict
 class PPFormulaNetTextConfig(MBartConfig):
+    model_type = "pp_formulanet_text"
     base_config_key = "text_config"
     vocab_size: int = 50000
     max_position_embeddings: int = 2560

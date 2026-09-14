@@ -46,7 +46,9 @@ class PPFormulaNetVisionConfig(PreTrainedConfig):
         The hidden size of the decoder that the encoder features are projected to.
     """
 
-    base_config_key = "vision_config"
+    base_config_key = "vision"
+    model_type = "pp_formulanet_vision"
+
     hidden_size: int = 768
     output_channels: int = 256
     num_hidden_layers: int = 12
@@ -90,7 +92,7 @@ class PPFormulaNetTextConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "pp_formulanet"
+    model_type = "pp_formulanet_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",
