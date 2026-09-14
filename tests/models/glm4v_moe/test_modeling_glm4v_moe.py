@@ -402,7 +402,7 @@ class Glm4vMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         EXPECTED_DECODED_TEXT = [
             "\nWhat kind of dog is this?\n<think>Got it, let's try to figure out",
-            "\nWhat kind of dog is this?\n<think>Got it, let's see. The user",
+            "\nWhat kind of dog is this?\n<think>Got it, let's see. The question",
             '\nWho are you?\n<think>The user is asking "Who are you?"'
         ]  # fmt: skip
         decoded = self.processor.batch_decode(output, skip_special_tokens=True)
