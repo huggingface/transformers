@@ -16,21 +16,30 @@
 import math
 from typing import Any
 
+import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ...image_processing_utils import BatchFeature
+from ...image_utils import ImageInput, make_flat_list_of_images
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
+from ...video_utils import VideoInput, make_batched_videos
 from ..auto import AutoConfig
 from ..minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6Config, MiniCPMV4_6VisionConfig
+from ..minicpmv4_6.image_processing_minicpmv4_6 import MiniCPMV4_6ImageProcessor, MiniCPMV4_6ImageProcessorKwargs
+from ..minicpmv4_6.image_processing_pil_minicpmv4_6 import MiniCPMV4_6ImageProcessorPil
 from ..minicpmv4_6.modeling_minicpmv4_6 import (
     MiniCPMV4_6ForConditionalGeneration,
     MiniCPMV4_6Model,
     MiniCPMV4_6PreTrainedModel,
 )
+from ..minicpmv4_6.processing_minicpmv4_6 import MiniCPMV4_6Processor, MiniCPMV4_6ProcessorKwargs
+from ..minicpmv4_6.video_processing_minicpmv4_6 import MiniCPMV4_6VideoProcessor, MiniCPMV4_6VideoProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
@@ -1149,10 +1158,341 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
         return input_ids, model_kwargs
 
 
+class MiniCPMV4_7ImageProcessorKwargs(MiniCPMV4_6ImageProcessorKwargs, total=False):
+    pass
+
+
+@auto_docstring
+class MiniCPMV4_7ImageProcessor(MiniCPMV4_6ImageProcessor):
+    def get_sliced_grid(
+        self,
+        image_size: tuple[int, int],
+        max_slice_nums: int,
+        scale_resolution: int,
+    ) -> list[int] | None:
+        original_height, original_width = image_size
+        log_ratio = math.log(original_width / original_height)
+        ratio = original_width * original_height / (scale_resolution * scale_resolution)
+        multiple = min(math.ceil(ratio), max_slice_nums)
+        if multiple <= 1:
+            return None
+
+        best_grid = [1, 1]
+        min_error = float("inf")
+        for num_slices in [multiple - 1, multiple, multiple + 1]:
+            if num_slices == 1 or num_slices > max_slice_nums:
+                continue
+            for num_rows in range(1, num_slices + 1):
+                if num_slices % num_rows == 0:
+                    num_cols = num_slices // num_rows
+                    error = abs(log_ratio - math.log(num_cols / num_rows))
+                    if error < min_error:
+                        best_grid = [num_rows, num_cols]
+                        min_error = error
+                    elif error == min_error and num_rows > best_grid[0]:
+                        best_grid = [num_rows, num_cols]
+        return best_grid
+
+
+@auto_docstring
+class MiniCPMV4_7ImageProcessorPil(MiniCPMV4_6ImageProcessorPil):
+    # Upstream convention (glm4v, smolvlm, ...) is for the PIL backend to share the
+    # `<Model>ImageProcessorKwargs` of the torchvision backend rather than declaring a
+    # separate `...ImageProcessorPilKwargs`.
+    valid_kwargs = MiniCPMV4_7ImageProcessorKwargs
+
+    def __init__(self, **kwargs: Unpack[MiniCPMV4_7ImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
+    @auto_docstring
+    def preprocess(
+        self,
+        images: ImageInput,
+        **kwargs: Unpack[MiniCPMV4_7ImageProcessorKwargs],
+    ) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
+    def get_sliced_grid(
+        self,
+        image_size: tuple[int, int],
+        max_slice_nums: int,
+        scale_resolution: int,
+    ) -> list[int] | None:
+        original_height, original_width = image_size
+        log_ratio = math.log(original_width / original_height)
+        ratio = original_width * original_height / (scale_resolution * scale_resolution)
+        multiple = min(math.ceil(ratio), max_slice_nums)
+        if multiple <= 1:
+            return None
+
+        best_grid = [1, 1]
+        min_error = float("inf")
+        for num_slices in [multiple - 1, multiple, multiple + 1]:
+            if num_slices == 1 or num_slices > max_slice_nums:
+                continue
+            for num_rows in range(1, num_slices + 1):
+                if num_slices % num_rows == 0:
+                    num_cols = num_slices // num_rows
+                    error = abs(log_ratio - math.log(num_cols / num_rows))
+                    if error < min_error:
+                        best_grid = [num_rows, num_cols]
+                        min_error = error
+                    elif error == min_error and num_rows > best_grid[0]:
+                        best_grid = [num_rows, num_cols]
+        return best_grid
+
+
+class MiniCPMV4_7VideoProcessorKwargs(MiniCPMV4_6VideoProcessorKwargs):
+    pass
+
+
+@auto_docstring
+class MiniCPMV4_7VideoProcessor(MiniCPMV4_6VideoProcessor):
+    def get_sliced_grid(
+        self,
+        video_size: tuple[int, int],
+        max_slice_nums: int,
+        scale_resolution: int,
+    ) -> list[int] | None:
+        original_height, original_width = video_size
+        log_ratio = math.log(original_width / original_height)
+        ratio = original_width * original_height / (scale_resolution * scale_resolution)
+        multiple = min(math.ceil(ratio), max_slice_nums)
+        if multiple <= 1:
+            return None
+
+        best_grid = [1, 1]
+        min_error = float("inf")
+        for num_slices in [multiple - 1, multiple, multiple + 1]:
+            if num_slices == 1 or num_slices > max_slice_nums:
+                continue
+            for num_rows in range(1, num_slices + 1):
+                if num_slices % num_rows == 0:
+                    num_cols = num_slices // num_rows
+                    error = abs(log_ratio - math.log(num_cols / num_rows))
+                    if error < min_error:
+                        best_grid = [num_rows, num_cols]
+                        min_error = error
+                    elif error == min_error and num_rows > best_grid[0]:
+                        best_grid = [num_rows, num_cols]
+        return best_grid
+
+
+class MiniCPMV4_7ProcessorKwargs(MiniCPMV4_6ProcessorKwargs, total=False):
+    _defaults = {
+        "common_kwargs": {
+            "return_tensors": "pt",
+        },
+        "text_kwargs": {
+            "padding": True,
+            "padding_side": "left",
+            "return_mm_token_type_ids": True,
+            "return_text_replacement_offsets": False,
+        },
+    }
+
+
+@auto_docstring
+class MiniCPMV4_7Processor(MiniCPMV4_6Processor):
+    valid_processor_kwargs = MiniCPMV4_7ProcessorKwargs
+
+    @auto_docstring
+    def __call__(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        videos: VideoInput | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        # MiniCPM needs to override `__call__` due to `_prepend_local_ids`, i.e. we add local image id inside text
+        # Current `replace_image_tokens` API assumes that each image-placeholder doesn't depend on the other!
+        images, text, videos, _ = self.prepare_inputs_layout(images=images, text=text, videos=videos, **kwargs)
+        self.validate_inputs(images=images, text=text, videos=videos, **kwargs)
+
+        merged_kwargs = self._merge_kwargs(
+            self.valid_processor_kwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
+            **kwargs,
+        )
+        use_image_id = merged_kwargs["images_kwargs"].pop("use_image_id", None)
+        use_image_id = use_image_id if use_image_id is not None else self.default_use_image_id
+
+        processed_images = processed_videos = {}
+        images_replacements = videos_replacements = []
+        # Per-visual patch grids (not recoverable from config alone), one flat entry per visual
+        # input, in the same order as the per-modality replacement strings.
+        images_mrope_grids: list[list[list[int]]] = []
+        videos_mrope_grids: list[list[list[int]]] = []
+        if images is not None:
+            processed_images, images_replacements = self._process_images(
+                images,
+                **merged_kwargs["images_kwargs"],
+            )
+            images_mrope_grids = self._image_mrope_grids(processed_images, images)
+        if videos is not None:
+            processed_videos, videos_replacements = self._process_videos(
+                videos,
+                **merged_kwargs["videos_kwargs"],
+            )
+            videos_mrope_grids = self._video_mrope_grids(processed_videos, videos)
+
+        text_inputs = {}
+        text_replacement_offsets = []
+        return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
+        if text is not None:
+            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop("return_mm_token_type_ids", True)
+            return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
+                "return_text_replacement_offsets", False
+            )
+
+            if images_replacements and use_image_id:
+                images_replacements = self._prepend_local_ids(text, images_replacements, self.image_token)
+
+            if videos_replacements and use_image_id:
+                videos_replacements = self._prepend_local_ids(text, videos_replacements, self.video_token)
+
+            text, text_replacement_offsets = self.get_text_with_replacements(
+                text,
+                images_replacements,
+                videos_replacements,
+            )
+            text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
+            self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video", "audio"])
+
+            if return_text_replacement_offsets:
+                text_inputs["text_replacement_offsets"] = text_replacement_offsets
+
+            if return_mm_token_type_ids:
+                text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
+
+        # `target_sizes_mrope` must follow the order of the visual spans inside `input_ids`, which is
+        # the order the placeholders appear in `text` — not the order the modalities are processed in.
+        # A sample may interleave modalities (e.g. "<video>...</video><image>...</image>"), so the
+        # per-modality grids collected above are re-sequenced through the text replacement offsets.
+        mrope_inputs = {}
+        if offsets_per_sample := text_replacement_offsets:
+            mrope_tgt_sizes_per_sample = self._assemble_mrope_target_sizes(
+                offsets_per_sample, images_mrope_grids, videos_mrope_grids
+            )
+            target_sizes_mrope = []
+            for sample_grids in mrope_tgt_sizes_per_sample:
+                target_sizes_mrope.append(
+                    torch.tensor(sample_grids, dtype=torch.int32)
+                    if sample_grids
+                    else torch.zeros(0, 2, dtype=torch.int32)
+                )
+            # Do not return special_token_ids (available on model config) or image_bounds
+            # (model recomputes bounds on compact/unpadded ids for left-padding safety).
+            mrope_inputs = {"target_sizes_mrope": target_sizes_mrope}
+
+        data = {**text_inputs, **processed_images, **processed_videos, **mrope_inputs}
+        data = {k: v for k, v in data.items() if k not in self.unused_input_names}
+
+        return BatchFeature(data, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion)
+
+    def _image_mrope_grids(self, image_inputs: dict, images: ImageInput) -> list[list[list[int]]]:
+        """Return one flat list of patch grids per image, aligned with the image replacement strings."""
+        images = make_flat_list_of_images(images)
+        return [self._image_target_sizes(image_inputs, idx).tolist() for idx in range(len(images))]
+
+    @staticmethod
+    def _image_target_sizes(image_inputs: dict, image_idx: int):
+        """Return the patch target sizes belonging to one image of the flattened batch."""
+        cum_patches = np.cumsum(image_inputs["num_patches_per_image"])
+        start_idx = cum_patches[image_idx - 1] if image_idx > 0 else 0
+        end_idx = cum_patches[image_idx]
+        return image_inputs["target_sizes"][start_idx:end_idx]
+
+    def _video_mrope_grids(self, video_inputs: dict, videos: VideoInput) -> list[list[list[int]]]:
+        """Return one flat list of patch grids per video, aligned with the video replacement strings.
+
+        Frames are concatenated in order, and a frame may itself span several patches.
+        """
+        videos = make_batched_videos(videos)
+        mrope_grids = []
+        for idx in range(len(videos)):
+            video_grids = []
+            for frame_ts, _, _ in self._iter_video_frames(video_inputs, idx):
+                video_grids.extend(frame_ts.tolist())
+            mrope_grids.append(video_grids)
+        return mrope_grids
+
+    @staticmethod
+    def _assemble_mrope_target_sizes(
+        offsets_per_sample: list[list[dict]],
+        images_mrope_grids: list[list[list[int]]],
+        videos_mrope_grids: list[list[list[int]]],
+    ) -> list[list[list[int]]]:
+        """Flatten per-visual patch grids into per-sample lists, following the text order of the visuals.
+
+        `get_text_with_replacements` walks each sample left to right and yields one offset entry per
+        placeholder occurrence, tagged with its modality. Consuming the per-modality grid lists in that
+        same order is what makes `target_sizes_mrope[b]` line up with the visual spans inside
+        `input_ids[b]` even when a sample interleaves image and video placeholders.
+
+        Grids are counted per visual input, not per frame: one video placeholder expands to all the
+        frames of that video. For a batch of a single modality this reproduces the plain per-modality
+        concatenation in use before, so single-modality behaviour is unchanged.
+        """
+        available = {
+            "image": len(images_mrope_grids),
+            "video": len(videos_mrope_grids),
+        }
+        num_placeholders = dict.fromkeys(available, 0)
+        for sample_offsets in offsets_per_sample:
+            for offset in sample_offsets:
+                num_placeholders[offset["type"]] += 1
+
+        for modality, expected in available.items():
+            if num_placeholders[modality] != expected:
+                raise ValueError(
+                    f"Number of `{modality}` placeholders does not match the number of `{modality}` inputs: "
+                    f"found {num_placeholders[modality]} placeholder(s) in `text` but received {expected} input(s). "
+                    "Every placeholder must have a matching input."
+                )
+
+        image_iter = iter(images_mrope_grids)
+        video_iter = iter(videos_mrope_grids)
+        grids_per_sample = []
+        for sample_offsets in offsets_per_sample:
+            sample_grids = []
+            for offset in sample_offsets:
+                # One video input expands to one grid per frame, so all of its grids are appended here
+                # in frame order; they then line up with that video's tokens from left to right.
+                for grid in next(image_iter if offset["type"] == "image" else video_iter):
+                    sample_grids.append(grid)
+            grids_per_sample.append(sample_grids)
+        return grids_per_sample
+
+    def _iter_video_frames(self, video_inputs: dict, video_idx: int):
+        """Yield `(frame_target_sizes, grid_rows, grid_cols)` per frame of one video, in text order."""
+        video_target_sizes = video_inputs["target_sizes_videos"]
+        num_frames_per_video = video_inputs["num_frames_per_video"]
+        video_grids = video_inputs["grids_videos"]
+        num_patches_per_frame = video_grids.prod(-1) + 1
+
+        num_frames = num_frames_per_video[video_idx]
+        cum_patches_per_frame = np.cumsum(num_patches_per_frame)
+        num_past_frames = np.cumsum(num_frames_per_video)[video_idx] - num_frames
+
+        for frame_idx in range(num_frames):
+            frame_start_idx = num_past_frames + frame_idx
+
+            start_idx = cum_patches_per_frame[frame_start_idx - 1] if frame_start_idx > 0 else 0
+            end_idx = cum_patches_per_frame[frame_start_idx]
+
+            grid_rows, grid_cols = video_grids[frame_start_idx]
+            yield video_target_sizes[start_idx:end_idx], grid_rows, grid_cols
+
+
 __all__ = [
     "MiniCPMV4_7Config",
     "MiniCPMV4_7VisionConfig",
     "MiniCPMV4_7PreTrainedModel",
     "MiniCPMV4_7Model",
     "MiniCPMV4_7ForConditionalGeneration",
+    "MiniCPMV4_7ImageProcessor",
+    "MiniCPMV4_7ImageProcessorPil",
+    "MiniCPMV4_7VideoProcessor",
+    "MiniCPMV4_7Processor",
 ]
