@@ -712,6 +712,9 @@ class QuantizedLayer(DynamicLayer):
     is set as a maximum capacity for the original precision cache. When the length goes beyond maximum capacity, the original
     precision cache is discarded and moved into the quantized cache. The quantization is done per-channel with a set `q_group_size`
     for both Keys and Values, in contrast to what was described in the paper.
+
+    Note that a beam reordering is only applied to the quantized states on the next `update`, so they may be left in a
+    stale batch order in between, see `reorder_cache`.
     """
 
     def __init__(
@@ -791,9 +794,10 @@ class QuantizedLayer(DynamicLayer):
         # The quantized states cannot be indexed, and dequantizing them here only to quantize them back would be
         # both costly and lossy. Instead, the reordering is recorded and applied by the next `update`, which
         # dequantizes them anyway. Reorderings accumulated while the residual cache fills up are composed together.
+        # It is cloned, as `beam_idx` belongs to the caller and is reused across steps in beam search.
         beam_idx = beam_idx.to(self.device)
         self._pending_beam_idx = (
-            beam_idx if self._pending_beam_idx is None else self._pending_beam_idx.index_select(0, beam_idx)
+            beam_idx.clone() if self._pending_beam_idx is None else self._pending_beam_idx.index_select(0, beam_idx)
         )
 
         # The residual cache is emptied whenever it is flushed into the quantized states, and holds nothing to
@@ -802,6 +806,15 @@ class QuantizedLayer(DynamicLayer):
         if self.keys.numel() > 0:
             self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
             self.values = self.values.index_select(0, beam_idx.to(self.values.device))
+
+    def reset(self) -> None:
+        """Resets the cache values while preserving the objects."""
+        super().reset()
+        # Most of the cache lives in the quantized states, which `super().reset()` knows nothing about. They are
+        # dropped instead of zeroed, so that the next `update` quantizes the new states from scratch.
+        self._quantized_keys = self._quantized_values = None
+        self._pending_beam_idx = None
+        self.is_initialized = False
 
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""

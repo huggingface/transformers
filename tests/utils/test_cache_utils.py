@@ -30,6 +30,7 @@ from transformers.testing_utils import (
     cleanup,
     get_gpu_count,
     is_torch_available,
+    require_optimum_quanto,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -64,6 +65,7 @@ if is_torch_available():
         LinearAttentionAndFullAttentionLayer,
         LinearAttentionAndSlidingWindowAttentionLayer,
         LinearAttentionLayer,
+        QuantoQuantizedLayer,
         StaticLayer,
     )
     from transformers.integrations.executorch import export_with_dynamic_cache, register_dynamic_cache_export_support
@@ -77,6 +79,18 @@ TEST_CACHE_IMPLEMENTATIONS = [
     # TODO (joao): offloaded_hybrid == offloaded_hybrid_chunked, deprecate one of them
     if cache_name not in ["offloaded", "offloaded_hybrid", "offloaded_static", "offloaded_hybrid_chunked"]
 ]
+
+
+def _quantized_layer_and_states(batch_size=4, num_heads=2, head_dim=8, residual_length=4):
+    """A quantized layer, and a helper building states whose batch rows each hold a distinct constant."""
+    layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=residual_length)
+    row_values = torch.arange(1, batch_size + 1, dtype=torch.float32).view(batch_size, 1, 1, 1)
+
+    def states(order, seq_len):
+        # Row `i` is filled with the constant of the original row `order[i]`, as the model would produce it
+        return row_values.index_select(0, order).expand(batch_size, num_heads, seq_len, head_dim).clone()
+
+    return layer, row_values, states
 
 
 @require_torch
@@ -189,6 +203,43 @@ class CacheTest(unittest.TestCase):
             keys, _ = cache.update(*_kv(1), layer_idx)
             self.assertEqual(keys.device.type, torch.device(torch_device).type)
 
+    @require_optimum_quanto
+    def test_quantized_layer_beam_reorder(self):
+        """
+        `reorder_cache` must reorder the quantized states as well, not only the residual cache. It used to index the
+        (emptied) residual cache while guarding on the total sequence length, so it either raised or silently left
+        the quantized states in the previous beam order.
+        """
+        layer, row_values, states = _quantized_layer_and_states()
+
+        order = torch.arange(4)
+        layer.update(states(order, 5), states(order, 5))
+
+        # Reorder on every step, with duplicated indices (`beam_idx` is a gather, several beams may pick the same
+        # source beam) and crossing the residual cache flushes, which bake the pending reordering in.
+        for beam_idx in [[1, 0, 3, 2], [2, 2, 0, 1], [3, 1, 2, 0], [0, 1, 2, 3], [1, 3, 0, 2], [2, 0, 1, 3]]:
+            beam_idx = torch.tensor(beam_idx)
+            layer.reorder_cache(beam_idx)
+            order = order.index_select(0, beam_idx)
+            keys, values = layer.update(states(order, 1), states(order, 1))
+            # Every cached position of a row must hold that row's constant, whatever the beam shuffling
+            expected = row_values.index_select(0, order).expand_as(keys)
+            torch.testing.assert_close(keys, expected, rtol=0, atol=1e-2)
+            torch.testing.assert_close(values, expected, rtol=0, atol=1e-2)
+
+    @require_optimum_quanto
+    def test_quantized_layer_reset(self):
+        """`reset` must also drop the quantized states, which hold most of the cache."""
+        layer, _, states = _quantized_layer_and_states()
+
+        order = torch.arange(4)
+        layer.update(states(order, 5), states(order, 5))
+        layer.reset()
+
+        self.assertEqual(layer.get_seq_length(), 0)
+        keys, _ = layer.update(states(order, 3), states(order, 3))
+        self.assertEqual(keys.shape[-2], 3)
+
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
     """Function to skip tests on failed cache prerequisites, given a cache implementation"""
@@ -294,7 +345,7 @@ class CacheIntegrationTest(unittest.TestCase):
         decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
-    @parameterized.expand([("quanto"), ("HQQ")])
+    @parameterized.expand([("quanto"), ("hqq")])
     def test_quantized_cache_generation(self, backend):
         """Tests that QuantizedCache works as expected for both `quanto` and `hqq` backends."""
         if backend == "quanto":
@@ -303,7 +354,7 @@ class CacheIntegrationTest(unittest.TestCase):
             axis_key, axis_value = 0, 0
             # This output is taken from a run with the same parameters, and is known to be correct
             expected_generation = ["The cat's whiskers are also a sign of anxiety."]
-        elif backend == "HQQ":
+        elif backend == "hqq":
             if not is_hqq_available():
                 self.skipTest("HQQ is not available")
             axis_key, axis_value = 1, 1
