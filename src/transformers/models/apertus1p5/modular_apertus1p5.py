@@ -63,35 +63,6 @@ def _pad_logits_to_vocab_size(logits: torch.Tensor, vocab_size: int) -> torch.Te
     return F.pad(logits, (0, padding), value=torch.finfo(logits.dtype).min)
 
 
-def _pruned_output_vocab_size(config: PreTrainedConfig) -> int | None:
-    """Return the physical LM-head width when it is pruned else `None`."""
-    text_config = config.get_text_config()
-    output_vocab_size = getattr(text_config, "output_vocab_size", None)
-    if output_vocab_size is not None and output_vocab_size != text_config.vocab_size:
-        return output_vocab_size
-    return None
-
-
-def _check_pruned_head_resize(config: PreTrainedConfig) -> None:
-    """Reject embedding resizes for pruned heads: the generic resize forces the head to the embedding size."""
-    if _pruned_output_vocab_size(config) is not None:
-        raise NotImplementedError(
-            "Resizing token embeddings is not supported for a pruned LM head (`output_vocab_size` is "
-            "set): resize the unpruned checkpoint and prune it again."
-        )
-
-
-def _check_pruned_head_tie(config: PreTrainedConfig) -> None:
-    """Reject weight tying for pruned heads: the generic tying installs the full-width embeddings as the head."""
-    text_config = config.get_text_config()
-    tied = getattr(config, "tie_word_embeddings", False) or getattr(text_config, "tie_word_embeddings", False)
-    if tied and _pruned_output_vocab_size(config) is not None:
-        raise ValueError(
-            "Cannot tie a pruned LM head (`output_vocab_size` smaller than `vocab_size`) to the input "
-            "embeddings; keep `tie_word_embeddings=False`."
-        )
-
-
 def _check_pruned_head_labels(labels: torch.Tensor, out_vocab_size: int, vocab_size: int) -> None:
     """Reject labels outside a pruned head's valid range before cross entropy."""
     if out_vocab_size < vocab_size:
@@ -172,8 +143,8 @@ class Apertus1p5TextConfig(ApertusConfig):
         Number of LM-head rows kept after pruning the multimodal token rows from the output projection; the
         retained output ids are `0..output_vocab_size - 1`. `None` means the head is unpruned (`vocab_size`
         rows). Input embeddings always use `vocab_size`, and logits returned without `labels` are padded to that
-        logical width with `torch.finfo(dtype).min` scores for the input-only tail. A pruned head cannot be
-        tied to the input embeddings.
+        logical width with `torch.finfo(dtype).min` scores for the input-only tail. Released checkpoints
+        use `tie_word_embeddings=False` to keep the pruned head separate from the input embeddings.
 
     Example:
 
@@ -206,13 +177,8 @@ class Apertus1p5TextConfig(ApertusConfig):
                     f"(vocab_size is {self.vocab_size})."
                 )
             if self.output_vocab_size == self.vocab_size:
-                # a full-width head is unpruned; normalizing keeps resize/tie semantics consistent
+                # Represent a full-width head with the canonical unpruned configuration.
                 self.output_vocab_size = None
-            elif self.tie_word_embeddings:
-                raise ValueError(
-                    "A pruned LM head (`output_vocab_size` smaller than `vocab_size`) cannot be tied to the "
-                    "input embeddings; set `tie_word_embeddings=False`."
-                )
         super().__post_init__(**kwargs)
 
 
@@ -275,7 +241,7 @@ class Apertus1p5Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        """Resolve nested configs and validate multimodal token ranges and pruned-head weight tying."""
+        """Resolve nested configs and validate multimodal token ranges."""
         if isinstance(self.text_config, dict):
             self.text_config = Apertus1p5TextConfig(**self.text_config)
         elif self.text_config is None:
@@ -309,16 +275,6 @@ class Apertus1p5Config(PreTrainedConfig):
             raise ValueError(
                 f"The audio token range ends at {audio_vocab_end}, beyond the vocabulary "
                 f"(`text_config.vocab_size` = {self.text_config.vocab_size})."
-            )
-        output_vocab_size = getattr(self.text_config, "output_vocab_size", None)
-        if (
-            self.tie_word_embeddings
-            and output_vocab_size is not None
-            and output_vocab_size != self.text_config.vocab_size
-        ):
-            raise ValueError(
-                "A pruned LM head (`text_config.output_vocab_size` set) cannot be tied to the input "
-                "embeddings; set `tie_word_embeddings=False`."
             )
         super().__post_init__(**kwargs)
 
@@ -548,41 +504,9 @@ class Apertus1p5PreTrainedModel(PreTrainedModel):
         "Apertus1p5VisionTokenizerAttnBlock",
     ]
 
-    def resize_token_embeddings(
-        self,
-        new_num_tokens: int | None = None,
-        pad_to_multiple_of: int | None = None,
-        mean_resizing: bool = True,
-    ) -> nn.Embedding:
-        """Reject resizing when the LM head is pruned."""
-        if new_num_tokens is not None or pad_to_multiple_of is not None:
-            _check_pruned_head_resize(self.config)
-        return super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
-
-    def tie_weights(self, missing_keys: set[str] | None = None, recompute_mapping: bool = True):
-        """Reject weight tying when the LM head is pruned."""
-        _check_pruned_head_tie(self.config)
-        return super().tie_weights(missing_keys, recompute_mapping)
-
 
 class Apertus1p5TextPreTrainedModel(ApertusPreTrainedModel):
     config: Apertus1p5TextConfig
-
-    def resize_token_embeddings(
-        self,
-        new_num_tokens: int | None = None,
-        pad_to_multiple_of: int | None = None,
-        mean_resizing: bool = True,
-    ) -> nn.Embedding:
-        """Reject resizing when the LM head is pruned."""
-        if new_num_tokens is not None or pad_to_multiple_of is not None:
-            _check_pruned_head_resize(self.config)
-        return PreTrainedModel.resize_token_embeddings(self, new_num_tokens, pad_to_multiple_of, mean_resizing)
-
-    def tie_weights(self, missing_keys: set[str] | None = None, recompute_mapping: bool = True):
-        """Reject weight tying when the LM head is pruned."""
-        _check_pruned_head_tie(self.config)
-        return PreTrainedModel.tie_weights(self, missing_keys, recompute_mapping)
 
 
 class Apertus1p5TextModel(ApertusModel):

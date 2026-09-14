@@ -561,12 +561,6 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         with self.assertRaisesRegex(ValueError, "masked with -100"):
             model(**inputs_dict, labels=bad_labels)
 
-        # the composite carries the same tie guard as the text model
-        model.config.tie_word_embeddings = True
-        with self.assertRaisesRegex(ValueError, "Cannot tie a pruned LM head"):
-            model.tie_weights()
-        model.config.tie_word_embeddings = False  # restore before the generation calls below
-
         prompt = inputs_dict["input_ids"][:2]
         model_inputs = {
             "attention_mask": inputs_dict["attention_mask"][:2],
@@ -621,6 +615,49 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 pixel_values=inputs_dict["pixel_values"],
                 image_sizes=inputs_dict["image_sizes"],
             )
+
+    def test_pruned_head_stays_untied_after_save_load(self):
+        input_ids = torch.tensor([[1, 5, 19]], device=torch_device)
+        for model_class in (Apertus1p5TextForCausalLM, Apertus1p5ForConditionalGeneration):
+            with self.subTest(model_class=model_class.__name__):
+                config = self.model_tester.get_config()
+                config.text_config.output_vocab_size = 20
+                if model_class is Apertus1p5TextForCausalLM:
+                    config = config.text_config
+                model = model_class(config).to(torch_device).eval()
+                self.assertFalse(model.config.tie_word_embeddings)
+                self.assertFalse(model.config.get_text_config().tie_word_embeddings)
+                input_weight = model.get_input_embeddings().weight
+                output_weight = model.get_output_embeddings().weight
+                self.assertNotEqual(input_weight.data_ptr(), output_weight.data_ptr())
+                self.assertEqual(input_weight.shape[0], config.get_text_config().vocab_size)
+                self.assertEqual(output_weight.shape[0], 20)
+                with torch.no_grad():
+                    expected_logits = model(input_ids).logits
+
+                model.tie_weights()
+                self.assertIs(model.resize_token_embeddings(), model.get_input_embeddings())
+                self.assertIs(model.get_input_embeddings().weight, input_weight)
+                self.assertIs(model.get_output_embeddings().weight, output_weight)
+
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    model.save_pretrained(tmp_dir)
+                    reloaded, info = model_class.from_pretrained(tmp_dir, output_loading_info=True)
+                reloaded = reloaded.to(torch_device).eval()
+                self.assertFalse(info["missing_keys"])
+                self.assertFalse(info["unexpected_keys"])
+                self.assertFalse(info["mismatched_keys"])
+                self.assertFalse(reloaded.config.tie_word_embeddings)
+                self.assertFalse(reloaded.config.get_text_config().tie_word_embeddings)
+                self.assertEqual(reloaded.config.get_text_config().output_vocab_size, 20)
+                self.assertEqual(reloaded.get_input_embeddings().weight.shape, input_weight.shape)
+                self.assertEqual(reloaded.get_output_embeddings().weight.shape, output_weight.shape)
+                self.assertNotEqual(
+                    reloaded.get_input_embeddings().weight.data_ptr(),
+                    reloaded.get_output_embeddings().weight.data_ptr(),
+                )
+                with torch.no_grad():
+                    torch.testing.assert_close(reloaded(input_ids).logits, expected_logits)
 
 
 class Apertus1p5TextModelTester(CausalLMModelTester):
@@ -720,23 +757,12 @@ class Apertus1p5TextModelTest(CausalLMModelTest, unittest.TestCase):
             {"hidden_states", "attentions"},
         )
 
-    def test_pruned_head_guards(self):
-        with self.assertRaisesRegex(ValueError, "cannot be tied"):
-            self._tiny_config(output_vocab_size=40, tie_word_embeddings=True)
-        with self.assertRaisesRegex(ValueError, "must be in"):
-            self._tiny_config(output_vocab_size=100)
-        model = Apertus1p5TextForCausalLM(self._tiny_config(output_vocab_size=40)).to(torch_device)
-        with self.assertRaisesRegex(NotImplementedError, "pruned LM head"):
-            model.resize_token_embeddings(128)
-        model.resize_token_embeddings()  # the no-argument getter path stays allowed
-        # the bare backbone (no LM head) carries the same guard
-        text_model = Apertus1p5TextModel(self._tiny_config(output_vocab_size=40)).to(torch_device)
-        with self.assertRaisesRegex(NotImplementedError, "pruned LM head"):
-            text_model.resize_token_embeddings(64)
-        # post-hoc config flips must not tie the full-width embeddings onto the pruned head
-        model.config.tie_word_embeddings = True
-        with self.assertRaisesRegex(ValueError, "Cannot tie a pruned LM head"):
-            model.tie_weights()
+    def test_output_vocab_size_validation(self):
+        for output_vocab_size in (-1, 0, 100):
+            with self.subTest(output_vocab_size=output_vocab_size):
+                with self.assertRaisesRegex(ValueError, "must be in"):
+                    self._tiny_config(output_vocab_size=output_vocab_size)
+        self.assertIsNone(self._tiny_config(output_vocab_size=99).output_vocab_size)
 
 
 @require_torch
