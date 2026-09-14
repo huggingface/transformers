@@ -591,6 +591,15 @@ class InklingDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+class InklingNormedEmbedding(nn.Embedding):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, norm_eps: float):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.embed_norm = InklingRMSNorm(embedding_dim, eps=norm_eps)
+
+    def forward(self, input_ids: torch.Tensor):
+        return self.embed_norm(super().forward(input_ids))
+
+
 @auto_docstring
 class InklingPreTrainedModel(PreTrainedModel):
     config_class = InklingConfig
@@ -650,12 +659,13 @@ class InklingTextModel(InklingPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embed_tokens = InklingNormedEmbedding(
+            config.vocab_size, config.hidden_size, self.padding_idx, config.rms_norm_eps
+        )
         self.layers = nn.ModuleList(
             [InklingDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = InklingRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.embed_norm = InklingRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -679,8 +689,6 @@ class InklingTextModel(InklingPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        # The norm needs to be outside the `if` in case `input_embeds` are given explicitly
-        inputs_embeds = self.embed_norm(inputs_embeds)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -1058,8 +1066,8 @@ class InklingModel(InklingPreTrainedModel):
         that the placeholder token count matches the length of `features`. If the lengths differ, an error is raised.
         """
         if input_ids is None:
-            special_mask = inputs_embeds == self.language_model.embed_norm(
-                self.get_input_embeddings()(torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device))
+            special_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_mask = special_mask.all(-1)
         else:
@@ -1128,8 +1136,6 @@ class InklingModel(InklingPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
-        # The norm need to be outside the `if` in case `input_embeds` are given explicitly
-        inputs_embeds = self.language_model.embed_norm(inputs_embeds)
 
         # Merge text and images
         if pixel_values is not None:
