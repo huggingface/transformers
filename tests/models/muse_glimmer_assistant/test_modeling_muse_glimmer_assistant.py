@@ -17,9 +17,12 @@ import unittest
 
 from ...test_modeling_common import (
     ModelTesterMixin,
+    cleanup,
     is_torch_available,
     random_attention_mask,
     require_torch,
+    require_torch_accelerator,
+    slow,
     torch_device,
 )
 
@@ -27,7 +30,12 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-    from transformers import MuseGlimmerAssistantConfig, MuseGlimmerAssistantModel
+    from transformers import (
+        AutoProcessor,
+        MuseGlimmerAssistantConfig,
+        MuseGlimmerAssistantModel,
+        MuseGlimmerForConditionalGeneration,
+    )
 
 
 class MuseGlimmerAssistantModelTester:
@@ -141,3 +149,111 @@ class MuseGlimmerAssistantModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip("Fix me later, not worth wasting time on it now")
     def test_retain_grad_hidden_states_attention(self):
         pass
+
+
+# The drafter checkpoint is ~5 layers (hidden_size=6656) — roughly 3–4 GiB in bfloat16, which fits on a
+# single 24 GiB accelerator without CPU offloading.  The full DFlash test also loads the main 30B model
+# with device_map="auto" (same reasoning as MuseGlimmerIntegrationTest in test_modeling_muse_glimmer.py).
+@slow
+@require_torch_accelerator
+class MuseGlimmerAssistantIntegrationTest(unittest.TestCase):
+    drafter_id = "meta-models/Muse-Glimmer-30B-assistant"
+    main_model_id = "meta-models/Muse-Glimmer-30B"
+
+    # DFlash is a lossless speculative-decoding algorithm: it provably produces the same token sequence as
+    # standard greedy decoding.  The expected prefix below is therefore identical to the one verified by
+    # MuseGlimmerIntegrationTest.test_text_generation_matches_reference in test_modeling_muse_glimmer.py.
+    EXPECTED_DFLASH_TEXT_PREFIX = " to find your gift. The purpose of life is to give it away."
+
+    @classmethod
+    def setUpClass(cls):
+        cls.drafter = None
+        cls.model = None
+
+    @classmethod
+    def get_drafter(cls):
+        if cls.drafter is None:
+            cls.drafter = MuseGlimmerAssistantModel.from_pretrained(
+                cls.drafter_id, dtype=torch.bfloat16, device_map="auto"
+            )
+        return cls.drafter
+
+    @classmethod
+    def get_model(cls):
+        if cls.model is None:
+            cls.model = MuseGlimmerForConditionalGeneration.from_pretrained(
+                cls.main_model_id, dtype=torch.bfloat16, device_map="auto"
+            )
+        return cls.model
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.drafter is not None:
+            del cls.drafter
+            cls.drafter = None
+        if cls.model is not None:
+            del cls.model
+            cls.model = None
+        cleanup(torch_device, gc_collect=True)
+
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def test_drafter_forward_output_shape(self):
+        """Standalone drafter forward pass with synthetic inputs.
+
+        The assistant borrows embeddings from the main model at runtime, so the only meaningful
+        standalone check is that the drafter accepts correctly shaped inputs and produces a
+        finite hidden-state tensor of the expected shape.  No main model is needed here.
+        """
+        drafter = self.get_drafter()
+        config = drafter.config
+
+        noise_embeds = torch.randn(
+            1, config.block_size, config.hidden_size, dtype=torch.bfloat16, device=torch_device
+        )
+        # context_hidden_states: [batch, context_len, hidden_size * num_target_layers]
+        context_hidden_states = torch.randn(
+            1, 7, config.hidden_size * len(config.target_layer_ids), dtype=torch.bfloat16, device=torch_device
+        )
+
+        with torch.no_grad():
+            out = drafter(noise_embeds=noise_embeds, context_hidden_states=context_hidden_states)
+
+        self.assertEqual(
+            out.last_hidden_state.shape,
+            torch.Size([1, config.block_size, config.hidden_size]),
+        )
+        self.assertTrue(out.last_hidden_state.isfinite().all())
+
+    def test_dflash_speculative_generation(self):
+        """End-to-end DFlash speculative decoding produces the same text as greedy decoding.
+
+        DFlash is a lossless speculative-decoding algorithm, so the completion must match the
+        reference produced by MuseGlimmerIntegrationTest.test_text_generation_matches_reference.
+        This test therefore validates both that the DFlash pipeline runs without errors and that
+        the drafter does not alter the model's output distribution.
+        """
+        model = self.get_model()
+        drafter = self.get_drafter()
+        processor = AutoProcessor.from_pretrained(self.main_model_id)
+        tokenizer = processor.tokenizer
+
+        prompt = "The meaning of life is"
+        prompt_ids = tokenizer(prompt, add_special_tokens=False).input_ids
+        input_ids = torch.tensor([[tokenizer.bos_token_id] + prompt_ids], device=torch_device)
+
+        # Same token budget reasoning as MuseGlimmerIntegrationTest.test_text_generation_matches_reference:
+        # 24 tokens gives margin for different tokenisations while keeping PCIe weight-streaming cost low.
+        output = model.generate(
+            input_ids=input_ids,
+            assistant_model=drafter,
+            speculation_type="dflash",
+            max_new_tokens=24,
+            do_sample=False,
+        )
+        completion = tokenizer.decode(output[0, input_ids.shape[1] :], skip_special_tokens=True)
+        self.assertEqual(completion[: len(self.EXPECTED_DFLASH_TEXT_PREFIX)], self.EXPECTED_DFLASH_TEXT_PREFIX)
