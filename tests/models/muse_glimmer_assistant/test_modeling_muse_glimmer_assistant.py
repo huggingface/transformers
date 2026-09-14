@@ -222,9 +222,7 @@ class MuseGlimmerAssistantIntegrationTest(unittest.TestCase):
         drafter = self.get_drafter()
         config = drafter.config
 
-        noise_embeds = torch.randn(
-            1, config.block_size, config.hidden_size, dtype=torch.bfloat16, device=torch_device
-        )
+        noise_embeds = torch.randn(1, config.block_size, config.hidden_size, dtype=torch.bfloat16, device=torch_device)
         # context_hidden_states: [batch, context_len, hidden_size * num_target_layers]
         context_hidden_states = torch.randn(
             1, 7, config.hidden_size * len(config.target_layer_ids), dtype=torch.bfloat16, device=torch_device
