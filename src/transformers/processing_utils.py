@@ -431,6 +431,10 @@ class AudioKwargs(TypedDict, total=False):
         do_batch_spectrogram (`bool`, *optional*):
             Whether to extract the spectrogram on the padded batch at once (`True`) or per waveform with
             feature-level padding (`False`).
+        center (`bool` or `str`, *optional*):
+            Per-call override of `spectrogram_config.stft_config.center`. Streaming chunks after the first
+            need `False`: the per-chunk STFT then reproduces, frame-for-frame, a single centered pass over
+            the whole utterance.
         add_channel_dim (`bool`, *optional*):
             Whether to insert a channel axis into the batched waveform, giving `(batch, channels, samples)`.
             Config only — not accepted by `__call__`; see `per_call_kwargs`.
@@ -474,6 +478,7 @@ class AudioKwargs(TypedDict, total=False):
     spectrogram_config: dict | SpectrogramConfig | None
     do_extract_spectrogram: bool | None
     do_batch_spectrogram: bool | None
+    center: bool | str | None
     # TODO: remove `add_channel_dim` — from here and from `BaseAudioProcessor.per_call_kwargs`'s exclusion —
     # once the six codec models that set it (dia, dac, encodec, xcodec2, vibevoice_acoustic_tokenizer,
     # kyutai_speech_to_text) align their modeling with the library's batch layout.
@@ -791,7 +796,7 @@ class ProcessorMixin(PushToHubMixin):
                 videos_replacements,
                 audio_replacements,
             )
-            text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
+            text_inputs = self._encode_text(text, **merged_kwargs["text_kwargs"])
             self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video", "audio"])
 
             if return_text_replacement_offsets:
@@ -807,7 +812,12 @@ class ProcessorMixin(PushToHubMixin):
         if not kwargs.get("return_metadata"):
             data.pop("video_metadata", None)
 
-        return BatchFeature(data, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion)
+        # The audio processor returns a `BatchFeature` that still resolves the deprecated key names
+        # (`input_features` -> `audio_features`); keep that subclass rather than flattening it back.
+        batch_feature_class = type(processed_audio) if isinstance(processed_audio, BatchFeature) else BatchFeature
+        return batch_feature_class(
+            data, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion
+        )
 
     def prepare_inputs_layout(
         self,
@@ -861,6 +871,14 @@ class ProcessorMixin(PushToHubMixin):
         if images is None and text is None and videos is None and audio is None:
             raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
 
+    def validate_streaming_chunk(self, is_streaming: bool, is_first_audio_chunk: bool):
+        """
+        Validate the streaming-session flags of a chunked audio processor: outside a streaming session
+        there is a single chunk, and it is the first one.
+        """
+        if not is_streaming and not is_first_audio_chunk:
+            raise ValueError("In non-streaming mode (`is_streaming=False`), `is_first_audio_chunk` must be `True`.")
+
     # Simple preprocessing includes calling the `subprocessor` and optionally
     # building placeholder strings. Each processor can override and add their
     # own special pre/post processing on top, e.g. see `audioflamingo`
@@ -903,6 +921,14 @@ class ProcessorMixin(PushToHubMixin):
                 audio_replacements.append(replacement_text)
 
         return processed_audio, audio_replacements
+
+    def _encode_text(self, text, **kwargs) -> dict:
+        """Tokenize `text` into the model's text inputs.
+
+        Override when the model's text inputs are not the tokenizer's own keys, e.g. a transducer whose
+        text is a target rather than a prompt and becomes `labels` / `decoder_input_ids`.
+        """
+        return self.tokenizer(text, **kwargs)
 
     # To be overridden by each model's processor if they need to add placeholder tokens
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
@@ -2458,6 +2484,8 @@ class ProcessorMixin(PushToHubMixin):
         Checks that number of special tokens in text and processed text is same. The count can be different
         if tokenized text was truncated, leading to issues in model code.
         """
+        if not self.all_special_multimodal_tokens:
+            return
         input_ids = text_inputs["input_ids"]
         if hasattr(input_ids, "tolist"):
             input_ids = input_ids.tolist()

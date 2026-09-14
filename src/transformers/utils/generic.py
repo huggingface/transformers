@@ -28,7 +28,7 @@ import warnings
 from collections import OrderedDict, UserDict
 from collections.abc import Callable, Iterable, MutableMapping
 from contextlib import AbstractContextManager, ExitStack, nullcontext
-from dataclasses import fields, is_dataclass
+from dataclasses import fields, is_dataclass, replace
 from enum import Enum
 from functools import partial, wraps
 from typing import TYPE_CHECKING, Any, ClassVar, TypedDict, TypeVar
@@ -92,6 +92,31 @@ class DataclassDict:
             if isinstance(config.get(key), dict):
                 config[key] = nested_type.from_dict(config[key])
         return cls(**config)
+
+    @classmethod
+    def field_names(cls) -> set[str]:
+        """Own field names, plus the nested-config ones `replace_fields` accepts."""
+        names = {f.name for f in fields(cls)}
+        for nested_type in cls._nested_config_types.values():
+            names |= {f.name for f in fields(nested_type)}
+        return names
+
+    def replace_fields(self, **overrides):
+        """Copy with `overrides` applied, each routed to the config declaring it. Own fields win a name clash."""
+        nested_overrides = {}
+        for key in set(overrides) - {f.name for f in fields(self)}:
+            for name, nested_type in self._nested_config_types.items():
+                if key in {f.name for f in fields(nested_type)}:
+                    nested_overrides.setdefault(name, {})[key] = overrides.pop(key)
+                    break
+            else:
+                raise ValueError(f"`{key}` is not a field of {type(self).__name__} nor of its nested configs.")
+        for name, nested in nested_overrides.items():
+            current = getattr(self, name)
+            overrides[name] = (
+                replace(current, **nested) if current is not None else self._nested_config_types[name](**nested)
+            )
+        return replace(self, **overrides)
 
     def __or__(self, other):
         if isinstance(other, dict) or type(other) is type(self):

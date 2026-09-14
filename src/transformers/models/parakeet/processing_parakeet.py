@@ -15,13 +15,10 @@
 
 from tokenizers.decoders import DecodeStream
 
-from ...audio_utils import AudioInput, make_list_of_audio
+from ...audio_utils import AudioInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
@@ -30,7 +27,6 @@ class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
             "sampling_rate": 16000,
             "padding": "longest",
             "return_padding_mask": True,
-            "subsampling_factor": 8,
         },
         "text_kwargs": {
             "padding": True,
@@ -43,7 +39,9 @@ class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class ParakeetProcessor(ProcessorMixin):
-    def __init__(self, audio_processor, tokenizer, blank_token="<blank>", decoder_type=None):
+    valid_processor_kwargs = ParakeetProcessorKwargs
+
+    def __init__(self, audio_processor, tokenizer, blank_token="<blank>", decoder_type=None, subsampling_factor=8):
         r"""
         blank_token (`str`, *optional*, defaults to `"<blank>"`):
             Blank token for transducer decoding.
@@ -55,10 +53,14 @@ class ParakeetProcessor(ProcessorMixin):
             - `"tdt"`: Repeated tokens are kept; each token span is based on its predicted duration. Punctuation is attached to the preceding token.
 
             If `None` (older checkpoints) the decoder type is inferred automatically for backward compatibility.
+        subsampling_factor (`int`, *optional*, defaults to 8):
+            The encoder's subsampling factor, i.e. how many mel frames one encoder frame spans. Used to turn
+            frame indices into timestamps.
         """
         self.blank_token = blank_token
         self.blank_token_id = tokenizer.convert_tokens_to_ids(blank_token)
         self.decoder_type = decoder_type
+        self.subsampling_factor = subsampling_factor
         super().__init__(audio_processor, tokenizer)
 
     @property
@@ -75,49 +77,20 @@ class ParakeetProcessor(ProcessorMixin):
         self,
         audio: AudioInput,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        sampling_rate: int | None = None,
         **kwargs: Unpack[ParakeetProcessorKwargs],
     ):
-        r"""
-        sampling_rate (`int`, *optional*):
-            The sampling rate of the input audio in Hz. This should match the sampling rate expected by the feature
-            extractor (defaults to 16000 Hz). If provided, it will be validated against the processor's expected
-            sampling rate, and an error will be raised if they don't match. If not provided, a warning will be
-            issued and the default sampling rate will be assumed.
-        """
-        audio = make_list_of_audio(audio)
+        return super().__call__(audio=audio, text=text, **kwargs)
 
-        output_kwargs = self._merge_kwargs(
-            ParakeetProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        if sampling_rate is None:
-            logger.warning_once(
-                f"You've provided audio without specifying the sampling rate. It will be assumed to be {output_kwargs['audio_kwargs']['sampling_rate']}, which can result in silent errors."
-            )
-        else:
-            # Forward the caller's assertion; the audio processor resamples if it differs from its own rate.
-            output_kwargs["audio_kwargs"]["sampling_rate"] = sampling_rate
-
-        if audio is not None:
-            inputs = self.audio_processor(audio, **output_kwargs["audio_kwargs"])
-        if text is not None:
-            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
-        if text is None:
-            return inputs
-        else:
-            inputs["labels"] = encodings["input_ids"]
-            # Prepend blank token to labels to form decoder_input_ids.
-            # The TDT decoder expects [blank, label_0, ..., label_{U-1}] as input,
-            if isinstance(text, str):
-                text = [text]
-            decoder_text = [self.blank_token + t for t in text]
-            decoder_encodings = self.tokenizer(decoder_text, **output_kwargs["text_kwargs"])
-            inputs["decoder_input_ids"] = decoder_encodings["input_ids"]
-            return inputs
+    def _encode_text(self, text, **kwargs) -> dict:
+        # Text is a transcription target: it becomes `labels`, and the transducer decoder expects
+        # [blank, label_0, ..., label_{U-1}] as its own input.
+        if isinstance(text, str):
+            text = [text]
+        decoder_text = [self.blank_token + text_el for text_el in text]
+        return {
+            "labels": self.tokenizer(text, **kwargs)["input_ids"],
+            "decoder_input_ids": self.tokenizer(decoder_text, **kwargs)["input_ids"],
+        }
 
     @property
     def model_input_names(self):
@@ -141,15 +114,7 @@ class ParakeetProcessor(ProcessorMixin):
             # Derive per-step frame indices from cumulative sum of durations.
             timestamps = durations.cumsum(dim=-1) - durations
 
-            output_kwargs = self._merge_kwargs(
-                ParakeetProcessorKwargs,
-                tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            )
-            frame_rate = (
-                self.audio_processor.hop_length
-                / self.audio_processor.sampling_rate
-                * output_kwargs["audio_kwargs"]["subsampling_factor"]
-            )
+            frame_rate = self.audio_processor.hop_length / self.audio_processor.sampling_rate * self.subsampling_factor
             # Filter padding/blank tokens and decode per sequence to keep track of token-level timestamps
             # See `compute_rnnt_timestamps` in NeMo:
             # https://github.com/NVIDIA-NeMo/NeMo/blob/1692a8fb97e1aadc883cfadd2a57c4e8a1b793aa/nemo/collections/asr/parts/submodules/rnnt_decoding.py#L993
