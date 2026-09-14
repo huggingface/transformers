@@ -42,6 +42,20 @@ class TextToAudioPipelineTests(unittest.TestCase):
     # for now only test text_to_waveform and not text_to_spectrogram
 
     @require_torch
+    def test_preprocess_tokenizer_only_model_pt(self):
+        # Regression test for tokenizer-only models (e.g. VITS, MusicGen, Bark): `preprocess`
+        # used to unconditionally call `output.to(dtype=self.model.dtype)`, which raised
+        # `TypeError: BatchEncoding.to() got an unexpected keyword argument 'dtype'`, because a
+        # tokenizer returns a `BatchEncoding` of integer tensors rather than a float `BatchFeature`.
+        speech_generator = pipeline(task="text-to-audio", model="hf-internal-testing/tiny-random-VitsModel")
+
+        # Would raise before the fix; the dtype cast must be skipped for tokenizer output.
+        model_inputs = speech_generator.preprocess("This is a test")
+
+        # Token ids must stay integer typed, i.e. not cast to the model's floating dtype.
+        self.assertFalse(torch.is_floating_point(model_inputs["input_ids"]))
+
+    @require_torch
     def test_small_speecht5_pt(self):
         audio_generator = pipeline(task="text-to-audio", model="microsoft/speecht5_tts")
         num_channels = 1  # model generates mono audio
