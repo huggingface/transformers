@@ -47,7 +47,7 @@ class PaliGemmaConfig(PreTrainedConfig):
     model_type = "paligemma"
     attribute_map = {"image_token_id": "image_token_index"}
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(
+        "vision_config": SubConfigSpec(
             config_class=AutoConfig,
             model_type="siglip_vision_model",
             init_kwargs={
@@ -61,7 +61,7 @@ class PaliGemmaConfig(PreTrainedConfig):
                 "vision_use_head": False,
             },
         ),
-        "vision_config": SubConfigSpec(
+        "text_config": SubConfigSpec(
             config_class=AutoConfig,
             model_type="gemma",
             init_kwargs={

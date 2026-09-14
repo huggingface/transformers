@@ -33,6 +33,7 @@ class Ovis2VisionConfig(PreTrainedConfig):
     """
 
     base_config_key = "vision_config"
+    model_type = "ovis2_vision"
 
     hidden_size: int = 1024
     intermediate_size: int = 2816

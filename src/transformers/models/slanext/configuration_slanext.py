@@ -43,8 +43,8 @@ class SLANeXtVisionConfig(PreTrainedConfig):
         The dimensionality of the MLP layer in the Transformer encoder.
     """
 
-    model_type = "slanext_vision"
     base_config_key = "vision_config"
+    model_type = "slanext_vision"
 
     hidden_size: int = 768
     output_channels: int = 256
@@ -97,4 +97,4 @@ class SLANeXtConfig(PreTrainedConfig):
     max_text_length: int = 500
 
 
-__all__ = ["SLANeXtConfig"]
+__all__ = ["SLANeXtConfig", "SLANeXtVisionConfig"]

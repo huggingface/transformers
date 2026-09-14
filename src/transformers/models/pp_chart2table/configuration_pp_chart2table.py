@@ -44,6 +44,8 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
     """
 
     base_config_key = "vision_config"
+    model_type = "pp_chart2table_vision"
+
     hidden_size: int = 768
     output_channels: int = 256
     num_hidden_layers: int = 12

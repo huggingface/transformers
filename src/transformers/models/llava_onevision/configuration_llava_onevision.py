@@ -58,7 +58,7 @@ class LlavaOnevisionConfig(PreTrainedConfig):
         "video_token_id": "video_token_index",
     }
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(
+        "vision_config": SubConfigSpec(
             config_class=AutoConfig,
             model_type="siglip_vision_model",
             init_kwargs={
@@ -71,7 +71,7 @@ class LlavaOnevisionConfig(PreTrainedConfig):
                 "vision_use_head": False,
             },
         ),
-        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen2"),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen2"),
     }
 
     vision_config: dict | PreTrainedConfig | None = None

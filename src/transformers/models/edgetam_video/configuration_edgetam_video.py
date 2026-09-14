@@ -40,6 +40,7 @@ class EdgeTamVideoPromptEncoderConfig(PreTrainedConfig):
     """
 
     base_config_key = "prompt_encoder_config"
+    model_type = "edgetam_video_prompt_encoder"
 
     hidden_size: int = 256
     image_size: int | list[int] | tuple[int, int] = 1024
@@ -74,6 +75,7 @@ class EdgeTamVideoMaskDecoderConfig(PreTrainedConfig):
     """
 
     base_config_key = "mask_decoder_config"
+    model_type = "edgetam_video_mask_decoder"
 
     hidden_size: int = 256
     hidden_act: str = "gelu"

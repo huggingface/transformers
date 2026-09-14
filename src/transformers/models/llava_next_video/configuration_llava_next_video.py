@@ -64,7 +64,7 @@ class LlavaNextVideoConfig(PreTrainedConfig):
         "video_token_id": "video_token_index",
     }
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(
+        "vision_config": SubConfigSpec(
             config_class=AutoConfig,
             model_type="clip_vision_model",
             init_kwargs={
@@ -78,7 +78,7 @@ class LlavaNextVideoConfig(PreTrainedConfig):
                 "projection_dim": 768,
             },
         ),
-        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="llama"),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="llama"),
     }
 
     vision_config: dict | PreTrainedConfig | None = None

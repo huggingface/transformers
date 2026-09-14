@@ -32,8 +32,8 @@ class Lfm2VlConfig(PreTrainedConfig):
 
     model_type = "lfm2_vl"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="siglip2_vision_model"),
-        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="lfm2"),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="siglip2_vision_model"),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="lfm2"),
     }
 
     vision_config: dict | PreTrainedConfig | None = None

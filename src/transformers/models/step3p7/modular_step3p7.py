@@ -331,9 +331,9 @@ class Step3p7Config(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         # Force default model-type - hub has a remote-code format config
         if isinstance(self.vision_config, dict):
-            self.vision_config = self.vision_config.pop("model_type", None)
+            self.vision_config.pop("model_type", None)
         if isinstance(self.text_config, dict):
-            self.text_config = self.text_config.pop("model_type", None)
+            self.text_config.pop("model_type", None)
         super().__post_init__(**kwargs)
 
 

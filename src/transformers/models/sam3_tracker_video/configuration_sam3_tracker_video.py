@@ -42,6 +42,7 @@ class Sam3TrackerVideoPromptEncoderConfig(PreTrainedConfig):
     """
 
     base_config_key = "prompt_encoder_config"
+    model_type = "sam3_tracker_video_prompt_encoder"
 
     hidden_size: int = 256
 
@@ -77,6 +78,7 @@ class Sam3TrackerVideoMaskDecoderConfig(PreTrainedConfig):
     """
 
     base_config_key = "mask_decoder_config"
+    model_type = "sam3_tracker_video_mask_decoder"
 
     hidden_size: int = 256
     hidden_act: str = "gelu"

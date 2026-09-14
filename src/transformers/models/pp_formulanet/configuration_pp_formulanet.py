@@ -46,7 +46,8 @@ class PPFormulaNetVisionConfig(PreTrainedConfig):
         The hidden size of the decoder that the encoder features are projected to.
     """
 
-    base_config_key = "vision"
+    base_config_key = "vision_config"
+
     model_type = "pp_formulanet_vision"
 
     hidden_size: int = 768
@@ -66,7 +67,6 @@ class PPFormulaNetVisionConfig(PreTrainedConfig):
     window_size: int = 14
     global_attn_indexes: list[int] | tuple[int, ...] = (2, 5, 8, 11)
     mlp_dim: int = 3072
-
     post_conv_in_channels: int = 256
     post_conv_out_channels: int = 1024
     post_conv_mid_channels: int = 512

@@ -170,6 +170,7 @@ class Sam2PromptEncoderConfig(PreTrainedConfig):
     """
 
     base_config_key = "prompt_encoder_config"
+    model_type = "sam2_prompt_encoder"
 
     hidden_size: int = 256
     image_size: int | list[int] | tuple[int, int] = 1024
@@ -204,6 +205,7 @@ class Sam2MaskDecoderConfig(PreTrainedConfig):
     """
 
     base_config_key = "mask_decoder_config"
+    model_type = "sam2_mask_decoder"
 
     hidden_size: int = 256
     hidden_act: str = "gelu"

@@ -60,7 +60,7 @@ class LightOnOcrConfig(PreTrainedConfig):
 
     model_type = "lighton_ocr"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(
+        "vision_config": SubConfigSpec(
             config_class=AutoConfig,
             model_type="pixtral",
             init_kwargs={
@@ -79,7 +79,7 @@ class LightOnOcrConfig(PreTrainedConfig):
                 "rope_parameters": {"rope_type": "default", "rope_theta": 10000},
             },
         ),
-        "vision_config": SubConfigSpec(
+        "text_config": SubConfigSpec(
             config_class=AutoConfig,
             model_type="qwen3",
             init_kwargs={
