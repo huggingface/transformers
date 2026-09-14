@@ -28,6 +28,7 @@ class CacheLayerMixin(ABC):
     """Base, abstract class for a single layer's cache."""
 
     is_compileable = False
+    is_croppable = False
     supports_early_init = True
     # Subclasses can set `_layer_type` to auto-register themselves in the mappings, if the class definition lives in a modeling
     # file instead of this file. This allows to update the mapping only when the modeling file is imported, which simplifies imports
@@ -117,6 +118,7 @@ class DynamicLayer(CacheLayerMixin):
     """
 
     is_sliding = False
+    is_croppable = True
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         self.dtype, self.device = key_states.dtype, key_states.device
@@ -960,6 +962,18 @@ class LinearAttentionCacheLayerMixin(ABC):
             if self.is_recurrent_states_initialized[i]:
                 self.recurrent_states[i] = self.recurrent_states[i].index_select(0, beam_idx.to(self.device))
 
+    @property
+    def is_croppable(self) -> bool:
+        """
+        Whether `crop` can put this layer back as it was. This is only supported when there are no recurrent states.
+        """
+        if any(self.is_recurrent_states_initialized.values()):
+            return False
+        # If nothing is initialized, return False as we don't yet know whether we will have any recurrent states or no, so let's be
+        # extra careful. If a conv states is initialized but no recurrent states are, then we return True as we know that we will never
+        # have any recurrent state (they are updated in the same forward)
+        return any(self.is_conv_states_initialized.values())
+
     def activate_past_recording(self):
         """
         Calling this function will activate past state recording, meaning that a call to `update_conv_states` will
@@ -1663,6 +1677,11 @@ class Cache:
         return len(layers) > 0 and all(layer.is_initialized for layer in layers)
 
     @property
+    def is_croppable(self) -> bool:
+        """Whether `crop` can put the whole cache back as it was, so a rollback leaves no trace."""
+        return all(layer.is_croppable for layer in self.layers)
+
+    @property
     def is_sliding(self) -> list[bool]:
         """Return whether the layers of the cache are sliding window"""
         return [getattr(layer, "is_sliding", False) for layer in self.layers]
@@ -2084,6 +2103,10 @@ class EncoderDecoderCache(Cache):
     @property
     def is_compileable(self) -> bool:
         return self.self_attention_cache.is_compileable
+
+    @property
+    def is_croppable(self) -> bool:
+        return self.self_attention_cache.is_croppable
 
     def activate_past_recording(self):
         self.self_attention_cache.activate_past_recording()

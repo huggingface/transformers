@@ -61,7 +61,9 @@ from transformers.testing_utils import (
     backend_device_count,
     evaluate_side_effect_factory,
     get_steps_per_epoch,
+    get_torch_dist_unique_port,
     is_staging_test,
+    mockenv_context,
     require_accelerate,
     require_deepspeed,
     require_non_hpu,
@@ -690,8 +692,18 @@ class TrainerAutoBatchSizeTest(TestCasePlus, TrainerIntegrationCommon):
             auto_find_batch_size=True,
             deepspeed=deepspeed,
         )
-        trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
-        trainer.train()
+        # DeepSpeed refuses to initialize without a rank in the environment, and this test runs
+        # in-process rather than under `accelerate launch`, so stand in for the launcher.
+        dist_env_1_gpu = {
+            "MASTER_ADDR": "localhost",
+            "MASTER_PORT": str(get_torch_dist_unique_port()),
+            "RANK": "0",
+            "LOCAL_RANK": "0",
+            "WORLD_SIZE": "1",
+        }
+        with mockenv_context(**dist_env_1_gpu):
+            trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
+            trainer.train()
         self.assertEqual(trainer._train_batch_size, 14)
 
     def test_auto_batch_size_with_resume_from_checkpoint(self):

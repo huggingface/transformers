@@ -729,7 +729,7 @@ default_enabled = true
 # `repeat_kv`, a converter-steering import, a quoted forward reference to another model's cache class, and a
 # `del` of a name that only exists in the inherited parent body. That was flagged upstream as converter
 # mechanics rather than model bugs, and the fix landed there, so no model needs an exemption any more.
-allowlist_models = []
+allowlist_models = ["hy_v4"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF035.explanation]
@@ -844,7 +844,7 @@ default_enabled = true
 # Down from 35 findings over 13 models: the rule now exempts guards (an `if` with no `else` that only raises
 # or only logs) and a `DEFAULT_EXEMPT_ATTRIBUTES` list of framework plumbing, which cleared `openai`(11),
 # `timm_backbone`(2), `timm_wrapper`(2), `vitpose_backbone`(1) and `glm5_next` outright and trimmed the rest.
-allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "inkling", "kimi_k25", "kosmos2", "muse_glimmer", "tipsv2", "x_clip"]
+allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "inkling", "kimi_k25", "kosmos2", "muse_glimmer", "tipsv2", "x_clip", "hy_v4"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF041.explanation]
@@ -885,7 +885,7 @@ default_enabled = true
 # (axk2, deepseek_v32, deepseek_v4, gemma4, glm_moe_dsa, ministral3, mistral4). Dropping `position_ids`
 # from a public `forward` signature is a breaking change per model, so each is its own follow-up. Upstream:
 # a `cutoff_date` would express the legacy half better than a list this long.
-allowlist_models = ["axk2", "chameleon", "clvp", "codegen", "deepseek_v32", "deepseek_v4", "falcon", "gemma4", "glm_moe_dsa", "gpt_neox_japanese", "gptj", "idefics", "idefics2", "ministral3", "mistral4", "moshi", "persimmon", "prophetnet", "qwen2_vl", "recurrent_gemma", "stablelm"]
+allowlist_models = ["axk2", "chameleon", "clvp", "codegen", "deepseek_v32", "deepseek_v4", "falcon", "gemma4", "glm_moe_dsa", "gpt_neox_japanese", "gptj", "idefics", "idefics2", "ministral3", "mistral4", "moshi", "persimmon", "prophetnet", "qwen2_vl", "recurrent_gemma", "stablelm", "hy_v4"]
 
 [rules.TRF043.explanation]
 what_it_does = "Flags a declared position_ids parameter in the forward signature of classes whose name ends in Attention."
@@ -1048,7 +1048,7 @@ default_enabled = true
 # attention-interface owner. Legacy dispatch in plain `modeling_*.py`: decision_transformer, falcon, gpt2.
 # Backend-conditional tensor handling in modular MLA/DSA-style models the interface cannot express yet:
 # axk2, deepseek_v32, diffusion_gemma, glm_moe_dsa, minimax_m3_vl, qwen2_5_omni. Follow-ups either way.
-allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "falcon", "glm_moe_dsa", "gpt2", "minimax_m3_vl", "qwen2_5_omni", "glm5_next"]
+allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "falcon", "glm_moe_dsa", "gpt2", "minimax_m3_vl", "qwen2_5_omni", "glm5_next", "hy_v4"]
 
 [rules.TRF051.explanation]
 what_it_does = "Flags comparisons against a _attn_implementation attribute in modeling_*.py and modular_*.py."
@@ -1084,11 +1084,11 @@ diff = '''
 [rules.TRF053]
 description = "No manual label shifting in modeling code; self.loss_function owns it."
 default_enabled = true
-# No `cutoff_date`: 37 findings over 15 pre-existing models that slice `shift_logits` / `shift_labels` by
+# No `cutoff_date`: 37 findings over 16 pre-existing models that slice `shift_logits` / `shift_labels` by
 # hand, 12 of them in legacy `modeling_*.py` and 3 modular (csm, gemma3, modernbert_decoder). Each move to
 # `self.loss_function` has to be checked against that model's own loss -- encoder-decoder models pass
 # already-shifted labels -- so they go one model per PR.
-allowlist_models = ["blip_2", "clvp", "csm", "gemma3", "git", "gpt2", "granite_speech", "imagegpt", "llama4", "mamba", "modernbert_decoder", "moshi", "openai", "qwen2_audio", "xlstm"]
+allowlist_models = ["blip", "blip_2", "clvp", "csm", "gemma3", "git", "gpt2", "granite_speech", "imagegpt", "llama4", "mamba", "modernbert_decoder", "moshi", "openai", "qwen2_audio", "xlstm"]
 
 [rules.TRF053.explanation]
 what_it_does = "In modeling_*.py and modular_*.py, flags assignments that build shift_logits/shift_labels (and shifted_ variants) by slicing, as in labels[..., 1:]. Receiving already-shifted labels (shift_labels = kwargs.pop(\"shift_labels\", labels)) is the correct idiom and is not flagged."

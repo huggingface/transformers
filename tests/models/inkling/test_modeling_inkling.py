@@ -503,14 +503,14 @@ class InklingIntegrationTest(unittest.TestCase):
     gist: https://gist.github.com/eustlb/cb2a5df1676911fa0eb07d0a76a38ae7
     """
 
-    IMAGE_URL = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    IMAGE_URL_2 = "http://images.cocodataset.org/val2017/000000000139.jpg"
-    AUDIO_URL = (
-        "https://huggingface.co/datasets/adarshxs/voxcpm2-native-generated-audio-user-ref/resolve/main/zs_medium.wav"
+    IMAGE_URL = (
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
     )
-    AUDIO_URL_2 = (
-        "https://huggingface.co/datasets/adarshxs/voxcpm2-native-generated-audio-user-ref/resolve/main/zs_short.wav"
+    IMAGE_URL_2 = (
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000000139.jpg"
     )
+    AUDIO_URL = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/zs_medium.wav"
+    AUDIO_URL_2 = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/zs_short.wav"
 
     @classmethod
     def setUpClass(cls):
