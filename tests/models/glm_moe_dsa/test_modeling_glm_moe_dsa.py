@@ -23,6 +23,7 @@ from parameterized import parameterized
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
+    DynamicCache,
     FineGrainedFP8Config,
     GlmMoeDsaConfig,
     is_torch_available,
@@ -124,6 +125,20 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
             ):
                 chunked = model(input_ids).logits
         torch.testing.assert_close(chunked, expected, rtol=1e-5, atol=1e-5)
+
+    def test_indexer_cache_holds_fp8_quantized_keys(self):
+        # As in the reference and the serving engines, the indexer keys are FP8 (e4m3) quantized with per-128-block
+        # power-of-two scales before they are cached, so every cached key must be exactly representable that way.
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = GlmMoeDsaForCausalLM(config).to(torch_device).eval()
+        cache = DynamicCache(config=config)
+        with torch.no_grad():
+            model(inputs["input_ids"].to(torch_device), past_key_values=cache, use_cache=True)
+        keys = torch.cat([layer.indexer_keys for layer in cache.layers if layer.is_indexer_initialized], dim=1)
+        blocks = keys.float().reshape(*keys.shape[:-1], -1, 128)
+        scale = torch.exp2(torch.ceil(torch.log2(blocks.abs().amax(-1, keepdim=True).clamp_min(1e-4) / 448.0)))
+        codes = blocks / scale
+        self.assertTrue(torch.equal(codes.to(torch.float8_e4m3fn).float(), codes))
 
     # DSA selects tokens with a hard top-k, which is discontinuous: a tiny numerical difference in the
     # indexer scores (attention backend, padding, batching, sequence packing) can flip which tokens are
