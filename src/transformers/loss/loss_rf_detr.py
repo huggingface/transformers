@@ -19,7 +19,7 @@ from torch import Tensor, nn
 
 from ..distributed.utils import _is_torch_distributed_initialized
 from ..image_transforms import center_to_corners_format
-from ..utils import is_scipy_available
+from ..utils import is_scipy_available, logging
 from .loss_for_object_detection import (
     HungarianMatcher,
     dice_loss,
@@ -30,6 +30,9 @@ from .loss_lw_detr import LwDetrImageLoss
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
+
+
+logger = logging.get_logger(__name__)
 
 
 # Copied from transformers.models.mask2former.modeling_mask2former.sigmoid_cross_entropy_loss
@@ -262,6 +265,12 @@ class RfDetrHungarianMatcher(HungarianMatcher):
             + self.cost_mask_class * cost_mask_class
             + self.cost_mask_dice * cost_mask_dice
         )
+        if not torch.isfinite(cost_matrix).any(-1).all():
+            # At least one row contains only NaN/inf
+            logger.warning_once(
+                "Some predictions have NaN or inf cost for all targets. If the loss "
+                "doesn't improve over the next steps the model has likely diverged."
+            )
         # Replace NaN and inf values with max value to avoid linear_sum_assignment errors. Max value is used to match
         # these predictions only if there are no other valid predictions.
         max_value = torch.finfo(cost_matrix.dtype).max

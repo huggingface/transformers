@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from ..image_transforms import center_to_corners_format
-from ..utils import is_scipy_available
+from ..utils import is_scipy_available, logging
 from .loss_for_object_detection import (
     HungarianMatcher,
     ImageLoss,
@@ -14,6 +14,9 @@ from .loss_for_object_detection import (
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
+
+
+logger = logging.get_logger(__name__)
 
 
 class DeformableDetrHungarianMatcher(HungarianMatcher):
@@ -49,6 +52,12 @@ class DeformableDetrHungarianMatcher(HungarianMatcher):
 
         # Final cost matrix
         cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
+        if not torch.isfinite(cost_matrix).any(-1).all():
+            # At least one row contains only NaN/inf
+            logger.warning_once(
+                "Some predictions have NaN or inf cost for all targets. If the loss "
+                "doesn't improve over the next steps the model has likely diverged."
+            )
         # Replace NaN and inf values with max value to avoid linear_sum_assignment errors. Max value is used to match
         # these predictions only if there are no other valid predictions.
         max_value = torch.finfo(cost_matrix.dtype).max

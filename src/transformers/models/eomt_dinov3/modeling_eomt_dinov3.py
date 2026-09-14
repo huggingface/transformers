@@ -34,7 +34,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import TransformersKwargs, auto_docstring, is_accelerate_available
+from ...utils import TransformersKwargs, auto_docstring, is_accelerate_available, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
@@ -47,6 +47,8 @@ if is_scipy_available():
 if is_accelerate_available():
     from accelerate import PartialState
     from accelerate.utils import reduce
+
+logger = logging.get_logger(__name__)
 
 
 def rotate_half(x):
@@ -634,6 +636,12 @@ class EomtDinov3HungarianMatcher(nn.Module):
             cost_dice = pair_wise_dice_loss(pred_mask, target_mask)
             # final cost matrix
             cost_matrix = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
+            if not torch.isfinite(cost_matrix).any(-1).all():
+                # At least one row contains only NaN/inf
+                logger.warning_once(
+                    "Some predictions have NaN or inf cost for all targets. If the loss "
+                    "doesn't improve over the next steps the model has likely diverged."
+                )
             # Replace NaN and inf values with max value to avoid linear_sum_assignment errors. Max value is used to match
             # these predictions only if there are no other valid predictions.
             max_value = torch.finfo(cost_matrix.dtype).max
