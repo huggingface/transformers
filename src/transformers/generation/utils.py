@@ -878,7 +878,7 @@ class GenerationMixin(ContinuousMixin):
 
         return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * bos_token_id
 
-    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs, dropped_mask_length=None):
+    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         """
         Tries to infer position ids given attention mask and past kv cache length. All instances when
         `position_ids=None` should call this method.
@@ -893,9 +893,6 @@ class GenerationMixin(ContinuousMixin):
             position_ids = attention_mask.long().cumsum(-1) - 1
             # We need this as otherwise padding tokens appear as -1 in position
             position_ids = position_ids.masked_fill(attention_mask == 0, 0)
-        elif dropped_mask_length is not None:
-            position_ids = torch.arange(dropped_mask_length, dtype=torch.long, device=inputs_tensor.device)
-            position_ids = position_ids.unsqueeze(0).expand(inputs_tensor.shape[0], -1)
         else:
             past_length = 0
             if (cache := model_kwargs.get("past_key_values")) is not None:
@@ -2709,6 +2706,11 @@ class GenerationMixin(ContinuousMixin):
             if model_input_name == "input_ids" and len(model_kwargs["attention_mask"].shape) > 2:
                 raise ValueError("`attention_mask` passed to `generate` must be 2D.")
 
+        kwargs_has_position_ids = model_kwargs.get("position_ids", None) is not None
+        accepts_position_ids = "position_ids" in set(inspect.signature(self.forward).parameters.keys())
+        if not kwargs_has_position_ids and accepts_position_ids and not self.config.is_encoder_decoder:
+            model_kwargs["position_ids"] = self._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
+
         # A mask of all ones says nothing to the model, so drop it. Not under compilation though: dynamo
         # guards on `attention_mask is None`, so dropping it costs a recompile.
         attention_mask = model_kwargs.get("attention_mask")
@@ -2727,17 +2729,8 @@ class GenerationMixin(ContinuousMixin):
             and generation_mode != GenerationMode.ASSISTED_GENERATION
         )
         if not inputs_are_padded and uses_default_decoding_loop:
-            # Positions and `_prefill` still need its length, which `input_ids` cannot give us -- those may
-            # hold only the new tokens
-            generation_config._dropped_mask_length = attention_mask.shape[-1]
+            generation_config._mask_length = attention_mask.shape[-1]
             del model_kwargs["attention_mask"]
-
-        kwargs_has_position_ids = model_kwargs.get("position_ids", None) is not None
-        accepts_position_ids = "position_ids" in set(inspect.signature(self.forward).parameters.keys())
-        if not kwargs_has_position_ids and accepts_position_ids and not self.config.is_encoder_decoder:
-            model_kwargs["position_ids"] = self._prepare_position_ids_for_generation(
-                inputs_tensor, model_kwargs, generation_config._dropped_mask_length
-            )
 
         if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
             # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`
@@ -4134,9 +4127,7 @@ class GenerationMixin(ContinuousMixin):
                 # use the length it recorded when doing so
                 mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
                 attention_mask = model_kwargs.get(mask_key)
-                mask_length = (
-                    attention_mask.shape[1] if attention_mask is not None else generation_config._dropped_mask_length
-                )
+                mask_length = attention_mask.shape[1] if attention_mask is not None else generation_config._mask_length
                 # Only slice when the inputs hold the whole sequence; if they hold only the new tokens there is
                 # nothing to do
                 if mask_length is not None and input_ids.shape[1] == mask_length:

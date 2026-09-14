@@ -379,7 +379,7 @@ class GenerationConfig(PushToHubMixin):
     _pad_token_tensor: "torch.Tensor | None"
     _decoder_start_token_tensor: "torch.Tensor | None"
 
-    _dropped_mask_length: int | None = None
+    _mask_length: int | None = None
 
     # Hash to detect whether the instance was modified after loading
     _original_object_hash: int | None
