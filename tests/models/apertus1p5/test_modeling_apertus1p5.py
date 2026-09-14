@@ -16,6 +16,7 @@
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import pytest
 
@@ -55,6 +56,7 @@ if is_torch_available():
         WavTokenizerConfig,
         WavTokenizerEncoderModel,
     )
+    from transformers.models.wavtokenizer.modeling_wavtokenizer import WavTokenizerEncoderOutput
 
 
 class Apertus1p5ModelTester:
@@ -440,19 +442,31 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         """The generation wrapper must pass audio tensors down and scatter them into the sequence."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = Apertus1p5ForConditionalGeneration(config).to(torch_device).eval()
-        with torch.no_grad():
-            # the wavtokenizer codebook is zero-initialized (degenerate argmin); randomize it deterministically
-            embed = model.model.audio_tokenizer.quantizer.codebook.embed
-            embed.copy_(torch.randn(embed.shape, generator=torch.Generator().manual_seed(0)))
-        torch.manual_seed(1)
-        loud_noise = torch.randn_like(inputs_dict["input_features"]) * 5.0
-        with torch.no_grad():
-            ids_a = model.model.get_audio_tokens(inputs_dict["input_features"], inputs_dict["feature_attention_mask"])
-            ids_b = model.model.get_audio_tokens(loud_noise, inputs_dict["feature_attention_mask"])
-            self.assertFalse(torch.equal(ids_a, ids_b), "test signals must map to different codes")
-            logits_a = model(**inputs_dict).logits
-            logits_b = model(**{**inputs_dict, "input_features": loud_noise}).logits
-        self.assertFalse(torch.allclose(logits_a, logits_b), "different audio must yield different logits")
+
+        # Distinct waveforms can legitimately quantize to the same code. Control only the encoder
+        # boundary so this test exercises real audio forwarding, vocabulary offsets and embedding scatter.
+        def encode(clip, return_dict):
+            self.assertTrue(return_dict)
+            code_id = int(clip[0, 0, 0].item())
+            self.assertIn(code_id, (0, 1))
+            torch.testing.assert_close(clip, torch.full_like(clip, code_id))
+            code_length = -(-clip.shape[-1] // config.audio_config.hop_length)
+            codes = torch.full((1, 1, code_length), code_id, dtype=torch.long, device=clip.device)
+            return WavTokenizerEncoderOutput(audio_codes=codes)
+
+        logits = []
+        for value in (0, 1):
+            features = torch.full_like(inputs_dict["input_features"], value)
+            with patch.object(model.model.audio_tokenizer, "encode", side_effect=encode) as mock_encode:
+                with torch.no_grad():
+                    logits.append(model(**{**inputs_dict, "input_features": features}).logits)
+                self.assertEqual(mock_encode.call_count, features.shape[0])
+                for call, clip, mask in zip(
+                    mock_encode.call_args_list, features, inputs_dict["feature_attention_mask"]
+                ):
+                    expected = clip[None, :, : int(mask.sum())].to(model.model.audio_tokenizer.dtype)
+                    torch.testing.assert_close(call.args[0], expected)
+        self.assertFalse(torch.allclose(*logits), "different audio codes must yield different logits")
 
     def test_config_return_dict_false_with_multimodal_inputs(self):
         """Internal model calls stay structured while the public output follows config-level tuple mode."""
