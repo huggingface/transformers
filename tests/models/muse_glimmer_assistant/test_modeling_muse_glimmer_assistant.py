@@ -178,8 +178,6 @@ class MuseGlimmerAssistantIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
     @classmethod
     def get_model(cls):
         if cls.model is None:
-            # Load in 4-bit so the 30B model (~15 GiB) fits on a single 24 GiB accelerator
-            # with enough headroom for the KV cache and lm_head activation buffers.
             bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16)
             cls.model = MuseGlimmerForConditionalGeneration.from_pretrained(
                 cls.main_model_id,
