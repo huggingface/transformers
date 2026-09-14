@@ -223,6 +223,8 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         audio_inputs = self.feature_extractor(flat_chunks, **kwargs)
         audio_inputs["input_features_mask"] = audio_inputs.pop("attention_mask")
 
+        # `input_features_mask` alone can't tell chunks apart at a window boundary, so `padding_mask` records
+        # each sample's raw length instead; the model recovers `audio_chunk_mapping` from it via `audio_chunk_size`.
         padding_mask = torch.zeros(len(audio), max(per_sample_lengths), dtype=torch.long)
         for idx, length in enumerate(per_sample_lengths):
             padding_mask[idx, :length] = 1
@@ -232,15 +234,14 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
             torch.arange(len(audio), dtype=torch.long), torch.tensor(per_sample_windows, dtype=torch.long)
         )
 
-        # Based on `Qwen2AudioEncoder._get_feat_extract_output_lengths` (conv stride 2, then avg-pool stride 2), so
-        # the placeholder token count matches `get_audio_features` from the same mask.
+        # Based on `WhisperEncoder._get_feat_extract_output_lengths` (conv stride 2 only), so the placeholder
+        # token count matches `get_audio_features` from the same mask.
         mel_lengths = audio_inputs["input_features_mask"].sum(-1)
         conv_lengths = (mel_lengths - 1) // 2 + 1
-        encoder_lengths = (conv_lengths - 2) // 2 + 1
 
-        per_sample_encoder_lengths = torch.zeros(len(audio), dtype=torch.long)
-        per_sample_encoder_lengths.scatter_add_(0, audio_chunk_mapping, encoder_lengths)
-        audio_inputs["num_audio_tokens"] = per_sample_encoder_lengths // self.audio_merge_size
+        per_sample_conv_lengths = torch.zeros(len(audio), dtype=torch.long)
+        per_sample_conv_lengths.scatter_add_(0, audio_chunk_mapping, conv_lengths)
+        audio_inputs["num_audio_tokens"] = per_sample_conv_lengths // self.audio_merge_size
 
         audio_replacements = [self.replace_audio_token(audio_inputs, audio_idx=idx) for idx in range(len(audio))]
         return audio_inputs, audio_replacements
