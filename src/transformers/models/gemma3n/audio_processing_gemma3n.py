@@ -15,7 +15,28 @@
 from ...audio_processing_backends import TorchAudioBackend
 
 
+def _preemphasis_mode_from_htk_flavor(value, config_dict):
+    """`preemphasis_htk_flavor` is a bool; the modern field is a named mode.
+
+    True selects the HTK variant, which scales the first sample of each frame by `1 - preemphasis`
+    instead of dropping it. Callable rather than a dot-path because the translation is not 1:1.
+    """
+    spectrogram_config = config_dict.setdefault("spectrogram_config", {})
+    spectrogram_config.setdefault("preemphasis_mode", "htk_per_frame" if value else "per_frame")
+
+
+LEGACY_GEMMA_AUDIO_FIELDS = {
+    "input_scale_factor": "spectrogram_config.waveform_scale",
+    "preemphasis_htk_flavor": _preemphasis_mode_from_htk_flavor,
+    # Derived, not configurable: the legacy extractor computes
+    # `fft_length = 2 ** ceil(log2(frame_length))`, doubled when `fft_overdrive` is set, and every
+    # config that carries the flag also carries the resulting `fft_length` — which the base mapping
+    # already sends to `n_fft`. Honouring the flag as well would let the two disagree.
+    "fft_overdrive": None,
+}
+
 class Gemma3nAudioProcessorMixin:
+    legacy_field_mapping = LEGACY_GEMMA_AUDIO_FIELDS
     max_length = 480000
     pad_to_multiple_of = 128
     sampling_rate = 16000

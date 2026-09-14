@@ -13,10 +13,12 @@
 # limitations under the License.
 
 from ...audio_processing_backends import TorchAudioBackend
+from ..gemma3n.audio_processing_gemma3n import LEGACY_GEMMA_AUDIO_FIELDS
 
 
 class Gemma4AudioProcessorMixin:
     legacy_field_mapping = {
+        **LEGACY_GEMMA_AUDIO_FIELDS,
         "mel_floor": "spectrogram_config.pre_log_offset",
     }
     max_length = 480_000

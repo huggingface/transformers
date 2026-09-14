@@ -36,6 +36,13 @@ class UnivNetAudioProcessorKwargs(AudioKwargs, total=False):
         Value the waveform is clipped to before dynamic range compression.
     max_length_s (`int`, *optional*, defaults to 10):
         Maximum waveform length in seconds, used to derive `num_max_samples`.
+    model_in_channels (`int`, *optional*, defaults to 64):
+        Channel count of the noise [`UnivNetModel`] is conditioned on. Config only: the legacy
+        extractor used it in `generate_noise`, which this processor does not implement. Declared so
+        a checkpoint round-trips rather than carrying it as undeclared instance state.
+    pad_end_length (`int`, *optional*, defaults to 10):
+        Number of hops of silence the legacy `pad_end` helper appended. Config only, for the same
+        reason as `model_in_channels`.
     """
 
     magnitude_floor: float
@@ -45,6 +52,8 @@ class UnivNetAudioProcessorKwargs(AudioKwargs, total=False):
     compression_factor: float
     compression_clip_val: float
     max_length_s: int
+    model_in_channels: int
+    pad_end_length: int
 
 
 class UnivNetAudioProcessorMixin:
@@ -86,6 +95,8 @@ class UnivNetAudioProcessorMixin:
     compression_factor = 1.0
     compression_clip_val = 1e-5
     max_length_s = 10
+    model_in_channels = 64
+    pad_end_length = 10
     valid_kwargs = UnivNetAudioProcessorKwargs
 
     def __init__(self, **kwargs):
