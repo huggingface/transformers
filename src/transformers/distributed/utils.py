@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 from datetime import timedelta
 from typing import TYPE_CHECKING, TypeGuard
 
@@ -137,6 +138,12 @@ def initialize_tensor_parallelism(
     Sets up the device mesh and initialized the backend for tensor parallelism.
     This function is called when the model is loaded and the TP plan is set to 'auto'.
     """
+    warnings.warn(
+        "`initialize_tensor_parallelism` is deprecated and will be removed in a future release. "
+        "Use `initialize_distributed_mesh` with a `DistributedConfig` instead.",
+        FutureWarning,
+        stacklevel=2,
+    )
     if tp_size is not None and tp_plan is None:
         raise ValueError("tp_plan has to be set when tp_size is passed.")
     if tp_plan is not None and device_map is not None:
@@ -178,6 +185,12 @@ def initialize_tensor_parallelism(
 
 
 def initialize_fully_sharded_data_parallelism(distributed_config: DistributedConfig):
+    warnings.warn(
+        "`initialize_fully_sharded_data_parallelism` is deprecated and will be removed in a future release. "
+        "Use `initialize_distributed_mesh` with a `DistributedConfig` instead.",
+        FutureWarning,
+        stacklevel=2,
+    )
     # `fully_shard` itself only needs torch>=2.6, but distributed checkpoint save/load
     # (DCP + HuggingFaceStorageWriter) needs 2.7, so that is the effective requirement.
     if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
