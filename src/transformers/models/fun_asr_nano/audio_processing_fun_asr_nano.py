@@ -30,8 +30,29 @@ class FunAsrNanoAudioProcessorKwargs(AudioKwargs, total=False):
     stride_lfr: int
 
 
+def _ms_to_samples(target):
+    """`torchaudio.compliance.kaldi.fbank` takes its frame geometry in **milliseconds**.
+
+    The base mapping sends `frame_length` to `win_length` as if it were samples, which turned this
+    checkpoint's `frame_length: 25` into a 25-sample window instead of 400. Convert against the
+    config's own `sampling_rate`, as kaldi does internally.
+    """
+
+    def apply(value, config_dict):
+        sampling_rate = config_dict.get("sampling_rate") or FunAsrNanoAudioProcessorMixin.sampling_rate
+        stft_config = config_dict.setdefault("spectrogram_config", {}).setdefault("stft_config", {})
+        stft_config[target] = int(value * sampling_rate / 1000)
+
+    apply.legacy_target = f"spectrogram_config.stft_config.{target}"
+    return apply
+
+
 class FunAsrNanoAudioProcessorMixin:
     sampling_rate = 16000
+    legacy_field_mapping = {
+        "frame_length": _ms_to_samples("win_length"),
+        "frame_shift": _ms_to_samples("hop_length"),
+    }
     # Keep each clip unpadded through the fbank so the mel projection remains bit-exact
     # with the legacy extractor. The base then pads the LFR features and builds their mask.
     do_batch_spectrogram = False

@@ -27,7 +27,27 @@ class ClvpAudioProcessorKwargs(AudioKwargs, total=False):
     mel_norms: list[float] | None
 
 
+def _max_length_from_default_audio_length(value, config_dict):
+    """CLVP pads to `default_audio_length * sampling_rate`, not to `n_samples`.
+
+    Its legacy `__call__` computes `max_length = self.default_audio_length * self.sampling_rate`
+    when the caller passes none. It *also* sets `n_samples = chunk_length * sampling_rate` at init
+    and then never reads it — so the base mapping's `n_samples`/`chunk_length` route sends CLVP's
+    padding to 30 s where the extractor uses 6 s. Both are neutralised below.
+    """
+    sampling_rate = config_dict.get("sampling_rate") or ClvpAudioProcessorMixin.sampling_rate
+    config_dict.setdefault("max_length", value * sampling_rate)
+
+
+_max_length_from_default_audio_length.legacy_target = "max_length"
+
+
 class ClvpAudioProcessorMixin:
+    legacy_field_mapping = {
+        "default_audio_length": _max_length_from_default_audio_length,
+        "n_samples": None,
+        "chunk_length": None,
+    }
     max_length = 132300
     # and never masks it (the legacy FE defaulted to `return_attention_mask=False` too).
     return_padding_mask = False

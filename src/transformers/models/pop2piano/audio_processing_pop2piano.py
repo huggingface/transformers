@@ -15,6 +15,17 @@
 from ...audio_processing_backends import TorchAudioBackend
 
 
+def _stft_frame_from_window_size(value, config_dict):
+    """`window_size` is the STFT frame: the legacy extractor passes it as `frame_length` and sizes
+    its filterbank with `(window_size // 2) + 1` frequency bins, i.e. it is `n_fft` as well."""
+    stft_config = config_dict.setdefault("spectrogram_config", {}).setdefault("stft_config", {})
+    stft_config.setdefault("n_fft", value)
+    stft_config.setdefault("win_length", value)
+
+
+_stft_frame_from_window_size.legacy_target = "spectrogram_config.stft_config.n_fft"
+
+
 class Pop2PianoAudioProcessorMixin:
     # Tokenizer and model-head parameters that share this processor's config file. The legacy
     # extractor takes only (sampling_rate, padding_value, window_size, hop_length, min_frequency,
@@ -26,6 +37,11 @@ class Pop2PianoAudioProcessorMixin:
         "mel_is_conditioned": None,
         "start_token_id": None,
         "target_length": None,
+        "window_size": _stft_frame_from_window_size,
+        # `num_bars` drives the beat-step extrapolation in the legacy `__call__`, which this
+        # processor does not port -- the beat path needs Essentia and is the reason pop2piano is
+        # the one parity xfail. Dropped rather than declared, since nothing here reads it.
+        "num_bars": None,
     }
     sampling_rate = 22050
     spectrogram_config = {

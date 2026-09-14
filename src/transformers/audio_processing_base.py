@@ -102,6 +102,27 @@ class BatchFeature(BaseBatchFeature):
         return _LEGACY_KEY_MAP.get(old_key)
 
 
+def _max_length_from_chunk_length(value, config_dict):
+    """`chunk_length` is the padding length in *seconds*.
+
+    Every legacy extractor that takes it does `self.n_samples = chunk_length * sampling_rate` and
+    pads to that, so it is the same quantity as `n_samples`/`nb_max_samples` in different units.
+    Written with `setdefault` and listed after those two, so a config carrying both keeps the
+    stored sample count rather than a recomputed one — and `legacy_target` tells the conformance
+    suite the two are aliases, so the redundant one is not reported as ignored.
+
+    The key is written back because it is also a declared field on the models that take it, and
+    has to survive the round-trip.
+    """
+    config_dict["chunk_length"] = value
+    sampling_rate = config_dict.get("sampling_rate")
+    if sampling_rate:
+        config_dict.setdefault("max_length", value * sampling_rate)
+
+
+_max_length_from_chunk_length.legacy_target = "max_length"
+
+
 class AudioProcessingMixin(PreprocessingMixin):
     """
     This is an audio processor mixin used to provide saving/loading functionality for audio processors.
@@ -137,7 +158,7 @@ class AudioProcessingMixin(PreprocessingMixin):
     # …) and spectrogram-domain keys (`n_fft`, `hop_length`, …). For non-spectrogram models
     # the spectrogram keys are simply absent from the hub config — translation is a no-op.
     # See docs/adr/0002-legacy-field-mapping.md.
-    _legacy_field_mapping_base: dict = {
+    _legacy_field_mapping_base: dict = {  # noqa: RUF012
         # Universal keys (apply to every audio processor).
         # NOTE: `sampling_rate` is intentionally not listed — the hub key matches the modern
         # instance attribute `sampling_rate` verbatim, so it passes through `from_dict` untranslated.
@@ -148,6 +169,7 @@ class AudioProcessingMixin(PreprocessingMixin):
         # Length keys, in samples.
         "n_samples": "max_length",
         "nb_max_samples": "max_length",
+        "chunk_length": _max_length_from_chunk_length,
         # Spectrogram-domain keys, skipped for models that declare no `spectrogram_config`
         # (see `_legacy_target_exists`). Several appear under more than one legacy spelling.
         "hop_length": "spectrogram_config.stft_config.hop_length",

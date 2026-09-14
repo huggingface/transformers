@@ -23,6 +23,9 @@ def _gemma4_unified_feature_size_to_samples_per_token(value, config_dict):
     config_dict.setdefault("audio_samples_per_token", value)
 
 
+_gemma4_unified_feature_size_to_samples_per_token.legacy_target = "audio_samples_per_token"
+
+
 class Gemma4UnifiedAudioProcessorKwargs(AudioKwargs, total=False):
     r"""
     audio_samples_per_token (`int`, *optional*, defaults to 640):
