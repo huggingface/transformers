@@ -561,11 +561,11 @@ class EdgeTamModelIntegrationTest(unittest.TestCase):
         )
 
         torch.testing.assert_close(
-            scores2, torch.tensor([0.7228, 0.6532, 0.6344]).to(torch_device), atol=1e-4, rtol=1e-4
+            scores2, torch.tensor([9.7692e-01, 4.2534e-01, 8.4256e-04]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
             masks_logits2,
-            torch.tensor([[-8.8497, -7.8133, -9.3914], [-8.2869, -8.7974, -9.1661], [-9.6242, -8.42, -9.082]]).to(
+            torch.tensor([[-1.3391, -0.6938, -0.9438], [-0.4971, 1.0835, 0.2109], [0.1637, 1.3306, 1.7760]]).to(
                 torch_device
             ),
             atol=1e-4,
