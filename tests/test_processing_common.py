@@ -1588,6 +1588,17 @@ class ProcessorTesterMixin:
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
+        assistant_ids = self._test_apply_chat_template_assistant_mask(processor)
+
+        image_token = getattr(self, "image_token", None)
+        if image_token and self.does_processor_return_mm_offsets(processor.__class__, "replace_image_token"):
+            # Regression test for #44521: expanding the placeholder into N image tokens must not shift the assistant spans
+            assistant_ids_with_image = self._test_apply_chat_template_assistant_mask(
+                processor, image=self.prepare_images_inputs()
+            )
+            self.assertEqual(assistant_ids_with_image.tolist(), assistant_ids.tolist())
+
+    def _test_apply_chat_template_assistant_mask(self, processor, image=None):
         messages = [
             [
                 {
@@ -1616,11 +1627,17 @@ class ProcessorTesterMixin:
                 },
             ]
         ]
+        if image is not None:
+            messages[0][0]["content"].insert(0, {"type": "image", "image": image})
 
         dummy_template = (
             "{% for message in messages %}"
             "{% if (message['role'] != 'assistant') %}"
-            "{{'<|special_start|>' + message['role'] + '\n' + message['content'][0]['text'] + '<|special_end|>' + '\n'}}"
+            "{{'<|special_start|>' + message['role'] + '\n'}}"
+            "{% for content in message['content'] %}"
+            "{{ image_token if content['type'] == 'image' else content['text'] }}"
+            "{% endfor %}"
+            "{{'<|special_end|>' + '\n'}}"
             "{% elif (message['role'] == 'assistant')%}"
             "{{'<|special_start|>' + message['role'] + '\n'}}"
             "{% generation %}"
@@ -1638,6 +1655,7 @@ class ProcessorTesterMixin:
             return_tensors="pt",
             return_assistant_tokens_mask=True,
             chat_template=dummy_template,
+            image_token=getattr(self, "image_token", None),
         )
         self.assertTrue("assistant_masks" in inputs)
         self.assertEqual(len(inputs["assistant_masks"]), len(inputs["input_ids"]))
@@ -1654,6 +1672,7 @@ class ProcessorTesterMixin:
         text_is_same = assistant_text == processor.decode(assistant_ids, clean_up_tokenization_spaces=True)
         ids_is_same = processor.tokenizer.encode(assistant_text, add_special_tokens=False), assistant_ids.tolist()
         self.assertTrue(text_is_same or ids_is_same)
+        return assistant_ids
 
     def test_apply_chat_template_tool_calls_no_content(self):
         processor = self.get_processor()
