@@ -72,7 +72,13 @@ jobs:
         run: |
           cd /transformers
           echo "shard ${{ matrix.group }} -> ${{ matrix.dirs }}"
-          python3 -m pytest -v -rsfE --dist no ${{ matrix.dirs }}
+          # Run under xdist with worker restart: some attention tests hard-crash
+          # (segfault) the process on gfx1151, which would otherwise abort the
+          # whole shard and skip every model after it. With a worker subprocess,
+          # a crash is reported as a failed test and the worker restarts to finish
+          # the remaining models -- so the shard always runs to completion.
+          python3 -m pip install -q pytest-xdist || true
+          python3 -m pytest -v -rsfE -n 1 --max-worker-restart=1000 --dist=loadscope ${{ matrix.dirs }}
 
   test:
     name: Smoke + tests (prebuilt gfx1151 image)
