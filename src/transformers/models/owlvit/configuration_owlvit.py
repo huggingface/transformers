@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
 
 
@@ -100,7 +100,10 @@ class OwlViTVisionConfig(PreTrainedConfig):
 @strict
 class OwlViTConfig(PreTrainedConfig):
     model_type = "owlvit"
-    sub_configs = {"text_config": OwlViTTextConfig, "vision_config": OwlViTVisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=OwlViTTextConfig),
+        "vision_config": SubConfigSpec(config_class=OwlViTVisionConfig),
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -108,21 +111,6 @@ class OwlViTConfig(PreTrainedConfig):
     logit_scale_init_value: float = 2.6592
     return_dict: bool = True
     initializer_factor: float = 1.0
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = OwlViTTextConfig()
-            logger.info("`text_config` is `None`. initializing the `OwlViTTextConfig` with default values.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = OwlViTTextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            self.vision_config = OwlViTVisionConfig()
-            logger.info("`vision_config` is `None`. initializing the `OwlViTVisionConfig` with default values.")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = OwlViTVisionConfig(**self.vision_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["OwlViTConfig", "OwlViTTextConfig", "OwlViTVisionConfig"]

@@ -135,9 +135,7 @@ class AriaConfig(PreTrainedConfig):
     """
 
     model_type = "aria"
-    attribute_map = {
-        "image_token_id": "image_token_index",
-    }
+    attribute_map = {"image_token_id": "image_token_index"}
     sub_configs_defaults = {
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="idefics3_vision"),
         "text_config": SubConfigSpec(config_class=AriaTextConfig),

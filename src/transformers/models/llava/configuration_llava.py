@@ -47,9 +47,7 @@ class LlavaConfig(PreTrainedConfig):
     ```"""
 
     model_type = "llava"
-    attribute_map = {
-        "image_token_id": "image_token_index",
-    }
+    attribute_map = {"image_token_id": "image_token_index"}
 
     sub_configs_defaults = {
         "vision_config": SubConfigSpec(
@@ -66,10 +64,7 @@ class LlavaConfig(PreTrainedConfig):
                 "projection_dim": 768,
             },
         ),
-        "text_config": SubConfigSpec(
-            config_class=AutoConfig,
-            model_type="llama",
-        ),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="llama"),
     }
 
     vision_config: dict | PreTrainedConfig | None = None

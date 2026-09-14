@@ -46,9 +46,7 @@ class FastVlmConfig(PreTrainedConfig):
     ```"""
 
     model_type = "fast_vlm"
-    attribute_map = {
-        "image_token_id": "image_token_index",
-    }
+    attribute_map = {"image_token_id": "image_token_index"}
     sub_configs_defaults = {
         "vision_config": SubConfigSpec(
             config_class=AutoConfig,

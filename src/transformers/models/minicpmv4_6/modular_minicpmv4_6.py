@@ -23,7 +23,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import gelu_pytorch_tanh
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -41,7 +41,7 @@ from ...vision_utils import (
     get_vision_nearest_position_ids,
     get_vision_window_index,
 )
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..idefics3.modeling_idefics3 import Idefics3VisionEmbeddings
 from ..lfm2_vl.modeling_lfm2_vl import Lfm2VlModel
 from ..qwen2_vl.modeling_qwen2_vl import VisionAttention, eager_attention_forward
@@ -95,7 +95,10 @@ class MiniCPMV4_6Config(PreTrainedConfig):
     """
 
     model_type = "minicpmv4_6"
-    sub_configs = {"text_config": AutoConfig, "vision_config": MiniCPMV4_6VisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_5_text"),
+        "vision_config": SubConfigSpec(config_class=MiniCPMV4_6VisionConfig),
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -110,21 +113,9 @@ class MiniCPMV4_6Config(PreTrainedConfig):
     merger_times: int = 1
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config.pop("model_type", None)
-            self.vision_config = MiniCPMV4_6VisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = MiniCPMV4_6VisionConfig()
-
+        super().__post_init__(**kwargs)
         self.vision_config.insert_layer_id = self.insert_layer_id
         self.patch_size = self.vision_config.patch_size
-
-        if isinstance(self.text_config, dict):
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen3_5_text"]()
-
-        super().__post_init__(**kwargs)
 
 
 class MiniCPMV4_6VisionEmbeddings(Idefics3VisionEmbeddings):

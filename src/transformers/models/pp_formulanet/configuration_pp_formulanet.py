@@ -20,11 +20,8 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-FormulaNet_plus-L_safetensors")
@@ -130,26 +127,14 @@ class PPFormulaNetTextConfig(PreTrainedConfig):
 @strict
 class PPFormulaNetConfig(PreTrainedConfig):
     model_type = "pp_formulanet"
-    sub_configs = {"text_config": PPFormulaNetTextConfig, "vision_config": PPFormulaNetVisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=PPFormulaNetTextConfig),
+        "vision_config": SubConfigSpec(config_class=PPFormulaNetVisionConfig),
+    }
 
     text_config: dict | PPFormulaNetTextConfig | None = None
     vision_config: dict | PPFormulaNetVisionConfig | None = None
     is_encoder_decoder: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config = PPFormulaNetTextConfig(**self.text_config)
-        elif self.text_config is None:
-            logger.info("text_config is None. Initializing the PPFormulaNetTextConfig with default values.")
-            self.text_config = PPFormulaNetTextConfig()
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = PPFormulaNetVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            logger.info("vision_config is None. Initializing the PPFormulaNetVisionConfig with default values.")
-            self.vision_config = PPFormulaNetVisionConfig()
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["PPFormulaNetConfig", "PPFormulaNetTextConfig", "PPFormulaNetVisionConfig"]

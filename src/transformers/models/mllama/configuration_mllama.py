@@ -14,7 +14,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
 
 
@@ -172,29 +172,15 @@ class MllamaConfig(PreTrainedConfig):
     ```"""
 
     model_type = "mllama"
-    attribute_map = {
-        "image_token_id": "image_token_index",
+    attribute_map = {"image_token_id": "image_token_index"}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=MllamaTextConfig),
+        "vision_config": SubConfigSpec(config_class=MllamaVisionConfig),
     }
-    sub_configs = {"text_config": MllamaTextConfig, "vision_config": MllamaVisionConfig}
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     image_token_index: int = 128256
-
-    def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = MllamaVisionConfig()
-            logger.info("vision_config is None, using default mllama vision config")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = MllamaVisionConfig(**self.vision_config)
-
-        if self.text_config is None:
-            self.text_config = MllamaTextConfig()
-            logger.info("text_config is None, using default mllama text config")
-        elif isinstance(self.text_config, dict):
-            self.text_config = MllamaTextConfig(**self.text_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["MllamaConfig", "MllamaTextConfig", "MllamaVisionConfig"]

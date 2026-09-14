@@ -31,9 +31,7 @@ class AyaVisionConfig(PreTrainedConfig):
     """
 
     model_type = "aya_vision"
-    attribute_map = {
-        "image_token_id": "image_token_index",
-    }
+    attribute_map = {"image_token_id": "image_token_index"}
     sub_configs_defaults = {
         "vision_config": SubConfigSpec(
             config_class=AutoConfig,

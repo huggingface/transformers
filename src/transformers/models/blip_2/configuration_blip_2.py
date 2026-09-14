@@ -144,9 +144,7 @@ class Blip2Config(PreTrainedConfig):
     ```"""
 
     model_type = "blip-2"
-    attribute_map = {
-        "image_token_id": "image_token_index",
-    }
+    attribute_map = {"image_token_id": "image_token_index"}
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="opt"),
         "vision_config": SubConfigSpec(config_class=Blip2VisionConfig),

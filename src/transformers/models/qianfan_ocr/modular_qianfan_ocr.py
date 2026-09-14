@@ -19,7 +19,7 @@ import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import SubConfigSpec
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import ProcessorMixin, Unpack
@@ -27,7 +27,7 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 from ..beit.modeling_beit import BeitDropPath
 from ..internvl.configuration_internvl import InternVLConfig, InternVLVisionConfig
 from ..internvl.modeling_internvl import (
@@ -104,23 +104,12 @@ class QianfanOCRConfig(InternVLConfig):
     ```"""
 
     model_type = "qianfan_ocr"
-    sub_configs = {"text_config": AutoConfig, "vision_config": QianfanOCRVisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3"),
+        "vision_config": SubConfigSpec(config_class=QianfanOCRVisionConfig),
+    }
 
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = QianfanOCRVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = QianfanOCRVisionConfig()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen3"]()
-
-        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 class QianfanOCRDropPath(BeitDropPath):

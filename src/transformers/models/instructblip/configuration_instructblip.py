@@ -141,9 +141,7 @@ class InstructBlipConfig(PreTrainedConfig):
     ```"""
 
     model_type = "instructblip"
-    attribute_map = {
-        "image_token_id": "image_token_index",
-    }
+    attribute_map = {"image_token_id": "image_token_index"}
     sub_configs = {
         "text_config": AutoConfig,
         "qformer_config": InstructBlipQFormerConfig,
