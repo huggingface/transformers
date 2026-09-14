@@ -274,8 +274,8 @@ class BackgroundThreadStatus:
             self._drop_pause_request()
 
     def is_pause_requested(self, local: bool = False) -> bool:
-        """Whether a thread asked for a pause and has not released it yet. If the local flag is True, only check the
-        calling thread's counter."""
+        """Whether a thread on this rank asked for a pause and has not released it yet. If the local flag is True, only
+        check the calling thread's counter."""
         # Local-only check, needs no lock by definition
         if local:
             return self._local_pauses_requested.value > 0
