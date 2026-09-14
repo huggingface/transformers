@@ -50,6 +50,7 @@ class DistributedMixin:
     """Distributed orchestration and save/load hooks for [`PreTrainedModel`]."""
 
     _device_mesh = None
+    _distributed_meshes = None
     _tp_plan: dict[str, str] | None = None
     _ep_plan: dict[str, str] | None = None
     _tp_size = None
@@ -164,34 +165,34 @@ class DistributedMixin:
         if distributed_config.dispatches_tokens and not is_torch_greater_or_equal("2.7"):
             raise OSError("Expert-parallel token dispatch requires `torch>=2.7`.")
 
-        device_map, device_mesh = initialize_distributed_mesh(distributed_config)
+        device_map, device_meshes = initialize_distributed_mesh(distributed_config)
 
-        return distributed_config, device_map, device_mesh
+        return distributed_config, device_map, device_meshes
 
     @classmethod
     def maybe_distribute_model(
         cls,
         model: nn.Module,
         distributed_config: DistributedConfig | None,
-        device_mesh,
+        device_meshes,
     ):
         """Apply TP or FSDP2 after model init, before weight loading."""
-        if device_mesh is not None:
+        if device_meshes is not None:
+            device_mesh = device_meshes["dense"]
             model.config.distributed_config = distributed_config
+            model._distributed_meshes = device_meshes
             model._device_mesh = device_mesh
             model._tp_size = distributed_config.tp_size
             model._fsdp_size = distributed_config.fsdp_size
 
             if distributed_config.pp_size > 1:
-                pp_mesh = device_mesh["pp"] if device_mesh.ndim > 1 else device_mesh
+                pp_mesh = device_mesh["pp"]
                 model = apply_pipeline_parallelism(model, pp_mesh)
 
             # Both may apply: the tensor/expert parallel plan shards across `tp` first, then FSDP2
             # shards every parameter (the `tp`-sharded ones included) across `fsdp`.
             if distributed_config.tp_size > 1 or distributed_config.enable_expert_parallel:
                 # All-reduce EP retains the legacy TP view. Only dispatch folds expert ownership into FSDP.
-                mesh_name = "ep" if distributed_config.dispatches_tokens else "tp"
-                tp_mesh = device_mesh[mesh_name] if device_mesh.ndim > 1 else device_mesh
                 if isinstance(distributed_config.tp_plan, dict):
                     model.tp_plan = distributed_config.tp_plan
                 if distributed_config.dispatches_tokens:
@@ -217,19 +218,22 @@ class DistributedMixin:
                     }
                     if distributed_config.tp_size > 1:
                         model = apply_tensor_parallelism(model, device_mesh["tp"], dense_plan)
-                    model = apply_tensor_parallelism(model, tp_mesh, expert_plan, dispatch_tp_mesh=device_mesh["tp"])
+                    model = apply_tensor_parallelism(
+                        model, device_meshes["expert"]["ep"], expert_plan, dispatch_tp_mesh=device_mesh["tp"]
+                    )
                     model._tp_plan = dense_plan | expert_plan
                 else:
+                    tp_mesh = device_mesh["tp"]
                     model = apply_tensor_parallelism(model, tp_mesh)
 
             if distributed_config.dispatches_tokens:
                 # Each TP group trains on its own batch. The trunk spans fsdp; each expert is additionally
                 # FSDP-sharded across efsdp, the ranks left after assigning its EP shard.
                 trunk_mesh = device_mesh["fsdp"]
-                expert_mesh = device_mesh["efsdp"] if distributed_config.efsdp_size > 1 else None
+                expert_mesh = device_meshes["expert"]["efsdp"] if distributed_config.efsdp_size > 1 else None
                 model = apply_fully_sharded_data_parallelism(model, trunk_mesh, expert_mesh=expert_mesh)
             elif distributed_config.fsdp_size > 1:
-                fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
+                fsdp_mesh = device_mesh["fsdp"]
                 model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
         return model
 

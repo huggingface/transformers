@@ -109,7 +109,7 @@ distributed_config = DistributedConfig(
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B", distributed_config=distributed_config)
 ```
 
-Both mesh views descend from one root mesh, and `tp_size * fsdp_size` must equal the number of processes. With all-reduce, the expert parallel plan shards the experts across `ep` (the same ranks as `tp`), then FSDP2 shards every parameter, experts included, across `fsdp` and owns their gradient reduction. Each `fsdp` rank trains on its own part of the batch. The all-to-all examples above show how to choose EP independently, with or without trunk TP.
+Both dispatchers use one mesh builder that prepares a dense view `(pp, fsdp, tp)` and an expert view `(pp, efsdp, ep)`, retaining size-one axes. Mesh sizes depend on the parallelism degrees, not the dispatcher. In these examples `pp_size=1`, so `tp_size * fsdp_size` and `ep_size * efsdp_size` both equal the number of processes. Token dispatch uses the expert view for expert ownership and FSDP sharding. Legacy all-reduce keeps using the dense view: its expert parallel plan shards the experts across `tp` (the same ranks as `ep`), then FSDP2 shards every parameter, experts included, across `fsdp` and owns their gradient reduction. Each `fsdp` rank trains on its own part of the batch. The all-to-all examples above show how to choose EP independently, with or without trunk TP.
 
 Load the model as usual, then train with [`Trainer`]. It takes the gradient norm across both meshes and gives each mesh its own optimizer param group. [`~Trainer.save_model`] gathers sharded weights into a regular checkpoint. This requires `accelerate>=1.12` so the `Trainer` can mirror `tp_size` and `fsdp_size` into [`~Accelerate.ParallelismConfig`].
 

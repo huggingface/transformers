@@ -80,8 +80,8 @@ class DistributedConfig:
 
     @property
     def efsdp_size(self) -> int:
-        """Number of FSDP shards per expert, after folding EP into the data-parallel mesh."""
-        return self.fsdp_size * self.tp_size // self.ep_size if self.dispatches_tokens else self.fsdp_size
+        """Size of the expert FSDP axis; the expert view is unused when EP is disabled."""
+        return self.fsdp_size * self.tp_size // self.ep_size
 
     def __post_init__(self):
         legacy_ep = self.enable_expert_parallel and self.ep_size is None
