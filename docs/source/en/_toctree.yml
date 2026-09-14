@@ -64,12 +64,14 @@
       title: Customizing tokenizers
     - local: tokenizer_summary
       title: Tokenization algorithms
+    - local: preprocessing
+      title: Preprocessing
     - local: image_processors
       title: Image processors
     - local: video_processors
       title: Video processors
-    - local: feature_extractors
-      title: Feature extractors
+    - local: audio_processors
+      title: Audio processors
     - local: processors
       title: Processors
     title: Preprocessors
@@ -504,6 +506,8 @@
       title: DeepSpeed
     - local: main_classes/executorch
       title: ExecuTorch
+    - local: main_classes/audio_processor
+      title: Audio processor
     - local: main_classes/feature_extractor
       title: Feature extractor
     - local: main_classes/image_processor

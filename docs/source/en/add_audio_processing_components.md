@@ -100,4 +100,5 @@ class MyModelProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 ## Next steps
 
 - Read the [Auto-generating docstrings](./auto_docstring) guide to auto-generate consistent docstrings with `@auto_docstring`.
-- Read the [Feature extractors](./feature_extractors) guide for user-facing preprocessing behavior.
+- Read the [Audio processors](./audio_processors) guide for user-facing preprocessing behavior, and
+  [Preprocessing](./preprocessing) for the pipeline and the option contract.

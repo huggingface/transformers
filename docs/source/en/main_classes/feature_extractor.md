@@ -16,6 +16,13 @@ rendered properly in your Markdown viewer.
 
 # Feature extractor
 
+> [!WARNING]
+> Feature extractors are deprecated for audio. [`AudioProcessor`](./audio_processor) replaces them:
+> `AutoFeatureExtractor` and the `XxxFeatureExtractor` classes still load and still work, with a
+> deprecation warning. See [Audio processors](../audio_processors).
+>
+> The classes below remain documented for the image and legacy paths.
+
 A feature extractor is in charge of preparing input features for audio models. This includes feature extraction from sequences, e.g., pre-processing audio files to generate Log-Mel Spectrogram features, and conversion to NumPy and PyTorch tensors.
 
 ## FeatureExtractionMixin
