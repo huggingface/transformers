@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import os
+from collections import defaultdict
 from datetime import timedelta
 from typing import TYPE_CHECKING, TypeGuard
 
@@ -292,3 +293,47 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
         optimizer_state_dict,
     )
     set_optimizer_state_dict(model, optimizer, optimizer_state_dict)
+
+
+def clip_grad_norm_(parameters, max_norm, norm_type=2.0, error_if_nonfinite=False, foreach=None):
+    from torch.distributed.tensor import DTensor, Replicate
+    from torch.nn.utils.clip_grad import _clip_grads_with_norm_, _get_total_norm
+
+    parameters = [parameters] if isinstance(parameters, torch.Tensor) else list(parameters)
+    norm_type = float(norm_type)
+
+    dtensor_params = defaultdict(list)
+    tensor_params = []
+    for p in parameters:
+        if p.grad is None:
+            continue
+        if is_dtensor(p):
+            dtensor_params[p.device_mesh].append(p)
+        else:
+            tensor_params.append(p)
+
+    if not dtensor_params:
+        return torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type, error_if_nonfinite, foreach)
+
+    norms = []
+
+    if tensor_params is not None:
+        tensor_norm = _get_total_norm([p.grad for p in tensor_params], norm_type, error_if_nonfinite, foreach)
+        norms.append(tensor_norm)
+
+    for mesh, params in dtensor_params.items():
+        dtensor_norm = _get_total_norm([p.grad for p in params], norm_type, error_if_nonfinite, foreach)
+        dtensor_norm = dtensor_norm.full_tensor()
+        norms.append(dtensor_norm)
+
+    total_norm = _get_total_norm(norms, norm_type, error_if_nonfinite, foreach=False)
+
+    _clip_grads_with_norm_(tensor_params, max_norm, total_norm, foreach)
+    for mesh, params in dtensor_params.items():
+        _clip_grads_with_norm_(
+            params,
+            max_norm,
+            DTensor.from_local(total_norm, device_mesh=mesh, placements=[Replicate()] * mesh.ndim),
+            foreach,
+        )
+    return total_norm

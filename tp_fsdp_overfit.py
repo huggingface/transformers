@@ -19,7 +19,7 @@ from torch.distributed.tensor import DTensor
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.distributed import DistributedConfig
 from transformers.distributed.utils import (
-    # clip_grad_norm,
+    clip_grad_norm_,
     load_optimizer_distributed,
     save_optimizer_distributed,
 )
@@ -71,9 +71,7 @@ model.train()
 for step in range(0, HALF):
     loss = model(ids, labels=ids).loss
     loss.backward()
-    # total_norm = clip_grad_norm(model.parameters(), max_norm=1.0)
-    # Patching before adding support for clip_grad_norm
-    total_norm = torch.tensor(0.0, device=loss.device)
+    total_norm = clip_grad_norm_(model.parameters(), max_norm=1.0)
     optimizer.step()
     optimizer.zero_grad()
     if rank == 0:
@@ -98,9 +96,7 @@ model.train()
 for step in range(HALF, STEPS):
     loss = model(ids, labels=ids).loss
     loss.backward()
-    # total_norm = clip_grad_norm(model.parameters(), max_norm=1.0)
-    # Patching before adding support for clip_grad_norm
-    total_norm = torch.tensor(0.0, device=loss.device)
+    total_norm = clip_grad_norm_(model.parameters(), max_norm=1.0)
     optimizer.step()
     optimizer.zero_grad()
     if rank == 0:
