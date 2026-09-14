@@ -2780,8 +2780,13 @@ class GenerationMixin(ContinuousMixin):
         )
         # `_prefill` reads the mask's length to tell whether `input_ids` holds the whole sequence or only the new
         # tokens, so record that before the mask goes. A decoding method we did not write may still expect one.
+        # Mirror what `_prefill` used to compare against: encoder-decoders track the decoder's own mask, and
+        # `attention_mask` there describes the encoder inputs, which have nothing to do with `input_ids`
+        length_mask = model_kwargs.get(
+            "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
+        )
         generation_config._inputs_hold_full_sequence = (
-            attention_mask is not None and input_ids.shape[1] == attention_mask.shape[1]
+            length_mask is not None and input_ids.shape[1] == length_mask.shape[1]
         )
         if not inputs_are_padded and custom_generate is None:
             del model_kwargs["attention_mask"]
