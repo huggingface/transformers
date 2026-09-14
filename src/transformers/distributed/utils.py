@@ -177,6 +177,37 @@ def initialize_tensor_parallelism(
     return device_map, device_mesh
 
 
+def initialize_fully_sharded_data_parallelism(distributed_config: DistributedConfig):
+    # `fully_shard` itself only needs torch>=2.6, but distributed checkpoint save/load
+    # (DCP + HuggingFaceStorageWriter) needs 2.7, so that is the effective requirement.
+    if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
+        raise OSError("FSDP2 requires `torch>=2.7` (distributed checkpoint save/load).")
+
+    device_type = torch._C._get_accelerator().type
+
+    if device_type != "cpu":
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        getattr(torch, device_type).set_device(local_rank)
+        device_map = torch.device(device_type, local_rank)
+    else:
+        device_map = torch.device(device_type)
+
+    fsdp_size = distributed_config.fsdp_size
+
+    dims, names = [], []
+    if fsdp_size > 1:
+        dims.append(fsdp_size)
+        names.append("fsdp")
+
+    # Build the N-dimensional device mesh
+    mesh = torch.distributed.init_device_mesh(device_type, tuple(dims), mesh_dim_names=tuple(names))
+    # If N > 1, create a flattened sub-mesh so all-reduces across the world mesh ae done in one collective
+    if len(dims) > 1:
+        mesh._flatten("_".join(names))
+
+    return device_map, mesh
+
+
 def initialize_distributed_mesh(
     distributed_config: DistributedConfig,
 ):
