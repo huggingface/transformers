@@ -1,0 +1,56 @@
+# Scheduled build of the AMD Ryzen "Strix Halo" (gfx1151) CI image.
+#
+# Built ONCE here (on a GitHub-hosted builder, off the pool) and pushed to GHCR;
+# the test workflow (amd-strix-halo-probe.yml) then just pulls it. Mirrors how
+# build-docker-images.yml builds the MI300 image. Push to a
+# `build_amd_gfx1151_image*` branch (or run it manually) to refresh the image
+# after a Dockerfile change.
+name: Build AMD gfx1151 (Strix Halo) CI image
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build_amd_gfx1151_image*
+  schedule:
+    - cron: "30 1 * * *"
+
+concurrency:
+  group: build-amd-gfx1151-image
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write   # push to GHCR with the built-in GITHUB_TOKEN
+
+jobs:
+  build:
+    name: Build & push gfx1151 image
+    runs-on:
+      group: aws-general-8-plus
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Login to GHCR
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: ./docker/transformers-pytorch-amd-gpu-gfx1151
+          build-args: |
+            REF=main
+          push: true
+          tags: |
+            ghcr.io/huggingface/transformers-pytorch-amd-gpu-gfx1151:latest
+            ghcr.io/huggingface/transformers-pytorch-amd-gpu-gfx1151:${{ github.sha }}

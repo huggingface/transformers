@@ -3,11 +3,11 @@
 # This file keeps its name on purpose: the pool's runner group allows this
 # workflow path, so we iterate here rather than adding new workflow files.
 #
-# Shape (mirrors the MI300 CI): build the gfx1151 image ONCE, push it to a
-# registry, and have the test job PULL it via a job-level `container:` instead
-# of building inline. Here build + push + pull all happen in one run so we can
-# validate the whole round-trip on a branch; later the build moves to the
-# scheduled build-docker-images flow and only the test job remains.
+# Test-only: the gfx1151 image is built and pushed separately by
+# build-amd-gfx1151-image.yml. This job just PULLS it via a job-level
+# `container:` and runs the tests on a pool runner -- so the per-run cost is a
+# pull, not a build. Refresh the image (Dockerfile change) by running that build
+# workflow first.
 name: AMD Strix Halo probe
 
 on:
@@ -18,41 +18,17 @@ on:
 
 permissions:
   contents: read
-  packages: write   # push the image to GHCR with the built-in GITHUB_TOKEN
+  packages: read   # pull the image from GHCR with the built-in GITHUB_TOKEN
 
 jobs:
-  build-image:
-    name: Build & push gfx1151 image
-    # Built on the pool: the ROCm 7.2.1-complete base + torch wheels are tens of
-    # GB and do not fit a GitHub-hosted runner's disk; the pool has 1.6T.
-    runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Log in to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-
-      - name: Build and push
-        run: |
-          IMAGE=ghcr.io/huggingface/transformers-pytorch-amd-gpu-gfx1151
-          docker build \
-            -f docker/transformers-pytorch-amd-gpu-gfx1151/Dockerfile \
-            -t "${IMAGE}:${GITHUB_SHA}" \
-            docker/transformers-pytorch-amd-gpu-gfx1151
-          docker push "${IMAGE}:${GITHUB_SHA}"
-          echo "Pushed ${IMAGE}:${GITHUB_SHA}"
-
   test:
-    name: Smoke + tests (pull prebuilt image)
-    needs: build-image
+    name: Smoke + tests (prebuilt gfx1151 image)
     runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
     timeout-minutes: 120
     # GitHub pulls this image and runs every step inside it. `options` passes the
-    # GPU devices and the host render group (gid 992 on the pool) into the
-    # container -- the same flags the inline `docker run` used.
+    # GPU devices and the host render group (gid 992 on the pool) into it.
     container:
-      image: ghcr.io/huggingface/transformers-pytorch-amd-gpu-gfx1151:${{ github.sha }}
+      image: ghcr.io/huggingface/transformers-pytorch-amd-gpu-gfx1151:latest
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -71,7 +47,8 @@ jobs:
           t = torch.ones(8, device="cuda"); torch.cuda.synchronize()
           print("[5] tiny cuda tensor ok, sum:", float(t.sum()), flush=True)
 
-          x = torch.randn(2048, 2048, device="cuda", dtype=torch.float16)
+          # bounded values so the fp16 matmul does not overflow to inf
+          x = (torch.rand(2048, 2048, device="cuda", dtype=torch.float16) - 0.5) * 0.1
           torch.cuda.synchronize()
           print("[6] matmul sum:", float((x @ x).sum()), flush=True)
 
