@@ -57,7 +57,6 @@ class DistributedMixin:
     _ep_plan: dict[str, str] | None = None
     _tp_size = None
     _fsdp_size = None
-    _expert_parallel_dispatch = False
     _pp_plan: dict[str, tuple[str, str]] | None = None
     _fsdp_plan: dict[str, str] | None = None
 
@@ -169,7 +168,7 @@ class DistributedMixin:
             distributed_config.tp_plan = "auto"
 
         if distributed_config.fsdp_size > 1:
-            # Builds a 2-D (fsdp, tp) mesh when tensor/expert parallelism is also requested.
+            # Builds one root with dense (fsdp, tp) and expert (edp, ep) views.
             if device_mesh is not None:
                 raise ValueError(
                     "`device_mesh` cannot be passed together with `fsdp_size > 1`: the mesh is built here."
@@ -202,12 +201,13 @@ class DistributedMixin:
             # sees unaccounted ranks and falls back to DDP, which rejects the DTensor parameters.
             model._tp_size = distributed_config.tp_size
             model._fsdp_size = distributed_config.fsdp_size
-            model._expert_parallel_dispatch = distributed_config.dispatches_tokens
 
             # Both may apply: the tensor/expert parallel plan shards across `tp` first, then FSDP2
             # shards every parameter (the `tp`-sharded ones included) across `fsdp`.
-            if distributed_config.tp_size > 1:
-                tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
+            if distributed_config.tp_size > 1 or distributed_config.enable_expert_parallel:
+                # All-reduce EP retains the legacy TP view. Only dispatch folds expert ownership into FSDP.
+                mesh_name = "ep" if distributed_config.dispatches_tokens else "tp"
+                tp_mesh = device_mesh[mesh_name] if device_mesh.ndim > 1 else device_mesh
                 if isinstance(distributed_config.tp_plan, dict):
                     model.tp_plan = distributed_config.tp_plan
                 if distributed_config.dispatches_tokens:
@@ -236,11 +236,10 @@ class DistributedMixin:
                 model = apply_tensor_parallelism(model, tp_mesh)
 
             if distributed_config.dispatches_tokens:
-                # Every expert-parallel rank trains on its own part of the batch, so the parameters outside the
-                # experts are data-parallel across the whole mesh: FSDP2 shards them across all of it and owns
-                # their gradient reduction. The experts stay sharded across `tp` and, if any, across `fsdp`.
-                trunk_mesh = device_mesh["fsdp_tp"] if device_mesh.ndim > 1 else device_mesh
-                expert_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else None
+                # Each rank trains on its own batch. The trunk spans fsdp; each expert is additionally
+                # FSDP-sharded across edp, the ranks left after assigning its EP shard.
+                trunk_mesh = device_mesh["fsdp"]
+                expert_mesh = device_mesh["edp"] if distributed_config.edp_size > 1 else None
                 model = apply_fully_sharded_data_parallelism(model, trunk_mesh, expert_mesh=expert_mesh)
             elif distributed_config.fsdp_size > 1:
                 fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh

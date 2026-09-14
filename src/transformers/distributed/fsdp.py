@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
 from .tensor_parallel import replace_layer_number_by_wildcard
-from .utils import _is_torch_distributed_initialized, is_dtensor
+from .utils import _is_torch_distributed_initialized
 
 
 if TYPE_CHECKING:
@@ -215,11 +215,7 @@ def apply_fully_sharded_data_parallelism(
     if distributed_config is not None and distributed_config.dispatches_tokens:
         if not is_torch_greater_or_equal("2.7"):
             raise OSError("Expert-parallel token dispatch requires `torch>=2.7`.")
-        # The DTensor parameters are the expert-parallel experts: `maybe_distribute_model` rewrote the expert
-        # parallel plan to shard only them.
-        expert_modules = [
-            module for module in model.modules() if any(is_dtensor(p) for p in module.parameters(recurse=False))
-        ]
+        expert_modules = [module for module in model.modules() if getattr(module, "_is_expert_parallel", False)]
         if expert_mesh is not None:
             for module in expert_modules:
                 fully_shard(module, mesh=expert_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)

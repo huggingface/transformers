@@ -546,8 +546,9 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
                 experts_dispatch="all-to-all" if dispatch else "all-reduce",
             ),
         )
-        assert model.tp_size == 2 and model.fsdp_size == dp
-        assert model._device_mesh.mesh_dim_names == ("fsdp", "tp")
+        assert model.tp_size == (1 if dispatch else 2)
+        assert model.fsdp_size == (world_size if dispatch else dp)
+        assert model._device_mesh.mesh_dim_names == ("edp", "ep_fsdp", "tp")
         model.train()
         optimizer = torch.optim.Adam(model.parameters(), lr=LR, foreach=False)
         if dispatch:
@@ -590,7 +591,7 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
             state_dict[key],
             rtol=DDP_FSDP_RTOL,
             atol=DDP_FSDP_ATOL,
-            msg=f"Weight mismatch for {key}: DDP vs FSDP2+EP",
+            msg=lambda msg: f"Weight mismatch for {key}: DDP vs FSDP2+EP\n{msg}",
         )
 
     if rank == 0:

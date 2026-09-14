@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## DistributedConfig
 
-Enable expert parallelism with the [`DistributedConfig`] class and the `enable_expert_parallel` argument.
+Enable expert parallelism with the [`DistributedConfig`] class and the `ep_size` argument. For all-reduce inference, set `ep_size=tp_size` so every rank in an expert group receives the same tokens.
 
 ```py
 import os
@@ -30,7 +30,7 @@ from transformers.distributed.configuration_utils import DistributedConfig
 
 distributed_config = DistributedConfig(
     tp_size=int(os.environ["WORLD_SIZE"]),
-    enable_expert_parallel=True,
+    ep_size=int(os.environ["WORLD_SIZE"]),
 )
 
 model = AutoModelForCausalLM.from_pretrained(
@@ -39,10 +39,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-> [!TIP]
-> Expert parallelism automatically enables [tensor parallelism](./perf_infer_gpu_multi) for attention layers.
-
-This argument switches to the `ep_plan` (expert parallel plan) defined in each MoE model's config file. The [`GroupedGemmParallel`] class splits expert weights so each device loads only its local experts. The `ep_router` routes tokens to experts and an all-reduce operation combines their outputs.
+This configuration uses the `ep_plan` (expert parallel plan) defined in each MoE model's config file. Attention sharding depends on that plan; expert parallelism does not automatically apply the model's tensor parallel plan. The [`GroupedGemmParallel`] class splits expert weights so each device loads only its local experts. The `ep_router` routes tokens to experts and an all-reduce operation combines their outputs.
 
 Launch your inference script with [torchrun](https://pytorch.org/docs/stable/elastic/run.html) and specify how many devices to use. The number of devices must evenly divide the total number of experts.
 
@@ -52,31 +49,34 @@ torchrun --nproc-per-node 8 your_script.py
 
 ## Token dispatch
 
-By default, every expert parallel rank runs the whole batch, keeps only the experts it owns, and all-reduces expert outputs after every MoE layer. Dense layers then do `tp_size` times the same work, and the all-reduce moves full activations. Set `experts_dispatch="all-to-all"` to send each token to the rank that owns its experts. Each rank trains on its own batch shard, and a lot less data is required to travel between GPUs/nodes during large-scale training.
+With all-reduce, every expert parallel rank runs the whole batch, keeps only the experts it owns, and all-reduces expert outputs after every MoE layer. Use `tp_size=1` and set `ep_size` independently to send each token to the rank that owns its experts. Each rank then trains on its own batch shard. The default `experts_dispatch="auto"` selects all-to-all for this topology.
 
 ```py
 from transformers import AutoModelForCausalLM
 from transformers.distributed import DistributedConfig
 
 distributed_config = DistributedConfig(
-    tp_size=8,
-    enable_expert_parallel=True,
-    experts_dispatch="all-to-all",
+    tp_size=1,
+    fsdp_size=8,
+    ep_size=4,
 )
 ```
 
 Each rank trains on its own part of the batch. At every MoE layer it routes its tokens, sends each (token, expert) pair to the rank that owns the expert with an all-to-all, runs its local experts, and gets the results back with a second all-to-all. Only the routed tokens travel.
 
+`ep_size` must divide `fsdp_size` and the number of experts. When only `ep_size` is supplied, `fsdp_size` defaults to `WORLD_SIZE`. Token dispatch with trunk tensor parallelism (`tp_size > 1`) is not supported yet.
+
 For the rest of the model:
 
-- The parameters outside the experts are data-parallel across the whole group, so they are sharded with [FSDP2](./fsdp) across every rank (`fsdp` and `tp` together when both are set), and FSDP2 reduces their gradients.
-- The experts stay sharded across `tp`, and across `fsdp` too when `fsdp_size > 1`. With `fsdp_size=1` they are outside FSDP2, so `fsdp_mixed_precision` and `fsdp_cpu_offload` do not apply to them.
-- The [`Trainer`] gives each rank its own training batches and counts tokens across all of them. Evaluation is unchanged from plain expert parallelism: every `tp` rank sees the same batches.
-- Training needs a sized (map-style) dataset, `dispatch_batches=False`, and `train_sampling_strategy="random"`. Iterable datasets and other sampling strategies are rejected.
+- The parameters outside the experts are sharded with [FSDP2](./fsdp) across the `fsdp` mesh, and FSDP2 reduces their gradients.
+- Experts are sharded across `ep` and additionally across `edp`, whose size is `fsdp_size // ep_size`. With `edp_size=1` they are outside FSDP2, so `fsdp_mixed_precision` and `fsdp_cpu_offload` do not apply to them.
+- The [`Trainer`] uses ordinary data-parallel batching for training and evaluation and counts tokens across all ranks.
+
+The legacy `enable_expert_parallel=True` spelling is deprecated. A dispatch configuration with `tp_size=4, fsdp_size=2, enable_expert_parallel=True` is translated to `tp_size=1, fsdp_size=8, ep_size=4`, preserving its expert groups and independent batches per rank. Legacy all-reduce configurations retain their original `tp_size` and `fsdp_size`.
 
 ## Combining with FSDP2
 
-Without token dispatch, expert parallelism only shards the experts. Everything else (attention, embeddings, norms) and its optimizer state is replicated on every expert-parallel rank, which limits how large a model you can train. Add [FSDP2](./fsdp) on a second mesh dimension with `fsdp_size`, and keep using `tp_size` for the expert parallel width (`tp_size` is the EP size).
+Without token dispatch, expert-only plans leave attention, embeddings, and norms replicated on every expert-parallel rank. Add [FSDP2](./fsdp) with `fsdp_size`, and set `ep_size=tp_size` for all-reduce.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -85,12 +85,12 @@ from transformers.distributed import DistributedConfig
 distributed_config = DistributedConfig(
     tp_size=4,  # expert parallel size
     fsdp_size=2,  # data parallel shards
-    enable_expert_parallel=True,
+    ep_size=4,
 )
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B", distributed_config=distributed_config)
 ```
 
-The model is loaded on a 2D `(fsdp, tp)` device mesh, and `tp_size * fsdp_size` must equal the number of processes. The expert parallel plan shards the experts across `tp`, then FSDP2 shards every parameter, experts included, across `fsdp` and owns their gradient reduction. Each `fsdp` rank trains on its own part of the batch. With `experts_dispatch="all-to-all"` the non-expert parameters are data-parallel across the whole mesh rather than replicated across `tp`, so FSDP2 shards them across `fsdp` and `tp` together.
+Both mesh views descend from one root mesh, and `tp_size * fsdp_size` must equal the number of processes. With all-reduce, the expert parallel plan shards the experts across `ep` (the same ranks as `tp`), then FSDP2 shards every parameter, experts included, across `fsdp` and owns their gradient reduction. Each `fsdp` rank trains on its own part of the batch. For all-to-all, use `tp_size=1` and the total number of processes as `fsdp_size`, as shown above.
 
 Load the model as usual, then train with [`Trainer`]. It takes the gradient norm across both meshes and gives each mesh its own optimizer param group. [`~Trainer.save_model`] gathers sharded weights into a regular checkpoint. This requires `accelerate>=1.12` so the `Trainer` can mirror `tp_size` and `fsdp_size` into [`~Accelerate.ParallelismConfig`].
 

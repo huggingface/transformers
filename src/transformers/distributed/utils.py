@@ -192,24 +192,16 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
     else:
         device_map = torch.device(device_type)
 
-    fsdp_size = distributed_config.fsdp_size
-    tp_size = distributed_config.tp_size
-
-    # `fsdp` is the outer dimension so that the `tp` ranks of a group are contiguous, which is what
-    # the expert all-to-all and the TP collectives want.
-    dims, names = [], []
-    if fsdp_size > 1:
-        dims.append(fsdp_size)
-        names.append("fsdp")
-    if tp_size > 1:
-        dims.append(tp_size)
-        names.append("tp")
-
-    # Build the N-dimensional device mesh
-    mesh = torch.distributed.init_device_mesh(device_type, tuple(dims), mesh_dim_names=tuple(names))
-    # If N > 1, create a flattened sub-mesh so all-reduces across the world mesh ae done in one collective
-    if len(dims) > 1:
-        mesh._flatten("_".join(names))
+    # Both views must descend from one root so FSDP can compose its sharding with EP/TP DTensors.
+    # Without EP, the middle dimension is a singleton and ordinary TP remains independent of FSDP.
+    ep_fsdp = distributed_config.ep_size if distributed_config.dispatches_tokens else 1
+    mesh = torch.distributed.init_device_mesh(
+        device_type,
+        (distributed_config.edp_size, ep_fsdp, distributed_config.tp_size),
+        mesh_dim_names=("edp", "ep_fsdp", "tp"),
+    )
+    mesh["edp", "ep_fsdp"]._flatten("fsdp")
+    mesh["ep_fsdp", "tp"]._flatten("ep")
 
     return device_map, mesh
 
