@@ -29,7 +29,6 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
@@ -331,35 +330,6 @@ class Apertus1p5VisionTokenizerModel(Apertus1p5VisionTokenizerPreTrainedModel):
         return self.quantize(hidden_states)
 
 
-def _pruned_output_vocab_size(config: PreTrainedConfig) -> int | None:
-    """Return the physical LM-head width when it is pruned else `None`."""
-    text_config = config.get_text_config()
-    output_vocab_size = getattr(text_config, "output_vocab_size", None)
-    if output_vocab_size is not None and output_vocab_size != text_config.vocab_size:
-        return output_vocab_size
-    return None
-
-
-def _check_pruned_head_resize(config: PreTrainedConfig) -> None:
-    """Reject embedding resizes for pruned heads: the generic resize forces the head to the embedding size."""
-    if _pruned_output_vocab_size(config) is not None:
-        raise NotImplementedError(
-            "Resizing token embeddings is not supported for a pruned LM head (`output_vocab_size` is "
-            "set): resize the unpruned checkpoint and prune it again."
-        )
-
-
-def _check_pruned_head_tie(config: PreTrainedConfig) -> None:
-    """Reject weight tying for pruned heads: the generic tying installs the full-width embeddings as the head."""
-    text_config = config.get_text_config()
-    tied = getattr(config, "tie_word_embeddings", False) or getattr(text_config, "tie_word_embeddings", False)
-    if tied and _pruned_output_vocab_size(config) is not None:
-        raise ValueError(
-            "Cannot tie a pruned LM head (`output_vocab_size` smaller than `vocab_size`) to the input "
-            "embeddings; keep `tie_word_embeddings=False`."
-        )
-
-
 @auto_docstring
 class Apertus1p5PreTrainedModel(PreTrainedModel):
     config: Apertus1p5Config
@@ -378,22 +348,6 @@ class Apertus1p5PreTrainedModel(PreTrainedModel):
         "Apertus1p5VisionTokenizerResnetBlock",
         "Apertus1p5VisionTokenizerAttnBlock",
     ]
-
-    def resize_token_embeddings(
-        self,
-        new_num_tokens: int | None = None,
-        pad_to_multiple_of: int | None = None,
-        mean_resizing: bool = True,
-    ) -> nn.Embedding:
-        """Reject resizing when the LM head is pruned."""
-        if new_num_tokens is not None or pad_to_multiple_of is not None:
-            _check_pruned_head_resize(self.config)
-        return super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
-
-    def tie_weights(self, missing_keys: set[str] | None = None, recompute_mapping: bool = True):
-        """Reject weight tying when the LM head is pruned."""
-        _check_pruned_head_tie(self.config)
-        return super().tie_weights(missing_keys, recompute_mapping)
 
 
 class Apertus1p5TextMLP(nn.Module):
@@ -634,22 +588,6 @@ class Apertus1p5TextPreTrainedModel(PreTrainedModel):
         "hidden_states": Apertus1p5TextDecoderLayer,
         "attentions": Apertus1p5TextAttention,
     }
-
-    def resize_token_embeddings(
-        self,
-        new_num_tokens: int | None = None,
-        pad_to_multiple_of: int | None = None,
-        mean_resizing: bool = True,
-    ) -> nn.Embedding:
-        """Reject resizing when the LM head is pruned."""
-        if new_num_tokens is not None or pad_to_multiple_of is not None:
-            _check_pruned_head_resize(self.config)
-        return super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
-
-    def tie_weights(self, missing_keys: set[str] | None = None, recompute_mapping: bool = True):
-        """Reject weight tying when the LM head is pruned."""
-        _check_pruned_head_tie(self.config)
-        return super().tie_weights(missing_keys, recompute_mapping)
 
 
 class Apertus1p5TextRotaryEmbedding(nn.Module):
