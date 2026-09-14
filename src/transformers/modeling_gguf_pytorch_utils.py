@@ -453,6 +453,55 @@ class MiniMaxM2TensorProcessor(TensorProcessor):
             out.copy_(torch_weights)
 
 
+class Glm4MoeTensorProcessor(TensorProcessor):
+    HF_MOE_W13_PATTERN = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.mlp\.experts\.gate_up_proj")
+    GGUF_MOE_WEIGHTS_PATTERN = re.compile(r"(?P<name>.*\.ffn_(?P<w>gate|down|up)_exps)\.weight$")
+    HF_BIAS_PATTERN = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.mlp\.gate\.e_score_correction_bias")
+
+    def __init__(self, config=None):
+        super().__init__(config=config)
+
+    def perform_fallback_tensor_mapping(
+        self, gguf_to_hf_name_map: dict[str, str], suffix: str, qual_name: str, hf_name: str
+    ):
+        # Routed experts store gate (w1) and up (w3) as one merged gate_up_proj on the HF side.
+        if m := re.fullmatch(self.HF_MOE_W13_PATTERN, hf_name):
+            full_hf_name = qual_name + hf_name
+            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_gate_exps{suffix}"] = full_hf_name
+            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_up_exps{suffix}"] = full_hf_name
+        # Routing bias is stored under mlp.gate on the HF side.
+        elif m := re.fullmatch(self.HF_BIAS_PATTERN, hf_name):
+            gguf_to_hf_name_map[f"blk.{m['bid']}.exp_probs_b.bias"] = qual_name + hf_name
+
+    def process(self, weights, name: str, **kwargs):
+        if m := re.fullmatch(self.GGUF_MOE_WEIGHTS_PATTERN, name):
+            tensor_key_mapping = kwargs.get("tensor_key_mapping")
+            parsed_parameters = kwargs.get("parsed_parameters")
+            if tensor_key_mapping:
+                self._set_moe_expert_tensor(weights, parsed_parameters, tensor_key_mapping[m["name"]], m["w"])
+            return GGUFTensor(weights, None, {})
+        return GGUFTensor(weights, name, {})
+
+    def _set_moe_expert_tensor(self, weights: np.ndarray, parsed_parameters: dict[str, dict], hf_name: str, w: str):
+        torch_weights = torch.from_numpy(np.copy(weights))
+        if w == "down":
+            parsed_parameters["tensors"][hf_name] = torch_weights
+        else:
+            # Merge gate and up into gate_up_proj [num_experts, 2*moe_intermediate, hidden]
+            shape = list(weights.shape)
+            shard_dim = 1
+            shard_size = shape[shard_dim]
+            shape[shard_dim] = shard_size * 2
+            if hf_name not in parsed_parameters["tensors"]:
+                parsed_parameters["tensors"][hf_name] = torch.zeros(shape, dtype=torch_weights.dtype)
+            out: torch.Tensor = parsed_parameters["tensors"][hf_name]
+            if w == "gate":
+                out = out.narrow(shard_dim, 0, shard_size)
+            else:  # w == "up"
+                out = out.narrow(shard_dim, shard_size, shard_size)
+            out.copy_(torch_weights)
+
+
 TENSOR_PROCESSORS = {
     "llama": LlamaTensorProcessor,
     "qwen2moe": Qwen2MoeTensorProcessor,
@@ -468,6 +517,7 @@ TENSOR_PROCESSORS = {
     "gemma3": Gemma2TensorProcessor,
     "lfm2": Lfm2TensorProcessor,
     "minimax-m2": MiniMaxM2TensorProcessor,
+    "glm4moe": Glm4MoeTensorProcessor,
 }
 
 
@@ -522,6 +572,8 @@ def get_gguf_hf_weights_map(
         model_type = "minimax-m2"
     elif model_type == "gpt_oss":
         model_type = "gpt-oss"
+    elif model_type == "glm4_moe":
+        model_type = "glm4moe"
     arch = None
     for key, value in MODEL_ARCH_NAMES.items():
         if value == model_type:
@@ -692,6 +744,18 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
 
         if gguf_key in reader_keys:
             logger.info(f"Some keys were not parsed and added into account {gguf_key} | {value}")
+
+    # GGUF uses `glm4moe` as architecture name while Transformers uses `glm4_moe`
+    if parsed_parameters["config"]["model_type"] == "glm4moe":
+        parsed_parameters["config"]["model_type"] = "glm4_moe"
+        # block_count includes Multi-Token-Prediction (nextn) layers, which the HF model does not represent.
+        n_nextn = read_field(reader, "glm4moe.nextn_predict_layers")
+        if n_nextn and parsed_parameters["config"].get("num_hidden_layers") is not None:
+            parsed_parameters["config"]["num_hidden_layers"] -= int(n_nextn[0])
+        # QKV bias and QK-norm are not stored as metadata; infer them from tensor presence.
+        tensor_names = {tensor.name for tensor in reader.tensors}
+        parsed_parameters["config"]["attention_bias"] = any(name.endswith("attn_q.bias") for name in tensor_names)
+        parsed_parameters["config"]["use_qk_norm"] = any("attn_q_norm" in name for name in tensor_names)
 
     # Gemma3 GGUF checkpoint only contains weights of text backbone
     if parsed_parameters["config"]["model_type"] == "gemma3":
