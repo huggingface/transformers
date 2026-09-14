@@ -31,7 +31,7 @@ ALBERT was created to address problems like -- GPU/TPU memory limitations, longe
 - **Factorized embedding parameterization:** The large vocabulary embedding matrix is decomposed into two smaller matrices, reducing memory consumption.
 - **Cross-layer parameter sharing:** Instead of learning separate parameters for each transformer layer, ALBERT shares parameters across layers, further reducing the number of learnable weights.
 
-ALBERT uses absolute position embeddings (like BERT) so padding is applied on the right. Size of embeddings is 128. While BERT uses 768. ALBERT can processes maximum 512 token at a time.
+ALBERT uses absolute position embeddings (like BERT) so padding is applied on the right. Size of embeddings is 128. While BERT uses 768. ALBERT can process maximum 512 tokens at a time.
 
 You can find all the original ALBERT checkpoints under the [ALBERT community](https://huggingface.co/albert) organization.
 
