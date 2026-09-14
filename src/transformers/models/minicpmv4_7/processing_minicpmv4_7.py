@@ -121,6 +121,8 @@ class MiniCPMV4_7Processor(ProcessorMixin):
         )
         use_image_id = merged_kwargs["images_kwargs"].pop("use_image_id", None)
         use_image_id = use_image_id if use_image_id is not None else self.default_use_image_id
+        # `use_image_id` is an image-only setting, so it must not leak into the video branch.
+        merged_kwargs["videos_kwargs"].pop("use_image_id", None)
 
         processed_images = processed_videos = {}
         images_replacements = videos_replacements = []
@@ -153,8 +155,8 @@ class MiniCPMV4_7Processor(ProcessorMixin):
             if images_replacements and use_image_id:
                 images_replacements = self._prepend_local_ids(text, images_replacements, self.image_token)
 
-            if videos_replacements and use_image_id:
-                videos_replacements = self._prepend_local_ids(text, videos_replacements, self.video_token)
+            # No local ids for videos: a video is one temporal sequence of frames rather than
+            # several addressable visuals, and this is how the model was trained.
 
             text, text_replacement_offsets = self.get_text_with_replacements(
                 text,

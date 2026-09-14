@@ -54,7 +54,8 @@ class MiniCPMV4_7VideoProcessor(BaseVideoProcessor):
     patch_size = 14
     slice_mode = True
     downsample_mode = "16x"
-    use_image_id = True
+    # Video frames form a single temporal sequence, so they are not numbered with local image ids.
+    use_image_id = False
     do_sample_frames = True
     max_num_frames = 128
     stack_frames = 1
