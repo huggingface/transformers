@@ -16,7 +16,6 @@
 import unittest
 
 from transformers.testing_utils import (
-    backend_device_count,
     cleanup,
     require_torch,
     require_torch_accelerator,
@@ -36,6 +35,7 @@ if is_torch_available():
 
     from transformers import (
         AutoProcessor,
+        BitsAndBytesConfig,
         MuseGlimmerAssistantConfig,
         MuseGlimmerAssistantModel,
         MuseGlimmerForConditionalGeneration,
@@ -186,23 +186,13 @@ class MuseGlimmerAssistantIntegrationTest(unittest.TestCase):
     @classmethod
     def get_model(cls):
         if cls.model is None:
-            # Cap per-GPU memory to 70% so there is headroom for activation buffers
-            # (e.g. the lm_head matmul) during generation; excess layers spill to CPU.
-            n = backend_device_count(torch_device)
-            if n > 0 and torch_device != "cpu":
-                torch_accel = getattr(torch, torch_device)
-                per_device = int(
-                    min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.90 / 1024**3
-                )
-                max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
-                max_memory["cpu"] = "60GiB"
-            else:
-                max_memory = None
+            # Load in 4-bit so the 30B model (~15 GiB) fits on a single 24 GiB accelerator
+            # with enough headroom for the KV cache and lm_head activation buffers.
+            bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16)
             cls.model = MuseGlimmerForConditionalGeneration.from_pretrained(
                 cls.main_model_id,
-                dtype=torch.bfloat16,
+                quantization_config=bnb_config,
                 device_map="auto",
-                max_memory=max_memory,
             )
         return cls.model
 
