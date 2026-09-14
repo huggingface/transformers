@@ -379,7 +379,6 @@ class GenerationConfig(PushToHubMixin):
     _pad_token_tensor: "torch.Tensor | None"
     _decoder_start_token_tensor: "torch.Tensor | None"
 
-    # Whether the inputs of this call are padded, worked out once by generate() at generation time
     _can_drop_attention_mask: bool = False
 
     # Hash to detect whether the instance was modified after loading
