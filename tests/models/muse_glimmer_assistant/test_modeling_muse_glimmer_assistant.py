@@ -16,7 +16,6 @@
 import unittest
 
 from transformers.testing_utils import (
-    cleanup,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -24,6 +23,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available
 
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import (
     ModelTesterMixin,
     random_attention_mask,
@@ -161,7 +161,7 @@ class MuseGlimmerAssistantModelTest(ModelTesterMixin, unittest.TestCase):
 # enough headroom; excess layers spill to CPU via accelerate offloading.
 @slow
 @require_torch_accelerator
-class MuseGlimmerAssistantIntegrationTest(unittest.TestCase):
+class MuseGlimmerAssistantIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     drafter_id = "meta-models/Muse-Glimmer-30B-assistant"
     main_model_id = "meta-models/Muse-Glimmer-30B"
 
@@ -204,13 +204,7 @@ class MuseGlimmerAssistantIntegrationTest(unittest.TestCase):
         if cls.model is not None:
             del cls.model
             cls.model = None
-        cleanup(torch_device, gc_collect=True)
-
-    def setUp(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
+        super().tearDownClass()
 
     def test_drafter_forward_output_shape(self):
         """Standalone drafter forward pass with synthetic inputs.
