@@ -192,7 +192,7 @@ class MuseGlimmerAssistantIntegrationTest(unittest.TestCase):
             if n > 0 and torch_device != "cpu":
                 torch_accel = getattr(torch, torch_device)
                 per_device = int(
-                    min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.80 / 1024**3
+                    min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.90 / 1024**3
                 )
                 max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
                 max_memory["cpu"] = "60GiB"
