@@ -759,18 +759,11 @@ class MiniCPMV4_7Config(MiniCPMV4_6Config):
     model_type = "minicpmv4_7"
     sub_configs = {"text_config": AutoConfig, "vision_config": MiniCPMV4_7VisionConfig}
 
-    # Structural token ids consumed by canvas M-RoPE. They are resolved from the tokenizer at
-    # conversion time and persisted in `config.json`; a checkpoint that ships without them cannot
-    # build canvas positions and `get_rope_index` raises instead of silently falling back to 1-D.
     image_start_id: int | None = None
     image_end_id: int | None = None
     slice_start_id: int | None = None
     slice_end_id: int | None = None
     newline_id: int | None = None
-
-    # No tp/ep plan rewriting here: the text config declares `base_model_tp_plan` /
-    # `base_model_ep_plan` as class attributes, and `init_parallel_plans()` already merges every
-    # child module's plan under its own attribute name (`language_model.*`).
 
     def get_mrope_special_token_ids(self) -> dict:
         return {
@@ -1352,9 +1345,6 @@ class MiniCPMV4_7Processor(MiniCPMV4_6Processor):
 
             if images_replacements and use_image_id:
                 images_replacements = self._prepend_local_ids(text, images_replacements, self.image_token)
-
-            # No local ids for videos: a video is one temporal sequence of frames rather than
-            # several addressable visuals, and this is how the model was trained.
 
             text, text_replacement_offsets = self.get_text_with_replacements(
                 text,

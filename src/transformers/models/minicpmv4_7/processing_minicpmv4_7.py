@@ -155,9 +155,6 @@ class MiniCPMV4_7Processor(ProcessorMixin):
             if images_replacements and use_image_id:
                 images_replacements = self._prepend_local_ids(text, images_replacements, self.image_token)
 
-            # No local ids for videos: a video is one temporal sequence of frames rather than
-            # several addressable visuals, and this is how the model was trained.
-
             text, text_replacement_offsets = self.get_text_with_replacements(
                 text,
                 images_replacements,

@@ -111,9 +111,6 @@ class MiniCPMV4_7Config(PreTrainedConfig):
     merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
     merger_times: int = 1
 
-    # Structural token ids consumed by canvas M-RoPE. They are resolved from the tokenizer at
-    # conversion time and persisted in `config.json`; a checkpoint that ships without them cannot
-    # build canvas positions and `get_rope_index` raises instead of silently falling back to 1-D.
     image_start_id: int | None = None
     image_end_id: int | None = None
     slice_start_id: int | None = None
@@ -136,10 +133,6 @@ class MiniCPMV4_7Config(PreTrainedConfig):
             self.text_config = CONFIG_MAPPING["qwen3_5_text"]()
 
         super().__post_init__(**kwargs)
-
-    # No tp/ep plan rewriting here: the text config declares `base_model_tp_plan` /
-    # `base_model_ep_plan` as class attributes, and `init_parallel_plans()` already merges every
-    # child module's plan under its own attribute name (`language_model.*`).
 
     def get_mrope_special_token_ids(self) -> dict:
         return {
