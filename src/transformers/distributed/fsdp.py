@@ -216,7 +216,7 @@ def apply_fully_sharded_data_parallelism(
     reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
 
     ignored_params = None
-    if distributed_config is not None and distributed_config.dispatches_tokens:
+    if distributed_config is not None and distributed_config.experts_dispatch == "all-to-all":
         expert_modules = [module for module in model.modules() if getattr(module, "_is_expert_parallel", False)]
         if expert_mesh is not None:
             expert_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)

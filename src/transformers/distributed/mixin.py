@@ -86,18 +86,6 @@ class DistributedMixin:
     @property
     def tp_plan(self) -> dict[str, str]:
         """The full tp plan for the model's modules."""
-        if (
-            hasattr(self.config, "distributed_config")
-            and self.config.distributed_config.enable_expert_parallel
-            and not self.config.distributed_config.dispatches_tokens
-        ):
-            if not self._ep_plan:
-                raise ValueError(
-                    f"Expert parallelism was requested (`enable_expert_parallel=True`), but "
-                    f"`{self.__class__.__name__}` does not define an expert-parallel plan. Add a "
-                    f"`base_model_ep_plan` to its config, or disable expert parallelism."
-                )
-            return self._ep_plan
         return self._tp_plan
 
     @property
@@ -163,7 +151,7 @@ class DistributedMixin:
             raise ValueError("Tensor parallelism and `device_map` are mutually exclusive.")
         if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
             raise OSError("FSDP2 requires `torch>=2.7` (distributed checkpoint save/load).")
-        if distributed_config.dispatches_tokens and not is_torch_greater_or_equal("2.7"):
+        if distributed_config.experts_dispatch == "all-to-all" and not is_torch_greater_or_equal("2.7"):
             raise OSError("Expert-parallel token dispatch requires `torch>=2.7`.")
 
         device_map, mesh_manager = initialize_distributed_mesh(distributed_config)
@@ -191,11 +179,11 @@ class DistributedMixin:
 
             # Both may apply: the tensor/expert parallel plan shards across `tp` first, then FSDP2
             # shards every parameter (the `tp`-sharded ones included) across `fsdp`.
-            if distributed_config.tp_size > 1 or distributed_config.enable_expert_parallel:
+            if distributed_config.tp_size > 1 or distributed_config.ep_size > 1:
                 # All-reduce EP retains the legacy TP view. Only dispatch folds expert ownership into FSDP.
                 if isinstance(distributed_config.tp_plan, dict):
                     model.tp_plan = distributed_config.tp_plan
-                if distributed_config.dispatches_tokens:
+                if distributed_config.experts_dispatch == "all-to-all":
                     ep_plan = model._ep_plan or {}
                     expert_paths = [name for name, style in ep_plan.items() if style == "moe_tp_experts"]
                     if not expert_paths:
@@ -224,9 +212,17 @@ class DistributedMixin:
                     model._tp_plan = dense_plan | expert_plan
                 else:
                     tp_mesh = mesh_manager.get_mesh("tp")
-                    model = apply_tensor_parallelism(model, tp_mesh)
+                    plan = model.tp_plan
+                    if distributed_config.ep_size > 1:
+                        if not model._ep_plan:
+                            raise ValueError(
+                                f"{type(model).__name__} does not define an expert-parallel plan. "
+                                "Add `base_model_ep_plan` to its config, or disable expert parallelism."
+                            )
+                        plan = model._ep_plan
+                    model = apply_tensor_parallelism(model, tp_mesh, plan)
 
-            if distributed_config.dispatches_tokens:
+            if distributed_config.experts_dispatch == "all-to-all":
                 # Each TP group trains on its own batch. The trunk spans fsdp; each expert is additionally
                 # FSDP-sharded across efsdp, the ranks left after assigning its EP shard.
                 trunk_mesh = mesh_manager.get_mesh("fsdp")
@@ -295,7 +291,7 @@ class DistributedMixin:
         if distributed_config is None:
             return state_dict
 
-        if distributed_config.fsdp_size > 1 or distributed_config.dispatches_tokens:
+        if distributed_config.fsdp_size > 1 or distributed_config.experts_dispatch == "all-to-all":
             # Also covers the 2-D (fsdp, tp) mesh and token dispatch: every parameter is FSDP-managed, and
             # the full state dict is only materialized on rank 0.
             if not _is_torch_distributed_initialized():

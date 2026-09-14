@@ -49,7 +49,7 @@ torchrun --nproc-per-node 8 your_script.py
 
 ## Token dispatch
 
-With all-reduce, every expert parallel rank runs the whole batch, keeps only the experts it owns, and all-reduces expert outputs after every MoE layer. Use `tp_size=1` and set `ep_size` independently to send each token to the rank that owns its experts. Each rank then trains on its own batch shard. The default `experts_dispatch="auto"` selects all-to-all for this topology.
+With all-reduce, every expert parallel rank runs the whole batch, keeps only the experts it owns, and all-reduces expert outputs after every MoE layer. Use `tp_size=1`, set `ep_size` independently, and select `experts_dispatch="all-to-all"` to send each token to the rank that owns its experts. Each rank then trains on its own batch shard. The default dispatcher is `"all-reduce"`.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -59,12 +59,13 @@ distributed_config = DistributedConfig(
     tp_size=1,
     fsdp_size=8,
     ep_size=4,
+    experts_dispatch="all-to-all",
 )
 ```
 
 Each rank trains on its own part of the batch. At every MoE layer it routes its tokens, sends each (token, expert) pair to the rank that owns the expert with an all-to-all, runs its local experts, and gets the results back with a second all-to-all. Only the routed tokens travel.
 
-With `tp_size=1`, `ep_size` must divide `fsdp_size` and the number of experts. When only `ep_size` is supplied, `fsdp_size` defaults to `WORLD_SIZE`.
+With `tp_size=1`, `ep_size` must divide `fsdp_size` and the number of experts. Set `fsdp_size` explicitly for this layout; it defaults to 1 when omitted.
 
 For the rest of the model:
 
@@ -72,7 +73,16 @@ For the rest of the model:
 - Experts are sharded across `ep` and additionally across `efsdp`, whose size is `fsdp_size // ep_size`. With `efsdp_size=1` they are outside FSDP2, so `fsdp_mixed_precision` and `fsdp_cpu_offload` do not apply to them.
 - The [`Trainer`] uses ordinary data-parallel batching for training and evaluation and counts tokens across all ranks.
 
-The legacy `enable_expert_parallel=True` spelling is deprecated. A dispatch configuration with `tp_size=4, fsdp_size=2, enable_expert_parallel=True` is translated to `tp_size=1, fsdp_size=8, ep_size=4`, preserving its expert groups and independent batches per rank. Legacy all-reduce configurations retain their original `tp_size` and `fsdp_size`.
+The legacy API uses `enable_expert_parallel=True`. When `ep_size` is omitted, this flag sets `ep_size=tp_size` and emits a deprecation warning. It leaves `tp_size`, `fsdp_size`, and `experts_dispatch` unchanged. An explicit `ep_size` takes precedence over the flag.
+
+The explicit API uses `ep_size` for expert ownership and `experts_dispatch` for communication. Both APIs default to `"all-reduce"`; select `"all-to-all"` for token dispatch. For example, these configurations each use eight GPUs:
+
+| Configuration | Result |
+| :--- | :--- |
+| `DistributedConfig(tp_size=4, fsdp_size=2, enable_expert_parallel=True)` | Legacy alias: sets `ep_size=4`, uses all-reduce, and warns. |
+| `DistributedConfig(tp_size=4, fsdp_size=2, ep_size=4)` | Explicit equivalent of the legacy configuration. |
+| `DistributedConfig(tp_size=4, fsdp_size=2, ep_size=4, experts_dispatch="all-to-all")` | Token dispatch with TP groups of four. |
+| `DistributedConfig(tp_size=1, fsdp_size=8, ep_size=4, experts_dispatch="all-to-all")` | Token dispatch with an independent batch on each rank. |
 
 ## Token dispatch with trunk tensor parallelism
 
@@ -91,7 +101,7 @@ Each pair of TP ranks receives the same batch. Attention and other dense modules
 
 `ep_size` must be a multiple of `tp_size`, divide `fsdp_size * tp_size`, and divide the number of experts. Token slices may be uneven or empty, including during single-token decoding. The model's usual TP constraints, such as attention-head divisibility, still apply.
 
-The [`Trainer`] shares batches within each TP group and counts each group's tokens once. The effective global batch size is `per_device_train_batch_size * fsdp_size * gradient_accumulation_steps`. Sequence parallelism is not required for this path. With `experts_dispatch="auto"`, `ep_size=tp_size` still selects legacy all-reduce; request `"all-to-all"` explicitly to use trunk TP in that case.
+The [`Trainer`] shares batches within each TP group and counts each group's tokens once. The effective global batch size is `per_device_train_batch_size * fsdp_size * gradient_accumulation_steps`. Sequence parallelism is not required for this path. Request `experts_dispatch="all-to-all"` explicitly for token dispatch, including when `ep_size=tp_size`.
 
 ## Combining with FSDP2
 
