@@ -104,7 +104,7 @@ Transformers 充当跨文本、计算机视觉、音频、视频与多模态的�
 
 ## 安装
 
-Transformers 支持 Python 3.10+，以及 [PyTorch](https://pytorch.org/get-started/locally/) 2.4+。
+Transformers 支持 Python 3.10+，以及 [PyTorch](https://pytorch.org/get-started/locally/) 2.5+。
 
 使用 [venv](https://docs.python.org/3/library/venv.html) 或 [uv](https://docs.astral.sh/uv/)（一个基于 Rust 的快速 Python 包与项目管理器）创建并激活虚拟环境：
 
@@ -157,7 +157,7 @@ pipeline("the secret to baking a really good cake is ")
 要与模型进行「聊天」，用法也一致。唯一不同是需要构造一段「聊天历史」（即 `Pipeline` 的输入）：
 
 > [!TIP]
-> 你也可以直接在命令行与模型聊天：
+> 只要 [`transformers serve` 正在运行](https://huggingface.co/docs/transformers/main/en/serving)，你也可以直接在命令行与模型聊天。
 > ```shell
 > transformers chat Qwen/Qwen2.5-0.5B-Instruct
 > ```
@@ -285,12 +285,12 @@ Transformers 不止是一个使用预训练模型的工具包，它还是围绕 
 <details>
 <summary>音频</summary>
 
-- 使用 [Whisper](https://huggingface.co/openai/whisper-large-v3-turbo) 进行音频分类
-- 使用 [Moonshine](https://huggingface.co/UsefulSensors/moonshine) 进行自动语音识别
+- 使用 [CLAP](https://huggingface.co/laion/clap-htsat-fused) 进行音频分类
+- 使用 [Parakeet](https://huggingface.co/nvidia/parakeet-ctc-1.1b#transcribing-using-transformers-%F0%9F%A4%97)、[Whisper](https://huggingface.co/openai/whisper-large-v3-turbo)、[GLM-ASR](https://huggingface.co/zai-org/GLM-ASR-Nano-2512) 与 [Moonshine-Streaming](https://huggingface.co/UsefulSensors/moonshine-streaming-medium) 进行自动语音识别
 - 使用 [Wav2Vec2](https://huggingface.co/superb/wav2vec2-base-superb-ks) 进行关键词检索
 - 使用 [Moshi](https://huggingface.co/kyutai/moshiko-pytorch-bf16) 进行语音到语音生成
-- 使用 [MusicGen](https://huggingface.co/facebook/musicgen-large) 文本到音频生成
-- 使用 [Bark](https://huggingface.co/suno/bark) 文本到语音生成
+- 使用 [MusicGen](https://huggingface.co/facebook/musicgen-large) 进行文本到音频生成
+- 使用 [CSM](https://huggingface.co/sesame/csm-1b) 进行文本到语音生成
 
 </details>
 
@@ -312,7 +312,7 @@ Transformers 不止是一个使用预训练模型的工具包，它还是围绕 
 <details>
 <summary>多模态</summary>
 
-- 使用 [Qwen2-Audio](https://huggingface.co/Qwen/Qwen2-Audio-7B) 实现音频或文本到文本
+- 使用 [Voxtral](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507)、[Audio Flamingo](https://huggingface.co/nvidia/audio-flamingo-3-hf) 实现音频或文本到文本
 - 使用 [LayoutLMv3](https://huggingface.co/microsoft/layoutlmv3-base) 进行文档问答
 - 使用 [Qwen-VL](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct) 实现图像或文本到文本
 - 使用 [BLIP-2](https://huggingface.co/Salesforce/blip2-opt-2.7b) 进行图文描述
