@@ -179,6 +179,21 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
                 chunked = model(input_ids).logits
         torch.testing.assert_close(chunked, expected, rtol=1e-5, atol=1e-5)
 
+    def test_fp8_e4m3_rounding_matches_the_native_cast(self):
+        # The FP8 grid is reproduced with ordinary arithmetic: `float8_e4m3fn` is unsupported by the Triton
+        # backend below sm_89, so casting through it breaks `torch.compile` on e.g. A100 while eager works.
+        torch.manual_seed(0)
+        values = torch.cat(
+            [
+                (torch.randn(100_000) * 100).clamp(-448, 448),
+                torch.randn(100_000) * 1e-3,  # subnormals of the 2 ** -6 binade
+                torch.linspace(-448, 448, 10_001),
+                torch.tensor([0.0, -0.0, 2**-9, 2**-10, 2**-6, 448.0, -448.0, 447.9, 1.0009765625]),
+            ]
+        ).to(torch_device)
+        expected = values.to(torch.float8_e4m3fn).float()
+        self.assertTrue(torch.equal(modeling_deepseek_v32.round_to_fp8_e4m3(values), expected))
+
     def test_indexer_cache_holds_fp8_quantized_keys(self):
         # As in the reference and the serving engines, the indexer keys are FP8 (e4m3) quantized with per-128-block
         # power-of-two scales before they are cached, so every cached key must be exactly representable that way.

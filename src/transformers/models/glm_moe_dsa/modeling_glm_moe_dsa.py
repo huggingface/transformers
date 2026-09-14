@@ -148,6 +148,21 @@ def hadamard_transform(x: torch.Tensor) -> torch.Tensor:
     return y.mul(n**-0.5).reshape(x.shape).to(x.dtype)
 
 
+def round_to_fp8_e4m3(x: torch.Tensor) -> torch.Tensor:
+    """
+    Rounds `x` (fp32, already scaled into range) to the `float8_e4m3fn` grid and returns it in fp32.
+
+    Bit-exactly equal to `x.to(torch.float8_e4m3fn).float()`, but expressed in ordinary arithmetic: the FP8
+    dtype is not supported by the Triton backend below `sm_89`, so casting through it makes `torch.compile`
+    fail on e.g. A100 while eager works. e4m3 keeps 3 mantissa bits, so within each binade the values are
+    spaced `2 ** (exponent - 3)`, with the subnormals of the `2 ** -6` binade spaced `2 ** -9`; `torch.round`
+    ties-to-even matches the hardware conversion, and the format saturates at 448.
+    """
+    magnitude, exponent = torch.frexp(x.abs())  # |x| == magnitude * 2 ** exponent, magnitude in [0.5, 1)
+    step = torch.exp2((exponent - 1).clamp_min(-6).float() - 3)
+    return torch.copysign(torch.round(x.abs() / step).mul(step).clamp(max=448.0), x)
+
+
 def fake_quant_fp8_block(x: torch.Tensor, block_size: int = 128, scale_fmt: str | None = None) -> torch.Tensor:
     """
     The reference's `act_quant` followed by dequantization: per-`block_size` block FP8 (e4m3) quantization
@@ -165,8 +180,8 @@ def fake_quant_fp8_block(x: torch.Tensor, block_size: int = 128, scale_fmt: str 
         bits = scale.contiguous().view(torch.int32)
         exponent, mantissa = (bits >> 23) & 0xFF, bits & 0x7FFFFF
         scale = torch.exp2((exponent - 127 + (mantissa != 0).to(torch.int32)).to(torch.float32))
-    quantized = (blocks / scale.unsqueeze(-1)).clamp(-448.0, 448.0).to(torch.float8_e4m3fn)
-    dequantized = (quantized.float() * scale.unsqueeze(-1)).reshape(x.shape).to(x.dtype)
+    quantized = round_to_fp8_e4m3((blocks / scale.unsqueeze(-1)).clamp(-448.0, 448.0))
+    dequantized = (quantized * scale.unsqueeze(-1)).reshape(x.shape).to(x.dtype)
     return x + (dequantized - x).detach()
 
 
