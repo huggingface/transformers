@@ -37,7 +37,11 @@ class AudioSpectrogramTransformerAudioProcessorKwargs(AudioKwargs, total=False):
 class AudioSpectrogramTransformerAudioProcessorMixin:
     do_batch_spectrogram = False
     # The legacy FE saved `feature_size=1` (a raw-audio default) and kept the real mel count in
-    legacy_field_mapping = {"feature_size": None}
+    # `num_mel_bins`, so `feature_size` opts out of the base mapping rather than overwriting it.
+    # `mean`/`std` are the dataset normalisation statistics; without the mapping a checkpoint's
+    # own values were dropped and every AST model normalised with AudioSet's, which is what the
+    # class defaults happen to be.
+    legacy_field_mapping = {"feature_size": None, "mean": "ast_mean", "std": "ast_std"}
     model_input_names = ["audio_values"]
     return_padding_mask = False
     sampling_rate = 16000
