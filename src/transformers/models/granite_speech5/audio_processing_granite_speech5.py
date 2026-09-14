@@ -59,6 +59,27 @@ class GraniteSpeech5AudioProcessorMixin:
     frame_stacking = 2
     valid_kwargs = GraniteSpeech5AudioProcessorKwargs
 
+    legacy_field_mapping = {
+        # `feature_size` is *derived* here, not configured: the legacy extractor computes it as
+        # `num_mel_bins * delta_expansion * frame_stacking` (80 * 2 * 2 = 320) and pops it from
+        # kwargs. The base mapping sends `feature_size` to `n_mels` — correct for the extractors
+        # that persisted the mel count under that name, wrong here — and it wins over the
+        # `num_mel_bins` the same config carries, giving 320 mels and features 4x too wide.
+        # Dropping it lets the real count through.
+        "feature_size": None,
+        "logmel_floor_db": "spectrogram_config.clip_max_offset",
+        # Keys from the pre-`auto_map` remote-code configs that the *legacy extractor does not
+        # read either*: its signature takes `num_mel_bins` and `sampling_rate`, and
+        # `delta_expansion`/`frame_stacking` are class constants ("hardcoded in modeling for this
+        # architecture"). Verified against it — a config saying `sample_rate=8000, n_mels=128,
+        # stack_factor=8, deltas=False` still yields 16000/80/2. Honouring them would *break*
+        # parity, so the drop is declared rather than left to look like an oversight.
+        "n_mels": None,
+        "sample_rate": None,
+        "stack_factor": None,
+        "deltas": None,
+    }
+
 
 class GraniteSpeech5AudioProcessor(GraniteSpeech5AudioProcessorMixin, TorchAudioBackend):
     def _compute_deltas(self, features):
