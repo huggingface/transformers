@@ -204,9 +204,18 @@ def replace_with_quant_layers(
 
     from ..quantizers.quantizers_utils import should_convert_module
 
-    quantize_embeddings = quantization_config.quantize_embeddings
-    num_bits = quantization_config.num_bits
-    module_quant_configs = quantization_config.module_quant_configs or {}
+    quantize_embeddings = getattr(quantization_config, "quantize_embeddings", False)
+    num_bits = getattr(quantization_config, "num_bits", 4)
+    module_quant_configs = getattr(quantization_config, "module_quant_configs", None) or {}
+
+    modules_to_not_convert = list(modules_to_not_convert or [])
+    if hasattr(model, "_keep_in_fp32_modules") and model._keep_in_fp32_modules:
+        modules_to_not_convert.extend(model._keep_in_fp32_modules)
+    if "router.proj" not in modules_to_not_convert:
+        modules_to_not_convert.append("router.proj")
+    if "router" in modules_to_not_convert and "router.proj" not in modules_to_not_convert:
+        modules_to_not_convert.append("router.proj")
+    modules_to_not_convert = list(set(modules_to_not_convert))
 
     # Join all the per-module patterns into one regex, compiled once, so each module name needs a
     # single search instead of a loop over patterns. Each pattern is a named group `g0`, `g1`, ...;
