@@ -28,6 +28,7 @@ import importlib.util
 import os
 import pathlib
 import sys
+import time
 import traceback
 from datetime import timedelta
 
@@ -91,9 +92,33 @@ def reclaim() -> tuple[float, float]:
     return torch.cuda.memory_allocated() / gib, torch.cuda.memory_reserved() / gib
 
 
+def quiet_unless_rank0(rank: int, log_dir: str):
+    """Send every rank but 0 to its own file, leaving the console to rank 0.
+
+    Four ranks interleaving into one stream is unreadable, and torchrun's own
+    filtering (``--local-ranks-filter``) only works through ``--tee``, which stamps
+    every line with a ``[default0]:`` prefix that cannot be turned off. Doing it
+    here keeps the console clean and still keeps each rank's output on disk.
+
+    dup2 on the file descriptors rather than rebinding ``sys.stdout``, so that
+    NCCL and the rest of the C++ side follow the redirect too.
+    """
+    if rank == 0:
+        return
+    os.makedirs(log_dir, exist_ok=True)
+    sink = open(os.path.join(log_dir, f"rank{rank}.log"), "w", buffering=1)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os.dup2(sink.fileno(), sys.stdout.fileno())
+    os.dup2(sink.fileno(), sys.stderr.fileno())
+
+
 def main():
     local_rank = int(os.environ["LOCAL_RANK"])
     rank, world = int(os.environ["RANK"]), int(os.environ["WORLD_SIZE"])
+    workspace = str(pathlib.Path(os.environ.get("WORKSPACE", os.getcwd())).resolve())
+    log_dir = os.environ.get("TD_LOG_DIR", os.path.join(workspace, ".td"))
+    quiet_unless_rank0(rank, log_dir)
     torch.cuda.set_device(local_rank)
 
     # Exactly one control store: rank 0 owns the server, everyone else connects to
@@ -109,8 +134,6 @@ def main():
 
     dist.init_process_group("nccl", device_id=torch.device("cuda", local_rank))
     ctrl = dist.new_group(backend="gloo")  # control plane, never NCCL
-
-    workspace = str(pathlib.Path(os.environ.get("WORKSPACE", os.getcwd())).resolve())
 
     # Announce readiness only once the loop below is actually reachable, so the
     # launcher cannot connect to a server that is a millisecond away from crashing.
@@ -132,6 +155,7 @@ def main():
         if rank == 0:
             print(f"[job {n - 1}] {script}", flush=True)
         ok = 1
+        started = time.monotonic()
         try:
             purge(workspace)
             run_script(script)
@@ -140,18 +164,30 @@ def main():
             sys.stderr.flush()
             ok = 0
         finally:
+            elapsed = time.monotonic() - started
             live, reserved = reclaim()
         sys.stdout.flush()
 
-        votes = torch.tensor([ok])
+        # One slot per rank rather than a sum, so rank 0 can name who failed —
+        # their traceback went to their own file and is not on the console.
+        votes = torch.zeros(world, dtype=torch.int32)
+        votes[rank] = ok
         dist.all_reduce(votes, group=ctrl)  # vote over gloo
         if rank == 0:
-            result = "ok" if votes.item() == world else "fail"
+            failed = [i for i, v in enumerate(votes.tolist()) if not v]
+            result = "ok" if not failed else "fail"
             print(
-                f"[job {n - 1}] finished: {result} (gpu0 {live:.1f} GiB live / {reserved:.1f} GiB reserved)",
+                f"[job {n - 1}] finished: {result} in {elapsed:.1f}s "
+                f"(gpu0 {live:.1f} GiB live / {reserved:.1f} GiB reserved)",
                 flush=True,
             )
-            store.set(f"done:{n - 1}", result)
+            if [i for i in failed if i != 0]:
+                where = ", ".join(f".td/rank{i}.log" for i in failed if i != 0)
+                print(f"[job {n - 1}] ranks {failed} failed; see {where}", flush=True)
+            # Duration rides along with the verdict: rank 0 is the only rank that
+            # timed the whole job, and the client cannot measure it itself without
+            # counting its own poll interval and startup.
+            store.set(f"done:{n - 1}", f"{result} {elapsed:.3f}")
 
     dist.destroy_process_group()
 

@@ -20,6 +20,8 @@ second run onwards is just the script.
 
     td train.py                                   # infer nodes/GPUs from Slurm
     td train.py --nodes a,b --gpus 8,8            # or say it explicitly
+    td train.py -d                                # submit and get the prompt back
+    td --logs                                     # follow rank 0 until you ^C
     td --down                                     # let the daemon finish and exit
     td --kill                                     # hard stop every rank
 
@@ -29,6 +31,7 @@ called afterwards.
 """
 
 import contextlib
+import glob
 import os
 import shlex
 import socket
@@ -44,6 +47,16 @@ import typer
 
 PORT, CTRL = 29500, 29600
 STARTUP_TIMEOUT = 300
+
+
+def _human(seconds: float) -> str:
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    minutes, rest = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{int(minutes)}m {rest:04.1f}s"
+    hours, minutes = divmod(int(minutes), 60)
+    return f"{hours}h {minutes:02d}m {rest:04.1f}s"
 
 
 class DaemonLost(RuntimeError):
@@ -291,7 +304,8 @@ class Cluster:
         # from polling torchrun's rendezvous store forever; once that store closes
         # it emits a full C++ stack every second per rank and buries the real logs.
         env = (
-            f"CTRL_PORT={CTRL} WORKSPACE={self.cwd} TORCH_NCCL_ASYNC_ERROR_HANDLING=1 "
+            f"CTRL_PORT={CTRL} WORKSPACE={self.cwd} TD_LOG_DIR={self.log_dir} "
+            f"TORCH_NCCL_ASYNC_ERROR_HANDLING=1 "
             f"TORCH_NCCL_ENABLE_MONITORING=0 PYTHONUNBUFFERED=1 {self.forwarded_env()}"
         )
 
@@ -299,11 +313,17 @@ class Cluster:
         # previous run's traceback before each node's own redirect clears the file.
         for host in self.nodes:
             open(os.path.join(self.log_dir, f"{host}.log"), "w").close()
+        for stale in glob.glob(os.path.join(self.log_dir, "rank*.log")):
+            with contextlib.suppress(OSError):
+                os.remove(stale)
 
         started = []
         try:
             for i, (host, ip, n_gpu) in enumerate(zip(self.nodes, self.ips, self.gpus)):
                 log = os.path.join(self.log_dir, f"{host}.log")
+                # Rank filtering is done inside the worker, not with torchrun's
+                # --local-ranks-filter: that one only takes effect through --tee,
+                # which stamps an un-removable "[default0]:" on every line.
                 inner = (
                     f"cd {self.cwd} && exec env {env} {sys.executable} -u -m torch.distributed.run "
                     f"--nnodes={len(self.nodes)} --nproc-per-node={n_gpu} --node-rank={i} "
@@ -376,6 +396,10 @@ def td(
     gpus: Annotated[
         str | None, typer.Option(help="Comma-separated GPU count per node. Defaults to the visible devices.")
     ] = None,
+    detach: Annotated[
+        bool, typer.Option("--detach", "-d", help="Submit and return the prompt; do not wait or stream.")
+    ] = False,
+    logs: Annotated[bool, typer.Option(help="Follow rank 0's live output until interrupted.")] = False,
     down: Annotated[bool, typer.Option(help="Ask the daemon to exit once it is idle.")] = False,
     kill: Annotated[bool, typer.Option(help="Hard-stop every rank on every node.")] = False,
 ):
@@ -397,8 +421,22 @@ def td(
             print("not running")
         return
 
+    if logs and script is None:
+        if not cluster.listening():
+            raise typer.Exit(_fail(None, "no daemon running"))
+        follower = Follower(cluster.head_log)
+        follower.start()
+        try:
+            while cluster.listening():
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            follower.close()
+        return
+
     if script is None:
-        raise typer.BadParameter("need a script (or --down / --kill)")
+        raise typer.BadParameter("need a script (or --down / --kill / --logs)")
     if not os.path.exists(script):
         raise typer.BadParameter(f"no such script: {script}")
 
@@ -441,8 +479,14 @@ def td(
                 store.set(f"job:{job}", "__skip__")
             raise
 
+        if detach:
+            follower.close()
+            follower = None
+            print(f"[job {job}] submitted; follow with `td --logs`, result lands in .td/{cluster.head}.log")
+            return
+
         try:
-            result = cluster.wait_for_result(store, job)
+            verdict = cluster.wait_for_result(store, job)
         except KeyboardInterrupt:
             raise typer.Exit(_fail(follower, "detached (job still running)"))
         except DaemonLost as e:
@@ -450,7 +494,9 @@ def td(
 
         follower.close()
         follower = None
-        print(f"[job {job}] {result}")
+        result, _, seconds = verdict.partition(" ")
+        took = f" in {_human(float(seconds))}" if seconds else ""
+        print(f"[job {job}] {result}{took}")
         raise typer.Exit(0 if result == "ok" else 1)
     finally:
         if follower is not None:
