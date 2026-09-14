@@ -45,6 +45,7 @@ _re_checkpoint = re.compile(r"""(?s)@auto_docstring\(.*?checkpoint\s*=\s*["']([^
 
 CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK = {
     "DecisionTransformerConfig",
+    "HelixConfig",  # architecture proposal; no pretrained checkpoint exists yet
     "EncoderDecoderConfig",
     "MusicgenConfig",
     "RagConfig",
