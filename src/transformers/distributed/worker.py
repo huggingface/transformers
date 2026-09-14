@@ -23,6 +23,7 @@ It is executed by ``torch.distributed.run`` as a plain script, not imported, so 
 deliberately avoids package-relative imports.
 """
 
+import gc
 import importlib.util
 import os
 import pathlib
@@ -61,11 +62,33 @@ def fresh_import(path: str):
 
 
 def run_script(path: str):
+    """Execute a job script.
+
+    Importing it already runs its module body, so a plain top-level script is a
+    valid job with nothing to declare — the body *is* the work. ``main()`` is
+    called afterwards when the script defines one, which is what you want as soon
+    as the script grows imports or helpers that should not re-run per call.
+    """
     module = fresh_import(path)
     entry = getattr(module, "main", None)
-    if not callable(entry):
-        raise AttributeError(f"{path} defines no main(); the job runner calls main() with no arguments")
-    entry()
+    if callable(entry):
+        entry()
+
+
+def reclaim() -> tuple[float, float]:
+    """Give the previous job's GPU memory back between runs.
+
+    Dropping the job module makes its tensors garbage, but two things stop that
+    from showing up as free memory on its own: reference cycles wait for a gc
+    pass, and the caching allocator holds freed blocks rather than returning them
+    to the driver. A long-lived pool therefore looks permanently full and the next
+    job fragments against a cache it cannot use. Neither is automatic, so do both.
+    """
+    gc.collect()
+    torch.cuda.empty_cache()
+    torch.cuda.reset_peak_memory_stats()
+    gib = 1024**3
+    return torch.cuda.memory_allocated() / gib, torch.cuda.memory_reserved() / gib
 
 
 def main():
@@ -101,6 +124,11 @@ def main():
         n += 1
         if script == "__exit__":
             break
+        if script == "__skip__":
+            # A client reserved this slot and then died before naming a script.
+            # Without the placeholder it writes on the way out, every rank would
+            # sit on this key forever and the pool would accept nothing further.
+            continue
         if rank == 0:
             print(f"[job {n - 1}] {script}", flush=True)
         ok = 1
@@ -111,13 +139,18 @@ def main():
             traceback.print_exc()
             sys.stderr.flush()
             ok = 0
+        finally:
+            live, reserved = reclaim()
         sys.stdout.flush()
 
         votes = torch.tensor([ok])
         dist.all_reduce(votes, group=ctrl)  # vote over gloo
         if rank == 0:
             result = "ok" if votes.item() == world else "fail"
-            print(f"[job {n - 1}] finished: {result}", flush=True)
+            print(
+                f"[job {n - 1}] finished: {result} (gpu0 {live:.1f} GiB live / {reserved:.1f} GiB reserved)",
+                flush=True,
+            )
             store.set(f"done:{n - 1}", result)
 
     dist.destroy_process_group()

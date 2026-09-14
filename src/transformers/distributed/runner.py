@@ -23,10 +23,12 @@ second run onwards is just the script.
     td --down                                     # let the daemon finish and exit
     td --kill                                     # hard stop every rank
 
-The submitted script must define ``main()``; it is called on every rank with the
-process group already initialized.
+The submitted script runs on every rank with the process group already
+initialized. Top-level code is the job; if the script defines ``main()`` it is
+called afterwards.
 """
 
+import contextlib
 import os
 import shlex
 import socket
@@ -44,33 +46,85 @@ PORT, CTRL = 29500, 29600
 STARTUP_TIMEOUT = 300
 
 
+class DaemonLost(RuntimeError):
+    """The worker pool went away while we were waiting on it."""
+
+
+def _scontrol(*args) -> str:
+    try:
+        return subprocess.run(["scontrol", *args], capture_output=True, text=True, timeout=15).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def _slurm_job_id() -> str | None:
+    """This shell's Slurm job, or the one that owns this host.
+
+    ``SLURM_JOB_ID`` is only exported inside the allocation. Submitting from a
+    plain login shell on an allocated node is normal, and silently falling back
+    to a single node there is worse than looking the job up.
+    """
+    if os.environ.get("SLURM_JOB_ID"):
+        return os.environ["SLURM_JOB_ID"]
+    out = subprocess.run(
+        ["squeue", "-h", "-u", os.environ.get("USER", ""), "-t", "RUNNING", "-o", "%i %N"],
+        capture_output=True,
+        text=True,
+    ).stdout
+    running = [line.split(None, 1) for line in out.splitlines() if line.strip()]
+    here = socket.gethostname()
+    for job_id, nodelist in running:
+        if here in _scontrol("show", "hostnames", nodelist).split():
+            return job_id
+    return running[0][0] if len(running) == 1 else None
+
+
 def default_nodes() -> list[str]:
     """Slurm's allocation if there is one, otherwise just this host."""
     nodelist = os.environ.get("SLURM_JOB_NODELIST") or os.environ.get("SLURM_NODELIST")
-    if not nodelist and os.environ.get("SLURM_JOB_ID"):
-        out = subprocess.run(
-            ["scontrol", "show", "job", os.environ["SLURM_JOB_ID"], "-o"],
-            capture_output=True,
-            text=True,
-        ).stdout
-        for field in out.split():
-            if field.startswith("NodeList=") and field != "NodeList=(null)":
-                nodelist = field.split("=", 1)[1]
-                break
+    if not nodelist:
+        job_id = _slurm_job_id()
+        if job_id:
+            for field in _scontrol("show", "job", job_id, "-o").split():
+                if field.startswith("NodeList=") and field != "NodeList=(null)":
+                    nodelist = field.split("=", 1)[1]
+                    break
     if nodelist:
-        hosts = subprocess.run(
-            ["scontrol", "show", "hostnames", nodelist], capture_output=True, text=True
-        ).stdout.split()
+        hosts = _scontrol("show", "hostnames", nodelist).split()
         if hosts:
             return hosts
     return [socket.gethostname()]
 
 
-def default_gpus(n_nodes: int) -> list[int]:
-    """Assume a homogeneous allocation: same visible GPU count on every node."""
-    per_node = os.environ.get("SLURM_GPUS_ON_NODE")
-    if per_node:
-        count = int(per_node)
+def default_gpus(nodes: list[str]) -> list[int]:
+    """Per-node GPU counts, from Slurm where it can tell us.
+
+    Not necessarily uniform: ``--gpus=4`` over two nodes is a *total*, and Slurm is
+    free to hand back 3+1. Asking each node separately avoids launching a shape the
+    allocation cannot satisfy. ``scontrol show job -d`` reports the split directly,
+    so prefer it over multiplying one number by the node count.
+    """
+    job_id = _slurm_job_id()
+    if job_id:
+        detail = _scontrol("show", "job", job_id, "-d")
+        per_node: dict[str, int] = {}
+        current: list[str] = []
+        for line in detail.splitlines():
+            line = line.strip()
+            if line.startswith("Nodes="):
+                fields = dict(f.split("=", 1) for f in line.split() if "=" in f)
+                current = _scontrol("show", "hostnames", fields.get("Nodes", "")).split()
+                gres = fields.get("GRES", "")
+                if "gpu:" in gres:
+                    count = gres.split("gpu:", 1)[1].split("(")[0]
+                    for host in current:
+                        per_node[host] = int(count)
+        if per_node and all(host in per_node for host in nodes):
+            return [per_node[host] for host in nodes]
+
+    per_node_env = os.environ.get("SLURM_GPUS_ON_NODE")
+    if per_node_env:
+        count = int(per_node_env)
     else:
         visible = os.environ.get("CUDA_VISIBLE_DEVICES")
         if visible:
@@ -80,8 +134,11 @@ def default_gpus(n_nodes: int) -> list[int]:
 
             count = torch.cuda.device_count()
     if count < 1:
-        raise typer.BadParameter("could not detect any GPU; pass --gpus explicitly")
-    return [count] * n_nodes
+        raise typer.BadParameter(
+            "could not detect any GPU on this host; pass --gpus explicitly "
+            "(a login shell outside the allocation sees none)"
+        )
+    return [count] * len(nodes)
 
 
 class Cluster:
@@ -155,6 +212,29 @@ class Cluster:
             return self.store(timedelta(seconds=2)).check(["ready"])
         except Exception:
             return False
+
+    def wait_for_result(self, store, job: int, poll: float = 2.0) -> str:
+        """Poll for the job's verdict rather than blocking on it.
+
+        A blocking ``get`` against a store whose timeout is measured in days never
+        returns if the pool goes away without closing the socket — a node released
+        from the allocation, or one rank wedged inside a collective so the verdict
+        is never written. ``td`` would then sit there with the job apparently
+        finished and no way to submit anything else. Polling lets us notice.
+        """
+        key = f"done:{job}"
+        while True:
+            try:
+                if store.check([key]):
+                    return store.get(key).decode()
+            except Exception as exc:
+                # c10d packs a full C++ backtrace into str(exc); the first line is
+                # the part a user can act on.
+                reason = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
+                raise DaemonLost(f"lost contact with the daemon: {reason}") from exc
+            if not self.listening():
+                raise DaemonLost("the daemon is gone — the node was released, or every rank died")
+            time.sleep(poll)
 
     def crashed(self) -> str | None:
         """Name of a node whose launcher died, so startup can fail fast."""
@@ -301,7 +381,7 @@ def td(
 ):
     """Run a script on a persistent multi-node worker pool, starting it if needed."""
     node_list = nodes.split(",") if nodes else default_nodes()
-    gpu_list = [int(x) for x in gpus.split(",")] if gpus else default_gpus(len(node_list))
+    gpu_list = [int(x) for x in gpus.split(",")] if gpus else default_gpus(node_list)
     cluster = Cluster(node_list, gpu_list)
 
     if kill:
@@ -310,7 +390,7 @@ def td(
 
     if down:
         if cluster.listening():
-            store = cluster.store()
+            store = cluster.store(timedelta(seconds=30))
             store.set(f"job:{store.add('next', 1) - 1}", "__exit__")
             print("stopping")
         else:
@@ -348,15 +428,25 @@ def td(
             follower = Follower(cluster.head_log)
             follower.start()
 
-        store = cluster.store()
+        # Bounded, because every call below now polls instead of blocking; a
+        # multi-day timeout here is what turns a dead pool into a hung terminal.
+        store = cluster.store(timedelta(seconds=30))
         job = store.add("next", 1) - 1
-        store.set(f"job:{job}", os.path.abspath(script))
         try:
-            result = store.get(f"done:{job}").decode()
+            store.set(f"job:{job}", os.path.abspath(script))
+        except BaseException:
+            # The slot is already reserved. Leaving it unfilled parks every rank on
+            # it forever, so hand back a placeholder before propagating.
+            with contextlib.suppress(Exception):
+                store.set(f"job:{job}", "__skip__")
+            raise
+
+        try:
+            result = cluster.wait_for_result(store, job)
         except KeyboardInterrupt:
             raise typer.Exit(_fail(follower, "detached (job still running)"))
-        except Exception as e:
-            raise typer.Exit(_fail(follower, f"lost the daemon while job {job} was running: {e}"))
+        except DaemonLost as e:
+            raise typer.Exit(_fail(follower, f"job {job}: {e}"))
 
         follower.close()
         follower = None
