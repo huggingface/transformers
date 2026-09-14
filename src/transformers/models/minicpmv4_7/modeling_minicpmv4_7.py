@@ -1179,22 +1179,6 @@ def _has_visual_grids(target_sizes_mrope) -> bool:
     return False
 
 
-def make_packed_text_position_ids(cu_seqlens, device=None) -> torch.Tensor:
-    """Per-document 1-D text positions for a packed sequence; returns ``(1, total_len)``.
-
-    Each document inside the packed sequence restarts at 0, so a document never inherits
-    positions from the one packed before it.
-    """
-    if not isinstance(cu_seqlens, torch.Tensor):
-        cu_seqlens = torch.as_tensor(cu_seqlens, device=device)
-    cu_seqlens = cu_seqlens.to(device=device, dtype=torch.long)
-    lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-    total_len = int(cu_seqlens[-1].item())
-    flat = torch.arange(total_len, device=device, dtype=torch.long)
-    starts = torch.repeat_interleave(cu_seqlens[:-1], lengths)
-    return (flat - starts).unsqueeze(0)
-
-
 def expand_1d_position_ids_to_3d(
     input_ids: torch.LongTensor,
     attention_mask: torch.Tensor | None = None,
@@ -1270,64 +1254,6 @@ def compute_canvas_rope_index(
         seq_lens = torch.full((input_ids.shape[0],), input_ids.shape[1], device=input_ids.device, dtype=torch.long)
     deltas = position_ids.amax(dim=(0, 2)).unsqueeze(1) + 1 - seq_lens.unsqueeze(1)
     return position_ids, deltas.long()
-
-
-def compute_canvas_position_ids_packed(input_ids, cu_seqlens, target_sizes_mrope, special_token_ids):
-    """Canvas ``(3, 1, total_len)`` positions for a packed (``batch=1``) sequence.
-
-    ``input_ids`` holds several documents concatenated end to end, with boundaries given by
-    ``cu_seqlens``. Visual spans are located per document so a crop never spills across a
-    document boundary, and each document's canvas restarts from its own origin.
-    """
-    if input_ids.ndim == 1:
-        input_ids = input_ids.unsqueeze(0)
-    if input_ids.shape[0] != 1:
-        raise ValueError(
-            f"Packed canvas M-RoPE expects `batch=1` with documents concatenated along the sequence "
-            f"axis, but `input_ids` has batch size {input_ids.shape[0]}. Pass one packed row, or drop "
-            "`cu_seqlens` to use the regular padded path."
-        )
-    if not isinstance(cu_seqlens, torch.Tensor):
-        cu_seqlens = torch.as_tensor(cu_seqlens, device=input_ids.device)
-    cu_seqlens = cu_seqlens.to(device=input_ids.device, dtype=torch.long)
-
-    total_len = input_ids.shape[1]
-    if int(cu_seqlens[-1].item()) != total_len:
-        raise ValueError(
-            f"`cu_seqlens` ends at {int(cu_seqlens[-1].item())} but the packed sequence has {total_len} "
-            "tokens; the two must describe the same sequence."
-        )
-
-    num_docs = cu_seqlens.numel() - 1
-    grids_per_doc = _normalize_target_sizes(target_sizes_mrope, num_docs, input_ids.device)
-
-    out = torch.zeros(3, 1, total_len, dtype=torch.long, device=input_ids.device)
-    ids_flat = input_ids[0]
-
-    for doc_idx in range(num_docs):
-        doc_start = int(cu_seqlens[doc_idx].item())
-        doc_end = int(cu_seqlens[doc_idx + 1].item())
-        if doc_start >= doc_end:
-            continue
-
-        doc_ids = ids_flat[doc_start:doc_end]
-        doc_pos2d = torch.arange(doc_end - doc_start, device=input_ids.device, dtype=torch.long)
-        bounds = _build_image_bounds(doc_ids, special_token_ids)
-        grids = grids_per_doc[doc_idx]
-
-        if bounds.numel() == 0 or grids.numel() == 0:
-            doc_pos3d = doc_pos2d.unsqueeze(0).expand(3, -1)
-        else:
-            if bounds.shape[0] != grids.shape[0]:
-                raise ValueError(
-                    f"Packed document {doc_idx}: `input_ids` contains {bounds.shape[0]} visual span(s) but "
-                    f"`target_sizes_mrope` provides {grids.shape[0]} grid(s). The processor and the model "
-                    "disagree about the number of visual crops; canvas positions cannot be built."
-                )
-            doc_pos3d = _compute_canvas_single(doc_ids, doc_pos2d, bounds, grids, special_token_ids)
-
-        out[:, 0, doc_start:doc_end] = doc_pos3d
-    return out
 
 
 @auto_docstring(
@@ -1421,8 +1347,6 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         target_sizes_mrope: list[torch.Tensor] | None = None,
         special_token_ids: dict | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
-        cu_seqlens: torch.Tensor | None = None,
-        max_seqlen: int | torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
@@ -1442,18 +1366,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
             Override for canvas structural token ids; defaults to values on `config`.
         mm_token_type_ids (`torch.IntTensor`, *optional*):
             Modality type ids (text/image/video), matching the Qwen processor contract.
-        cu_seqlens (`torch.Tensor` of shape `(num_seqs + 1,)`, *optional*):
-            Cumulative sequence lengths for packed-sequence training (batch size must be 1).
-            Canvas M-RoPE restarts per document, and FlashAttention uses these boundaries
-            for variable-length attention so it does not rebuild lengths from 3D position IDs.
-        max_seqlen (`int` or `torch.Tensor`, *optional*):
-            Max document length inside the packed sequence; derived from `cu_seqlens` when omitted.
         """
-        if cu_seqlens is None:
-            cu_seqlens = kwargs.pop("cu_seqlens", None)
-        if max_seqlen is None:
-            max_seqlen = kwargs.pop("max_seqlen", None)
-        kwargs = self._prepare_packed_attention_kwargs(kwargs, cu_seqlens, max_seqlen)
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -1490,7 +1403,6 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
                 target_sizes_mrope=target_sizes_mrope,
                 special_token_ids=special_token_ids,
                 mm_token_type_ids=mm_token_type_ids,
-                cu_seqlens=cu_seqlens,
             )
 
         output = self.language_model(
@@ -1573,39 +1485,12 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         target_sizes_mrope: list[torch.Tensor] | None = None,
         special_token_ids: dict | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
-        cu_seqlens: torch.Tensor | None = None,
     ) -> torch.Tensor | None:
-        """Return 4D position ids ``[text, T, H, W]`` for canvas M-RoPE (Qwen-style entrypoint).
-
-        When ``cu_seqlens`` is provided the sequence is treated as packed (``batch=1``,
-        multiple documents concatenated). Per-document canvas positions are built and each
-        document restarts its own 1-D text counter from zero.
-        """
+        """Return 4D position ids ``[text, T, H, W]`` for canvas M-RoPE (Qwen-style entrypoint)."""
         past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        # Only the spatial grids can actually produce canvas positions; the other two are
+        # accepted for API compatibility and are ignored by `get_rope_index`.
         has_multimodal = target_sizes_mrope is not None
-
-        # Packed training: batch=1, documents delimited by cu_seqlens.
-        if cu_seqlens is not None and input_ids is not None and past_key_values_length == 0:
-            token_ids = (
-                special_token_ids if special_token_ids is not None else self.config.get_mrope_special_token_ids()
-            )
-            text_position_ids = make_packed_text_position_ids(cu_seqlens, device=input_ids.device)
-            if has_multimodal:
-                if _has_visual_grids(target_sizes_mrope) and not any(v is not None for v in token_ids.values()):
-                    raise ValueError(
-                        "Canvas M-RoPE needs the structural token ids but none are set. "
-                        "Populate `image_start_id` / `image_end_id` / `slice_start_id` / "
-                        "`slice_end_id` / `newline_id` on the model config."
-                    )
-                mrope_position_ids = compute_canvas_position_ids_packed(
-                    input_ids,
-                    cu_seqlens=cu_seqlens,
-                    target_sizes_mrope=target_sizes_mrope if target_sizes_mrope is not None else [],
-                    special_token_ids=token_ids,
-                )
-                self.rope_deltas = mrope_position_ids.amax(dim=(0, 2)).unsqueeze(1) + 1 - input_ids.shape[1]
-                return torch.cat([text_position_ids.unsqueeze(0), mrope_position_ids], dim=0)
-            return text_position_ids
 
         if input_ids is not None and has_multimodal and (self.rope_deltas is None or past_key_values_length == 0):
             mrope_position_ids, rope_deltas = self.get_rope_index(
@@ -1648,32 +1533,6 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
                 "degrades multimodal quality. Pass `input_ids` for the first forward pass."
             )
         return None
-
-    def _prepare_packed_attention_kwargs(
-        self,
-        kwargs: dict,
-        cu_seqlens: torch.Tensor | None,
-        max_seqlen: int | torch.Tensor | None = None,
-    ) -> dict:
-        """Map packed `cu_seqlens` to the FlashAttention `cu_seq_lens_*` kwargs.
-
-        The maximum document length is resolved with the shared [`~utils.generic.get_max_seqlen`]
-        helper against the text backbone config, so a precomputed `max_seqlen` is reused and the
-        reduction only runs when Flash Attention is actually requested.
-        """
-        if cu_seqlens is None:
-            return kwargs
-        cu = cu_seqlens if isinstance(cu_seqlens, torch.Tensor) else torch.as_tensor(cu_seqlens)
-        cu = cu.to(dtype=torch.int32)
-        max_length = get_max_seqlen(cu, self.language_model.config, kwargs={"max_seqlen": max_seqlen})
-        if isinstance(max_length, torch.Tensor):
-            max_length = int(max_length.item())
-        kwargs = dict(kwargs)
-        kwargs["cu_seq_lens_q"] = cu
-        kwargs["cu_seq_lens_k"] = cu
-        kwargs["max_length_q"] = max_length
-        kwargs["max_length_k"] = max_length
-        return kwargs
 
     def _text_position_ids(self, input_ids, attention_mask, past_key_values_length=0):
         """Standard 1-D text position ids of shape ``(batch, seq)``."""
@@ -1795,7 +1654,6 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
         target_sizes_mrope=None,
         special_token_ids=None,
         mm_token_type_ids=None,
-        cu_seqlens=None,
         position_ids=None,
         use_cache=True,
         is_first_iteration=False,
@@ -1820,7 +1678,6 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
             model_inputs["target_sizes_mrope"] = target_sizes_mrope
             model_inputs["special_token_ids"] = special_token_ids
             model_inputs["mm_token_type_ids"] = mm_token_type_ids
-            model_inputs["cu_seqlens"] = cu_seqlens
         return model_inputs
 
     def _expand_inputs_for_generation(
