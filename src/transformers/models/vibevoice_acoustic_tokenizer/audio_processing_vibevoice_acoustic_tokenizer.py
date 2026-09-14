@@ -22,10 +22,14 @@ class VibevoiceAcousticTokenizerAudioProcessorKwargs(AudioKwargs, total=False):
         Loudness, in dBFS, the waveform is normalized to.
     eps (`float`, *optional*, defaults to 1e-06):
         Small constant guarding the loudness-normalization division.
+    normalize_audio (`bool`, *optional*, defaults to `True`):
+        Whether to loudness-normalize the waveform at all. The legacy extractor gates the whole
+        normalization on this; without it a checkpoint that disables it was normalized anyway.
     """
 
     target_dB_FS: int
     eps: float
+    normalize_audio: bool
 
 
 class VibevoiceAcousticTokenizerAudioProcessorMixin:
@@ -34,10 +38,17 @@ class VibevoiceAcousticTokenizerAudioProcessorMixin:
 
     target_dB_FS = -25
     eps = 1e-6
+    normalize_audio = True
+    # Not in the legacy extractor's signature (feature_size, sampling_rate, padding_value,
+    # normalize_audio, target_dB_FS, eps, pad_to_multiple_of): `db_normalize` is superseded by
+    # `normalize_audio`, and `speech_tok_compress_ratio` is a modeling ratio, not a feature one.
+    legacy_field_mapping = {"db_normalize": None, "speech_tok_compress_ratio": None}
     valid_kwargs = VibevoiceAcousticTokenizerAudioProcessorKwargs
 
-    def _downmix_to_mono(self, audio_el, *, target_dB_FS, eps, **kwargs):
+    def _downmix_to_mono(self, audio_el, *, normalize_audio, target_dB_FS, eps, **kwargs):
         audio_el = super()._downmix_to_mono(audio_el, **kwargs)
+        if not normalize_audio:
+            return audio_el
         rms = (audio_el**2).mean() ** 0.5
         audio_el = audio_el * (10 ** (target_dB_FS / 20) / (rms + eps))
         max_val = abs(audio_el).max()

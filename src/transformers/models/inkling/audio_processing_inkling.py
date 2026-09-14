@@ -19,6 +19,10 @@ from ...audio_utils import _clamp_min
 
 
 class InklingAudioProcessorMixin:
+    # The legacy extractor derives its window from `audio_token_duration_s *
+    # window_size_multiplier * sampling_rate` and takes no `window_size`; a config carrying one is
+    # stating a derived value, and honouring it could contradict the three it is derived from.
+    legacy_field_mapping = {"window_size": None}
     sampling_rate = 16000
     spectrogram_config = {
         "stft_config": {

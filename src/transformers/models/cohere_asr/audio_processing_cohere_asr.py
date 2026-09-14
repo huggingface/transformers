@@ -74,6 +74,18 @@ class CohereAsrAudioProcessorMixin:
     max_audio_clip_s: float = 35.0
     overlap_chunk_second: float = 5.0
     min_energy_window_samples: int = 1600
+    # NeMo-era keys the *legacy extractor does not read either* — its signature is
+    # (feature_size, sampling_rate, hop_length, n_fft, win_length, preemphasis, padding_value,
+    # dither, max_audio_clip_s, overlap_chunk_second, min_energy_window_samples). `n_window_size`
+    # and `n_window_stride` are the pre-HF spellings of `win_length`/`hop_length`, which the config
+    # also carries under the names the extractor takes; honouring these would let the two disagree.
+    legacy_field_mapping = {
+        "frame_splicing": None,
+        "log": None,
+        "n_window_size": None,
+        "n_window_stride": None,
+        "pad_to": None,
+    }
     valid_kwargs = CohereAsrAudioProcessorKwargs
 
     def _dither_waveform(self, audio, audio_ranges=None, *, dither):

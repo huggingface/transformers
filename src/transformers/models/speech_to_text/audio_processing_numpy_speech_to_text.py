@@ -32,8 +32,18 @@ class SpeechToTextAudioProcessorNumpy(SpeechToTextAudioProcessorMixin, NumpyAudi
         return x.astype(np.float32)
 
     def _finalize_output(
-        self, output, feature_ranges=None, *, normalize_means, normalize_vars, padding_value, **kwargs
+        self,
+        output,
+        feature_ranges=None,
+        *,
+        do_ceptral_normalize,
+        normalize_means,
+        normalize_vars,
+        padding_value,
+        **kwargs,
     ):
+        if not do_ceptral_normalize:
+            return output
         features = output["audio_features"]
         normalized = []
         for i, (start, end) in enumerate(feature_ranges):

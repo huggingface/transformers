@@ -16,6 +16,10 @@ from ...audio_processing_backends import TorchAudioBackend
 
 
 class SpeechT5AudioProcessorMixin:
+    # Not read by the legacy extractor either: its signature stops at `return_attention_mask`.
+    # `frame_signal_scale` and `reduction_factor` were removed from it as no-ops (the scale was
+    # applied nowhere; the reduction factor belongs to the model, not the features).
+    legacy_field_mapping = {"frame_signal_scale": None, "reduction_factor": None}
     sampling_rate = 16000
 
 

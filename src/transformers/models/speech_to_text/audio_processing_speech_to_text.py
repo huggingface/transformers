@@ -25,13 +25,19 @@ class SpeechToTextAudioProcessorKwargs(AudioKwargs, total=False):
         Whether to mean-normalize the extracted features per utterance.
     normalize_vars (`bool`, *optional*, defaults to `True`):
         Whether to variance-normalize the extracted features per utterance.
+    do_ceptral_normalize (`bool`, *optional*, defaults to `True`):
+        Whether to apply utterance-level cepstral mean and variance normalization at all. The
+        legacy extractor gates the whole CMVN block on this, above `normalize_means`/
+        `normalize_vars`; without it a checkpoint that disables normalization was normalized anyway.
     """
 
     normalize_means: bool
     normalize_vars: bool
+    do_ceptral_normalize: bool
 
 
 class SpeechToTextAudioProcessorMixin:
+    do_ceptral_normalize = True
     do_batch_spectrogram = False
     sampling_rate = 16000
     spectrogram_config = {
@@ -84,8 +90,18 @@ class SpeechToTextAudioProcessor(SpeechToTextAudioProcessorMixin, TorchAudioBack
         return torch.from_numpy(x.astype(np.float32))
 
     def _finalize_output(
-        self, output, feature_ranges=None, *, normalize_means, normalize_vars, padding_value, **kwargs
+        self,
+        output,
+        feature_ranges=None,
+        *,
+        do_ceptral_normalize,
+        normalize_means,
+        normalize_vars,
+        padding_value,
+        **kwargs,
     ):
+        if not do_ceptral_normalize:
+            return output
         features = output["audio_features"]
         normalized = []
         for i, (start, end) in enumerate(feature_ranges):

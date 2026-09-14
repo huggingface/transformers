@@ -16,6 +16,17 @@ from ...audio_processing_backends import TorchAudioBackend
 
 
 class Pop2PianoAudioProcessorMixin:
+    # Tokenizer and model-head parameters that share this processor's config file. The legacy
+    # extractor takes only (sampling_rate, padding_value, window_size, hop_length, min_frequency,
+    # feature_size, num_bars), so none of these reach feature extraction on either side.
+    legacy_field_mapping = {
+        "default_velocity": None,
+        "eos_token_id": None,
+        "input_length": None,
+        "mel_is_conditioned": None,
+        "start_token_id": None,
+        "target_length": None,
+    }
     sampling_rate = 22050
     spectrogram_config = {
         "stft_config": {"n_fft": 4096, "hop_length": 1024, "power": 2.0},
