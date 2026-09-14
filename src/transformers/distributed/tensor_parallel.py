@@ -858,6 +858,8 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
                 # reach the router and trunk, and combine outputs with an identity backward.
                 hidden_states = _AllReduceBackward.apply(hidden_states, tp_mesh.get_group())
                 top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_mesh.get_group())
+                # TP ranks share the same batch. Slice tokens here so each is dispatched only once,
+                # then restore the full output below; Trainer does not need a separate EP sampler.
                 tp_rank = tp_mesh.get_local_rank()
                 rows = slice(num_tokens * tp_rank // tp_size, num_tokens * (tp_rank + 1) // tp_size)
                 hidden_states, top_k_index, top_k_weights = (
@@ -992,14 +994,16 @@ def apply_tensor_parallelism_moe(
     """Apply the resolved expert rules on the TP or EP mesh."""
     tp_mesh = mesh_manager.get_mesh("tp")
     if distributed_config.experts_dispatch == "all-to-all":
-        ep_mesh = mesh_manager.get_mesh("ep")
-        return apply_tensor_parallelism(model, ep_mesh, plan, ep_mesh=ep_mesh, tp_mesh=tp_mesh)
+        return apply_tensor_parallelism(model, tp_mesh, plan, ep_mesh=mesh_manager.get_mesh("ep"))
+    # All-reduce EP requires ep_size == tp_size: apply the EP rules on those same ranks,
+    # using the TP mesh so expert parameters remain on the dense mesh used by FSDP.
     return apply_tensor_parallelism(model, tp_mesh, plan)
 
 
-def apply_tensor_parallelism(model, shard_mesh, tp_plan=None, *, ep_mesh=None, tp_mesh=None):
-    """Apply a plan on the given sharding mesh; dispatch hooks receive explicit EP and TP meshes."""
+def apply_tensor_parallelism(model, tp_mesh, tp_plan=None, *, ep_mesh=None):
+    """Apply a plan on the TP mesh, or on the EP mesh when one is given; dispatch hooks receive both."""
     tp_plan = model.tp_plan if tp_plan is None else tp_plan
+    mesh = tp_mesh if ep_mesh is None else ep_mesh
 
     for name, module in model.named_modules():
         # Create DTensor placeholders so the loader knows which shard belongs to this rank.
@@ -1008,8 +1012,8 @@ def apply_tensor_parallelism(model, shard_mesh, tp_plan=None, *, ep_mesh=None, t
             style_name = _get_parameter_tp_plan(parameter_name=full, tp_plan=tp_plan, is_weight=True)
             if style_name is not None and style_name in ALL_PARALLEL_STYLES:
                 style = ALL_PARALLEL_STYLES[style_name]
-                style.validate_param(module, p_name, shard_mesh, parameter_name=full)
-                style.shard_param(module, p_name, shard_mesh)
+                style.validate_param(module, p_name, mesh, parameter_name=full)
+                style.shard_param(module, p_name, mesh)
 
         # Install the input/output transforms required by this module's TP style.
         style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=tp_plan, is_weight=False)
@@ -1021,7 +1025,7 @@ def apply_tensor_parallelism(model, shard_mesh, tp_plan=None, *, ep_mesh=None, t
             if style_name == "ep_dispatch_experts":
                 ALL_PARALLEL_STYLES[style_name].install_forward(module, ep_mesh=ep_mesh, tp_mesh=tp_mesh)
             else:
-                ALL_PARALLEL_STYLES[style_name].install_forward(module, shard_mesh)
+                ALL_PARALLEL_STYLES[style_name].install_forward(module, mesh)
         module._is_hooked = True
 
     return model
