@@ -4123,8 +4123,6 @@ class GenerationMixin(ContinuousMixin):
             if use_inputs_embeds:
                 next_sequence_length = model_kwargs["inputs_embeds"].shape[1] - past_length
             else:
-                # The mask's length tells the two calling conventions apart; if `generate` dropped the mask,
-                # use the length it recorded when doing so
                 mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
                 attention_mask = model_kwargs.get(mask_key)
                 mask_length = attention_mask.shape[1] if attention_mask is not None else generation_config._mask_length
