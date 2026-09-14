@@ -4149,7 +4149,7 @@ class PreTrainedModel(
             distributed_config, device_map, mesh_manager = cls.prepare_distribute_model(
                 distributed_config, device_map=device_map
             )
-            device_mesh = mesh_manager.dense_mesh if mesh_manager is not None else None
+            device_mesh = mesh_manager.get_mesh(("pp", "fsdp", "tp")) if mesh_manager is not None else None
 
         if gguf_file is not None and not is_accelerate_available():
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")

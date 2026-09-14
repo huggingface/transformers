@@ -30,7 +30,7 @@ from .tensor_parallel import (
     gather_state_dict_for_save,
 )
 from .utils import (
-    DistributedMesh,
+    MeshManager,
     _distributed_barrier,
     _get_torch_distributed_rank,
     _is_torch_distributed_initialized,
@@ -51,7 +51,7 @@ class DistributedMixin:
     """Distributed orchestration and save/load hooks for [`PreTrainedModel`]."""
 
     _device_mesh = None
-    _mesh_manager: DistributedMesh | None = None
+    _mesh_manager: MeshManager | None = None
     _tp_plan: dict[str, str] | None = None
     _ep_plan: dict[str, str] | None = None
     _tp_size = None
@@ -149,7 +149,7 @@ class DistributedMixin:
         cls,
         distributed_config: DistributedConfig | dict | None,
         device_map=None,
-    ) -> tuple[DistributedConfig | None, object, DistributedMesh | None]:
+    ) -> tuple[DistributedConfig | None, object, MeshManager | None]:
         if distributed_config is None:
             return None, device_map, None
 
@@ -175,13 +175,13 @@ class DistributedMixin:
         cls,
         model: nn.Module,
         distributed_config: DistributedConfig | None,
-        mesh_manager: DistributedMesh | None,
+        mesh_manager: MeshManager | None,
     ):
         """Apply TP or FSDP2 after model init, before weight loading."""
         if mesh_manager is not None:
             model.config.distributed_config = distributed_config
             model._mesh_manager = mesh_manager
-            model._device_mesh = mesh_manager.dense_mesh
+            model._device_mesh = mesh_manager.get_mesh(("pp", "fsdp", "tp"))
             model._tp_size = distributed_config.tp_size
             model._fsdp_size = distributed_config.fsdp_size
 
