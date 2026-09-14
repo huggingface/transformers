@@ -103,24 +103,20 @@ class DistributedConfig:
         elif self.tp_size is None:
             self.tp_size = 1
 
-        self._apply_legacy_expert_parallel_compatibility()
+        # Previously, `enable_expert_parallel` implied ep_size = tp_size.
+        # This was a bottleneck as num_kv_heads % tp_size == 0 and num_experts % ep_size == 0
+        if self.enable_expert_parallel and self.ep_size is None:
+            self.ep_size = self.tp_size
+            warnings.warn(
+                f"`enable_expert_parallel` without `ep_size` is deprecated. Use ep_size={self.ep_size} instead.",
+                FutureWarning,
+                stacklevel=4,
+            )
+
         if self.ep_size is None:
             self.ep_size = 1
         # Retain the legacy attribute for callers; internal EP decisions use ep_size.
         self.enable_expert_parallel = self.ep_size > 1
-
-    def _apply_legacy_expert_parallel_compatibility(self):
-        """Map the deprecated flag to ep_size; leave the layout and dispatcher unchanged."""
-        if not self.enable_expert_parallel or self.ep_size is not None:
-            return
-
-        # Previously, `enable_expert_parallel` implied ep_size = tp_size. This was a bottleneck as num_kv_heads % tp_size == 0 and num_experts % ep_size == 0
-        self.ep_size = self.tp_size
-        warnings.warn(
-            f"`enable_expert_parallel` without `ep_size` is deprecated. Use ep_size={self.ep_size} instead.",
-            FutureWarning,
-            stacklevel=5,
-        )
 
     def _validate_parallelism(self):
         """Check that the resolved sizes and dispatch strategy form a supported parallel layout."""
