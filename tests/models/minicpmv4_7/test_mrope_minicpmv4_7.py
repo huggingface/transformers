@@ -171,6 +171,154 @@ class MiniCPMV4_7MropeUtilsTest(unittest.TestCase):
         self.assertEqual(tuple(position_ids.shape), (4, 1, 8))
         self.assertIsNotNone(model.rope_deltas)
 
+    @unittest.skipUnless(is_torch_available(), "torch not available")
+    def test_decode_step_continues_past_prefill_max(self):
+        """The first decoded token must sit at `prefill_amax + 1`, never reuse the last prefill position."""
+        model = MiniCPMV4_7Model(_tiny_config())
+        input_ids = torch.tensor([[1, 10, 100, 100, 100, 100, 11, 2]])
+        attention_mask = torch.ones_like(input_ids)
+
+        prefill_pos = model.compute_3d_position_ids(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            target_sizes_mrope=[torch.tensor([[2, 2]], dtype=torch.int32)],
+            special_token_ids=SPECIAL_TOKEN_IDS,
+        )
+        prefill_amax = int(prefill_pos[1:].amax())
+
+        class _FakeCache:
+            def __init__(self, length):
+                self._length = length
+
+            def get_seq_length(self):
+                return self._length
+
+        next_ids = torch.tensor([[3]])
+        next_mask = torch.ones(1, input_ids.shape[1] + 1, dtype=attention_mask.dtype)
+        decode_pos = model.compute_3d_position_ids(
+            input_ids=next_ids,
+            attention_mask=next_mask,
+            past_key_values=_FakeCache(input_ids.shape[1]),
+            target_sizes_mrope=[torch.tensor([[2, 2]], dtype=torch.int32)],
+            special_token_ids=SPECIAL_TOKEN_IDS,
+        )
+        # Channels 1..3 are the spatial (T, H, W) axes shifted by `rope_deltas`.
+        self.assertTrue(torch.equal(decode_pos[1:, :, -1], torch.full((3, 1), prefill_amax + 1, dtype=torch.long)))
+
+    @unittest.skipUnless(is_torch_available(), "torch not available")
+    def test_missing_special_token_ids_raises(self):
+        """Silently falling back to 1-D positions on a visual input would be a quality regression."""
+        config = _tiny_config()
+        config.image_start_id = None
+        config.image_end_id = None
+        config.slice_start_id = None
+        config.slice_end_id = None
+        config.newline_id = None
+        model = MiniCPMV4_7Model(config)
+
+        input_ids = torch.tensor([[1, 10, 100, 100, 100, 100, 11, 2]])
+        with self.assertRaises(ValueError):
+            model.get_rope_index(
+                input_ids,
+                attention_mask=torch.ones_like(input_ids),
+                target_sizes_mrope=[torch.tensor([[2, 2]], dtype=torch.int32)],
+            )
+
+    @unittest.skipUnless(is_torch_available(), "torch not available")
+    def test_missing_special_token_ids_text_only_is_allowed(self):
+        """Without visual grids there is nothing to place, so the text path must stay usable."""
+        config = _tiny_config()
+        config.image_start_id = None
+        config.image_end_id = None
+        config.slice_start_id = None
+        config.slice_end_id = None
+        config.newline_id = None
+        model = MiniCPMV4_7Model(config)
+
+        input_ids = torch.tensor([[1, 2, 3, 4]])
+        pos, _ = model.get_rope_index(input_ids, attention_mask=torch.ones_like(input_ids))
+        self.assertEqual(tuple(pos.shape), (3, 1, 4))
+
+    @unittest.skipUnless(is_torch_available(), "torch not available")
+    def test_span_grid_count_mismatch_raises(self):
+        """One `<image>...</image>` span but two grids means processor/model disagree; do not guess."""
+        input_ids = torch.tensor([[1, 10, 100, 100, 100, 100, 11, 2]])
+        with self.assertRaises(ValueError):
+            compute_canvas_rope_index(
+                input_ids,
+                torch.ones_like(input_ids),
+                target_sizes_mrope=[torch.tensor([[2, 2], [2, 2]], dtype=torch.int32)],
+                special_token_ids=SPECIAL_TOKEN_IDS,
+            )
+
+    @unittest.skipUnless(is_torch_available(), "torch not available")
+    def test_unbalanced_visual_markers_raise(self):
+        """A dropped `</image>` used to silently truncate the remaining spans."""
+        # Two `<image_start>` (id 10) but a single `<image_end>` (id 11).
+        input_ids = torch.tensor([[1, 10, 100, 100, 10, 100, 100, 11, 2]])
+        with self.assertRaises(ValueError):
+            compute_canvas_rope_index(
+                input_ids,
+                torch.ones_like(input_ids),
+                target_sizes_mrope=[torch.tensor([[2, 2], [2, 2]], dtype=torch.int32)],
+                special_token_ids=SPECIAL_TOKEN_IDS,
+            )
+
+    @unittest.skipUnless(is_torch_available(), "torch not available")
+    def test_processor_kwargs_alone_drive_canvas(self):
+        """End-to-end contract: the processor only emits `target_sizes_mrope` and `mm_token_type_ids`.
+
+        `special_token_ids` and `image_bounds` are deliberately not returned (see
+        `MiniCPMV4_7Processor.__call__`), so the model must resolve the structural ids from its own
+        config and still produce genuine 4-channel canvas positions.
+        """
+        model = MiniCPMV4_7Model(_tiny_config())
+        input_ids = torch.tensor([[1, 10, 100, 100, 100, 100, 11, 2]])
+        attention_mask = torch.ones_like(input_ids)
+        # Mirrors `create_mm_token_type_ids`: 1 marks the visual span, 0 the text tokens.
+        mm_token_type_ids = torch.tensor([[0, 0, 1, 1, 1, 1, 0, 0]], dtype=torch.int32)
+
+        position_ids = model.compute_3d_position_ids(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            target_sizes_mrope=[torch.tensor([[2, 2]], dtype=torch.int32)],
+            mm_token_type_ids=mm_token_type_ids,
+        )
+
+        self.assertEqual(tuple(position_ids.shape), (4, 1, 8))
+        # Canvas actually engaged: the H and W axes disagree inside the visual span.
+        visual_h, visual_w = position_ids[2, 0, 2:6], position_ids[3, 0, 2:6]
+        self.assertFalse(torch.equal(visual_h, visual_w))
+        # Identical to passing the ids explicitly, i.e. the config lookup is the sole source.
+        explicit, _ = compute_canvas_rope_index(
+            input_ids,
+            attention_mask,
+            target_sizes_mrope=[torch.tensor([[2, 2]], dtype=torch.int32)],
+            special_token_ids=SPECIAL_TOKEN_IDS,
+        )
+        self.assertTrue(torch.equal(position_ids[1:], explicit))
+
+    @unittest.skipUnless(is_torch_available(), "torch not available")
+    def test_text_only_batch_stays_one_dimensional(self):
+        """No visual grids means no canvas: every spatial axis collapses onto the 1-D ramp.
+
+        `compute_3d_position_ids` returns 3 channels here (the 4th text channel is only prepended
+        on the canvas path), and `mm_token_type_ids` must not accidentally trigger the canvas branch.
+        """
+        model = MiniCPMV4_7Model(_tiny_config())
+        input_ids = torch.tensor([[1, 2, 3, 4, 5]])
+        attention_mask = torch.ones_like(input_ids)
+
+        position_ids = model.compute_3d_position_ids(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            mm_token_type_ids=torch.zeros_like(input_ids, dtype=torch.int32),
+        )
+        self.assertEqual(tuple(position_ids.shape), (3, 1, 5))
+        expected = torch.arange(5, dtype=torch.long)
+        for channel in range(3):
+            self.assertTrue(torch.equal(position_ids[channel, 0], expected))
+
 
 if __name__ == "__main__":
     unittest.main()

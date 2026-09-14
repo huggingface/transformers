@@ -82,15 +82,18 @@ class MiniCPMV4_7Config(PreTrainedConfig):
     merger_times (`int`, *optional*, defaults to 1):
         Number of iterative merge rounds in the Merger.
     image_start_id (`int`, *optional*):
-        Token id of the image-start marker used by canvas M-RoPE.
+        Token id of the image-start marker (`<image>`) used by canvas M-RoPE. Resolved from the
+        tokenizer by the conversion script and stored in `config.json`. Required for any
+        checkpoint that is used with images or videos.
     image_end_id (`int`, *optional*):
-        Token id of the image-end marker used by canvas M-RoPE.
+        Token id of the image-end marker (`</image>`) used by canvas M-RoPE. See `image_start_id`.
     slice_start_id (`int`, *optional*):
-        Token id of the slice-start marker used by canvas M-RoPE.
+        Token id of the slice-start marker (`<slice>`) used by canvas M-RoPE. See `image_start_id`.
     slice_end_id (`int`, *optional*):
-        Token id of the slice-end marker used by canvas M-RoPE.
+        Token id of the slice-end marker (`</slice>`) used by canvas M-RoPE. See `image_start_id`.
     newline_id (`int`, *optional*):
-        Token id of the newline used between slice rows for canvas M-RoPE.
+        Token id of the newline (`"\n"`) separating slice rows for canvas M-RoPE. See
+        `image_start_id`.
     """
 
     model_type = "minicpmv4_7"
@@ -108,7 +111,9 @@ class MiniCPMV4_7Config(PreTrainedConfig):
     merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
     merger_times: int = 1
 
-    # Special tokens used by canvas M-RoPE (set by convert / from tokenizer).
+    # Structural token ids consumed by canvas M-RoPE. They are resolved from the tokenizer at
+    # conversion time and persisted in `config.json`; a checkpoint that ships without them cannot
+    # build canvas positions and `get_rope_index` raises instead of silently falling back to 1-D.
     image_start_id: int | None = None
     image_end_id: int | None = None
     slice_start_id: int | None = None
