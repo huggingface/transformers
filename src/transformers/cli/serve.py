@@ -41,7 +41,15 @@ class ReasoningMode(str, enum.Enum):
 class Serve:
     def __init__(
         self,
-        force_model: Annotated[str | None, typer.Argument(help="Model to preload and use for all requests.")] = None,
+        force_model: Annotated[
+            str | None,
+            typer.Argument(
+                help=(
+                    "Model to preload and use for all requests. GGUF weights are named `<repo>:<file>.gguf`, "
+                    "and their config and tokenizer come from the file itself."
+                )
+            ),
+        ] = None,
         # Model options
         continuous_batching: Annotated[
             bool,

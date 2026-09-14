@@ -20,11 +20,11 @@ import json
 import os.path
 from collections import OrderedDict
 
-import httpx
 import numpy as np
 import torch
 from flax.training.checkpoints import restore_checkpoint
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 
 from transformers import VivitConfig, VivitForVideoClassification, VivitImageProcessor
 from transformers.image_utils import PILImageResampling

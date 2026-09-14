@@ -25,10 +25,10 @@ import numpy as np
 from ...audio_utils import AudioInput
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, VideosKwargs
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
-from ...video_utils import VideoInput, make_batched_videos
+from ...video_utils import VideoInput
 
 
 # Redefine kwargs for videos because Qwen-Omni uses some kwargs for processing omni
@@ -138,7 +138,7 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         videos: VideoInput | None = None,
         audio: AudioInput | None = None,
-        **kwargs,
+        **kwargs: Unpack[Qwen3OmniMoeProcessorKwargs],
     ) -> BatchFeature:
         if text is None:
             raise ValueError("You need to specify either a `text` input to process.")
@@ -153,6 +153,7 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
         position_id_per_seconds = output_kwargs["videos_kwargs"].pop("position_id_per_seconds")
         use_audio_in_video = output_kwargs["videos_kwargs"].pop("use_audio_in_video")
         fps = output_kwargs["videos_kwargs"].get("fps", 1.0)
+        fps = fps if fps is not None else 1.0
         n_window = output_kwargs["audio_kwargs"].pop("n_window", 50)
 
         if audio is not None:
@@ -178,9 +179,8 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
             image_grid_thw = iter([])
 
         if videos is not None:
-            videos = make_batched_videos(videos)
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            fps = [fps] * len(videos)
+            fps = [fps] * len(videos_inputs["video_grid_thw"])
             videos_inputs["video_second_per_grid"] = [
                 self.video_processor.temporal_patch_size / fps[i] for i in range(len(fps))
             ]

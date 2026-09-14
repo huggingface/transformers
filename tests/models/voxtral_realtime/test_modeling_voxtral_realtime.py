@@ -255,12 +255,6 @@ class VoxtralRealtimeForConditionalGenerationModelTest(ALMModelTest, unittest.Te
     def test_left_padding_compatibility(self):
         pass
 
-    @unittest.skip(
-        reason="VoxtralRealtime output contains non-tensor padding_cache state that is incompatible with DataParallel gather"
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     @unittest.skip("Model needs special input preparation!")
     def test_model_rope_scaling_from_config(self, scaling_type):
