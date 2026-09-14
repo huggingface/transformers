@@ -157,7 +157,7 @@ pipeline("the secret to baking a really good cake is ")
 要与模型进行「聊天」，用法也一致。唯一不同是需要构造一段「聊天历史」（即 `Pipeline` 的输入）：
 
 > [!TIP]
-> 只要 [`transformers serve` 正在运行](https://huggingface.co/docs/transformers/main/en/serving)，你也可以直接在命令行与模型聊天。
+> 你也可以直接在命令行与模型聊天，前提是 [`transformers serve` 正在运行](https://huggingface.co/docs/transformers/main/en/serving)。
 > ```shell
 > transformers chat Qwen/Qwen2.5-0.5B-Instruct
 > ```
