@@ -111,6 +111,8 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B", distributed_c
 
 Both dispatchers use one mesh builder that prepares a dense view `(pp, fsdp, tp)` and an expert view `(pp, efsdp, ep)`, retaining size-one axes. Mesh sizes depend on the parallelism degrees, not the dispatcher. In these examples `pp_size=1`, so `tp_size * fsdp_size` and `ep_size * efsdp_size` both equal the number of processes. Token dispatch uses the expert view for expert ownership and FSDP sharding. Legacy all-reduce keeps using the dense view: its expert parallel plan shards the experts across `tp` (the same ranks as `ep`), then FSDP2 shards every parameter, experts included, across `fsdp` and owns their gradient reduction. Each `fsdp` rank trains on its own part of the batch. The all-to-all examples above show how to choose EP independently, with or without trunk TP.
 
+Internally, a single mesh manager owns both views. Model setup requests axes by name (`get_mesh("tp")`, `get_mesh("ep")`, or `get_mesh("efsdp")`), without choosing a view. Combined axes must belong to the same view; size-one axes remain available.
+
 Load the model as usual, then train with [`Trainer`]. It takes the gradient norm across both meshes and gives each mesh its own optimizer param group. [`~Trainer.save_model`] gathers sharded weights into a regular checkpoint. This requires `accelerate>=1.12` so the `Trainer` can mirror `tp_size` and `fsdp_size` into [`~Accelerate.ParallelismConfig`].
 
 The table below compares EP-only training with 2D EP+FSDP2 on 8xH100 GPUs. The workload is full fine-tuning of Qwen3-30B-A3B in bf16 at sequence length 2048. More FSDP shards cut peak memory, and tokens/s drop some because FSDP2 all-gathers and reduce-scatters the experts across `fsdp`.

@@ -30,6 +30,7 @@ from .tensor_parallel import (
     gather_state_dict_for_save,
 )
 from .utils import (
+    DistributedMesh,
     _distributed_barrier,
     _get_torch_distributed_rank,
     _is_torch_distributed_initialized,
@@ -50,7 +51,7 @@ class DistributedMixin:
     """Distributed orchestration and save/load hooks for [`PreTrainedModel`]."""
 
     _device_mesh = None
-    _distributed_meshes = None
+    _mesh_manager: DistributedMesh | None = None
     _tp_plan: dict[str, str] | None = None
     _ep_plan: dict[str, str] | None = None
     _tp_size = None
@@ -148,7 +149,7 @@ class DistributedMixin:
         cls,
         distributed_config: DistributedConfig | dict | None,
         device_map=None,
-    ) -> tuple[DistributedConfig | None, object, object]:
+    ) -> tuple[DistributedConfig | None, object, DistributedMesh | None]:
         if distributed_config is None:
             return None, device_map, None
 
@@ -165,28 +166,27 @@ class DistributedMixin:
         if distributed_config.dispatches_tokens and not is_torch_greater_or_equal("2.7"):
             raise OSError("Expert-parallel token dispatch requires `torch>=2.7`.")
 
-        device_map, device_meshes = initialize_distributed_mesh(distributed_config)
+        device_map, mesh_manager = initialize_distributed_mesh(distributed_config)
 
-        return distributed_config, device_map, device_meshes
+        return distributed_config, device_map, mesh_manager
 
     @classmethod
     def maybe_distribute_model(
         cls,
         model: nn.Module,
         distributed_config: DistributedConfig | None,
-        device_meshes,
+        mesh_manager: DistributedMesh | None,
     ):
         """Apply TP or FSDP2 after model init, before weight loading."""
-        if device_meshes is not None:
-            device_mesh = device_meshes["dense"]
+        if mesh_manager is not None:
             model.config.distributed_config = distributed_config
-            model._distributed_meshes = device_meshes
-            model._device_mesh = device_mesh
+            model._mesh_manager = mesh_manager
+            model._device_mesh = mesh_manager.dense_mesh
             model._tp_size = distributed_config.tp_size
             model._fsdp_size = distributed_config.fsdp_size
 
             if distributed_config.pp_size > 1:
-                pp_mesh = device_mesh["pp"]
+                pp_mesh = mesh_manager.get_mesh("pp")
                 model = apply_pipeline_parallelism(model, pp_mesh)
 
             # Both may apply: the tensor/expert parallel plan shards across `tp` first, then FSDP2
@@ -217,23 +217,23 @@ class DistributedMixin:
                         if is_expert(name)
                     }
                     if distributed_config.tp_size > 1:
-                        model = apply_tensor_parallelism(model, device_mesh["tp"], dense_plan)
+                        model = apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), dense_plan)
                     model = apply_tensor_parallelism(
-                        model, device_meshes["expert"]["ep"], expert_plan, dispatch_tp_mesh=device_mesh["tp"]
+                        model, mesh_manager.get_mesh("ep"), expert_plan, dispatch_tp_mesh=mesh_manager.get_mesh("tp")
                     )
                     model._tp_plan = dense_plan | expert_plan
                 else:
-                    tp_mesh = device_mesh["tp"]
+                    tp_mesh = mesh_manager.get_mesh("tp")
                     model = apply_tensor_parallelism(model, tp_mesh)
 
             if distributed_config.dispatches_tokens:
                 # Each TP group trains on its own batch. The trunk spans fsdp; each expert is additionally
                 # FSDP-sharded across efsdp, the ranks left after assigning its EP shard.
-                trunk_mesh = device_mesh["fsdp"]
-                expert_mesh = device_meshes["expert"]["efsdp"] if distributed_config.efsdp_size > 1 else None
+                trunk_mesh = mesh_manager.get_mesh("fsdp")
+                expert_mesh = mesh_manager.get_mesh("efsdp") if distributed_config.efsdp_size > 1 else None
                 model = apply_fully_sharded_data_parallelism(model, trunk_mesh, expert_mesh=expert_mesh)
             elif distributed_config.fsdp_size > 1:
-                fsdp_mesh = device_mesh["fsdp"]
+                fsdp_mesh = mesh_manager.get_mesh("fsdp")
                 model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
         return model
 

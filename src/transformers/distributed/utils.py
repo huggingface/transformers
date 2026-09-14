@@ -178,9 +178,35 @@ def initialize_tensor_parallelism(
     return device_map, device_mesh
 
 
+class DistributedMesh:
+    """Named access to dense and expert parallel axes without exposing their view selection."""
+
+    def __init__(self, dense_mesh: DeviceMesh, expert_mesh: DeviceMesh):
+        # Loading and saving still need the full dense DeviceMesh.
+        self.dense_mesh = dense_mesh
+        self._expert_mesh = expert_mesh
+
+    def get_mesh(self, dims: str | tuple[str, ...] | list[str]) -> DeviceMesh:
+        """Return named axes from one compatible view, retaining size-one dimensions.
+
+        Dense axes are `pp`, `fsdp`, and `tp`; expert axes are `pp`, `efsdp`, and `ep`.
+        Combined axes must belong to the same view and follow its dimension order.
+        A shared axis such as `pp` uses the dense view.
+        """
+        dims = (dims,) if isinstance(dims, str) else tuple(dims)
+        if not dims or len(set(dims)) != len(dims):
+            raise ValueError("Mesh dimensions must be nonempty and unique.")
+        for mesh in (self.dense_mesh, self._expert_mesh):
+            if set(dims).issubset(mesh.mesh_dim_names):
+                return mesh[dims]
+        raise ValueError(
+            f"Invalid mesh dimensions {dims}: select axes from either ('pp', 'fsdp', 'tp') or ('pp', 'efsdp', 'ep')."
+        )
+
+
 def initialize_distributed_mesh(
     distributed_config: DistributedConfig,
-) -> tuple[torch.device | None, dict[str, DeviceMesh] | None]:
+) -> tuple[torch.device | None, DistributedMesh | None]:
     """Build named dense and expert views, independently of the expert dispatcher.
 
     Both views include singleton dimensions so callers can always select their axes by name.
@@ -220,7 +246,7 @@ def initialize_distributed_mesh(
         (distributed_config.pp_size, distributed_config.efsdp_size, distributed_config.ep_size),
         mesh_dim_names=("pp", "efsdp", "ep"),
     )
-    return device_map, {"dense": dense_mesh, "expert": expert_mesh}
+    return device_map, DistributedMesh(dense_mesh, expert_mesh)
 
 
 def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
