@@ -197,8 +197,7 @@ class MuseGlimmerAssistantIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
             1, 7, config.hidden_size * len(config.target_layer_ids), dtype=torch.bfloat16, device=torch_device
         )
 
-        with torch.no_grad():
-            out = drafter(noise_embeds=noise_embeds, context_hidden_states=context_hidden_states)
+        out = drafter(noise_embeds=noise_embeds, context_hidden_states=context_hidden_states)
 
         self.assertEqual(
             out.last_hidden_state.shape,
