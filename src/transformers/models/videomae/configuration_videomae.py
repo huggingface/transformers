@@ -71,13 +71,19 @@ class VideoMAEConfig(PreTrainedConfig):
     attention_probs_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
-    qkv_bias: bool = True
+    qv_bias: bool = True
     use_mean_pooling: bool = True
     decoder_num_attention_heads: int = 6
     decoder_hidden_size: int = 384
     decoder_num_hidden_layers: int = 4
     decoder_intermediate_size: int = 1536
     norm_pix_loss: bool = True
+
+    def __post_init__(self, **kwargs):
+        if "qkv_bias" in kwargs:
+            self.qv_bias = kwargs.pop("qkv_bias")
+
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["VideoMAEConfig"]
