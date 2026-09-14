@@ -1360,7 +1360,7 @@ class RTDetrMLPPredictionHead(DetrMLPPredictionHead):
 @auto_docstring
 class RTDetrPreTrainedModel(PreTrainedModel):
     config: RTDetrConfig
-    base_model_prefix = "rt_detr"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = [r"RTDetrHybridEncoder", r"RTDetrDecoderLayer"]
