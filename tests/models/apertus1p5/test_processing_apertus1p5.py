@@ -248,20 +248,77 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 self.assertNotIn("pixel_values", out)
                 self.assertNotIn("input_features", out)
 
+    @require_torch
+    def test_audio_without_padding(self):
+        processor = self.get_processor()
+        hop = processor.feature_extractor.hop_length
+        for length in (1, hop + 3):
+            for batch_size in (1, 2):
+                for tensor_type in (None, "np", "pt"):
+                    with self.subTest(length=length, batch_size=batch_size, tensor_type=tensor_type):
+                        out = processor(
+                            text=["<|audio|>"] * batch_size,
+                            audio=[self._clip(length) for _ in range(batch_size)],
+                            padding=False,
+                            audio_kwargs={"return_tensors": tensor_type},
+                        )
+                        mask = out["feature_attention_mask"]
+                        expected_type = {None: list, "np": np.ndarray, "pt": torch.Tensor}[tensor_type]
+                        self.assertIsInstance(mask, expected_type)
+                        np.testing.assert_array_equal(np.asarray(mask), np.ones((batch_size, length)))
+                        self.assertEqual(np.asarray(out["input_features"]).shape, (batch_size, 1, length))
+                        for ids in out["input_ids"]:
+                            num_placeholders = processor.tokenizer.decode(ids).count("<|audio|>")
+                            self.assertEqual(num_placeholders, -(-length // hop))
+
+    def test_audio_masks_for_unequal_clips(self):
+        processor = self.get_processor()
+        hop = processor.feature_extractor.hop_length
+        lengths = [1, hop + 3]
+        for padding in (False, True):
+            with self.subTest(padding=padding):
+                out = processor(
+                    text=["<|audio|>"] * len(lengths),
+                    audio=[self._clip(length) for length in lengths],
+                    padding=padding,
+                )
+                for index, length in enumerate(lengths):
+                    output_length = max(lengths) if padding else length
+                    expected_mask = np.arange(output_length) < length
+                    np.testing.assert_array_equal(out["feature_attention_mask"][index], expected_mask)
+                    self.assertEqual(out["input_features"][index].shape, (1, output_length))
+                    num_placeholders = processor.tokenizer.decode(out["input_ids"][index]).count("<|audio|>")
+                    self.assertEqual(num_placeholders, -(-length // hop))
+
+    @require_torch
+    def test_audio_without_padding_rejects_ragged_tensors(self):
+        processor = self.get_processor()
+        for tensor_type in ("np", "pt"):
+            with self.subTest(tensor_type=tensor_type), self.assertRaises(ValueError):
+                processor(
+                    text=["<|audio|>", "<|audio|>"],
+                    audio=[self._clip(1), self._clip(processor.feature_extractor.hop_length + 3)],
+                    padding=False,
+                    return_tensors=tensor_type,
+                )
+
     def test_audio_truncation_keeps_placeholders_consistent(self):
         """Truncation must never desync the placeholder count from the returned features."""
         processor = self.get_processor()
         hop = processor.feature_extractor.hop_length
-        out = processor(
-            text="<|audio|>",
-            audio=[self._clip(3 * hop)],
-            audio_kwargs={"truncation": True, "max_length": hop},
-            return_tensors="pt",
-        )
-        num_placeholders = processor.tokenizer.decode(out["input_ids"][0]).count("<|audio|>")
-        valid_samples = int(out["feature_attention_mask"].sum())
-        self.assertEqual(num_placeholders, -(-valid_samples // hop))
-        self.assertEqual(out["input_features"].shape[-1], hop)
+        for padding in (False, True):
+            with self.subTest(padding=padding):
+                out = processor(
+                    text="<|audio|>",
+                    audio=[self._clip(3 * hop)],
+                    audio_kwargs={"padding": padding, "truncation": True, "max_length": hop},
+                    return_tensors="pt",
+                )
+                num_placeholders = processor.tokenizer.decode(out["input_ids"][0]).count("<|audio|>")
+                valid_samples = int(out["feature_attention_mask"].sum())
+                self.assertEqual(valid_samples, hop)
+                self.assertEqual(num_placeholders, -(-valid_samples // hop))
+                self.assertEqual(out["input_features"].shape[-1], hop)
 
     @require_torch
     def test_processor_to_tiny_model_forward(self):
