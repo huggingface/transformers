@@ -177,8 +177,7 @@ class Glm5NextVideoProcessor(BaseVideoProcessor):
             fps (`int` or `float`, *optional*):
                 Target frames to sample per second. Defaults to `self.fps`.
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            np.ndarray: Indices to sample video frames.
         """
         if metadata is None or getattr(metadata, "fps", None) is None:
             raise ValueError(
@@ -318,7 +317,6 @@ class Glm5NextVideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list[torch.Tensor],
-        do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: SizeDict | None = None,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None" = PILImageResampling.BICUBIC,
@@ -340,8 +338,6 @@ class Glm5NextVideoProcessor(BaseVideoProcessor):
         resized_videos_grouped = {}
 
         for shape, stacked_videos in grouped_videos.items():
-            if do_convert_rgb:
-                stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 # New resize requires new kwargs to be passed downstream
                 stacked_videos = self.resize(
