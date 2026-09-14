@@ -2212,6 +2212,11 @@ class ProcessorMixin(PushToHubMixin):
             if return_tensors:
                 processor_kwargs["return_tensors"] = return_tensors
 
+            # Audio was loaded/resampled by us above, so let the audio processor know at which rate. Otherwise
+            # it warns about a missing `sampling_rate` and cannot detect a mismatch with the model's expected rate
+            if batch_audios:
+                processor_kwargs.setdefault("sampling_rate", sampling_rate)
+
             images_exist = any((im is not None) for im_list in batch_images for im in im_list)
             videos_exist = any((vid is not None) for vid_list in batch_videos for vid in vid_list)
             out = self(
