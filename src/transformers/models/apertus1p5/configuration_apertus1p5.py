@@ -94,8 +94,8 @@ class Apertus1p5TextConfig(PreTrainedConfig):
         Number of LM-head rows kept after pruning the multimodal token rows from the output projection; the
         retained output ids are `0..output_vocab_size - 1`. `None` means the head is unpruned (`vocab_size`
         rows). Input embeddings always use `vocab_size`, and logits returned without `labels` are padded to that
-        logical width with `torch.finfo(dtype).min` scores for the input-only tail. A pruned head cannot be
-        tied to the input embeddings.
+        logical width with `torch.finfo(dtype).min` scores for the input-only tail. Released checkpoints
+        use `tie_word_embeddings=False` to keep the pruned head separate from the input embeddings.
 
     Example:
 
@@ -162,13 +162,8 @@ class Apertus1p5TextConfig(PreTrainedConfig):
                     f"(vocab_size is {self.vocab_size})."
                 )
             if self.output_vocab_size == self.vocab_size:
-                # a full-width head is unpruned; normalizing keeps resize/tie semantics consistent
+                # Represent a full-width head with the canonical unpruned configuration.
                 self.output_vocab_size = None
-            elif self.tie_word_embeddings:
-                raise ValueError(
-                    "A pruned LM head (`output_vocab_size` smaller than `vocab_size`) cannot be tied to the "
-                    "input embeddings; set `tie_word_embeddings=False`."
-                )
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
@@ -243,7 +238,7 @@ class Apertus1p5Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        """Resolve nested configs and validate multimodal token ranges and pruned-head weight tying."""
+        """Resolve nested configs and validate multimodal token ranges."""
         if isinstance(self.text_config, dict):
             self.text_config = Apertus1p5TextConfig(**self.text_config)
         elif self.text_config is None:
@@ -277,16 +272,6 @@ class Apertus1p5Config(PreTrainedConfig):
             raise ValueError(
                 f"The audio token range ends at {audio_vocab_end}, beyond the vocabulary "
                 f"(`text_config.vocab_size` = {self.text_config.vocab_size})."
-            )
-        output_vocab_size = getattr(self.text_config, "output_vocab_size", None)
-        if (
-            self.tie_word_embeddings
-            and output_vocab_size is not None
-            and output_vocab_size != self.text_config.vocab_size
-        ):
-            raise ValueError(
-                "A pruned LM head (`text_config.output_vocab_size` set) cannot be tied to the input "
-                "embeddings; set `tie_word_embeddings=False`."
             )
         super().__post_init__(**kwargs)
 
