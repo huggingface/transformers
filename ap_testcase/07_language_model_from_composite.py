@@ -40,6 +40,7 @@ def case_1_config(config):
     """
     assert type(config).__name__ == "Apertus1p5TextConfig", f"unexpected config type {type(config).__name__}"
     assert config.output_vocab_size, "missing pruned output_vocab_size"
+    assert not config.tie_word_embeddings, "released text checkpoints must keep embeddings untied"
     return f"vocab {config.vocab_size}; output vocab {config.output_vocab_size}; hidden size {config.hidden_size}"
 
 
@@ -56,6 +57,9 @@ def case_2_clean_load(model, info):
     config = model.config
     head_rows = model.lm_head.out_features
     assert head_rows == (config.output_vocab_size or config.vocab_size), "lm_head has the wrong width"
+    assert model.get_input_embeddings().weight.data_ptr() != model.get_output_embeddings().weight.data_ptr(), (
+        "the pruned head must not share storage with the input embeddings"
+    )
     return f"0 missing; {len(info['unexpected_keys'])} expected extras; head width {head_rows}"
 
 
