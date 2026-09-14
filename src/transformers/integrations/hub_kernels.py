@@ -249,12 +249,9 @@ if is_kernels_available():
                 },
             },
             "fused_recurrent_gated_delta_rule": {
+                # Inference only: the fused recurrent kernel has no backward implementation,
+                # so training stays on the torch path.
                 "cuda": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/fla",
-                        layer_name="recurrent_gated_delta_rule",
-                        version=1,
-                    ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="recurrent_gated_delta_rule",
@@ -613,12 +610,9 @@ if is_kernels_available():
                 },
             },
             "fused_recurrent_kda": {
+                # Inference only: the fused recurrent kernel has no backward implementation,
+                # so training stays on the torch path.
                 "cuda": {
-                    Mode.TRAINING: LayerRepository(
-                        repo_id="kernels-community/fla",
-                        layer_name="recurrent_kimi_delta_attention",
-                        version=1,
-                    ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="recurrent_kimi_delta_attention",
