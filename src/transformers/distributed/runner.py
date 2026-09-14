@@ -21,7 +21,7 @@ second run onwards is just the script.
     td train.py                                   # infer nodes/GPUs from Slurm
     td train.py --nodes a,b --gpus 8,8            # or say it explicitly
     td train.py -d                                # submit and get the prompt back
-    td --logs                                     # follow rank 0 until you ^C
+    td                                            # follow rank 0 until you ^C
     td --down                                     # let the daemon finish and exit
     td --kill                                     # hard stop every rank
 
@@ -226,6 +226,19 @@ class Cluster:
         except Exception:
             return False
 
+    def live_log(self, store) -> str:
+        """Where the running daemon is actually writing.
+
+        The log lives under the cwd the daemon was *started* from, so a client
+        deriving it from its own cwd silently tails a file nobody writes: the job
+        runs, the result comes back, and not one line of output appears. Ask the
+        daemon instead, and fall back only when it predates this key.
+        """
+        with contextlib.suppress(Exception):
+            if store.check(["logpath"]):
+                return store.get("logpath").decode()
+        return self.head_log
+
     def wait_for_result(self, store, job: int, poll: float = 2.0) -> str:
         """Poll for the job's verdict rather than blocking on it.
 
@@ -387,6 +400,26 @@ class Follower(threading.Thread):
         self.join(timeout=2)
         self.drain()
 
+    @classmethod
+    def from_tail(cls, path: str, kib: int = 16) -> "Follower":
+        """Follow, but replay the tail first.
+
+        Attaching at EOF is right when we are about to submit, and wrong when we
+        are catching up on something already running: a short job can finish in
+        less time than it takes this process to import torch, so the watcher would
+        show an empty screen for work that already happened.
+        """
+        try:
+            size = os.path.getsize(path)
+        except OSError:
+            return cls(path, offset=0)
+        start = max(0, size - kib * 1024)
+        if start:
+            with contextlib.suppress(OSError), open(path, "rb") as f:
+                f.seek(start)
+                start += len(f.readline())  # do not begin mid-line
+        return cls(path, offset=start)
+
 
 def td(
     script: Annotated[str | None, typer.Argument(help="Python file defining main(); run on every rank.")] = None,
@@ -399,7 +432,6 @@ def td(
     detach: Annotated[
         bool, typer.Option("--detach", "-d", help="Submit and return the prompt; do not wait or stream.")
     ] = False,
-    logs: Annotated[bool, typer.Option(help="Follow rank 0's live output until interrupted.")] = False,
     down: Annotated[bool, typer.Option(help="Ask the daemon to exit once it is idle.")] = False,
     kill: Annotated[bool, typer.Option(help="Hard-stop every rank on every node.")] = False,
 ):
@@ -421,10 +453,15 @@ def td(
             print("not running")
         return
 
-    if logs and script is None:
+    if script is None:
+        # Bare `td` means "show me what the pool is doing" — the common thing to
+        # want when a job is already in flight.
         if not cluster.listening():
-            raise typer.Exit(_fail(None, "no daemon running"))
-        follower = Follower(cluster.head_log)
+            raise typer.Exit(_fail(None, "no daemon running (submit a script to start one)"))
+        path = cluster.live_log(cluster.store(timedelta(seconds=30)))
+        _warn_if_log_vanished(path)
+        print(f"--- following {path} (^C to stop watching) ---", flush=True)
+        follower = Follower.from_tail(path)
         follower.start()
         try:
             while cluster.listening():
@@ -435,8 +472,6 @@ def td(
             follower.close()
         return
 
-    if script is None:
-        raise typer.BadParameter("need a script (or --down / --kill / --logs)")
     if not os.path.exists(script):
         raise typer.BadParameter(f"no such script: {script}")
 
@@ -462,13 +497,18 @@ def td(
             else:
                 raise typer.Exit(_fail(follower, f"daemon never came up; see .td/{cluster.head}.log"))
             print("--- daemon up ---", flush=True)
+            store = cluster.store(timedelta(seconds=30))
+            # Record it now, so later clients in other directories can find it.
+            store.set("logpath", cluster.head_log)
         else:
-            follower = Follower(cluster.head_log)
+            # Bounded, because every call below polls instead of blocking; a
+            # multi-day timeout is what turns a dead pool into a hung terminal.
+            store = cluster.store(timedelta(seconds=30))
+            path = cluster.live_log(store)
+            _warn_if_log_vanished(path)
+            follower = Follower(path)
             follower.start()
 
-        # Bounded, because every call below now polls instead of blocking; a
-        # multi-day timeout here is what turns a dead pool into a hung terminal.
-        store = cluster.store(timedelta(seconds=30))
         job = store.add("next", 1) - 1
         try:
             store.set(f"job:{job}", os.path.abspath(script))
@@ -482,7 +522,7 @@ def td(
         if detach:
             follower.close()
             follower = None
-            print(f"[job {job}] submitted; follow with `td --logs`, result lands in .td/{cluster.head}.log")
+            print(f"[job {job}] submitted; run `td` to follow it")
             return
 
         try:
@@ -501,6 +541,19 @@ def td(
     finally:
         if follower is not None:
             follower.close()
+
+
+def _warn_if_log_vanished(path: str):
+    """A deleted log file is invisible otherwise: the daemon holds the open fd and
+    keeps writing happily into an unlinked inode, so jobs still run and still
+    report, but nothing ever reaches the console again."""
+    if not os.path.exists(path):
+        print(
+            f"warning: {path} is gone, so the daemon is writing into a deleted file "
+            f"and no output can be shown. `td --kill` and resubmit to get logs back.",
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 def _fail(follower: Follower | None, message: str) -> int:
