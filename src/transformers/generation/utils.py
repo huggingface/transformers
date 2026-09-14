@@ -894,8 +894,6 @@ class GenerationMixin(ContinuousMixin):
             # We need this as otherwise padding tokens appear as -1 in position
             position_ids = position_ids.masked_fill(attention_mask == 0, 0)
         elif dropped_mask_length is not None:
-            # `generate` dropped a mask of all ones; the branch above would have counted over it, so do that.
-            # Keep its batch dimension too -- `_expand_inputs_for_generation` repeats this row-wise.
             position_ids = torch.arange(dropped_mask_length, dtype=torch.long, device=inputs_tensor.device)
             position_ids = position_ids.unsqueeze(0).expand(inputs_tensor.shape[0], -1)
         else:
@@ -2272,9 +2270,19 @@ class GenerationMixin(ContinuousMixin):
         # Note: for some models that only use linear attention (e.g. Mamba), even a DynamicCache is compilable since all
         # Encoder-decoder models hold that cache in a subcache, so we unwrap it to check the cache the decoder actually generates with
         decoder_cache = cache.self_attention_cache if isinstance(cache, EncoderDecoderCache) else cache
-        # Note: for some models that only use linear attention (e.g. Mamba), even a DynamicCache is compilable since all
-        # layers are, but we don't want to ALWAYS compile when calling `generate`, so we check the type
-        using_compilable_cache = cache is not None and cache.is_compileable and type(decoder_cache) is not DynamicCache
+        if cache is not None:
+            # Note: for some models that only use linear attention (e.g. Mamba), even a DynamicCache is compilable since all
+            # layers are, but we don't want to ALWAYS compile when calling `generate`, so we check the type
+            using_compilable_cache = cache.is_compileable and type(decoder_cache) is not DynamicCache
+        else:
+            # There is no cache yet, so answer for the one `_prepare_cache_for_generation` will build.
+            # It builds none at all when `use_cache` is off or when the model makes its own, and of
+            # what it does build only a static implementation is compileable (the rest is a DynamicCache).
+            using_compilable_cache = (
+                bool(generation_config.use_cache)
+                and self._supports_default_dynamic_cache()
+                and generation_config.cache_implementation in ALL_STATIC_CACHE_IMPLEMENTATIONS
+            )
         can_compile = valid_hardware and using_compilable_cache
 
         # Exception 1: Some quantization methods do not support compilation
@@ -2701,29 +2709,14 @@ class GenerationMixin(ContinuousMixin):
             if model_input_name == "input_ids" and len(model_kwargs["attention_mask"].shape) > 2:
                 raise ValueError("`attention_mask` passed to `generate` must be 2D.")
 
-        # A mask of all ones says nothing, so drop it before anything downstream has a chance to depend on it.
-        # The cache does not exist yet, so compilation has to be predicted rather than asked: err towards
-        # "will compile", where the only cost is skipping the optimization.
-        existing_cache = model_kwargs.get("past_key_values", model_kwargs.get("cache_params"))
-        may_compile = (
-            not generation_config.disable_compile
-            and (
-                self.device.type in ["cuda", "xpu", "neuron", "tpu"]
-                or bool(
-                    generation_config.compile_config is not None
-                    and generation_config.compile_config._compile_all_devices
-                )
-            )
-            and (
-                generation_config.cache_implementation is not None or getattr(existing_cache, "is_compileable", False)
-            )
-        )
+        # A mask of all ones says nothing to the model, so drop it. Not under compilation though: dynamo
+        # guards on `attention_mask is None`, so dropping it costs a recompile.
         attention_mask = model_kwargs.get("attention_mask")
         inputs_are_padded = (
             self.config.is_encoder_decoder
             or attention_mask is None
             or is_tracing(attention_mask)
-            or may_compile
+            or self._valid_auto_compile_criteria(model_kwargs, generation_config)
             or not bool(fast_all(attention_mask))
         )
         decoding_name = GENERATION_MODES_MAPPING[generation_mode]
@@ -2734,8 +2727,8 @@ class GenerationMixin(ContinuousMixin):
             and generation_mode != GenerationMode.ASSISTED_GENERATION
         )
         if not inputs_are_padded and uses_default_decoding_loop:
-            # The mask was all ones, so its length is the only thing it still told us: positions count over it,
-            # and `_prefill` compares the inputs against it. Keep the number, drop the tensor.
+            # Positions and `_prefill` still need its length, which `input_ids` cannot give us -- those may
+            # hold only the new tokens
             generation_config._dropped_mask_length = attention_mask.shape[-1]
             del model_kwargs["attention_mask"]
 
