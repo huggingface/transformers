@@ -109,7 +109,7 @@ class GPTJAttention(nn.Module):
         """
         Splits hidden dim into attn_head_size and num_attention_heads
         """
-        new_shape = tensor.size()[:-1] + (num_attention_heads, attn_head_size)
+        new_shape = tensor.size()[:-1] + (-1, attn_head_size)
         tensor = tensor.view(new_shape)
         if rotary:
             return tensor
@@ -130,7 +130,7 @@ class GPTJAttention(nn.Module):
             tensor = tensor.permute(0, 2, 1, 3).contiguous()
         else:
             raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(tensor.shape)}")
-        new_shape = tensor.size()[:-2] + (num_attention_heads * attn_head_size,)
+        new_shape = tensor.size()[:-2] + (-1,)
         return tensor.view(new_shape)
 
     def _attn(
@@ -431,6 +431,8 @@ class GPTJPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class GPTJModel(GPTJPreTrainedModel):
+    _input_embed_layer = "wte"
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -566,6 +568,7 @@ class GPTJModel(GPTJPreTrainedModel):
 )
 class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config):
         super().__init__(config)
