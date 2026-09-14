@@ -37,9 +37,8 @@ the steps that differ from the shared pipeline. The pipeline itself is explained
 An audio processor is a fixed sequence of steps with named override points. A model changes behaviour
 by overriding a step, never by rewriting the sequence.
 
-In both figures the highlighted steps are the override points, each labelled with how many of the 33
-audio processors actually override it — so the diagram shows not just where you *may* intervene but
-where models really do.
+In both figures the highlighted steps are the override points, each labelled with the models that
+actually override it — so the diagram shows not just where you *may* intervene, but who does.
 
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/audio-processor-call-flow.png" alt="AudioProcessor call flow, from __call__ to BatchFeature"/>
@@ -91,8 +90,12 @@ configuration block and nothing else — including [Whisper](./model_doc/whisper
 [EnCodec](./model_doc/encodec), [DAC](./model_doc/dac), [Dia](./model_doc/dia), [SpeechT5](./model_doc/speecht5),
 LASR, PE-Audio and [Pop2Piano](./model_doc/pop2piano).
 
-The remaining 24 override a hook or two. The figures above carry the counts; this table names them,
-so that if you are changing a hook you can see exactly who depends on its behaviour.
+The remaining 24 override a hook or two. Both figures name the models at each override point; the
+table repeats them as text, because the figures are images and their contents are neither searchable
+nor selectable.
+
+Every overridden hook appears in one of the figures except `_set_attributes` (CLAP), which runs at
+construction rather than during a call and so has no place in a call flow.
 
 | hook | models that override it |
 |---|---|
