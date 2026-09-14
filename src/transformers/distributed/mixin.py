@@ -66,7 +66,10 @@ class DistributedMixin:
 
         if self.base_model is self:
             self._pp_plan.update(self.config.base_model_pp_plan or {})
-            self._tp_plan.update(self.config.base_model_tp_plan or {})
+            tp_plan = dict(self.config.base_model_tp_plan or {})
+            if tp_plan and getattr(self.config, "tie_word_embeddings", False):
+                tp_plan.setdefault(getattr(self, "_input_embed_layer", "embed_tokens"), "embedding_rowwise")
+            self._tp_plan.update(tp_plan)
             self._ep_plan.update(self.config.base_model_ep_plan or {})
             self._fsdp_plan.update(self.config.base_model_fsdp_plan or {})
 
