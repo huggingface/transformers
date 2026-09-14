@@ -17,7 +17,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
-from ..esmc.configuration_esmc import EsmcConfig
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -349,7 +349,7 @@ class EsmFold2Config(PreTrainedConfig):
 
     model_type = "esmfold2"
     sub_configs = {
-        "esmc_config": EsmcConfig,
+        "esmc_config": AutoConfig,
         "atom_encoder": EsmFold2AtomEncoderConfig,
         "structure_head": EsmFold2StructureHeadConfig,
         "confidence_head": EsmFold2ConfidenceHeadConfig,
@@ -380,7 +380,7 @@ class EsmFold2Config(PreTrainedConfig):
     confidence_head: dict | EsmFold2ConfidenceHeadConfig | None = None
     msa_encoder: dict | EsmFold2MsaEncoderConfig | None = None
     lm_encoder: dict | EsmFold2LmEncoderConfig | None = None
-    esmc_config: dict | EsmcConfig | None = None
+    esmc_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
         def _init_nested(cls, val):
@@ -390,7 +390,7 @@ class EsmFold2Config(PreTrainedConfig):
                 return cls(**val)
             return val
 
-        self.esmc_config = _init_nested(EsmcConfig, self.esmc_config)
+        self.esmc_config = _init_nested(CONFIG_MAPPING["esmc"], self.esmc_config)
         self.atom_encoder = _init_nested(EsmFold2AtomEncoderConfig, self.atom_encoder)
         self.structure_head = _init_nested(EsmFold2StructureHeadConfig, self.structure_head)
         self.confidence_head = _init_nested(EsmFold2ConfidenceHeadConfig, self.confidence_head)

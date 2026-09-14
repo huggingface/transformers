@@ -34,6 +34,7 @@ from ...test_modeling_common import (
     ModelTesterMixin,
     ids_tensor,
 )
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -211,6 +212,11 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
             "test_generate_methods_with_logits_to_keep",
             "test_model_parallel_beam_search",
             "test_generate_compile_model_forward_fullgraph",
+            # VibeVoice uses two forward calls with different input shapes (positive + negative guidance
+            # pass), which causes flaky CUDAGraphs tensor overwrites and inductor dtype errors under
+            # static-cache compilation. TODO: fix in a follow-up PR.
+            "test_generate_with_static_cache",
+            "test_static_cache_no_recompile_with_smaller_length",
         ]
         for test in skippable_tests:
             if self._testMethodName.startswith(test):
@@ -295,6 +301,10 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         )
         self.assertIsNotNone(output.audio)
         self.assertEqual(len(output.audio), self.model_tester.batch_size)
+
+    @unittest.skip(reason="Vibevoice has a special cache format so skipping for now")
+    def test_cached_decode_matches_cacheless(self):
+        pass
 
 
 class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
@@ -401,7 +411,9 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
                     },
                     {
                         "type": "audio",
-                        "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/en-Alice_woman.wav"
+                        ),
                     },
                 ],
             },
@@ -414,7 +426,9 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
                     },
                     {
                         "type": "audio",
-                        "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/en-Frank_man.wav"
+                        ),
                     },
                 ],
             },

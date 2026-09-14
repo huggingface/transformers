@@ -17,12 +17,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
@@ -131,8 +133,6 @@ class EdgeTamVideoConfig(PreTrainedConfig):
         The non-linear activation function in the feedforward network in the memory attention module.
     memory_attention_dropout (`float`, *optional*, defaults to 0.1):
         The dropout rate for the memory attention module.
-    memory_attention_rope_theta (`float`, *optional*, defaults to 10000):
-        The Rope theta parameter.
     memory_attention_rope_feat_sizes (`Tuple[int, int]`, *optional*, defaults to `[64, 64]`):
         The feature sizes for the Rope positional encoding.
     memory_attention_rope_k_sizes (`List[int]`, *optional*, defaults to `[16, 16]`):
@@ -219,6 +219,7 @@ class EdgeTamVideoConfig(PreTrainedConfig):
     ```"""
 
     model_type = "edgetam_video"
+    default_rope_type = "axial"
     sub_configs = {
         "vision_config": AutoConfig,
         "prompt_encoder_config": EdgeTamVideoPromptEncoderConfig,
@@ -250,10 +251,10 @@ class EdgeTamVideoConfig(PreTrainedConfig):
     memory_attention_mlp_hidden_size: int = 2048
     memory_attention_mlp_hidden_act: str = "relu"
     memory_attention_dropout: float | int = 0.1
-    memory_attention_rope_theta: float | int = 10000
     memory_attention_rope_feat_sizes: list | None = None
     memory_attention_rope_k_sizes: list | None = None
     memory_attention_rope_dropout: float | int = 0.1
+    rope_parameters: dict | None = None
 
     # spatial perceiver resampler
     perceiver_resampler_num_latents: int = 256
@@ -308,7 +309,24 @@ class EdgeTamVideoConfig(PreTrainedConfig):
             self.mask_decoder_config = EdgeTamVideoMaskDecoderConfig(**self.mask_decoder_config)
         elif self.mask_decoder_config is None:
             self.mask_decoder_config = EdgeTamVideoMaskDecoderConfig()
+
         super().__post_init__(**kwargs)
+
+    @property
+    def memory_attention_rope_theta(self):
+        logger.warning_once(
+            "`memory_attention_rope_theta` is deprecated and will be removed in v5.0. "
+            "Use `rope_parameters['rope_theta']` instead."
+        )
+        return self.rope_parameters.get("rope_theta", 10_000)
+
+    @memory_attention_rope_theta.setter
+    def memory_attention_rope_theta(self, value):
+        logger.warning_once(
+            "`memory_attention_rope_theta` is deprecated and will be removed in v5.0. "
+            "Use `rope_parameters['rope_theta']` instead."
+        )
+        self.rope_parameters["rope_theta"] = value
 
 
 __all__ = ["EdgeTamVideoMaskDecoderConfig", "EdgeTamVideoPromptEncoderConfig", "EdgeTamVideoConfig"]

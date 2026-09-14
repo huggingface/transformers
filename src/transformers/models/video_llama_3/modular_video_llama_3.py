@@ -22,7 +22,6 @@ import torchvision.transforms.v2.functional as tvF
 from huggingface_hub.dataclasses import strict
 from torch.nn import LayerNorm
 
-from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
@@ -44,13 +43,11 @@ from ...utils.generic import (
 )
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
-from ...video_utils import (
-    group_videos_by_shape,
-    reorder_videos,
-)
+from ...video_utils import group_videos_by_shape, reorder_videos
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModel
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs, smart_resize
 from ..qwen2_vl.modeling_qwen2_vl import (
@@ -58,13 +55,10 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLModel,
     Qwen2VLPreTrainedModel,
     TransformersKwargs,
-    VisionRotaryEmbedding,
     apply_rotary_pos_emb_vision,
     eager_attention_forward,
 )
-from ..qwen2_vl.processing_qwen2_vl import (
-    Qwen2VLProcessorKwargs,
-)
+from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
 from ..qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
 from ..qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
 from ..siglip.configuration_siglip import SiglipVisionConfig
@@ -84,8 +78,11 @@ logger = logging.get_logger(__name__)
 class VideoLlama3VisionConfig(SiglipVisionConfig):
     model_type = "video_llama_3_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+
     image_size = AttributeError()
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="lkhl/VideoLLaMA3-2B-Image-HF")
@@ -121,7 +118,7 @@ class VideoLlama3Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class VideoLlama3VisionRotaryEmbedding(VisionRotaryEmbedding):
+class VideoLlama3VisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 
@@ -315,12 +312,6 @@ class VideoLlama3PreTrainedModel(Qwen2VLPreTrainedModel):
     config: VideoLlama3Config
     _no_split_modules = ["VideoLlama3VisionEncoderLayer"]
 
-    def _init_weights(self, module):
-        PreTrainedModel._init_weights(self, module)
-        if isinstance(module, VideoLlama3VisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
-
 
 class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
     config: VideoLlama3VisionConfig
@@ -333,9 +324,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
 
     def __init__(self, config: VideoLlama3VisionConfig):
         super().__init__(config)
-        head_dim = config.hidden_size // config.num_attention_heads
-
-        self.rotary_pos_emb = VideoLlama3VisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = VideoLlama3VisionRotaryEmbedding(config)
         self.embeddings = VideoLlama3VisionEmbeddings(config)
         self.encoder = VideoLlama3VisionEncoder(config)
         self.post_layernorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -388,9 +377,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = self.embeddings(pixel_values.type(self.dtype))
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
+        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
 
         encoder_outputs: BaseModelOutput = self.encoder(
             hidden_states,

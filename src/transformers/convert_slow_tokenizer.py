@@ -1876,6 +1876,17 @@ class ParakeetConverter(SpmConverter):
         return tokenizer
 
 
+class CanaryConverter(ParakeetConverter):
+    def __init__(self, vocab_file=None, *args):
+        super().__init__(vocab_file, *args)
+        # Only the `<|...|>` (type 4) control tokens are special; other type-4 pieces (digits, `<pad>`) are plain text.
+        self.special_tokens = {
+            piece.piece
+            for piece in self.proto.pieces
+            if piece.type == 4 and piece.piece.startswith("<|") and piece.piece.endswith("|>")
+        }
+
+
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
@@ -1920,15 +1931,18 @@ class TikTokenConverter:
             extra_special_tokens.keys() if isinstance(extra_special_tokens, dict) else extra_special_tokens
         )
 
-    def extract_vocab_merges_from_model(self, tiktoken_url: str):
+    @staticmethod
+    def load_tiktoken_bpe(tiktoken_url: str) -> dict[bytes, int]:
         try:
             from tiktoken.load import load_tiktoken_bpe
         except Exception:
             raise ValueError(
                 "`tiktoken` is required to read a `tiktoken` file. Install it with `pip install tiktoken`."
             )
+        return load_tiktoken_bpe(tiktoken_url)
 
-        bpe_ranks = load_tiktoken_bpe(tiktoken_url)
+    def extract_vocab_merges_from_model(self, tiktoken_url: str):
+        bpe_ranks = self.load_tiktoken_bpe(tiktoken_url)
         byte_encoder = bytes_to_unicode()
 
         def token_bytes_to_string(b):

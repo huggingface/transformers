@@ -706,7 +706,7 @@ class CanineOnlyMLMHead(nn.Module):
     def forward(
         self,
         sequence_output: tuple[torch.Tensor],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
 

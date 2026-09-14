@@ -20,11 +20,10 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested
@@ -33,13 +32,13 @@ from ..exaone4.modeling_exaone4 import Exaone4PreTrainedModel
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
-    Qwen2_5_VisionRotaryEmbedding,
     Qwen2_5_VisionTransformerPretrainedModel,
     Qwen2_5_VLForConditionalGeneration,
     Qwen2_5_VLMLP,
     Qwen2_5_VLPatchMerger,
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionBlock,
+    Qwen2_5_VLVisionRotaryEmbedding,
 )
 from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLModel,
@@ -103,7 +102,7 @@ class Exaone4_5_PatchEmbed(Qwen2_5_VisionPatchEmbed):
     pass
 
 
-class Exaone4_5_VisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
+class Exaone4_5_VisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 
@@ -206,12 +205,6 @@ class Exaone4_5_PreTrainedModel(Exaone4PreTrainedModel):
     _no_split_modules = ["Exaone4_5_VisionBlock", "Exaone4_5_DecoderLayer"]
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
-    def _init_weights(self, module):
-        PreTrainedModel._init_weights(module)
-        if isinstance(module, Exaone4_5_VisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
-
 
 class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel, Qwen2_5_VisionTransformerPretrainedModel):
     config_class = Exaone4_5_VisionConfig
@@ -224,8 +217,7 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel, Qwen2_5_VisionTransformer
             in_channels=config.in_channels,
             embed_dim=config.hidden_size,
         )
-        head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = Exaone4_5_VisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = Exaone4_5_VisionRotaryEmbedding(config)
         self.blocks = nn.ModuleList([Exaone4_5_VisionBlock(config) for _ in range(config.depth)])
         self.merger = Exaone4_5_PatchMerger(
             dim=config.out_hidden_size,

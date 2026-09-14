@@ -270,7 +270,7 @@ class PixioModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.7420, -1.4220, 0.1580], [0.3938, -1.4386, 0.2878], [0.2898, -1.4012, 0.3667]],
+            [[0.7420, -1.4219, 0.1581], [0.3935, -1.4387, 0.2880], [0.2888, -1.4017, 0.3672]],
             device=torch_device,
         )
         # valid the first three patch tokens

@@ -37,6 +37,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_modeling_common import floats_tensor, ids_tensor
+from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -62,19 +63,19 @@ class Qwen3VLMoeVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("hidden_act", "silu")
         kwargs.setdefault("num_attention_heads", 4)
         kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 8)
+        kwargs.setdefault("head_dim", 16)
         kwargs.setdefault("moe_intermediate_size", 16)
         kwargs.setdefault("num_experts_per_tok", 4)
         kwargs.setdefault("num_experts", 8)
         kwargs.setdefault("depth", 2)
         kwargs.setdefault("vision_hidden_act", "gelu_pytorch_tanh")
-        kwargs.setdefault("num_heads", 4)
+        kwargs.setdefault("num_heads", 2)
         kwargs.setdefault("spatial_merge_size", 1)
         kwargs.setdefault("temporal_patch_size", 2)
         kwargs.setdefault("num_position_embeddings", 16)
         kwargs.setdefault("deepstack_visual_indexes", [0, 1])
         kwargs.setdefault(
-            "rope_parameters", {"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True}
+            "rope_parameters", {"rope_type": "default", "mrope_section": [2, 3, 3], "mrope_interleaved": True}
         )
         kwargs.setdefault("decoder_sparse_step", 1)
         super().__init__(parent, **kwargs)
@@ -357,7 +358,9 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
                     },
                     {"type": "text", "text": "What kind of dog is this?"},
                 ],
@@ -369,7 +372,9 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/coco_sample.png"
+                        ),
                     },
                     {"type": "text", "text": "What kind of dog is this?"},
                 ],
@@ -381,7 +386,9 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "video",
-                        "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4"
+                        ),
                     },
                     {"type": "text", "text": "Describe the video in short."},
                 ],
@@ -422,7 +429,13 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
         inputs = inputs.to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        EXPECTED_DECODED_TEXT = "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and montane regions"
+        expected_decoded_texts = Expectations(
+            {
+                (None, None): "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and montane regions",
+                ("xpu", 5): "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and montane regions",
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -441,10 +454,19 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
-        EXPECTED_DECODED_TEXT = [
-            "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and steppes",
-            "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and steppes"
-        ]  # fmt: skip
+        expected_decoded_texts = Expectations(
+            {
+                (None, None): [
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and steppes",
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and steppes",
+                ],
+                ("xpu", 5): [
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and steppes",
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and steppes",
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -576,10 +598,19 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
-        EXPECTED_DECODED_TEXT = [
-            "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat species native to the grasslands and montane",
-            "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere are some observations about the cats in the"
-        ]  # fmt: skip
+        expected_decoded_texts = Expectations(
+            {
+                (None, None): [
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat species native to the grasslands and montane",
+                    "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere are some observations about the cats in the",
+                ],
+                ("xpu", 5): [
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and montane regions",
+                    "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere are some observations about the cats in the",
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
