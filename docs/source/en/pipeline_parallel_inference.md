@@ -70,7 +70,7 @@ tokens --> +------+   +------+   +------+   +------+ --> logits --> broadcast
 
 A 32-layer model on three ranks is uneven. Ranks 0 and 1 get 10 layers each, and rank 2 gets 12.
 
-Set Transformers logging to `INFO` to print a `LOAD REPORT` of which checkpoint keys this rank owns and which it skipped.
+The load path in `core_model_loading.py` emits loading logs you can use to check that every GPU received the right weights. Set Transformers logging to `INFO` to print a `LOAD REPORT` of which checkpoint keys this rank owns and which it skipped.
 
 ```py
 from transformers.utils import logging
