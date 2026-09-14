@@ -1796,6 +1796,7 @@ class EsmFold2PreTrainedModel(PreTrainedModel):
         "norm_start",
         "norm_single",
         "boundaries",
+        "distogram_head",
     ]
     _supports_sdpa = True
 

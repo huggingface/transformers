@@ -14,14 +14,17 @@
 """Testing suite for the PyTorch Glm5Next model."""
 
 import copy
+import tempfile
 import unittest
 
 import pytest
+from safetensors.torch import load_file
 
 from transformers import (
     Glm5NextConfig,
     Glm5NextForConditionalGeneration,
     Glm5NextModel,
+    Glm5NextTextModel,
     Glm5NextVisionConfig,
     is_torch_available,
     logging,
@@ -29,6 +32,7 @@ from transformers import (
 from transformers.cache_utils import DynamicCache
 from transformers.generation import CompileConfig
 from transformers.models.glm5_next.configuration_glm5_next import Glm5NextTextConfig
+from transformers.models.glm5_next.modeling_glm5_next import Glm5NextTextLinearAttention
 from transformers.testing_utils import (
     CaptureLogger,
     require_torch,
@@ -39,6 +43,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
 
 from ...generation.test_utils import (
     assert_similar_generate_outputs,
@@ -168,6 +173,32 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.8, 0.9]
     # FIXME: export is very sensitive to any shape changes
     test_torch_exportable = False
+
+    def test_text_model_save_uses_original_weight_names(self):
+        """Keep text-only saves in the released layout expected by SGLang (sgl-project/sglang#38618)."""
+        config = self.model_tester.get_text_config()
+        model = Glm5NextTextModel(config)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            saved_keys = set(load_file(f"{tmpdirname}/model.safetensors"))
+
+        expected_keys = {
+            "layers.0.hc_attn_fn",
+            "layers.0.hc_ffn_fn",
+            "layers.0.self_attn.f_a_proj.weight",
+            "layers.0.self_attn.q_conv1d.weight",
+            "layers.1.mlp.experts.0.gate_proj.weight",
+            "layers.1.mlp.experts.0.up_proj.weight",
+            "layers.1.mlp.experts.0.down_proj.weight",
+        }
+        self.assertTrue(expected_keys.issubset(saved_keys))
+
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        config = copy.deepcopy(config)
+        config.text_config.head_dim = config.text_config.qk_head_dim
+        return VLMModelTest._prepare_config_headdim(config, requested_dim)
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         """Override similar to GLM4V: images shaped as (bs*patch_len, dim) so we can't slice to batches in generate"""
@@ -575,6 +606,38 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
 
             for dynamic_result, compiled_result in zip(dynamic_outputs, compiled_outputs):
                 assert_similar_generate_outputs(dynamic_result, compiled_result, atol=atol, rtol=rtol)
+
+    def test_linear_attention_backward_with_saturated_forget_gate(self):
+        """
+        Ensures that a linear attention layer has finite gradients when its forget gate sits at its lower bound. The
+        pairwise decay `g_i - g_j` is positive for non-causal pairs and overflows fp32 `exp`, which leaves the output
+        finite because those entries are masked out afterwards, but not the backward pass.
+        """
+        # The optional backends are resolved at import time, so cpu alone does not rule them out
+        if is_flash_linear_attention_available() or is_causal_conv1d_available():
+            self.skipTest(reason="Please uninstall `flash-linear-attention` / `causal-conv1d` to run this test")
+
+        # On cpu to exercise the reference pytorch path and not the hub kernel one
+        config = self.model_tester.get_config().get_text_config()
+        layer = Glm5NextTextLinearAttention(config, layer_idx=0).to("cpu").train()
+
+        # `A_log` and `dt_bias` are allocated empty, so pin the gate to `linear_lower_bound * sigmoid(8)`
+        with torch.no_grad():
+            layer.forget_gate.A_log.zero_()
+            layer.forget_gate.dt_bias.fill_(8.0)
+            layer.forget_gate.f_b_proj.weight.zero_()
+
+        hidden_states = floats_tensor([self.model_tester.batch_size, self.model_tester.seq_length, config.hidden_size])
+        hidden_states = hidden_states.to("cpu").requires_grad_(True)
+
+        output = layer(hidden_states)
+        self.assertTrue(torch.isfinite(output).all())
+
+        output.square().mean().backward()
+        self.assertTrue(torch.isfinite(hidden_states.grad).all(), "non-finite gradient on the inputs")
+        for name, parameter in layer.named_parameters():
+            self.assertIsNotNone(parameter.grad, f"missing gradient for `{name}`")
+            self.assertTrue(torch.isfinite(parameter.grad).all(), f"non-finite gradient for `{name}`")
 
     @unittest.skip("Fundamentally incompatible with indexer - indexer has no boundary offset telling sequences apart")
     def test_eager_padding_matches_padding_free_with_position_ids(self):

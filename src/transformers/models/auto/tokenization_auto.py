@@ -130,6 +130,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("florence2", "BartTokenizer" if is_tokenizers_available() else None),
         ("fnet", "FNetTokenizer" if is_tokenizers_available() else None),
         ("fsmt", "FSMTTokenizer"),
+        ("fun_asr_nano", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("funnel", "FunnelTokenizer" if is_tokenizers_available() else None),
         ("gemma", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("gemma2", "GemmaTokenizer" if is_tokenizers_available() else None),
@@ -164,6 +165,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("herbert", "HerbertTokenizer" if is_tokenizers_available() else None),
         ("hubert", "Wav2Vec2CTCTokenizer"),
         ("hunyuan_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("hyperclovax_vision_v2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("ibert", "RobertaTokenizer"),
         ("idefics", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("idefics2", "LlamaTokenizer" if is_tokenizers_available() else None),
@@ -173,6 +175,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("jais2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("jina_embeddings_v3", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("kimi_k25", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("kimi_linear", "TokenizersBackend" if is_tokenizers_available() else None),
         ("kosmos-2", "TokenizersBackend" if is_tokenizers_available() else None),
         ("lasr_ctc", "LasrTokenizer" if is_tokenizers_available() else None),
         ("lasr_encoder", "LasrTokenizer" if is_tokenizers_available() else None),
@@ -290,6 +293,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("qwen3", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_5", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_5_moe", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
+        ("qwen3_5_text", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_asr", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_next", "Qwen2Tokenizer" if is_tokenizers_available() else None),
@@ -389,6 +393,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "h2ovl_chat",
     "hyperclovax",
     "hyperclovax_vlm",
+    "hyperclovax_vision_v2",
     "internlm2",
     "jamba",
     "janus",
@@ -398,6 +403,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "minicpmv",
     "minimax_m2",
     "modernbert",
+    "modernbert-decoder",
     "molmo",
     "molmo2",
     "nemotron",
@@ -415,7 +421,6 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "cohere_asr",
     "camembertv2-base",
     "smolvlm",
-    "vision-encoder-decoder",
 }
 
 for model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
@@ -431,6 +436,7 @@ MODEL_IDS_TO_TOKENIZERS_BACKEND = [
     "deepseek-ai/deepseek-coder-*",
     "allenai/dolma2-tokenizer",
     "google/umt5-small",
+    "naver-clova-ix/donut-*",
     "salesforce/blip2-opt-*",
     "salesforce/blip2-flan-t5-*",
     "salesforce/instructblip-flan-t5-*",
@@ -768,8 +774,15 @@ class AutoTokenizer:
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         if gguf_file:
+            # Same split as `PreTrainedConfig.from_pretrained`: fast reader where covered, else legacy.
+            from ...integrations.gguf import GGUF_CONFIG_ARCHS, get_gguf_config, read_gguf_metadata
+
             gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
-            config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
+            metadata, tensor_names = read_gguf_metadata(gguf_path)
+            if metadata["general.architecture"] in GGUF_CONFIG_ARCHS:
+                config_dict = get_gguf_config(metadata, tensor_names)
+            else:
+                config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
             config = AutoConfig.for_model(**config_dict)
         elif config is None:
             try:

@@ -87,7 +87,7 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder",
-    "huggingface-hub>=1.5.0,<2.0",
+    "huggingface-hub>=1.31.0,<2.0",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
     "kenlm",
@@ -326,7 +326,7 @@ if __name__ == "__main__":
 
     setup(
         name="transformers",
-        version="5.17.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+        version="5.18.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
         author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
         author_email="transformers@huggingface.co",
         description="Transformers: the model-definition framework for state-of-the-art machine learning models in text, vision, audio, and multimodal models, for both inference and training.",
