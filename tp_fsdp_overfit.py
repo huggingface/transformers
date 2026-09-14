@@ -12,7 +12,10 @@ The script overfit one sentence following the steps:
 """
 
 import os
+
 import torch
+from torch.distributed.tensor import DTensor
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.distributed import DistributedConfig
 from transformers.distributed.utils import (
@@ -20,6 +23,19 @@ from transformers.distributed.utils import (
     load_optimizer_distributed,
     save_optimizer_distributed,
 )
+
+
+def create_optimizer(model):
+    dtensor_params, tensor_params = [], []
+    for parameter in model.parameters():
+        (dtensor_params if isinstance(parameter, DTensor) else tensor_params).append(parameter)
+    groups = []
+    if dtensor_params:
+        groups.append({"params": dtensor_params})
+    if tensor_params:
+        groups.append({"params": tensor_params})
+    return torch.optim.AdamW(groups, lr=1e-3, foreach=True)
+
 
 NAME = "Isotonic/TinyMixtral-4x248M-MoE"
 TEXT = "In a quiet village nestled between rolling hills and a slow river, the autumn mornings arrived with mist that hung low over the fields and a sky that turned from grey to pale gold as the sun climbed."
@@ -50,9 +66,7 @@ model = AutoModelForCausalLM.from_pretrained(
     distributed_config=DistributedConfig(tp_size=2, fsdp_size=2, enable_sequence_parallel=True),
     dtype=torch.bfloat16,
 )
-print(model.tp_plan)
-print(model.fsdp_plan)
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+optimizer = create_optimizer(model)
 model.train()
 for step in range(0, HALF):
     loss = model(ids, labels=ids).loss
@@ -77,7 +91,7 @@ model = AutoModelForCausalLM.from_pretrained(
     distributed_config=DistributedConfig(tp_size=4, enable_sequence_parallel=True),
     dtype=torch.bfloat16,
 )
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+optimizer = create_optimizer(model)
 load_optimizer_distributed(model, optimizer, OPT)
 
 model.train()

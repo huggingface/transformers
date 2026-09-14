@@ -257,9 +257,11 @@ def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
     import torch.distributed.checkpoint as dcp
-    from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict
+    from torch.distributed.checkpoint.state_dict import StateDictOptions, get_optimizer_state_dict
 
-    optimizer_state_dict = _prepare_state_dict_for_dcp(get_optimizer_state_dict(model, optimizer))
+    # Key group options by parameter name so regrouping after a mesh change remains loadable.
+    options = StateDictOptions(flatten_optimizer_state_dict=True)
+    optimizer_state_dict = _prepare_state_dict_for_dcp(get_optimizer_state_dict(model, optimizer, options=options))
     dcp.save({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
 
 
@@ -271,10 +273,15 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
     import torch.distributed.checkpoint as dcp
-    from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict, set_optimizer_state_dict
+    from torch.distributed.checkpoint.state_dict import (
+        StateDictOptions,
+        get_optimizer_state_dict,
+        set_optimizer_state_dict,
+    )
     from torch.utils._pytree import tree_map
 
-    optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
+    options = StateDictOptions(flatten_optimizer_state_dict=True)
+    optimizer_state_dict = get_optimizer_state_dict(model, optimizer, options=options)
     checkpoint_state_dict = _prepare_state_dict_for_dcp(optimizer_state_dict)
     dcp.load({"optimizer": checkpoint_state_dict}, checkpoint_id=checkpoint_dir)
     optimizer_state_dict = tree_map(
