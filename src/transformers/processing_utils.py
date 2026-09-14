@@ -2221,9 +2221,12 @@ class ProcessorMixin(PushToHubMixin):
 
             # Audio was loaded/resampled by us above, so let the audio processor know at which rate. Otherwise
             # it warns about a missing `sampling_rate` and cannot detect a mismatch with the model's expected rate
-            # Do not set it when users passed it nested, otherwise `_merge_kwargs` sees it passed twice
-            if batch_audios and "sampling_rate" not in audio_kwargs_from_user:
-                processor_kwargs.setdefault("sampling_rate", sampling_rate)
+            # Replace explicit None with the resolved rate, preserving its location to avoid duplicates in `_merge_kwargs`.
+            if batch_audios:
+                if "sampling_rate" in audio_kwargs_from_user:
+                    processor_kwargs["audio_kwargs"] = {**audio_kwargs_from_user, "sampling_rate": sampling_rate}
+                else:
+                    processor_kwargs["sampling_rate"] = sampling_rate
 
             images_exist = any((im is not None) for im_list in batch_images for im in im_list)
             videos_exist = any((vid is not None) for vid_list in batch_videos for vid in vid_list)

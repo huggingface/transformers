@@ -1356,6 +1356,8 @@ class ProcessorTesterMixin:
             None,
             {"sampling_rate": sampling_rate},
             {"audio_kwargs": {"sampling_rate": sampling_rate}},
+            {"sampling_rate": None},
+            {"audio_kwargs": {"sampling_rate": None}},
         ]:
             with patch.object(
                 type(processor), "__call__", autospec=True, side_effect=type(processor).__call__
