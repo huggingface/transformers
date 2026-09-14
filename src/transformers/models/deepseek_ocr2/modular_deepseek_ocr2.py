@@ -711,8 +711,7 @@ class DeepseekOcr2SamVisionNeck(SamVisionNeck):
 
 class DeepseekOcr2SamPatchEmbeddings(SamPatchEmbeddings):
     def forward(self, pixel_values):
-        target_dtype = self.projection.weight.dtype
-        embeddings = self.projection(pixel_values.to(dtype=target_dtype)).permute(0, 2, 3, 1)
+        embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
         return embeddings
 
 
