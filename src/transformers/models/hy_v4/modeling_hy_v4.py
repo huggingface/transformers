@@ -225,7 +225,7 @@ class HYV4Indexer(nn.Module):
 
         Returns:
             `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
-                turn these into an additive sparse mask; the `flash-mla` kernel consumes them directly.
+                attend to exactly those tokens; the `flash-mla` kernel consumes them directly.
         """
         batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings

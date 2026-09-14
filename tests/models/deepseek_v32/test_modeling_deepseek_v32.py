@@ -156,6 +156,10 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         # the shared DSA branch in `test_utils` still expects expanded K/V (the case for HY-V4, AXK2, GLM5-Next).
         return (batch_size, 1, seq_length, config.kv_lora_rank), (batch_size, 1, seq_length, config.qk_rope_head_dim)
 
+    def _get_attention_kv_length(self, config, kv_length):
+        # DSA returns the probabilities over the keys its indexer selected, `[B, H, S, min(index_topk, kv_length)]`
+        return min(config.index_topk, kv_length)
+
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = DeepseekV32ForCausalLM if is_torch_available() else None
 

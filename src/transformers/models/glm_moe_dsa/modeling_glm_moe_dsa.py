@@ -28,6 +28,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...distributed.utils import is_dtensor
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
@@ -120,6 +121,11 @@ class GlmMoeDsaRotaryEmbedding(nn.Module):
             sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+# Upper bound, in elements, on the fp32 `[B, chunk, H_idx, T]` score tensor the indexer materializes.
+# Queries are scored in chunks along the sequence so peak memory stays bounded at long context.
+_INDEXER_SCORE_BUDGET = 2**29
 
 
 def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -217,7 +223,7 @@ class GlmMoeDsaIndexer(nn.Module):
 
         Returns:
             `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
-                turn these into an additive sparse mask; the `flash-mla` kernel consumes them directly.
+                attend to exactly those tokens; the `flash-mla` kernel consumes them directly.
         """
         batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings
@@ -236,21 +242,32 @@ class GlmMoeDsaIndexer(nn.Module):
         if past_key_values is not None:
             k = past_key_values.update_indexer(k, self.layer_idx)
 
-        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
-        scores = F.relu(scores)
-
-        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
+        # Queries are scored in chunks along the sequence so that the fp32 `[B, chunk, H, T]` score tensor
+        # stays under `_INDEXER_SCORE_BUDGET` elements. Each query's top-k only depends on its own scores,
+        # so chunking is exact — a single chunk reproduces the unchunked computation.
         weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
-        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+        topk = min(self.index_topk, k.shape[-2])
+        chunk = max(1, min(seq_len, _INDEXER_SCORE_BUDGET // (batch_size * self.n_heads * k.shape[-2])))
 
-        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask.dtype == torch.bool:
-            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
-        else:
-            index_scores = index_scores + attention_mask
+        topk_indices = []
+        for start in range(0, seq_len, chunk):
+            q_chunk = q[:, start : start + chunk].float()
+            scores = torch.matmul(q_chunk, k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
+            scores = F.relu(scores)
 
-        topk = min(self.index_topk, index_scores.shape[-1])
-        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
+            # Weight per head and sum across heads: [B, chunk, 1, H] @ [B, chunk, H, T] → [B, chunk, T]
+            index_scores = torch.matmul(weights[:, start : start + chunk].unsqueeze(-2), scores).squeeze(-2)
+
+            # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
+            mask_chunk = attention_mask[:, start : start + chunk]
+            if attention_mask.dtype == torch.bool:
+                index_scores = index_scores.masked_fill(~mask_chunk, float("-inf"))
+            else:
+                index_scores = index_scores + mask_chunk
+
+            topk_indices.append(index_scores.topk(topk, dim=-1).indices.to(torch.int32))
+
+        return torch.cat(topk_indices, dim=1)  # [B, S, topk]
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -304,6 +321,139 @@ def yarn_apply_mscale(rope_parameters, scaling):
             mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
             scaling = scaling * mscale * mscale
     return scaling
+
+
+def sparse_attention_forward(
+    module: nn.Module,
+    q_pass: torch.Tensor,
+    q_rot: torch.Tensor,
+    k_pass: torch.Tensor,
+    k_rot: torch.Tensor,
+    kv_b_weight: torch.Tensor,
+    topk_indices: torch.Tensor,
+    attention_mask: torch.Tensor,
+    dropout: float = 0.0,
+    scaling: float = 1.0,
+):
+    """MLA attention restricted to the tokens the DSA indexer selected, in weight-absorbed form.
+
+    Rather than expanding every cached latent into per-head keys / values (`expand_kv`) and masking the
+    unselected ones out, the queries are absorbed into the `kv_b_proj` weights and scored against the
+    `K = topk_indices.shape[-1]` gathered latents only, as in the DeepSeek-V3.2 reference. Queries are
+    processed in chunks so that the gathered latents stay under `_SPARSE_ATTENTION_BUDGET` elements: peak
+    memory scales with `chunk * K * (kv_lora_rank + qk_rope_head_dim)` rather than with the cache length `T`.
+
+    The attention modules only take this path for the `eager` / `sdpa` implementations, and only when
+    `_absorbable_kv_b_weight` can resolve the `kv_b_proj` weight; otherwise they fall back to the dense
+    `expand_kv` path with the unselected keys masked out, which computes the same probabilities.
+
+    Args:
+        q_pass / q_rot: queries, `[B, H, S, qk_nope_head_dim]` / `[B, H, S, qk_rope_head_dim]`.
+        k_pass / k_rot: the cached latents, `[B, 1, T, kv_lora_rank]` / `[B, 1, T, qk_rope_head_dim]`.
+        kv_b_weight: the `kv_b_proj` weight, `[H * (qk_nope_head_dim + v_head_dim), kv_lora_rank]`.
+        topk_indices: the selected key positions, `[B, S, K]`.
+        attention_mask: the 4D `[B, 1, S, T]` causal mask, gathered at the selected positions.
+
+    Returns the attention output `[B, S, H, v_head_dim]` and the probabilities `[B, H, S, K]`, i.e. over the
+    selected keys only (in the order of `topk_indices`), not over the `T` cached positions.
+    """
+    if is_dtensor(kv_b_weight):
+        # Tensor parallelism: `kv_b_proj` is sharded over heads, so score against this rank's shard
+        # (`q_pass` is sharded the same way). That bypasses the colwise backward which would otherwise
+        # sum the latents' gradient over the mesh, so synchronize that partial gradient explicitly.
+        from ...distributed.tensor_parallel import _AllReduceBackward
+
+        mesh = kv_b_weight.device_mesh
+        kv_b_weight = kv_b_weight.to_local()
+        if torch.is_grad_enabled() and k_pass.requires_grad:
+            k_pass = _AllReduceBackward.apply(k_pass, mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp"))
+
+    # The head count follows from the (possibly sharded) weight rather than `module.num_heads`
+    wkv_b = kv_b_weight.to(q_pass.dtype).view(-1, module.qk_nope_head_dim + module.v_head_dim, module.kv_lora_rank)
+    w_uk, w_uv = wkv_b[:, : module.qk_nope_head_dim], wkv_b[:, -module.v_head_dim :]
+
+    # Absorbing `w_uk` into the query scores the latents directly: q·(w_uk·c) == (q·w_uk)·c
+    q_absorbed = torch.einsum("bhsd,hdc->bhsc", q_pass, w_uk)  # [B, H, S, kv_lora_rank]
+
+    indices = topk_indices.long()  # [B, S, K]
+    batch_size, seq_len, topk = indices.shape
+    batch_indices = torch.arange(batch_size, device=indices.device).view(-1, 1, 1)
+    kv_cache, pe_cache, mask = k_pass[:, 0], k_rot[:, 0], attention_mask[:, 0]
+    chunk = max(
+        1, min(seq_len, _SPARSE_ATTENTION_BUDGET // (batch_size * topk * (kv_cache.shape[-1] + pe_cache.shape[-1])))
+    )
+
+    attn_outputs, attn_weights = [], []
+    for start in range(0, seq_len, chunk):
+        chunk_slice = slice(start, start + chunk)
+        chunk_indices = indices[:, chunk_slice]
+        kv_selected = kv_cache[batch_indices, chunk_indices]  # [B, chunk, K, kv_lora_rank]
+        pe_selected = pe_cache[batch_indices, chunk_indices]  # [B, chunk, K, qk_rope_head_dim]
+
+        chunk_weights = (
+            torch.einsum("bhsc,bskc->bhsk", q_absorbed[:, :, chunk_slice], kv_selected)
+            + torch.einsum("bhsr,bskr->bhsk", q_rot[:, :, chunk_slice], pe_selected)
+        ) * scaling
+
+        # Selected keys can still be masked (causality, padding, or fewer than K valid keys). Masking with
+        # `finfo.min` rather than `-inf` matches the additive masks: a fully masked query (a padding token
+        # attending to nothing) then keeps finite, uniform weights instead of poisoning the batch with NaNs.
+        mask_selected = mask[:, chunk_slice].gather(-1, chunk_indices).unsqueeze(1)  # [B, 1, chunk, K]
+        if mask.dtype == torch.bool:
+            chunk_weights = chunk_weights.masked_fill(~mask_selected, torch.finfo(chunk_weights.dtype).min)
+        else:
+            chunk_weights = chunk_weights + mask_selected
+
+        chunk_weights = nn.functional.softmax(chunk_weights, dim=-1, dtype=torch.float32).to(q_pass.dtype)
+        if mask.dtype == torch.bool:
+            # SDPA outputs zeros for a query whose boolean mask row is all `False`; match it
+            chunk_weights = chunk_weights.masked_fill(~mask_selected.any(-1, keepdim=True), 0.0)
+        chunk_weights = nn.functional.dropout(chunk_weights, p=dropout, training=module.training)
+
+        attn_outputs.append(torch.einsum("bhsk,bskc->bhsc", chunk_weights, kv_selected))  # [B, H, chunk, kv_lora_rank]
+        attn_weights.append(chunk_weights)
+
+    # A single chunk (the common case) hands back the tensors themselves rather than copies
+    attn_output = attn_outputs[0] if len(attn_outputs) == 1 else torch.cat(attn_outputs, dim=2)
+    attn_weights = attn_weights[0] if len(attn_weights) == 1 else torch.cat(attn_weights, dim=2)
+    attn_output = torch.einsum("bhsc,hdc->bhsd", attn_output, w_uv)  # [B, H, S, v_head_dim]
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+def _absorbable_kv_b_weight(kv_b_proj: nn.Module) -> torch.Tensor | None:
+    """The dense `[H * (qk_nope_head_dim + v_head_dim), kv_lora_rank]` weight `kv_b_proj` applies, or `None`.
+
+    `sparse_attention_forward` absorbs this weight into the queries instead of calling `kv_b_proj`, so it
+    must see the weight the module's `forward` would apply. That is only known for a plain `nn.Linear` (the
+    weight may be a tensor-parallel DTensor, returned as is) and for an `FP8Linear`, whose float8 weight is
+    dequantized here with its `weight_scale_inv`. Anything else (PEFT / quantization wrappers, accelerate
+    offload hooks materializing the weight inside `forward`, FP4-packed weights) returns `None`.
+    """
+    weight = kv_b_proj.weight
+    if hasattr(kv_b_proj, "_hf_hook") or weight.device.type == "meta":
+        return None
+    if type(kv_b_proj) is nn.Linear:
+        return weight
+    if type(kv_b_proj).__name__ == "FP8Linear":
+        if weight.element_size() > 1:  # dequantized at load time
+            return weight
+        if weight.dtype != torch.float8_e4m3fn:
+            return None
+        scale = kv_b_proj.weight_scale_inv.float()  # per tensor, or one scale per `block_size` block
+        if kv_b_proj.block_size is not None:
+            block_n, block_k = kv_b_proj.block_size
+            scale = scale.repeat_interleave(block_n, 0).repeat_interleave(block_k, 1)[
+                : weight.shape[0], : weight.shape[1]
+            ]
+        return weight.float() * scale
+    return None
+
+
+# Upper bound, in elements, on the `[B, chunk, K, kv_lora_rank + qk_rope_head_dim]` latents the sparse
+# attention gathers per query chunk.
+_SPARSE_ATTENTION_BUDGET = 2**27
 
 
 class GlmMoeDsaAttention(nn.Module):
@@ -423,10 +573,6 @@ class GlmMoeDsaAttention(nn.Module):
         if past_key_values is not None:
             k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
 
-        query_states = torch.cat((q_pass, q_rot), dim=-1)
-
-        key_states, value_states = self.expand_kv(k_pass, k_rot)
-
         # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
         if self.indexer is not None:
             topk_indices = self.indexer(
@@ -442,35 +588,56 @@ class GlmMoeDsaAttention(nn.Module):
                 raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
             topk_indices = prev_topk_indices
 
-        sparse_indices = None
-        if self.config._attn_implementation in ("eager", "sdpa"):
-            index_mask = (
-                topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
-                .scatter(-1, topk_indices.long(), False)
-                .unsqueeze(1)
+        eager_or_sdpa = self.config._attn_implementation in ("eager", "sdpa")
+        kv_b_weight = _absorbable_kv_b_weight(self.kv_b_proj) if eager_or_sdpa else None
+        if kv_b_weight is not None:
+            attn_output, attn_weights = sparse_attention_forward(
+                self,
+                q_pass,
+                q_rot,
+                k_pass,
+                k_rot,
+                kv_b_weight,
+                topk_indices,
+                attention_mask,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
             )
-
-            if attention_mask.dtype == torch.bool:
-                attention_mask = attention_mask & ~index_mask
-            else:
-                attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
         else:
-            sparse_indices = topk_indices
+            # Dense path: the latents are expanded into per-head keys / values, and the unselected keys are
+            # masked out (eager / SDPA) or skipped by the kernel itself, which consumes the top-k indices.
+            query_states = torch.cat((q_pass, q_rot), dim=-1)
+            key_states, value_states = self.expand_kv(k_pass, k_rot)
 
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            indices=sparse_indices,  # consumed by flash_mla_with_kvcache; ignored by eager / SDPA
-            **kwargs,
-        )
+            sparse_indices = None
+            if eager_or_sdpa:
+                index_mask = (
+                    topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
+                    .scatter(-1, topk_indices.long(), False)
+                    .unsqueeze(1)
+                )
+
+                if attention_mask.dtype == torch.bool:
+                    attention_mask = attention_mask & ~index_mask
+                else:
+                    attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
+            else:
+                sparse_indices = topk_indices
+
+            attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+                self.config._attn_implementation, eager_attention_forward
+            )
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
+                indices=sparse_indices,  # consumed by flash_mla_with_kvcache; ignored by eager / SDPA
+                **kwargs,
+            )
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)

@@ -33,12 +33,15 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 )
 from ..deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
 from ..deepseek_v32.modeling_deepseek_v32 import (
+    _INDEXER_SCORE_BUDGET,
     DeepseekV32DecoderLayer,
     DeepseekV32ForCausalLM,
     DeepseekV32Indexer,
     DeepseekV32Model,
     DeepseekV32PreTrainedModel,
     DeepseekV32RotaryEmbedding,
+    _absorbable_kv_b_weight,
+    sparse_attention_forward,
 )
 
 
@@ -156,7 +159,7 @@ class GlmMoeDsaIndexer(DeepseekV32Indexer):
 
         Returns:
             `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
-                turn these into an additive sparse mask; the `flash-mla` kernel consumes them directly.
+                attend to exactly those tokens; the `flash-mla` kernel consumes them directly.
         """
         batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings
@@ -175,21 +178,32 @@ class GlmMoeDsaIndexer(DeepseekV32Indexer):
         if past_key_values is not None:
             k = past_key_values.update_indexer(k, self.layer_idx)
 
-        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
-        scores = F.relu(scores)
-
-        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
+        # Queries are scored in chunks along the sequence so that the fp32 `[B, chunk, H, T]` score tensor
+        # stays under `_INDEXER_SCORE_BUDGET` elements. Each query's top-k only depends on its own scores,
+        # so chunking is exact — a single chunk reproduces the unchunked computation.
         weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
-        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+        topk = min(self.index_topk, k.shape[-2])
+        chunk = max(1, min(seq_len, _INDEXER_SCORE_BUDGET // (batch_size * self.n_heads * k.shape[-2])))
 
-        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask.dtype == torch.bool:
-            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
-        else:
-            index_scores = index_scores + attention_mask
+        topk_indices = []
+        for start in range(0, seq_len, chunk):
+            q_chunk = q[:, start : start + chunk].float()
+            scores = torch.matmul(q_chunk, k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
+            scores = F.relu(scores)
 
-        topk = min(self.index_topk, index_scores.shape[-1])
-        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
+            # Weight per head and sum across heads: [B, chunk, 1, H] @ [B, chunk, H, T] → [B, chunk, T]
+            index_scores = torch.matmul(weights[:, start : start + chunk].unsqueeze(-2), scores).squeeze(-2)
+
+            # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
+            mask_chunk = attention_mask[:, start : start + chunk]
+            if attention_mask.dtype == torch.bool:
+                index_scores = index_scores.masked_fill(~mask_chunk, float("-inf"))
+            else:
+                index_scores = index_scores + mask_chunk
+
+            topk_indices.append(index_scores.topk(topk, dim=-1).indices.to(torch.int32))
+
+        return torch.cat(topk_indices, dim=1)  # [B, S, topk]
 
 
 class GlmMoeDsaAttention(DeepseekV3Attention):
@@ -238,10 +252,6 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
         if past_key_values is not None:
             k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
 
-        query_states = torch.cat((q_pass, q_rot), dim=-1)
-
-        key_states, value_states = self.expand_kv(k_pass, k_rot)
-
         # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
         if self.indexer is not None:
             topk_indices = self.indexer(
@@ -257,35 +267,56 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
                 raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
             topk_indices = prev_topk_indices
 
-        sparse_indices = None
-        if self.config._attn_implementation in ("eager", "sdpa"):
-            index_mask = (
-                topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
-                .scatter(-1, topk_indices.long(), False)
-                .unsqueeze(1)
+        eager_or_sdpa = self.config._attn_implementation in ("eager", "sdpa")
+        kv_b_weight = _absorbable_kv_b_weight(self.kv_b_proj) if eager_or_sdpa else None
+        if kv_b_weight is not None:
+            attn_output, attn_weights = sparse_attention_forward(
+                self,
+                q_pass,
+                q_rot,
+                k_pass,
+                k_rot,
+                kv_b_weight,
+                topk_indices,
+                attention_mask,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
             )
-
-            if attention_mask.dtype == torch.bool:
-                attention_mask = attention_mask & ~index_mask
-            else:
-                attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
         else:
-            sparse_indices = topk_indices
+            # Dense path: the latents are expanded into per-head keys / values, and the unselected keys are
+            # masked out (eager / SDPA) or skipped by the kernel itself, which consumes the top-k indices.
+            query_states = torch.cat((q_pass, q_rot), dim=-1)
+            key_states, value_states = self.expand_kv(k_pass, k_rot)
 
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            indices=sparse_indices,  # consumed by flash_mla_with_kvcache; ignored by eager / SDPA
-            **kwargs,
-        )
+            sparse_indices = None
+            if eager_or_sdpa:
+                index_mask = (
+                    topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
+                    .scatter(-1, topk_indices.long(), False)
+                    .unsqueeze(1)
+                )
+
+                if attention_mask.dtype == torch.bool:
+                    attention_mask = attention_mask & ~index_mask
+                else:
+                    attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
+            else:
+                sparse_indices = topk_indices
+
+            attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+                self.config._attn_implementation, eager_attention_forward
+            )
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
+                indices=sparse_indices,  # consumed by flash_mla_with_kvcache; ignored by eager / SDPA
+                **kwargs,
+            )
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)

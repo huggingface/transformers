@@ -191,6 +191,11 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+# Upper bound, in elements, on the fp32 `[B, chunk, H_idx, T]` score tensor the indexer materializes.
+# Queries are scored in chunks along the sequence so peak memory stays bounded at long context.
+_INDEXER_SCORE_BUDGET = 2**29
+
+
 class AXK2Indexer(nn.Module):
     """
     DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens.
@@ -252,7 +257,7 @@ class AXK2Indexer(nn.Module):
 
         Returns:
             `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
-                turn these into an additive sparse mask; the `flash-mla` kernel consumes them directly.
+                attend to exactly those tokens; the `flash-mla` kernel consumes them directly.
         """
         batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings
@@ -271,21 +276,32 @@ class AXK2Indexer(nn.Module):
         if past_key_values is not None:
             k = past_key_values.update_indexer(k, self.layer_idx)
 
-        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
-        scores = F.relu(scores)
-
-        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
+        # Queries are scored in chunks along the sequence so that the fp32 `[B, chunk, H, T]` score tensor
+        # stays under `_INDEXER_SCORE_BUDGET` elements. Each query's top-k only depends on its own scores,
+        # so chunking is exact — a single chunk reproduces the unchunked computation.
         weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
-        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+        topk = min(self.index_topk, k.shape[-2])
+        chunk = max(1, min(seq_len, _INDEXER_SCORE_BUDGET // (batch_size * self.n_heads * k.shape[-2])))
 
-        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask.dtype == torch.bool:
-            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
-        else:
-            index_scores = index_scores + attention_mask
+        topk_indices = []
+        for start in range(0, seq_len, chunk):
+            q_chunk = q[:, start : start + chunk].float()
+            scores = torch.matmul(q_chunk, k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
+            scores = F.relu(scores)
 
-        topk = min(self.index_topk, index_scores.shape[-1])
-        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
+            # Weight per head and sum across heads: [B, chunk, 1, H] @ [B, chunk, H, T] → [B, chunk, T]
+            index_scores = torch.matmul(weights[:, start : start + chunk].unsqueeze(-2), scores).squeeze(-2)
+
+            # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
+            mask_chunk = attention_mask[:, start : start + chunk]
+            if attention_mask.dtype == torch.bool:
+                index_scores = index_scores.masked_fill(~mask_chunk, float("-inf"))
+            else:
+                index_scores = index_scores + mask_chunk
+
+            topk_indices.append(index_scores.topk(topk, dim=-1).indices.to(torch.int32))
+
+        return torch.cat(topk_indices, dim=1)  # [B, S, topk]
 
 
 class AXK2TopkRouter(nn.Module):
@@ -513,7 +529,7 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
 
 class AXK2Attention(nn.Module):
     """
-    DeepSeek-V3 MLA, with a DSA indexer whose top-k sparse mask is folded into the attention mask.
+    DeepSeek-V3 MLA, with a DSA indexer selecting the tokens each query attends to.
     Qlora rank formulation is dropped as it is never used in released models.
     """
 

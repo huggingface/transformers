@@ -2704,6 +2704,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         self.assertTrue(vocab_diff in [0, 1])
         self.assertListEqual([vocab_size - score.shape[-1] for score in logits], [vocab_diff] * len(logits))
 
+    def _get_attention_kv_length(self, config, kv_length):
+        # The last axis of the returned attention probabilities; models scoring a subset of the keys override it
+        return kv_length
+
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
@@ -2745,7 +2749,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 batch_size,
                 config.num_attention_heads,
                 model_input_length,
-                query_length,
+                self._get_attention_kv_length(config, query_length),
             )
             # check attn size
             self.assertListEqual(
