@@ -160,12 +160,15 @@ class AudioProcessingMixin(PreprocessingMixin):
         "power": "spectrogram_config.stft_config.power",
         "center": "spectrogram_config.stft_config.center",
         "pad_mode": "spectrogram_config.stft_config.pad_mode",
-        # `feature_size` is the mel count for the 17 spectrogram FEs that persisted it. The
-        # guard skips the raw-audio models whose configs also carry it (always as `1`); the
-        # three that produce mels *and* saved `feature_size=1` keep the count in
-        # `num_mel_bins` and opt out with `"feature_size": None`.
-        "feature_size": "spectrogram_config.mel_scale_config.n_mels",
+        # Both legacy spellings carry the mel count, and a config often has *both*. Mapping is
+        # first-writer-wins, so the order here decides which one lands: `num_mel_bins` is the
+        # unambiguous name and goes first. `feature_size` is the fallback, and is ambiguous — for
+        # raw-audio models it is always `1` (the guard skips those, since they declare no
+        # `spectrogram_config`), and for a model that post-processes its mels it is the *output*
+        # width rather than the filter count. Ordering it second means a config carrying both is
+        # read correctly without every such model needing its own `"feature_size": None`.
         "num_mel_bins": "spectrogram_config.mel_scale_config.n_mels",
+        "feature_size": "spectrogram_config.mel_scale_config.n_mels",
         "f_min": "spectrogram_config.mel_scale_config.f_min",
         "f_max": "spectrogram_config.mel_scale_config.f_max",
         "min_frequency": "spectrogram_config.mel_scale_config.f_min",
