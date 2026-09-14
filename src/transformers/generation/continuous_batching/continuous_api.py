@@ -436,6 +436,9 @@ class ContinuousBatchProcessor:
         # Pause window: if any thread of the TP group asked for a pause, all ranks wait here until their own threads
         # are done pausing. Thanks to the barrier (one per rank), all ranks leave the pause at the same time.
         if pause_requested:
+            # Wait for the work on the compute stream to be done before pausing
+            if self.inputs_and_outputs.compute_stream is not None:
+                self.inputs_and_outputs.compute_stream.synchronize()
             self.background_thread_status.pause_and_wait()
             if self.distributed_helper.cpu_comm_group is not None:
                 timeout = self.cb_config.cpu_group_timeout
@@ -882,21 +885,11 @@ class ContinuousBatchingManager:
 
     @contextmanager
     def pause(self):
-        """A context manager that pauses the generation loop so the calling thread can use the model, typically to
-        update it in place. The thread only enters this context once the loop is parked, and the loop resumes on exit,
+        """A context manager that pauses the generation loop, so the calling thread can use the model, typically to
+        update it in place. The thread only enters this context once the loop is paused, and the loop resumes on exit,
         keeping its cache and its in-flight requests: nothing is drained and no request is lost.
-
-        Several threads may hold the pause at the same time, and the loop resumes once the last one leaves. This does
-        not make them exclusive of each other, it only keeps the generation loop out of their way.
-
-        If TP is on, all ranks must enter this context, otherwise other ranks will hang forever: the pause is
-        MAX-reduced over the TP group, so every rank parks as soon as any rank asks, and each parked loop then waits
-        for its own threads.
-
-        Raises:
-            RuntimeError: if the generation loop is not running, or if it stops or dies before it can pause. In the
-                latter case the error that killed it is chained as `__cause__`, and the rank raises right away rather
-                than waiting for its peers: they unblock when `cpu_group_timeout` fires.
+        Several threads may hold the pause at the same time, and the loop resumes once the last one leaves.
+        If TP is on, all ranks must enter this context, otherwise other ranks will hang forever.
         """
         # Error out if the caller asks for a pause while no generation loop is running
         if not self.is_running():
@@ -1212,17 +1205,17 @@ class ContinuousBatchingManager:
 
     def _handle_critical_error(self, error: Exception, batch_processor: ContinuousBatchProcessor | None) -> None:
         """Handle critical errors that terminate the generation loop."""
-        # Request a hard stop
+        # Request a hard stop., only on this rank. Other ranks will be notified at the comm
         self.background_thread_status.request_stop(
             status=BackgroundThreadStatus.HARD_STOP, global_rank=self.distributed_helper.global_rank
         )
-        # Communicate to other processes in the TP group that the group is stopping (they could have not crashed)
-        # Since the other processes need to reach the collective, it may take a few seconds to complete.
-        self.distributed_helper.tp_all_reduce_state(0, BackgroundThreadStatus.HARD_STOP)
         # Fail all remaining requests
         self._fail_all_remaining_requests(error, batch_processor)
         # After failing the remaining requests (and so retrieving their partial outputs), record the fatal error
         self.background_thread_status.record_fatal_error(error)
+        # Communicate to other ranks in the TP group that the group is stopping (they could have not crashed)
+        # Since the other processes need to reach the collective, it may take a few seconds to complete.
+        self.distributed_helper.tp_all_reduce_state(0, BackgroundThreadStatus.HARD_STOP)
 
     def _fail_all_remaining_requests(self, error: Exception, batch_processor: ContinuousBatchProcessor | None) -> None:
         """Fail all remaining requests in the input queue and active requests."""

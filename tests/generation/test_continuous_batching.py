@@ -803,7 +803,7 @@ class ContinuousBatchingPauseTest(unittest.TestCase):
         def generation_loop() -> None:
             """Simulates a loop that was paused by a thread on another rank."""
             try:
-                self.assertFalse(status.is_pause_requested()) # should be false because this rank did not pause
+                self.assertFalse(status.is_pause_requested())  # should be false because this rank did not pause
                 status.pause_and_wait()  # enters the pause on behalf of the other rank
                 resumed.set()  # signals that the pause ended
             finally:
@@ -819,7 +819,7 @@ class ContinuousBatchingPauseTest(unittest.TestCase):
         with manager.pause():
             entered.append(True)
             self.assertFalse(resumed.is_set(), "the loop resumed while the pause was held")
-        loop_thread.join(timeout=3) # should leave enough for the loop to resume
+        loop_thread.join(timeout=3)  # should leave enough for the loop to resume
 
         self.assertEqual(entered, [True], "the thread did not enter the already paused loop")
         self.assertTrue(resumed.is_set(), "the loop did not resume after the pause was released")
