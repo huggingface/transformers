@@ -25,6 +25,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    backend_device_count,
     cleanup,
     require_flash_attn,
     require_torch,
@@ -298,8 +299,26 @@ class Glm4vMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.offload_dir = tempfile.TemporaryDirectory()
+            # device_map="auto" fills GPUs to ~100%, leaving no room for the ~1.4 GiB
+            # MergeModulelist temporary buffer that fuses per-expert weight shards into
+            # a single gate_up_proj tensor during from_pretrained — causing CUDA OOM on
+            # multi-GPU runners. A 70% per-GPU max_memory cap reserves the headroom.
+            n = backend_device_count(torch_device)
+            if n > 0 and torch_device != "cpu":
+                torch_accel = getattr(torch, torch_device)
+                per_device = int(
+                    min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3
+                )
+                max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+                max_memory["cpu"] = "60GiB"
+            else:
+                max_memory = None
             cls.model = Glm4vMoeForConditionalGeneration.from_pretrained(
-                "zai-org/GLM-4.5V", dtype="auto", device_map="auto", offload_folder=cls.offload_dir.name
+                "zai-org/GLM-4.5V",
+                dtype="auto",
+                device_map="auto",
+                max_memory=max_memory,
+                offload_folder=cls.offload_dir.name,
             )
         return cls.model
 
