@@ -1070,7 +1070,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MllamaVisionModel
 
@@ -1260,7 +1260,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, LlavaForConditionalGeneration
 

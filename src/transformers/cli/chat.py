@@ -22,11 +22,11 @@ from collections.abc import AsyncIterator, Awaitable
 from typing import Annotated, Any
 from urllib.parse import urljoin, urlparse, urlunparse
 
-import httpx
 import requests
 import typer
 import yaml
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
+from huggingface_hub.utils import httpx
 
 from transformers import GenerationConfig
 from transformers.utils import is_rich_available

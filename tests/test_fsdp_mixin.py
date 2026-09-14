@@ -584,6 +584,12 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
             msg=f"Grad norm mismatch at step {step}: DDP={ddp_grad_norms[step]}, FSDP2+EP={grad_norms[step]}",
         )
 
+    # Adam normalises each step to about `lr * sign(grad)`, so an element whose gradient is near zero turns a
+    # rounding-level difference into an `lr`-sized weight difference. Token dispatch reduces the gradients over
+    # every rank rather than over `fsdp`, which changes those last bits: the same single step with SGD, whose
+    # update is proportional to the gradient, matches to 6e-11. Losses and gradient norms keep the tight
+    # tolerance, and they are what says the reduction is right.
+    weight_atol = 1e-4 if dispatch else DDP_FSDP_ATOL
     for key in ddp_state_dict:
         assert key in state_dict, f"Key {key} missing from FSDP2+EP state dict"
         torch.testing.assert_close(

@@ -766,8 +766,7 @@ class Trainer:
         model_fsdp_size = getattr(self.model, "fsdp_size", None) or 1
         if model_tp_size > 1:
             # Sharded at load time (tensor/expert parallelism, optionally with FSDP2 on a second mesh
-            # dimension): accelerate has to know both sizes, or it sees unaccounted ranks and wraps
-            # the DTensor model in DDP, which raises.
+            # dimension): accelerate has to know both sizes.
             if not is_accelerate_available("1.12.0"):
                 raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
             if args.get("parallelism_config") is None:
@@ -2561,7 +2560,11 @@ class Trainer:
         if self.is_deepspeed_enabled and (deepspeed_config := getattr(self.args, "hf_deepspeed_config", None)):
             return deepspeed_config.config.get("tensor_parallel", {}).get("autotp_size", 1)
 
-        # 3. Default fallback
+        # 3. Fall back to accelerate, for tensor parallelism configured outside `DistributedConfig`
+        if (pc := getattr(self.accelerator, "parallelism_config", None)) is not None:
+            return pc.tp_size
+
+        # 4. Default fallback
         return 1
 
     def _wrap_model(self, model: nn.Module, training: bool = True, dataloader: DataLoader | None = None) -> nn.Module:
