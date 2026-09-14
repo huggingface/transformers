@@ -21,18 +21,15 @@
 
 from tokenizers.decoders import DecodeStream
 
-from ...audio_utils import AudioInput, make_list_of_audio
+from ...audio_utils import AudioInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, is_torch_available, logging
+from ...utils import auto_docstring, is_torch_available
 from ...utils.import_utils import requires
 
 
 if is_torch_available():
     import torch
-
-
-logger = logging.get_logger(__name__)
 
 
 class Nemotron3_5AsrProcessorKwargs(ProcessingKwargs, total=False):
@@ -41,7 +38,6 @@ class Nemotron3_5AsrProcessorKwargs(ProcessingKwargs, total=False):
             "sampling_rate": 16000,
             "padding": "longest",
             "return_padding_mask": True,
-            "subsampling_factor": 8,
         },
         "text_kwargs": {
             "padding": True,
@@ -185,6 +181,10 @@ DEFAULT_PROMPT_DICTIONARY = {
 @requires(backends=("torch",))
 @auto_docstring
 class Nemotron3_5AsrProcessor(ProcessorMixin):
+    valid_processor_kwargs = Nemotron3_5AsrProcessorKwargs
+    # `num_lookahead_tokens` is a forward argument, not a feature: keep it an `int`.
+    skip_tensor_conversion = [*ProcessorMixin.skip_tensor_conversion, "num_lookahead_tokens"]
+
     def __init__(
         self,
         audio_processor,
@@ -195,6 +195,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
         default_num_lookahead_tokens=None,
         prompt_dictionary=None,
         num_prompts=128,
+        subsampling_factor=8,
     ):
         r"""
         blank_token (`str`, *optional*, defaults to `"<blank>"`):
@@ -215,6 +216,9 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
         num_prompts (`int`, *optional*, defaults to 128):
             Number of language-prompt slots (size of the one-hot prompt vector), mirroring
             `Nemotron3_5AsrConfig.num_prompts`.
+        subsampling_factor (`int`, *optional*, defaults to 8):
+            The encoder's subsampling factor, i.e. how many mel frames one encoder frame spans. Sizes the
+            streaming chunks and turns frame indices into timestamps.
         """
         self.prompt_dictionary = prompt_dictionary if prompt_dictionary is not None else DEFAULT_PROMPT_DICTIONARY
         self.num_prompts = num_prompts
@@ -230,6 +234,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
         )
         self.blank_token = blank_token
         self.blank_token_id = tokenizer.convert_tokens_to_ids(blank_token)
+        self.subsampling_factor = subsampling_factor
         super().__init__(audio_processor, tokenizer)
 
     @auto_docstring
@@ -237,22 +242,18 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
         self,
         audio: AudioInput,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        sampling_rate: int | None = None,
         is_streaming: bool = False,
         is_first_audio_chunk: bool | None = True,
         language: str | list[str] = "auto",
         **kwargs: Unpack[Nemotron3_5AsrProcessorKwargs],
     ):
         r"""
-        sampling_rate (`int`, *optional*):
-            The sampling rate of the input audio in Hz. Validated against the feature extractor's
-            expected sampling rate (defaults to 16000 Hz) when provided.
         is_streaming (`bool`, *optional*, defaults to `False`):
             Whether to process audio in streaming mode (chunked), using `is_first_audio_chunk` to
             distinguish the first chunk from subsequent ones.
         is_first_audio_chunk (`bool`, *optional*, defaults to `True`):
             Whether the current audio is the first chunk of a streaming session. Controls `center` in the
-            feature extractor so per-chunk STFT reproduces a single full-utterance pass. Must be `True`
+            audio processor so the per-chunk STFT reproduces a single full-utterance pass. Must be `True`
             when `is_streaming=False`.
         language (`str` or `list[str]`, *optional*, defaults to `"auto"`):
             Target language(s) for prompt conditioning. Either a
@@ -267,47 +268,26 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
               to the model/`generate`; the model turns it into the broadcast one-hot used by
               `prompt_projector`.
         """
-        if not is_streaming and not is_first_audio_chunk:
-            raise ValueError("In non-streaming mode (`is_streaming=False`), `is_first_audio_chunk` must be `True`.")
+        self.validate_streaming_chunk(is_streaming, is_first_audio_chunk)
+        inputs = super().__call__(audio=audio, text=text, center=bool(is_first_audio_chunk), **kwargs)
+        inputs["prompt_ids"] = self._resolve_prompt_ids(language, len(inputs["audio_features"]))
+        return inputs
 
-        audio = make_list_of_audio(audio)
+    def _process_audio(self, audio: AudioInput, **kwargs):
+        processed_audio, audio_replacements = super()._process_audio(audio, **kwargs)
+        processed_audio["num_lookahead_tokens"] = self.default_num_lookahead_tokens
+        return processed_audio, audio_replacements
 
-        output_kwargs = self._merge_kwargs(
-            Nemotron3_5AsrProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        if sampling_rate is None:
-            logger.warning_once(
-                f"You've provided audio without specifying the sampling rate. It will be assumed to be "
-                f"{output_kwargs['audio_kwargs']['sampling_rate']}, which can result in silent errors."
-            )
-        else:
-            # Forward the caller's assertion; the audio processor resamples if it differs from its own rate.
-            output_kwargs["audio_kwargs"]["sampling_rate"] = sampling_rate
-
-        if audio is not None:
-            # `center=True` for the first/offline chunk, `center=False` for subsequent streaming chunks.
-            inputs = self.audio_processor(audio, center=bool(is_first_audio_chunk), **output_kwargs["audio_kwargs"])
-        if text is not None:
-            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
-        inputs["num_lookahead_tokens"] = self.default_num_lookahead_tokens
-        inputs["prompt_ids"] = self._resolve_prompt_ids(language, len(audio))
-
-        if text is None:
-            return inputs
-
-        inputs["labels"] = encodings["input_ids"]
-        # Prepend the blank token to labels to form decoder_input_ids: the RNN-T decoder expects
-        # [blank, label_0, ..., label_{U-1}] as input.
+    def _encode_text(self, text, **kwargs) -> dict:
+        # Text is a transcription target: it becomes `labels`, and the RNN-T decoder expects
+        # [blank, label_0, ..., label_{U-1}] as its own input.
         if isinstance(text, str):
             text = [text]
-        decoder_text = [self.blank_token + t for t in text]
-        decoder_encodings = self.tokenizer(decoder_text, **output_kwargs["text_kwargs"])
-        inputs["decoder_input_ids"] = decoder_encodings["input_ids"]
-        return inputs
+        decoder_text = [self.blank_token + text_el for text_el in text]
+        return {
+            "labels": self.tokenizer(text, **kwargs)["input_ids"],
+            "decoder_input_ids": self.tokenizer(decoder_text, **kwargs)["input_ids"],
+        }
 
     @property
     def model_input_names(self):
@@ -333,15 +313,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
             # Derive per-step frame indices from cumulative sum of durations.
             timestamps = durations.cumsum(dim=-1) - durations
 
-            output_kwargs = self._merge_kwargs(
-                Nemotron3_5AsrProcessorKwargs,
-                tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            )
-            frame_rate = (
-                self.audio_processor.hop_length
-                / self.audio_processor.sampling_rate
-                * output_kwargs["audio_kwargs"]["subsampling_factor"]
-            )
+            frame_rate = self.audio_processor.hop_length / self.audio_processor.sampling_rate * self.subsampling_factor
             # Filter padding/blank tokens and decode per sequence to keep track of token-level timestamps
             # See `compute_rnnt_timestamps` in NeMo:
             # https://github.com/NVIDIA-NeMo/NeMo/blob/1692a8fb97e1aadc883cfadd2a57c4e8a1b793aa/nemo/collections/asr/parts/submodules/rnnt_decoding.py#L993
@@ -398,16 +370,9 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
         self.default_num_lookahead_tokens = num_lookahead_tokens
 
     @property
-    def _subsampling_factor(self) -> int:
-        output_kwargs = self._merge_kwargs(
-            Nemotron3_5AsrProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs
-        )
-        return output_kwargs["audio_kwargs"]["subsampling_factor"]
-
-    @property
     def _encoder_frame_ms(self) -> float:
         """Duration in milliseconds of one subsampled encoder frame (`subsampling_factor * hop_length / sampling_rate`)."""
-        return self._subsampling_factor * self.audio_processor.hop_length / self.audio_processor.sampling_rate * 1000
+        return self.subsampling_factor * self.audio_processor.hop_length / self.audio_processor.sampling_rate * 1000
 
     @property
     def streaming_latency_ms(self) -> int:
@@ -435,7 +400,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
         Number of mel frames the first cache-aware streaming chunk must carry, for the model's
         `default_num_lookahead_tokens`: `1 + subsampling_factor * num_lookahead_tokens`.
         """
-        return 1 + self._subsampling_factor * self.default_num_lookahead_tokens
+        return 1 + self.subsampling_factor * self.default_num_lookahead_tokens
 
     @property
     def num_mel_frames_per_audio_chunk(self) -> int:
@@ -443,7 +408,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
         Number of mel frames each subsequent cache-aware streaming chunk must carry, for the model's
         `default_num_lookahead_tokens`: `subsampling_factor * (num_lookahead_tokens + 1)`.
         """
-        return self._subsampling_factor * (self.default_num_lookahead_tokens + 1)
+        return self.subsampling_factor * (self.default_num_lookahead_tokens + 1)
 
     @property
     def num_samples_first_audio_chunk(self) -> int:

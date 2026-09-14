@@ -581,7 +581,7 @@ class PPDocLayoutV2ModelIntegrationTest(unittest.TestCase):
         self.model = PPDocLayoutV2ForObjectDetection.from_pretrained(model_path).to(torch_device)
         self.image_processor = PPDocLayoutV2ImageProcessor.from_pretrained(model_path)
         img_url = url_to_local_path(
-            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_layout_demo.jpg"
         )
         self.image = load_image(img_url)
 
@@ -596,25 +596,21 @@ class PPDocLayoutV2ModelIntegrationTest(unittest.TestCase):
 
         expected_shape_logits = torch.Size((1, 300, self.model.config.num_labels))
         expected_logits = torch.tensor(
-            [[-3.6572, -4.4185, -4.3930], [-3.7213, -4.5011, -4.6771], [-3.8721, -4.4524, -4.4162]]
+            [[-4.6888, -4.0497, -4.5854], [-4.9177, -3.628, -4.9805], [-4.5637, -3.6381, -4.6998]]
         ).to(torch_device)
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=2e-2, atol=2e-2)
 
         expected_shape_boxes = torch.Size((1, 300, 4))
         expected_boxes = torch.tensor(
-            [[0.3709, 0.4911, 0.3358], [0.7263, 0.4419, 0.3394], [0.3724, 0.1793, 0.3392]]
+            [[0.3299, 0.2403, 0.408], [0.6544, 0.7772, 0.2563], [0.3309, 0.2023, 0.4104]]
         ).to(torch_device)
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
         torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=2e-2, atol=2e-2)
 
         expected_shape_order_logits = torch.Size((1, 300, 300))
         expected_order_logits = torch.tensor(
-            [
-                [-10000.0000, 43.8388, -32.8785],
-                [-10000.0000, -10000.0000, -63.9118],
-                [-10000.0000, -10000.0000, -10000.0000],
-            ]
+            [[-10000.0, 73.0009, -37.7191], [-10000.0, -10000.0, -76.1782], [-10000.0, -10000.0, -10000.0]]
         ).to(torch_device)
         self.assertEqual(outputs.order_logits.shape, expected_shape_order_logits)
         torch.testing.assert_close(outputs.order_logits[0, :3, :3], expected_order_logits, rtol=2e-2, atol=2e-2)
@@ -624,35 +620,20 @@ class PPDocLayoutV2ModelIntegrationTest(unittest.TestCase):
             outputs, threshold=0.5, target_sizes=[self.image.size[::-1]]
         )[0]
 
-        expected_scores = torch.tensor(
-            [
-                0.9878,
-                0.9675,
-                0.9882,
-                0.9852,
-                0.9828,
-                0.9843,
-                0.9700,
-                0.8182,
-                0.5148,
-                0.8273,
-                0.8718,
-                0.9494,
-                0.8733,
-                0.9266,
-            ]
-        ).to(torch_device)
+        expected_scores = torch.tensor([0.6741, 0.9360, 0.9324, 0.9269, 0.9461, 0.9367, 0.9155, 0.9119]).to(
+            torch_device
+        )
         torch.testing.assert_close(results["scores"], expected_scores, rtol=2e-2, atol=2e-2)
 
-        expected_labels = [22, 17, 22, 22, 22, 22, 22, 10, 22, 10, 22, 10, 16, 8]
+        expected_labels = [6, 22, 22, 22, 21, 22, 22, 22]
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
 
         expected_slice_boxes = torch.tensor(
             [
-                [335.3923, 184.2622, 896.4918, 654.4847],
-                [337.1364, 683.4911, 869.4224, 798.2716],
-                [335.7133, 843.0425, 891.1711, 1454.1525],
-                [920.4213, 185.5302, 1476.3922, 464.2497],
+                [115.5772, 126.9838, 871.1675, 188.2383],
+                [113.1930, 221.4636, 482.5090, 263.9412],
+                [113.2962, 267.2744, 480.5345, 309.3500],
+                [113.7253, 312.9062, 362.0050, 354.7045],
             ]
         ).to(torch_device)
         torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, rtol=2e-2, atol=2e-2)
