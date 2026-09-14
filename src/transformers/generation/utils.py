@@ -654,6 +654,7 @@ class GenerationMixin(ContinuousMixin):
         attention_mask: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         is_first_iteration: bool | None = False,
+        inputs_are_padded: bool = True,
         **kwargs,
     ):
         """
@@ -729,7 +730,7 @@ class GenerationMixin(ContinuousMixin):
                 is_first_iteration=is_first_iteration,
             )
 
-        if attention_mask is not None:
+        if attention_mask is not None and inputs_are_padded:
             model_inputs[attention_mask_key] = attention_mask
 
         if encoder_attention_mask is not None:
@@ -1117,13 +1118,9 @@ class GenerationMixin(ContinuousMixin):
         # 2D attention mask (always 2D here)
         attention_mask_key = "attention_mask" if not is_encoder_decoder else "decoder_attention_mask"
         if (attention_mask := model_kwargs.get(attention_mask_key)) is not None:
-            extended_attention_mask = torch.cat(
+            model_kwargs[attention_mask_key] = torch.cat(
                 [attention_mask, attention_mask.new_ones((attention_mask.shape[0], num_new_tokens))], dim=-1
             )
-            # The tokens just added are not padding, so the longer mask has padding only if the shorter one did.
-            # `cat` hands back a new tensor, so the answer is carried over by hand (`generate` works it out once)
-            extended_attention_mask._has_padding = getattr(attention_mask, "_has_padding", True)
-            model_kwargs[attention_mask_key] = extended_attention_mask
 
         return model_kwargs
 
@@ -2731,13 +2728,6 @@ class GenerationMixin(ContinuousMixin):
             **model_kwargs,
         )
 
-        # sdpa can ignore a mask with no padding in it and rely on `is_causal` instead, but `_ignore_causal_mask_sdpa`
-        # works out whether there is any on every forward: it reduces the mask on the accelerator and reads the result
-        # back on the host, which stops the CPU from running ahead of the device. Decoding only ever appends ones, so
-        # padding can only come from the prompt: the answer is settled here, once, and carried on the mask itself.
-        if not self.config.is_encoder_decoder and (attention_mask := model_kwargs.get("attention_mask")) is not None:
-            attention_mask._has_padding = is_tracing(attention_mask) or not bool(fast_all(attention_mask))
-
         if generation_config.token_healing:
             input_ids = self.heal_tokens(input_ids, generation_mode_kwargs.get("tokenizer"))
 
@@ -2776,6 +2766,20 @@ class GenerationMixin(ContinuousMixin):
             max_cache_length += inputs_tensor.shape[1]
         self._prepare_cache_for_generation(
             generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
+        )
+
+        # Decoding only ever appends ones to the mask, so padding can only come from the prompt: whether the inputs
+        # are padded is settled here, once, for the whole generation. `prepare_inputs_for_generation` is what uses it.
+        # A compiled forward keeps its mask: `_ignore_causal_mask_sdpa` bails out while tracing, so there is no
+        # per-step read to save there, and leaving the mask out would make its type depend on the data and cost a
+        # recompile. This has to come after the cache exists, which is what decides whether we compile at all.
+        attention_mask = model_kwargs.get("attention_mask")
+        generation_config._inputs_are_padded = (
+            self.config.is_encoder_decoder
+            or attention_mask is None
+            or is_tracing(attention_mask)
+            or self._valid_auto_compile_criteria(model_kwargs, generation_config)
+            or not bool(fast_all(attention_mask))
         )
 
         if self.device.type != input_ids.device.type:
@@ -3037,7 +3041,10 @@ class GenerationMixin(ContinuousMixin):
                 if prefill_consumed:
                     next_sequence_length = 1 if model_kwargs["use_cache"] else None
                     model_inputs = self.prepare_inputs_for_generation(
-                        input_ids, next_sequence_length=next_sequence_length, **model_kwargs
+                        input_ids,
+                        next_sequence_length=next_sequence_length,
+                        inputs_are_padded=generation_config._inputs_are_padded,
+                        **model_kwargs,
                     )
                     outputs = model_forward(**model_inputs, return_dict=True)
                 prefill_consumed = True
@@ -3539,7 +3546,10 @@ class GenerationMixin(ContinuousMixin):
                 flat_running_sequences = self._flatten_beam_dim(running_sequences[:, :, :cur_len])
                 next_sequence_length = 1 if model_kwargs["use_cache"] else None
                 model_inputs = self.prepare_inputs_for_generation(
-                    flat_running_sequences, next_sequence_length=next_sequence_length, **model_kwargs
+                    flat_running_sequences,
+                    next_sequence_length=next_sequence_length,
+                    inputs_are_padded=generation_config._inputs_are_padded,
+                    **model_kwargs,
                 )
                 model_outputs = self(**model_inputs, return_dict=True)
             prefill_consumed = True
@@ -3887,6 +3897,7 @@ class GenerationMixin(ContinuousMixin):
                 candidate_input_ids,
                 next_sequence_length=next_sequence_length,
                 is_first_iteration=is_first_iteration,
+                inputs_are_padded=generation_config._inputs_are_padded,
                 **candidate_kwargs,
             )
 
@@ -4116,6 +4127,7 @@ class GenerationMixin(ContinuousMixin):
                 input_ids,
                 next_sequence_length=next_sequence_length,
                 is_first_iteration=is_first_iteration,
+                inputs_are_padded=generation_config._inputs_are_padded,
                 **model_kwargs,
             )
             return self(**model_inputs, return_dict=True)
@@ -4147,7 +4159,9 @@ class GenerationMixin(ContinuousMixin):
                     model_kwargs["attention_mask"] = attention_mask[:, :current_length]
                 if position_ids is not None:
                     model_kwargs["position_ids"] = position_ids[:, past_length:current_length]
-                model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
+                model_inputs = self.prepare_inputs_for_generation(
+                    input_chunk, inputs_are_padded=generation_config._inputs_are_padded, **model_kwargs
+                )
 
                 outputs = model_forward(**model_inputs, return_dict=True)
 
