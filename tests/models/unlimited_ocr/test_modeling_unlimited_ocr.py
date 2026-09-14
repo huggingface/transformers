@@ -282,17 +282,6 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
             for layer in reference_layers:
                 self.assertEqual(layer.prefill_length, prompt_length)
 
-    def test_generate_without_sliding_window(self):
-        """With `sliding_window=None` every layer is a full attention layer."""
-        model_tester = self.model_tester_class(self, sliding_window=None)
-        config, inputs_dict = model_tester.prepare_config_and_inputs_for_common()
-        self.assertEqual(config.text_config.layer_types, ["full_attention"] * config.text_config.num_hidden_layers)
-
-        for model_class in self.all_generative_model_classes:
-            model = model_class(config).to(torch_device).eval()
-            out = model.generate(**inputs_dict, max_new_tokens=3, do_sample=False, return_dict_in_generate=True)
-            self.assertTrue(all(not layer.is_sliding for layer in out.past_key_values.layers))
-
 
 @require_torch
 class UnlimitedOcrIntegrationTest(unittest.TestCase):
@@ -331,6 +320,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         inputs = self.processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
         ).to(model.device)
+        # The reference implementation uses autocast: https://huggingface.co/baidu/Unlimited-OCR/blob/main/modeling_unlimitedocr.py#L1042
         with torch.autocast(device_type=torch_device, dtype=torch.bfloat16):
             generate_ids = model.generate(
                 **inputs,
@@ -341,6 +331,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 ("cuda", 9): "image [383, 88, 497, 175]\ntitle [333",
+                ("cuda", 8): "image [383, 88, 497, 171]\ntitle [333",
                 ("cpu", None): "image [383, 87, 497, 171]\ntitle [333",
             }
         ).get_expectation()  # fmt: skip
@@ -373,6 +364,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 ("cuda", 9): "<|det|>image [383, 88, 497, 175]<|/det|>\n<|det|>title [333",
+                ("cuda", 8): "<|det|>image [383, 88, 497, 171]<|/det|>\n<|det|>title [333",
                 ("cpu", None): "<|det|>image [383, 87, 497, 171]<|/det|>\n<|det|>title [333",
             }
         ).get_expectation()  # fmt: skip
@@ -381,6 +373,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         EXPECTED_DETECTIONS = Expectations(
             {
                 ("cuda", 9): [{"region_type": "image", "box": [383, 88, 497, 175], "text": "\n"}],
+                ("cuda", 8): [{"region_type": "image", "box": [383, 88, 497, 171], "text": "\n"}],
                 ("cpu", None): [{"region_type": "image", "box": [383, 87, 497, 171], "text": "\n"}],
             }
         ).get_expectation()  # fmt: skip
@@ -425,6 +418,10 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
             {
                 ("cuda", 9): [
                     "image [383, 88, 497, 174]\ntitle [333",
+                    "header [53, 23, 365, 41]Advanced Template and Styl",
+                ],
+                ("cuda", 8): [
+                    "image [383, 87, 497, 171]\ntitle [333",
                     "header [53, 23, 365, 41]Advanced Template and Styl",
                 ],
                 ("cpu", None): [
@@ -472,6 +469,7 @@ class UnlimitedOcrIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 ("cuda", 9): "<PAGE>image [382, 87, 489, 180]\n",
+                ("cuda", 8): "<PAGE>image [382, 87, 489, 174]\n",
                 ("cpu", None): "<PAGE>image [382, 87, 489, 174]\n",
             }
         ).get_expectation()

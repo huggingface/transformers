@@ -42,6 +42,13 @@ The text model is identical to DeepSeek-OCR-2 with the additional Reference Slid
 This model was contributed by [guarin](https://huggingface.co/guarin).
 The original code can be found [here](https://github.com/baidu/Unlimited-OCR).
 
+> [!TIP]
+> The original implementation runs the model with [torch.autocast](https://pytorch.org/docs/stable/amp.html#torch.autocast) in bfloat16. Wrap the forward and generate calls in an autocast context to reproduce its outputs.
+>
+> ```python
+> with torch.autocast(device_type=model.device.type, dtype=torch.bfloat16):
+>     output = model.generate(**inputs)
+> ```
 
 <hfoptions id="usage">
 <hfoption id="Single-page OCR">
@@ -61,7 +68,7 @@ messages = [
 ]
 inputs = processor.apply_chat_template(
     messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
-).to(model.device)
+).to(model.device, model.dtype)
 
 output = model.generate(**inputs, max_new_tokens=512)
 processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
@@ -98,7 +105,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     processor_kwargs={"padding": True},
-).to(model.device)
+).to(model.device, model.dtype)
 
 output = model.generate(**inputs)
 processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
@@ -126,7 +133,7 @@ messages = [
 ]
 inputs = processor.apply_chat_template(
     messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
-).to(model.device)
+).to(model.device, model.dtype)
 
 output = model.generate(**inputs)
 decoded, detections = processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=False, return_detections=True)
@@ -185,7 +192,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     processor_kwargs={"crop_to_patches": False},
-).to(model.device)
+).to(model.device, model.dtype)
 
 output = model.generate(
     **inputs,

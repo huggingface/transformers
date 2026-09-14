@@ -37,7 +37,7 @@ class UnlimitedOcrProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class UnlimitedOcrProcessor(ProcessorMixin):
     valid_processor_kwargs = UnlimitedOcrProcessorKwargs
-    skip_tensor_conversion = [*ProcessorMixin.skip_tensor_conversion, "num_local_patches", "patches_grid"]
+    skip_tensor_conversion = ["video_metadata", "text_replacement_offsets", "num_local_patches", "patches_grid"]
 
     def __init__(
         self,

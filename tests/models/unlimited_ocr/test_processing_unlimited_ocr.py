@@ -33,9 +33,9 @@ class UnlimitedOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     # Defaults from mixin are too small as a single image expands to 273 image tokens
     # for this checkpoint (size=1024)
-    image_text_kwargs_max_length = 320
-    image_text_kwargs_override_max_length = 310
-    image_unstructured_max_length = 300
+    images_text_kwargs_max_length = 320
+    images_text_kwargs_override_max_length = 310
+    images_unstructured_max_length = 300
 
     def get_messages(self, image):
         return [

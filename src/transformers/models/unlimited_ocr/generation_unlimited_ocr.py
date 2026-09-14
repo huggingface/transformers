@@ -50,8 +50,13 @@ class UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor(NoRepeatNGramLogitsP
 
 
 class UnlimitedOcrGenerationMixin(GenerationMixin):
-    r"""
-    Adds support for the `no_repeat_ngram_window_size` generation option. If set together with `no_repeat_ngram_size`,
+    r"""Adds support for reference sliding window attention (R-SWA) cache prefill handling and the corresponding
+    sliding window logits processor.
+
+    The cache combines a fixed prefill with a sliding window cache. The mixin tracks when prefill is completed
+    and marks that region of the cache as fixed.
+
+    Adds the `no_repeat_ngram_window_size` generation option. If set together with `no_repeat_ngram_size`,
     n-gram repetitions are blocked only within this many trailing tokens instead of over the whole sequence.
     """
 

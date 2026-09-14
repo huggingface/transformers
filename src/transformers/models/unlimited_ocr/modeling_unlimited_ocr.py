@@ -941,7 +941,7 @@ class UnlimitedOcrVisionModel(UnlimitedOcrPreTrainedModel):
         >>> image_processor = AutoImageProcessor.from_pretrained(model_id)
 
         >>> image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_suggestion_form.jpg")
-        >>> inputs = image_processor(images=image, return_tensors="pt").to(model.device)
+        >>> inputs = image_processor(images=image, return_tensors="pt").to(model.device, model.dtype)
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
@@ -1683,6 +1683,7 @@ def create_reference_sliding_window_causal_mask(
     and_mask_function: Callable | None = None,
     block_sequence_ids: torch.Tensor | None = None,
     layer_idx: int | None = None,
+    allow_is_causal_skip: bool = False,
 ) -> torch.Tensor | BlockMask | None:
     layer = None
     if past_key_values is not None:
@@ -1703,6 +1704,9 @@ def create_reference_sliding_window_causal_mask(
         return kv_idx - kv_offset < prefill_length
 
     prefill_mask_function = and_masks(causal_mask_function, prefill_overlay)
+
+    # Workaround in case an or_mask_function is passed as prefill_mask_function
+    # is also an or mask.
     if or_mask_function is not None:
         prefill_mask_function = or_masks(prefill_mask_function, or_mask_function)
 
@@ -1716,6 +1720,7 @@ def create_reference_sliding_window_causal_mask(
         and_mask_function=and_mask_function,
         block_sequence_ids=block_sequence_ids,
         layer_idx=layer_idx,
+        allow_is_causal_skip=allow_is_causal_skip,
     )
 
 
@@ -1777,13 +1782,8 @@ class UnlimitedOcrTextModel(UnlimitedOcrTextPreTrainedModel):
 
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
+                "reference_sliding_attention": create_reference_sliding_window_causal_mask(**mask_kwargs),
             }
-            # CODEPATH: create_sliding_window_causal_mask errors if config.sliding_window is None.
-            # Without the check here a model with full attention crashes.
-            if self.config.sliding_window is not None:
-                causal_mask_mapping["reference_sliding_attention"] = create_reference_sliding_window_causal_mask(
-                    **mask_kwargs
-                )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
@@ -1854,13 +1854,11 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
         """
         batch_size = pixel_values.shape[0]
 
-        pixel_values = pixel_values.to(self.vision_tower.dtype)
         global_vision_outputs = self.vision_tower(pixel_values, **kwargs)
         global_features = self.multi_modal_projector(global_vision_outputs.last_hidden_state)
 
         local_outputs = {}
         if pixel_values_local is not None:
-            pixel_values_local = pixel_values_local.to(self.vision_tower.dtype)
             local_vision_outputs = self.vision_tower(pixel_values_local, **kwargs)
             all_local_features = self.multi_modal_projector(local_vision_outputs.last_hidden_state)
             per_image_local = torch.split(all_local_features, num_local_patches, dim=0)
@@ -1874,10 +1872,11 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
 
         hidden_size = global_features.shape[-1]
         newline = self.image_newline[None, None, :]
-        view_separator = self.view_separator[None, :]
-
-        all_features = []
         num_queries_global = int(global_features.shape[1] ** 0.5)
+
+        # Different from DeepseekOcr2: each row of image patches gets a newline token appended.
+        all_features = []
+        view_separator = self.view_separator.to(global_features.device).unsqueeze(0)
         for idx in range(batch_size):
             global_grid = global_features[idx].reshape(num_queries_global, num_queries_global, hidden_size)
             global_grid = torch.cat([global_grid, newline.expand(num_queries_global, 1, hidden_size)], dim=1)
@@ -1985,6 +1984,8 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
         )
 
 
+# Cannot inherit from XYZForConditionalGeneration as this results in MRO clashes between GenerationMixin
+# and UnlimitedOcrGenerationMixin. Cannot change the inheritance order as this breaks modular generation.
 @auto_docstring
 class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, UnlimitedOcrGenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
@@ -2066,14 +2067,9 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
         ... ]
         >>> inputs = processor.apply_chat_template(
         ...     messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
-        ... ).to(model.device)
+        ... ).to(model.device, model.dtype)
 
-        >>> output = model.generate(
-        ...     **inputs,
-        ...     max_new_tokens=32768,
-        ...     no_repeat_ngram_size=35,
-        ...     no_repeat_ngram_window_size=128,
-        ... )
+        >>> output = model.generate(**inputs)
         >>> processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
         >>> # image [383, 87, 497, 171]\ntext [333, 201, 558, 230]R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM...
         ```
@@ -2103,12 +2099,10 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
         ...     return_dict=True,
         ...     return_tensors="pt",
         ...     processor_kwargs={"crop_to_patches": False},
-        ... ).to(model.device)
+        ... ).to(model.device, model.dtype)
 
         >>> output = model.generate(
         ...     **inputs,
-        ...     max_new_tokens=32768,
-        ...     no_repeat_ngram_size=35,
         ...     no_repeat_ngram_window_size=1024,
         ... )
         >>> processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)

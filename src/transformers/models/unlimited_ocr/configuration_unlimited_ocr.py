@@ -271,6 +271,8 @@ class UnlimitedOcrTextConfig(PreTrainedConfig):
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({self.num_attention_heads})."
             )
+        if self.sliding_window is None:
+            raise ValueError("`sliding_window` cannot be `None` for this model.")
 
 
 @auto_docstring(checkpoint="baidu/Unlimited-OCR")
