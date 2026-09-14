@@ -64,7 +64,7 @@ distributed_config = DistributedConfig(
 
 Each rank trains on its own part of the batch. At every MoE layer it routes its tokens, sends each (token, expert) pair to the rank that owns the expert with an all-to-all, runs its local experts, and gets the results back with a second all-to-all. Only the routed tokens travel.
 
-`ep_size` must divide `fsdp_size` and the number of experts. When only `ep_size` is supplied, `fsdp_size` defaults to `WORLD_SIZE`. Token dispatch with trunk tensor parallelism (`tp_size > 1`) is not supported yet.
+With `tp_size=1`, `ep_size` must divide `fsdp_size` and the number of experts. When only `ep_size` is supplied, `fsdp_size` defaults to `WORLD_SIZE`.
 
 For the rest of the model:
 
@@ -73,6 +73,25 @@ For the rest of the model:
 - The [`Trainer`] uses ordinary data-parallel batching for training and evaluation and counts tokens across all ranks.
 
 The legacy `enable_expert_parallel=True` spelling is deprecated. A dispatch configuration with `tp_size=4, fsdp_size=2, enable_expert_parallel=True` is translated to `tp_size=1, fsdp_size=8, ep_size=4`, preserving its expert groups and independent batches per rank. Legacy all-reduce configurations retain their original `tp_size` and `fsdp_size`.
+
+## Token dispatch with trunk tensor parallelism
+
+Set `tp_size > 1` with explicit `ep_size` and `experts_dispatch="all-to-all"` to apply the model's tensor parallel plan to the trunk and its expert parallel plan to the routed experts. For example, on eight processes:
+
+```py
+distributed_config = DistributedConfig(
+    tp_size=2,
+    fsdp_size=4,
+    ep_size=4,
+    experts_dispatch="all-to-all",
+)
+```
+
+Each pair of TP ranks receives the same batch. Attention and other dense modules are sharded according to the TP plan. At each MoE layer, TP ranks dispatch disjoint slices of the tokens, then combine their results into a replicated output. EP groups span four ranks, and each expert is additionally FSDP-sharded across `edp_size = fsdp_size * tp_size // ep_size = 2` ranks. The trunk's FSDP group spans four ranks.
+
+`ep_size` must be a multiple of `tp_size`, divide `fsdp_size * tp_size`, and divide the number of experts. The token count entering each MoE layer (normally batch size times sequence length) must be divisible by `tp_size`; otherwise forward raises an error. This also applies during generation, where each decode step may contain only one token per sequence. The model's usual TP constraints, such as attention-head divisibility, still apply.
+
+The [`Trainer`] shares batches within each TP group and counts each group's tokens once. The effective global batch size is `per_device_train_batch_size * fsdp_size * gradient_accumulation_steps`. Sequence parallelism is not required for this path. With `experts_dispatch="auto"`, `ep_size=tp_size` still selects legacy all-reduce; request `"all-to-all"` explicitly to use trunk TP in that case.
 
 ## Combining with FSDP2
 
@@ -90,7 +109,7 @@ distributed_config = DistributedConfig(
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B", distributed_config=distributed_config)
 ```
 
-Both mesh views descend from one root mesh, and `tp_size * fsdp_size` must equal the number of processes. With all-reduce, the expert parallel plan shards the experts across `ep` (the same ranks as `tp`), then FSDP2 shards every parameter, experts included, across `fsdp` and owns their gradient reduction. Each `fsdp` rank trains on its own part of the batch. For all-to-all, use `tp_size=1` and the total number of processes as `fsdp_size`, as shown above.
+Both mesh views descend from one root mesh, and `tp_size * fsdp_size` must equal the number of processes. With all-reduce, the expert parallel plan shards the experts across `ep` (the same ranks as `tp`), then FSDP2 shards every parameter, experts included, across `fsdp` and owns their gradient reduction. Each `fsdp` rank trains on its own part of the batch. The all-to-all examples above show how to choose EP independently, with or without trunk TP.
 
 Load the model as usual, then train with [`Trainer`]. It takes the gradient norm across both meshes and gives each mesh its own optimizer param group. [`~Trainer.save_model`] gathers sharded weights into a regular checkpoint. This requires `accelerate>=1.12` so the `Trainer` can mirror `tp_size` and `fsdp_size` into [`~Accelerate.ParallelismConfig`].
 

@@ -87,7 +87,11 @@ class DistributedMixin:
     @property
     def tp_plan(self) -> dict[str, str]:
         """The full tp plan for the model's modules."""
-        if hasattr(self.config, "distributed_config") and self.config.distributed_config.enable_expert_parallel:
+        if (
+            hasattr(self.config, "distributed_config")
+            and self.config.distributed_config.enable_expert_parallel
+            and not self.config.distributed_config.dispatches_tokens
+        ):
             if not self._ep_plan:
                 raise ValueError(
                     f"Expert parallelism was requested (`enable_expert_parallel=True`), but "
@@ -167,12 +171,10 @@ class DistributedMixin:
         if distributed_config.tp_size > 1 and distributed_config.tp_plan is None:
             distributed_config.tp_plan = "auto"
 
-        if distributed_config.fsdp_size > 1:
+        if distributed_config.fsdp_size > 1 or distributed_config.dispatches_tokens:
             # Builds one root with dense (fsdp, tp) and expert (edp, ep) views.
             if device_mesh is not None:
-                raise ValueError(
-                    "`device_mesh` cannot be passed together with `fsdp_size > 1`: the mesh is built here."
-                )
+                raise ValueError("`device_mesh` cannot be passed with FSDP or token dispatch: the mesh is built here.")
             device_map, device_mesh = initialize_fully_sharded_data_parallelism(distributed_config)
         elif distributed_config.tp_size > 1:
             device_map, device_mesh = initialize_tensor_parallelism(
@@ -211,32 +213,40 @@ class DistributedMixin:
                 if isinstance(distributed_config.tp_plan, dict):
                     model.tp_plan = distributed_config.tp_plan
                 if distributed_config.dispatches_tokens:
-                    # Every rank trains on its own part of the batch, so only the experts can be sharded across the
-                    # group: the experts get the dispatch style, the router keeps its global ids and scores, and
-                    # whatever else the plan shards stays replicated, data-parallel like the rest of the trunk.
-                    # Replicated parameters inside the experts module keep their gradient all-reduce: FSDP2 treats
-                    # that module as expert-owned and does not reduce them, and each rank saw different tokens.
+                    if not model._ep_plan:
+                        raise ValueError(f"{type(model).__name__} does not define an expert-parallel plan.")
                     kept = ("grouped_gemm", "moe_tp_experts", "replicated_with_grad_allreduce")
-                    replicated = sorted(
-                        name for name, style in model.tp_plan.items() if style not in ("ep_router", *kept)
+                    expert_paths = [name for name, style in model._ep_plan.items() if style == "moe_tp_experts"]
+                    # A module-level expert rule owns all its descendants, including TP rules whose keys
+                    # differ from the EP parameter rules. Resolve ownership before either pass installs hooks.
+                    dense_plan = (
+                        {
+                            name: style
+                            for name, style in model._tp_plan.items()
+                            if not any(name == path or name.startswith(path + ".") for path in expert_paths)
+                        }
+                        if distributed_config.tp_size > 1
+                        else {}
                     )
-                    if replicated:
-                        logger.warning(
-                            f"`experts_dispatch={distributed_config.experts_dispatch!r}` shards only the experts, "
-                            "so these expert parallel plan "
-                            f"entries are ignored and their modules stay replicated: {replicated}."
-                        )
-                    # `tp_plan` reads `_ep_plan` under expert parallelism, so that is the plan to rewrite.
                     dispatch_style = EXPERTS_DISPATCH_STRATEGIES[distributed_config.experts_dispatch]
-                    model._ep_plan = {
+                    expert_plan = {
                         name: dispatch_style if style == "moe_tp_experts" else style
-                        for name, style in model.tp_plan.items()
+                        for name, style in model._ep_plan.items()
                         if style in kept
+                        and (
+                            distributed_config.tp_size == 1
+                            or any(name == path or name.startswith(path + ".") for path in expert_paths)
+                        )
                     }
-                model = apply_tensor_parallelism(model, tp_mesh)
+                    if distributed_config.tp_size > 1:
+                        model = apply_tensor_parallelism(model, device_mesh["tp"], dense_plan)
+                    model = apply_tensor_parallelism(model, tp_mesh, expert_plan, dispatch_tp_mesh=device_mesh["tp"])
+                    model._tp_plan = dense_plan | expert_plan
+                else:
+                    model = apply_tensor_parallelism(model, tp_mesh)
 
             if distributed_config.dispatches_tokens:
-                # Each rank trains on its own batch. The trunk spans fsdp; each expert is additionally
+                # Each TP group trains on its own batch. The trunk spans fsdp; each expert is additionally
                 # FSDP-sharded across edp, the ranks left after assigning its EP shard.
                 trunk_mesh = device_mesh["fsdp"]
                 expert_mesh = device_mesh["edp"] if distributed_config.edp_size > 1 else None

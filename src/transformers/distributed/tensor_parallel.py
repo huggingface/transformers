@@ -761,14 +761,15 @@ def dispatch_experts_forward(
     top_k_weights: torch.Tensor,
     ep_group,
     ep_size: int,
+    tp_size: int = 1,
 ) -> torch.Tensor:
     """
-    Expert-parallel forward by token dispatch. Every rank routes its own tokens, sends each selected (token, expert)
+    Expert-parallel forward by token dispatch. Every rank routes its own token slice, sends each selected (token, expert)
     pair to the rank that owns the expert with an all-to-all, runs its local experts on what it receives with
     `experts_forward` (the experts module's own forward, as a top-1 routing with unit weights), sends the results
-    back and combines them with the routing weights. Each rank trains on its own part of the batch, so the parameters
-    outside the experts are data-parallel across the group and averaged by FSDP2; the local experts run on every
-    rank's tokens, so their gradients already sum every rank's contribution and are scaled by `1 / ep_size` to match.
+    back and combines them with the routing weights. Each TP group trains on its own batch. The expert gradients
+    sum contributions from `ep_size / tp_size` batches and are scaled by `tp_size / ep_size` before the remaining
+    expert-data-parallel reduction, matching the trunk's FSDP average.
     """
     from torch.distributed.nn.functional import all_to_all_single
 
@@ -796,12 +797,13 @@ def dispatch_experts_forward(
     recv_expert_ids = torch.arange(num_local_experts, device=hidden_states.device).repeat(ep_size)
     recv_expert_ids = recv_expert_ids.repeat_interleave(recv_counts.reshape(-1), output_size=sum(recv_sizes))
 
-    # The local experts, as a top-1 routing with unit weights. Scaling the gradient of the output by `1 / ep_size`
-    # and of the input by `ep_size` leaves the token gradients untouched and scales the expert gradients.
-    recv_tokens = _ScaleGrad.apply(recv_tokens, ep_size)
+    # An EP group collects ep_size / tp_size distinct batches. The remaining edp reduction averages
+    # expert replicas; together these give the same fsdp_size divisor as the trunk.
+    expert_gradient_scale = tp_size / ep_size
+    recv_tokens = _ScaleGrad.apply(recv_tokens, 1.0 / expert_gradient_scale)
     unit_weights = torch.ones_like(recv_expert_ids, dtype=recv_tokens.dtype).unsqueeze(-1)
     expert_out = experts_forward(recv_tokens, recv_expert_ids.unsqueeze(-1), unit_weights)
-    expert_out = _ScaleGrad.apply(expert_out, 1.0 / ep_size)
+    expert_out = _ScaleGrad.apply(expert_out, expert_gradient_scale)
 
     # Send the results back to the owners of the tokens and combine them with the routing weights.
     recv_out = all_to_all_single(
@@ -818,20 +820,64 @@ def dispatch_experts_forward(
 
 
 class EpDispatchExpertsParallel(MoeExpertsParallel):
-    """Experts of expert-parallel token dispatch: every rank sends its own tokens to the experts' owners."""
+    """Dispatch disjoint TP token slices to the experts' owners, then replicate the combined output on TP."""
 
-    def install_forward(self, module, mesh, *, is_expert_parallel=False):
+    def install_forward(self, module, mesh, *, is_expert_parallel=False, tp_mesh=None):
         original_forward = module.forward
         ep_group, ep_size = mesh.get_group(), mesh.size()
+        tp_size = tp_mesh.size() if tp_mesh is not None else 1
+
+        def experts_forward(hidden_states, top_k_index, top_k_weights):
+            output = original_forward(hidden_states, top_k_index, top_k_weights)
+            if hidden_states.size(0) == 0 and torch.is_grad_enabled():
+                # Eager experts may return disconnected zeros on an empty receiver. Keep both the
+                # reverse all-to-all and the expert FSDP reductions in the backward graph on every rank.
+                output = output + hidden_states
+                for param in module.parameters():
+                    if isinstance(param, DTensor):
+                        param = param.to_local()
+                    output = output + param.reshape(-1)[:0].sum()
+            return output
 
         def tp_forward(hidden_states, top_k_index, top_k_weights):
             if isinstance(hidden_states, DTensor):
                 hidden_states = hidden_states.to_local()
+            if isinstance(top_k_weights, DTensor):
+                top_k_weights = top_k_weights.to_local()
+            num_tokens = hidden_states.size(0)
+            if tp_size > 1:
+                if num_tokens % tp_size:
+                    raise ValueError(
+                        f"MoE token count ({num_tokens}) must be divisible by tp_size ({tp_size}) for token dispatch."
+                    )
+                # Inputs and router scores are replicated on TP. Sum the slice gradients before they
+                # reach the router and trunk, and combine outputs with an identity backward.
+                hidden_states = _AllReduceBackward.apply(hidden_states, tp_mesh.get_group())
+                top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_mesh.get_group())
+                start = tp_mesh.get_local_rank() * (num_tokens // tp_size)
+                rows = slice(start, start + num_tokens // tp_size)
+                hidden_states, top_k_index, top_k_weights = (
+                    hidden_states[rows],
+                    top_k_index[rows],
+                    top_k_weights[rows],
+                )
             with self.context_around_forward(module, mesh):
                 # The sharding leaves the module with its local expert count.
-                return dispatch_experts_forward(
-                    original_forward, module.num_experts, hidden_states, top_k_index, top_k_weights, ep_group, ep_size
+                output = dispatch_experts_forward(
+                    experts_forward,
+                    module.num_experts,
+                    hidden_states,
+                    top_k_index,
+                    top_k_weights,
+                    ep_group,
+                    ep_size,
+                    tp_size=tp_size,
                 )
+            if tp_size > 1:
+                full_output = output.new_zeros(num_tokens, output.size(-1))
+                full_output[rows] = output
+                output = _AllReduceForward.apply(full_output, tp_mesh.get_group())
+            return output
 
         module.forward = tp_forward
         return module
@@ -900,29 +946,33 @@ def _validate_tp_plan_styles(tp_plan: dict[str, str] | None) -> None:
         )
 
 
-def apply_tensor_parallelism(model, tp_mesh):
+def apply_tensor_parallelism(model, tp_mesh, tp_plan=None, *, dispatch_tp_mesh=None):
     """DTensor backend: shard params as placeholders and install TP forward hooks."""
 
-    _validate_tp_plan_styles(model.tp_plan)
+    tp_plan = model.tp_plan if tp_plan is None else tp_plan
+    _validate_tp_plan_styles(tp_plan)
 
     for name, module in model.named_modules():
         # Create DTensor placeholders so the loader knows which shard belongs to this rank.
         for p_name, _ in list(module.named_parameters(recurse=False)):
             full = f"{name}.{p_name}" if name else p_name
-            style_name = _get_parameter_tp_plan(parameter_name=full, tp_plan=model.tp_plan, is_weight=True)
+            style_name = _get_parameter_tp_plan(parameter_name=full, tp_plan=tp_plan, is_weight=True)
             if style_name is not None and style_name in ALL_PARALLEL_STYLES:
                 style = ALL_PARALLEL_STYLES[style_name]
                 style.validate_param(module, p_name, tp_mesh, parameter_name=full)
                 style.shard_param(module, p_name, tp_mesh)
 
         # Install the input/output transforms required by this module's TP style.
-        style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=model.tp_plan, is_weight=False)
+        style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=tp_plan, is_weight=False)
         if style_name is not None and style_name in ALL_PARALLEL_STYLES:
             if style_name == "mla_kv_a_proj":
                 # MLA needs to know the qk_rope_head_dim to split the projection output into KV and RoPE parts.
                 # TODO: Store qk_rope_head_dim on MLA projection modules when the models initialize them.
                 module.config = model.config.get_text_config()
-            ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
+            if style_name == "ep_dispatch_experts":
+                ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh, tp_mesh=dispatch_tp_mesh)
+            else:
+                ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
         module._is_hooked = True
 
     return model

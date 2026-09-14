@@ -180,7 +180,9 @@ def initialize_tensor_parallelism(
 def initialize_fully_sharded_data_parallelism(distributed_config: DistributedConfig):
     # `fully_shard` itself only needs torch>=2.6, but distributed checkpoint save/load
     # (DCP + HuggingFaceStorageWriter) needs 2.7, so that is the effective requirement.
-    if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
+    if (distributed_config.fsdp_size > 1 or distributed_config.dispatches_tokens) and not is_torch_greater_or_equal(
+        "2.7"
+    ):
         raise OSError("FSDP2 requires `torch>=2.7` (distributed checkpoint save/load).")
 
     device_type = torch._C._get_accelerator().type
@@ -194,7 +196,7 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
 
     # Both views must descend from one root so FSDP can compose its sharding with EP/TP DTensors.
     # Without EP, the middle dimension is a singleton and ordinary TP remains independent of FSDP.
-    ep_fsdp = distributed_config.ep_size if distributed_config.dispatches_tokens else 1
+    ep_fsdp = distributed_config.ep_size // distributed_config.tp_size if distributed_config.dispatches_tokens else 1
     mesh = torch.distributed.init_device_mesh(
         device_type,
         (distributed_config.edp_size, ep_fsdp, distributed_config.tp_size),

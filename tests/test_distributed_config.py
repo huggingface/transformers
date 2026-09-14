@@ -16,6 +16,7 @@ import os
 import tempfile
 import unittest
 import warnings
+from collections import OrderedDict
 from copy import deepcopy
 from datetime import timedelta
 from types import SimpleNamespace
@@ -87,7 +88,7 @@ class DistributedConfigTest(unittest.TestCase):
     def test_invalid_topologies(self):
         cases = [
             ({"fsdp_size": 4, "ep_size": 3}, "must divide"),
-            ({"tp_size": 2, "fsdp_size": 2, "ep_size": 4}, "trunk tensor parallelism"),
+            ({"tp_size": 4, "fsdp_size": 2, "ep_size": 2}, "multiple of"),
             ({"fsdp_size": 4, "ep_size": 4, "experts_dispatch": "all-reduce"}, "identical tokens"),
             ({"fsdp_size": 4, "experts_dispatch": "all-to-all"}, "ep_size > 1"),
             ({"experts_dispatch": "unknown"}, "Unknown"),
@@ -101,26 +102,41 @@ class DistributedConfigTest(unittest.TestCase):
                 with self.subTest(name=name, value=value), self.assertRaisesRegex(ValueError, "positive integer"):
                     DistributedConfig(**{name: value})
 
+    def test_folded_tp_dispatch(self):
+        for fsdp, tp, ep, edp in ((2, 2, 4, 1), (4, 2, 4, 2), (2, 2, 2, 2), (1, 4, 4, 1)):
+            with self.subTest(fsdp=fsdp, tp=tp, ep=ep):
+                config = DistributedConfig(fsdp_size=fsdp, tp_size=tp, ep_size=ep, experts_dispatch="all-to-all")
+                self.assertEqual(config.edp_size, edp)
+                self.assertEqual(DistributedConfig.from_dict(config.to_dict()), config)
+
 
 class _Experts(nn.Module):
-    def __init__(self):
+    def __init__(self, num_experts=4):
         super().__init__()
-        self.num_experts = 4
-        self.weight = nn.Parameter(torch.randn(4, 3, 3))
+        self.num_experts = num_experts
+        self.weight = nn.Parameter(torch.randn(num_experts, 3, 3))
 
     def forward(self, hidden_states, indices, weights):
+        if hidden_states.size(0) == 0:
+            # Eager experts skip every matmul when no expert receives a token.
+            return torch.zeros_like(hidden_states)
         selected = self.weight[indices]
         outputs = torch.einsum("ni,nkoi->nko", hidden_states, selected)
         return (outputs * weights.unsqueeze(-1)).sum(1)
 
 
 class _MoE(DistributedMixin, nn.Module):
-    def __init__(self):
+    def __init__(self, num_experts=4):
         super().__init__()
         self.config = SimpleNamespace()
-        self.dense = nn.Linear(3, 3)
-        self.experts = _Experts()
-        self._tp_plan = {}
+        self.dense = nn.Sequential(OrderedDict(up=nn.Linear(3, 4), down=nn.Linear(4, 3)))
+        self.experts = _Experts(num_experts)
+        self._tp_plan = {
+            "dense.up": "colwise",
+            "dense.down": "rowwise",
+            "experts.weight": "packed_colwise",
+            "experts": "moe_tp_experts",
+        }
         self._ep_plan = {"experts.weight": "grouped_gemm", "experts": "moe_tp_experts"}
         self._fsdp_plan = {"dense": "free_full_weight"}
 
@@ -128,18 +144,24 @@ class _MoE(DistributedMixin, nn.Module):
         return self.experts(self.dense(x), indices, weights)
 
 
-def _mesh_worker(rank, rendezvous, check_backward, device_type):
+def _mesh_worker(rank, rendezvous, check_backward, device_type, world_size=4):
     dist.init_process_group(
         "gloo" if device_type == "cpu" else "nccl",
         init_method=f"file://{rendezvous}",
         rank=rank,
-        world_size=4,
+        world_size=world_size,
         timeout=timedelta(seconds=120),
     )
     os.environ["LOCAL_RANK"] = str(rank)
     try:
         configs = [DistributedConfig(fsdp_size=4), DistributedConfig(tp_size=2, fsdp_size=2)]
         configs += [DistributedConfig(fsdp_size=4, ep_size=ep) for ep in (2, 4)]
+        configs += [
+            DistributedConfig(fsdp_size=2, tp_size=2, ep_size=ep, experts_dispatch="all-to-all") for ep in (2, 4)
+        ]
+        configs += [DistributedConfig(fsdp_size=1, tp_size=4, ep_size=4, experts_dispatch="all-to-all")]
+        if world_size == 8:
+            configs = [DistributedConfig(fsdp_size=4, tp_size=2, ep_size=4, experts_dispatch="all-to-all")]
         for config in configs:
             with patch("torch._C._get_accelerator", return_value=torch.device(device_type)):
                 device, root = initialize_fully_sharded_data_parallelism(config)
@@ -152,35 +174,45 @@ def _mesh_worker(rank, rendezvous, check_backward, device_type):
             assert dist.get_process_group_ranks(root["ep"].get_group()) == list(
                 range(rank // ep * ep, (rank // ep + 1) * ep)
             )
-            assert dist.get_process_group_ranks(root["edp"].get_group()) == list(range(rank % ep, 4, ep))
+            assert dist.get_process_group_ranks(root["edp"].get_group()) == list(range(rank % ep, world_size, ep))
             if not check_backward:
                 continue
 
             torch.manual_seed(42)
-            reference = _MoE().to(device)
+            reference = _MoE(num_experts=world_size).to(device)
             model = deepcopy(reference)
             model = model.maybe_distribute_model(model, config, root)
-            # Different inputs on every rank; the reference evaluates the concatenated global batch.
-            inputs = torch.randn(8, 3, device=device)
-            weights = torch.rand(8, 2, device=device)
-            for empty_receivers in (False, True):
-                indices = (
-                    torch.zeros(8, 2, dtype=torch.long, device=device)
-                    if empty_receivers
-                    else torch.arange(16, device=device).reshape(8, 2) % 4
-                )
+            # Different inputs per TP group; the reference evaluates the concatenated global batch.
+            total_tokens = config.fsdp_size * 4
+            inputs = torch.randn(total_tokens, 3, device=device)
+            weights = torch.rand(total_tokens, 2, device=device)
+            batch = rank // config.tp_size
+            rows = slice(batch * 4, (batch + 1) * 4)
+            if config.tp_size > 1:
+                assert model.dense[0].weight.device_mesh.mesh_dim_names[-1] == "tp"
+                assert model.dense[0].weight.placements[-1].is_shard()
+                assert model.tp_plan["experts.weight"] == "grouped_gemm"
+            for routing in ("balanced", "empty_receivers", "different_edp_receivers"):
+                if routing == "balanced":
+                    indices = torch.arange(total_tokens * 2, device=device).reshape(total_tokens, 2) % world_size
+                elif routing == "empty_receivers":
+                    indices = torch.zeros(total_tokens, 2, dtype=torch.long, device=device)
+                else:
+                    # One expert replica receives tokens while another replica of that expert is empty.
+                    indices = torch.arange(total_tokens, device=device) // (total_tokens // config.edp_size)
+                    indices = (indices * (world_size // ep)).unsqueeze(-1).expand(-1, 2)
                 reference.zero_grad(set_to_none=True)
                 model.zero_grad(set_to_none=True)
-                x = inputs[rank * 2 : (rank + 1) * 2].clone().requires_grad_()
-                scores = weights[rank * 2 : (rank + 1) * 2].clone().requires_grad_()
+                x = inputs[rows].clone().requires_grad_()
+                scores = weights[rows].clone().requires_grad_()
                 ref_x, ref_scores = inputs.clone().requires_grad_(), weights.clone().requires_grad_()
                 expected = reference(ref_x, indices, ref_scores)
-                actual = model(x, indices[rank * 2 : (rank + 1) * 2], scores)
-                torch.testing.assert_close(actual, expected[rank * 2 : (rank + 1) * 2])
+                actual = model(x, indices[rows], scores)
+                torch.testing.assert_close(actual, expected[rows])
                 expected.square().mean().backward()
                 actual.square().mean().backward()
-                torch.testing.assert_close(x.grad / 4, ref_x.grad[rank * 2 : (rank + 1) * 2])
-                torch.testing.assert_close(scores.grad / 4, ref_scores.grad[rank * 2 : (rank + 1) * 2])
+                torch.testing.assert_close(x.grad / config.fsdp_size, ref_x.grad[rows])
+                torch.testing.assert_close(scores.grad / config.fsdp_size, ref_scores.grad[rows])
                 for (_, param), (_, ref_param) in zip(model.named_parameters(), reference.named_parameters()):
                     grad = param.grad.full_tensor() if isinstance(param.grad, DTensor) else param.grad
                     torch.testing.assert_close(grad, ref_param.grad)
@@ -190,16 +222,32 @@ def _mesh_worker(rank, rendezvous, check_backward, device_type):
                 for (_, param), (_, ref_param) in zip(model.named_parameters(), reference.named_parameters()):
                     full = param.full_tensor() if isinstance(param, DTensor) else param
                     torch.testing.assert_close(full, ref_param)
+                with torch.no_grad():
+                    torch.testing.assert_close(
+                        model(inputs[rows], indices[rows], weights[rows]), reference(inputs, indices, weights)[rows]
+                    )
+            if config.tp_size > 1:
+                try:
+                    model(inputs[rows][:3], indices[rows][:3], weights[rows][:3])
+                except ValueError as error:
+                    assert "MoE token count" in str(error)
+                else:
+                    raise AssertionError("Uneven token slices should be rejected")
     finally:
         dist.destroy_process_group()
 
 
-def _trainer_worker(rank, rendezvous):
+def _trainer_worker(rank, rendezvous, tp_size=1, device_type="cpu"):
     from transformers import Qwen3MoeConfig, Qwen3MoeForCausalLM, Trainer, TrainingArguments
 
     os.environ.update(RANK=str(rank), LOCAL_RANK=str(rank), WORLD_SIZE="4", LOCAL_WORLD_SIZE="4")
     os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
-    dist.init_process_group("gloo", init_method=f"file://{rendezvous}", rank=rank, world_size=4)
+    if device_type == "cuda":
+        torch.cuda.set_device(rank)
+    device = torch.device("cpu" if device_type == "cpu" else f"cuda:{rank}")
+    dist.init_process_group(
+        "gloo" if device_type == "cpu" else "nccl", init_method=f"file://{rendezvous}", rank=rank, world_size=4
+    )
     try:
         torch.manual_seed(42)
         config = Qwen3MoeConfig(
@@ -214,15 +262,20 @@ def _trainer_worker(rank, rendezvous):
             num_experts=4,
             num_experts_per_tok=2,
         )
-        reference = Qwen3MoeForCausalLM(config)
+        reference = Qwen3MoeForCausalLM(config).to(device)
         source = rendezvous + "_model"
         if rank == 0:
             reference.save_pretrained(source)
         dist.barrier()
-        with patch("torch._C._get_accelerator", return_value=torch.device("cpu")):
+        with patch("torch._C._get_accelerator", return_value=torch.device(device_type)):
             model = Qwen3MoeForCausalLM.from_pretrained(
                 source,
-                distributed_config=DistributedConfig(fsdp_size=4, ep_size=2),
+                distributed_config=DistributedConfig(
+                    fsdp_size=4 // tp_size,
+                    tp_size=tp_size,
+                    ep_size=4 if tp_size > 1 else 2,
+                    experts_dispatch="all-to-all",
+                ),
                 experts_implementation="eager",
             )
         model.train()
@@ -231,14 +284,43 @@ def _trainer_worker(rank, rendezvous):
         labels = inputs.clone()
         labels[::2, 1:3] = -100
         dataset = [{"input_ids": row, "labels": label} for row, label in zip(inputs, labels)]
+        if tp_size > 1:
+            # Compare every gradient before the optimizer can hide small scale errors in the update.
+            rows = slice((rank // tp_size) * 4, (rank // tp_size + 1) * 4)
+
+            def force_empty_receivers(module, args, output):
+                logits, scores, indices = output
+                return logits, scores, torch.arange(2, device=indices.device).expand_as(indices)
+
+            for empty_receivers in (False, True):
+                handles = []
+                if empty_receivers:
+                    handles = [
+                        m.model.layers[0].mlp.gate.register_forward_hook(force_empty_receivers)
+                        for m in (model, reference)
+                    ]
+                expected = reference(inputs.to(device), labels=labels.to(device))
+                actual = model(inputs[rows].to(device), labels=labels[rows].to(device))
+                torch.testing.assert_close(actual.logits, expected.logits[rows], atol=1e-6, rtol=1e-4)
+                actual.loss.backward()
+                expected.loss.backward()
+                for (name, param), (_, ref_param) in zip(model.named_parameters(), reference.named_parameters()):
+                    grad = param.grad.full_tensor() if isinstance(param.grad, DTensor) else param.grad
+                    torch.testing.assert_close(
+                        grad, ref_param.grad, atol=1e-7, rtol=1e-4, msg=lambda msg: f"{name}: {msg}"
+                    )
+                model.zero_grad(set_to_none=True)
+                reference.zero_grad(set_to_none=True)
+                for handle in handles:
+                    handle.remove()
         trainer = Trainer(
             model=model,
             args=TrainingArguments(
                 output_dir=rendezvous + "_output",
-                use_cpu=True,
+                use_cpu=device_type == "cpu",
                 max_steps=1,
                 per_device_train_batch_size=1,
-                gradient_accumulation_steps=2,
+                gradient_accumulation_steps=2 * tp_size,
                 per_device_eval_batch_size=2,
                 learning_rate=0.01,
                 max_grad_norm=0,
@@ -252,7 +334,7 @@ def _trainer_worker(rank, rendezvous):
             optimizers=(torch.optim.SGD(model.parameters(), lr=0.01, foreach=False), None),
         )
         trainer.train()
-        reference(inputs, labels=labels).loss.backward()
+        reference(inputs.to(device), labels=labels.to(device)).loss.backward()
         torch.optim.SGD(reference.parameters(), lr=0.01, foreach=False).step()
         for (name, param), (_, ref_param) in zip(model.named_parameters(), reference.named_parameters()):
             full = param.full_tensor() if isinstance(param, DTensor) else param
@@ -280,6 +362,19 @@ class ExpertMeshTest(unittest.TestCase):
             self.skipTest("CPU FSDP coverage requires torch>=2.13")
         with tempfile.TemporaryDirectory() as directory:
             mp.spawn(_trainer_worker, args=(os.path.join(directory, "init"),), nprocs=4, join=True)
+
+    def test_tp_dispatch_folded_edp_cpu(self):
+        if not is_torch_greater_or_equal("2.13"):
+            self.skipTest("CPU FSDP coverage requires torch>=2.13")
+        with tempfile.TemporaryDirectory() as directory:
+            mp.spawn(_mesh_worker, args=(os.path.join(directory, "init"), True, "cpu", 8), nprocs=8, join=True)
+
+    @require_torch_accelerator
+    def test_tp_dispatch_trainer(self):
+        if torch_device != "cuda" or torch.cuda.device_count() < 4:
+            self.skipTest("Requires four CUDA devices")
+        with tempfile.TemporaryDirectory() as directory:
+            mp.spawn(_trainer_worker, args=(os.path.join(directory, "init"), 2, "cuda"), nprocs=4, join=True)
 
     @require_torch_accelerator
     def test_dispatch_backward(self):

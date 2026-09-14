@@ -43,13 +43,14 @@ class DistributedConfig:
             Legacy alias for `ep_size=tp_size`. With token dispatch, the legacy `tp_size` is folded into
             `fsdp_size` and reset to 1, preserving one independent batch per rank.
         ep_size (`int`, *optional*):
-            Number of devices owning distinct expert shards. Defaults to 1. With token dispatch, must divide
-            `fsdp_size` and requires `tp_size=1`. If only `ep_size` is supplied, `fsdp_size` defaults to WORLD_SIZE.
+            Number of devices owning distinct expert shards. Defaults to 1. With token dispatch, must be a
+            multiple of `tp_size` and divide `fsdp_size * tp_size`. If only `ep_size` is supplied, `fsdp_size`
+            defaults to WORLD_SIZE.
         experts_dispatch (`str`, *optional*, defaults to `"auto"`):
             How the expert outputs get back to the tokens that need them. `"all-reduce"` runs the whole batch on
             every rank and all-reduces the expert outputs. `"all-to-all"` sends each token to the rank that owns its
-            experts instead, so each rank trains on its own part of the batch and the parameters that are not
-            expert-parallel are sharded with FSDP2 across every rank. `"auto"` selects `"all-reduce"` when
+            experts instead. Each TP group trains on its own batch; its ranks dispatch disjoint token slices.
+            The trunk uses TP and FSDP2. `"auto"` selects `"all-reduce"` when
             `ep_size=tp_size`, and `"all-to-all"` otherwise. Token dispatch requires `ep_size > 1`.
         fsdp_size (`int`, *optional*):
             Number of devices for FSDP (data parallelism). If `None` and `tp_size` is set, defaults to 1.
@@ -74,13 +75,13 @@ class DistributedConfig:
 
     @property
     def dispatches_tokens(self) -> bool:
-        """Whether each rank routes and trains on its own part of the batch."""
+        """Whether ranks dispatch their token slices to the owning experts."""
         return self.experts_dispatch == "all-to-all"
 
     @property
     def edp_size(self) -> int:
         """Number of FSDP shards per expert, after folding EP into the data-parallel mesh."""
-        return self.fsdp_size // self.ep_size if self.dispatches_tokens else self.fsdp_size
+        return self.fsdp_size * self.tp_size // self.ep_size if self.dispatches_tokens else self.fsdp_size
 
     def __post_init__(self):
         legacy_ep = self.enable_expert_parallel and self.ep_size is None
@@ -135,10 +136,10 @@ class DistributedConfig:
         if self.dispatches_tokens:
             if self.ep_size == 1:
                 raise ValueError("`experts_dispatch='all-to-all'` requires `ep_size > 1`.")
-            if self.tp_size != 1:
-                raise ValueError("Token dispatch with trunk tensor parallelism is not supported yet; use `tp_size=1`.")
-            if self.fsdp_size % self.ep_size:
-                raise ValueError("`ep_size` must divide `fsdp_size` for token dispatch.")
+            if self.ep_size % self.tp_size:
+                raise ValueError("`ep_size` must be a multiple of `tp_size` for token dispatch.")
+            if (self.fsdp_size * self.tp_size) % self.ep_size:
+                raise ValueError("`ep_size` must divide `fsdp_size * tp_size` for token dispatch.")
         elif self.enable_expert_parallel and self.ep_size != self.tp_size:
             raise ValueError(
                 "`experts_dispatch='all-reduce'` requires `ep_size=tp_size` and identical tokens per EP group."
