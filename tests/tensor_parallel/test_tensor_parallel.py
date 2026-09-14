@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import torch
 
@@ -294,6 +294,27 @@ class TestParallelPlanResolution(TestCasePlus):
         with patch.object(tensor_parallel, "apply_tensor_parallelism") as apply:
             tensor_parallel.resolve_parallel_plans(self.model, config)
         apply.assert_not_called()
+
+    def test_dispatch_shards_on_ep_and_passes_both_meshes_to_hook(self):
+        tp_mesh, ep_mesh = object(), object()
+        mesh_manager = Mock()
+        mesh_manager.get_mesh.side_effect = {"tp": tp_mesh, "ep": ep_mesh}.__getitem__
+        config = DistributedConfig(
+            tp_size=2, fsdp_size=2, ep_size=4, ep_plan={"layers.*.mlp.experts": "ep_dispatch_experts"}
+        )
+        _, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
+        experts = self.model.layers[0].mlp.experts
+        with (
+            patch.object(ALL_PARALLEL_STYLES["grouped_gemm"], "validate_param") as validate,
+            patch.object(ALL_PARALLEL_STYLES["grouped_gemm"], "shard_param") as shard,
+            patch.object(ALL_PARALLEL_STYLES["ep_dispatch_experts"], "install_forward") as install,
+        ):
+            tensor_parallel.apply_tensor_parallelism_moe(self.model, config, mesh_manager, ep_plan)
+        self.assertEqual(shard.call_count, 2)
+        for name in ("gate_up_proj", "down_proj"):
+            validate.assert_any_call(experts, name, ep_mesh, parameter_name=f"layers.0.mlp.experts.{name}")
+            shard.assert_any_call(experts, name, ep_mesh)
+        install.assert_called_once_with(experts, ep_mesh=ep_mesh, tp_mesh=tp_mesh)
 
     def test_dispatcher_is_derived_and_not_serialized(self):
         config = DistributedConfig(tp_size=4, ep_size=4, ep_plan={"layers.*.mlp.experts": "ep_dispatch_experts"})

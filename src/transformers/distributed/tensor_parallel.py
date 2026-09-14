@@ -990,15 +990,16 @@ def apply_tensor_parallelism_moe(
     model: nn.Module, distributed_config: DistributedConfig, mesh_manager: MeshManager, plan: dict[str, str]
 ):
     """Apply the resolved expert rules on the TP or EP mesh."""
+    tp_mesh = mesh_manager.get_mesh("tp")
     if distributed_config.experts_dispatch == "all-to-all":
-        return apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), plan, ep_mesh=mesh_manager.get_mesh("ep"))
-    return apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), plan)
+        ep_mesh = mesh_manager.get_mesh("ep")
+        return apply_tensor_parallelism(model, ep_mesh, plan, ep_mesh=ep_mesh, tp_mesh=tp_mesh)
+    return apply_tensor_parallelism(model, tp_mesh, plan)
 
 
-def apply_tensor_parallelism(model, tp_mesh, tp_plan=None, *, ep_mesh=None):
-    """Shard and install hooks on EP when provided, otherwise TP; dispatch also uses TP for token slices."""
+def apply_tensor_parallelism(model, shard_mesh, tp_plan=None, *, ep_mesh=None, tp_mesh=None):
+    """Apply a plan on the given sharding mesh; dispatch hooks receive explicit EP and TP meshes."""
     tp_plan = model.tp_plan if tp_plan is None else tp_plan
-    shard_mesh = ep_mesh if ep_mesh is not None else tp_mesh
 
     for name, module in model.named_modules():
         # Create DTensor placeholders so the loader knows which shard belongs to this rank.
