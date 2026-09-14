@@ -654,7 +654,7 @@ class GenerationMixin(ContinuousMixin):
         attention_mask: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         is_first_iteration: bool | None = False,
-        inputs_are_padded: bool = True,
+        can_drop_attention_mask: bool = False,
         **kwargs,
     ):
         """
@@ -730,7 +730,7 @@ class GenerationMixin(ContinuousMixin):
                 is_first_iteration=is_first_iteration,
             )
 
-        if attention_mask is not None and inputs_are_padded:
+        if attention_mask is not None and not can_drop_attention_mask:
             model_inputs[attention_mask_key] = attention_mask
 
         if encoder_attention_mask is not None:
@@ -2769,12 +2769,12 @@ class GenerationMixin(ContinuousMixin):
         )
 
         attention_mask = model_kwargs.get("attention_mask")
-        generation_config._inputs_are_padded = (
-            self.config.is_encoder_decoder
-            or attention_mask is None
-            or is_tracing(attention_mask)
-            or self._valid_auto_compile_criteria(model_kwargs, generation_config)
-            or not bool(fast_all(attention_mask))
+        generation_config._can_drop_attention_mask = (
+            attention_mask is not None
+            and not self.config.is_encoder_decoder
+            and not is_tracing(attention_mask)
+            and not self._valid_auto_compile_criteria(model_kwargs, generation_config)
+            and bool(fast_all(attention_mask))
         )
 
         if self.device.type != input_ids.device.type:
@@ -3038,7 +3038,7 @@ class GenerationMixin(ContinuousMixin):
                     model_inputs = self.prepare_inputs_for_generation(
                         input_ids,
                         next_sequence_length=next_sequence_length,
-                        inputs_are_padded=generation_config._inputs_are_padded,
+                        can_drop_attention_mask=generation_config._can_drop_attention_mask,
                         **model_kwargs,
                     )
                     outputs = model_forward(**model_inputs, return_dict=True)
@@ -3543,7 +3543,7 @@ class GenerationMixin(ContinuousMixin):
                 model_inputs = self.prepare_inputs_for_generation(
                     flat_running_sequences,
                     next_sequence_length=next_sequence_length,
-                    inputs_are_padded=generation_config._inputs_are_padded,
+                    can_drop_attention_mask=generation_config._can_drop_attention_mask,
                     **model_kwargs,
                 )
                 model_outputs = self(**model_inputs, return_dict=True)
@@ -3892,7 +3892,7 @@ class GenerationMixin(ContinuousMixin):
                 candidate_input_ids,
                 next_sequence_length=next_sequence_length,
                 is_first_iteration=is_first_iteration,
-                inputs_are_padded=generation_config._inputs_are_padded,
+                can_drop_attention_mask=generation_config._can_drop_attention_mask,
                 **candidate_kwargs,
             )
 
@@ -4122,7 +4122,7 @@ class GenerationMixin(ContinuousMixin):
                 input_ids,
                 next_sequence_length=next_sequence_length,
                 is_first_iteration=is_first_iteration,
-                inputs_are_padded=generation_config._inputs_are_padded,
+                can_drop_attention_mask=generation_config._can_drop_attention_mask,
                 **model_kwargs,
             )
             return self(**model_inputs, return_dict=True)
@@ -4155,7 +4155,7 @@ class GenerationMixin(ContinuousMixin):
                 if position_ids is not None:
                     model_kwargs["position_ids"] = position_ids[:, past_length:current_length]
                 model_inputs = self.prepare_inputs_for_generation(
-                    input_chunk, inputs_are_padded=generation_config._inputs_are_padded, **model_kwargs
+                    input_chunk, can_drop_attention_mask=generation_config._can_drop_attention_mask, **model_kwargs
                 )
 
                 outputs = model_forward(**model_inputs, return_dict=True)
