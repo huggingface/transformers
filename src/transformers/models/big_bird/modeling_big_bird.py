@@ -1626,10 +1626,9 @@ class BigBirdModel(BigBirdPreTrainedModel):
             band_mask = None
             from_mask = None
             to_mask = None
-            attention_mask = create_bidirectional_mask(
-                config=self.config,
-                inputs_embeds=embedding_output,
-                attention_mask=attention_mask,
+            mask_function = create_bidirectional_mask if self.config.is_decoder else create_bidirectional_mask
+            attention_mask = mask_function(
+                self.config, embedding_output, attention_mask=attention_mask, past_key_values=past_key_values
             )
         else:
             raise ValueError(
