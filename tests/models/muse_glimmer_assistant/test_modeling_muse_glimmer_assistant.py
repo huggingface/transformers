@@ -165,11 +165,6 @@ class MuseGlimmerAssistantIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
     drafter_id = "meta-models/Muse-Glimmer-30B-assistant"
     main_model_id = "meta-models/Muse-Glimmer-30B"
 
-    # DFlash is a lossless speculative-decoding algorithm: it provably produces the same token sequence as
-    # standard greedy decoding.  The expected prefix below is therefore identical to the one verified by
-    # MuseGlimmerIntegrationTest.test_text_generation_matches_reference in test_modeling_muse_glimmer.py.
-    EXPECTED_DFLASH_TEXT_PREFIX = " to find your gift. The purpose of life is to give it away."
-
     @classmethod
     def setUpClass(cls):
         cls.drafter = None
@@ -247,5 +242,10 @@ class MuseGlimmerAssistantIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
             max_new_tokens=24,
             do_sample=False,
         )
+        # Strip prompt tokens; output shape is [batch, prompt_len + gen_len].
         completion = tokenizer.decode(output[0, input_ids.shape[1] :], skip_special_tokens=True)
-        self.assertEqual(completion[: len(self.EXPECTED_DFLASH_TEXT_PREFIX)], self.EXPECTED_DFLASH_TEXT_PREFIX)
+
+        # DFlash is lossless — identical output to greedy decoding — so this prefix matches
+        # MuseGlimmerIntegrationTest.test_text_generation_matches_reference in test_modeling_muse_glimmer.py.
+        expected = " to find your gift. The purpose of life is to give it away."
+        self.assertEqual(completion[: len(expected)], expected)
