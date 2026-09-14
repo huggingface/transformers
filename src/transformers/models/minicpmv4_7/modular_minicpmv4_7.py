@@ -24,13 +24,14 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 from ..minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6Config, MiniCPMV4_6VisionConfig
 from ..minicpmv4_6.modeling_minicpmv4_6 import (
     MiniCPMV4_6ForConditionalGeneration,
     MiniCPMV4_6Model,
     MiniCPMV4_6PreTrainedModel,
 )
+
 
 logger = logging.get_logger(__name__)
 
@@ -693,9 +694,7 @@ def compute_canvas_rope_index(
     if attention_mask is not None:
         seq_lens = attention_mask.sum(-1)
     else:
-        seq_lens = torch.full(
-            (input_ids.shape[0],), input_ids.shape[1], device=input_ids.device, dtype=torch.long
-        )
+        seq_lens = torch.full((input_ids.shape[0],), input_ids.shape[1], device=input_ids.device, dtype=torch.long)
     deltas = position_ids.amax(dim=(0, 2)).unsqueeze(1) + 1 - seq_lens.unsqueeze(1)
     return position_ids, deltas.long()
 
