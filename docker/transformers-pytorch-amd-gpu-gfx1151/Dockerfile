@@ -99,10 +99,8 @@ RUN python3 -m pip install --no-cache-dir einops blobfile num2words timm
 # SIGSEGVs and takes pytest down with it.
 ENV FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE
 
-# Keep Triton / inductor / tmp caches on disk rather than RAM: this APU has a
-# single 62 GiB pool shared between CPU and GPU, so a RAM-backed /tmp steals VRAM.
-# At CI runtime, back /scratch with a host volume on the runner's large disk.
-ENV TRITON_CACHE_DIR=/scratch/triton \
-    TORCHINDUCTOR_CACHE_DIR=/scratch/inductor \
-    TMPDIR=/scratch/tmp
-RUN mkdir -p /scratch/triton /scratch/inductor /scratch/tmp
+# NOTE: do NOT point TMPDIR / Triton / inductor caches at a /scratch that the
+# workflow bind-mounts over -- the mount hides the dirs created here, leaving
+# TMPDIR non-existent, and ROCm then segfaults on the first kernel launch.
+# Container /tmp (overlay, disk-backed) is fine. If a dedicated cache is wanted
+# later, create it at runtime inside whatever is mounted.

@@ -47,7 +47,6 @@ jobs:
 
       - name: Smoke-test torch + Flash-Attention on the GPU
         run: |
-          mkdir -p "${RUNNER_TEMP}/scratch"
           # Grant the container the host's `render` group so it can reach the GPU
           # devices. Resolve the GID on the host (the container image has no such
           # group by name, which is why `--group-add render` failed before).
@@ -59,7 +58,6 @@ jobs:
           docker run --rm -i \
             --device=/dev/kfd --device=/dev/dri \
             --group-add "${RENDER_GID}" \
-            -v "${RUNNER_TEMP}/scratch:/scratch" \
             transformers-gfx1151:ci \
             python3 -u - <<'PY'
           print("[1] python up", flush=True)
@@ -93,6 +91,5 @@ jobs:
           docker run --rm \
             --device=/dev/kfd --device=/dev/dri \
             --group-add "${RENDER_GID}" \
-            -v "${RUNNER_TEMP}/scratch:/scratch" \
             transformers-gfx1151:ci \
             bash -c "cd /transformers && python3 -m pytest -q tests/utils/test_modeling_utils.py -x"
