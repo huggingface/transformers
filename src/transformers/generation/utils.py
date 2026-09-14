@@ -2714,21 +2714,19 @@ class GenerationMixin(ContinuousMixin):
         # A mask of all ones says nothing to the model, so drop it. Not under compilation though: dynamo
         # guards on `attention_mask is None`, so dropping it costs a recompile.
         attention_mask = model_kwargs.get("attention_mask")
-        inputs_are_padded = (
-            self.config.is_encoder_decoder
-            or attention_mask is None
-            or is_tracing(attention_mask)
-            or self._valid_auto_compile_criteria(model_kwargs, generation_config)
-            or not bool(fast_all(attention_mask))
-        )
         decoding_name = GENERATION_MODES_MAPPING[generation_mode]
-        uses_default_decoding_loop = (
-            "/" not in decoding_name
+        can_drop_attention_mask = (
+            attention_mask is not None
+            and not self.config.is_encoder_decoder
+            and not is_tracing(attention_mask)
+            and not self._valid_auto_compile_criteria(model_kwargs, generation_config)
+            and bool(fast_all(attention_mask))
+            # Hub recipes and the candidate generators index `model_kwargs["attention_mask"]` themselves
+            and "/" not in decoding_name
             and decoding_method is getattr(GenerationMixin, decoding_name)
-            # Candidate generators slice `model_kwargs["attention_mask"]` themselves
             and generation_mode != GenerationMode.ASSISTED_GENERATION
         )
-        if not inputs_are_padded and uses_default_decoding_loop:
+        if can_drop_attention_mask:
             generation_config._mask_length = attention_mask.shape[-1]
             del model_kwargs["attention_mask"]
 
