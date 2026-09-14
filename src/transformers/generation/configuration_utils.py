@@ -380,7 +380,7 @@ class GenerationConfig(PushToHubMixin):
     _decoder_start_token_tensor: "torch.Tensor | None"
 
     # Worked out once per call by generate(), never serialized
-    _inputs_hold_full_sequence: bool
+    _inputs_hold_full_sequence: bool = False
 
     # Hash to detect whether the instance was modified after loading
     _original_object_hash: int | None

@@ -1705,10 +1705,12 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         # from last position 3 that was processed
         # For `position_ids`, we need only the last token positions, whereas the `attention_mask` should be passed fully (except last "bonus" token)
         position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens - 1 : -1]
-        # `generate` drops a mask that says nothing; then there is nothing to slice either
+        # `generate` drops a mask that says nothing. Nothing is padded then, so a full mask says the same thing
+        # and keeps the slicing and concatenation below in one piece.
         attention_mask = model_kwargs.get("attention_mask")
-        if attention_mask is not None:
-            attention_mask = attention_mask[:, :-1]
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
+        attention_mask = attention_mask[:, :-1]
 
         # Create the new inputs corresponding to only the "noise", or "diffusion window". It's the last bonus token (or "anchor") from
         # the main model, and the noise tokens
