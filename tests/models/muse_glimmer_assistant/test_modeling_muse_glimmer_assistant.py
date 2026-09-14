@@ -156,10 +156,6 @@ class MuseGlimmerAssistantModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
-# The drafter checkpoint is ~5 layers (hidden_size=6656) — roughly 3–4 GiB in bfloat16, which fits on a
-# single 24 GiB accelerator without CPU offloading.  The full DFlash test also loads the main 30B model
-# with device_map="auto" and a 70% per-GPU memory cap so activation buffers (e.g. lm_head matmul) have
-# enough headroom; excess layers spill to CPU via accelerate offloading.
 @slow
 @require_torch_accelerator
 class MuseGlimmerAssistantIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
