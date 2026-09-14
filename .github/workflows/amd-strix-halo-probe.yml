@@ -21,8 +21,63 @@ permissions:
   packages: read   # pull the image from GHCR with the built-in GITHUB_TOKEN
 
 jobs:
+  # --- Full all-models run (gated) -------------------------------------------
+  # Sharded run of every tests/models/* folder, sized to the pool's ~7 usable
+  # concurrency. Runs ONLY when the pushed commit message contains "[models]".
+  # `setup` (on a hosted runner) splits the 514 model folders into N groups; the
+  # matrix then runs each group on the pool inside the prebuilt image.
+  models-setup:
+    name: Split model folders into shards
+    if: ${{ contains(github.event.head_commit.message, '[models]') }}
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.split.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: split
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import os, json
+          base = "tests/models"
+          dirs = sorted(d for d in os.listdir(base)
+                        if os.path.isdir(os.path.join(base, d)) and not d.startswith("__"))
+          N = 40
+          groups = [dirs[i::N] for i in range(N)]           # round-robin balance
+          include = [{"group": i + 1, "dirs": " ".join(f"tests/models/{d}" for d in g)}
+                     for i, g in enumerate(groups) if g]
+          print("matrix=" + json.dumps({"include": include}))
+          PY
+
+  models-ci:
+    name: "models ${{ matrix.group }}"
+    needs: models-setup
+    runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.models-setup.outputs.matrix) }}
+    container:
+      image: ghcr.io/huggingface/transformers-pytorch-amd-gpu-gfx1151:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --device=/dev/kfd --device=/dev/dri --group-add 992
+    env:
+      HF_HOME: /tmp/hf_home
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}   # empty if unset -> unauthenticated
+      # Flip to "1" for the full slow suite (real checkpoints) once non-slow is understood.
+      RUN_SLOW: "0"
+    steps:
+      - name: Run model tests for this shard
+        run: |
+          cd /transformers
+          echo "shard ${{ matrix.group }} -> ${{ matrix.dirs }}"
+          python3 -m pytest -v -rsfE --dist no ${{ matrix.dirs }}
+
   test:
     name: Smoke + tests (prebuilt gfx1151 image)
+    # Skip the quick smoke job on a [models] run.
+    if: ${{ !contains(github.event.head_commit.message, '[models]') }}
     runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
     timeout-minutes: 120
     # GitHub pulls this image and runs every step inside it. `options` passes the
