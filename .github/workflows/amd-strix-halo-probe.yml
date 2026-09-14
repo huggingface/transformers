@@ -41,15 +41,19 @@ jobs:
           base = "tests/models"
           dirs = sorted(d for d in os.listdir(base)
                         if os.path.isdir(os.path.join(base, d)) and not d.startswith("__"))
-          N = 40
+          # GitHub caps a matrix at 256 jobs/run, and we have >256 models, so we
+          # use the max granularity: 256 groups (~2 models each), each job NAMED
+          # by its model(s) so the UI shows model names rather than "shard N".
+          N = min(256, len(dirs))
           groups = [dirs[i::N] for i in range(N)]           # round-robin balance
-          include = [{"group": i + 1, "dirs": " ".join(f"tests/models/{d}" for d in g)}
-                     for i, g in enumerate(groups) if g]
+          include = [{"name": ", ".join(g),
+                      "dirs": " ".join(f"tests/models/{d}" for d in g)}
+                     for g in groups if g]
           print("matrix=" + json.dumps({"include": include}))
           PY
 
   models-ci:
-    name: "models ${{ matrix.group }}"
+    name: "${{ matrix.name }}"
     needs: models-setup
     runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
     timeout-minutes: 240
@@ -71,7 +75,7 @@ jobs:
       - name: Run model tests for this shard
         run: |
           cd /transformers
-          echo "shard ${{ matrix.group }} -> ${{ matrix.dirs }}"
+          echo "models -> ${{ matrix.dirs }}"
           # Run under xdist with worker restart: some attention tests hard-crash
           # (segfault) the process on gfx1151, which would otherwise abort the
           # whole shard and skip every model after it. With a worker subprocess,

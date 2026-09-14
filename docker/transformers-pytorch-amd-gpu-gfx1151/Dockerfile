@@ -27,12 +27,12 @@ ARG DEBIAN_FRONTEND=noninteractive
 # first GPU op rather than erroring cleanly -- install them here.
 # apt resilience: a build hit intermittent connect failures to
 # archive.ubuntu.com from the pool, so retry a few times before giving up.
-# (espeak-ng / tesseract-ocr are omitted for now -- not needed by the current
-# smoke + test slice; add them back once the apt path is reliable.)
+# tesseract-ocr + espeak-ng are needed by OCR / TTS model tests.
 RUN printf 'Acquire::Retries "8";\nAcquire::http::Timeout "30";\n' > /etc/apt/apt.conf.d/99retries && \
     apt-get update && \
     apt-get install -y --no-install-recommends --fix-missing \
-      git git-lfs ffmpeg libsndfile1-dev \
+      git git-lfs ffmpeg libsndfile1-dev espeak-ng \
+      tesseract-ocr tesseract-ocr-eng \
       build-essential pkg-config curl ca-certificates \
       python3 python3-dev python3-pip python3-venv \
       libnuma1 libgomp1 libdrm2 libdrm-amdgpu1 libelf1 && \
@@ -94,6 +94,16 @@ RUN python3 -m pip uninstall -y kernels || true
 
 # Common extra deps used across the test suite.
 RUN python3 -m pip install --no-cache-dir einops blobfile num2words timm
+
+# Media decoders needed by audio/video model tests:
+#  - PyAV (`av`): torchvision video ops
+#  - torchcodec: audio/video decoding (pinned to the torch 2.9 ABI; --no-deps so
+#    it can't drag in a different torch). Best-effort: a torchcodec mismatch must
+#    not fail the whole image build.
+RUN python3 -m pip install --no-cache-dir av
+RUN python3 -m pip install --no-cache-dir --no-deps torchcodec==0.9.0 || \
+    python3 -m pip install --no-cache-dir --no-deps torchcodec || \
+    echo "torchcodec install skipped"
 
 # --- Runtime environment -----------------------------------------------------
 # REQUIRED for the FA Triton-AMD backend on gfx1151 -- without it the backend
