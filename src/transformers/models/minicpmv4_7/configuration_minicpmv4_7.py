@@ -137,21 +137,9 @@ class MiniCPMV4_7Config(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
-        # Keep the `language_model.` prefix inheritance for tp/ep plans from `text_config`.
-        if getattr(self.text_config, "base_model_tp_plan", None):
-            self.base_model_tp_plan = {
-                f"language_model.{k}": v for k, v in self.text_config.base_model_tp_plan.items()
-            }
-        ep_plan = getattr(self.text_config, "base_model_ep_plan", None)
-        if ep_plan is None and getattr(self.text_config, "num_experts", None):
-            ep_plan = {
-                "layers.*.mlp.gate": "ep_router",
-                "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
-                "layers.*.mlp.experts.down_proj": "grouped_gemm",
-                "layers.*.mlp.experts": "moe_tp_experts",
-            }
-        if ep_plan:
-            self.base_model_ep_plan = {f"language_model.{k}": v for k, v in ep_plan.items()}
+    # No tp/ep plan rewriting here: the text config declares `base_model_tp_plan` /
+    # `base_model_ep_plan` as class attributes, and `init_parallel_plans()` already merges every
+    # child module's plan under its own attribute name (`language_model.*`).
 
     def get_mrope_special_token_ids(self) -> dict:
         return {
