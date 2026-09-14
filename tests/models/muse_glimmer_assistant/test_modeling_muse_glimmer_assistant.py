@@ -210,10 +210,9 @@ class MuseGlimmerAssistantIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
         # Expected value from MuseGlimmerIntegrationTest.test_text_generation_matches_reference.
         expected = Expectations(
             {
-                (
-                    "cuda",
-                    None,
-                ): " to find your gift. The purpose of life is to give it away.\n\nThe meaning of life is to find your gift",
+                # fmt: off
+                ("cuda", None): " to find your gift. The purpose of life is to give it away.\n\nThe meaning of life is to find your gift",
+                # fmt: on
             }
         )
         self.assertEqual(completion, expected.get_expectation())
