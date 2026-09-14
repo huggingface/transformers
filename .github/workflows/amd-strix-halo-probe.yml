@@ -21,31 +21,8 @@ permissions:
   packages: read   # pull the image from GHCR with the built-in GITHUB_TOKEN
 
 jobs:
-  # One-off pool concurrency probe: 24 parallel jobs that each just hold a runner
-  # for ~2 min, so we can measure how many run simultaneously (= usable
-  # parallelism for sharding the full suite). Runs ONLY when the pushed commit
-  # message contains "[probe]", so normal runs are unaffected.
-  concurrency-probe:
-    name: "concurrency probe ${{ matrix.n }}"
-    if: ${{ contains(github.event.head_commit.message, '[probe]') }}
-    runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      max-parallel: 32
-      matrix:
-        n: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
-    steps:
-      - name: Hold a runner
-        run: |
-          echo "PROBE n=${{ matrix.n }} runner=${RUNNER_NAME:-unknown} start=$(date -u +%s)"
-          sleep 120
-          echo "PROBE n=${{ matrix.n }} runner=${RUNNER_NAME:-unknown} end=$(date -u +%s)"
-
   test:
     name: Smoke + tests (prebuilt gfx1151 image)
-    # Skip the normal test job on a [probe] run.
-    if: ${{ !contains(github.event.head_commit.message, '[probe]') }}
     runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
     timeout-minutes: 120
     # GitHub pulls this image and runs every step inside it. `options` passes the
