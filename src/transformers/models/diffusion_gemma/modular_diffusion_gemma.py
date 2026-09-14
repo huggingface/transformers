@@ -23,7 +23,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...masking_utils import (
     ALL_MASK_ATTENTION_FUNCTIONS,
     bidirectional_mask_function,
@@ -51,7 +51,7 @@ from ...utils import (
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..gemma4.configuration_gemma4 import Gemma4Config, Gemma4TextConfig
 from ..gemma4.modeling_gemma4 import (
     Gemma4ClippableLinear,
@@ -145,9 +145,9 @@ class DiffusionGemmaConfig(Gemma4Config):
     ```"""
 
     model_type = "diffusion_gemma"
-    sub_configs = {
-        "text_config": DiffusionGemmaTextConfig,
-        "vision_config": AutoConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=DiffusionGemmaTextConfig),
+        "vision_config": SubConfigSpec(config_class=AutoConfig),
     }
 
     text_config: DiffusionGemmaTextConfig | dict[str, Any] | None = None
@@ -165,21 +165,6 @@ class DiffusionGemmaConfig(Gemma4Config):
     eoa_token_index = AttributeError()
     video_token_id = AttributeError()
     audio_token_id = AttributeError()
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = DiffusionGemmaTextConfig()
-            logger.info("text_config is None. Using default DiffusionGemmaTextConfig.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = DiffusionGemmaTextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            logger.info("vision_config is None. DiffusionGemmaEncoderModel.vision_tower will not be initialized.")
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "gemma4_vision")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-
-        PreTrainedConfig.__post_init__(**kwargs)
 
 
 # Add support for `partial_rotary_factor` in full attention layers

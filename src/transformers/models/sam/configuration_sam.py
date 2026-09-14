@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 
 
@@ -178,10 +178,10 @@ class SamConfig(PreTrainedConfig):
     ```"""
 
     model_type = "sam"
-    sub_configs = {
-        "prompt_encoder_config": SamPromptEncoderConfig,
-        "mask_decoder_config": SamMaskDecoderConfig,
-        "vision_config": SamVisionConfig,
+    sub_configs_defaults = {
+        "prompt_encoder_config": SubConfigSpec(config_class=SamPromptEncoderConfig),
+        "mask_decoder_config": SubConfigSpec(config_class=SamMaskDecoderConfig),
+        "vision_config": SubConfigSpec(config_class=SamVisionConfig),
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -189,24 +189,6 @@ class SamConfig(PreTrainedConfig):
     mask_decoder_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = SamVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = SamVisionConfig()
-
-        if isinstance(self.prompt_encoder_config, dict):
-            self.prompt_encoder_config = SamPromptEncoderConfig(**self.prompt_encoder_config)
-        elif self.prompt_encoder_config is None:
-            self.prompt_encoder_config = SamPromptEncoderConfig()
-
-        if isinstance(self.mask_decoder_config, dict):
-            self.mask_decoder_config = SamMaskDecoderConfig(**self.mask_decoder_config)
-        elif self.mask_decoder_config is None:
-            self.mask_decoder_config = SamMaskDecoderConfig()
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["SamConfig", "SamMaskDecoderConfig", "SamPromptEncoderConfig", "SamVisionConfig"]

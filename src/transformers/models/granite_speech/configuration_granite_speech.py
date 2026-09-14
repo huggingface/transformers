@@ -15,9 +15,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-3.3-2b")
@@ -110,10 +110,10 @@ class GraniteSpeechConfig(PreTrainedConfig):
 
     model_type = "granite_speech"
     attribute_map = {"audio_token_id": "audio_token_index"}
-    sub_configs = {
-        "text_config": AutoConfig,
-        "encoder_config": GraniteSpeechEncoderConfig,
-        "projector_config": AutoConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="granite"),
+        "encoder_config": SubConfigSpec(config_class=GraniteSpeechEncoderConfig),
+        "projector_config": SubConfigSpec(config_class=AutoConfig, model_type="blip_2_qformer"),
     }
 
     text_config: dict | PreTrainedConfig | None = None
@@ -125,25 +125,6 @@ class GraniteSpeechConfig(PreTrainedConfig):
     downsample_rate: int = 5
     window_size: int = 15
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "granite")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["granite"]()
-
-        if isinstance(self.projector_config, dict):
-            self.projector_config["model_type"] = self.projector_config.get("model_type", "blip_2_qformer")
-            self.projector_config = CONFIG_MAPPING[self.projector_config["model_type"]](**self.projector_config)
-        elif self.projector_config is None:
-            self.projector_config = CONFIG_MAPPING["blip_2_qformer"]()
-
-        if not isinstance(self.encoder_config, GraniteSpeechEncoderConfig):
-            self.encoder_config = {} if self.encoder_config is None else self.encoder_config
-            self.encoder_config = GraniteSpeechEncoderConfig(**self.encoder_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["GraniteSpeechEncoderConfig", "GraniteSpeechConfig"]

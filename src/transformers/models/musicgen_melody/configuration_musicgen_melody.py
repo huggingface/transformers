@@ -15,9 +15,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
-from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
+from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -134,10 +134,10 @@ class MusicgenMelodyConfig(PreTrainedConfig):
     ```"""
 
     model_type = "musicgen_melody"
-    sub_configs = {
-        "text_encoder": AutoConfig,
-        "audio_encoder": AutoConfig,
-        "decoder": MusicgenMelodyDecoderConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="t5"),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="encodec"),
+        "decoder": SubConfigSpec(config_class=MusicgenMelodyDecoderConfig),
     }
 
     text_encoder: dict | PreTrainedConfig | None = None
@@ -148,25 +148,8 @@ class MusicgenMelodyConfig(PreTrainedConfig):
     initializer_factor: float = 0.02
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.text_encoder, dict):
-            text_encoder_model_type = self.text_encoder.pop("model_type")
-            self.text_encoder = AutoConfig.for_model(text_encoder_model_type, **self.text_encoder)
-        elif self.text_encoder is None:
-            self.text_encoder = CONFIG_MAPPING["t5"]()
-
-        if isinstance(self.audio_encoder, dict):
-            audio_encoder_model_type = self.audio_encoder.pop("model_type")
-            self.audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **self.audio_encoder)
-        elif self.audio_encoder is None:
-            self.audio_encoder = CONFIG_MAPPING["encodec"]()
-
-        if isinstance(self.decoder, dict):
-            self.decoder = MusicgenMelodyDecoderConfig(**self.decoder)
-        elif self.decoder is None:
-            self.decoder = MusicgenMelodyDecoderConfig()
-
-        self.is_encoder_decoder = True
         super().__post_init__(**kwargs)
+        self.is_encoder_decoder = True
 
     @property
     # This is a property because you might want to change the codec model on the fly
