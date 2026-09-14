@@ -37,9 +37,7 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
     projector_bias (`bool`, *optional*, defaults to `True`):
         Whether to use bias in the multi-modal projector linear layers.
     audio_chunk_size (`int`, *optional*, defaults to 480000):
-        Number of raw audio samples per Whisper encoder window (`chunk_length * sampling_rate`). The processor
-        splits each audio sample into windows of this size before feature extraction; the model uses it together
-        with `padding_mask` to recover which chunk rows of `input_features` belong to which audio sample.
+        Whisper encoder window size in raw audio samples, used with `padding_mask` to recover `audio_chunk_mapping`.
     """
 
     model_type = "moss_transcribe_diarize"
@@ -85,10 +83,10 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
             audio_config = dict(self.audio_config)
-            model_type = audio_config.setdefault("model_type", "qwen2_audio_encoder")
+            model_type = audio_config.setdefault("model_type", "whisper")
             self.audio_config = CONFIG_MAPPING[model_type](**audio_config)
         elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["qwen2_audio_encoder"](**self._default_audio_config_kwargs)
+            self.audio_config = CONFIG_MAPPING["whisper"](**self._default_audio_config_kwargs)
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
