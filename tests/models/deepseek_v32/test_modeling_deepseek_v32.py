@@ -14,17 +14,19 @@
 """Testing suite for the PyTorch DeepSeekV3.2 model."""
 
 import unittest
+from unittest.mock import patch
 
 import pytest
 from parameterized import parameterized
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    ids_tensor,
 )
 
 
@@ -36,6 +38,7 @@ if is_torch_available():
         DeepseekV32ForCausalLM,
         DeepseekV32Model,
     )
+    from transformers.models.deepseek_v32 import modeling_deepseek_v32
 
 
 # Opening of "Alice's Adventures in Wonderland" by Lewis Carroll (public domain, Project Gutenberg).
@@ -159,6 +162,21 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
     def _get_attention_kv_length(self, config, kv_length):
         # DSA returns the probabilities over the keys its indexer selected, `[B, H, S, min(index_topk, kv_length)]`
         return min(config.index_topk, kv_length)
+
+    def test_chunked_indexer_and_attention_match_unchunked(self):
+        # The indexer scores and the sparse attention run in query chunks under a memory budget; chunking must not
+        # change the selected keys or the outputs. The prompt exceeds `index_topk` so real selection happens.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DeepseekV32ForCausalLM(config).to(torch_device).eval()
+        input_ids = ids_tensor((2, config.index_topk + 5), config.vocab_size)
+        with torch.no_grad():
+            expected = model(input_ids).logits
+            with (
+                patch.object(modeling_deepseek_v32, "_INDEXER_SCORE_BUDGET", 1),
+                patch.object(modeling_deepseek_v32, "_SPARSE_ATTENTION_BUDGET", 1),
+            ):
+                chunked = model(input_ids).logits
+        torch.testing.assert_close(chunked, expected, rtol=1e-5, atol=1e-5)
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = DeepseekV32ForCausalLM if is_torch_available() else None

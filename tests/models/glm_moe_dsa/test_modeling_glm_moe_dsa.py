@@ -15,6 +15,7 @@
 
 import os
 import unittest
+from unittest.mock import patch
 
 import torch
 from parameterized import parameterized
@@ -28,16 +29,19 @@ from transformers import (
     set_seed,
 )
 from transformers.distributed import DistributedConfig
+from transformers.models.glm_moe_dsa import modeling_glm_moe_dsa
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     slow,
+    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    ids_tensor,
 )
 
 
@@ -105,6 +109,21 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
             config.indexer_types,
             ["full", "full", "full", "shared", "shared", "shared", "full", "shared"],
         )
+
+    def test_chunked_indexer_and_attention_match_unchunked(self):
+        # The indexer scores and the sparse attention run in query chunks under a memory budget; chunking must not
+        # change the selected keys or the outputs. The prompt exceeds `index_topk` so real selection happens.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = GlmMoeDsaForCausalLM(config).to(torch_device).eval()
+        input_ids = ids_tensor((2, config.index_topk + 5), config.vocab_size)
+        with torch.no_grad():
+            expected = model(input_ids).logits
+            with (
+                patch.object(modeling_glm_moe_dsa, "_INDEXER_SCORE_BUDGET", 1),
+                patch.object(modeling_glm_moe_dsa, "_SPARSE_ATTENTION_BUDGET", 1),
+            ):
+                chunked = model(input_ids).logits
+        torch.testing.assert_close(chunked, expected, rtol=1e-5, atol=1e-5)
 
     # DSA selects tokens with a hard top-k, which is discontinuous: a tiny numerical difference in the
     # indexer scores (attention backend, padding, batching, sequence packing) can flip which tokens are
