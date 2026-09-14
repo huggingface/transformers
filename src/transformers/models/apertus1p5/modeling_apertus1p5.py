@@ -198,6 +198,7 @@ class Apertus1p5VisionTokenizerEncoderStage(nn.Module):
 
         self.layers = nn.ModuleList(layers)
         self.downsample = (
+            # CODEPATH: channel_multiplier sets the stage count; all but the final stage downsample.
             Apertus1p5VisionTokenizerDownsample(out_channels)
             if stage_idx < len(config.channel_multiplier) - 1
             else nn.Identity()
@@ -960,11 +961,11 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         if input_ids is None:
             embedder = self.get_input_embeddings()
             image_token_embed = embedder(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = (inputs_embeds == image_token_embed).all(-1)
             audio_token_embed = embedder(
-                torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_audio_mask = (inputs_embeds == audio_token_embed).all(-1)
         else:
