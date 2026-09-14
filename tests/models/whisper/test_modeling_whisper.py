@@ -539,6 +539,14 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         model.generate(input_features)
         model.generate(input_features, num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
+    @require_torch_fp16
+    def test_generate_fp16_float32_input_features(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs()
+        input_features = input_dict["input_features"]
+        model = WhisperForConditionalGeneration(config).eval().to(torch_device)
+        model.half()
+        model.generate(input_features)
+
     def test_generate_language(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_features = input_dict["input_features"]
