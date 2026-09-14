@@ -878,7 +878,7 @@ class GenerationMixin(ContinuousMixin):
 
         return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * bos_token_id
 
-    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs, dropped_mask_length=None):
         """
         Tries to infer position ids given attention mask and past kv cache length. All instances when
         `position_ids=None` should call this method.
@@ -893,6 +893,11 @@ class GenerationMixin(ContinuousMixin):
             position_ids = attention_mask.long().cumsum(-1) - 1
             # We need this as otherwise padding tokens appear as -1 in position
             position_ids = position_ids.masked_fill(attention_mask == 0, 0)
+        elif dropped_mask_length is not None:
+            # `generate` dropped a mask of all ones; the branch above would have counted over it, so do that.
+            # Keep its batch dimension too -- `_expand_inputs_for_generation` repeats this row-wise.
+            position_ids = torch.arange(dropped_mask_length, dtype=torch.long, device=inputs_tensor.device)
+            position_ids = position_ids.unsqueeze(0).expand(inputs_tensor.shape[0], -1)
         else:
             past_length = 0
             if (cache := model_kwargs.get("past_key_values")) is not None:
@@ -2696,10 +2701,50 @@ class GenerationMixin(ContinuousMixin):
             if model_input_name == "input_ids" and len(model_kwargs["attention_mask"].shape) > 2:
                 raise ValueError("`attention_mask` passed to `generate` must be 2D.")
 
+        # A mask of all ones says nothing, so drop it before anything downstream has a chance to depend on it.
+        # The cache does not exist yet, so compilation has to be predicted rather than asked: err towards
+        # "will compile", where the only cost is skipping the optimization.
+        existing_cache = model_kwargs.get("past_key_values", model_kwargs.get("cache_params"))
+        may_compile = (
+            not generation_config.disable_compile
+            and (
+                self.device.type in ["cuda", "xpu", "neuron", "tpu"]
+                or bool(
+                    generation_config.compile_config is not None
+                    and generation_config.compile_config._compile_all_devices
+                )
+            )
+            and (
+                generation_config.cache_implementation is not None or getattr(existing_cache, "is_compileable", False)
+            )
+        )
+        attention_mask = model_kwargs.get("attention_mask")
+        inputs_are_padded = (
+            self.config.is_encoder_decoder
+            or attention_mask is None
+            or is_tracing(attention_mask)
+            or may_compile
+            or not bool(fast_all(attention_mask))
+        )
+        decoding_name = GENERATION_MODES_MAPPING[generation_mode]
+        uses_default_decoding_loop = (
+            "/" not in decoding_name
+            and decoding_method is getattr(GenerationMixin, decoding_name)
+            # Candidate generators slice `model_kwargs["attention_mask"]` themselves
+            and generation_mode != GenerationMode.ASSISTED_GENERATION
+        )
+        if not inputs_are_padded and uses_default_decoding_loop:
+            # The mask was all ones, so its length is the only thing it still told us: positions count over it,
+            # and `_prefill` compares the inputs against it. Keep the number, drop the tensor.
+            generation_config._dropped_mask_length = attention_mask.shape[-1]
+            del model_kwargs["attention_mask"]
+
         kwargs_has_position_ids = model_kwargs.get("position_ids", None) is not None
         accepts_position_ids = "position_ids" in set(inspect.signature(self.forward).parameters.keys())
         if not kwargs_has_position_ids and accepts_position_ids and not self.config.is_encoder_decoder:
-            model_kwargs["position_ids"] = self._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
+            model_kwargs["position_ids"] = self._prepare_position_ids_for_generation(
+                inputs_tensor, model_kwargs, generation_config._dropped_mask_length
+            )
 
         if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
             # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`
@@ -2766,30 +2811,6 @@ class GenerationMixin(ContinuousMixin):
         self._prepare_cache_for_generation(
             generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
         )
-
-        attention_mask = model_kwargs.get("attention_mask")
-        inputs_are_padded = (
-            self.config.is_encoder_decoder
-            or attention_mask is None
-            or is_tracing(attention_mask)
-            or self._valid_auto_compile_criteria(model_kwargs, generation_config)
-            or not bool(fast_all(attention_mask))
-        )
-        length_mask = model_kwargs.get(
-            "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
-        )
-        generation_config._inputs_hold_full_sequence = (
-            length_mask is not None and input_ids.shape[1] == length_mask.shape[1]
-        )
-        decoding_name = GENERATION_MODES_MAPPING[generation_mode]
-        uses_default_decoding_loop = (
-            "/" not in decoding_name
-            and decoding_method is getattr(GenerationMixin, decoding_name)
-            # Candidate generators slice `model_kwargs["attention_mask"]` themselves
-            and generation_mode != GenerationMode.ASSISTED_GENERATION
-        )
-        if not inputs_are_padded and uses_default_decoding_loop:
-            del model_kwargs["attention_mask"]
 
         if self.device.type != input_ids.device.type:
             warnings.warn(
@@ -4116,9 +4137,16 @@ class GenerationMixin(ContinuousMixin):
             if use_inputs_embeds:
                 next_sequence_length = model_kwargs["inputs_embeds"].shape[1] - past_length
             else:
+                # The mask's length tells the two calling conventions apart; if `generate` dropped the mask,
+                # use the length it recorded when doing so
+                mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
+                attention_mask = model_kwargs.get(mask_key)
+                mask_length = (
+                    attention_mask.shape[1] if attention_mask is not None else generation_config._dropped_mask_length
+                )
                 # Only slice when the inputs hold the whole sequence; if they hold only the new tokens there is
-                # nothing to do (see where `_inputs_hold_full_sequence` is set)
-                if getattr(generation_config, "_inputs_hold_full_sequence", False):
+                # nothing to do
+                if mask_length is not None and input_ids.shape[1] == mask_length:
                     # inputs will be sliced as `input_ids[:, -next_sequence_length :]` in `prepare_inputs_for_generation`
                     next_sequence_length = input_ids.shape[1] - past_length
 
