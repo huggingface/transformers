@@ -2246,6 +2246,12 @@ class ProcessorMixin(PushToHubMixin):
                             )
                             start_pos = bisect.bisect_left(offset_starts, assistant_start_char)
                             end_pos = bisect.bisect_left(offset_starts, assistant_end_char)
+                            # The span may start inside the previous token, e.g. `▁The` absorbing the newline before it
+                            if (
+                                start_pos > 0
+                                and offsets[start_pos - 1][0] < assistant_start_char < offsets[start_pos - 1][1]
+                            ):
+                                start_pos -= 1
 
                             if not (
                                 start_pos >= 0
