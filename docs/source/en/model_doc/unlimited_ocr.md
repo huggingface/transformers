@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2026-06-23 and contributed to Hugging Face Transformers on 2026-08-24.*
+*This model was published in HF papers on 2026-06-23 and contributed to Hugging Face Transformers on 2026-09-14.*
 
 
 # UnlimitedOcr
@@ -63,12 +63,7 @@ inputs = processor.apply_chat_template(
     messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
 ).to(model.device)
 
-output = model.generate(
-    **inputs,
-    max_new_tokens=512,
-    no_repeat_ngram_size=35,
-    no_repeat_ngram_window_size=128,
-)
+output = model.generate(**inputs, max_new_tokens=512)
 processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 # image [383, 87, 497, 171]\ntext [333, 201, 558, 230]R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM...
 
@@ -105,12 +100,7 @@ inputs = processor.apply_chat_template(
     processor_kwargs={"padding": True},
 ).to(model.device)
 
-output = model.generate(
-    **inputs,
-    max_new_tokens=32768,
-    no_repeat_ngram_size=35,
-    no_repeat_ngram_window_size=128,
-)
+output = model.generate(**inputs)
 processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 # image [383, 87, 497, 171]\ntext [333, 201, 558, 230]R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM...
 
@@ -138,12 +128,7 @@ inputs = processor.apply_chat_template(
     messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
 ).to(model.device)
 
-output = model.generate(
-    **inputs,
-    max_new_tokens=32768,
-    no_repeat_ngram_size=35,
-    no_repeat_ngram_window_size=128,
-)
+output = model.generate(**inputs)
 decoded, detections = processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=False, return_detections=True)
 # <|det|>image [383, 87, 497, 171]<|/det|>\n<|det|>text [333, 201, 558, 230]<|/det|>R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM...
 
@@ -204,9 +189,7 @@ inputs = processor.apply_chat_template(
 
 output = model.generate(
     **inputs,
-    max_new_tokens=32768,
-    no_repeat_ngram_size=35,
-    no_repeat_ngram_window_size=1024,
+    no_repeat_ngram_window_size=1024, # default: 128, larger window size recommended for long documents
 )
 processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 # <PAGE>image [382, 87, 489, 174]\ntitle [333, 201, 556, 230]R&D QUALITY IMPROVEMENT\nSUGGESTION/SCLUTION FORM...
