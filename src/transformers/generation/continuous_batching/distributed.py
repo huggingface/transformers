@@ -60,10 +60,17 @@ class DistributedHelper:
             self.tp_group = tp_mesh.get_group()
             self.tp_root_global_rank = dist.get_global_rank(self.tp_group, 0)
             self.tp_local_rank = tp_mesh.get_local_rank()
-            # If TP is on, we create a dedicated CPU group, with an eventual timeout
+            # If TP is on, we create a dedicated CPU group, with an eventual timeout. When the TP group
+            # is a subset of the world (e.g. one TP group per node with data parallelism across nodes),
+            # only the group members join the creation (use_local_synchronization)
             tp_ranks = dist.get_process_group_ranks(self.tp_group)
             timeout = None if cpu_group_timeout is None else timedelta(seconds=cpu_group_timeout)
-            self.cpu_comm_group = dist.new_group(ranks=tp_ranks, backend="gloo", timeout=timeout)
+            self.cpu_comm_group = dist.new_group(
+                ranks=tp_ranks,
+                backend="gloo",
+                timeout=timeout,
+                use_local_synchronization=len(tp_ranks) < self.world_size,
+            )
         else:
             self.tp_size = 1
             self.tp_group = None

@@ -20,7 +20,7 @@ and don't require downloading real datasets.
 Supports --do_train (default) and --do_eval via TrainingArguments.
 
 32 training samples are created; with per_device_train_batch_size=4
-and 2 GPUs this gives 4 steps per epoch.
+and 2 GPUs this gives 4 steps per epoch. Pass --padding do_not_pad for variable-length data.
 """
 
 import json
@@ -39,6 +39,28 @@ from transformers import (
 
 
 DTYPE_MAP = {"fp32": torch.float32, "bf16": torch.bfloat16, "fp16": torch.float16}
+PADDING_CHOICES = ("max_length", "do_not_pad")
+
+
+class DataCollatorWithPositionIds:
+    """Wrap a collator so every batch carries `position_ids`.
+
+    DeepSpeed's Ulysses sequence parallelism requires them, because a token has to keep its global
+    position once the sequence is sharded across ranks (see `deepspeed/runtime/sequence_parallel/
+    ulysses_sp.py`). These samples are not packed, so a plain `arange` per sample is the correct
+    value -- and it is also what the model derives internally when `position_ids` is not passed, so
+    adding it does not change the non-SP runs this test compares against.
+    """
+
+    def __init__(self, inner):
+        self.inner = inner
+
+    def __call__(self, features):
+        batch = self.inner(features)
+        if "position_ids" not in batch:
+            batch_size, seq_len = batch["input_ids"].shape
+            batch["position_ids"] = torch.arange(seq_len).expand(batch_size, seq_len).clone()
+        return batch
 
 
 def _pop_custom_arg(name):
@@ -60,6 +82,11 @@ def main():
     model_dtype = _pop_custom_arg("--model_dtype")
     attn_impl = _pop_custom_arg("--attn_implementation")
     pad_to_multiple_of = _pop_custom_arg("--pad_to_multiple_of")
+    # "max_length" (default) pads samples to max_length; "do_not_pad" gives variable-length
+    # training data.
+    padding = _pop_custom_arg("--padding") or "max_length"
+    if padding not in PADDING_CHOICES:
+        raise ValueError(f"--padding must be one of {PADDING_CHOICES}, got {padding!r}")
 
     parser = HfArgumentParser((TrainingArguments,))
     (training_args,) = parser.parse_args_into_dataclasses()
@@ -88,6 +115,7 @@ def main():
 
     # Synthetic dataset — 32 samples of tokenized text
     # With per_device_train_batch_size=4 and 2 GPUs this gives 4 steps per epoch.
+    # The four texts tokenize to 51, 61, 61 and 81 tokens.
     texts = [
         "The quick brown fox jumps over the lazy dog. " * 5,
         "A journey of a thousand miles begins with a single step. " * 5,
@@ -98,9 +126,9 @@ def main():
     train_dataset = None
     eval_dataset = None
     if training_args.do_train:
-        train_dataset = [tokenizer(text, max_length=128, truncation=True, padding="max_length") for text in texts]
+        train_dataset = [tokenizer(text, max_length=128, truncation=True, padding=padding) for text in texts]
     if training_args.do_eval:
-        eval_dataset = [tokenizer(text, max_length=128, truncation=True, padding="max_length") for text in texts[:8]]
+        eval_dataset = [tokenizer(text, max_length=128, truncation=True, padding=padding) for text in texts[:8]]
 
     collator_kwargs = {}
     if pad_to_multiple_of:
@@ -113,7 +141,9 @@ def main():
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        data_collator=DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, **collator_kwargs),
+        data_collator=DataCollatorWithPositionIds(
+            DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, **collator_kwargs)
+        ),
     )
 
     if training_args.do_train:

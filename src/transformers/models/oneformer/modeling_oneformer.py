@@ -2887,7 +2887,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
         ```python
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import OneFormerProcessor, OneFormerModel
 
@@ -3085,7 +3085,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         ```python
         >>> from transformers import OneFormerProcessor, OneFormerForUniversalSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 

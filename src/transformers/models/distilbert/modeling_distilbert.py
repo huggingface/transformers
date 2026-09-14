@@ -243,7 +243,7 @@ class TransformerBlock(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, ...]:
+    ) -> torch.Tensor:
         # Self-Attention
         attention_output, _ = self.attention(
             hidden_states,

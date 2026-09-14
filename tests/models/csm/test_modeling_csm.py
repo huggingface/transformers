@@ -142,7 +142,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
     all_model_classes = (CsmForConditionalGeneration,) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    test_resize_embeddings_untied = False
 
     def setUp(self):
         self.model_tester = CsmModelTester(self)
