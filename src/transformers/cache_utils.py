@@ -729,6 +729,8 @@ class QuantizedLayer(DynamicLayer):
         self.q_group_size = q_group_size
         self.residual_length = residual_length
         self.cumulative_length = 0
+        # Beam reordering of the quantized states is deferred until the next `update`, see `reorder_cache`
+        self._pending_beam_idx = None
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
@@ -754,6 +756,12 @@ class QuantizedLayer(DynamicLayer):
 
         dequant_keys = self._dequantize(self._quantized_keys)
         dequant_values = self._dequantize(self._quantized_values)
+        # Apply the beam reordering requested since the last update, now that the states are back in full precision
+        if self._pending_beam_idx is not None:
+            beam_idx = self._pending_beam_idx.to(dequant_keys.device)
+            dequant_keys = dequant_keys.index_select(0, beam_idx)
+            dequant_values = dequant_values.index_select(0, beam_idx)
+
         keys_to_return = torch.cat([dequant_keys, self.keys, key_states], dim=-2)
         values_to_return = torch.cat([dequant_values, self.values, value_states], dim=-2)
         if self.keys.dim() == 4 and self.keys.shape[-2] + 1 >= self.residual_length:
@@ -761,6 +769,8 @@ class QuantizedLayer(DynamicLayer):
             self._quantized_values = self._quantize(values_to_return.contiguous(), axis=self.axis_value)
             self.keys = torch.tensor([], dtype=key_states.dtype, device=key_states.device)
             self.values = torch.tensor([], dtype=key_states.dtype, device=key_states.device)
+            # The reordering is now baked into the quantized states
+            self._pending_beam_idx = None
         else:
             self.keys = torch.cat([self.keys, key_states], dim=-2)
             self.values = torch.cat([self.values, value_states], dim=-2)
@@ -778,13 +788,12 @@ class QuantizedLayer(DynamicLayer):
         if not self.is_initialized:
             return
 
-        # The quantized states cannot be indexed, so they are dequantized, reordered and quantized back
-        dequant_keys = self._dequantize(self._quantized_keys)
-        dequant_values = self._dequantize(self._quantized_values)
-        beam_idx = beam_idx.to(dequant_keys.device)
-        self._quantized_keys = self._quantize(dequant_keys.index_select(0, beam_idx).contiguous(), axis=self.axis_key)
-        self._quantized_values = self._quantize(
-            dequant_values.index_select(0, beam_idx).contiguous(), axis=self.axis_value
+        # The quantized states cannot be indexed, and dequantizing them here only to quantize them back would be
+        # both costly and lossy. Instead, the reordering is recorded and applied by the next `update`, which
+        # dequantizes them anyway. Reorderings accumulated while the residual cache fills up are composed together.
+        beam_idx = beam_idx.to(self.device)
+        self._pending_beam_idx = (
+            beam_idx if self._pending_beam_idx is None else self._pending_beam_idx.index_select(0, beam_idx)
         )
 
         # The residual cache is emptied whenever it is flushed into the quantized states, and holds nothing to
