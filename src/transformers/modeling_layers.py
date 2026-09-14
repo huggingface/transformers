@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+import copy
 import os
 import re
 import sys
@@ -403,6 +404,11 @@ class MtpModel(PreTrainedModel):
         """Tie the embedding/head/rotary layer with the main model."""
         # The embeddings and head are shared between main model and MTP layers
         self.embed_tokens = main_model.get_input_embeddings()
+        # Some models may subclass nn.Embedding directly, but here we do not want the added norm (note that we cannot simply set it to
+        # nn.Identity, as it would modify the main model inplace as well)
+        if hasattr(self.embed_tokens, "embed_norm"):
+            self.embed_tokens = copy.deepcopy(self.embed_tokens)
+            self.embed_tokens.embed_norm = nn.Identity()
         self.shared_head = main_model.lm_head
         # Use the same rotary class (it only has non-persistent buffers); models with learned
         # position biases (e.g. Inkling) have none
