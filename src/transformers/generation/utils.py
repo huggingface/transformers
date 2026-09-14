@@ -2767,9 +2767,6 @@ class GenerationMixin(ContinuousMixin):
             generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
         )
 
-        # Decoding only ever appends ones to the mask, so padding can only come from the prompt: settle once
-        # whether the inputs are padded. A compiled forward keeps its mask, as `_ignore_causal_mask_sdpa` bails
-        # while tracing and there is nothing to save, while dropping it would make its type data-dependent.
         attention_mask = model_kwargs.get("attention_mask")
         inputs_are_padded = (
             self.config.is_encoder_decoder
@@ -2778,17 +2775,17 @@ class GenerationMixin(ContinuousMixin):
             or self._valid_auto_compile_criteria(model_kwargs, generation_config)
             or not bool(fast_all(attention_mask))
         )
-        # `_prefill` reads the mask's length to tell whether `input_ids` holds the whole sequence or only the new
-        # tokens, so record that before the mask goes. A decoding method we did not write may still expect one.
-        # Mirror what `_prefill` used to compare against: encoder-decoders track the decoder's own mask, and
-        # `attention_mask` there describes the encoder inputs, which have nothing to do with `input_ids`
         length_mask = model_kwargs.get(
             "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
         )
         generation_config._inputs_hold_full_sequence = (
             length_mask is not None and input_ids.shape[1] == length_mask.shape[1]
         )
-        if not inputs_are_padded and custom_generate is None:
+        decoding_name = GENERATION_MODES_MAPPING[generation_mode]
+        uses_default_decoding_loop = "/" not in decoding_name and decoding_method is getattr(
+            GenerationMixin, decoding_name
+        )
+        if not inputs_are_padded and uses_default_decoding_loop:
             del model_kwargs["attention_mask"]
 
         if self.device.type != input_ids.device.type:
