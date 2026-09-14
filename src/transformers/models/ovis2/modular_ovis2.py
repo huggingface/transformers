@@ -394,7 +394,7 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Ovis2ForConditionalGeneration
 

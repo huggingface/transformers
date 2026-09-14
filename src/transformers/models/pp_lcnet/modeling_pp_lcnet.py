@@ -335,7 +335,7 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
         Examples:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoModelForImageClassification, AutoImageProcessor

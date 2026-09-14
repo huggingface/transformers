@@ -723,7 +723,7 @@ class PPDocLayoutV2MultiscaleDeformableAttention(nn.Module):
 @auto_docstring
 class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
     config: PPDocLayoutV2Config
-    base_model_prefix = "pp_doclayout_v2"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = [r"PPDocLayoutV2HybridEncoder", r"PPDocLayoutV2DecoderLayer"]
@@ -2164,7 +2164,7 @@ class PPDocLayoutV2Model(PPDocLayoutV2PreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, PPDocLayoutV2Model
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -2400,7 +2400,7 @@ class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):
         ```python
         >>> from transformers import AutoModelForObjectDetection, AutoImageProcessor
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 
