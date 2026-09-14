@@ -73,8 +73,9 @@ RUN python3 -m pip install --no-cache-dir --no-deps ${FA_WHEEL}
 ARG REF=main
 WORKDIR /
 
-# Invalidate the docker cache from here if a new commit is available on main.
-ADD https://api.github.com/repos/huggingface/transformers/git/refs/heads/main version.json
+# Clone transformers at REF. (No api.github.com cache-buster ADD here: on the
+# GitHub-hosted buildx builder that unauthenticated call is rate-limited to 403,
+# and the scheduled builder has no persistent layer cache to invalidate anyway.)
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
 # Install transformers (editable) + test deps.
