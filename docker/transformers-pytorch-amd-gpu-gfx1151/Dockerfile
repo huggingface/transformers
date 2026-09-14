@@ -21,6 +21,10 @@ LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
+# The repo.radeon.com torch wheel is not self-contained: on top of the ROCm
+# userspace from the -complete base it dlopens libnuma1, libgomp1, libdrm2,
+# libdrm-amdgpu1 and libelf1. A missing libnuma1 in particular SEGFAULTS on the
+# first GPU op rather than erroring cleanly -- install them here.
 # apt resilience: a build hit intermittent connect failures to
 # archive.ubuntu.com from the pool, so retry a few times before giving up.
 # (espeak-ng / tesseract-ocr are omitted for now -- not needed by the current
@@ -30,7 +34,8 @@ RUN printf 'Acquire::Retries "8";\nAcquire::http::Timeout "30";\n' > /etc/apt/ap
     apt-get install -y --no-install-recommends --fix-missing \
       git git-lfs ffmpeg libsndfile1-dev \
       build-essential pkg-config curl ca-certificates \
-      python3 python3-dev python3-pip python3-venv && \
+      python3 python3-dev python3-pip python3-venv \
+      libnuma1 libgomp1 libdrm2 libdrm-amdgpu1 libelf1 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

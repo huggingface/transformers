@@ -54,15 +54,11 @@ jobs:
           RENDER_GID=$(getent group render | cut -d: -f3)
           # -i is REQUIRED: without it docker does not attach stdin, so the
           # heredoc never reaches `python3 -` and the test silently no-ops.
-          # -u + flush so we see exactly which stage crashes (a segfault drops
-          # buffered stdout); AMD_SERIALIZE_KERNEL=3 makes HIP errors synchronous.
+          # -u + flush so we see exactly which stage runs (a segfault drops
+          # buffered stdout).
           docker run --rm -i \
             --device=/dev/kfd --device=/dev/dri \
             --group-add "${RENDER_GID}" \
-            --security-opt seccomp=unconfined \
-            -e AMD_SERIALIZE_KERNEL=3 \
-            -e HSA_OVERRIDE_GFX_VERSION=11.5.1 \
-            -e HSA_ENABLE_SDMA=0 \
             -v "${RUNNER_TEMP}/scratch:/scratch" \
             transformers-gfx1151:ci \
             python3 -u - <<'PY'
@@ -97,7 +93,6 @@ jobs:
           docker run --rm \
             --device=/dev/kfd --device=/dev/dri \
             --group-add "${RENDER_GID}" \
-            --security-opt seccomp=unconfined \
             -v "${RUNNER_TEMP}/scratch:/scratch" \
             transformers-gfx1151:ci \
             bash -c "cd /transformers && python3 -m pytest -q tests/utils/test_modeling_utils.py -x"
