@@ -1666,7 +1666,7 @@ class ProcessorTesterMixin:
             },
             {
                 "role": "assistant",
-                "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": {}}}],
+                "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": "{}"}}],
             },
         ]
 
