@@ -2782,8 +2782,11 @@ class GenerationMixin(ContinuousMixin):
             length_mask is not None and input_ids.shape[1] == length_mask.shape[1]
         )
         decoding_name = GENERATION_MODES_MAPPING[generation_mode]
-        uses_default_decoding_loop = "/" not in decoding_name and decoding_method is getattr(
-            GenerationMixin, decoding_name
+        uses_default_decoding_loop = (
+            "/" not in decoding_name
+            and decoding_method is getattr(GenerationMixin, decoding_name)
+            # Candidate generators slice `model_kwargs["attention_mask"]` themselves
+            and generation_mode != GenerationMode.ASSISTED_GENERATION
         )
         if not inputs_are_padded and uses_default_decoding_loop:
             del model_kwargs["attention_mask"]
