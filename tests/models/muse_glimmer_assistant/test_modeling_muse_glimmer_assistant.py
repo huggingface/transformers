@@ -16,6 +16,7 @@
 import unittest
 
 from transformers.testing_utils import (
+    Expectations,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -242,10 +243,15 @@ class MuseGlimmerAssistantIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
             max_new_tokens=24,
             do_sample=False,
         )
-        # Strip prompt tokens; output shape is [batch, prompt_len + gen_len].
+        # output shape is [batch, prompt_len + gen_len]; strip the prompt before decoding.
+        # (skip_special_tokens=True only removes BOS/EOS/PAD, not the prompt text itself.)
         completion = tokenizer.decode(output[0, input_ids.shape[1] :], skip_special_tokens=True)
 
-        # DFlash is lossless — identical output to greedy decoding — so this prefix matches
+        # DFlash is lossless — identical output to greedy decoding — so this matches
         # MuseGlimmerIntegrationTest.test_text_generation_matches_reference in test_modeling_muse_glimmer.py.
-        expected = " to find your gift. The purpose of life is to give it away."
-        self.assertEqual(completion[: len(expected)], expected)
+        expected = Expectations(
+            {
+                ("cuda", None): " to find your gift. The purpose of life is to give it away.\n\nThe meaning of life is to find your gift",
+            }
+        )
+        self.assertEqual(completion, expected.get_expectation())
