@@ -436,6 +436,8 @@ def nested_truncate(tensors, limit):
 class LabelSmoother:
     """
     Adds label-smoothing on a pre-computed output from a Transformers model.
+    Supports both single-label (multi-class) and multi-label classification.
+    For multi-label targets, applies mass-preserving label smoothing.
 
     Args:
         epsilon (`float`, *optional*, defaults to 0.1):
@@ -452,6 +454,26 @@ class LabelSmoother:
         if shift_labels:
             logits = logits[..., :-1, :].contiguous()
             labels = labels[..., 1:].contiguous()
+
+        if labels.dim() == logits.dim() and labels.shape[-1] == logits.shape[-1]:
+            labels_float = labels.to(dtype=logits.dtype)
+            valid_mask = labels.ne(self.ignore_index)
+            clean_labels = torch.where(valid_mask, labels_float, torch.zeros_like(labels_float))
+
+            active_mass = clean_labels.sum(dim=-1, keepdim=True)
+            num_classes = valid_mask.sum(dim=-1, keepdim=True).clamp(min=1)
+            smoothed_labels = clean_labels * (1.0 - self.epsilon) + (self.epsilon * active_mass) / num_classes
+
+            logits_clean = torch.where(valid_mask, logits, torch.zeros_like(logits))
+            loss = nn.functional.binary_cross_entropy_with_logits(logits_clean, smoothed_labels, reduction="none")
+
+            if num_items_in_batch is None:
+                denominator = valid_mask.sum().clamp(min=1)
+            elif torch.is_tensor(num_items_in_batch):
+                denominator = num_items_in_batch.to(loss.device)
+            else:
+                denominator = num_items_in_batch
+            return loss.masked_fill(~valid_mask, 0.0).sum() / denominator
 
         log_probs = -nn.functional.log_softmax(logits, dim=-1)
         if labels.dim() == log_probs.dim() - 1:
