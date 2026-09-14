@@ -28,7 +28,8 @@ DON'T touch:
 - The **`decompose_prefill_decode` guard** against generators that bypass the top-level
   forward — real generators call ``forward`` many times, so the guard is dead code without a
   targeted test.
-- **`register_patch`** unresolvable-path fallback — real registrations point at real paths.
+- **`register_patch`** / **`apply_patches`** deferred resolution — real registrations point at real
+  paths, so the import-safe "store the string, resolve at apply, raise if unresolvable" path is untested.
 
 Everything below targets one of those gaps.
 """
@@ -57,6 +58,7 @@ if is_torch_available():
 
     from transformers import GenerationConfig
     from transformers.exporters.utils import (
+        apply_patches,
         cast_leaf_tensors,
         decompose_prefill_decode,
         duplicate_leaf_tensors,
@@ -203,10 +205,12 @@ class PatchRegistryEdgeCasesTest(unittest.TestCase):
         self.assertEqual(a.method(), "original")
         self.assertEqual(b.method(), "original")
 
-    def test_register_patch_skips_unresolvable_path(self):
-        # Real backends only register paths that resolve; the silent-skip fallback is what lets
-        # `exporter_onnx.py` and `exporter_executorch.py` co-exist when only one backend is
-        # installed. If it ever started raising, one of the two backends would fail to import.
+    def test_register_patch_defers_resolution_to_apply(self):
+        # `register_patch` stores the dotted path as a string without importing it, so registering a path
+        # into an uninstalled backend is import-safe — this is what lets `exporter_onnx.py` and
+        # `exporter_executorch.py` co-exist when only one backend is present. Resolution happens in
+        # `apply_patches`, which runs only for the backend actually exporting; a genuinely unresolvable
+        # path there is a bug and raises rather than being silently skipped.
         backend = "_test_unresolvable"
 
         @register_patch(backend, "does.not.exist.at.all")
@@ -214,7 +218,11 @@ class PatchRegistryEdgeCasesTest(unittest.TestCase):
             return original
 
         try:
-            self.assertEqual(exporter_utils._PATCHES.get(backend, []), [])
+            obj_path, attribute, fn = exporter_utils._PATCHES[backend][0]
+            self.assertEqual((obj_path, attribute), ("does.not.exist.at", "all"))  # stored, not resolved
+            with self.assertRaises((ImportError, AttributeError)):
+                with apply_patches(backend):
+                    pass
         finally:
             exporter_utils._PATCHES.pop(backend, None)
 
