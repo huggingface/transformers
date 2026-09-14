@@ -13,9 +13,11 @@
 # limitations under the License.
 """Testing suite for the PyTorch MuseGlimmerAssistant model."""
 
+import tempfile
 import unittest
 
 from transformers.testing_utils import (
+    backend_device_count,
     cleanup,
     require_torch,
     require_torch_accelerator,
@@ -156,7 +158,8 @@ class MuseGlimmerAssistantModelTest(ModelTesterMixin, unittest.TestCase):
 
 # The drafter checkpoint is ~5 layers (hidden_size=6656) — roughly 3–4 GiB in bfloat16, which fits on a
 # single 24 GiB accelerator without CPU offloading.  The full DFlash test also loads the main 30B model
-# with device_map="auto" (same reasoning as MuseGlimmerIntegrationTest in test_modeling_muse_glimmer.py).
+# with device_map="auto" and a 70% per-GPU memory cap so activation buffers (e.g. lm_head matmul) have
+# enough headroom; excess layers spill to CPU via accelerate offloading.
 @slow
 @require_torch_accelerator
 class MuseGlimmerAssistantIntegrationTest(unittest.TestCase):
@@ -172,6 +175,7 @@ class MuseGlimmerAssistantIntegrationTest(unittest.TestCase):
     def setUpClass(cls):
         cls.drafter = None
         cls.model = None
+        cls.offload_dir = tempfile.TemporaryDirectory()
 
     @classmethod
     def get_drafter(cls):
@@ -184,8 +188,24 @@ class MuseGlimmerAssistantIntegrationTest(unittest.TestCase):
     @classmethod
     def get_model(cls):
         if cls.model is None:
+            # Cap per-GPU memory to 70% so there is headroom for activation buffers
+            # (e.g. the lm_head matmul) during generation; excess layers spill to CPU.
+            n = backend_device_count(torch_device)
+            if n > 0 and torch_device != "cpu":
+                torch_accel = getattr(torch, torch_device)
+                per_device = int(
+                    min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3
+                )
+                max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+                max_memory["cpu"] = "60GiB"
+            else:
+                max_memory = None
             cls.model = MuseGlimmerForConditionalGeneration.from_pretrained(
-                cls.main_model_id, dtype=torch.bfloat16, device_map="auto"
+                cls.main_model_id,
+                dtype=torch.bfloat16,
+                device_map="auto",
+                max_memory=max_memory,
+                offload_folder=cls.offload_dir.name,
             )
         return cls.model
 
@@ -197,6 +217,7 @@ class MuseGlimmerAssistantIntegrationTest(unittest.TestCase):
         if cls.model is not None:
             del cls.model
             cls.model = None
+        cls.offload_dir.cleanup()
         cleanup(torch_device, gc_collect=True)
 
     def setUp(self):
