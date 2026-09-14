@@ -50,6 +50,8 @@ model = AutoModelForCausalLM.from_pretrained(
     distributed_config=DistributedConfig(tp_size=2, fsdp_size=2, enable_sequence_parallel=True),
     dtype=torch.bfloat16,
 )
+print(model.tp_plan)
+print(model.fsdp_plan)
 optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
 model.train()
 for step in range(0, HALF):

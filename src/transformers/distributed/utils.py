@@ -198,6 +198,21 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
     return {}
 
 
+def _prepare_state_dict_for_dcp(state_dict):
+    """Replace disjoint DTensor shards with contiguous shards in the checkpoint view."""
+    from torch.distributed.tensor import Shard
+    from torch.distributed.tensor.placement_types import _StridedShard
+    from torch.utils._pytree import tree_map
+
+    def prepare(value):
+        if is_dtensor(value) and any(isinstance(p, _StridedShard) for p in value.placements):
+            placements = tuple(Shard(p.dim) if isinstance(p, _StridedShard) else p for p in value.placements)
+            return value.redistribute(placements=placements)
+        return value
+
+    return tree_map(prepare, state_dict)
+
+
 def save_model_checkpoint_distributed(model, checkpoint_dir: str) -> None:
     """Save model parameters as standard HF-format sharded safetensors using
     DCP + HuggingFaceStorageWriter with consolidation enabled.
@@ -217,7 +232,10 @@ def save_model_checkpoint_distributed(model, checkpoint_dir: str) -> None:
     from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
     from torch.distributed.checkpoint.state_dict import get_model_state_dict
 
-    state_dict = get_model_state_dict(model)
+    # DCP describes each DTensor as one rectangular chunk, which cannot represent packed shards.
+    # We redistribute any strided shards to contiguous shards so DCP can write them out.
+    # Sub-optimal compared to a future DCP that can write strided shards directly, but works for now.
+    state_dict = _prepare_state_dict_for_dcp(get_model_state_dict(model))
     dcp.save(
         state_dict,
         storage_writer=HuggingFaceStorageWriter(
@@ -241,7 +259,7 @@ def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     import torch.distributed.checkpoint as dcp
     from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict
 
-    optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
+    optimizer_state_dict = _prepare_state_dict_for_dcp(get_optimizer_state_dict(model, optimizer))
     dcp.save({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
 
 
@@ -254,7 +272,16 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     # being emitted if the function is not used
     import torch.distributed.checkpoint as dcp
     from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict, set_optimizer_state_dict
+    from torch.utils._pytree import tree_map
 
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
-    dcp.load({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
+    checkpoint_state_dict = _prepare_state_dict_for_dcp(optimizer_state_dict)
+    dcp.load({"optimizer": checkpoint_state_dict}, checkpoint_id=checkpoint_dir)
+    optimizer_state_dict = tree_map(
+        lambda loaded, original: loaded.redistribute(placements=original.placements)
+        if is_dtensor(original) and loaded.placements != original.placements
+        else loaded,
+        checkpoint_state_dict,
+        optimizer_state_dict,
+    )
     set_optimizer_state_dict(model, optimizer, optimizer_state_dict)
