@@ -41,6 +41,9 @@ from ..deepseek_v32.modeling_deepseek_v32 import (
     DeepseekV32PreTrainedModel,
     DeepseekV32RotaryEmbedding,
     _absorbable_kv_b_weight,
+    _dsa_scale_fmt,
+    fake_quant_fp8_block,
+    hadamard_transform,
     sparse_attention_forward,
 )
 
@@ -175,6 +178,14 @@ class GlmMoeDsaIndexer(DeepseekV32Indexer):
         q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
 
+        # Quantized activations are model semantics here, not an optimization: the reference rotates and
+        # FP8-quantizes q / k, and its key cache holds those fp8 values (we cache them dequantized). The indexer
+        # always uses `ue8m0` power-of-two scales, as vLLM and SGLang do for every DSA model regardless of the
+        # config; the dequantized values are then exactly representable in bf16. vLLM and SGLang's fused GLM
+        # path skip the (logit-preserving) rotation and quantize directly, so engine-level top-k parity is approximate.
+        q = fake_quant_fp8_block(hadamard_transform(q), scale_fmt="ue8m0")
+        k = fake_quant_fp8_block(hadamard_transform(k), scale_fmt="ue8m0")
+
         if past_key_values is not None:
             k = past_key_values.update_indexer(k, self.layer_idx)
 
@@ -243,6 +254,8 @@ class GlmMoeDsaAttention(DeepseekV3Attention):
         kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
         # Both latents are viewed as single-head, 4D tensors, as expected by `expand_kv`
         k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
+        # The reference deploys an fp8 KV cache, so it quantizes this latent (but not `k_rot`) before caching
+        k_pass = fake_quant_fp8_block(k_pass, scale_fmt=_dsa_scale_fmt(self.config))
 
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
         cos, sin = position_embeddings

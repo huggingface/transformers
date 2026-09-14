@@ -196,6 +196,48 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 _INDEXER_SCORE_BUDGET = 2**29
 
 
+def hadamard_transform(x: torch.Tensor) -> torch.Tensor:
+    """
+    Normalized Walsh-Hadamard transform along the last dimension (which must be a power of two), computed
+    as `log2(n)` butterfly stages. This is the reference's `rotate_activation`, i.e.
+    `fast_hadamard_transform.hadamard_transform(x, scale=n**-0.5)` with the natural (Sylvester) ordering.
+    """
+    n = x.shape[-1]
+    if n & (n - 1):
+        raise ValueError(f"The Hadamard transform requires a power-of-two last dimension, but got {n}.")
+    # Butterflies accumulate in fp32 like the reference kernel, which casts back once after normalizing
+    y = x.reshape(-1, n) if x.dtype in (torch.float32, torch.float64) else x.float().reshape(-1, n)
+    half = 1
+    while half < n:
+        y = y.reshape(-1, n // (2 * half), 2, half)
+        a, b = y[:, :, 0], y[:, :, 1]
+        y = torch.stack((a + b, a - b), dim=2).reshape(-1, n)
+        half *= 2
+    return y.mul(n**-0.5).reshape(x.shape).to(x.dtype)
+
+
+def fake_quant_fp8_block(x: torch.Tensor, block_size: int = 128, scale_fmt: str | None = None) -> torch.Tensor:
+    """
+    The reference's `act_quant` followed by dequantization: per-`block_size` block FP8 (e4m3) quantization
+    along the last dimension, returned in `x.dtype`. Last dimensions that the reference cannot block (tiny
+    test configs) are returned unchanged. The result is a straight-through estimator, so quantizing an
+    activation does not cut the gradient of the projections that produced it.
+    """
+    n = x.shape[-1]
+    if n % block_size:
+        return x
+    blocks = x.float().reshape(*x.shape[:-1], n // block_size, block_size)
+    scale = blocks.abs().amax(-1).clamp_min(1e-4) / 448.0
+    if scale_fmt == "ue8m0":
+        # Round the scale up to a power of two, with the IEEE-754 bit manipulation of the reference kernel
+        bits = scale.contiguous().view(torch.int32)
+        exponent, mantissa = (bits >> 23) & 0xFF, bits & 0x7FFFFF
+        scale = torch.exp2((exponent - 127 + (mantissa != 0).to(torch.int32)).to(torch.float32))
+    quantized = (blocks / scale.unsqueeze(-1)).clamp(-448.0, 448.0).to(torch.float8_e4m3fn)
+    dequantized = (quantized.float() * scale.unsqueeze(-1)).reshape(x.shape).to(x.dtype)
+    return x + (dequantized - x).detach()
+
+
 class AXK2Indexer(nn.Module):
     """
     DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens.
@@ -240,11 +282,6 @@ class AXK2Indexer(nn.Module):
         """
         Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
 
-        This is the bf16 equivalent of the reference Indexer which uses `rotate_activation` (Hadamard transform)
-        and `fp8_index` (FP8 quantized scoring kernel). Since the Hadamard transform is orthogonal (dot products
-        are preserved: Hq·Hk = q·k), and FP8 quantization is a precision optimization, we skip both and compute
-        scores directly in bf16/fp32.
-
         The scoring logic computes:
             index_score[b,s,t] = Σ_h (weight[b,s,h] · softmax_scale · q[b,s,h,:] · k[b,t,:])
 
@@ -272,6 +309,14 @@ class AXK2Indexer(nn.Module):
         q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
         q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
+
+        # Quantized activations are model semantics here, not an optimization: the reference rotates and
+        # FP8-quantizes q / k, and its key cache holds those fp8 values (we cache them dequantized). The indexer
+        # always uses `ue8m0` power-of-two scales, as vLLM and SGLang do for every DSA model regardless of the
+        # config; the dequantized values are then exactly representable in bf16. vLLM and SGLang's fused GLM
+        # path skip the (logit-preserving) rotation and quantize directly, so engine-level top-k parity is approximate.
+        q = fake_quant_fp8_block(hadamard_transform(q), scale_fmt="ue8m0")
+        k = fake_quant_fp8_block(hadamard_transform(k), scale_fmt="ue8m0")
 
         if past_key_values is not None:
             k = past_key_values.update_indexer(k, self.layer_idx)
