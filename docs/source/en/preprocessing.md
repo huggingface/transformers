@@ -80,6 +80,40 @@ next to the figure:
   the window geometry — some extractors report the shorter count, and the padding mask has to agree
   with whichever the model expects.
 
+### Which models override what
+
+Most models need no code at all: **9 of the 33 audio processors override nothing**, and are a
+configuration block and nothing else — including [Whisper](./model_doc/whisper), [Gemma3n](./model_doc/gemma3n),
+[EnCodec](./model_doc/encodec), [DAC](./model_doc/dac), [Dia](./model_doc/dia), [SpeechT5](./model_doc/speecht5),
+LASR, PE-Audio and [Pop2Piano](./model_doc/pop2piano).
+
+The remaining 24 override a hook or two. The table below is the whole surface in use — if you are
+changing a hook, this is who else depends on its behaviour.
+
+| hook | models that override it |
+|---|---|
+| `_finalize_output` | 17 — AST, CLAP, Cohere-ASR, Fun-ASR-Nano, Gemma4, Granite-Speech, Granite-Speech5, Inkling, Kyutai-STT, Nemotron-ASR-Streaming, NeuCodec, Parakeet, Phi4-Multimodal, Qwen3-ASR, SeamlessM4T, Speech2Text, XCodec2 |
+| `compute_features` | CLAP, Gemma4-Unified, Granite-Speech, Musicgen-Melody, SeamlessM4T |
+| `_downmix_to_mono` | NeuCodec, Qwen3-ASR, VibeVoice, Wav2Vec2, XCodec2 |
+| `_log_compress` | CLVP, UnivNet, Voxtral-Realtime |
+| `_padded_frame_count` | Inkling, Qwen3-ASR, UnivNet |
+| `_finalize_features` | Fun-ASR-Nano, SeamlessM4T |
+| `_waveform_to_spectrum` | Inkling, UnivNet |
+| `_spectrum_magnitude` | Inkling, UnivNet |
+| `_pad_feature_single` | NeuCodec, XCodec2 |
+| `_project_to_mel` · `_valid_frame_counts` | UnivNet |
+| `_process_frames` · `_stft_framed` | Phi4-Multimodal |
+| `_pad_features` | AST |
+| `pad` · `_pad_waveform` · `_truncate_waveform` · `_stack_waveforms` · `_resolve_padding_strategy` · `_set_attributes` | CLAP |
+| `_dither_waveform` · `_preprocess_audio_like_inputs` | Cohere-ASR |
+| `_preprocess` | NeuCodec |
+
+Two patterns are worth reading off it. `_finalize_output` dominates because most model-specific work
+is *after* the features exist — an extra output key, a per-utterance normalisation, a reshape for the
+encoder. And the two models with the widest surface are the two with genuinely unusual pipelines:
+CLAP, whose fusion mode crops the mel rather than the waveform, and UnivNet, which is a vocoder and
+runs the spectrogram in float64 throughout.
+
 ## Configuration files
 
 `preprocessor_config.json` stores a standalone preprocessor's settings: the defaults for the options
