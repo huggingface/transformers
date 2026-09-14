@@ -1519,11 +1519,6 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         # This is the tricky part: potentially invalidate and recreate the mtp cache for wrong positions if necessary
         # With one layer, or if validating enough tokens, the cache is always correct since the first mtp layer sees the token
         # drafted directly from main model, which is necessarily correct, so we don't need any correction
-        # `generate` drops a mask that says nothing, so there may be none to slice
-        mask_to_slice = model_kwargs.get("attention_mask")
-        if mask_to_slice is None:
-            mask_to_slice = torch.ones_like(input_ids)
-
         if self.num_mtp_layers > 1 and n_last_matches < self.num_mtp_layers - 1 and not self.is_main_model_prefill:
             # Invalidate the full chains of layers before recomputing with the validated tokens, even if the first layers may
             # have a valid cache, because we need to have the same sequence length for all MTP layers due to the cat of tokens
@@ -1533,7 +1528,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
             # We need the last invalidated tokens, as well as the new one in a single passcfor efficiency
             mtp_input_ids = input_ids[:, -num_last_main_model_tokens - self.num_mtp_layers :]
             mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens - self.num_mtp_layers :]
-            mtp_attention_mask = mask_to_slice[:, -num_last_main_model_tokens - self.num_mtp_layers :]
+            mtp_attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens - self.num_mtp_layers :]
             last_hidden_states = self.full_seq_last_hidden_states[
                 :, -num_last_main_model_tokens - self.num_mtp_layers :, :
             ]
@@ -1541,7 +1536,7 @@ class MTPCandidateGenerator(AssistedCandidateGenerator):
         else:
             mtp_input_ids = input_ids[:, -num_last_main_model_tokens:]
             mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens:]
-            mtp_attention_mask = mask_to_slice[:, -num_last_main_model_tokens:]
+            mtp_attention_mask = model_kwargs["attention_mask"][:, -num_last_main_model_tokens:]
 
         candidate_ids, candidate_logits, _ = self.mtp_model(
             input_ids=mtp_input_ids,
@@ -1705,12 +1700,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         # from last position 3 that was processed
         # For `position_ids`, we need only the last token positions, whereas the `attention_mask` should be passed fully (except last "bonus" token)
         position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens - 1 : -1]
-        # `generate` drops a mask that says nothing. Nothing is padded then, so a full mask says the same thing
-        # and keeps the slicing and concatenation below in one piece.
-        attention_mask = model_kwargs.get("attention_mask")
-        if attention_mask is None:
-            attention_mask = torch.ones_like(input_ids)
-        attention_mask = attention_mask[:, :-1]
+        attention_mask = model_kwargs["attention_mask"][:, :-1]
 
         # Create the new inputs corresponding to only the "noise", or "diffusion window". It's the last bonus token (or "anchor") from
         # the main model, and the noise tokens
