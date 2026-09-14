@@ -177,9 +177,6 @@ def _test_eager_matches_sdpa_inference(
     This test is written as a regular function to be able to overload it easily with different tolerances.
     Otherwise, `parameterize.expand` prevents it as it removes the original function from the namespace.
     """
-    if not self.has_attentions:
-        self.skipTest(reason="Model architecture does not support attentions")
-
     if not self.all_model_classes[0]._supports_sdpa:
         self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
@@ -251,8 +248,11 @@ def _test_eager_matches_sdpa_inference(
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)
 
-        # If it's a model with sliding window attention, let's test it with sliding window
-        if hasattr(config, "sliding_window"):
+        # If it's a model with sliding window attention, let's test it with sliding window. Only override the
+        # model's default when an attention mask is used: the no-mask variants exist to exercise the default
+        # masking path (where sdpa may skip mask materialization entirely and rely on `is_causal`), and
+        # forcing `sliding_window` there silently swaps that default path for the sliding-window one.
+        if use_attention_mask and hasattr(config, "sliding_window"):
             config.sliding_window = 2
 
         model = model_class(config)
@@ -457,6 +457,9 @@ def _test_eager_matches_sdpa_inference(
                 key = "hidden_states" if "hidden_states" in outputs_eager else "decoder_hidden_states"
             else:
                 key = "hidden_states"
+
+            if key not in outputs_eager:
+                self.skipTest(reason=f"Model output does not contain `{key}` to compare across implementations")
 
             # TODO: rename logits -> hidden_states
             logits_eager = outputs_eager[key]
