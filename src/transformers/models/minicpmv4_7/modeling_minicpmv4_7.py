@@ -626,32 +626,10 @@ def _build_image_bounds(input_ids: torch.LongTensor, special_token_ids: dict) ->
     is the matching ``<image_end>``/``<slice_end>`` position. Indices are relative to ``input_ids``,
     so when the model recomputes bounds on a left-unpadded (compact) sequence the offsets stay valid.
     """
-    start_ids = [
-        x for x in (special_token_ids.get("im_start_id"), special_token_ids.get("slice_start_id")) if x is not None
-    ]
-    end_ids = [x for x in (special_token_ids.get("im_end_id"), special_token_ids.get("slice_end_id")) if x is not None]
-    if not start_ids or not end_ids:
-        return torch.zeros(0, 2, dtype=torch.long, device=input_ids.device)
-    start_cond = torch.zeros_like(input_ids, dtype=torch.bool)
-    end_cond = torch.zeros_like(input_ids, dtype=torch.bool)
-    for start_id in start_ids:
-        start_cond |= input_ids == start_id
-    for end_id in end_ids:
-        end_cond |= input_ids == end_id
+    start_cond = (input_ids == special_token_ids["im_start_id"]) | (input_ids == special_token_ids["slice_start_id"])
+    end_cond = (input_ids == special_token_ids["im_end_id"]) | (input_ids == special_token_ids["slice_end_id"])
     starts = torch.where(start_cond)[0] + 1
     ends = torch.where(end_cond)[0]
-    if len(starts) != len(ends):
-        raise ValueError(
-            f"Malformed visual markup: found {len(starts)} start marker(s) but {len(ends)} end marker(s). "
-            "Every `<image>`/`<slice>` must be closed by a matching `</image>`/`</slice>`."
-        )
-    if len(starts) == 0:
-        return torch.zeros(0, 2, dtype=torch.long, device=input_ids.device)
-    if not bool((ends >= starts).all()):
-        raise ValueError(
-            "Malformed visual markup: start/end markers are nested or out of order; canvas M-RoPE "
-            "expects flat, sequentially closed visual spans."
-        )
     return torch.stack([starts, ends], dim=-1)
 
 
@@ -733,20 +711,6 @@ def _compute_canvas(
     special_token_ids,
 ):
     """Assign spatial ``(3, batch, seq)`` canvas positions to visual tokens of a packed sequence."""
-    if position_ids_2d.ndim == 1:
-        position_ids_2d = position_ids_2d.unsqueeze(0)
-    if input_ids.ndim == 1:
-        input_ids = input_ids.unsqueeze(0)
-
-    has_images = (
-        isinstance(image_bound, torch.Tensor)
-        and image_bound.numel() > 0
-        and isinstance(target_sizes, torch.Tensor)
-        and target_sizes.numel() > 0
-    )
-    if not has_images:
-        return position_ids_2d.unsqueeze(0).expand(3, -1, -1).contiguous()
-
     device = position_ids_2d.device
     position_ids_3d = position_ids_2d.unsqueeze(0).expand(3, -1, -1).clone()
     ids_flat = input_ids.view(-1)
@@ -815,8 +779,7 @@ def _compute_canvas(
                 text_len = group_start - cursor
                 if text_len > 0:
                     text_pos = torch.arange(text_len, device=device, dtype=torch.long) + pos
-                    for dim in range(3):
-                        position_ids_3d[dim, 0, cursor:group_start] = text_pos
+                    position_ids_3d[:, 0, cursor:group_start] = text_pos
                     pos += text_len
 
                 frame_cursor = group_start
@@ -829,8 +792,7 @@ def _compute_canvas(
                     gap_len = image_start_pos - frame_cursor
                     if gap_len > 0:
                         text_pos = torch.arange(gap_len, device=device, dtype=torch.long) + pos
-                        for dim in range(3):
-                            position_ids_3d[dim, 0, frame_cursor:image_start_pos] = text_pos
+                        position_ids_3d[:, 0, frame_cursor:image_start_pos] = text_pos
                         pos += gap_len
                         pos += 1  # buffer: prevents halo collision
 
@@ -874,14 +836,9 @@ def _compute_canvas(
                         frame_end += 1
                     frame_end = min(frame_end, group_end)
 
-                    # Base coat for this frame's span.
-                    position_ids_3d[0, 0, image_start_pos:frame_end] = base
-                    position_ids_3d[1, 0, image_start_pos:frame_end] = base
-                    position_ids_3d[2, 0, image_start_pos:frame_end] = base
-
-                    # <image_start> -> halo.
-                    position_ids_3d[1, 0, image_start_pos] = halo_lo
-                    position_ids_3d[2, 0, image_start_pos] = halo_lo
+                    # Base coat for this frame's span, then <image_start> -> halo.
+                    position_ids_3d[:, 0, image_start_pos:frame_end] = base
+                    position_ids_3d[1:, 0, image_start_pos] = halo_lo
 
                     # <image_end> -> halo (right after thumbnail).
                     image_end_pos = thumb_end
@@ -904,8 +861,7 @@ def _compute_canvas(
                         position_ids_3d[2, 0, thumb_start:thumb_end] = w_idx + base
                     else:
                         fallback = torch.arange(num_thumb, device=device, dtype=torch.long) + base
-                        for dim in range(3):
-                            position_ids_3d[dim, 0, thumb_start:thumb_end] = fallback
+                        position_ids_3d[:, 0, thumb_start:thumb_end] = fallback
 
                     # Slice visual tokens + slice specials.
                     for k, (slice_start, slice_end, slice_index) in enumerate(frame_slices):
@@ -942,8 +898,7 @@ def _compute_canvas(
                             position_ids_3d[2, 0, slice_start:slice_end] = w_idx + w_off + base
                         else:
                             fallback = torch.arange(num_slice, device=device, dtype=torch.long) + base
-                            for dim in range(3):
-                                position_ids_3d[dim, 0, slice_start:slice_end] = fallback
+                            position_ids_3d[:, 0, slice_start:slice_end] = fallback
 
                     # "\n" between slice rows -> W = right edge + 1; H stays within the ended row.
                     if frame_slices:
@@ -966,8 +921,7 @@ def _compute_canvas(
                 if frame_cursor < group_end:
                     trail_len = group_end - frame_cursor
                     text_pos = torch.arange(trail_len, device=device, dtype=torch.long) + pos
-                    for dim in range(3):
-                        position_ids_3d[dim, 0, frame_cursor:group_end] = text_pos
+                    position_ids_3d[:, 0, frame_cursor:group_end] = text_pos
                     pos += trail_len
 
                 cursor = group_end
@@ -991,8 +945,7 @@ def _compute_canvas(
                 text_len = group_start - cursor
                 if text_len > 0:
                     text_pos = torch.arange(text_len, device=device, dtype=torch.long) + pos
-                    for dim in range(3):
-                        position_ids_3d[dim, 0, cursor:group_start] = text_pos
+                    position_ids_3d[:, 0, cursor:group_start] = text_pos
                     pos += text_len
 
                 base = pos
@@ -1027,14 +980,9 @@ def _compute_canvas(
                     canvas_height = max(llm_thumb_h, 1)
                     canvas_width = max(llm_thumb_w, 1)
 
-                # Base coat.
-                position_ids_3d[0, 0, group_start:group_end] = base
-                position_ids_3d[1, 0, group_start:group_end] = base
-                position_ids_3d[2, 0, group_start:group_end] = base
-
-                # <image_start> -> halo.
-                position_ids_3d[1, 0, group_start] = halo_lo
-                position_ids_3d[2, 0, group_start] = halo_lo
+                # Base coat, then <image_start> -> halo.
+                position_ids_3d[:, 0, group_start:group_end] = base
+                position_ids_3d[1:, 0, group_start] = halo_lo
 
                 # <image_end> -> halo.
                 image_end_pos = thumb_end
@@ -1059,8 +1007,7 @@ def _compute_canvas(
                     position_ids_3d[2, 0, thumb_start:thumb_end] = w_idx + base
                 else:
                     fallback = torch.arange(num_thumb, device=device, dtype=torch.long) + base
-                    for dim in range(3):
-                        position_ids_3d[dim, 0, thumb_start:thumb_end] = fallback
+                    position_ids_3d[:, 0, thumb_start:thumb_end] = fallback
 
                 # Slice visual tokens + slice specials.
                 for k, (slice_start, slice_end, slice_index) in enumerate(slices):
@@ -1099,8 +1046,7 @@ def _compute_canvas(
                         position_ids_3d[2, 0, slice_start:slice_end] = w_idx + w_off + base
                     else:
                         fallback = torch.arange(num_slice, device=device, dtype=torch.long) + base
-                        for dim in range(3):
-                            position_ids_3d[dim, 0, slice_start:slice_end] = fallback
+                        position_ids_3d[:, 0, slice_start:slice_end] = fallback
 
                 # "\n" between slice rows -> W = right edge + 1; H stays within the ended row.
                 if slices:
@@ -1123,8 +1069,7 @@ def _compute_canvas(
         remaining = seq_end - cursor
         if remaining > 0:
             text_pos = torch.arange(remaining, device=device, dtype=torch.long) + pos
-            for dim in range(3):
-                position_ids_3d[dim, 0, cursor:seq_end] = text_pos
+            position_ids_3d[:, 0, cursor:seq_end] = text_pos
 
     return position_ids_3d
 
@@ -1206,6 +1151,8 @@ def compute_canvas_position_ids(input_ids, attention_mask, target_sizes_mrope, s
     if input_ids.ndim == 1:
         input_ids = input_ids.unsqueeze(0)
     batch_size, seq_len = input_ids.shape
+    if any(token_id is None for token_id in special_token_ids.values()):
+        return expand_1d_position_ids_to_3d(input_ids, attention_mask)
     out = torch.zeros(3, batch_size, seq_len, dtype=torch.long, device=input_ids.device)
     target_sizes_list = _normalize_target_sizes(target_sizes_mrope, batch_size, input_ids.device)
 
@@ -1218,18 +1165,12 @@ def compute_canvas_position_ids(input_ids, attention_mask, target_sizes_mrope, s
         compact_ids = input_ids[batch_idx][valid_mask]
         compact_len = int(compact_ids.shape[0])
         compact_pos2d = torch.arange(compact_len, device=input_ids.device, dtype=torch.long)
-        bounds = _build_image_bounds(compact_ids, special_token_ids)
         grids = target_sizes_list[batch_idx]
 
-        if bounds.numel() == 0 or grids.numel() == 0:
+        if grids.numel() == 0:
             compact_pos3d = compact_pos2d.unsqueeze(0).expand(3, -1)
         else:
-            if bounds.shape[0] != grids.shape[0]:
-                raise ValueError(
-                    f"Sample {batch_idx}: `input_ids` contains {bounds.shape[0]} visual span(s) but "
-                    f"`target_sizes_mrope` provides {grids.shape[0]} grid(s). The processor and the model "
-                    "disagree about the number of visual crops; canvas positions cannot be built."
-                )
+            bounds = _build_image_bounds(compact_ids, special_token_ids)
             compact_pos3d = _compute_canvas_single(compact_ids, compact_pos2d, bounds, grids, special_token_ids)
 
         out[:, batch_idx, valid_mask] = compact_pos3d
@@ -1461,9 +1402,9 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         """
         del mm_token_type_ids, kwargs  # API compat; the scan below is the single source of truth
         token_ids = special_token_ids if special_token_ids is not None else self.config.get_mrope_special_token_ids()
-        if _has_visual_grids(target_sizes_mrope) and not any(v is not None for v in token_ids.values()):
+        if _has_visual_grids(target_sizes_mrope) and any(v is None for v in token_ids.values()):
             raise ValueError(
-                "Canvas M-RoPE needs the structural token ids but none are set. Populate "
+                "Canvas M-RoPE needs the structural token ids but some are missing. Populate "
                 "`image_start_id` / `image_end_id` / `slice_start_id` / `slice_end_id` / `newline_id` "
                 "on the model config (the conversion script resolves them from the tokenizer), or pass "
                 "`special_token_ids=` explicitly. Continuing would silently fall back to 1-D positions "
