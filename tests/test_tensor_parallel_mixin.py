@@ -393,19 +393,29 @@ def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_t
 def _load_ep_and_reference_models(model_path, model_class, dispatch=False):
     """Load EP model and non-EP reference model for comparison."""
     model_ref = model_class.from_pretrained(model_path)
-    ep_plan = (
-        {name: "ep_dispatch_experts" for name, style in model_ref.ep_plan.items() if style == "moe_tp_experts"}
-        if dispatch
-        else None
-    )
+    world_size = dist.get_world_size()
+    if dispatch:
+        # Override expert forward rules; keep the default expert weight sharding rules.
+        ep_plan = {
+            name: "ep_dispatch_experts" for name, style in model_ref.ep_plan.items() if style == "moe_tp_experts"
+        }
+        # All-to-all: no TP; dense weights use FSDP and experts are split across all ranks.
+        distributed_config = DistributedConfig(
+            tp_size=1,
+            fsdp_size=world_size,
+            ep_size=world_size,
+            ep_plan=ep_plan,
+        )
+    else:
+        # All-reduce: TP and EP share all ranks and use the default EP plan; no FSDP.
+        distributed_config = DistributedConfig(
+            tp_size=world_size,
+            fsdp_size=1,
+            ep_size=world_size,
+        )
     model_ep = model_class.from_pretrained(
         model_path,
-        distributed_config=DistributedConfig(
-            tp_size=1 if dispatch else dist.get_world_size(),
-            fsdp_size=dist.get_world_size() if dispatch else 1,
-            ep_size=dist.get_world_size(),
-            ep_plan=ep_plan,
-        ),
+        distributed_config=distributed_config,
     )
     dist.barrier()
 
