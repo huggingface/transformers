@@ -70,8 +70,8 @@ The model composes three parts:
 > it applies the physical LM head directly to intermediate hidden states, whose logits do not have the padded
 > logical vocabulary width. Label positions holding input-only ids must be masked with `-100` (the model raises
 > an explicit error otherwise), and `Trainer`'s `label_smoothing_factor` is unsupported (its loss diverges over
-> the tail). Resizing token embeddings and tying the head to the input embeddings are rejected for pruned
-> checkpoints.
+> the tail). Released checkpoints keep `tie_word_embeddings=False` in both the text and composite configs.
+> Generic embedding resizing or explicitly enabling weight tying does not preserve the pruned-head layout.
 
 Images are always encoded one at a time, even in batched inputs, because the vision tokenizer contains global
 attention, so batch padding would change the codes. Same for the audio tokenizer and audio samples.
