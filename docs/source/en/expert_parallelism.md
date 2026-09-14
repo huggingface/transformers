@@ -39,7 +39,26 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-This configuration uses the `ep_plan` (expert parallel plan) defined in each MoE model's config file. Attention sharding depends on that plan; expert parallelism does not automatically apply the model's tensor parallel plan. The [`GroupedGemmParallel`] class splits expert weights so each device loads only its local experts. The `ep_router` routes tokens to experts and an all-reduce operation combines their outputs.
+This configuration uses the `ep_plan` (expert parallel plan) defined in each MoE model's config file. The tensor parallel plan handles the remaining modules, including attention. EP rules take precedence over TP rules for the modules they cover, so expert weights are sharded only once. The [`GroupedGemmParallel`] class splits expert weights so each device loads only its local experts. The `ep_router` routes tokens to experts and an all-reduce operation combines their outputs.
+
+Pass `ep_plan={...}` to `DistributedConfig` to override individual rules in the model's expert parallel plan,
+independently of `tp_plan`. Unspecified EP rules are preserved. Leaving `ep_plan` as `None` or setting it to `"auto"` uses the predefined plan. The two plans remain
+available separately as `model.tp_plan` and `model.ep_plan`. Providing an EP plan does not infer parallel sizes;
+set `ep_size` and the layout explicitly.
+
+With EP enabled, an `"ep_dispatch_experts"` rule selects all-to-all. Communication is derived from the EP plan.
+For example, this overrides the expert forward rule while preserving the default expert-weight rules:
+
+```py
+distributed_config = DistributedConfig(
+    tp_size=4,
+    ep_size=4,
+    ep_plan={"layers.*.mlp.experts": "ep_dispatch_experts"},
+)
+```
+
+Use full module paths matching your model's EP plan (for example, `model.layers.*.mlp.experts` for a causal LM
+whose layers are under `model`).
 
 Launch your inference script with [torchrun](https://pytorch.org/docs/stable/elastic/run.html) and specify how many devices to use. The number of devices must evenly divide the total number of experts.
 
@@ -49,7 +68,7 @@ torchrun --nproc-per-node 8 your_script.py
 
 ## Token dispatch
 
-With all-reduce, every expert parallel rank runs the whole batch, keeps only the experts it owns, and all-reduces expert outputs after every MoE layer. Use `tp_size=1`, set `ep_size` independently, and select `experts_dispatch="all-to-all"` to send each token to the rank that owns its experts. Each rank then trains on its own batch shard. The default dispatcher is `"all-reduce"`.
+With all-reduce, every expert parallel rank runs the whole batch, keeps only the experts it owns, and all-reduces expert outputs after every MoE layer. Use `tp_size=1`, set `ep_size` independently, and provide an `"ep_dispatch_experts"` rule in `ep_plan` to send each token to the rank that owns its experts. Each rank then trains on its own batch shard. The default dispatcher is `"all-reduce"`.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -59,7 +78,7 @@ distributed_config = DistributedConfig(
     tp_size=1,
     fsdp_size=8,
     ep_size=4,
-    experts_dispatch="all-to-all",
+    ep_plan={"model.layers.*.mlp.experts": "ep_dispatch_experts"},
 )
 ```
 
@@ -73,27 +92,27 @@ For the rest of the model:
 - Experts are sharded across `ep` and additionally across `efsdp`, whose size is `fsdp_size // ep_size`. With `efsdp_size=1` they are outside FSDP2, so `fsdp_mixed_precision` and `fsdp_cpu_offload` do not apply to them.
 - The [`Trainer`] uses ordinary data-parallel batching for training and evaluation and counts tokens across all ranks.
 
-The legacy API uses `enable_expert_parallel=True`. When `ep_size` is omitted, this flag sets `ep_size=tp_size` and emits a deprecation warning. It leaves `tp_size`, `fsdp_size`, and `experts_dispatch` unchanged. An explicit `ep_size` takes precedence over the flag.
+The legacy API uses `enable_expert_parallel=True`. When `ep_size` is omitted, this flag sets `ep_size=tp_size` and emits a deprecation warning. It leaves `tp_size`, `fsdp_size`, and `ep_plan` unchanged. An explicit `ep_size` takes precedence over the flag.
 
-The explicit API uses `ep_size` for expert ownership and `experts_dispatch` for communication. Both APIs default to `"all-reduce"`; select `"all-to-all"` for token dispatch. For example, these configurations each use eight GPUs:
+The explicit API uses `ep_size` for expert ownership and `ep_plan` for expert behavior. Default expert plans use all-reduce; override their forward rule with `"ep_dispatch_experts"` for token dispatch. For example, these configurations each use eight GPUs, with `dispatch_plan = {"model.layers.*.mlp.experts": "ep_dispatch_experts"}`:
 
 | Configuration | Result |
 | :--- | :--- |
 | `DistributedConfig(tp_size=4, fsdp_size=2, enable_expert_parallel=True)` | Legacy alias: sets `ep_size=4`, uses all-reduce, and warns. |
 | `DistributedConfig(tp_size=4, fsdp_size=2, ep_size=4)` | Explicit equivalent of the legacy configuration. |
-| `DistributedConfig(tp_size=4, fsdp_size=2, ep_size=4, experts_dispatch="all-to-all")` | Token dispatch with TP groups of four. |
-| `DistributedConfig(tp_size=1, fsdp_size=8, ep_size=4, experts_dispatch="all-to-all")` | Token dispatch with an independent batch on each rank. |
+| `DistributedConfig(tp_size=4, fsdp_size=2, ep_size=4, ep_plan=dispatch_plan)` | Token dispatch with TP groups of four. |
+| `DistributedConfig(tp_size=1, fsdp_size=8, ep_size=4, ep_plan=dispatch_plan)` | Token dispatch with an independent batch on each rank. |
 
 ## Token dispatch with trunk tensor parallelism
 
-Set `tp_size > 1` with explicit `ep_size` and `experts_dispatch="all-to-all"` to apply the model's tensor parallel plan to the trunk and its expert parallel plan to the routed experts. For example, on eight processes:
+Set `tp_size > 1` with explicit `ep_size` and `ep_plan=dispatch_plan` to apply the model's tensor parallel plan to the trunk and its expert parallel plan to the routed experts. For example, on eight processes:
 
 ```py
 distributed_config = DistributedConfig(
     tp_size=2,
     fsdp_size=4,
     ep_size=4,
-    experts_dispatch="all-to-all",
+    ep_plan={"model.layers.*.mlp.experts": "ep_dispatch_experts"},
 )
 ```
 
@@ -101,11 +120,11 @@ Each pair of TP ranks receives the same batch. Attention and other dense modules
 
 `ep_size` must be a multiple of `tp_size`, divide `fsdp_size * tp_size`, and divide the number of experts. Token slices may be uneven or empty, including during single-token decoding. The model's usual TP constraints, such as attention-head divisibility, still apply.
 
-The [`Trainer`] shares batches within each TP group and counts each group's tokens once. The effective global batch size is `per_device_train_batch_size * fsdp_size * gradient_accumulation_steps`. Sequence parallelism is not required for this path. Request `experts_dispatch="all-to-all"` explicitly for token dispatch, including when `ep_size=tp_size`.
+The [`Trainer`] shares batches within each TP group and counts each group's tokens once. The effective global batch size is `per_device_train_batch_size * fsdp_size * gradient_accumulation_steps`. Sequence parallelism is not required for this path. The `"ep_dispatch_experts"` rule selects token dispatch, including when `ep_size=tp_size`.
 
 ## Combining with FSDP2
 
-Without token dispatch, expert-only plans leave attention, embeddings, and norms replicated on every expert-parallel rank. Add [FSDP2](./fsdp) with `fsdp_size`, and set `ep_size=tp_size` for all-reduce.
+With all-reduce EP, the TP plan handles dense layers and the EP plan handles experts on the same rank groups. Add [FSDP2](./fsdp) with `fsdp_size`, and set `ep_size=tp_size`.
 
 ```py
 from transformers import AutoModelForCausalLM

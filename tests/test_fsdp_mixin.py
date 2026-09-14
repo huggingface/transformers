@@ -522,6 +522,14 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
 
     device = _get_rank_device(rank)
     config = config_class.from_dict(config_dict)
+    ep_plan = None
+    if dispatch:
+        with torch.device("meta"):
+            ep_plan = {
+                name: "ep_dispatch_experts"
+                for name, style in AutoModelForCausalLM.from_config(config).ep_plan.items()
+                if style == "moe_tp_experts"
+            }
     world_size = dist.get_world_size()
     dp = world_size // 2
     num_slices = world_size if dispatch else dp
@@ -543,7 +551,7 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
                 tp_size=1 if dispatch else 2,
                 fsdp_size=world_size if dispatch else dp,
                 ep_size=2,
-                experts_dispatch="all-to-all" if dispatch else "all-reduce",
+                ep_plan=ep_plan,
             ),
         )
         assert model.tp_size == (1 if dispatch else 2)

@@ -16,10 +16,19 @@ from __future__ import annotations
 import contextlib
 import re
 from collections.abc import Callable
+from fnmatch import fnmatchcase
+from typing import TYPE_CHECKING
 
 from ..utils import logging
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
+from .configuration_utils import DistributedConfig
+
+
+if TYPE_CHECKING:
+    from torch import nn
+
+    from .utils import MeshManager
 
 
 logger = logging.get_logger(__name__)
@@ -939,6 +948,73 @@ def _validate_tp_plan_styles(tp_plan: dict[str, str] | None) -> None:
             f"Unsupported tensor parallel styles: {unsupported_styles}. "
             f"Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
         )
+
+
+def resolve_parallel_plans(model: nn.Module, distributed_config: DistributedConfig):
+    """Resolve overrides and give EP ownership of its modules before applying any sharding."""
+    if isinstance(distributed_config.tp_plan, dict):
+        model.tp_plan = distributed_config.tp_plan
+    if isinstance(distributed_config.ep_plan, dict):
+        model.ep_plan = (model.ep_plan or {}) | distributed_config.ep_plan
+
+    tp_plan = model.tp_plan if distributed_config.tp_size > 1 else {}
+    expert_plan = (model.ep_plan or {}) if distributed_config.ep_size > 1 else tp_plan
+    if distributed_config.ep_size > 1 and distributed_config.experts_dispatch == "all-reduce" and not expert_plan:
+        raise ValueError(
+            f"{type(model).__name__} does not define an expert-parallel plan. "
+            "Pass `ep_plan` in DistributedConfig, add `base_model_ep_plan` to the model's config, "
+            "or disable expert parallelism."
+        )
+
+    expert_styles = (
+        ("moe_tp_experts", "ep_dispatch_experts")
+        if distributed_config.ep_size > 1
+        else ("moe_tp_experts", "megamoe_experts")
+    )
+    expert_paths = [name for name, style in expert_plan.items() if style in expert_styles]
+    if distributed_config.experts_dispatch == "all-to-all" and not expert_paths:
+        raise ValueError(
+            f"{type(model).__name__} needs a `moe_tp_experts` or `ep_dispatch_experts` rule for token dispatch."
+        )
+
+    if distributed_config.ep_size > 1 and distributed_config.experts_dispatch == "all-reduce":
+        # Keep the EP router and any other explicit EP rules; they take precedence over TP too.
+        moe_plan = dict(expert_plan)
+        expert_paths = list(expert_plan)
+    else:
+        moe_plan = {
+            name: style
+            for name, style in expert_plan.items()
+            if any(fnmatchcase(name, path) or fnmatchcase(name, path + ".*") for path in expert_paths)
+        }
+    tp_plan = {
+        name: style
+        for name, style in tp_plan.items()
+        if not any(fnmatchcase(name, path) or fnmatchcase(name, path + ".*") for path in expert_paths)
+    }
+    _validate_tp_plan_styles(tp_plan)
+    _validate_tp_plan_styles(moe_plan)
+    return tp_plan, moe_plan
+
+
+def apply_tensor_parallelism_non_moe(model: nn.Module, mesh_manager: MeshManager, plan: dict[str, str]):
+    """Apply the resolved dense TP rules."""
+    if plan:
+        model = apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), plan)
+    return model
+
+
+def apply_tensor_parallelism_moe(
+    model: nn.Module, distributed_config: DistributedConfig, mesh_manager: MeshManager, plan: dict[str, str]
+):
+    """Apply the resolved expert rules on the TP or EP mesh."""
+    if not plan:
+        return model
+    if distributed_config.experts_dispatch == "all-to-all":
+        return apply_tensor_parallelism(
+            model, mesh_manager.get_mesh("ep"), plan, dispatch_tp_mesh=mesh_manager.get_mesh("tp")
+        )
+    return apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), plan)
 
 
 def apply_tensor_parallelism(model, tp_mesh, tp_plan=None, *, dispatch_tp_mesh=None):

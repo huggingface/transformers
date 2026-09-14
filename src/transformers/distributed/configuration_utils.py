@@ -19,12 +19,6 @@ from dataclasses import asdict, dataclass
 from typing import Literal
 
 
-# How the expert outputs get back to the tokens that need them, mapped to the parallel style the experts take.
-# `all-reduce` runs the whole batch on every rank and needs no style of its own. A new backend such as DeepEP is a
-# new entry here plus the matching style in `ParallelInterface`, not a new flag.
-EXPERTS_DISPATCH_STRATEGIES = {"all-reduce": None, "all-to-all": "ep_dispatch_experts"}
-
-
 @dataclass
 class DistributedConfig:
     """
@@ -41,16 +35,15 @@ class DistributedConfig:
             Reserved for sequence parallelism. Not wired up yet.
         enable_expert_parallel (`bool`, *optional*, defaults to `False`):
             Deprecated alias for `ep_size=tp_size` when `ep_size` is omitted. Explicit `ep_size` takes
-            precedence. This flag does not change `tp_size`, `fsdp_size`, or `experts_dispatch`.
+            precedence. This flag does not change `tp_size`, `fsdp_size`, or `ep_plan`.
         ep_size (`int`, *optional*):
             Number of devices owning distinct expert shards. Defaults to 1. With token dispatch, must be a
             multiple of `tp_size` and divide `fsdp_size * tp_size`.
-        experts_dispatch (`str`, *optional*, defaults to `"all-reduce"`):
-            How the expert outputs get back to the tokens that need them. `"all-reduce"` runs the whole batch on
-            every rank and all-reduces the expert outputs. `"all-to-all"` sends each token to the rank that owns its
-            experts instead. Each TP group trains on its own batch; its ranks dispatch disjoint token slices.
-            The trunk uses TP and FSDP2. All-reduce EP requires `ep_size=tp_size`.
-            Select `"all-to-all"` explicitly for token dispatch, which requires `ep_size > 1`.
+        ep_plan (`dict[str, str]` or `"auto"`, *optional*):
+            Expert parallel sharding plan. Pass `"auto"` or `None` to use the model's predefined
+            `base_model_ep_plan`. Pass a dictionary to override individual rules in that plan.
+            Set `ep_size` explicitly to enable EP. With EP enabled, an `"ep_dispatch_experts"` rule
+            selects `"all-to-all"` dispatch automatically.
         fsdp_size (`int`, *optional*):
             Number of devices for FSDP (data parallelism). Defaults to 1 when omitted.
         fsdp_cpu_offload (`bool`, *optional*, defaults to `False`):
@@ -65,12 +58,19 @@ class DistributedConfig:
     tp_plan: dict[str, str] | Literal["auto"] | None = None
     enable_sequence_parallel: bool = False
     enable_expert_parallel: bool = False
-    experts_dispatch: str = "all-reduce"
     fsdp_size: int | None = None
     fsdp_cpu_offload: bool = False
     fsdp_mixed_precision: bool = False
     pp_size: int | None = None
     ep_size: int | None = None
+    ep_plan: dict[str, str] | Literal["auto"] | None = None
+
+    @property
+    def experts_dispatch(self) -> str:
+        """Communication selected by the expert plan; no independent dispatcher setting."""
+        if self.ep_size > 1 and isinstance(self.ep_plan, dict) and "ep_dispatch_experts" in self.ep_plan.values():
+            return "all-to-all"
+        return "all-reduce"
 
     @property
     def efsdp_size(self) -> int:
@@ -82,7 +82,7 @@ class DistributedConfig:
         self._validate_parallelism()
 
     def _resolve_parallelism(self):
-        """Resolve parallel sizes and legacy EP settings, and check the dispatch strategy."""
+        """Resolve parallel sizes and legacy EP settings."""
         for value in (self.tp_size, self.fsdp_size, self.pp_size, self.ep_size):
             if value is not None and value < 1:
                 raise ValueError(f"Parallelism sizes must be >= 1, got {value}.")
@@ -102,12 +102,6 @@ class DistributedConfig:
             self.tp_size = world_size // other_parallel_size
         elif self.tp_size is None:
             self.tp_size = 1
-
-        if self.experts_dispatch not in EXPERTS_DISPATCH_STRATEGIES:
-            raise ValueError(
-                f"Unknown `experts_dispatch={self.experts_dispatch!r}`, expected one of "
-                f"{sorted(EXPERTS_DISPATCH_STRATEGIES)}."
-            )
 
         self._apply_legacy_expert_parallel_compatibility()
         if self.ep_size is None:
@@ -131,22 +125,15 @@ class DistributedConfig:
     def _validate_parallelism(self):
         """Check that the resolved sizes and dispatch strategy form a supported parallel layout."""
         if self.experts_dispatch == "all-to-all":
-            if self.ep_size == 1:
-                raise ValueError("`experts_dispatch='all-to-all'` requires `ep_size > 1`.")
             if self.ep_size % self.tp_size:
                 raise ValueError("`ep_size` must be a multiple of `tp_size` for token dispatch.")
             if (self.fsdp_size * self.tp_size) % self.ep_size:
                 raise ValueError("`ep_size` must divide `fsdp_size * tp_size` for token dispatch.")
         elif self.ep_size > 1 and self.ep_size != self.tp_size:
-            raise ValueError(
-                "`experts_dispatch='all-reduce'` requires `ep_size=tp_size` and identical tokens per EP group."
-            )
+            raise ValueError("All-reduce EP requires `ep_size=tp_size` and identical tokens per EP group.")
 
         if self.experts_dispatch == "all-to-all" and self.pp_size > 1:
-            raise ValueError(
-                f"Combining `experts_dispatch={self.experts_dispatch!r}` with pipeline parallelism is not "
-                "supported yet."
-            )
+            raise ValueError("Combining token dispatch with pipeline parallelism is not supported yet.")
 
         if self.fsdp_size > 1 and self.pp_size > 1:
             raise ValueError(

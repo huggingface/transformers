@@ -16,18 +16,19 @@ from __future__ import annotations
 import os
 import re
 import warnings
-from fnmatch import fnmatchcase
 from typing import TYPE_CHECKING
 
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
-from .configuration_utils import EXPERTS_DISPATCH_STRATEGIES, DistributedConfig
+from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
     _validate_tp_plan_styles,
-    apply_tensor_parallelism,
+    apply_tensor_parallelism_moe,
+    apply_tensor_parallelism_non_moe,
     gather_state_dict_for_save,
+    resolve_parallel_plans,
 )
 from .utils import (
     MeshManager,
@@ -89,6 +90,11 @@ class DistributedMixin:
         return self._tp_plan
 
     @property
+    def ep_plan(self) -> dict[str, str]:
+        """The full expert parallel plan for the model's modules."""
+        return self._ep_plan
+
+    @property
     def fsdp_plan(self) -> dict[str, str]:
         return self._fsdp_plan
 
@@ -121,6 +127,16 @@ class DistributedMixin:
                 )
 
         self._tp_plan = plan
+
+    @ep_plan.setter
+    def ep_plan(self, plan: dict[str, str] | None):
+        if plan is None:
+            self._ep_plan = {}
+            return
+        if not isinstance(plan, dict):
+            raise ValueError("Can only set a dictionary as `ep_plan`")
+        _validate_tp_plan_styles(plan)
+        self._ep_plan = plan
 
     @pp_plan.setter
     def pp_plan(self, plan: dict[str, tuple[str, str]] | None):
@@ -165,72 +181,27 @@ class DistributedMixin:
         distributed_config: DistributedConfig | None,
         mesh_manager: MeshManager | None,
     ):
-        """Apply TP or FSDP2 after model init, before weight loading."""
-        if mesh_manager is not None:
-            model.config.distributed_config = distributed_config
-            model._mesh_manager = mesh_manager
-            model._device_mesh = mesh_manager.get_mesh(("pp", "fsdp", "tp"))
-            model._tp_size = distributed_config.tp_size
-            model._fsdp_size = distributed_config.fsdp_size
+        """Apply pipeline, tensor/expert, then FSDP parallelism before weight loading."""
+        if mesh_manager is None:
+            return model
 
-            if distributed_config.pp_size > 1:
-                pp_mesh = mesh_manager.get_mesh("pp")
-                model = apply_pipeline_parallelism(model, pp_mesh)
+        model.config.distributed_config = distributed_config
+        model._mesh_manager = mesh_manager
+        model._device_mesh = mesh_manager.get_mesh(("pp", "fsdp", "tp"))
+        model._tp_size = distributed_config.tp_size
+        model._fsdp_size = distributed_config.fsdp_size
 
-            # Both may apply: the tensor/expert parallel plan shards across `tp` first, then FSDP2
-            # shards every parameter (the `tp`-sharded ones included) across `fsdp`.
-            if distributed_config.tp_size > 1 or distributed_config.ep_size > 1:
-                # All-reduce EP retains the legacy TP view. Only dispatch folds expert ownership into FSDP.
-                if isinstance(distributed_config.tp_plan, dict):
-                    model.tp_plan = distributed_config.tp_plan
-                if distributed_config.experts_dispatch == "all-to-all":
-                    ep_plan = model._ep_plan or {}
-                    expert_paths = [name for name, style in ep_plan.items() if style == "moe_tp_experts"]
-                    if not expert_paths:
-                        raise ValueError(f"{type(model).__name__} needs a `moe_tp_experts` rule for token dispatch.")
+        if distributed_config.pp_size > 1:
+            model = apply_pipeline_parallelism(model, mesh_manager.get_mesh("pp"))
 
-                    def is_expert(name):
-                        return any(fnmatchcase(name, path) or fnmatchcase(name, path + ".*") for path in expert_paths)
+        if distributed_config.tp_size > 1 or distributed_config.ep_size > 1:
+            tp_plan, moe_plan = resolve_parallel_plans(model, distributed_config)
+            if distributed_config.tp_size > 1:
+                model = apply_tensor_parallelism_non_moe(model, mesh_manager, tp_plan)
+            model = apply_tensor_parallelism_moe(model, distributed_config, mesh_manager, moe_plan)
 
-                    # Expert rules own their descendants; the trunk uses TP only when requested.
-                    dense_plan = {
-                        name: style
-                        for name, style in model._tp_plan.items()
-                        if distributed_config.tp_size > 1 and not is_expert(name)
-                    }
-                    dispatch_style = EXPERTS_DISPATCH_STRATEGIES[distributed_config.experts_dispatch]
-                    expert_plan = {
-                        name: dispatch_style if style == "moe_tp_experts" else style
-                        for name, style in ep_plan.items()
-                        if is_expert(name)
-                    }
-                    if distributed_config.tp_size > 1:
-                        model = apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), dense_plan)
-                    model = apply_tensor_parallelism(
-                        model, mesh_manager.get_mesh("ep"), expert_plan, dispatch_tp_mesh=mesh_manager.get_mesh("tp")
-                    )
-                    model._tp_plan = dense_plan | expert_plan
-                else:
-                    tp_mesh = mesh_manager.get_mesh("tp")
-                    plan = model.tp_plan
-                    if distributed_config.ep_size > 1:
-                        if not model._ep_plan:
-                            raise ValueError(
-                                f"{type(model).__name__} does not define an expert-parallel plan. "
-                                "Add `base_model_ep_plan` to its config, or disable expert parallelism."
-                            )
-                        plan = model._ep_plan
-                    model = apply_tensor_parallelism(model, tp_mesh, plan)
-
-            if distributed_config.experts_dispatch == "all-to-all":
-                # Each TP group trains on its own batch. The trunk spans fsdp; each expert is additionally
-                # FSDP-sharded across efsdp, the ranks left after assigning its EP shard.
-                trunk_mesh = mesh_manager.get_mesh("fsdp")
-                expert_mesh = mesh_manager.get_mesh("efsdp") if distributed_config.efsdp_size > 1 else None
-                model = apply_fully_sharded_data_parallelism(model, trunk_mesh, expert_mesh=expert_mesh)
-            elif distributed_config.fsdp_size > 1:
-                fsdp_mesh = mesh_manager.get_mesh("fsdp")
-                model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
+        if distributed_config.fsdp_size > 1 or distributed_config.experts_dispatch == "all-to-all":
+            model = apply_fully_sharded_data_parallelism(model, mesh_manager)
         return model
 
     def should_save_on_this_rank(self, is_main_process: bool) -> bool:

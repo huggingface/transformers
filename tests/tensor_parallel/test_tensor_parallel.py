@@ -16,8 +16,9 @@ from unittest.mock import patch
 
 import torch
 
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, Qwen3MoeConfig, Qwen3MoeModel
 from transformers.distributed import tensor_parallel
+from transformers.distributed.configuration_utils import DistributedConfig
 from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
@@ -26,7 +27,132 @@ from transformers.distributed.tensor_parallel import (
     PackedRowwiseParallel,
     RowwiseParallel,
 )
-from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
+from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test, require_torch
+
+
+@require_torch
+class TestParallelPlanResolution(TestCasePlus):
+    def test_resolved_tp_and_expert_plans(self):
+        dense_plan = {
+            "layers.*.self_attn.q_proj": "colwise",
+            "layers.*.self_attn.k_proj": "colwise",
+            "layers.*.self_attn.v_proj": "colwise",
+            "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+            "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+            "layers.*.self_attn.o_proj": "rowwise",
+            "layers.*.mlp.gate_proj": "colwise",
+            "layers.*.mlp.up_proj": "colwise",
+            "layers.*.mlp.down_proj": "rowwise",
+        }
+        expert_tp_plan = {
+            "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+            "layers.*.mlp.experts.down_proj": "rowwise",
+            "layers.*.mlp.experts": "moe_tp_experts",
+        }
+        expert_ep_plan = {
+            "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+            "layers.*.mlp.experts.down_proj": "grouped_gemm",
+            "layers.*.mlp.experts": "moe_tp_experts",
+        }
+        all_reduce_plan = {"layers.*.mlp.gate": "ep_router", **expert_ep_plan}
+        dispatch_override = {"layers.*.mlp.experts": "ep_dispatch_experts"}
+        dispatch_plan = expert_ep_plan | dispatch_override
+        custom_tp_plan = {
+            "layers.*.self_attn.q_proj": "colwise",
+            "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+            "layers.*.mlp.experts": "moe_tp_experts",
+        }
+        cases = [
+            ("disabled", DistributedConfig(), {}, {}),
+            ("fsdp_only", DistributedConfig(fsdp_size=8), {}, {}),
+            ("tp_only", DistributedConfig(tp_size=4), dense_plan, expert_tp_plan),
+            ("all_reduce", DistributedConfig(tp_size=4, ep_size=4), dense_plan, all_reduce_plan),
+            (
+                "auto_ep_plan",
+                DistributedConfig(tp_size=4, ep_size=4, ep_plan="auto"),
+                dense_plan,
+                all_reduce_plan,
+            ),
+            (
+                "partial_ep_override",
+                DistributedConfig(tp_size=4, ep_size=4, ep_plan=dispatch_override),
+                dense_plan,
+                dispatch_plan,
+            ),
+            (
+                "inferred_dispatch_without_tp",
+                DistributedConfig(fsdp_size=8, ep_size=4, ep_plan=dispatch_override),
+                {},
+                dispatch_plan,
+            ),
+            (
+                "inferred_dispatch_with_tp",
+                DistributedConfig(tp_size=2, fsdp_size=4, ep_size=4, ep_plan=dispatch_override),
+                dense_plan,
+                dispatch_plan,
+            ),
+            (
+                "custom_tp_and_ep",
+                DistributedConfig(
+                    tp_size=4,
+                    ep_size=4,
+                    tp_plan=custom_tp_plan,
+                    ep_plan=dispatch_override,
+                ),
+                {"layers.*.self_attn.q_proj": "colwise"},
+                dispatch_plan,
+            ),
+            (
+                "ep_override_does_not_enable_ep",
+                DistributedConfig(tp_size=4, ep_plan=dispatch_override),
+                dense_plan,
+                expert_tp_plan,
+            ),
+        ]
+        model_config = Qwen3MoeConfig(
+            vocab_size=32,
+            hidden_size=16,
+            intermediate_size=32,
+            moe_intermediate_size=8,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            head_dim=4,
+            num_experts=4,
+            num_experts_per_tok=2,
+        )
+        for name, distributed_config, expected_tp, expected_experts in cases:
+            with self.subTest(name=name), torch.device("meta"):
+                expected_dispatch = "all-to-all" if expected_experts == dispatch_plan else "all-reduce"
+                self.assertEqual(distributed_config.experts_dispatch, expected_dispatch)
+                self.assertNotIn("experts_dispatch", distributed_config.to_dict())
+                self.assertEqual(DistributedConfig.from_dict(distributed_config.to_dict()), distributed_config)
+                model = Qwen3MoeModel(model_config)
+                with patch.object(tensor_parallel, "apply_tensor_parallelism") as apply:
+                    tp_plan, expert_plan = tensor_parallel.resolve_parallel_plans(model, distributed_config)
+                apply.assert_not_called()
+                self.assertEqual(tp_plan, expected_tp)
+                self.assertEqual(expert_plan, expected_experts)
+                self.assertEqual(
+                    model.tp_plan,
+                    custom_tp_plan if name == "custom_tp_and_ep" else dense_plan | expert_tp_plan,
+                )
+                expected_stored_ep = all_reduce_plan
+                if isinstance(distributed_config.ep_plan, dict):
+                    expected_stored_ep = expected_stored_ep | distributed_config.ep_plan
+                self.assertEqual(model.ep_plan, expected_stored_ep)
+                self.assertEqual(model_config.base_model_tp_plan, dense_plan | expert_tp_plan)
+                self.assertEqual(model_config.base_model_ep_plan, all_reduce_plan)
+
+    def test_dispatch_plan_validates_layout(self):
+        ep_plan = {"layers.*.mlp.experts": "ep_dispatch_experts"}
+        for sizes, message in (
+            ({"fsdp_size": 2, "ep_size": 4}, "must divide"),
+            ({"tp_size": 3, "fsdp_size": 2, "ep_size": 2}, "must be a multiple"),
+            ({"tp_size": 2, "ep_size": 2, "pp_size": 2}, "pipeline parallelism"),
+        ):
+            with self.subTest(sizes=sizes), self.assertRaisesRegex(ValueError, message):
+                DistributedConfig(**sizes, ep_plan=ep_plan)
 
 
 @is_tensor_parallel_test
