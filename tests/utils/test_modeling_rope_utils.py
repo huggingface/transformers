@@ -20,7 +20,8 @@ import unittest
 from parameterized import parameterized
 
 from transformers import Gemma3TextConfig, LlamaConfig
-from transformers.testing_utils import is_torch_available, require_torch, torch_device
+from transformers.testing_utils import CaptureLogger, is_torch_available, require_torch, torch_device
+from transformers.utils import logging as transformers_logging
 
 
 if is_torch_available():
@@ -77,6 +78,21 @@ class RopeTest(unittest.TestCase):
             same_rope_per_layer=same_rope_per_layer,
         )
         config.validate_rope()
+
+        # If rope parameters are nested per layer type but only a single layer type is used,
+        # we don't raise a warning, As long as `cfg.rope_params.keys()` overlap with layer types
+        # we assume it is a nested RoPE and validate each sub-dict separately. See #48392 for more
+        if is_nested:
+            logger = transformers_logging.get_logger("transformers.modeling_rope_utils")
+            config = self.get_config_with_rope_parameters(
+                rope_params={"rope_type": "default", "rope_theta": 10000.0},
+                is_nested=is_nested,
+                same_rope_per_layer=same_rope_per_layer,
+            )
+            config.layer_types = ["full_attention"]
+            with CaptureLogger(logger) as cl:
+                config.validate_rope()
+            self.assertEqual("", cl.out)
 
         # If we explicitly set the other (non-default) RoPE types with only rope_theta,
         # validation should fail because required keys are missing (e.g. factor, short_factor)

@@ -523,17 +523,21 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.image1 = Image.open(
             BytesIO(
                 requests.get(
-                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
                 ).content
             )
         )
         self.image2 = Image.open(
-            BytesIO(requests.get("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg").content)
+            BytesIO(
+                requests.get(
+                    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/skyline_chicago.jpg"
+                ).content
+            )
         )
         self.image3 = Image.open(
             BytesIO(
                 requests.get(
-                    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg"
                 ).content
             )
         )
@@ -560,7 +564,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         # Batch affects generated text. Single batch output: ['In this image, we see the Statue of Liberty in the foreground and']
-        expected_generated_text = "In this image, we see the Statue of Liberty, the New York City"
+        expected_generated_text = "In this image, we see the Statue of Liberty, which is a col"
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     @slow
@@ -581,9 +585,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_generated_texts = Expectations(
             {
-                ("xpu", 3): "In this image, we see the Statue of Liberty, the Hudson River,",
-                ("cuda", None): "In this image, we see the Statue of Liberty, the Hudson River,",
-                ("rocm", (9, 5)): "In this image, we see the Statue of Liberty, the New York City",
+                (None, None): "In this image, we see the Statue of Liberty, which is a col",
             }
         )
         EXPECTED_GENERATED_TEXT = expected_generated_texts.get_expectation()

@@ -98,6 +98,10 @@ else:
             ("granite4_vision", {"torchvision": "LlavaNextImageProcessor", "pil": "LlavaNextImageProcessorPil"}),
             ("groupvit", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("hiera", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
+            (
+                "hyperclovax_vision_v2",
+                {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"},
+            ),
             ("ijepa", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("inkling_mm_model", {"torchvision": "InklingImageProcessor"}),
             ("instructblip", {"torchvision": "BlipImageProcessor", "pil": "BlipImageProcessorPil"}),
@@ -136,6 +140,7 @@ else:
             ("qwen3_5_moe", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("qwen3_omni_moe", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("qwen3_vl", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
+            ("qwen4_exp", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("regnet", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("resnet", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("sam2_video", {"torchvision": "Sam2ImageProcessor"}),

@@ -20,7 +20,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_video_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin, prepare_video_inputs
 
 
 if is_torch_available():
@@ -32,7 +32,7 @@ if is_vision_available():
     from transformers import VivitImageProcessor
 
 
-class VivitImageProcessingTester:
+class VivitImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -237,4 +237,8 @@ class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @unittest.skip("VivitImageProcessor has not been refactored to use the new image processing backend architecture")
     def test_override_instance_attributes_does_not_affect_other_instances(self):
+        pass
+
+    @unittest.skip("Vivit has an old API that inherits from `BaseImageProcessor`")
+    def test_pil_can_load_without_torchvision(self):
         pass

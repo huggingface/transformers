@@ -1134,7 +1134,7 @@ class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, Data2VecVisionForSemanticSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

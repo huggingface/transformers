@@ -62,7 +62,7 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # we don't need an image as input because the model will generate one
         input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         inputs = processor(text=input_str, return_for_image_generation=True, return_tensors="pt")
         self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "image_sizes"])
         self.assertEqual(inputs[self.text_input_name].shape[-1], 8)
@@ -78,7 +78,7 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(**processor_components)
 
         input_str = "lower newer"
-        orig_image_input = self.prepare_image_inputs()
+        orig_image_input = self.prepare_images_inputs()
         orig_image = np.array(orig_image_input).transpose(2, 0, 1)
 
         inputs = processor(text=input_str, images=orig_image, do_resize=False, return_tensors="pt")
@@ -102,7 +102,7 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(output["num_image_patches"]), 3)
 
     @unittest.skip("Processor adds BOS manually to the input text")
-    def test_tokenizer_defaults(self):
+    def test_subprocessor_defaults_0_text(self):
         pass
 
     @parameterized.expand([(1, "pt"), (2, "pt")])

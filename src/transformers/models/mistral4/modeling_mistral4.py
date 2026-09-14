@@ -199,7 +199,7 @@ class Mistral4Experts(nn.Module):
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
@@ -393,12 +393,22 @@ class Mistral4Attention(nn.Module):
 
         self.is_causal = True
 
-        if self.q_lora_rank is None:
-            self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        else:
-            self.q_a_proj = nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
-            self.q_a_layernorm = Mistral4RMSNorm(self.q_lora_rank)
-            self.q_b_proj = nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+        self.q_proj = (
+            nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
+            if self.q_lora_rank is None
+            else None
+        )
+        self.q_a_proj = (
+            nn.Linear(self.hidden_size, config.q_lora_rank, bias=config.attention_bias)
+            if self.q_lora_rank is not None
+            else None
+        )
+        self.q_a_layernorm = Mistral4RMSNorm(config.q_lora_rank) if self.q_lora_rank is not None else None
+        self.q_b_proj = (
+            nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+            if self.q_lora_rank is not None
+            else None
+        )
 
         self.kv_a_proj_with_mqa = nn.Linear(
             self.hidden_size,

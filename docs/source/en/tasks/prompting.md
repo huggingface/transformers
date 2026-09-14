@@ -26,7 +26,7 @@ Try prompting a LLM to classify some text. When you create a prompt, it's import
 from transformers import pipeline
 import torch
 
-pipeline = pipeline(task="text-generation", model="mistralai/Mistal-7B-Instruct-v0.1", dtype=torch.bfloat16, device_map="auto")
+pipeline = pipeline(task="text-generation", model="mistralai/Mistral-7B-Instruct-v0.1", dtype=torch.bfloat16, device_map="auto")
 prompt = """Classify the text into neutral, negative or positive.
 Text: This movie is definitely one of my favorite movies of its kind. The interaction between respectable and morally strong characters is an ode to chivalry and the honor code amongst thieves and policemen.
 Sentiment:

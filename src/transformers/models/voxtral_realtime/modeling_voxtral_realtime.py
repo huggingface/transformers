@@ -1215,15 +1215,13 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
 
         # NOTE: we use the encoder prefix here this is not a classical encoder-decoder model - no cross-attention
         # the model is better seen as a VLM/ AudioLM, so with an encoder that can take psat_key_values for it's forward pass
-        if generation_config.cache_implementation is not None:
-            if generation_config.cache_implementation in ("static", "offloaded_static"):
-                model_kwargs["encoder_past_key_values"] = self._get_encoder_cache(
-                    cache_implementation=generation_config.cache_implementation,
-                    batch_size=batch_size,
-                    max_cache_len=self.config.audio_config.sliding_window,
-                )
-            else:
-                raise ValueError(f"{generation_config.cache_implementation} is not supported for VoxtralRealtime")
+        # Only static caches need pre-allocation here: dynamic ones are lazily initialized by the encoder itself.
+        if generation_config.cache_implementation in ("static", "offloaded_static"):
+            model_kwargs["encoder_past_key_values"] = self._get_encoder_cache(
+                cache_implementation=generation_config.cache_implementation,
+                batch_size=batch_size,
+                max_cache_len=self.config.audio_config.sliding_window,
+            )
 
     def _get_encoder_cache(self, cache_implementation: str, batch_size: int, max_cache_len: int) -> Cache:
         offload_cache = "offloaded" in cache_implementation
