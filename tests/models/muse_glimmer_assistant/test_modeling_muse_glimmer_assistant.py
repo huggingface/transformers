@@ -196,16 +196,6 @@ class MuseGlimmerAssistantIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
             )
         return cls.model
 
-    @classmethod
-    def tearDownClass(cls):
-        if cls.drafter is not None:
-            del cls.drafter
-            cls.drafter = None
-        if cls.model is not None:
-            del cls.model
-            cls.model = None
-        super().tearDownClass()
-
     def test_drafter_forward_output_shape(self):
         """Standalone drafter forward pass with synthetic inputs.
 
