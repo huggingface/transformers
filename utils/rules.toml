@@ -77,7 +77,7 @@ default_enabled = true
 # `unispeech_sat` and `wavlm` were dropped: their modular files define no `tie_weights` at all, so the
 # override exists only in their generated `modeling_*.py`, copied in from `Wav2Vec2ForCTC`. Fixing wav2vec2
 # fixes all five, and listing them separately implied five independent violations instead of one root cause.
-allowlist_models = ["apertus1p5", "data2vec", "sew_d", "wav2vec2", "wav2vec2_conformer"]
+allowlist_models = ["data2vec", "sew_d", "wav2vec2", "wav2vec2_conformer"]
 
 [rules.TRF004.explanation]
 what_it_does = "Checks that no model class defines a tie_weights method."
