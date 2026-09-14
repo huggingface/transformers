@@ -30,7 +30,7 @@ from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
-    from transformers import AutoTokenizer, Glm4MoeForCausalLM, Glm4MoeModel
+    from transformers import AutoTokenizer, BitsAndBytesConfig, Glm4MoeForCausalLM, Glm4MoeModel
 
 
 class Glm4MoeModelTester(CausalLMModelTester):
@@ -74,7 +74,7 @@ class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         if cls.model is None:
             cls.model = Glm4MoeForCausalLM.from_pretrained(
                 "zai-org/GLM-4.5",
-                torch_dtype=torch.bfloat16,
+                quantization_config=BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16),
                 device_map="auto",
             )
             cls.tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.5")
