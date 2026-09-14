@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch MuseGlimmerAssistant model."""
 
-import tempfile
 import unittest
 
 from transformers.testing_utils import (
@@ -175,7 +174,6 @@ class MuseGlimmerAssistantIntegrationTest(unittest.TestCase):
     def setUpClass(cls):
         cls.drafter = None
         cls.model = None
-        cls.offload_dir = tempfile.TemporaryDirectory()
 
     @classmethod
     def get_drafter(cls):
@@ -194,7 +192,7 @@ class MuseGlimmerAssistantIntegrationTest(unittest.TestCase):
             if n > 0 and torch_device != "cpu":
                 torch_accel = getattr(torch, torch_device)
                 per_device = int(
-                    min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3
+                    min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.80 / 1024**3
                 )
                 max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
                 max_memory["cpu"] = "60GiB"
@@ -205,7 +203,6 @@ class MuseGlimmerAssistantIntegrationTest(unittest.TestCase):
                 dtype=torch.bfloat16,
                 device_map="auto",
                 max_memory=max_memory,
-                offload_folder=cls.offload_dir.name,
             )
         return cls.model
 
@@ -217,7 +214,6 @@ class MuseGlimmerAssistantIntegrationTest(unittest.TestCase):
         if cls.model is not None:
             del cls.model
             cls.model = None
-        cls.offload_dir.cleanup()
         cleanup(torch_device, gc_collect=True)
 
     def setUp(self):
