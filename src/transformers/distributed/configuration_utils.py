@@ -39,8 +39,8 @@ class DistributedConfig:
         ep_size (`int`, *optional*):
             Number of devices owning distinct expert shards. Defaults to 1. With token dispatch, must be a
             multiple of `tp_size` and divide `fsdp_size * tp_size`.
-        ep_plan (`dict[str, str]` or `"auto"`, *optional*):
-            Expert parallel sharding plan. Pass `"auto"` or `None` to use the model's predefined
+        ep_plan (`dict[str, str]`, *optional*):
+            Expert parallel sharding plan. Leave as `None` to use the model's predefined
             `base_model_ep_plan`. Pass a dictionary to override individual rules in that plan.
             Set `ep_size` explicitly to enable EP. With EP enabled, an `"ep_dispatch_experts"` rule
             selects `"all-to-all"` dispatch automatically.
@@ -63,7 +63,7 @@ class DistributedConfig:
     fsdp_mixed_precision: bool = False
     pp_size: int | None = None
     ep_size: int | None = None
-    ep_plan: dict[str, str] | Literal["auto"] | None = None
+    ep_plan: dict[str, str] | None = None
 
     @property
     def experts_dispatch(self) -> str:
@@ -120,6 +120,9 @@ class DistributedConfig:
 
     def _validate_parallelism(self):
         """Check that the resolved sizes and dispatch strategy form a supported parallel layout."""
+        if self.ep_plan is not None and not isinstance(self.ep_plan, dict):
+            raise ValueError("`ep_plan` must be a dictionary or None.")
+
         if self.experts_dispatch == "all-to-all":
             if self.ep_size % self.tp_size:
                 raise ValueError("`ep_size` must be a multiple of `tp_size` for token dispatch.")
