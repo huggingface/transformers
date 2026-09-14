@@ -24,6 +24,8 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
+    from PIL import Image
+
     from transformers import MiniCPMV4_7Processor
 
 if is_torch_available():
@@ -155,6 +157,57 @@ class MiniCPMV4_7ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         texts_no_skip = processor.post_process_image_text_to_text(generated_ids, skip_special_tokens=False)
         self.assertEqual(len(texts_skip), 1)
         self.assertEqual(len(texts_no_skip), 1)
+
+    def test_mrope_tgt_sizes_follow_text_order_not_modality_order(self):
+        """`target_sizes_mrope` must follow the order the placeholders appear in `text`.
+
+        Images are processed before videos, so collecting grids in modality order puts every image
+        grid ahead of every video grid. When one sample interleaves the two modalities in the other
+        order, that misaligns the grids with the visual spans in `input_ids` — silently, because the
+        *number* of grids still matches. Asymmetric grids make the misalignment visible.
+        """
+        processor = self.get_processor()
+        # Rectangular, non-square inputs so the image grid and the video-frame grid differ and a
+        # swapped order is detectable rather than coincidentally identical.
+        wide = Image.fromarray((np.random.randint(255, size=(50, 200, 3))).astype("uint8"))
+        tall = Image.fromarray((np.random.randint(255, size=(200, 50, 3))).astype("uint8"))
+        frames = [tall] * 3
+
+        image_only = processor(text=f"{self.image_token}", images=[wide], do_sample_frames=False, return_tensors="pt")
+        video_only = processor(
+            text=f"{self.video_token}", videos=[frames], do_sample_frames=False, return_tensors="pt"
+        )
+        image_grids = image_only["target_sizes_mrope"][0].tolist()
+        video_grids = video_only["target_sizes_mrope"][0].tolist()
+        self.assertNotEqual(
+            image_grids[0], video_grids[0], "test setup needs the image and video grids to be distinguishable"
+        )
+
+        video_first = processor(
+            text=f"{self.video_token}A{self.image_token}B",
+            images=[wide],
+            videos=[frames],
+            do_sample_frames=False,
+            return_tensors="pt",
+        )
+        image_first = processor(
+            text=f"{self.image_token}A{self.video_token}B",
+            images=[wide],
+            videos=[frames],
+            do_sample_frames=False,
+            return_tensors="pt",
+        )
+
+        self.assertListEqual(video_first["target_sizes_mrope"][0].tolist(), video_grids + image_grids)
+        self.assertListEqual(image_first["target_sizes_mrope"][0].tolist(), image_grids + video_grids)
+
+    def test_mrope_tgt_sizes_placeholder_input_mismatch_raises(self):
+        """Extra visuals without a matching placeholder are rejected instead of silently appended."""
+        processor = self.get_processor()
+        image = Image.fromarray((np.random.randint(255, size=(50, 200, 3))).astype("uint8"))
+
+        with self.assertRaises(ValueError):
+            processor(text=f"{self.image_token}", images=[image, image], return_tensors="pt")
 
     def test_use_image_id_kwarg(self):
         """Test that use_image_id is correctly routed through _merge_kwargs."""

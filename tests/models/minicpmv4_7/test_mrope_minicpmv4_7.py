@@ -20,7 +20,6 @@ from transformers.models.minicpmv4_7.modeling_minicpmv4_7 import (
     compute_canvas_rope_index,
     expand_1d_position_ids_to_3d,
 )
-from transformers.models.minicpmv4_7.processing_minicpmv4_7 import MiniCPMV4_7Processor
 
 
 if is_torch_available():
@@ -71,15 +70,6 @@ def _tiny_config(**kwargs):
 
 
 class MiniCPMV4_7MropeUtilsTest(unittest.TestCase):
-    def test_sample_ids_per_visual(self):
-        sample_ids = MiniCPMV4_7Processor._sample_ids_per_visual
-        processor = MiniCPMV4_7Processor.__new__(MiniCPMV4_7Processor)
-
-        self.assertEqual(sample_ids(processor, ["<image><image><image>"], "<image>"), [0, 0, 0])
-        self.assertEqual(sample_ids(processor, ["<image><image>", "<image>"], "<image>"), [0, 0, 1])
-        self.assertEqual(sample_ids(processor, ["no visual input"], "<image>"), [])
-        self.assertEqual(sample_ids(processor, None, "<image>"), [])
-
     @unittest.skipUnless(is_torch_available(), "torch not available")
     def test_expand_1d_position_ids_to_3d(self):
         input_ids = torch.tensor([[1, 2, 3, 4], [5, 6, 7, 8]])
