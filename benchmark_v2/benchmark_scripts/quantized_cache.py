@@ -25,11 +25,28 @@ BACKEND_CACHE_CONFIGS = {
 PROMPT = "The French Revolution was a period of political and societal change in France that began in 1789. "
 
 
+def state_memory(state) -> int:
+    """
+    Number of bytes held by a key or value state. The backends store theirs differently: `fp8` as a plain tensor,
+    `hqq` as a `(tensor, metadata)` tuple, and `quanto` as a tensor subclass whose payload is in its attributes.
+    """
+    if isinstance(state, dict):
+        return sum(state_memory(value) for value in state.values())
+    if isinstance(state, (tuple, list)):
+        return sum(state_memory(item) for item in state)
+    if not isinstance(state, torch.Tensor):
+        return 0
+    # A quanto `QTensor` reports the `numel` and `element_size` of the tensor it stands for, not of its payload
+    payload = [getattr(state, name, None) for name in ("_data", "_scale", "_shift")]
+    if any(tensor is not None for tensor in payload):
+        return sum(state_memory(tensor) for tensor in payload)
+    return state.numel() * state.element_size()
+
+
 def cache_memory(cache) -> int:
     """Number of bytes held by the key and value states of `cache`, whether they are quantized or not."""
     states = ("keys", "values", "_quantized_keys", "_quantized_values")
-    tensors = (getattr(layer, name, None) for layer in cache.layers for name in states)
-    return sum(t.numel() * t.element_size() for t in tensors if isinstance(t, torch.Tensor))
+    return sum(state_memory(getattr(layer, name, None)) for layer in cache.layers for name in states)
 
 
 def run(model, inputs, generation_kwargs, warmup: int, iterations: int) -> dict:
@@ -40,9 +57,11 @@ def run(model, inputs, generation_kwargs, warmup: int, iterations: int) -> dict:
 
     latencies = []
     for i in range(warmup + iterations):
+        # `generate` consumes the entries of `cache_config`, so every call is given a fresh copy of it
+        kwargs = generation_kwargs | {"cache_config": dict(generation_kwargs["cache_config"])}
         torch.accelerator.synchronize()
         start = time.perf_counter()
-        outputs = model.generate(**inputs, **generation_kwargs)
+        outputs = model.generate(**inputs, **kwargs)
         torch.accelerator.synchronize()
         if i >= warmup:
             latencies.append(time.perf_counter() - start)
@@ -52,6 +71,7 @@ def run(model, inputs, generation_kwargs, warmup: int, iterations: int) -> dict:
         "cache_memory": cache_memory(outputs.past_key_values) / 2**20,
         "peak_memory": torch.accelerator.max_memory_allocated() / 2**20,
         "sequences": outputs.sequences,
+        "scores": torch.stack(outputs.scores).float(),
     }
 
 
@@ -76,11 +96,16 @@ def main():
         "do_sample": False,
         "max_new_tokens": args.num_tokens_to_generate,
         "return_dict_in_generate": True,
+        "output_scores": True,
         "disable_compile": True,
+        "cache_config": {},
     }
 
     print(f"\n{args.model_id}, {args.sequence_length} prompt tokens, {args.num_tokens_to_generate} generated tokens\n")
-    header = f"{'cache':>10} | {'kv cache':>10} | {'peak memory':>12} | {'latency':>10} | {'matching tokens':>16}"
+    header = (
+        f"{'cache':>10} | {'kv cache':>10} | {'peak memory':>12} | {'latency':>10} "
+        f"| {'matching tokens':>16} | {'logit KL':>9}"
+    )
     print(header + "\n" + "-" * len(header))
 
     # The bf16 `DynamicCache` is the baseline that the quantized backends are compared against
@@ -90,13 +115,21 @@ def main():
         cache_kwargs = {"cache_implementation": "quantized", "cache_config": BACKEND_CACHE_CONFIGS[backend]}
         results[backend] = run(model, inputs, generation_kwargs | cache_kwargs, args.warmup, args.iterations)
 
+    baseline_logprobs = baseline["scores"].log_softmax(dim=-1)
     for name, result in results.items():
         # Quantizing the cache changes the numerics, so the greedy generations eventually diverge from the bf16 one
         matching_tokens = (result["sequences"] == baseline["sequences"]).int().cumprod(dim=-1).sum()
+        # How far the next-token distribution drifts from the bf16 one, averaged over the generated tokens
+        kl = torch.nn.functional.kl_div(
+            result["scores"].flatten(0, 1).log_softmax(dim=-1),
+            baseline_logprobs.flatten(0, 1),
+            log_target=True,
+            reduction="batchmean",
+        )
         print(
             f"{name:>10} | {result['cache_memory']:7.1f} MiB | {result['peak_memory']:9.1f} MiB "
             f"| {result['latency']:7.1f} ms | {matching_tokens - inputs.input_ids.numel():6d} "
-            f"/ {args.num_tokens_to_generate:<7d}"
+            f"/ {args.num_tokens_to_generate:<7d} | {kl:9.2e}"
         )
 
 
