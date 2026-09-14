@@ -208,11 +208,11 @@ class MuseGlimmerAssistantIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
         )
         completion = tokenizer.decode(output[0, input_ids.shape[1] :], skip_special_tokens=True)
         # Expected value from MuseGlimmerIntegrationTest.test_text_generation_matches_reference.
+        # fmt: off
         expected = Expectations(
             {
-                # fmt: off
                 ("cuda", None): " to find your gift. The purpose of life is to give it away.\n\nThe meaning of life is to find your gift",
-                # fmt: on
             }
         )
+        # fmt: on
         self.assertEqual(completion, expected.get_expectation())
