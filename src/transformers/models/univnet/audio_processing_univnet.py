@@ -99,6 +99,10 @@ class UnivNetAudioProcessorMixin:
     pad_end_length = 10
     valid_kwargs = UnivNetAudioProcessorKwargs
 
+    # Derived in `__init__` from `max_length_s`, so it is internal state rather than configuration
+    # and must not reach a saved config: a stale copy would silently contradict `max_length_s`.
+    _excluded_dict_keys = {"mel_filters", "window", "_cached_stft_window", "num_max_samples"}
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.num_max_samples = self.max_length_s * self.sampling_rate

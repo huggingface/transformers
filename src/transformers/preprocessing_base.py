@@ -300,13 +300,21 @@ class PreprocessingMixin(PushToHubMixin):
         if hasattr(self, "valid_kwargs") and hasattr(self.valid_kwargs, "__annotations__"):
             self._init_kwargs_from_valid_kwargs(kwargs)
 
-        # Additional attributes without default values
+        # Additional attributes without default values. These are keys the class does not declare:
+        # a legacy spelling the field mapping left flat, or a field belonging to another component
+        # that shares the config file. They are still set, so remote code and models that read them
+        # keep working — but they are recorded, and `to_dict` leaves them out. Serialising them is
+        # what makes an undeclared key permanent: it enters one config, lands on the instance, and
+        # every checkpoint saved from then on carries it. `valid_kwargs` is the contract for what a
+        # saved config contains; `__dict__` is not.
+        self._undeclared_config_keys = set()
         for key, value in kwargs.items():
             try:
                 setattr(self, key, value)
             except AttributeError as err:
                 logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
+            self._undeclared_config_keys.add(key)
 
     def _init_kwargs_from_valid_kwargs(self, kwargs: dict):
         """
@@ -684,6 +692,8 @@ class PreprocessingMixin(PushToHubMixin):
         output = copy.deepcopy(self.__dict__)
         output[self._type_key] = self.__class__.__name__
         output.pop("_valid_kwargs_names", None)
+        for key in output.pop("_undeclared_config_keys", set()):
+            output.pop(key, None)
         for key in self._excluded_dict_keys:
             if key in output:
                 del output[key]
