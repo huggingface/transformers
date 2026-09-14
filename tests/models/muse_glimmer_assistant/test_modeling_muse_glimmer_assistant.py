@@ -15,15 +15,18 @@
 
 import unittest
 
-from ...test_modeling_common import (
-    ModelTesterMixin,
+from transformers.testing_utils import (
     cleanup,
-    is_torch_available,
-    random_attention_mask,
     require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
+)
+from transformers.utils import is_torch_available
+
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    random_attention_mask,
 )
 
 
