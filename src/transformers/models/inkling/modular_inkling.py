@@ -765,6 +765,26 @@ class InklingPreTrainedModel(PreTrainedModel):
             )
 
 
+class _NormedEmbeddingView:
+    """Non-module view composing embed_tokens + embed_norm.
+
+    Returned by ``get_input_embeddings()`` so that callers (VLM, weight tying,
+    etc.) see a single, properly-normed embedding lookup — without moving
+    parameters or changing checkpoint weight keys.
+    """
+
+    def __init__(self, embed_tokens: nn.Embedding, embed_norm: nn.Module):
+        self._embed_tokens = embed_tokens
+        self._embed_norm = embed_norm
+
+    @property
+    def weight(self) -> torch.Tensor:
+        return self._embed_tokens.weight
+
+    def __call__(self, input_ids: torch.LongTensor) -> torch.FloatTensor:
+        return self._embed_norm(self._embed_tokens(input_ids))
+
+
 @auto_docstring
 class InklingTextModel(InklingPreTrainedModel):
     config: InklingTextConfig
@@ -785,6 +805,12 @@ class InklingTextModel(InklingPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self) -> "_NormedEmbeddingView":
+        return _NormedEmbeddingView(self.embed_tokens, self.embed_norm)
+
+    def set_input_embeddings(self, value: nn.Embedding) -> None:
+        self.embed_tokens = value
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -802,7 +828,7 @@ class InklingTextModel(InklingPreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_norm(self.embed_tokens(input_ids))
+            inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -1160,8 +1186,8 @@ class InklingModel(InklingPreTrainedModel):
         that the placeholder token count matches the length of `features`. If the lengths differ, an error is raised.
         """
         if input_ids is None:
-            special_mask = inputs_embeds == self.language_model.embed_norm(
-                self.get_input_embeddings()(torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device))
+            special_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_mask = special_mask.all(-1)
         else:
@@ -1230,8 +1256,6 @@ class InklingModel(InklingPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
-        # The norm need to be outside the `if` in case `input_embeds` are given explicitly
-        inputs_embeds = self.language_model.embed_norm(inputs_embeds)
 
         # Merge text and images
         if pixel_values is not None:
