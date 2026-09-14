@@ -27,6 +27,8 @@ class VideoMAEConfig(PreTrainedConfig):
         The number of frames in each video.
     tubelet_size (`int`, *optional*, defaults to 2):
         The number of tubelets.
+    qv_bias (`bool`, *optional*, defaults to `True`):
+        Whether to add a bias to the queries and values in the self-attention layers.
     use_mean_pooling (`bool`, *optional*, defaults to `True`):
         Whether to mean pool the final hidden states instead of using the final hidden state of the [CLS] token.
     decoder_num_attention_heads (`int`, *optional*, defaults to 6):
