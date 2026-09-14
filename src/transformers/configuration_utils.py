@@ -194,7 +194,7 @@ class SubConfigSpec:
             return backbone_config
 
         model_type = subconfig.get("model_type", self.model_type) if subconfig is not None else self.model_type
-        if model_type is None:
+        if not model_type:
             raise ValueError(f"Cannot resolve `{key}`: no model_type given and no default in `sub_configs_defaults`.")
         subconfig_cls = self.get_config_class(model_type)
 
