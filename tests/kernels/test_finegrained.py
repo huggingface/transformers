@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Marshalling tests for the multi-recipe ``finegrained`` integration: the kernel bundle is
+"""Marshalling tests for the multi-format ``finegrained`` integration: the kernel bundle is
 mocked, so these pin exactly what the integration passes to `kernels-community/finegrained-kernels`
 (the As-positional / no-block_size / expert_start / b_global_scale contract) without a GPU."""
 
@@ -77,21 +77,6 @@ def _fake_bundle():
     ):
         setattr(kernel, name, rec._op(name))
     kernel.get_supported_act_fns = lambda: ("silu", "gelu", "relu")
-
-    @dataclass
-    class Quantization:
-        input_recipe: str | None = "weights"
-        output_recipe: str | None = None
-
-    @dataclass
-    class Epilogue:
-        gate: bool = False
-        act_fn: str = "silu"
-        swiglu_alpha: float | None = None
-        swiglu_limit: float | None = None
-
-    kernel.Quantization = Quantization
-    kernel.Epilogue = Epilogue
     return kernel, rec
 
 
@@ -130,8 +115,8 @@ class FineGrainedLoaderTest(unittest.TestCase):
         p1, p2, p3, p4 = _loaded(kernel)
         with p1, p2, p3, p4:
             bundle = load_finegrained_kernel()
-        self.assertIs(bundle.Quantization, kernel.Quantization)
-        self.assertIs(bundle.Epilogue, kernel.Epilogue)
+        self.assertIs(bundle.matmul_2d, kernel.matmul_2d)
+        self.assertIs(bundle.get_supported_act_fns, kernel.get_supported_act_fns)
 
 
 @require_torch
@@ -164,7 +149,7 @@ class FineGrainedLinearMarshallingTest(unittest.TestCase):
         g = torch.tensor(2.0)
         _, call = self._run(weight_global_scale=g, activation_format="bf16")
         self.assertIs(call.kwargs["b_global_scale"], g)
-        self.assertIsNone(call.kwargs["quantization"].input_recipe)
+        self.assertEqual(call.kwargs["activation_format"], "bf16")
 
     def test_module_forward_threads_everything(self):
         kernel, rec = _fake_bundle()
@@ -181,7 +166,7 @@ class FineGrainedLinearMarshallingTest(unittest.TestCase):
             out = m(torch.randn(2, 64, dtype=torch.bfloat16))
         call = rec.calls["matmul_2d"][-1]
         self.assertIs(call.kwargs["b_global_scale"], m.weight_global_scale)
-        self.assertIsNone(call.kwargs["quantization"].input_recipe)
+        self.assertEqual(call.kwargs["activation_format"], "bf16")
         self.assertEqual(out.shape, (2, 32))
 
 
@@ -259,7 +244,7 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
             self.assertEqual(call.kwargs["activation_format"], "bf16")
         for call in rec.calls["matmul_2d"]:
             self.assertIsNotNone(call.kwargs["b_global_scale"])
-            self.assertIsNone(call.kwargs["quantization"].input_recipe)
+            self.assertEqual(call.kwargs["activation_format"], "bf16")
 
     def test_batched_marshalling(self):
         kernel, rec = _fake_bundle()
@@ -278,7 +263,7 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         self.assertIsNone(call.kwargs["gate_up_proj_global_scale"])
         self.assertEqual(call.kwargs["act_fn"], "silu")  # fusable: passed by name
         self.assertIs(call.kwargs["gate"], True)
-        self.assertEqual(call.kwargs["recipe"], "weights")  # activation_format None = weight family
+        self.assertIsNone(call.kwargs["activation_format"])  # None = the weight family's format
         self.assertEqual(out.shape, (6, 64))
 
     def test_grouped_marshalling(self):
@@ -292,14 +277,14 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         self.assertIs(call.kwargs["down_proj_scale_inv"], m.down_proj_scale_inv)
         self.assertNotIn("moe_fused_batched", rec.calls)
 
-    def test_activation_format_maps_to_the_block_recipe(self):
+    def test_activation_format_passes_through(self):
         kernel, rec = _fake_bundle()
-        for activation_format, recipe in ((None, "weights"), ("bf16", None), ("mxfp8", "mxfp8")):
+        for activation_format in (None, "bf16", "mxfp8"):
             m = self._experts(has_gate=True, activation_format=activation_format)
             p1, p2, p3, p4 = _loaded(kernel)
             with p1, p2, p3, p4:
                 fg.finegrained_batched_mm_experts_forward(m, *self._route())
-            self.assertEqual(rec.calls["moe_fused_batched"][-1].kwargs["recipe"], recipe)
+            self.assertEqual(rec.calls["moe_fused_batched"][-1].kwargs["activation_format"], activation_format)
 
     def test_nvfp4_experts_thread_per_expert_globals(self):
         kernel, rec = _fake_bundle()
@@ -879,7 +864,7 @@ class FineGrainedRealKernelTest(unittest.TestCase):
         blocks = w.reshape(N // 128, 128, K // 128, 128)
         amax = blocks.abs().amax(dim=(1, 3), keepdim=True).clamp(min=1e-12)
         inv = amax / 448.0
-        if ue8m0:  # power-of-two scales: the tcgen05 dot_scaled recipe
+        if ue8m0:  # power-of-two scales: the tcgen05 dot_scaled format
             inv = torch.pow(2.0, torch.ceil(torch.log2(inv)))
         q = (blocks / inv).to(torch.float8_e4m3fn)
         deq = (q.float() * inv).reshape(N, K)

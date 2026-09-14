@@ -622,7 +622,9 @@ else:
 
 
 _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
-    "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 2},
+    # DeepGEMM JIT-compiles its CUDA kernels for the running device; the build metadata declares only
+    # the arch it was packaged on (9.0a), so the `kernels` arch check would wrongly reject sm_100.
+    "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 2, "check_arch": False},
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
     "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 4},
     # the multi-recipe superset of finegrained-fp8 (block-FP8, MXFP8, MXFP4, NVFP4, weight-only);
@@ -756,7 +758,13 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
             if version is None and revision is None:
                 version = 1
 
-            kernel = get_kernel(repo_id, revision=revision, version=version, allow_all_kernels=ALLOW_ALL_KERNELS)
+            kernel = get_kernel(
+                repo_id,
+                revision=revision,
+                version=version,
+                allow_all_kernels=ALLOW_ALL_KERNELS,
+                check_arch=_HUB_KERNEL_MAPPING[kernel_name].get("check_arch", True),
+            )
             mapping[kernel_name] = kernel
         except FileNotFoundError as e:
             mapping[kernel_name] = None
@@ -818,6 +826,7 @@ def get_kernel(
     revision: str | None = None,
     version: int | str | None = None,
     allow_all_kernels: bool = False,
+    check_arch: bool = True,
 ) -> ModuleType:
     from .. import __version__
 
@@ -825,8 +834,16 @@ def get_kernel(
         raise ImportError(_MISSING_KERNELS_MESSAGE)
 
     user_agent = {"framework": "transformers", "version": __version__, "repo_id": kernel_name}
+    # `check_arch` (kernels >= 0.16) is only passed when a caller opts out, so older `kernels`
+    # releases without the keyword keep working.
+    arch_kwargs = {} if check_arch else {"check_arch": False}
     return get_kernel_hub(
-        kernel_name, revision=revision, version=version, user_agent=user_agent, trust_remote_code=allow_all_kernels
+        kernel_name,
+        revision=revision,
+        version=version,
+        user_agent=user_agent,
+        trust_remote_code=allow_all_kernels,
+        **arch_kwargs,
     )
 
 
