@@ -199,10 +199,11 @@ class Apertus1p5Processor(ProcessorMixin):
         kwargs.setdefault("sampling_rate", self.feature_extractor.sampling_rate)
         audio_inputs = self.feature_extractor(clips, **kwargs)
         if "padding_mask" not in audio_inputs:
-            raise ValueError(
-                "The audio feature extractor returned no `padding_mask`; audio must be processed with "
-                "`padding=True` (the default)."
-            )
+            # Unpadded waveforms contain only valid samples, including after truncation.
+            audio_inputs["padding_mask"] = [
+                np.ones(values.shape[-1], dtype=np.int64) for values in audio_inputs["input_values"]
+            ]
+            audio_inputs.convert_to_tensors(kwargs.get("return_tensors"))
         audio_inputs["input_features"] = audio_inputs.pop("input_values")
         audio_inputs["feature_attention_mask"] = audio_inputs.pop("padding_mask")
         # counts come from the feature-extractor OUTPUT so that truncation/max_length can never desync the
