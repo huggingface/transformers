@@ -67,6 +67,8 @@ AudioInput = Union[np.ndarray, "torch.Tensor", list[np.ndarray], list["torch.Ten
 
 @dataclass(frozen=True, eq=False, unsafe_hash=True)
 class StftConfig(DataclassDict):
+    _renamed_fields = {"frame_extension": "extra_samples_per_frame"}
+
     n_fft: int = 400
     win_length: int | None = None
     hop_length: int | None = None
@@ -76,11 +78,10 @@ class StftConfig(DataclassDict):
     center: bool | str = True
     pad_mode: str = "reflect"
     normalized: bool = False
-    onesided: bool | None = None
     periodic: bool = True
     left_align_fft: bool = False
     window_dtype: str | None = None
-    frame_extension: int = 0
+    extra_samples_per_frame: int = 0
     # None: FFT in the waveform dtype; "float64": frames upcast at the FFT boundary; "native": no cast;
     # "complex64": the FFT output is rounded through complex64 before the float64 magnitudes.
     fft_dtype: str | None = None
@@ -105,6 +106,13 @@ class MelScaleConfig(DataclassDict):
 @dataclass(frozen=True, eq=False, unsafe_hash=True)
 class SpectrogramConfig(DataclassDict):
     _nested_config_types = {"stft_config": StftConfig, "mel_scale_config": MelScaleConfig}
+    _renamed_fields = {
+        "clip_max_offset": "floor_below_peak",
+        "post_log_shift": "log_shift",
+        "post_log_scale": "log_scale",
+        "count_partial_frames": "count_frames_by_hop",
+        "skip_last_frame": "drop_last_frame",
+    }
 
     stft_config: StftConfig = field(default_factory=StftConfig)
     mel_scale_config: MelScaleConfig | None = None
@@ -116,12 +124,12 @@ class SpectrogramConfig(DataclassDict):
     pre_log_offset: float | None = None
     waveform_scale: float | None = None
     computation_dtype: str | None = None
-    skip_last_frame: bool = False
-    count_partial_frames: bool = False
+    drop_last_frame: bool = False
+    count_frames_by_hop: bool = False
     transpose_features: bool = False
-    clip_max_offset: float | None = None
-    post_log_shift: float | None = None
-    post_log_scale: float | None = None
+    floor_below_peak: float | None = None
+    log_shift: float | None = None
+    log_scale: float | None = None
 
 
 @retry(exceptions=(httpx.HTTPError,))

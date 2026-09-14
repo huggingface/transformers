@@ -50,9 +50,9 @@ class GraniteSpeech5AudioProcessorMixin:
         "mel_scale_config": {"n_mels": 80},
         "log_mode": "log10",
         "mel_floor": 1e-10,
-        "clip_max_offset": 8.0,
-        "post_log_shift": 4.0,
-        "post_log_scale": 0.25,
+        "floor_below_peak": 8.0,
+        "log_shift": 4.0,
+        "log_scale": 0.25,
     }
 
     delta_win_length = 3
@@ -67,7 +67,7 @@ class GraniteSpeech5AudioProcessorMixin:
         # `num_mel_bins` the same config carries, giving 320 mels and features 4x too wide.
         # Dropping it lets the real count through.
         "feature_size": None,
-        "logmel_floor_db": "spectrogram_config.clip_max_offset",
+        "logmel_floor_db": "spectrogram_config.floor_below_peak",
         # Keys from the pre-`auto_map` remote-code configs that the *legacy extractor does not
         # read either*: its signature takes `num_mel_bins` and `sampling_rate`, and
         # `delta_expansion`/`frame_stacking` are class constants ("hardcoded in modeling for this

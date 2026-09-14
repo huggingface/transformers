@@ -48,7 +48,7 @@ class Gemma3nAudioProcessorMixin:
             "power": 1.0,
             "center": False,
             "window_fn": "hann_window_f32",
-            "frame_extension": 1,
+            "extra_samples_per_frame": 1,
             "fft_dtype": "float64",
         },
         "mel_scale_config": {
@@ -62,7 +62,7 @@ class Gemma3nAudioProcessorMixin:
         "log_mode": "log",
         "preemphasis": 0.97,
         "preemphasis_mode": "htk_per_frame",
-        "count_partial_frames": True,
+        "count_frames_by_hop": True,
         "computation_dtype": "float64",
     }
     truncation = True

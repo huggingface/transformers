@@ -55,6 +55,9 @@ class DataclassDict:
     """
 
     _nested_config_types: ClassVar[dict[str, type[DataclassDict]]] = {}
+    # Old field name -> current one, for configs written before a rename. `from_dict` translates
+    # them, so a saved config keeps loading; `to_dict` only ever writes the current names.
+    _renamed_fields: ClassVar[dict[str, str]] = {}
 
     def __getitem__(self, key):
         if key in {f.name for f in fields(self)}:
@@ -88,6 +91,10 @@ class DataclassDict:
     @classmethod
     def from_dict(cls, config: dict):
         config = dict(config)
+        for old, current in cls._renamed_fields.items():
+            if old in config:
+                config.setdefault(current, config.pop(old))
+            config.pop(old, None)
         for key, nested_type in cls._nested_config_types.items():
             if isinstance(config.get(key), dict):
                 config[key] = nested_type.from_dict(config[key])

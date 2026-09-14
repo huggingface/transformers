@@ -80,7 +80,7 @@ class InklingAudioProcessorMixin:
         "transpose_features": True,
         # `_waveform_to_spectrum` left-pads by `n_fft - hop`, so frame k is centred on sample k*hop and counts as
         # valid whenever that centre lies in the real audio, even if its window reaches padding.
-        "count_partial_frames": True,
+        "count_frames_by_hop": True,
     }
 
     def _waveform_to_spectrum(self, audio, *, spectrogram_config, audio_ranges=None, **kwargs):

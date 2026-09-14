@@ -52,9 +52,9 @@ class GraniteSpeechAudioProcessorMixin:
         "mel_scale_config": {"n_mels": 80},
         "log_mode": "log10",
         "mel_floor": 1e-10,
-        "clip_max_offset": 8.0,
-        "post_log_shift": 4.0,
-        "post_log_scale": 0.25,
+        "floor_below_peak": 8.0,
+        "log_shift": 4.0,
+        "log_scale": 0.25,
     }
 
     projector_window_size = 15

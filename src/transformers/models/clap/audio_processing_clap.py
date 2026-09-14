@@ -79,7 +79,7 @@ class ClapAudioProcessorMixin:
         # `padding_mode`/`truncation_mode`, leaving `padding`/`truncation` their base meaning.
         "padding": "padding_mode",
         "truncation": "truncation_mode",
-        "top_db": "spectrogram_config.clip_max_offset",
+        "top_db": "spectrogram_config.floor_below_peak",
         "chunk_length_s": None,
         "max_length_s": None,
     }

@@ -51,12 +51,12 @@ class Qwen3ASRAudioProcessorMixin:
         },
         "log_mode": "log10",
         # the legacy extractor slices the STFT (`stft[..., :-1]`) before the mel projection
-        "skip_last_frame": True,
-        "clip_max_offset": 8.0,
-        "post_log_shift": 4.0,
-        "post_log_scale": 0.25,
+        "drop_last_frame": True,
+        "floor_below_peak": 8.0,
+        "log_shift": 4.0,
+        "log_scale": 0.25,
         # legacy masks by striding the sample mask -> boundary-straddling frames count as valid
-        "count_partial_frames": True,
+        "count_frames_by_hop": True,
     }
 
     min_length = 8000

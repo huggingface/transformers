@@ -49,10 +49,10 @@ class WhisperAudioProcessorMixin:
             "matmul_order": "filters_first_matmul",
         },
         "log_mode": "log10",
-        "skip_last_frame": True,
-        "clip_max_offset": 8.0,
-        "post_log_shift": 4.0,
-        "post_log_scale": 0.25,
+        "drop_last_frame": True,
+        "floor_below_peak": 8.0,
+        "log_shift": 4.0,
+        "log_scale": 0.25,
     }
     truncation = True
 

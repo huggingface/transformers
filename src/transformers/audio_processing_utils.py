@@ -515,15 +515,15 @@ class BaseAudioProcessor(AudioProcessingMixin):
     def _waveform_to_spectrum(self, audio, *, spectrogram_config, dither, **kwargs):
         stft_cfg = spectrogram_config.stft_config
         needs_manual_framing = self._needs_manual_framing(spectrogram_config)
-        if stft_cfg.frame_extension:
-            if stft_cfg.frame_extension != 1:
-                raise ValueError(f"Only frame_extension=1 is supported, got {stft_cfg.frame_extension}.")
+        if stft_cfg.extra_samples_per_frame:
+            if stft_cfg.extra_samples_per_frame != 1:
+                raise ValueError(f"Only extra_samples_per_frame=1 is supported, got {stft_cfg.extra_samples_per_frame}.")
             if stft_cfg.center is True:
-                raise ValueError("frame_extension requires center=False or center='left', not symmetric centering.")
+                raise ValueError("extra_samples_per_frame requires center=False or center='left', not symmetric centering.")
             if spectrogram_config.remove_dc_offset:
-                raise ValueError("remove_dc_offset is not supported with frame_extension.")
+                raise ValueError("remove_dc_offset is not supported with extra_samples_per_frame.")
         elif spectrogram_config.preemphasis_mode == "htk_per_frame":
-            raise ValueError("preemphasis_mode='htk_per_frame' requires frame_extension=1.")
+            raise ValueError("preemphasis_mode='htk_per_frame' requires extra_samples_per_frame=1.")
         if stft_cfg.fft_dtype is not None:
             if stft_cfg.fft_dtype not in ("float64", "native", "complex64"):
                 raise ValueError(
@@ -565,7 +565,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         if needs_manual_framing:
             audio_dtype = audio.dtype
             frames = self._frame_waveform(
-                audio, window, frame_length + stft_cfg.frame_extension, hop_length, n_fft, stft_cfg
+                audio, window, frame_length + stft_cfg.extra_samples_per_frame, hop_length, n_fft, stft_cfg
             )
             frames = self._process_frames(frames, spectrogram_config=spectrogram_config, **kwargs)
             stft_out = self._stft_framed(frames, window, frame_length, n_fft, stft_cfg, audio_dtype=audio_dtype)
@@ -587,7 +587,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
                 and spectrogram_config.preemphasis_mode in ("per_frame", "htk_per_frame")
             )
             or spectrogram_config.remove_dc_offset
-            or bool(spectrogram_config.stft_config.frame_extension)
+            or bool(spectrogram_config.stft_config.extra_samples_per_frame)
             or spectrogram_config.stft_config.center == "left"  # truthy string would center-pad natively
             # A native STFT frames on `n_fft`; left-aligning the window inside the FFT buffer
             # means the framing must use `win_length`, which only the manual path can do.
@@ -603,10 +603,10 @@ class BaseAudioProcessor(AudioProcessingMixin):
         win_length = stft_cfg.win_length or stft_cfg.n_fft
         hop_length = stft_cfg.hop_length or win_length // 2
         if stft_cfg.center == "left":
-            count = (lengths + win_length // 2 - (win_length + stft_cfg.frame_extension)) // hop_length + 1
+            count = (lengths + win_length // 2 - (win_length + stft_cfg.extra_samples_per_frame)) // hop_length + 1
             return max(0, count) if isinstance(count, int) else count.clip(min=0)
         if not stft_cfg.center:
-            return (lengths - (win_length + stft_cfg.frame_extension)) // hop_length + 1
+            return (lengths - (win_length + stft_cfg.extra_samples_per_frame)) // hop_length + 1
         return lengths // hop_length
 
     def _padded_frame_count(self, padded_length, spectrogram_config) -> int:
@@ -619,17 +619,17 @@ class BaseAudioProcessor(AudioProcessingMixin):
         width = self._frame_count(padded_length, stft_cfg)
         if stft_cfg.center and stft_cfg.center != "left":
             width += 1  # a centered STFT emits the extra frame centered at t=0
-        if spectrogram_config.skip_last_frame:
+        if spectrogram_config.drop_last_frame:
             width -= 1  # the log stage drops the trailing frame
         return int(width)
 
     def _valid_frame_counts(self, audio_lengths, spectrogram_config):
         """Per-utterance number of frames covered by real (non-padding) audio.
 
-        Honours `count_partial_frames`; override only for framing a config can't describe.
+        Honours `count_frames_by_hop`; override only for framing a config can't describe.
         """
         stft_cfg = spectrogram_config.stft_config
-        if spectrogram_config.count_partial_frames:
+        if spectrogram_config.count_frames_by_hop:
             win_length = stft_cfg.win_length or stft_cfg.n_fft
             hop_length = stft_cfg.hop_length or win_length // 2
             return (audio_lengths + hop_length - 1) // hop_length
@@ -662,10 +662,10 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
         Called after framing, before windowing and FFT. Applies DC-offset removal, per-frame
         (kaldi-style) preemphasis, and USM/HTK-style extended-frame preemphasis when
-        ``stft_config.frame_extension`` is set. Override for non-standard frame processing
+        ``stft_config.extra_samples_per_frame`` is set. Override for non-standard frame processing
         that doesn't fit these knobs, e.g. boundary-frame masking (Phi4-multimodal).
         """
-        if spectrogram_config.stft_config.frame_extension:
+        if spectrogram_config.stft_config.extra_samples_per_frame:
             # USM-style extended frames: preemphasis consumes the extra trailing sample,
             # reducing the frame back to `win_length`.
             preemphasis = spectrogram_config.preemphasis
@@ -745,7 +745,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         else:
             raise ValueError(f"Unknown log_mel option: {log_mel}")
 
-        if spectrogram_config.skip_last_frame:
+        if spectrogram_config.drop_last_frame:
             result = result[..., :-1]
         result = self._shape_log_features(result, spectrogram_config)
         return self._maybe_transpose_features(result, spectrogram_config)
@@ -758,13 +758,13 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return result
 
     def _shape_log_features(self, result, spectrogram_config):
-        if spectrogram_config.clip_max_offset is not None:
+        if spectrogram_config.floor_below_peak is not None:
             max_vals = self._amax_over_features(result)
-            result = _array_namespace(result).maximum(result, max_vals - spectrogram_config.clip_max_offset)
-        if spectrogram_config.post_log_shift is not None:
-            result = result + spectrogram_config.post_log_shift
-        if spectrogram_config.post_log_scale is not None:
-            result = result * spectrogram_config.post_log_scale
+            result = _array_namespace(result).maximum(result, max_vals - spectrogram_config.floor_below_peak)
+        if spectrogram_config.log_shift is not None:
+            result = result + spectrogram_config.log_shift
+        if spectrogram_config.log_scale is not None:
+            result = result * spectrogram_config.log_scale
         return result
 
     # ── Backend array-API primitives ─────────────────────────────────────
