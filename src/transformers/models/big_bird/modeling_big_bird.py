@@ -25,7 +25,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...masking_utils import create_bidirectional_mask
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1626,7 +1626,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
             band_mask = None
             from_mask = None
             to_mask = None
-            mask_function = create_bidirectional_mask if self.config.is_decoder else create_bidirectional_mask
+            mask_function = create_causal_mask if self.config.is_decoder else create_bidirectional_mask
             attention_mask = mask_function(
                 self.config, embedding_output, attention_mask=attention_mask, past_key_values=past_key_values
             )
