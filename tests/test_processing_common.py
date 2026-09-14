@@ -158,7 +158,7 @@ class ProcessorTesterMixin:
     # Max-length value used in chat template tests. Override in subclasses if needed.
     chat_template_max_length = 100  # max_length in test_apply_chat_template_*
 
-    # Role used in chat template tests. Override in subclasses whose template expects another role, e.g. a speaker id
+    # Role used in chat template tests. Override in subclasses whose template expects another role.
     chat_template_user_role = "user"
 
     @classmethod
