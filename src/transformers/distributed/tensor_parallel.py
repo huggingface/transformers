@@ -830,9 +830,9 @@ def dispatch_experts_forward(
 class EpDispatchExpertsParallel(MoeExpertsParallel):
     """Dispatch disjoint TP token slices to the experts' owners, then replicate the combined output on TP."""
 
-    def install_forward(self, module, mesh, *, is_expert_parallel=False, tp_mesh=None):
+    def install_forward(self, module, ep_mesh, *, is_expert_parallel=False, tp_mesh=None):
         original_forward = module.forward
-        ep_group, ep_size = mesh.get_group(), mesh.size()
+        ep_group, ep_size = ep_mesh.get_group(), ep_mesh.size()
         tp_size = tp_mesh.size() if tp_mesh is not None else 1
 
         def experts_forward(hidden_states, top_k_index, top_k_weights):
@@ -865,7 +865,7 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
                     top_k_index[rows],
                     top_k_weights[rows],
                 )
-            with self.context_around_forward(module, mesh):
+            with self.context_around_forward(module, ep_mesh):
                 # The sharding leaves the module with its local expert count.
                 output = dispatch_experts_forward(
                     experts_forward,
@@ -952,76 +952,53 @@ def _validate_tp_plan_styles(tp_plan: dict[str, str] | None) -> None:
 
 def resolve_parallel_plans(model: nn.Module, distributed_config: DistributedConfig):
     """Resolve overrides and give EP ownership of its modules before applying any sharding."""
+    # Take user-defined plans
     if isinstance(distributed_config.tp_plan, dict):
-        model.tp_plan = distributed_config.tp_plan
+        model.tp_plan = (model.tp_plan or {}) | distributed_config.tp_plan
     if isinstance(distributed_config.ep_plan, dict):
         model.ep_plan = (model.ep_plan or {}) | distributed_config.ep_plan
 
-    tp_plan = model.tp_plan if distributed_config.tp_size > 1 else {}
-    expert_plan = (model.ep_plan or {}) if distributed_config.ep_size > 1 else tp_plan
-    if distributed_config.ep_size > 1 and distributed_config.experts_dispatch == "all-reduce" and not expert_plan:
+    tp_plan = (model.tp_plan or {}) if distributed_config.tp_size > 1 else {}
+    ep_plan = (model.ep_plan or {}) if distributed_config.ep_size > 1 else {}
+
+    if distributed_config.ep_size > 1 and distributed_config.experts_dispatch == "all-reduce" and not ep_plan:
         raise ValueError(
             f"{type(model).__name__} does not define an expert-parallel plan. "
             "Pass `ep_plan` in DistributedConfig, add `base_model_ep_plan` to the model's config, "
             "or disable expert parallelism."
         )
 
-    expert_styles = (
-        ("moe_tp_experts", "ep_dispatch_experts")
-        if distributed_config.ep_size > 1
-        else ("moe_tp_experts", "megamoe_experts")
-    )
-    expert_paths = [name for name, style in expert_plan.items() if style in expert_styles]
-    if distributed_config.experts_dispatch == "all-to-all" and not expert_paths:
-        raise ValueError(
-            f"{type(model).__name__} needs a `moe_tp_experts` or `ep_dispatch_experts` rule for token dispatch."
-        )
+    def is_expert_path(name):
+        return any(fnmatchcase(name, path) or fnmatchcase(name, path + ".*") for path in expert_paths)
 
-    if distributed_config.ep_size > 1 and distributed_config.experts_dispatch == "all-reduce":
-        # Keep the EP router and any other explicit EP rules; they take precedence over TP too.
-        moe_plan = dict(expert_plan)
-        expert_paths = list(expert_plan)
-    else:
-        moe_plan = {
-            name: style
-            for name, style in expert_plan.items()
-            if any(fnmatchcase(name, path) or fnmatchcase(name, path + ".*") for path in expert_paths)
-        }
-    tp_plan = {
-        name: style
-        for name, style in tp_plan.items()
-        if not any(fnmatchcase(name, path) or fnmatchcase(name, path + ".*") for path in expert_paths)
-    }
+    expert_paths = list(ep_plan)
+    if distributed_config.experts_dispatch == "all-to-all":
+        expert_paths = [name for name, style in ep_plan.items() if style in ("moe_tp_experts", "ep_dispatch_experts")]
+        ep_plan = {name: style for name, style in ep_plan.items() if is_expert_path(name)}
+    tp_plan = {name: style for name, style in tp_plan.items() if not is_expert_path(name)}
     _validate_tp_plan_styles(tp_plan)
-    _validate_tp_plan_styles(moe_plan)
-    return tp_plan, moe_plan
+    _validate_tp_plan_styles(ep_plan)
+    return tp_plan, ep_plan
 
 
 def apply_tensor_parallelism_non_moe(model: nn.Module, mesh_manager: MeshManager, plan: dict[str, str]):
-    """Apply the resolved dense TP rules."""
-    if plan:
-        model = apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), plan)
-    return model
+    """Apply the resolved TP rules, including experts when EP is disabled."""
+    return apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), plan)
 
 
 def apply_tensor_parallelism_moe(
     model: nn.Module, distributed_config: DistributedConfig, mesh_manager: MeshManager, plan: dict[str, str]
 ):
     """Apply the resolved expert rules on the TP or EP mesh."""
-    if not plan:
-        return model
     if distributed_config.experts_dispatch == "all-to-all":
-        return apply_tensor_parallelism(
-            model, mesh_manager.get_mesh("ep"), plan, dispatch_tp_mesh=mesh_manager.get_mesh("tp")
-        )
+        return apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), plan, ep_mesh=mesh_manager.get_mesh("ep"))
     return apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), plan)
 
 
-def apply_tensor_parallelism(model, tp_mesh, tp_plan=None, *, dispatch_tp_mesh=None):
-    """DTensor backend: shard params as placeholders and install TP forward hooks."""
-
+def apply_tensor_parallelism(model, tp_mesh, tp_plan=None, *, ep_mesh=None):
+    """Shard and install hooks on EP when provided, otherwise TP; dispatch also uses TP for token slices."""
     tp_plan = model.tp_plan if tp_plan is None else tp_plan
-    _validate_tp_plan_styles(tp_plan)
+    shard_mesh = ep_mesh if ep_mesh is not None else tp_mesh
 
     for name, module in model.named_modules():
         # Create DTensor placeholders so the loader knows which shard belongs to this rank.
@@ -1030,8 +1007,8 @@ def apply_tensor_parallelism(model, tp_mesh, tp_plan=None, *, dispatch_tp_mesh=N
             style_name = _get_parameter_tp_plan(parameter_name=full, tp_plan=tp_plan, is_weight=True)
             if style_name is not None and style_name in ALL_PARALLEL_STYLES:
                 style = ALL_PARALLEL_STYLES[style_name]
-                style.validate_param(module, p_name, tp_mesh, parameter_name=full)
-                style.shard_param(module, p_name, tp_mesh)
+                style.validate_param(module, p_name, shard_mesh, parameter_name=full)
+                style.shard_param(module, p_name, shard_mesh)
 
         # Install the input/output transforms required by this module's TP style.
         style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=tp_plan, is_weight=False)
@@ -1041,9 +1018,9 @@ def apply_tensor_parallelism(model, tp_mesh, tp_plan=None, *, dispatch_tp_mesh=N
                 # TODO: Store qk_rope_head_dim on MLA projection modules when the models initialize them.
                 module.config = model.config.get_text_config()
             if style_name == "ep_dispatch_experts":
-                ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh, tp_mesh=dispatch_tp_mesh)
+                ALL_PARALLEL_STYLES[style_name].install_forward(module, ep_mesh=ep_mesh, tp_mesh=tp_mesh)
             else:
-                ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
+                ALL_PARALLEL_STYLES[style_name].install_forward(module, shard_mesh)
         module._is_hooked = True
 
     return model

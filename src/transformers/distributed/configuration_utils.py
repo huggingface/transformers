@@ -30,7 +30,7 @@ class DistributedConfig:
             `WORLD_SIZE // (other_parallel_size)`. If `None` and no `tp_plan` is set, defaults to 1.
         tp_plan (`dict[str, str]` or `"auto"`, *optional*):
             Tensor parallel sharding plan. Pass `"auto"`, or leave as `None` when `tp_size` is set, to use the
-            model's predefined `base_model_tp_plan`. Pass a dictionary to override the predefined plan.
+            model's predefined `base_model_tp_plan`. Pass a dictionary to override individual rules in that plan.
         enable_sequence_parallel (`bool`, *optional*, defaults to `False`):
             Reserved for sequence parallelism. Not wired up yet.
         enable_expert_parallel (`bool`, *optional*, defaults to `False`):

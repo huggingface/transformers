@@ -130,6 +130,7 @@ def _distributed_barrier():
     else:
         torch.distributed.barrier()
 
+
 class MeshManager:
     """Named access to dense and expert parallel axes without exposing their view selection."""
 
@@ -142,6 +143,7 @@ class MeshManager:
         dims = (dims,) if isinstance(dims, str) else dims
         mesh = self._expert_mesh if "ep" in dims or "efsdp" in dims else self._dense_mesh
         return mesh[dims]
+
 
 # Retained for the legacy transformers.integrations.tensor_parallel API.
 def initialize_tensor_parallelism(
@@ -195,6 +197,7 @@ def initialize_tensor_parallelism(
         device_map = torch.device(f"{device_mesh.device_type}:{int(os.environ['LOCAL_RANK'])}")
 
     return device_map, device_mesh
+
 
 def initialize_fully_sharded_data_parallelism(distributed_config: DistributedConfig):
     warnings.warn(

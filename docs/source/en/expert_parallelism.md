@@ -46,6 +46,9 @@ independently of `tp_plan`. Unspecified EP rules are preserved. Leaving `ep_plan
 available separately as `model.tp_plan` and `model.ep_plan`. Providing an EP plan does not infer parallel sizes;
 set `ep_size` and the layout explicitly.
 
+`tp_plan` is applied only when `tp_size > 1`, and `ep_plan` only when `ep_size > 1`.
+With TP enabled and EP disabled, the full `tp_plan` applies, including any expert rules it contains.
+
 With EP enabled, an `"ep_dispatch_experts"` rule selects all-to-all. Communication is derived from the EP plan.
 For example, this overrides the expert forward rule while preserving the default expert-weight rules:
 

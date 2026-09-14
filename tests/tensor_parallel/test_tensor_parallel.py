@@ -58,14 +58,14 @@ class TestParallelPlanResolution(TestCasePlus):
         dispatch_override = {"layers.*.mlp.experts": "ep_dispatch_experts"}
         dispatch_plan = expert_ep_plan | dispatch_override
         custom_tp_plan = {
-            "layers.*.self_attn.q_proj": "colwise",
+            "layers.*.self_attn.q_proj": "colwise_rep",
             "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
             "layers.*.mlp.experts": "moe_tp_experts",
         }
         cases = [
             ("disabled", DistributedConfig(), {}, {}),
             ("fsdp_only", DistributedConfig(fsdp_size=8), {}, {}),
-            ("tp_only", DistributedConfig(tp_size=4), dense_plan, expert_tp_plan),
+            ("tp_only", DistributedConfig(tp_size=4), dense_plan | expert_tp_plan, {}),
             ("all_reduce", DistributedConfig(tp_size=4, ep_size=4), dense_plan, all_reduce_plan),
             (
                 "auto_ep_plan",
@@ -99,14 +99,14 @@ class TestParallelPlanResolution(TestCasePlus):
                     tp_plan=custom_tp_plan,
                     ep_plan=dispatch_override,
                 ),
-                {"layers.*.self_attn.q_proj": "colwise"},
+                dense_plan | {"layers.*.self_attn.q_proj": "colwise_rep"},
                 dispatch_plan,
             ),
             (
                 "ep_override_does_not_enable_ep",
                 DistributedConfig(tp_size=4, ep_plan=dispatch_override),
-                dense_plan,
-                expert_tp_plan,
+                dense_plan | expert_tp_plan,
+                {},
             ),
         ]
         model_config = Qwen3MoeConfig(
@@ -133,10 +133,10 @@ class TestParallelPlanResolution(TestCasePlus):
                 apply.assert_not_called()
                 self.assertEqual(tp_plan, expected_tp)
                 self.assertEqual(expert_plan, expected_experts)
-                self.assertEqual(
-                    model.tp_plan,
-                    custom_tp_plan if name == "custom_tp_and_ep" else dense_plan | expert_tp_plan,
-                )
+                expected_stored_tp = dense_plan | expert_tp_plan
+                if isinstance(distributed_config.tp_plan, dict):
+                    expected_stored_tp = expected_stored_tp | distributed_config.tp_plan
+                self.assertEqual(model.tp_plan, expected_stored_tp)
                 expected_stored_ep = all_reduce_plan
                 if isinstance(distributed_config.ep_plan, dict):
                     expected_stored_ep = expected_stored_ep | distributed_config.ep_plan
@@ -201,7 +201,7 @@ class TestTensorParallelProperties(TestCasePlus):
             self.assertIn(repr(style), error_message)
         self.assertIn("Supported styles are", error_message)
 
-    def test_apply_tensor_parallelism_reports_all_invalid_styles(self):
+    def test_resolve_parallel_plans_reports_all_invalid_styles(self):
         model = torch.nn.Module()
         model.tp_plan = {
             "first_layer": "invalid_style",
@@ -209,7 +209,7 @@ class TestTensorParallelProperties(TestCasePlus):
         }
 
         with self.assertRaises(ValueError) as context:
-            tensor_parallel.apply_tensor_parallelism(model, tp_mesh=None)
+            tensor_parallel.resolve_parallel_plans(model, DistributedConfig(tp_size=2))
 
         error_message = str(context.exception)
         self.assertIn("'invalid_style'", error_message)

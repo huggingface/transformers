@@ -130,9 +130,7 @@ class DistributedMixin:
 
     @ep_plan.setter
     def ep_plan(self, plan: dict[str, str] | None):
-        if plan is None:
-            self._ep_plan = {}
-            return
+        plan = {} if plan is None else plan
         if not isinstance(plan, dict):
             raise ValueError("Can only set a dictionary as `ep_plan`")
         _validate_tp_plan_styles(plan)
@@ -194,11 +192,11 @@ class DistributedMixin:
         if distributed_config.pp_size > 1:
             model = apply_pipeline_parallelism(model, mesh_manager.get_mesh("pp"))
 
-        if distributed_config.tp_size > 1 or distributed_config.ep_size > 1:
-            tp_plan, moe_plan = resolve_parallel_plans(model, distributed_config)
-            if distributed_config.tp_size > 1:
-                model = apply_tensor_parallelism_non_moe(model, mesh_manager, tp_plan)
-            model = apply_tensor_parallelism_moe(model, distributed_config, mesh_manager, moe_plan)
+        tp_plan, ep_plan = resolve_parallel_plans(model, distributed_config)
+        if tp_plan:
+            model = apply_tensor_parallelism_non_moe(model, mesh_manager, tp_plan)
+        if ep_plan:
+            model = apply_tensor_parallelism_moe(model, distributed_config, mesh_manager, ep_plan)
 
         if distributed_config.fsdp_size > 1 or distributed_config.experts_dispatch == "all-to-all":
             model = apply_fully_sharded_data_parallelism(model, mesh_manager)
