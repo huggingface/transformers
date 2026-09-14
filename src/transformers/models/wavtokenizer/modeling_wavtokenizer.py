@@ -117,9 +117,9 @@ class WavTokenizerConv1d(nn.Module):
         # Effective kernel size with dilations.
         kernel_size = torch.tensor((kernel_size - 1) * dilation + 1, dtype=torch.int64)
 
-        self.register_buffer("stride", stride, persistent=False)
-        self.register_buffer("kernel_size", kernel_size, persistent=False)
-        self.register_buffer("padding_total", kernel_size - stride, persistent=False)
+        self.stride = nn.Buffer(stride, persistent=False)
+        self.kernel_size = nn.Buffer(kernel_size, persistent=False)
+        self.padding_total = nn.Buffer(kernel_size - stride, persistent=False)
 
     def _get_extra_padding_for_conv1d(
         self,
@@ -267,10 +267,10 @@ class WavTokenizerEuclideanCodebook(nn.Module):
 
         self.codebook_size = config.codebook_size
 
-        self.register_buffer("inited", torch.Tensor([True]))
-        self.register_buffer("cluster_size", torch.zeros(config.codebook_size))
-        self.register_buffer("embed", embed)
-        self.register_buffer("embed_avg", embed.clone())
+        self.inited = nn.Buffer(torch.Tensor([True]))
+        self.cluster_size = nn.Buffer(torch.zeros(config.codebook_size))
+        self.embed = nn.Buffer(embed)
+        self.embed_avg = nn.Buffer(embed.clone())
 
     def quantize(self, hidden_states):
         embed = self.embed.t()
@@ -455,23 +455,24 @@ class WavTokenizerISTFTHead(nn.Module):
         self.hop_length = config.hop_length
         self.padding = (self.n_fft - self.hop_length) // 2
         window = torch.hann_window(config.n_fft)
-        self.register_buffer("window", window, persistent=False)
+        self.window = nn.Buffer(window, persistent=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        stft_pred = self.linear(hidden_states).transpose(1, 2)
-        magnitude, phase = stft_pred.chunk(2, dim=1)
+        stft_pred = self.linear(hidden_states)
+        # Keep the frequency axis last for `torch.polar` compatibility with torch.compile
+        magnitude, phase = stft_pred.chunk(2, dim=-1)
         # Cast to float32: complex exponential and irfft are not supported for fp16 (ComplexHalf)
         magnitude = magnitude.float()
         phase = phase.float()
         # Clamp like original: https://huggingface.co/HKUSTAudio/wavtokenizer/blob/main/vq/codec_decoder_vocos.py#L138
         magnitude = torch.exp(magnitude).clamp(max=1e2)
-        spectrogram_complex = magnitude * torch.exp(1j * phase)
+        spectrogram_complex = torch.polar(magnitude, phase)
 
         # Back to audio (ISTFT with manual "same" padding: torch.istft lacks a native same-padding mode,
         # so we use irfft + fold with explicit pre-computed padding to replicate it)
-        time_frames = torch.fft.irfft(spectrogram_complex, self.n_fft, dim=1, norm="backward")
+        time_frames = torch.fft.irfft(spectrogram_complex, self.n_fft, dim=-1, norm="backward").transpose(1, 2)
         time_frames = time_frames * self.window[None, :, None]
-        num_frames = spectrogram_complex.shape[-1]
+        num_frames = spectrogram_complex.shape[1]
         output_size = (num_frames - 1) * self.hop_length + self.n_fft
         audio = F.fold(
             time_frames,
