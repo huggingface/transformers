@@ -43,13 +43,14 @@ from ..dynamic_module_utils import (
     resolve_trust_remote_code,
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
-from ..masking_utils import create_masks_for_generate
+from ..masking_utils import create_masks_for_generate, fast_all
 from ..tokenization_python import ExtensionsTrie
 from ..utils import (
     ModelOutput,
     TransformersKwargs,
     has_file,
     is_accelerate_available,
+    is_tracing,
     logging,
 )
 from ..utils.generic import is_flash_attention_requested
@@ -2766,6 +2767,25 @@ class GenerationMixin(ContinuousMixin):
             generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
         )
 
+        # Decoding only ever appends ones to the mask, so padding can only come from the prompt: settle once
+        # whether the inputs are padded. A compiled forward keeps its mask, as `_ignore_causal_mask_sdpa` bails
+        # while tracing and there is nothing to save, while dropping it would make its type data-dependent.
+        attention_mask = model_kwargs.get("attention_mask")
+        inputs_are_padded = (
+            self.config.is_encoder_decoder
+            or attention_mask is None
+            or is_tracing(attention_mask)
+            or self._valid_auto_compile_criteria(model_kwargs, generation_config)
+            or not bool(fast_all(attention_mask))
+        )
+        # `_prefill` reads the mask's length to tell whether `input_ids` holds the whole sequence or only the new
+        # tokens, so record that before the mask goes. A decoding method we did not write may still expect one.
+        generation_config._inputs_hold_full_sequence = (
+            attention_mask is not None and input_ids.shape[1] == attention_mask.shape[1]
+        )
+        if not inputs_are_padded and custom_generate is None:
+            del model_kwargs["attention_mask"]
+
         if self.device.type != input_ids.device.type:
             warnings.warn(
                 "You are calling .generate() with the `input_ids` being on a device type different"
@@ -4091,10 +4111,9 @@ class GenerationMixin(ContinuousMixin):
             if use_inputs_embeds:
                 next_sequence_length = model_kwargs["inputs_embeds"].shape[1] - past_length
             else:
-                attention_mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
-                attention_mask = model_kwargs.get(attention_mask_key)
-                # In this case we need to slice - if it's smaller than the mask, only the new inputs were passed -> no need to do anything
-                if attention_mask is not None and input_ids.shape[1] == attention_mask.shape[1]:
+                # Only slice when the inputs hold the whole sequence; if they hold only the new tokens there is
+                # nothing to do (see where `_inputs_hold_full_sequence` is set)
+                if getattr(generation_config, "_inputs_hold_full_sequence", False):
                     # inputs will be sliced as `input_ids[:, -next_sequence_length :]` in `prepare_inputs_for_generation`
                     next_sequence_length = input_ids.shape[1] - past_length
 
