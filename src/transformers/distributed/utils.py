@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 from datetime import timedelta
 from typing import TYPE_CHECKING, TypeGuard
 
@@ -129,6 +130,18 @@ def _distributed_barrier():
     else:
         torch.distributed.barrier()
 
+class MeshManager:
+    """Named access to dense and expert parallel axes without exposing their view selection."""
+
+    def __init__(self, dense_mesh: DeviceMesh, expert_mesh: DeviceMesh):
+        self._dense_mesh = dense_mesh
+        self._expert_mesh = expert_mesh
+
+    def get_mesh(self, dims: str | tuple[str, ...]) -> DeviceMesh:
+        """Select expert axes for `ep`/`efsdp`, otherwise dense axes; DeviceMesh handles slicing."""
+        dims = (dims,) if isinstance(dims, str) else dims
+        mesh = self._expert_mesh if "ep" in dims or "efsdp" in dims else self._dense_mesh
+        return mesh[dims]
 
 # Retained for the legacy transformers.integrations.tensor_parallel API.
 def initialize_tensor_parallelism(
@@ -138,6 +151,12 @@ def initialize_tensor_parallelism(
     Sets up the device mesh and initialized the backend for tensor parallelism.
     This function is called when the model is loaded and the TP plan is set to 'auto'.
     """
+    warnings.warn(
+        "`initialize_tensor_parallelism` is deprecated and will be removed in a future release. "
+        "Use `initialize_distributed_mesh` with a `DistributedConfig` instead.",
+        FutureWarning,
+        stacklevel=2,
+    )
     if tp_size is not None and tp_plan is None:
         raise ValueError("tp_plan has to be set when tp_size is passed.")
     if tp_plan is not None and device_map is not None:
@@ -177,19 +196,41 @@ def initialize_tensor_parallelism(
 
     return device_map, device_mesh
 
+def initialize_fully_sharded_data_parallelism(distributed_config: DistributedConfig):
+    warnings.warn(
+        "`initialize_fully_sharded_data_parallelism` is deprecated and will be removed in a future release. "
+        "Use `initialize_distributed_mesh` with a `DistributedConfig` instead.",
+        FutureWarning,
+        stacklevel=2,
+    )
+    # `fully_shard` itself only needs torch>=2.6, but distributed checkpoint save/load
+    # (DCP + HuggingFaceStorageWriter) needs 2.7, so that is the effective requirement.
+    if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
+        raise OSError("FSDP2 requires `torch>=2.7` (distributed checkpoint save/load).")
 
-class MeshManager:
-    """Named access to dense and expert parallel axes without exposing their view selection."""
+    device_type = torch._C._get_accelerator().type
 
-    def __init__(self, dense_mesh: DeviceMesh, expert_mesh: DeviceMesh):
-        self._dense_mesh = dense_mesh
-        self._expert_mesh = expert_mesh
+    if device_type != "cpu":
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        getattr(torch, device_type).set_device(local_rank)
+        device_map = torch.device(device_type, local_rank)
+    else:
+        device_map = torch.device(device_type)
 
-    def get_mesh(self, dims: str | tuple[str, ...]) -> DeviceMesh:
-        """Select expert axes for `ep`/`efsdp`, otherwise dense axes; DeviceMesh handles slicing."""
-        dims = (dims,) if isinstance(dims, str) else dims
-        mesh = self._expert_mesh if "ep" in dims or "efsdp" in dims else self._dense_mesh
-        return mesh[dims]
+    fsdp_size = distributed_config.fsdp_size
+
+    dims, names = [], []
+    if fsdp_size > 1:
+        dims.append(fsdp_size)
+        names.append("fsdp")
+
+    # Build the N-dimensional device mesh
+    mesh = torch.distributed.init_device_mesh(device_type, tuple(dims), mesh_dim_names=tuple(names))
+    # If N > 1, create a flattened sub-mesh so all-reduces across the world mesh ae done in one collective
+    if len(dims) > 1:
+        mesh._flatten("_".join(names))
+
+    return device_map, mesh
 
 
 def initialize_distributed_mesh(

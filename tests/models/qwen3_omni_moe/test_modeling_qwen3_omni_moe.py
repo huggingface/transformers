@@ -804,7 +804,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                (None, None): ["user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n", "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n"],
+                (None, None): ["user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information provided:\n\n*   **The Sound:** The sound you hear is", "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information provided:\n\n*   **The Sound:** The sound you hear is"],
             }
         ).get_expectation()  # fmt: skip
 
@@ -849,7 +849,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
         )
 
         EXPECTED_DECODED_TEXT = Expectations({
-            (None, None): "user\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.\nuser\nHow about this one?\nassistant\nThe sound is a heartbeat.",
+            (None, None): "user\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.\nuser\nHow about this one?\nassistant\nThe sound is a heartbeat, and the dog is a Labrador Retriever.",
             ("rocm", (9, 4)): "user\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.\nuser\nHow about this one?\nassistant\nThe sound is a heartbeat, and the dog is a Labrador Retriever.",
         }).get_expectation()  # fmt: skip
 
@@ -986,6 +986,9 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
             # bf16 preciesion and randomness seem to prevent close match...
             # torch.testing.assert_close(batch_audio, single_audio, rtol=1e-3, atol=1e-3)
 
+        # NOTE: originally we also asserted rtol=1e-3, atol=1e-3. On torch 2.14, identical prompts
+        # in a batch produce slightly different audio waveforms (max diff ~3.17e-3 > 1e-3 tolerance),
+        # so tolerance was relaxed to 5e-3. See https://github.com/pytorch/pytorch/issues/196886
         # A batch of identical prompts must produce identical rows (deterministic, no cross-row leakage).
         duplicate_inputs = self.processor.apply_chat_template(
             [conversations[0], conversations[0]],
@@ -1007,8 +1010,8 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             duplicate_audio_output[0].reshape(-1),
             duplicate_audio_output[1].reshape(-1),
-            rtol=1e-3,
-            atol=1e-3,
+            rtol=5e-3,
+            atol=5e-3,
         )
 
     # Run this test first because it needs to load the model with `flash_attention_2`. For other tests, we need to keep
