@@ -189,11 +189,7 @@ class MuseGlimmerAssistantIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
         return cls.model
 
     def test_dflash_speculative_generation(self):
-        """End-to-end DFlash speculative decoding produces the same text as greedy decoding.
-
-        DFlash is a lossless speculative-decoding algorithm, so the completion must match the
-        reference from MuseGlimmerIntegrationTest.test_text_generation_matches_reference.
-        """
+        """End-to-end DFlash speculative decoding produces the same text as greedy decoding."""
         model = self.get_model()
         drafter = self.get_drafter()
         processor = AutoProcessor.from_pretrained(self.main_model_id)
@@ -211,6 +207,7 @@ class MuseGlimmerAssistantIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
             do_sample=False,
         )
         completion = tokenizer.decode(output[0, input_ids.shape[1] :], skip_special_tokens=True)
+        # Expected value from MuseGlimmerIntegrationTest.test_text_generation_matches_reference.
         expected = Expectations(
             {
                 (
