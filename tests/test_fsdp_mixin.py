@@ -511,8 +511,9 @@ def _grad_norm_across_meshes(model):
 
 def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, dtype=None, dispatch=False):
     """
-    DDP vs a 2-D (fsdp, tp) mesh with expert parallelism on `tp`. DDP sees the whole batch on every rank; each `fsdp`
-    rank of the 2-D run sees its own slice of it (every rank with token dispatch), so FSDP2's reduction is exercised.
+    Compare DDP against FSDP with all-reduce or all-to-all expert parallelism.
+    DDP sees the whole batch on every rank. All-reduce EP shares a data slice within each TP pair;
+    all-to-all EP gives each rank its own slice and dispatches tokens to the owning experts.
     Losses, gradient norms and final weights have to match step by step.
     """
     init_test_logger()
@@ -522,17 +523,30 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
 
     device = _get_rank_device(rank)
     config = config_class.from_dict(config_dict)
-    ep_plan = None
-    if dispatch:
-        with torch.device("meta"):
-            ep_plan = {
-                name: "ep_dispatch_experts"
-                for name, style in AutoModelForCausalLM.from_config(config).ep_plan.items()
-                if style == "moe_tp_experts"
-            }
     world_size = dist.get_world_size()
-    dp = world_size // 2
-    num_slices = world_size if dispatch else dp
+    if dispatch:
+        # Override expert forward rules; keep the default expert weight sharding rules.
+        with torch.device("meta"):
+            default_ep_plan = AutoModelForCausalLM.from_config(config).ep_plan
+            ep_plan = {
+                name: "ep_dispatch_experts" for name, style in default_ep_plan.items() if style == "moe_tp_experts"
+            }
+        # All-to-all: no TP, one data slice per rank, experts split across pairs of ranks.
+        distributed_config = DistributedConfig(
+            tp_size=1,
+            fsdp_size=world_size,
+            ep_size=2,
+            ep_plan=ep_plan,
+        )
+        num_slices = world_size
+    else:
+        # All-reduce: each TP/EP pair shares one data slice and uses the default EP plan.
+        distributed_config = DistributedConfig(
+            tp_size=2,
+            fsdp_size=world_size // 2,
+            ep_size=2,
+        )
+        num_slices = world_size // 2
     generator = torch.Generator(device=device)
     generator.manual_seed(SEED)
     input_ids = torch.randint(
@@ -547,15 +561,10 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
         model = AutoModelForCausalLM.from_pretrained(
             init_model_dir,
             torch_dtype=dtype,
-            distributed_config=DistributedConfig(
-                tp_size=1 if dispatch else 2,
-                fsdp_size=world_size if dispatch else dp,
-                ep_size=2,
-                ep_plan=ep_plan,
-            ),
+            distributed_config=distributed_config,
         )
-        assert model.tp_size == (1 if dispatch else 2)
-        assert model.fsdp_size == (world_size if dispatch else dp)
+        assert model.tp_size == distributed_config.tp_size
+        assert model.fsdp_size == distributed_config.fsdp_size
         assert model._device_mesh.mesh_dim_names == ("pp", "fsdp", "tp")
         model.train()
         optimizer = torch.optim.Adam(model.parameters(), lr=LR, foreach=False)
