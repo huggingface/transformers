@@ -16,6 +16,7 @@ from functools import partial
 from itertools import repeat
 from typing import TypedDict
 
+import numpy as np
 import torch
 
 from transformers.configuration_utils import PretrainedConfig
@@ -233,9 +234,18 @@ class ContinuousBatchingIOs:
                 other.block_table.copy_(self.block_table, non_blocking=non_blocking)
             # Otherwise, we transfer the write indices (and read indices if the batch uses any cache reads)
             else:
-                other.write_index_storage.copy_(self.write_index_storage, non_blocking=non_blocking)
+                # Only the prefix the batch uses: the read storage is sized by the whole pool (num_pages + T entries
+                # of int64, hundreds of MB on a small model with a large pool) and copying it whole every batch was
+                # 90% of gemma-3-1b's device time.
+                q_size = self.num_q_tokens
+                kv_size = self.max_kv_read + self.num_q_tokens
+                other.write_index_storage[:, :q_size].copy_(
+                    self.write_index_storage[:, :q_size], non_blocking=non_blocking
+                )
                 if self.max_kv_read > 0:
-                    other.read_index_storage.copy_(self.read_index_storage, non_blocking=non_blocking)
+                    other.read_index_storage[:, :kv_size].copy_(
+                        self.read_index_storage[:, :kv_size], non_blocking=non_blocking
+                    )
             # Transfer the attention masks if needed
             if self.attention_mask is not None and other.attention_mask is not None:
                 for layer_type in self.attention_mask.keys():
@@ -450,7 +460,11 @@ class ContinuousBatchingIOs:
 
         # If we are not using the block table, we populate the write indices (and maybe the read indices)
         if not self.use_block_table:
-            to_index_tensor = partial(torch.tensor, dtype=torch.int64, device=self.device)
+            # These lists run to hundreds of thousands of ints per batch on sliding-window models (up to a window per
+            # request); numpy converts them several times faster than torch.tensor does
+            def to_index_tensor(indices):
+                return torch.from_numpy(np.asarray(indices, dtype=np.int64)).to(self.device, non_blocking=True)
+
             for i, group_write_indices in enumerate(write_index):
                 self.write_index_storage[i, : len(group_write_indices)] = to_index_tensor(group_write_indices)
                 self.true_write_sizes[i] = len(group_write_indices)
