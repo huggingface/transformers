@@ -49,6 +49,8 @@ if is_torch_available():
         DiaForConditionalGeneration,
         DiaModel,
         DiaProcessor,
+        LogitsProcessor,
+        LogitsProcessorList,
         PreTrainedConfig,
         PreTrainedModel,
     )
@@ -513,6 +515,83 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     @pytest.mark.generate
     def test_prepare_inputs_for_generation_kwargs_forwards(self):
         super().test_prepare_inputs_for_generation_kwargs_forwards(encoder_outputs=torch.randn(2, 2, 32))
+
+    def _prepare_delayed_decoder_prompt(self, config, batch_size, prompt_len=3):
+        """Processor-shaped decoder prompt: channel `c` is padded on `[0, delay[c])` and holds real tokens after."""
+        delay_pattern = config.delay_pattern
+        pad_id = config.decoder_config.pad_token_id
+        total_len = prompt_len + max(delay_pattern)
+        decoder_input_ids = torch.full(
+            (batch_size, total_len, len(delay_pattern)), pad_id, dtype=torch.long, device=torch_device
+        )
+        for channel, delay in enumerate(delay_pattern):
+            decoder_input_ids[:, delay : delay + prompt_len, channel] = ids_tensor(
+                [batch_size, prompt_len], config.decoder_config.eos_token_id
+            )
+        decoder_attention_mask = decoder_input_ids[..., 0].ne(pad_id).long()
+        return decoder_input_ids, decoder_attention_mask
+
+    def _check_generate_with_classifier_free_guidance(self, **generate_kwargs):
+        config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        model = DiaForConditionalGeneration(config).to(torch_device).eval()
+        batch_size = inputs_dict["input_ids"].shape[0]
+        decoder_input_ids, decoder_attention_mask = self._prepare_delayed_decoder_prompt(config, batch_size)
+
+        out = model.generate(
+            **inputs_dict,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            max_new_tokens=3,
+            do_sample=False,
+            guidance_scale=3.0,
+            **generate_kwargs,
+        )
+
+        # (batch, seq_len, channels): the unconditional half of the CFG batch is not returned
+        self.assertEqual(out.shape[0], batch_size)
+        self.assertEqual(out.shape[-1], config.decoder_config.num_channels)
+        # the tokens forced by the delay mask (incl. those in the generated region) survive in the output
+        pad_id = config.decoder_config.pad_token_id
+        n = decoder_input_ids.shape[1]
+        self.assertTrue(
+            torch.equal(torch.where(decoder_input_ids == pad_id, out[:, :n], decoder_input_ids), out[:, :n])
+        )
+
+    def test_generate_with_classifier_free_guidance(self):
+        self._check_generate_with_classifier_free_guidance()
+
+    def test_generate_with_classifier_free_guidance_static_cache(self):
+        # static cache + CFG: the cache batch must be doubled like the decoder batch
+        self._check_generate_with_classifier_free_guidance(cache_implementation="static")
+
+    def test_num_return_sequences_raises(self):
+        config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        model = DiaForConditionalGeneration(config).to(torch_device).eval()
+        with self.assertRaisesRegex(ValueError, "num_return_sequences"):
+            model.generate(**inputs_dict, max_new_tokens=2, do_sample=True, num_return_sequences=2)
+
+    def test_no_loop_state_on_the_model(self):
+        config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        model = DiaForConditionalGeneration(config).to(torch_device).eval()
+        before = set(vars(model))
+        model.generate(**inputs_dict, max_new_tokens=2, do_sample=False, guidance_scale=3.0)
+        self.assertEqual(set(vars(model)), before)
+
+    def test_user_logits_processor_is_applied(self):
+        config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+        model = DiaForConditionalGeneration(config).to(torch_device).eval()
+        calls = []
+
+        class Recording(LogitsProcessor):
+            def __call__(self, input_ids, scores):
+                calls.append(tuple(input_ids.shape))
+                return scores
+
+        model.generate(
+            **inputs_dict, max_new_tokens=2, do_sample=False, logits_processor=LogitsProcessorList([Recording()])
+        )
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0][0], inputs_dict["input_ids"].shape[0] * config.decoder_config.num_channels)
 
     @unittest.skip(reason="Indirectly checked in Dia through the generate methods.")
     def test_hidden_states_output(self):

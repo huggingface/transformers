@@ -187,6 +187,62 @@ class NemotronAsrStreamingForRNNTModelTest(ParakeetForRNNTModelTest):
         # argument) is what gets reported.
         self.assertFalse(consumed, "streaming `generate` consumed the stream before validating num_lookahead_tokens")
 
+    def test_streaming_generate_consumes_the_stream(self):
+        """Streaming `generate` keeps decoding past the first chunk: once every row consumed its encoder frames the
+        next mel chunk is encoded and appended to the frame buffer *before* the stopping criteria look at the
+        pointers, so the loop only stops once the stream is exhausted. No loop state is left on the model."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = NemotronAsrStreamingForRNNT(config=config).to(torch_device).eval()
+        num_lookahead_tokens = 1
+        first = model._required_stream_chunk_frames(num_lookahead_tokens, is_first_chunk=True)
+        rest = model._required_stream_chunk_frames(num_lookahead_tokens, is_first_chunk=False)
+        chunks = [
+            floats_tensor([self.model_tester.batch_size, first, config.encoder_config.num_mel_bins]),
+            floats_tensor([self.model_tester.batch_size, rest, config.encoder_config.num_mel_bins]),
+            floats_tensor([self.model_tester.batch_size, rest, config.encoder_config.num_mel_bins]),
+        ]
+        num_consumed = 0
+
+        def input_features_generator():
+            nonlocal num_consumed
+            for chunk in chunks:
+                num_consumed += 1
+                yield chunk
+
+        attributes_before = set(vars(model))
+        output = model.generate(
+            input_features=input_features_generator(),
+            num_lookahead_tokens=num_lookahead_tokens,
+            decoder_start_token_id=config.blank_token_id,
+            return_dict_in_generate=True,
+        )
+        self.assertEqual(output.sequences.shape, output.durations.shape)
+        # Every chunk was consumed, and every row's pointer walked past the frames of all three chunks (in
+        # `chunked_limited` streaming each chunk yields `num_lookahead_tokens + 1` encoder frames).
+        self.assertEqual(num_consumed, len(chunks))
+        total_encoder_frames = len(chunks) * (num_lookahead_tokens + 1)
+        self.assertGreaterEqual(int(output.durations.sum(dim=1).min()), total_encoder_frames)
+        self.assertEqual(set(vars(model)), attributes_before)
+
+    def test_streaming_generate_positional_stream_raises(self):
+        """A stream of mel chunks must be passed as `input_features=`: the streaming flag is set when the
+        generation config is prepared, which never sees positional `inputs`."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = NemotronAsrStreamingForRNNT(config=config).to(torch_device).eval()
+
+        consumed = False
+
+        def input_features_generator():
+            nonlocal consumed
+            consumed = True
+            yield floats_tensor([1, 9, config.encoder_config.num_mel_bins])
+
+        with self.assertRaisesRegex(ValueError, "input_features="):
+            model.generate(
+                input_features_generator(), num_lookahead_tokens=1, decoder_start_token_id=config.blank_token_id
+            )
+        self.assertFalse(consumed, "streaming `generate` consumed a positional stream before rejecting it")
+
 
 @require_torch
 class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):

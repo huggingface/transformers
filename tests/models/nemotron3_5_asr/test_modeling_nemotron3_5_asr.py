@@ -209,6 +209,33 @@ class Nemotron3_5AsrForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
             explicit_logits = model(**no_prompt, prompt_ids=default_prompt).logits
         torch.testing.assert_close(default_logits, explicit_logits)
 
+    def test_generate_forwards_prompt_ids_to_the_encoder(self):
+        """`prompt_ids` passed to `generate` reach every encoder call through `model_kwargs`; nothing is stored on
+        the model and `get_audio_features` is not patched."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Nemotron3_5AsrForRNNT(config).to(torch_device).eval()
+        seen = []
+        original = model.get_audio_features
+
+        def spy(*args, prompt_ids=None, **kwargs):
+            seen.append(prompt_ids)
+            return original(*args, prompt_ids=prompt_ids, **kwargs)
+
+        model.get_audio_features = spy
+        batch_size = inputs_dict["input_features"].shape[0]
+        prompt_ids = torch.full((batch_size,), config.num_prompts - 1, dtype=torch.long, device=torch_device)
+        model.generate(
+            input_features=inputs_dict["input_features"].to(torch_device),
+            attention_mask=inputs_dict["attention_mask"].to(torch_device),
+            prompt_ids=prompt_ids,
+            decoder_start_token_id=config.blank_token_id,
+        )
+        del model.get_audio_features
+        self.assertGreaterEqual(len(seen), 1)
+        self.assertTrue(all(p is not None and torch.equal(p, prompt_ids) for p in seen))
+        self.assertFalse(hasattr(model, "_prompt_ids"))
+        self.assertIs(model.get_audio_features.__func__, Nemotron3_5AsrForRNNT.get_audio_features)
+
     @unittest.skip(reason="Nemotron3_5AsrForRNNT does not use inputs_embeds")
     def test_model_get_set_embeddings(self):
         pass
@@ -234,7 +261,8 @@ class Nemotron3_5AsrForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="Nemotron3_5AsrForRNNT has a custom generate() that is not fully compatible with GenerationTesterMixin"
+        reason="Nemotron3_5AsrForRNNT transducer generation returns durations and needs encoder inputs; "
+        "not covered by GenerationTesterMixin"
     )
     def test_generation_tester_mixin_inheritance(self):
         pass

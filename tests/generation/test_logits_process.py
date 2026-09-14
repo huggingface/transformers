@@ -28,6 +28,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers.generation import (
+        AlternatingCodebooksLogitsProcessor,
         EncoderNoRepeatNGramLogitsProcessor,
         EncoderRepetitionPenaltyLogitsProcessor,
         EpsilonLogitsWarper,
@@ -46,6 +47,7 @@ if is_torch_available():
         PrefixConstrainedLogitsProcessor,
         RepetitionPenaltyLogitsProcessor,
         SequenceBiasLogitsProcessor,
+        SuppressTokensAtBeginLogitsProcessor,
         SynthIDTextWatermarkLogitsProcessor,
         TemperatureLogitsWarper,
         TopHLogitsWarper,
@@ -1441,3 +1443,41 @@ class LogitsProcessorTest(unittest.TestCase):
         check_eos_logits(out=out, logits=logits, batch=1, channel=0, eos=eos)
         self.assertTrue(delay_pattern_processor.active_batches.all())
         self.assertTrue((delay_pattern_processor.delay_pattern == torch.tensor(delay_pattern) - 1).all())
+
+    def test_length_based_processors_use_time_dimension_for_frames(self):
+        # (batch=1, time=2, num_codebooks=4) frames: the sequence length is 2, not 4
+        frames = torch.zeros((1, 2, 4), dtype=torch.long)
+        scores = torch.zeros((1, 10))
+        eos = 3
+
+        min_length = MinLengthLogitsProcessor(min_length=3, eos_token_id=eos)
+        self.assertEqual(min_length(frames, scores.clone())[0, eos].item(), -float("inf"))  # 2 < 3 -> eos blocked
+
+        min_new_tokens = MinNewTokensLengthLogitsProcessor(prompt_length_to_skip=1, min_new_tokens=2, eos_token_id=eos)
+        self.assertEqual(min_new_tokens(frames, scores.clone())[0, eos].item(), -float("inf"))  # 1 new < 2
+
+        suppress_at_begin = SuppressTokensAtBeginLogitsProcessor(begin_suppress_tokens=[5], begin_index=2)
+        self.assertEqual(
+            suppress_at_begin(frames, scores.clone())[0, 5].item(), -float("inf")
+        )  # length == begin_index
+
+        forced_bos = ForcedBOSTokenLogitsProcessor(bos_token_id=1)
+        one_frame = torch.zeros((1, 1, 4), dtype=torch.long)  # length 1 -> BOS forced
+        self.assertEqual(forced_bos(one_frame, scores.clone()).argmax(-1).item(), 1)
+
+        forced_eos = ForcedEOSTokenLogitsProcessor(max_length=3, eos_token_id=eos)
+        self.assertEqual(forced_eos(frames, scores.clone()).argmax(-1).item(), eos)  # length 2 == max_length - 1
+
+        decay = ExponentialDecayLengthPenalty(
+            exponential_decay_length_penalty=(1, 2.0), eos_token_id=eos, input_ids_seq_length=0
+        )
+        self.assertGreater(
+            decay(frames, torch.ones((1, 10)))[0, eos].item(), 1.0
+        )  # past the start index -> eos boosted
+
+        alternating = AlternatingCodebooksLogitsProcessor(input_start_len=0, semantic_vocab_size=4, codebook_size=3)
+        alternating_scores = alternating(
+            frames, scores.clone()
+        )  # length 2 is even -> semantic tokens masked, codebook kept
+        self.assertEqual(alternating_scores[0, 0].item(), -float("inf"))
+        self.assertTrue(torch.isfinite(alternating_scores[0, 4]))

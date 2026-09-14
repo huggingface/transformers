@@ -44,6 +44,7 @@ if is_torch_available():
     )
     from transformers.loss.loss_rnnt import rnnt_loss
     from transformers.loss.loss_tdt import tdt_loss
+    from transformers.models.parakeet.generation_parakeet import EncoderExhaustedCriteria
 
 
 FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures/parakeet"
@@ -675,7 +676,8 @@ class ParakeetForTDTModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="ParakeetForTDT has a custom generate() that is not fully compatible with GenerationTesterMixin"
+        reason="ParakeetForTDT transducer generation returns durations and needs encoder inputs; "
+        "not covered by GenerationTesterMixin"
     )
     def test_generation_tester_mixin_inheritance(self):
         pass
@@ -713,6 +715,36 @@ class ParakeetForTDTModelTest(ModelTesterMixin, unittest.TestCase):
                     class_name = submodule.__class__.__name__
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
+
+    def test_generate_returns_durations_aligned_with_sequences(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict.pop("decoder_input_ids")  # the prompt is the decoder start token, as in transcription
+        model = ParakeetForTDT(config).to(torch_device).eval()
+        attributes_before = set(vars(model))
+        output = model.generate(
+            **inputs_dict, decoder_start_token_id=config.blank_token_id, return_dict_in_generate=True
+        )
+        self.assertEqual(output.sequences.shape, output.durations.shape)
+        self.assertEqual(output.durations.dtype, torch.long)
+        self.assertTrue((output.durations[:, 0] == 0).all())  # the decoder start token has no duration
+        # TDT durations are the argmax over the duration head, i.e. indices into `config.durations`
+        self.assertTrue((output.durations < len(config.durations)).all())
+        self.assertEqual(set(vars(model)), attributes_before)  # no loop state left on the model
+
+    def test_encoder_exhausted_criteria_reads_model_kwargs(self):
+        criteria = EncoderExhaustedCriteria()
+        model_kwargs = {"encoder_frame_idxs": torch.tensor([3, 1]), "encoder_valid_lengths": torch.tensor([3, 3])}
+        out = criteria(torch.zeros(2, 1, dtype=torch.long), None, model_kwargs=model_kwargs)
+        self.assertListEqual(out.tolist(), [True, False])
+
+    def test_tdt_selects_tokens_from_the_vocabulary_logits(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict.pop("decoder_input_ids")  # the prompt is the decoder start token, as in transcription
+        model = ParakeetForTDT(config).to(torch_device).eval()
+        output = model.generate(
+            **inputs_dict, decoder_start_token_id=config.blank_token_id, return_dict_in_generate=True
+        )
+        self.assertTrue((output.sequences < config.vocab_size).all())
 
 
 @require_torch
@@ -996,7 +1028,8 @@ class ParakeetForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="ParakeetForRNNT has a custom generate() that is not fully compatible with GenerationTesterMixin"
+        reason="ParakeetForRNNT transducer generation returns durations and needs encoder inputs; "
+        "not covered by GenerationTesterMixin"
     )
     def test_generation_tester_mixin_inheritance(self):
         pass
@@ -1034,6 +1067,29 @@ class ParakeetForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
                     class_name = submodule.__class__.__name__
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
+
+    def test_generate_returns_durations_aligned_with_sequences(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict.pop("decoder_input_ids")  # the prompt is the decoder start token, as in transcription
+        model = ParakeetForRNNT(config).to(torch_device).eval()
+        attributes_before = set(vars(model))
+        output = model.generate(
+            **inputs_dict, decoder_start_token_id=config.blank_token_id, return_dict_in_generate=True
+        )
+        self.assertEqual(output.sequences.shape, output.durations.shape)
+        self.assertEqual(output.durations.dtype, torch.long)
+        self.assertTrue((output.durations[:, 0] == 0).all())  # the decoder start token has no duration
+        # RNN-T advances the encoder frame pointer by one on every blank emission (and on a forced advance), else 0
+        self.assertTrue(((output.durations == 0) | (output.durations == 1)).all())
+        blank_durations = output.durations[:, 1:][output.sequences[:, 1:] == config.blank_token_id]
+        self.assertTrue((blank_durations == 1).all())
+        self.assertEqual(set(vars(model)), attributes_before)  # no loop state left on the model
+
+    def test_encoder_exhausted_criteria_reads_model_kwargs(self):
+        criteria = EncoderExhaustedCriteria()
+        model_kwargs = {"encoder_frame_idxs": torch.tensor([3, 1]), "encoder_valid_lengths": torch.tensor([3, 3])}
+        out = criteria(torch.zeros(2, 1, dtype=torch.long), None, model_kwargs=model_kwargs)
+        self.assertListEqual(out.tolist(), [True, False])
 
 
 @require_torch

@@ -191,8 +191,12 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = CsmForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 # use static cache, enabling automatically torch compile with fullgraph and reduce-overhead
-model.generation_config.max_length = 250 # big enough to avoid recompilation
+# with a text prompt, `max_length` counts generated audio frames (the prompt is not returned) and the static cache is
+# sized `max_length - 1 + prompt_length`: fix its size with `max_cache_len` so that prompts of different lengths reuse
+# the same compiled cache instead of triggering a recompilation
+model.generation_config.max_length = 250 # generated audio frames
 model.generation_config.max_new_tokens = None # would take precedence over max_length
+model.generation_config.max_cache_len = 1024 # ceiling for `max_length - 1 + prompt_length`, big enough to avoid recompilation
 model.generation_config.cache_implementation = "static"
 model.depth_decoder.generation_config.cache_implementation = "static"
 

@@ -13,18 +13,17 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import torch
-import torch.nn as nn
 
 from ...generation import (
     GenerateDecoderOnlyOutput,
     GenerationConfig,
     GenerationMixin,
     GenerationMode,
+    GenerationState,
     LogitsProcessorList,
-    StoppingCriteriaList,
 )
 from ...generation.logits_process import (
     InfNanRemoveLogitsProcessor,
@@ -33,9 +32,7 @@ from ...generation.logits_process import (
     TopKLogitsWarper,
     TopPLogitsWarper,
 )
-from ...generation.streamers import BaseStreamer
-from ...generation.utils import GenerateNonBeamOutput
-from ...utils import add_start_docstrings, logging
+from ...utils import ModelOutput, add_start_docstrings, logging
 
 
 logger = logging.get_logger(__name__)
@@ -166,21 +163,20 @@ class HiggsAudioV2GenerationOutput(GenerateDecoderOnlyOutput):
     Outputs of HiggsAudioV2 generation models, when using non-beam methods.
 
     Args:
-        sequences (`torch.LongTensor` of shape `(batch_size, audio_sequence_length, num_codebooks)`):
-            The generated text sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
-            if all batches finished early due to the `eos_token_id`.
+        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            The text sequences: the prompt followed by one placeholder token per generated audio frame
+            (`audio_token_id`, `audio_delay_token_id` or `eos_token_id`). The second dimension (sequence_length) is
+            either equal to `max_length` or shorter if all batches finished early due to the `eos_token_id`.
         scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True`):
-            Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
-            each generated token).
-            If the generated token is a text token, the tensor will have shape `(batch_size, config.vocab_size)`.
-            If the generated token is an audio token, the tensor will have shape `(config.num_codebooks, self.model.codebook_size)`
+            Processed prediction scores of the audio head (scores for each codebook token before SoftMax) at each
+            generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each
+            generated frame), each of shape `(batch_size * config.num_codebooks, config.codebook_size)`: the delay
+            pattern logits processor lays the codebooks out along the batch dimension so that the sampling warpers
+            apply per codebook.
         logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
-            Unprocessed prediction scores of the language modeling head or the audio head (scores for each vocabulary token before SoftMax)
-            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
-            each generated token).
-            If the generated token is a text token, the tensor will have shape `(batch_size, config.vocab_size)`.
-            If the generated token is an audio token, the tensor will have shape `(config.num_codebooks, self.model.codebook_size)`
+            Unprocessed prediction scores of the audio head (scores for each codebook token before SoftMax) at each
+            generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each
+            generated frame), each of shape `(batch_size, config.num_codebooks * config.codebook_size)`.
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
@@ -190,14 +186,28 @@ class HiggsAudioV2GenerationOutput(GenerateDecoderOnlyOutput):
         past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
-        audio_sequences (`tuple(torch.LongTensor)` *optional*):
-            The generated discrete audio codes.
+        audio_sequences (`torch.LongTensor` of shape `(batch_size, num_frames, config.num_codebooks)`, *optional*):
+            The generated discrete audio codes: the audio prompt frames followed by the generated frames. Finished
+            rows are padded with end-of-stream frames (`audio_stream_eos_id` in every codebook).
     """
 
-    audio_sequences: list[torch.LongTensor] | None = None
+    audio_sequences: torch.LongTensor | None = None
 
 
 class HiggsAudioV2GenerationMixin(GenerationMixin):
+    """
+    HiggsAudioV2 generates one audio frame (`num_codebooks` tokens) per step. The text stream (`sequences`) only
+    receives placeholder tokens that drive the delay pattern and the end of generation: the audio token while audio
+    streams, the delay token once a codebook emitted `audio_stream_eos_id` (the delay pattern logits processor then
+    closes the remaining codebooks one step at a time), and `eos_token_id` once every codebook has ended. The frames
+    are accumulated in `model_kwargs["audio_input_ids"]` (with `audio_input_ids_mask`, `False` on all-EOS frames) and
+    returned as `audio_sequences`. Finished rows emit end-of-stream frames. Sampling is per codebook, with optional
+    repetition-aware resampling (`ras_win_len`, `ras_win_max_num_repeat` on the generation config). Only greedy
+    search and sampling are supported.
+    """
+
+    _supported_generation_modes = [GenerationMode.GREEDY_SEARCH, GenerationMode.SAMPLE]
+
     # Logits processors that only operate on scores and are safe to apply per-codebook.
     # Other processors (e.g. RepetitionPenaltyLogitsProcessor) use input_ids to index into
     # scores and are incompatible with audio codebook logits.
@@ -208,7 +218,7 @@ class HiggsAudioV2GenerationMixin(GenerationMixin):
         InfNanRemoveLogitsProcessor,
     )
 
-    def _get_logits_processor(self, *args, **kwargs):
+    def _get_logits_processor(self, *args, **kwargs) -> LogitsProcessorList:
         parent_processors = super()._get_logits_processor(*args, **kwargs)
 
         unsupported = [p for p in parent_processors if not isinstance(p, self._supported_logits_processor_types)]
@@ -241,205 +251,94 @@ class HiggsAudioV2GenerationMixin(GenerationMixin):
         logits_processor.extend(parent_processors)
         return logits_processor
 
-    def _prepare_generation_config(
-        self, generation_config: GenerationConfig | None, **kwargs: Any
-    ) -> tuple[GenerationConfig, dict]:
-        generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
-        original_get_generation_mode = generation_config.get_generation_mode
-
-        def patched_get_generation_mode(assistant_model=None):
-            generation_mode = original_get_generation_mode(assistant_model)
-            if generation_mode not in [GenerationMode.GREEDY_SEARCH, GenerationMode.SAMPLE]:
-                raise ValueError(
-                    f"Generation mode {generation_mode} is not supported for HiggsAudioV2 model. Please set generation parameters to use greedy or sampling generation."
-                )
-
-            return generation_mode
-
-        generation_config.get_generation_mode = patched_get_generation_mode
-
-        return generation_config, model_kwargs
-
-    def _sample(
+    def _select_next_tokens(
         self,
-        input_ids: torch.LongTensor,
-        logits_processor: LogitsProcessorList,
-        stopping_criteria: StoppingCriteriaList,
+        next_token_scores: torch.FloatTensor,
         generation_config: GenerationConfig,
-        synced_gpus: bool = False,
-        streamer: Optional["BaseStreamer"] = None,
-        **model_kwargs,
-    ) -> GenerateNonBeamOutput | torch.LongTensor:
-        output_attentions = generation_config.output_attentions
-        output_hidden_states = generation_config.output_hidden_states
-        output_scores = generation_config.output_scores
-        output_logits = generation_config.output_logits
-        return_dict_in_generate = generation_config.return_dict_in_generate
-        has_eos_stopping_criteria = any(hasattr(criteria, "eos_token_id") for criteria in stopping_criteria)
-        do_sample = generation_config.do_sample
+        outputs: ModelOutput,
+        model_kwargs: dict[str, Any],
+        state: GenerationState,
+    ) -> torch.LongTensor:
+        # `next_token_scores` is `(batch_size * num_codebooks, codebook_size)` after the delay pattern processor: one
+        # token is selected per codebook, then regrouped into `(batch_size, num_codebooks)` frames
+        num_codebooks, codebook_size = self.config.num_codebooks, self.config.codebook_size
+        next_tokens = super()._select_next_tokens(next_token_scores, generation_config, outputs, model_kwargs, state)
+        next_tokens = next_tokens.reshape(-1, num_codebooks)
 
-        # init attention / hidden states / scores tuples
-        scores = () if (return_dict_in_generate and output_scores) else None
-        raw_logits = () if (return_dict_in_generate and output_logits) else None
-        decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
-        decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
+        # repetition-aware sampling: codebooks whose selected token already appears at least `ras_win_max_num_repeat`
+        # times in the last `ras_win_len` frames are resampled from the unprocessed logits (without temperature).
+        # Stream BOS / EOS tokens are not counted as repetitions.
+        ras_win_len = getattr(generation_config, "ras_win_len", None)
+        ras_win_max_num_repeat = getattr(generation_config, "ras_win_max_num_repeat", None)
+        audio_input_ids = model_kwargs.get("audio_input_ids")
+        if ras_win_len is not None and ras_win_max_num_repeat is not None and audio_input_ids is not None:
+            audio_input_ids_window = audio_input_ids[:, -ras_win_len:, :]
+            repetition_mask = audio_input_ids_window == next_tokens.unsqueeze(1)
+            not_excluded_mask = (audio_input_ids_window != self.config.audio_stream_bos_id) & (
+                audio_input_ids_window != self.config.audio_stream_eos_id
+            )
+            rep_num = (repetition_mask & not_excluded_mask).sum(dim=1)
+            replacement_mask = rep_num >= ras_win_max_num_repeat
+            next_token_logits = outputs.logits[:, -1].to(dtype=torch.float32, device=next_tokens.device)
+            next_token_logits = next_token_logits.reshape(-1, num_codebooks, codebook_size)
+            replacement_tokens = (
+                next_token_logits[replacement_mask].softmax(dim=-1).multinomial(1, replacement=True).view(-1)
+            )
+            next_tokens[replacement_mask] = replacement_tokens
+        return next_tokens
 
-        # keep track of which sequences are already finished
-        batch_size, cur_len = input_ids.shape[:2]
-        this_peer_finished = False
-        unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
+    def _mask_finished_tokens(
+        self,
+        next_tokens: torch.LongTensor,
+        unfinished_sequences: torch.LongTensor,
+        pad_token_id: torch.Tensor | int,
+    ) -> torch.LongTensor:
+        # finished rows emit end-of-stream frames: the text pad token is not a valid codebook id
+        return super()._mask_finished_tokens(next_tokens, unfinished_sequences, self.config.audio_stream_eos_id)
 
-        model_forward = (
-            self.get_compiled_call(generation_config.compile_config)
-            if self._valid_auto_compile_criteria(model_kwargs, generation_config)
-            else self.__call__
+    def _append_next_tokens(self, sequences: torch.LongTensor, next_tokens: torch.LongTensor) -> torch.LongTensor:
+        # The text stream gets one placeholder per frame: the audio token while audio streams, the delay token once a
+        # codebook ended its stream (or once the previous placeholder was already the delay token, so that the delay
+        # pattern processor keeps closing the remaining codebooks), and `eos_token_id` once every codebook has ended.
+        is_stream_eos = next_tokens == self.config.audio_stream_eos_id
+        next_text_tokens = sequences.new_full((sequences.shape[0],), self.config.audio_token_id)
+        previous_is_delay = sequences[:, -1] == self.config.audio_delay_token_id
+        next_text_tokens[is_stream_eos.any(dim=-1) | previous_is_delay] = self.config.audio_delay_token_id
+        if self.config.eos_token_id is not None:
+            next_text_tokens[is_stream_eos.all(dim=-1)] = self.config.eos_token_id
+        return super()._append_next_tokens(sequences, next_text_tokens)
+
+    def _update_model_kwargs_with_next_tokens(
+        self,
+        next_tokens: torch.LongTensor,
+        outputs: ModelOutput | None,
+        model_kwargs: dict[str, Any],
+        state: GenerationState,
+    ) -> dict[str, Any]:
+        # the frame is stored for the next forward; all-EOS frames are masked out of the audio inputs
+        new_frames = next_tokens[:, None, :]
+        new_mask = ~(next_tokens == self.config.audio_stream_eos_id).all(dim=-1, keepdim=True)
+        audio_input_ids = model_kwargs.get("audio_input_ids")
+        audio_input_ids_mask = model_kwargs.get("audio_input_ids_mask")
+        model_kwargs["audio_input_ids"] = (
+            new_frames if audio_input_ids is None else torch.cat([audio_input_ids, new_frames], dim=1)
         )
-
-        prefill_consumed = False
-        outputs = self._prefill(
-            input_ids,
-            generation_config,
-            model_kwargs,
-            is_first_iteration=not generation_config.is_assistant,
+        model_kwargs["audio_input_ids_mask"] = (
+            new_mask if audio_input_ids_mask is None else torch.cat([audio_input_ids_mask, new_mask], dim=1)
         )
+        return model_kwargs
 
-        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
-            if prefill_consumed:
-                next_sequence_length = 1 if model_kwargs["use_cache"] else None
-                model_inputs = self.prepare_inputs_for_generation(
-                    input_ids, next_sequence_length=next_sequence_length, **model_kwargs
-                )
-                with self._optimize_model_for_decode():
-                    outputs = model_forward(**model_inputs, return_dict=True)
-            prefill_consumed = True
-            model_kwargs = self._update_model_kwargs_for_generation(
-                outputs,
-                model_kwargs,
-                is_encoder_decoder=self.config.is_encoder_decoder,
-            )
-            if synced_gpus and this_peer_finished:
-                continue
-
-            # Copy is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
-            # (the clone itself is always small)
-            next_token_logits = outputs.logits[:, -1, :].to(copy=True, dtype=torch.float32, device=input_ids.device)
-
-            # pre-process distribution (delay pattern reshapes to per-codebook, then warpers apply per-codebook)
-            next_token_scores = logits_processor(input_ids, next_token_logits)
-
-            # ===========================
-            # BELOW DIFFERENCES WITH GenerationMixin._sample()
-            # Store scores, attentions and hidden_states when required
-            if return_dict_in_generate:
-                if output_scores:
-                    scores += (
-                        next_token_scores.reshape(batch_size, self.config.num_codebooks, self.config.codebook_size),
-                    )
-                if output_logits:
-                    raw_logits += (next_token_logits,)
-                if output_attentions:
-                    decoder_attentions += (outputs.attentions,)
-                if output_hidden_states:
-                    decoder_hidden_states += (outputs.hidden_states,)
-
-            # token selection
-            if do_sample:
-                probs = nn.functional.softmax(next_token_scores, dim=-1)
-                # TODO (joao): this OP throws "skipping cudagraphs due to ['incompatible ops']", find solution
-                next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
-            else:
-                next_tokens = torch.argmax(next_token_scores, dim=-1)
-
-            next_token_logits = next_token_logits.reshape(-1, self.config.num_codebooks, self.config.codebook_size)
-            next_tokens = next_tokens.reshape(batch_size, self.config.num_codebooks)
-
-            ras_win_len = generation_config.ras_win_len if hasattr(generation_config, "ras_win_len") else None
-            ras_win_max_num_repeat = (
-                generation_config.ras_win_max_num_repeat
-                if hasattr(generation_config, "ras_win_max_num_repeat")
-                else None
-            )
-            audio_input_ids = model_kwargs.get("audio_input_ids")
-            if ras_win_len is not None and ras_win_max_num_repeat is not None and audio_input_ids is not None:
-                # check if there are repetitions over a window of tokens.
-                audio_inputs_ids_window = audio_input_ids[:, -ras_win_len:, :]
-                repetition_mask = audio_inputs_ids_window == next_tokens.unsqueeze(1)
-
-                # avoid counting the repetition of the audio stream EOS and BOS tokens
-                not_excluded_mask = (audio_inputs_ids_window != self.config.audio_stream_bos_id) & (
-                    audio_inputs_ids_window != self.config.audio_stream_eos_id
-                )
-                repetition_mask = repetition_mask & not_excluded_mask
-                rep_num = repetition_mask.sum(dim=1)
-
-                # if we saw repeated tokens in the most recent window of tokens, resample without temperature.
-                replacement_mask = rep_num >= ras_win_max_num_repeat
-                replacement_tokens = (
-                    next_token_logits[replacement_mask].softmax(dim=-1).multinomial(1, replacement=True).view(-1)
-                )
-                next_tokens[replacement_mask] = replacement_tokens
-
-            # finished sentences should have their next token be a padding token
-            if has_eos_stopping_criteria:
-                next_tokens = next_tokens * unfinished_sequences[:, None] + self.config.audio_stream_eos_id * (
-                    1 - unfinished_sequences[:, None]
-                )
-
-            has_audio_stream_eos = (next_tokens == self.config.audio_stream_eos_id).any(dim=-1)
-            has_all_audio_stream_eos = (next_tokens == self.config.audio_stream_eos_id).all(dim=-1)
-            next_tokens = next_tokens[:, None, :]
-
-            if audio_input_ids is not None:
-                model_kwargs["audio_input_ids"] = torch.cat([audio_input_ids, next_tokens], dim=1)
-            else:
-                model_kwargs["audio_input_ids"] = next_tokens
-
-            next_audio_input_ids_mask = torch.ones((batch_size, 1), dtype=torch.bool, device=next_tokens.device)
-            next_audio_input_ids_mask[has_all_audio_stream_eos] = 0
-            audio_input_ids_mask = model_kwargs.get("audio_input_ids_mask")
-            if audio_input_ids_mask is not None:
-                model_kwargs["audio_input_ids_mask"] = torch.cat(
-                    [audio_input_ids_mask, next_audio_input_ids_mask], dim=1
-                )
-            else:
-                model_kwargs["audio_input_ids_mask"] = next_audio_input_ids_mask
-
-            # generation of a stream eos audio token will start delay pattern masking in the logits processor
-            # for that, we need to set next text token to audio_eos_start_delay_token_id
-            next_tokens_flat = input_ids.new_ones(batch_size) * self.config.audio_token_id
-            next_tokens_flat[has_audio_stream_eos | (input_ids[:, -1] == self.config.audio_delay_token_id)] = (
-                self.config.audio_delay_token_id
-            )
-            if self.config.eos_token_id is not None:
-                next_tokens_flat[has_all_audio_stream_eos] = self.config.eos_token_id
-            next_tokens = next_tokens_flat
-            # ============================
-
-            # update generated ids, model inputs, and length for next step
-            input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
-            if streamer is not None:
-                streamer.put(next_tokens.cpu())
-
-            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
-            this_peer_finished = unfinished_sequences.max() == 0
-            cur_len += 1
-
-            # This is needed to properly delete outputs.logits which may be very large for first iteration
-            # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
-            del outputs
-
-        if streamer is not None:
-            streamer.end()
-
-        if return_dict_in_generate:
-            return HiggsAudioV2GenerationOutput(
-                sequences=input_ids,
-                scores=scores,
-                logits=raw_logits,
-                attentions=decoder_attentions,
-                hidden_states=decoder_hidden_states,
-                past_key_values=model_kwargs.get("past_key_values"),
-                audio_sequences=model_kwargs.get("audio_input_ids"),
-            )
-        else:
-            return model_kwargs.get("audio_input_ids")
+    def _build_generate_output(
+        self,
+        sequences: torch.LongTensor,
+        state: GenerationState,
+        generation_config: GenerationConfig,
+        model_kwargs: dict[str, Any],
+        **kwargs,
+    ) -> HiggsAudioV2GenerationOutput | torch.LongTensor:
+        # `generate` returns the audio frames, the text placeholders only matter inside the loop
+        output = super()._build_generate_output(sequences, state, generation_config, model_kwargs, **kwargs)
+        audio_sequences = model_kwargs.get("audio_input_ids")
+        if generation_config.return_dict_in_generate:
+            return HiggsAudioV2GenerationOutput(**output, audio_sequences=audio_sequences)
+        return audio_sequences
