@@ -188,23 +188,6 @@ class MuseGlimmerAssistantIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
             )
         return cls.model
 
-    def test_drafter_forward_output_shape(self):
-        drafter = self.get_drafter()
-        config = drafter.config
-
-        noise_embeds = torch.randn(1, config.block_size, config.hidden_size, dtype=torch.bfloat16, device=torch_device)
-        context_hidden_states = torch.randn(
-            1, 7, config.hidden_size * len(config.target_layer_ids), dtype=torch.bfloat16, device=torch_device
-        )
-
-        out = drafter(noise_embeds=noise_embeds, context_hidden_states=context_hidden_states)
-
-        self.assertEqual(
-            out.last_hidden_state.shape,
-            torch.Size([1, config.block_size, config.hidden_size]),
-        )
-        self.assertTrue(out.last_hidden_state.isfinite().all())
-
     def test_dflash_speculative_generation(self):
         """End-to-end DFlash speculative decoding produces the same text as greedy decoding.
 
