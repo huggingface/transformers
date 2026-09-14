@@ -2082,15 +2082,22 @@ class ProcessorMixin(PushToHubMixin):
                     True  # force offset mapping so we can infer token boundaries
                 )
 
-        # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`
-        sampling_rate = kwargs.get("sampling_rate", processor_kwargs.get("sampling_rate"))
+        # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`.
+        # Audio kwargs can be passed flat or nested under `audio_kwargs`, so we check both
+        audio_kwargs_from_user = processor_kwargs.get("audio_kwargs", {})
+        sampling_rate = kwargs.get(
+            "sampling_rate", processor_kwargs.get("sampling_rate", audio_kwargs_from_user.get("sampling_rate"))
+        )
         if sampling_rate is None:
             if hasattr(self._audio_processor, "sampling_rate"):
                 sampling_rate = self._audio_processor.sampling_rate
             else:
                 sampling_rate = 16_000
 
-        load_audio_backend = kwargs.get("load_audio_backend", processor_kwargs.get("load_audio_backend"))
+        load_audio_backend = kwargs.get(
+            "load_audio_backend",
+            processor_kwargs.get("load_audio_backend", audio_kwargs_from_user.get("load_audio_backend")),
+        )
         if load_audio_backend is None:
             default_audio_kwargs = self.valid_processor_kwargs._defaults.get("audio_kwargs", {})
             load_audio_backend = default_audio_kwargs.get("load_audio_backend", "auto")
@@ -2214,7 +2221,8 @@ class ProcessorMixin(PushToHubMixin):
 
             # Audio was loaded/resampled by us above, so let the audio processor know at which rate. Otherwise
             # it warns about a missing `sampling_rate` and cannot detect a mismatch with the model's expected rate
-            if batch_audios:
+            # Do not set it when users passed it nested, otherwise `_merge_kwargs` sees it passed twice
+            if batch_audios and "sampling_rate" not in audio_kwargs_from_user:
                 processor_kwargs.setdefault("sampling_rate", sampling_rate)
 
             images_exist = any((im is not None) for im_list in batch_images for im in im_list)
