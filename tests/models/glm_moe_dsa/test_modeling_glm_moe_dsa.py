@@ -97,6 +97,14 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
             ["full", "full", "full", "shared", "shared", "shared", "full", "shared"],
         )
 
+    def test_mla_latent_norms_use_config_eps(self):
+        # GLM normalizes the MLA latents with `rms_norm_eps` (1e-5 in the released configs), not the 1e-6 default
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.rms_norm_eps = 1e-5
+        attention = GlmMoeDsaModel(config).layers[0].self_attn
+        self.assertEqual(attention.q_a_layernorm.variance_epsilon, config.rms_norm_eps)
+        self.assertEqual(attention.kv_a_layernorm.variance_epsilon, config.rms_norm_eps)
+
     # DSA selects tokens with a hard top-k, which is discontinuous: a tiny numerical difference in the
     # indexer scores (attention backend, padding, batching, sequence packing) can flip which tokens are
     # selected and thus change the output, so these exact-equivalence tests do not hold for DSA.
