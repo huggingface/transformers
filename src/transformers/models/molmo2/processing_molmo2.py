@@ -40,10 +40,10 @@ class Molmo2ImagesKwargs(ImagesKwargs, total=False):
         The pooling size of the vision adapter.
     """
 
-    max_crops: int | None
-    overlap_margins: list[int] | None
-    patch_size: int | None
-    pooling_size: list[int] | None
+    max_crops: int
+    overlap_margins: list[int]
+    patch_size: int
+    pooling_size: list[int]
 
 
 class Molmo2VideosKwargs(VideosKwargs, total=False):
@@ -60,11 +60,11 @@ class Molmo2VideosKwargs(VideosKwargs, total=False):
         Base frames-per-second step declared by the checkpoint for frame sampling.
     """
 
-    patch_size: int | None
-    pooling_size: list[int] | None
-    max_fps: int | None
-    frame_sample_mode: str | None
-    sampling_fps: int | float | None
+    patch_size: int
+    pooling_size: list[int]
+    max_fps: int
+    frame_sample_mode: str
+    sampling_fps: int | float
 
 
 class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
@@ -147,6 +147,8 @@ class Molmo2Processor(ProcessorMixin):
         self.use_single_crop_start_token = use_single_crop_start_token
         self.video_use_col_tokens = video_use_col_tokens
         self.use_frame_special_tokens = use_frame_special_tokens
+        self.image_token = getattr(tokenizer, "image_token", self.image_token)
+        self.video_token = getattr(tokenizer, "video_token", self.video_token)
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template)
 
     @auto_docstring

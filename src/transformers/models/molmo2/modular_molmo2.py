@@ -40,7 +40,7 @@ from ...image_utils import (
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_masks_for_generate
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import (
@@ -506,10 +506,10 @@ class Molmo2ImagesKwargs(ImagesKwargs, total=False):
         The pooling size of the vision adapter.
     """
 
-    max_crops: int | None
-    overlap_margins: list[int] | None
-    patch_size: int | None
-    pooling_size: list[int] | None
+    max_crops: int
+    overlap_margins: list[int]
+    patch_size: int
+    pooling_size: list[int]
 
 
 @auto_docstring
@@ -804,11 +804,11 @@ class Molmo2VideosKwargs(VideosKwargs, total=False):
         Base frames-per-second step declared by the checkpoint for frame sampling.
     """
 
-    patch_size: int | None
-    pooling_size: list[int] | None
-    max_fps: int | None
-    frame_sample_mode: str | None
-    sampling_fps: int | float | None
+    patch_size: int
+    pooling_size: list[int]
+    max_fps: int
+    frame_sample_mode: str
+    sampling_fps: int | float
 
 
 @auto_docstring
@@ -1040,6 +1040,8 @@ class Molmo2Processor(ProcessorMixin):
         self.use_single_crop_start_token = use_single_crop_start_token
         self.video_use_col_tokens = video_use_col_tokens
         self.use_frame_special_tokens = use_frame_special_tokens
+        self.image_token = getattr(tokenizer, "image_token", self.image_token)
+        self.video_token = getattr(tokenizer, "video_token", self.video_token)
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template)
 
     @auto_docstring
@@ -1252,7 +1254,7 @@ class Molmo2VisionEncoder(Siglip2Encoder):
 class Molmo2VisionModel(PreTrainedModel):
     config_class = Molmo2VisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["Molmo2VisionEncoderLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -1317,7 +1319,7 @@ class Molmo2ImageProjectorMLP(LlamaMLP):
 )
 class Molmo2Adapter(PreTrainedModel):
     config_class = Molmo2AdapterConfig
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["Molmo2VisionAttention"]
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -1331,7 +1333,7 @@ class Molmo2Adapter(PreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    def forward(self, image_features: torch.Tensor, pooled_patches_idx: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(self, image_features: torch.Tensor, pooled_patches_idx: torch.Tensor, **kwargs) -> BaseModelOutput:
         r"""
         image_features (`torch.Tensor` of shape `(num_crops, num_patches, hidden_size * len(vit_layers))`):
             Concatenated intermediate ViT features of every crop.
@@ -1357,7 +1359,7 @@ class Molmo2Adapter(PreTrainedModel):
         pooled_features, _ = self.image_pooling_2d(query, patches_to_pool, attention_mask=attention_mask)
         pooled_features = pooled_features.squeeze(1)
         pooled_features = self.image_projector(pooled_features)
-        return pooled_features[valid_token_mask]
+        return BaseModelOutput(last_hidden_state=pooled_features[valid_token_mask])
 
 
 class Molmo2RotaryEmbedding(LlamaRotaryEmbedding):
@@ -1703,7 +1705,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
 
         if image_shape is not None:
             image_features = image_features.reshape(*image_shape, -1)
-        image_outputs.pooler_output = self.multi_modal_projector(image_features, image_token_pooling)
+        image_outputs.pooler_output = self.multi_modal_projector(image_features, image_token_pooling).last_hidden_state
         return image_outputs
 
     @can_return_tuple
@@ -1962,48 +1964,6 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
                     visual[pooling_key] = torch.cat([chunk for chunk in chunks for _ in range(expand_size)], dim=0)
         model_kwargs.update(visual)
         return input_ids, model_kwargs
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids: torch.LongTensor,
-        past_key_values: list[torch.FloatTensor] | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        image_token_pooling: torch.Tensor | None = None,
-        image_grids: torch.Tensor | None = None,
-        image_num_crops: torch.Tensor | None = None,
-        pixel_values_videos: torch.Tensor | None = None,
-        video_token_pooling: torch.Tensor | None = None,
-        video_grids: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        mm_token_type_ids: torch.LongTensor | None = None,
-        logits_to_keep: int | torch.Tensor | None = None,
-        is_first_iteration: bool = False,
-        use_cache: bool = True,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            mm_token_type_ids=mm_token_type_ids,
-            is_first_iteration=is_first_iteration,
-            use_cache=use_cache,
-            **kwargs,
-        )
-
-        if is_first_iteration or not use_cache:
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["image_token_pooling"] = image_token_pooling
-            model_inputs["image_grids"] = image_grids
-            model_inputs["image_num_crops"] = image_num_crops
-            model_inputs["pixel_values_videos"] = pixel_values_videos
-            model_inputs["video_token_pooling"] = video_token_pooling
-            model_inputs["video_grids"] = video_grids
-
-        return model_inputs
 
     @staticmethod
     def create_masks_for_generate(
