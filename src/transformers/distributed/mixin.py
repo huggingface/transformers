@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import re
 import warnings
+from fnmatch import fnmatchcase
 from typing import TYPE_CHECKING
 
 from ..utils import is_torch_greater_or_equal, logging
@@ -172,7 +173,7 @@ class DistributedMixin:
             distributed_config.tp_plan = "auto"
 
         if distributed_config.fsdp_size > 1 or distributed_config.dispatches_tokens:
-            # Builds one root with dense (fsdp, tp) and expert (edp, ep) views.
+            # Builds one root with dense (fsdp, tp) and expert (efsdp, ep) views.
             if device_mesh is not None:
                 raise ValueError("`device_mesh` cannot be passed with FSDP or token dispatch: the mesh is built here.")
             device_map, device_mesh = initialize_fully_sharded_data_parallelism(distributed_config)
@@ -213,30 +214,25 @@ class DistributedMixin:
                 if isinstance(distributed_config.tp_plan, dict):
                     model.tp_plan = distributed_config.tp_plan
                 if distributed_config.dispatches_tokens:
-                    if not model._ep_plan:
-                        raise ValueError(f"{type(model).__name__} does not define an expert-parallel plan.")
-                    kept = ("grouped_gemm", "moe_tp_experts", "replicated_with_grad_allreduce")
-                    expert_paths = [name for name, style in model._ep_plan.items() if style == "moe_tp_experts"]
-                    # A module-level expert rule owns all its descendants, including TP rules whose keys
-                    # differ from the EP parameter rules. Resolve ownership before either pass installs hooks.
-                    dense_plan = (
-                        {
-                            name: style
-                            for name, style in model._tp_plan.items()
-                            if not any(name == path or name.startswith(path + ".") for path in expert_paths)
-                        }
-                        if distributed_config.tp_size > 1
-                        else {}
-                    )
+                    ep_plan = model._ep_plan or {}
+                    expert_paths = [name for name, style in ep_plan.items() if style == "moe_tp_experts"]
+                    if not expert_paths:
+                        raise ValueError(f"{type(model).__name__} needs a `moe_tp_experts` rule for token dispatch.")
+
+                    def is_expert(name):
+                        return any(fnmatchcase(name, path) or fnmatchcase(name, path + ".*") for path in expert_paths)
+
+                    # Expert rules own their descendants; the trunk uses TP only when requested.
+                    dense_plan = {
+                        name: style
+                        for name, style in model._tp_plan.items()
+                        if distributed_config.tp_size > 1 and not is_expert(name)
+                    }
                     dispatch_style = EXPERTS_DISPATCH_STRATEGIES[distributed_config.experts_dispatch]
                     expert_plan = {
                         name: dispatch_style if style == "moe_tp_experts" else style
-                        for name, style in model._ep_plan.items()
-                        if style in kept
-                        and (
-                            distributed_config.tp_size == 1
-                            or any(name == path or name.startswith(path + ".") for path in expert_paths)
-                        )
+                        for name, style in ep_plan.items()
+                        if is_expert(name)
                     }
                     if distributed_config.tp_size > 1:
                         model = apply_tensor_parallelism(model, device_mesh["tp"], dense_plan)
@@ -247,9 +243,9 @@ class DistributedMixin:
 
             if distributed_config.dispatches_tokens:
                 # Each TP group trains on its own batch. The trunk spans fsdp; each expert is additionally
-                # FSDP-sharded across edp, the ranks left after assigning its EP shard.
+                # FSDP-sharded across efsdp, the ranks left after assigning its EP shard.
                 trunk_mesh = device_mesh["fsdp"]
-                expert_mesh = device_mesh["edp"] if distributed_config.edp_size > 1 else None
+                expert_mesh = device_mesh["efsdp"] if distributed_config.efsdp_size > 1 else None
                 model = apply_fully_sharded_data_parallelism(model, trunk_mesh, expert_mesh=expert_mesh)
             elif distributed_config.fsdp_size > 1:
                 fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh

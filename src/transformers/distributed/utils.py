@@ -199,10 +199,10 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
     ep_fsdp = distributed_config.ep_size // distributed_config.tp_size if distributed_config.dispatches_tokens else 1
     mesh = torch.distributed.init_device_mesh(
         device_type,
-        (distributed_config.edp_size, ep_fsdp, distributed_config.tp_size),
-        mesh_dim_names=("edp", "ep_fsdp", "tp"),
+        (distributed_config.efsdp_size, ep_fsdp, distributed_config.tp_size),
+        mesh_dim_names=("efsdp", "ep_fsdp", "tp"),
     )
-    mesh["edp", "ep_fsdp"]._flatten("fsdp")
+    mesh["efsdp", "ep_fsdp"]._flatten("fsdp")
     mesh["ep_fsdp", "tp"]._flatten("ep")
 
     return device_map, mesh

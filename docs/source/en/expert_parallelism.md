@@ -69,7 +69,7 @@ With `tp_size=1`, `ep_size` must divide `fsdp_size` and the number of experts. W
 For the rest of the model:
 
 - The parameters outside the experts are sharded with [FSDP2](./fsdp) across the `fsdp` mesh, and FSDP2 reduces their gradients.
-- Experts are sharded across `ep` and additionally across `edp`, whose size is `fsdp_size // ep_size`. With `edp_size=1` they are outside FSDP2, so `fsdp_mixed_precision` and `fsdp_cpu_offload` do not apply to them.
+- Experts are sharded across `ep` and additionally across `efsdp`, whose size is `fsdp_size // ep_size`. With `efsdp_size=1` they are outside FSDP2, so `fsdp_mixed_precision` and `fsdp_cpu_offload` do not apply to them.
 - The [`Trainer`] uses ordinary data-parallel batching for training and evaluation and counts tokens across all ranks.
 
 The legacy `enable_expert_parallel=True` spelling is deprecated. A dispatch configuration with `tp_size=4, fsdp_size=2, enable_expert_parallel=True` is translated to `tp_size=1, fsdp_size=8, ep_size=4`, preserving its expert groups and independent batches per rank. Legacy all-reduce configurations retain their original `tp_size` and `fsdp_size`.
@@ -87,9 +87,9 @@ distributed_config = DistributedConfig(
 )
 ```
 
-Each pair of TP ranks receives the same batch. Attention and other dense modules are sharded according to the TP plan. At each MoE layer, TP ranks dispatch disjoint slices of the tokens, then combine their results into a replicated output. EP groups span four ranks, and each expert is additionally FSDP-sharded across `edp_size = fsdp_size * tp_size // ep_size = 2` ranks. The trunk's FSDP group spans four ranks.
+Each pair of TP ranks receives the same batch. Attention and other dense modules are sharded according to the TP plan. At each MoE layer, TP ranks dispatch disjoint slices of the tokens, then combine their results into a replicated output. EP groups span four ranks, and each expert is additionally FSDP-sharded across `efsdp_size = fsdp_size * tp_size // ep_size = 2` ranks. The trunk's FSDP group spans four ranks.
 
-`ep_size` must be a multiple of `tp_size`, divide `fsdp_size * tp_size`, and divide the number of experts. The token count entering each MoE layer (normally batch size times sequence length) must be divisible by `tp_size`; otherwise forward raises an error. This also applies during generation, where each decode step may contain only one token per sequence. The model's usual TP constraints, such as attention-head divisibility, still apply.
+`ep_size` must be a multiple of `tp_size`, divide `fsdp_size * tp_size`, and divide the number of experts. Token slices may be uneven or empty, including during single-token decoding. The model's usual TP constraints, such as attention-head divisibility, still apply.
 
 The [`Trainer`] shares batches within each TP group and counts each group's tokens once. The effective global batch size is `per_device_train_batch_size * fsdp_size * gradient_accumulation_steps`. Sequence parallelism is not required for this path. With `experts_dispatch="auto"`, `ep_size=tp_size` still selects legacy all-reduce; request `"all-to-all"` explicitly to use trunk TP in that case.
 

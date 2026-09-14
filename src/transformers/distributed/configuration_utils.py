@@ -79,7 +79,7 @@ class DistributedConfig:
         return self.experts_dispatch == "all-to-all"
 
     @property
-    def edp_size(self) -> int:
+    def efsdp_size(self) -> int:
         """Number of FSDP shards per expert, after folding EP into the data-parallel mesh."""
         return self.fsdp_size * self.tp_size // self.ep_size if self.dispatches_tokens else self.fsdp_size
 

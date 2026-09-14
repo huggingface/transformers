@@ -797,7 +797,7 @@ def dispatch_experts_forward(
     recv_expert_ids = torch.arange(num_local_experts, device=hidden_states.device).repeat(ep_size)
     recv_expert_ids = recv_expert_ids.repeat_interleave(recv_counts.reshape(-1), output_size=sum(recv_sizes))
 
-    # An EP group collects ep_size / tp_size distinct batches. The remaining edp reduction averages
+    # An EP group collects ep_size / tp_size distinct batches. The remaining efsdp reduction averages
     # expert replicas; together these give the same fsdp_size divisor as the trunk.
     expert_gradient_scale = tp_size / ep_size
     recv_tokens = _ScaleGrad.apply(recv_tokens, 1.0 / expert_gradient_scale)
@@ -846,16 +846,12 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
                 top_k_weights = top_k_weights.to_local()
             num_tokens = hidden_states.size(0)
             if tp_size > 1:
-                if num_tokens % tp_size:
-                    raise ValueError(
-                        f"MoE token count ({num_tokens}) must be divisible by tp_size ({tp_size}) for token dispatch."
-                    )
                 # Inputs and router scores are replicated on TP. Sum the slice gradients before they
                 # reach the router and trunk, and combine outputs with an identity backward.
                 hidden_states = _AllReduceBackward.apply(hidden_states, tp_mesh.get_group())
                 top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_mesh.get_group())
-                start = tp_mesh.get_local_rank() * (num_tokens // tp_size)
-                rows = slice(start, start + num_tokens // tp_size)
+                tp_rank = tp_mesh.get_local_rank()
+                rows = slice(num_tokens * tp_rank // tp_size, num_tokens * (tp_rank + 1) // tp_size)
                 hidden_states, top_k_index, top_k_weights = (
                     hidden_states[rows],
                     top_k_index[rows],
