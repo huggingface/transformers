@@ -20,8 +20,8 @@ from transformers import (
     MossTranscribeDiarizeConfig,
     MossTranscribeDiarizeForConditionalGeneration,
     MossTranscribeDiarizeModel,
-    Qwen2AudioEncoderConfig,
     Qwen3Config,
+    WhisperConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -43,7 +43,7 @@ class MossTranscribeDiarizeModelTester(ALMModelTester):
     base_model_class = MossTranscribeDiarizeModel
     conditional_generation_class = MossTranscribeDiarizeForConditionalGeneration
     text_config_class = Qwen3Config
-    audio_config_class = Qwen2AudioEncoderConfig
+    audio_config_class = WhisperConfig
     audio_mask_key = None
 
     def __init__(self, parent, **kwargs):
@@ -63,17 +63,18 @@ class MossTranscribeDiarizeModelTester(ALMModelTester):
         super().__init__(parent, **kwargs)
 
     def _prepare_modality_inputs(self, input_ids, config):
-        num_audio_tokens = torch.full((self.batch_size,), 4, dtype=torch.long, device=torch_device)
+        num_audio_tokens = torch.full((self.batch_size,), 8, dtype=torch.long, device=torch_device)
         input_ids = self.place_audio_tokens(input_ids, config, num_audio_tokens)
-        # 64 input frames -> 32 post-conv -> 16 post-pool -> 4 merged tokens (merge_size=4), matching
-        # `Qwen2AudioEncoder._get_feat_extract_output_lengths` + merge trim in `get_audio_features`.
+        # 64 input frames -> 32 post-conv -> 8 merged tokens (merge_size=4), matching
+        # `WhisperEncoder._get_feat_extract_output_lengths` + merge trim in `get_audio_features`.
         valid_mel_frames = 64
         input_features_mask = torch.zeros(self.batch_size, self.feat_seq_length, dtype=torch.long, device=torch_device)
         input_features_mask[:, :valid_mel_frames] = 1
         modality_inputs = {
             "input_features": self.create_audio_features(),
             "input_features_mask": input_features_mask,
-            "audio_chunk_mapping": torch.arange(self.batch_size, device=torch_device),
+            # 1 sample = 1 chunk, like the `torch.arange` mapping this replaces.
+            "padding_mask": torch.ones(self.batch_size, 1, dtype=torch.long, device=torch_device),
         }
         return input_ids, modality_inputs
 
@@ -103,9 +104,7 @@ class MossTranscribeDiarizeForConditionalGenerationModelTest(ALMModelTest, unitt
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip(
-        reason="MossTranscribeDiarize uses input_features_mask and audio_chunk_mapping instead of audio masks."
-    )
+    @unittest.skip(reason="MossTranscribeDiarize uses input_features_mask and padding_mask instead of audio masks.")
     def test_mismatching_num_audio_tokens(self):
         pass
 

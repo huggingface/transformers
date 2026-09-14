@@ -117,11 +117,11 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
 
         outputs = processor(text=text, audio=audio)
 
-        for key in ("input_ids", "attention_mask", "input_features", "input_features_mask", "audio_chunk_mapping"):
+        for key in ("input_ids", "attention_mask", "input_features", "input_features_mask", "padding_mask"):
             self.assertIn(key, outputs)
         self.assertEqual(outputs["input_ids"].shape[0], 2)
         self.assertEqual(outputs["input_features"].shape[0], 2)
-        self.assertEqual(outputs["audio_chunk_mapping"].tolist(), [0, 1])
+        self.assertEqual(outputs["padding_mask"].shape[0], 2)
         self.assertEqual(outputs["input_features_mask"].shape[0], 2)
 
     @require_torch
@@ -147,7 +147,7 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
         )
         manual_outputs = processor(text=formatted_prompt, audio=[audio])
 
-        for key in ("input_ids", "attention_mask", "input_features", "input_features_mask", "audio_chunk_mapping"):
+        for key in ("input_ids", "attention_mask", "input_features", "input_features_mask", "padding_mask"):
             self.assertIn(key, template_outputs)
             self.assertTrue(template_outputs[key].equal(manual_outputs[key]))
 
@@ -170,7 +170,7 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
         )
 
         self.assertIn("input_features", outputs)
-        self.assertIn("audio_chunk_mapping", outputs)
+        self.assertIn("padding_mask", outputs)
         self.assertGreater(outputs["input_features"].shape[0], 0)
         self.assertEqual(outputs["input_ids"].shape[0], 1)
 
@@ -197,7 +197,7 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
             add_generation_prompt=True,
         )
 
-        for key in ("input_ids", "attention_mask", "input_features", "input_features_mask", "audio_chunk_mapping"):
+        for key in ("input_ids", "attention_mask", "input_features", "input_features_mask", "padding_mask"):
             self.assertIn(key, helper_outputs)
             self.assertTrue(helper_outputs[key].equal(manual_outputs[key]))
 
@@ -208,7 +208,7 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
         audio_url = MODALITY_INPUT_DATA["audio"][0]
         outputs = processor.apply_transcription_request(audio=audio_url)
 
-        for key in ("input_ids", "attention_mask", "input_features", "input_features_mask", "audio_chunk_mapping"):
+        for key in ("input_ids", "attention_mask", "input_features", "input_features_mask", "padding_mask"):
             self.assertIn(key, outputs)
         self.assertEqual(outputs["input_ids"].shape[0], 1)
 
@@ -249,7 +249,7 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
         )
         self.assertEqual(outputs["input_ids"].shape[0], batch_size)
         self.assertEqual(outputs["input_features"].shape[0], batch_size)
-        self.assertEqual(outputs["audio_chunk_mapping"].tolist(), list(range(batch_size)))
+        self.assertEqual(outputs["padding_mask"].shape[0], batch_size)
 
     @require_torch
     def test_model_input_names(self):
