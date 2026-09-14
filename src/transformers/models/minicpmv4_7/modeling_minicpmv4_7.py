@@ -1649,32 +1649,30 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
             )
         return None
 
-    @staticmethod
     def _prepare_packed_attention_kwargs(
+        self,
         kwargs: dict,
         cu_seqlens: torch.Tensor | None,
         max_seqlen: int | torch.Tensor | None = None,
     ) -> dict:
-        """Map packed ``cu_seqlens`` to FlashAttention / FLA ``cu_seq_lens_*`` kwargs.
+        """Map packed `cu_seqlens` to the FlashAttention `cu_seq_lens_*` kwargs.
 
-        Uses the shared ``get_max_seqlen`` utility (passing ``config=self.config``) rather
-        than rebuilding the logic inline, as suggested by the reviewer.
+        The maximum document length is resolved with the shared [`~utils.generic.get_max_seqlen`]
+        helper against the text backbone config, so a precomputed `max_seqlen` is reused and the
+        reduction only runs when Flash Attention is actually requested.
         """
         if cu_seqlens is None:
             return kwargs
         cu = cu_seqlens if isinstance(cu_seqlens, torch.Tensor) else torch.as_tensor(cu_seqlens)
         cu = cu.to(dtype=torch.int32)
-        if max_seqlen is None:
-            max_seqlen_val = int((cu[1:] - cu[:-1]).max().item())
-        elif isinstance(max_seqlen, torch.Tensor):
-            max_seqlen_val = int(max_seqlen.item())
-        else:
-            max_seqlen_val = int(max_seqlen)
+        max_length = get_max_seqlen(cu, self.language_model.config, kwargs={"max_seqlen": max_seqlen})
+        if isinstance(max_length, torch.Tensor):
+            max_length = int(max_length.item())
         kwargs = dict(kwargs)
         kwargs["cu_seq_lens_q"] = cu
         kwargs["cu_seq_lens_k"] = cu
-        kwargs["max_length_q"] = max_seqlen_val
-        kwargs["max_length_k"] = max_seqlen_val
+        kwargs["max_length_q"] = max_length
+        kwargs["max_length_k"] = max_length
         return kwargs
 
     def _text_position_ids(self, input_ids, attention_mask, past_key_values_length=0):
