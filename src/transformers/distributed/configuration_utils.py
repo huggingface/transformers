@@ -145,10 +145,16 @@ class DistributedConfig:
                 "`experts_dispatch='all-reduce'` requires `ep_size=tp_size` and identical tokens per EP group."
             )
 
-        if self.pp_size > 1 and (self.tp_size > 1 or self.fsdp_size > 1):
+        if self.dispatches_tokens and self.pp_size > 1:
             raise ValueError(
-                "Pipeline parallelism cannot be combined with tensor or FSDP parallelism yet. "
-                "Use DistributedConfig(pp_size=N) on its own, or DistributedConfig(tp_size=N, fsdp_size=M)."
+                f"Combining `experts_dispatch={self.experts_dispatch!r}` with pipeline parallelism is not "
+                "supported yet."
+            )
+
+        if self.fsdp_size > 1 and self.pp_size > 1:
+            raise ValueError(
+                "Combining FSDP with pipeline parallelism is not supported yet. "
+                "Use DistributedConfig(tp_size=N, fsdp_size=M), or combine TP and PP."
             )
 
     @classmethod

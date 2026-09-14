@@ -47,8 +47,8 @@ from typing import TYPE_CHECKING, Any
 from unittest import mock
 from unittest.mock import patch
 
-import httpx
 from huggingface_hub import create_repo, delete_repo
+from huggingface_hub.utils import httpx
 from packaging import version
 
 from transformers import logging as transformers_logging
@@ -3708,6 +3708,14 @@ class Expectations(UserDict[PackedDeviceProperties, Any]):
 
     def __repr__(self):
         return f"{self.data}"
+
+
+def get_json_expectation(expectations: dict[str, Any]) -> Any:
+    """
+    Same as `Expectations.get_expectation`, for expectations stored in a JSON fixture. JSON only allows string keys, so
+    they are written as their `Expectations` counterpart repr, e.g. `"(None, None)"` or `"('xpu', 5)"`.
+    """
+    return Expectations({ast.literal_eval(key): value for key, value in expectations.items()}).get_expectation()
 
 
 def patch_torch_compile_force_graph():

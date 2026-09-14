@@ -864,7 +864,7 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection):
         ```python
         >>> from transformers import AutoModelForObjectDetection, AutoImageProcessor
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 

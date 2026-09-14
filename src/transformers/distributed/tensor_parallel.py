@@ -585,6 +585,18 @@ if is_torch_distributed_available():
             dist.all_reduce(grad, group=ctx.process_group)
             return grad, None
 
+    class _ScaleGrad(torch.autograd.Function):
+        """Identity whose backward scales the gradient."""
+
+        @staticmethod
+        def forward(ctx, tensor, scale):
+            ctx.scale = scale
+            return tensor
+
+        @staticmethod
+        def backward(ctx, grad_output):
+            return grad_output * ctx.scale, None
+
 
 class MoeExpertsParallel(TensorParallelLayer):
     def should_use_local_tensors(self, module):
@@ -738,19 +750,6 @@ class RouterParallelMegaMoe(EpRouterParallel):
 
     def transform_output_post_forward(self, module, output, mesh):
         return output
-
-
-class _ScaleGrad(torch.autograd.Function):
-    """Identity whose backward scales the gradient."""
-
-    @staticmethod
-    def forward(ctx, tensor, scale):
-        ctx.scale = scale
-        return tensor
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        return grad_output * ctx.scale, None
 
 
 def dispatch_experts_forward(
