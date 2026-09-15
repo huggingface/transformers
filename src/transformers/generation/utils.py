@@ -48,6 +48,7 @@ from ..tokenization_python import ExtensionsTrie
 from ..utils import (
     ModelOutput,
     TransformersKwargs,
+    has_file,
     is_accelerate_available,
     logging,
 )
@@ -601,13 +602,16 @@ class GenerationMixin(ContinuousMixin):
         Returns:
             A callable that can be used to generate text.
         """
-        # Fetches the generate.py file from the model repo. If it doesn't exist, a file in `.no_exist` cache directory
-        # is created (preventing future hub requests), and an OSError is raised.
-        try:
-            module = get_cached_module_file(
-                pretrained_model_name_or_path, module_file="custom_generate/generate.py", **kwargs
-            )
-        except OSError:
+        custom_generate_file = "custom_generate/generate.py"
+        custom_generate_requirements = "custom_generate/requirements.txt"
+
+        # Check for the existence of the file without actually downloading it
+        # (preventing unwanted downloads of files, even if not executed)
+        if not has_file(
+            pretrained_model_name_or_path,
+            custom_generate_file,
+            **kwargs,
+        ):
             raise OSError(
                 f"`{pretrained_model_name_or_path}` does not contain a `custom_generate` subdirectory with a "
                 "`generate.py` file, can't load the custom generate function."
@@ -631,9 +635,12 @@ class GenerationMixin(ContinuousMixin):
             error_message=error_message,
         )
 
+        # Load the remote generation module
+        module = get_cached_module_file(pretrained_model_name_or_path, module_file=custom_generate_file, **kwargs)
+
         # Load the custom generate function
         check_python_requirements(
-            pretrained_model_name_or_path, requirements_file="custom_generate/requirements.txt", **kwargs
+            pretrained_model_name_or_path, requirements_file=custom_generate_requirements, **kwargs
         )
         custom_generate_function = get_class_in_module("generate", module)
         return custom_generate_function
@@ -702,8 +709,7 @@ class GenerationMixin(ContinuousMixin):
         if (
             isinstance(past_key_values, Cache)
             and past_key_values.is_compileable
-            and attention_mask is not None
-            and attention_mask.ndim == 2
+            and (attention_mask is None or attention_mask.ndim == 2)
         ):
             # Some models may overwrite the general one
             causal_mask_creation_function = getattr(self, "create_masks_for_generate", create_masks_for_generate)
@@ -720,6 +726,10 @@ class GenerationMixin(ContinuousMixin):
                 mm_token_type_ids=model_inputs.get("mm_token_type_ids"),
                 is_first_iteration=is_first_iteration,
             )
+            if isinstance(attention_mask, dict):
+                attention_mask = {k: v.contiguous() if v is not None else None for k, v in attention_mask.items()}
+            else:
+                attention_mask = attention_mask.contiguous() if attention_mask is not None else None
 
         if attention_mask is not None:
             model_inputs[attention_mask_key] = attention_mask
@@ -2693,6 +2703,18 @@ class GenerationMixin(ContinuousMixin):
         if not kwargs_has_position_ids and accepts_position_ids and not self.config.is_encoder_decoder:
             model_kwargs["position_ids"] = self._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
+        # We can drop the mask altogether if it's all 1s, i.e. no padding, to make downstream attention mask creation and inference
+        # faster (we will never have padding). Note that we cannot drop it earlier, as position_ids creation absolutely needs to check
+        # the mask even if it's only 1s, in case we restart from an existing cache and only new sequence input_ids
+        if (
+            not self.config.is_encoder_decoder
+            and accepts_attention_mask
+            and (model_kwargs["attention_mask"] == 1).all()
+        ):
+            # Record the length to slice correctly in `_prefill` if restarting from existing Cache
+            generation_config._mask_length = model_kwargs["attention_mask"].shape[1]
+            model_kwargs["attention_mask"] = None
+
         if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
             # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`
             model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
@@ -4086,8 +4108,13 @@ class GenerationMixin(ContinuousMixin):
             else:
                 attention_mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
                 attention_mask = model_kwargs.get(attention_mask_key)
+                mask_length = (
+                    attention_mask.shape[1]
+                    if attention_mask is not None
+                    else getattr(generation_config, "_mask_length", -1)
+                )
                 # In this case we need to slice - if it's smaller than the mask, only the new inputs were passed -> no need to do anything
-                if attention_mask is not None and input_ids.shape[1] == attention_mask.shape[1]:
+                if mask_length == input_ids.shape[1]:
                     # inputs will be sliced as `input_ids[:, -next_sequence_length :]` in `prepare_inputs_for_generation`
                     next_sequence_length = input_ids.shape[1] - past_length
 

@@ -32,7 +32,7 @@ from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -55,8 +55,6 @@ from .configuration_cosmos3_edge import Cosmos3EdgeConfig, Cosmos3EdgeTextConfig
 
 
 class Cosmos3EdgeTextRotaryEmbedding(nn.Module):
-    """Interleaved M-RoPE used for Cosmos3 Edge text and visual tokens."""
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: Cosmos3EdgeTextConfig, device=None):
         super().__init__()
@@ -73,41 +71,58 @@ class Cosmos3EdgeTextRotaryEmbedding(nn.Module):
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+        self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: Cosmos3EdgeTextConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
-        """Construct an axis-aware inverse-frequency matrix for interleaved temporal, height, and width RoPE."""
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
         base = config.rope_parameters["rope_theta"]
-        dim = config.head_dim
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
-        indices = torch.arange(inv_freq.shape[0])
-        mrope_section = config.rope_parameters["mrope_section"]
-        height_mask = (indices % 3 == 1) & (indices < mrope_section[1] * 3)
-        width_mask = (indices % 3 == 2) & (indices < mrope_section[2] * 3)
-        temporal_mask = ~(height_mask | width_mask)
-        inv_freq = torch.stack(
-            (
-                inv_freq * temporal_mask,
-                inv_freq * height_mask,
-                inv_freq * width_mask,
-            )
-        )
-        return inv_freq.to(device), 1.0
+        attention_factor = 1.0  # Unused in this type of RoPE
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
+    @dynamic_rope_update
     def forward(self, x, position_ids):
-        position_ids = position_ids.permute(1, 2, 0).float()
+        # In contrast to other models, Cosmos3EdgeText has different position ids for the grids
+        # So we expand the inv_freq to shape (3, ...)
+        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
+        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
+
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = position_ids.float() @ self.inv_freq.float().to(x.device)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
+
+        sin = self.recomposition_frequencies(sin)
+        cos = self.recomposition_frequencies(cos)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freqs_thw = freq[0]  # just overwrite the first dimension T
+        for dim, offset in enumerate((1, 2), start=1):  # H, W
+            length = self.mrope_section[dim] * 3
+            idx = slice(offset, length, 3)
+            freqs_thw[..., idx] = freq[dim, ..., idx]
+        return torch.cat((freqs_thw, freqs_thw), dim=-1)
 
 
 def rotate_half(x):
@@ -771,7 +786,7 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
         grid_thw: list[int, int, int] | torch.Tensor,
         temp_merge_size: int = 1,
         spatial_merge_size: int = 1,
-        time_interval: int = 1,
+        time_interval: float | torch.Tensor = 1.0,
         device: str | torch.device | None = None,
     ):
         """
@@ -792,8 +807,8 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
             spatial_merge_size (`int`, *optional*):
                 Factor by which the spatial dimensions (H and W) are reduced in the backbone. Both H and W are divided
                 by this value. Defaults to 1.
-            time_interval (`int`, *optional*):
-                Spacing factor applied between consecutive temporal position indices.Defaults to 1.
+            time_interval (`float` or scalar `torch.Tensor`, *optional*, defaults to 1.0):
+                Spacing factor applied before quantizing temporal position indices.
             device (`str` or `torch.device`, *optional*):
                 Device on which the resulting tensor is allocated. If `None`, uses the current default device.
 
@@ -808,7 +823,7 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
             grid_thw[2].item() // spatial_merge_size,
         )
 
-        position_temporal = torch.arange(llm_grid_t, device=device) * time_interval
+        position_temporal = (torch.arange(llm_grid_t, device=device) * time_interval).long()
         position_height = torch.arange(llm_grid_h, device=device) + start_position
         position_width = torch.arange(llm_grid_w, device=device) + start_position
 

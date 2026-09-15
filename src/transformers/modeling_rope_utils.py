@@ -786,7 +786,7 @@ class RotaryEmbeddingConfigMixin:
             rope_parameters.setdefault("rope_type", rope_parameters.get("type", "default"))
             rope_parameters.setdefault("rope_theta", rope_theta)
             if partial_rotary_factor is not None:
-                rope_parameters["partial_rotary_factor"] = partial_rotary_factor
+                rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
 
             # Force set the default type to model's expected `default_rope`. For most models it's a no-op
             # used only to keep BC with old ckpt that require axial rope type
@@ -812,7 +812,7 @@ class RotaryEmbeddingConfigMixin:
                 rope_parameters[layer_type].setdefault("rope_type", rope_parameters[layer_type].get("type", "default"))
                 rope_parameters[layer_type].setdefault("rope_theta", rope_theta)
                 if partial_rotary_factor is not None:
-                    rope_parameters[layer_type]["partial_rotary_factor"] = partial_rotary_factor
+                    rope_parameters[layer_type].setdefault("partial_rotary_factor", partial_rotary_factor)
 
                 if rope_parameters[layer_type]["rope_type"] in ["llama3", "yarn", "longrope"]:
                     self.rope_parameters[layer_type].setdefault(
