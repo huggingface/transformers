@@ -235,10 +235,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
             [
                 {
                     "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt_text},
-                        make_audio_chat_template_content(audio_item),
-                    ],
+                    "content": make_audio_chat_template_content(audio_item, prompt_text),
                 }
             ]
             for prompt_text, audio_item in zip(prompts, audio_items)

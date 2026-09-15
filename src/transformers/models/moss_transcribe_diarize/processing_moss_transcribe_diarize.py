@@ -24,7 +24,7 @@ import re
 import numpy as np
 import torch
 
-from ...audio_utils import AudioInput, make_audio_chat_content, make_list_of_audio_chat_template
+from ...audio_utils import AudioInput, make_audio_chat_template_content, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
@@ -49,7 +49,6 @@ class MossTranscribeDiarizeProcessorKwargs(ProcessingKwargs, total=False):
             "sampling_rate": 16000,
             "padding": "max_length",
             "return_attention_mask": True,
-            "return_tensors": "pt",
         },
     }
 
@@ -58,6 +57,15 @@ class MossTranscribeDiarizeProcessorKwargs(ProcessingKwargs, total=False):
 _SEGMENT_PATTERN = re.compile(
     r"\[(?P<start>[^\[\]]+)\]\[S(?P<speaker>\d+)\](?P<content>.*?)\[(?P<end>[^\[\]]+)\]", re.DOTALL
 )
+
+
+def _prepare_keyword_inputs(keywords, batch_size: int) -> list[list[str] | None]:
+    """Broadcast / validate the hotword argument to match batch_size."""
+    if isinstance(keywords, str):
+        keywords = [keywords]
+    if isinstance(keywords, list | tuple) and all(isinstance(item, str) for item in keywords):
+        keywords = [list(keywords)] * batch_size
+    return prepare_prompt_input(keywords, batch_size, input_name="keywords")
 
 
 @requires(backends=("torch",))
@@ -259,6 +267,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         self,
         audio: str | list[str] | AudioInput,
         prompt: str | list[str] | None = None,
+        keywords: str | list[str] | list[list[str]] | None = None,
         **kwargs: Unpack[MossTranscribeDiarizeProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -271,6 +280,10 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
             prompt (`str` or `list[str]`, *optional*):
                 Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When
                 `None`, the chat template supplies the default timestamped diarization prompt.
+            keywords (`str`, `list[str]`, or `list[list[str]]`, *optional*):
+                Hotwords/domain terms (e.g. proper nouns) to bias transcription toward the correct spelling. A
+                string or flat list of strings is shared across the batch; a nested list supplies separate
+                keywords per audio sample.
             **kwargs:
                 Additional keyword arguments forwarded to [`~MossTranscribeDiarizeProcessor.apply_chat_template`].
         """
@@ -282,11 +295,14 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
             raise ValueError("`audio` must contain at least one sample.")
 
         prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
+        keyword_batches = _prepare_keyword_inputs(keywords, batch_size)
 
-        conversations = [
-            [{"role": "user", "content": make_audio_chat_content(audio_item, prompt_text)}]
-            for prompt_text, audio_item in zip(prompts, audio_items)
-        ]
+        conversations = []
+        for audio_item, prompt_text, keyword_list in zip(audio_items, prompts, keyword_batches):
+            content = make_audio_chat_template_content(audio_item, prompt_text)
+            if keyword_list:
+                content.append({"type": "keywords", "keywords": keyword_list})
+            conversations.append([{"role": "user", "content": content}])
 
         return self.apply_chat_template(
             conversations,

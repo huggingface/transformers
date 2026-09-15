@@ -202,6 +202,20 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
             self.assertTrue(helper_outputs[key].equal(manual_outputs[key]))
 
     @require_librosa
+    def test_apply_transcription_request_with_prompt_and_keywords(self):
+        processor = AutoProcessor.from_pretrained(self.tmpdirname)
+        audio_url = MODALITY_INPUT_DATA["audio"][0]
+        context = "Transcribe and diarize this clip."
+
+        outputs = processor.apply_transcription_request(
+            audio=audio_url, prompt=context, keywords=["Quilter", "apostle"], return_tensors="pt"
+        )
+
+        decoded = processor.tokenizer.decode(outputs["input_ids"][0])
+        self.assertIn(context, decoded)
+        self.assertIn("热词列表：[Quilter, apostle]", decoded)
+
+    @require_librosa
     @require_torch
     def test_apply_transcription_request_with_url(self):
         processor = self.get_processor()
