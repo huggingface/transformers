@@ -11,7 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Dequantizing GGUF blocks with torch ops."""
+"""Dequantizing GGUF blocks with torch ops.
+
+Inspired by ComfyUI-GGUF (c) City96, Apache-2.0: https://github.com/city96/ComfyUI-GGUF
+"""
 
 import torch
 
@@ -79,23 +82,17 @@ def dequantize(data: torch.Tensor, ggml_type: int, dtype: torch.dtype = torch.fl
     return values.reshape(-1)[: blocks.shape[0] * block_elems]
 
 
-def _half(blocks: torch.Tensor, start: int) -> torch.Tensor:
-    """Read one fp16 scalar per block, as (nb, 1) float32."""
-    return blocks[:, start : start + 2].contiguous().view(torch.float16).float()
+def _half(blocks: torch.Tensor, start: int, dtype: torch.dtype = torch.float32) -> torch.Tensor:
+    """Read one fp16 scalar per block, as `(nb, 1)` of `dtype`."""
+    return blocks[:, start : start + 2].view(torch.float16).to(dtype)
 
 
 def _k_scales(scales: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """Unpack the 12 bytes of 6-bit scales/mins shared by Q4_K and Q5_K (ggml's get_scale_min_k4)."""
-    q = scales.int()
-    scale = torch.cat([q[:, :4] & 63, (q[:, 8:12] & 0xF) | ((q[:, 0:4] >> 6) << 4)], dim=1)
-    minimum = torch.cat([q[:, 4:8] & 63, (q[:, 8:12] >> 4) | ((q[:, 4:8] >> 6) << 4)], dim=1)
+    # stays in `uint8`: the six-bit fields never overflow it, and promoting first costs a copy
+    scale = torch.cat([scales[:, :4] & 63, (scales[:, 8:12] & 0xF) | ((scales[:, 0:4] >> 6) << 4)], dim=1)
+    minimum = torch.cat([scales[:, 4:8] & 63, (scales[:, 8:12] >> 4) | ((scales[:, 4:8] >> 6) << 4)], dim=1)
     return scale.float(), minimum.float()
-
-
-def _interleave_nibbles(qs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """(nb, 128) nibble bytes -> low/high nibbles as (nb, 4, 32) each, still `uint8`."""
-    q = qs.reshape(-1, 4, 32)
-    return q & 0xF, q >> 4
 
 
 def _shifted(data: torch.Tensor, shifts: tuple[int, ...], width: int) -> torch.Tensor:
@@ -106,77 +103,60 @@ def _shifted(data: torch.Tensor, shifts: tuple[int, ...], width: int) -> torch.T
 
 def _iq4_levels(nibbles: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
     """Nibbles -> the levels they index."""
-    levels = torch.tensor(_IQ4_LEVELS, device=nibbles.device, dtype=torch.int8)
-    return levels[nibbles.long()].to(dtype)
+    # built in the target dtype: gathering int8 and casting afterwards materializes the result twice
+    levels = torch.tensor(_IQ4_LEVELS, device=nibbles.device, dtype=dtype)
+    return levels[nibbles.long()]
 
 
 def _dequant_q8_0(blocks: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
-    d = _half(blocks, 0).to(dtype)
-    qs = blocks[:, 2:34].contiguous().view(torch.int8).to(dtype)
-    return d * qs
+    return _half(blocks, 0, dtype) * blocks[:, 2:34].view(torch.int8)
 
 
 def _dequant_q4_k(blocks: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
     d, dmin = _half(blocks, 0), _half(blocks, 2)
     scale, minimum = _k_scales(blocks[:, 4:16])
-    low, high = _interleave_nibbles(blocks[:, 16:144])
-    q = torch.stack([low, high], dim=2).reshape(-1, 8, 32).to(dtype)
+    q = _shifted(blocks[:, 16:144], (0, 4), 32) & 0xF
     return (d * scale).to(dtype)[..., None] * q - (dmin * minimum).to(dtype)[..., None]
 
 
 def _dequant_q5_k(blocks: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
     d, dmin = _half(blocks, 0), _half(blocks, 2)
     scale, minimum = _k_scales(blocks[:, 4:16])
-    qh = blocks[:, 16:48].unsqueeze(1)  # (nb, 1, 32), one extra bit per value
-    low, high = _interleave_nibbles(blocks[:, 48:176])
-    shift = torch.arange(4, device=blocks.device, dtype=torch.uint8).reshape(1, 4, 1) * 2
-    low = low + ((qh >> shift) & 1) * 16
-    high = high + ((qh >> (shift + 1)) & 1) * 16
-    q = torch.stack([low, high], dim=2).reshape(-1, 8, 32).to(dtype)
+    # the fifth bit of each value lives in its own plane, one bit per byte
+    low = _shifted(blocks[:, 48:176], (0, 4), 32) & 0xF
+    high = _shifted(blocks[:, 16:48], tuple(range(8)), 32) & 1
+    q = low | (high << 4)
     return (d * scale).to(dtype)[..., None] * q - (dmin * minimum).to(dtype)[..., None]
 
 
 def _dequant_q6_k(blocks: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
-    d = _half(blocks, 208)
-    ql, qh = blocks[:, 0:128], blocks[:, 128:192]
-    scales = blocks[:, 192:208].contiguous().view(torch.int8).float()
-    # 16 values share a scale; the four quarters of each 128-element half use scales is+0/2/4/6
-    which = torch.arange(32, device=blocks.device) // 16
-    out = []
-    for half in range(2):
-        lo, hi = ql[:, half * 64 : half * 64 + 32], ql[:, half * 64 + 32 : (half + 1) * 64]
-        h, sc = qh[:, half * 32 : (half + 1) * 32], scales[:, half * 8 : (half + 1) * 8]
-        quants = [
-            (lo & 0xF) | ((h & 3) << 4),
-            (hi & 0xF) | (((h >> 2) & 3) << 4),
-            (lo >> 4) | (((h >> 4) & 3) << 4),
-            (hi >> 4) | (((h >> 6) & 3) << 4),
-        ]
-        for quarter, q in enumerate(quants):
-            scale = (d * sc[:, which + 2 * quarter]).to(dtype)
-            out.append(scale * (q.to(dtype) - 32))
-    return torch.cat(out, dim=1)
+    nb = blocks.shape[0]
+    ql, qh, scales = blocks[:, 0:128], blocks[:, 128:192], blocks[:, 192:208]
+    # 16 values share a scale, and the six bits of a quant are split four low and two high
+    scale = (_half(blocks, 208) * scales.view(torch.int8).float()).to(dtype).reshape(nb, 16, 1)
+    low = (_shifted(ql, (0, 4), 64) & 0xF).reshape(nb, -1, 32)
+    high = (_shifted(qh, (0, 2, 4, 6), 32) & 3).reshape(nb, -1, 32)
+    quants = (low | (high << 4)).to(torch.int8) - 32
+    return (scale * quants.reshape(nb, 16, -1)).reshape(nb, -1)
 
 
 def _dequant_q4_0(blocks: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
-    d = _half(blocks, 0).to(dtype)
     nibbles = _shifted(blocks[:, 2:18], (0, 4), 16).reshape(-1, 32) & 0xF
-    return d * (nibbles.to(torch.int8) - 8).to(dtype)
+    return _half(blocks, 0, dtype) * (nibbles.to(torch.int8) - 8)
 
 
 def _dequant_q4_1(blocks: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
-    d, m = _half(blocks, 0).to(dtype), _half(blocks, 2).to(dtype)
     nibbles = _shifted(blocks[:, 4:20], (0, 4), 16).reshape(-1, 32) & 0xF
-    return d * nibbles.to(dtype) + m
+    return _half(blocks, 0, dtype) * nibbles + _half(blocks, 2, dtype)
 
 
 def _dequant_q2_k(blocks: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
     scales, qs = blocks[:, 0:16], blocks[:, 16:80]
-    d, dmin = _half(blocks, 80).to(dtype), _half(blocks, 82).to(dtype)
+    d, dmin = _half(blocks, 80, dtype), _half(blocks, 82, dtype)
     # one byte per group of 16: a four-bit scale low, a four-bit minimum high
     dl = (d * (scales & 0xF).to(dtype)).reshape(-1, 16, 1)
     ml = (dmin * (scales >> 4).to(dtype)).reshape(-1, 16, 1)
-    q = (_shifted(qs, (0, 2, 4, 6), 32).reshape(-1, 16, 16) & 3).to(dtype)
+    q = _shifted(qs, (0, 2, 4, 6), 32).reshape(-1, 16, 16) & 3
     return (dl * q - ml).reshape(blocks.shape[0], -1)
 
 
@@ -191,19 +171,18 @@ def _dequant_q3_k(blocks: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
     ql = _shifted(qs, (0, 2, 4, 6), 32).reshape(-1, 16, 16) & 3
     # the high bit is an inverted borrow: the offset applies where the mask bit is clear
     qh = (_shifted(hmask, tuple(range(8)), 32).reshape(-1, 16, 16) & 1) ^ 1
-    q = (ql.to(torch.int8) - (qh << 2).to(torch.int8)).to(dtype)
+    q = ql.to(torch.int8) - (qh << 2).to(torch.int8)
     return ((d.to(dtype) * scale)[..., None] * q).reshape(blocks.shape[0], -1)
 
 
 def _dequant_iq4_nl(blocks: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
-    d = _half(blocks, 0).to(dtype)
     nibbles = _shifted(blocks[:, 2:18], (0, 4), 16).reshape(-1, 32) & 0xF
-    return d * _iq4_levels(nibbles, dtype)
+    return _half(blocks, 0, dtype) * _iq4_levels(nibbles, dtype)
 
 
 def _dequant_iq4_xs(blocks: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
     d = _half(blocks, 0)
-    scales_h = blocks[:, 2:4].contiguous().view(torch.int16).to(torch.int32) & 0xFFFF
+    scales_h = blocks[:, 2:4].view(torch.int16).to(torch.int32) & 0xFFFF
     # eight six-bit scales: four bytes of low nibbles here, low then high *within* each byte, with
     # their top two bits spread across one uint16
     shift = torch.tensor((0, 4), device=blocks.device, dtype=torch.uint8).reshape(1, 1, 2)
@@ -654,7 +633,7 @@ def _dequant_iq1_m(blocks: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
     # the fp16 scale is spread across the top nibble of all four scale words
     bits = (packed & 0xF000) >> torch.tensor([12, 8, 4, 0], device=blocks.device).reshape(1, 4)
     d = bits[:, 0] | bits[:, 1] | bits[:, 2] | bits[:, 3]
-    d = d.to(torch.int16).contiguous().view(torch.float16).float().reshape(nb, 1)
+    d = d.to(torch.int16).view(torch.float16).float().reshape(nb, 1)
     scale = (_shift_of(packed, (0, 3, 6, 9)) & 7).float()
     dl = (d * (2 * scale + 1)).to(dtype).reshape(nb, -1, 2, 1, 1)
 
