@@ -6237,6 +6237,58 @@ class ModelTesterMixin(ExportTesterMixin):
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
+    def test_model_rope_with_partial_rotation(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        text_config = config.get_text_config(decoder=True)
+        base_model_class = None
+        for model_class in self.all_model_classes:
+            if model_class.__name__ in [
+                *get_values(MODEL_MAPPING_NAMES),
+            ]:
+                base_model_class = model_class
+                break
+
+        if base_model_class is None:
+            self.skipTest("This model has no `base_model_class` defined in tester.")
+
+        if not hasattr(text_config, "rope_parameters"):
+            self.skipTest("This model does not have RoPE")
+
+        if not hasattr(text_config, "vocab_size"):
+            self.skipTest("This model has no vocab size defined and the test doesn't yet support non-text modalities.")
+
+        n_required_args = sum(
+            p.default is inspect.Parameter.empty
+            and p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY, p.POSITIONAL_ONLY)
+            and p.name != "self"
+            for p in inspect.signature(base_model_class.forward).parameters.values()
+        )
+        if n_required_args > 1:
+            self.skipTest("This model requires more than single main input, skip for now as it's not supported")
+
+        input = ids_tensor([1, 10], text_config.vocab_size)
+        model_kwargs = {}
+        if config.is_encoder_decoder:
+            model_kwargs = {"decoder_input_ids": input.clone()}
+
+        if "partial_rotary_factor" not in text_config.rope_parameters:
+            self.skipTest("This model does not have partial rope supported")
+
+        # Run with partial rotary factor set to a values less than one, should not raise any shape errors
+        # If tested already has a value > 1, use it since that might affect to other config field values
+        default_partial_rotation = text_config.rope_parameters["partial_rotary_factor"]
+        _set_config_rope_params(
+            text_config,
+            {
+                "rope_type": "default",
+                "rope_theta": 10_000.0,
+                "partial_rotary_factor": 0.5 if default_partial_rotation >= 1.0 else default_partial_rotation,
+            },
+        )
+        model = base_model_class(config)
+        model.to(torch_device).eval()
+        model(input, **model_kwargs)
+
 
 global_rng = random.Random()
 
