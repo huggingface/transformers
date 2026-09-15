@@ -22,6 +22,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ...activations import ACT2FN
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...utils.deprecation import deprecate_kwarg
@@ -173,3 +174,24 @@ class DeepseekV41Experts(nn.Module):
         up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         # Simple swiglu instead of alpha
         return F.silu(gate) * up
+
+
+class DeepseekV41TopkRouter(nn.Module):
+    def __init__(self, config: DeepseekV41Config):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.score_fn = ACT2FN[config.scoring_func]
+        self.routed_scaling_factor = config.routed_scaling_factor
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        flat = hidden_states.reshape(-1, self.hidden_dim)
+        logits = F.linear(flat, self.weight)
+        scores = self.score_fn(logits)
+        indices = torch.topk(scores + self.e_score_correction_bias, self.top_k, dim=-1, sorted=False).indices
+        weights = scores.gather(1, indices)
+        weights = weights / (weights.sum(dim=-1, keepdim=True) + 1e-20)
+        return logits, weights * self.routed_scaling_factor, indices

@@ -11,31 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""DeepSeek-V4.1-Flash: Pushing the Limits of KV Cache Compression
-"""
-
-from collections.abc import Callable
+"""DeepSeek-V4.1-Flash: Pushing the Limits of KV Cache Compression"""
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
-from ...cache_utils import Cache, DynamicCache
-from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import auto_docstring, logging
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3RMSNorm
 from ..deepseek_v4.configuration_deepseek_v4 import DeepseekV4Config
-from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4RotaryEmbedding
+from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4RotaryEmbedding, DeepseekV4TopKRouter
 from ..glm5_next.modeling_glm5_next import Glm5NextTextExperts
 
 
 logger = logging.get_logger(__name__)
-
 
 
 def get_grouped_indices(
@@ -98,6 +88,31 @@ class DeepseekV41RotaryEmbedding(DeepseekV4RotaryEmbedding):
 
 class DeepseekV41Experts(Glm5NextTextExperts):
     pass
+
+
+class DeepseekV41TopkRouter(DeepseekV4TopKRouter):
+    """Deepseek V4 router with a different router bias for image tokens."""
+
+    def __init__(self, config: DeepseekV41Config):
+        super().__init__(config)
+        self.e_score_correction_bias_vl = nn.Buffer(torch.zeros(self.num_experts))
+
+    def forward(
+        self, hidden_states: torch.Tensor, image_mask: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Routs tokens to experts, with different bias for text and image tokens.
+        Args:
+            - hidden_states: tensor with shape [batch_size, seq_len, hidden_dim]
+            - image_mask: a boolean tensor indicating if the token is a image token with shape [batch_size, seq_len]
+        """
+        flat = hidden_states.reshape(-1, self.hidden_dim)
+        logits = F.linear(flat, self.weight)
+        scores = self.score_fn(logits)
+        bias = torch.where(image_mask.unsqueeze(-1), self.e_score_correction_bias_vl, self.e_score_correction_bias)
+        indices = torch.topk(scores + bias, self.top_k, dim=-1, sorted=False).indices
+        weights = scores.gather(1, indices)
+        weights = weights / (weights.sum(dim=-1, keepdim=True) + 1e-20)
+        return logits, weights * self.routed_scaling_factor, indices
 
 
 __all__ = [
