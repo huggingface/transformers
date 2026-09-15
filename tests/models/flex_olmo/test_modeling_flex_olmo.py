@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch FlexOlmo model."""
 
+import tempfile
 import unittest
 
 from transformers import is_torch_available
@@ -20,6 +21,7 @@ from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
     Expectations,
     backend_device_count,
+    get_cpu_ram_total_gib,
     require_torch,
     slow,
     torch_device,
@@ -70,6 +72,7 @@ class FlexOlmoIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.model = None
+        cls.offload_dir = None
 
     @classmethod
     def get_model(cls):
@@ -92,12 +95,26 @@ class FlexOlmoIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                     min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3
                 )
                 max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+                max_memory["cpu"] = f"{int(get_cpu_ram_total_gib())}GiB"
             else:
                 max_memory = None
+            # offload_folder is added for consistency with other MoE integration tests. For this model,
+            # GPU + CPU already holds the full model so disk offloading won't actually be triggered.
+            cls.offload_dir = tempfile.TemporaryDirectory()
             cls.model = FlexOlmoForCausalLM.from_pretrained(
-                cls.model_id, device_map="auto", max_memory=max_memory, torch_dtype=torch.bfloat16
+                cls.model_id,
+                device_map="auto",
+                max_memory=max_memory,
+                torch_dtype=torch.bfloat16,
+                offload_folder=cls.offload_dir.name,
             )
         return cls.model
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.offload_dir is not None:
+            cls.offload_dir.cleanup()
+        super().tearDownClass()
 
     @slow
     def test_model_7b_logits(self):
