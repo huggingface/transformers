@@ -22,7 +22,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import PreTrainedModel
@@ -30,7 +30,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 from ..cohere_asr.modeling_cohere_asr import (
     CohereAsrDecoder,
     CohereAsrForConditionalGeneration,
@@ -102,7 +102,19 @@ class CanaryConfig(PreTrainedConfig):
 
     model_type = "canary"
     keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"encoder_config": AutoConfig, "decoder_config": CanaryDecoderConfig}
+    sub_configs_defaults = {
+        "encoder_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="parakeet_encoder",
+            init_kwargs={
+                "num_hidden_layers": 32,
+                "num_mel_bins": 128,
+                "scale_input": False,
+                "layerdrop": 0.0,
+            },
+        ),
+        "decoder_config": SubConfigSpec(config_class=CanaryDecoderConfig),
+    }
 
     encoder_config: dict | PreTrainedConfig | None = None
     decoder_config: dict | PreTrainedConfig | None = None
@@ -115,25 +127,6 @@ class CanaryConfig(PreTrainedConfig):
     decoder_start_token_id: int | None = 7
     initializer_range: float = 0.02
     vocab_size: int = 16384
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config["model_type"] = self.encoder_config.get("model_type", "parakeet_encoder")
-            self.encoder_config = CONFIG_MAPPING[self.encoder_config["model_type"]](**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = CONFIG_MAPPING["parakeet_encoder"](
-                num_hidden_layers=32,
-                num_mel_bins=128,
-                scale_input=False,
-                layerdrop=0.0,
-            )
-
-        if isinstance(self.decoder_config, dict):
-            self.decoder_config = CanaryDecoderConfig(**self.decoder_config)
-        elif self.decoder_config is None:
-            self.decoder_config = CanaryDecoderConfig()
-
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         if self.decoder_config.vocab_size != self.vocab_size:

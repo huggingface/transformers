@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
 
 
@@ -184,28 +184,16 @@ class AlignConfig(PreTrainedConfig):
     ```"""
 
     model_type = "align"
-    sub_configs = {"text_config": AlignTextConfig, "vision_config": AlignVisionConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=AlignVisionConfig),
+        "text_config": SubConfigSpec(config_class=AlignTextConfig),
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     projection_dim: int = 640
     temperature_init_value: float = 1.0
     initializer_range: float = 0.02
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = AlignTextConfig()
-            logger.info("`text_config` is `None`. Initializing the `AlignTextConfig` with default values.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = AlignTextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            self.vision_config = AlignVisionConfig()
-            logger.info("`vision_config` is `None`. initializing the `AlignVisionConfig` with default values.")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = AlignVisionConfig(**self.vision_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["AlignTextConfig", "AlignVisionConfig", "AlignConfig"]

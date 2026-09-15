@@ -16,7 +16,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -34,10 +34,7 @@ class VisionEncoderDecoderConfig(PreTrainedConfig):
     >>> from transformers import BertConfig, ViTConfig, VisionEncoderDecoderConfig, VisionEncoderDecoderModel
 
     >>> # Initializing a ViT & BERT style configuration
-    >>> config_encoder = ViTConfig()
-    >>> config_decoder = BertConfig()
-
-    >>> config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
+    >>> config = VisionEncoderDecoderConfig()
 
     >>> # Initializing a ViTBert model (with random weights) from a ViT & google-bert/bert-base-uncased style configurations
     >>> model = VisionEncoderDecoderModel(config=config)
@@ -58,26 +55,16 @@ class VisionEncoderDecoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "vision-encoder-decoder"
-    sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
-    has_no_defaults_at_init = True
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig, model_type="bert", init_kwargs={"is_decoder": True, "add_cross_attention": True}
+        ),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="vit"),
+    }
 
+    encoder: PreTrainedConfig | dict | None = None
+    decoder: PreTrainedConfig | dict | None = None
     is_encoder_decoder: bool = True
-
-    def __post_init__(self, **kwargs):
-        if "encoder" not in kwargs or "decoder" not in kwargs:
-            raise ValueError(
-                f"A configuration of type {self.model_type} cannot be instantiated because "
-                f"not both `encoder` and `decoder` sub-configurations are passed, but only {kwargs}"
-            )
-
-        encoder_config = kwargs.pop("encoder")
-        encoder_model_type = encoder_config.pop("model_type")
-        decoder_config = kwargs.pop("decoder")
-        decoder_model_type = decoder_config.pop("model_type")
-
-        self.encoder = AutoConfig.for_model(encoder_model_type, **encoder_config)
-        self.decoder = AutoConfig.for_model(decoder_model_type, **decoder_config)
-        super().__post_init__(**kwargs)
 
     @classmethod
     def from_encoder_decoder_configs(

@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
 
 
@@ -158,7 +158,10 @@ class CLIPSegConfig(PreTrainedConfig):
     ```"""
 
     model_type = "clipseg"
-    sub_configs = {"text_config": CLIPSegTextConfig, "vision_config": CLIPSegVisionConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=CLIPSegVisionConfig),
+        "text_config": SubConfigSpec(config_class=CLIPSegTextConfig),
+    }
 
     text_config: dict | CLIPSegTextConfig | None = None
     vision_config: dict | CLIPSegVisionConfig | None = None
@@ -176,32 +179,17 @@ class CLIPSegConfig(PreTrainedConfig):
     use_complex_transposed_convolution: bool = False
 
     def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `CLIPSegTextConfig` with default values.")
-        elif isinstance(self.text_config, CLIPSegTextConfig):
-            text_config = self.text_config.to_dict()
-        else:
-            text_config = self.text_config
-
-        if self.vision_config is None:
-            vision_config = {}
-            logger.info("`vision_config` is `None`. initializing the `CLIPSegVisionConfig` with default values.")
-        elif isinstance(self.vision_config, CLIPSegVisionConfig):
-            vision_config = self.vision_config.to_dict()
-        else:
-            vision_config = self.vision_config
-
         # For backward compatibility check keyword args
         # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
         # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
         # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
-        text_config_dict = kwargs.pop("text_config_dict", None)
-        vision_config_dict = kwargs.pop("vision_config_dict", None)
-
-        if text_config_dict is not None:
+        if (text_config_dict := kwargs.pop("text_config_dict", None)) is not None:
             # This is the complete result when using `text_config_dict`.
             _text_config_dict = CLIPSegTextConfig(**text_config_dict).to_dict()
+            text_config = (
+                self.text_config.to_dict() if isinstance(self.text_config, PreTrainedConfig) else self.text_config
+            )
+            text_config = text_config or {}
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
@@ -222,10 +210,18 @@ class CLIPSegConfig(PreTrainedConfig):
 
             # Update all values in `text_config` with the ones in `_text_config_dict`.
             text_config.update(_text_config_dict)
+            self.text_config = text_config
 
-        if vision_config_dict is not None:
+        if (vision_config_dict := kwargs.pop("vision_config_dict", None)) is not None:
             # This is the complete result when using `vision_config_dict`.
             _vision_config_dict = CLIPSegVisionConfig(**vision_config_dict).to_dict()
+            vision_config = (
+                self.vision_config.to_dict()
+                if isinstance(self.vision_config, PreTrainedConfig)
+                else self.vision_config
+            )
+            vision_config = vision_config or {}
+
             # convert keys to string instead of integer
             if "id2label" in _vision_config_dict:
                 _vision_config_dict["id2label"] = {
@@ -251,10 +247,7 @@ class CLIPSegConfig(PreTrainedConfig):
 
             # Update all values in `vision_config` with the ones in `_vision_config_dict`.
             vision_config.update(_vision_config_dict)
-
-        # Finally we can convert back our unified text/vision configs to `PretrainedConfig`
-        self.text_config = CLIPSegTextConfig(**text_config)
-        self.vision_config = CLIPSegVisionConfig(**vision_config)
+            self.vision_config = vision_config
 
         super().__post_init__(**kwargs)
 

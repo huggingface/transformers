@@ -15,9 +15,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="CohereLabs/command-a-vision-07-2025")
@@ -31,7 +31,20 @@ class Cohere2VisionConfig(PreTrainedConfig):
     """
 
     model_type = "cohere2_vision"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="siglip_vision_model",
+            init_kwargs={
+                "hidden_size": 1152,
+                "intermediate_size": 3072,
+                "image_size": 512,
+                "num_hidden_layers": 27,
+                "num_attention_heads": 12,
+            },
+        ),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="cohere2"),
+    }
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -39,27 +52,6 @@ class Cohere2VisionConfig(PreTrainedConfig):
     image_token_id: int = 255036
     alignment_intermediate_size: int = 36864
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "siglip_vision_model")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["siglip_vision_model"](
-                hidden_size=1152,
-                intermediate_size=3072,
-                image_size=512,
-                num_hidden_layers=27,
-                num_attention_heads=12,
-            )
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "cohere2")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["cohere2"](tie_word_embeddings=self.tie_word_embeddings)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Cohere2VisionConfig"]

@@ -1858,6 +1858,8 @@ class ConfigArgs:
     decoder_attention_dropout = attention_dropout
     decoder_dropout = dropout
     encoder_dropout = dropout
+    encoder = encoder_config
+    decoder = decoder_config
 
     route_scale = routed_scaling_factor
     activation_function = hidden_act

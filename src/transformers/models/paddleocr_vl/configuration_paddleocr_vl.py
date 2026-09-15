@@ -27,7 +27,7 @@ import inspect
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -159,7 +159,10 @@ class PaddleOCRVLConfig(PreTrainedConfig):
 
     model_type = "paddleocr_vl"
 
-    sub_configs = {"vision_config": PaddleOCRVisionConfig, "text_config": PaddleOCRTextConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=PaddleOCRVisionConfig),
+        "text_config": SubConfigSpec(config_class=PaddleOCRTextConfig),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -172,30 +175,21 @@ class PaddleOCRVLConfig(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
         # Hub configs are saved as flat dicts so we pop some of kwargs to init `TextConfig`
-        text_params = inspect.signature(self.sub_configs["text_config"].__init__).parameters.keys()
-        text_params = list(text_params) + ["rope_parameters", "rope_scaling", "rope_theta"]
-        text_kwargs = {key: kwargs.pop(key) for key in text_params if key in kwargs}
+        if self.text_config is None:
+            text_params = inspect.signature(
+                self.sub_configs_defaults["text_config"].config_class.__init__
+            ).parameters.keys()
+            text_params = list(text_params) + ["rope_parameters", "rope_scaling", "rope_theta"]
+            self.text_config = {key: kwargs.pop(key) for key in text_params if key in kwargs}
+            self.text_config["dtype"] = kwargs.get("torch_dtype", kwargs.get("dtype"))  # don't pop the dtype
 
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            # Hub configs are saved as flat dicts so we pop some of kwargs to init `TextConfig`
-            text_kwargs["dtype"] = kwargs.get("torch_dtype", kwargs.get("dtype"))  # don't pop the dtype
-            self.text_config = self.sub_configs["text_config"](**text_kwargs)
-
+        super().__post_init__(**kwargs)
         # BC: pre-v5 saves placed `tie_word_embeddings` inside text_config. Forward it to the outer
         # config (where v5's tying logic looks) when the root value is the default. Checked after
         # text_config init so it also covers a text config passed as an already-initialized instance.
         if not self.tie_word_embeddings and getattr(self.text_config, "tie_word_embeddings", False):
             self.tie_word_embeddings = True
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["PaddleOCRVLConfig", "PaddleOCRVisionConfig", "PaddleOCRTextConfig"]

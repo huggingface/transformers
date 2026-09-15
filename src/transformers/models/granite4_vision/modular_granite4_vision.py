@@ -22,14 +22,14 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_utils import select_best_resolution
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..granite.configuration_granite import GraniteConfig
 from ..granite.modeling_granite import GraniteAttention, GraniteDecoderLayer, GraniteModel, GraniteRotaryEmbedding
 from ..llava_next.configuration_llava_next import LlavaNextConfig
@@ -123,7 +123,21 @@ class Granite4VisionConfig(LlavaNextConfig):
     """
 
     model_type = "granite4_vision"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "qformer_config": AutoConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="granite4_vision_text"),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="clip_vision_model"),
+        "qformer_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="blip_2_qformer",
+            init_kwargs={
+                "num_hidden_layers": 1,
+                "intermediate_size": 3072,
+                "cross_attention_frequency": 1,
+                "max_position_embeddings": 2048,
+                "use_qformer_text_input": False,
+            },
+        ),
+    }
 
     multimodal_projector_bias = AttributeError()
     projector_hidden_act = AttributeError()
@@ -136,46 +150,16 @@ class Granite4VisionConfig(LlavaNextConfig):
     qformer_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
-        self.image_grid_pinpoints = (
-            self.image_grid_pinpoints
-            if self.image_grid_pinpoints is not None
-            else [[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]
-        )
+        super().__post_init__(**kwargs)
+        self.qformer_config.hidden_size = self.vision_config.hidden_size
+        self.qformer_config.num_attention_heads = self.vision_config.hidden_size // 64
+        self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
 
         if self.deepstack_layer_map is not None:
             self.deepstack_layer_map = [(int(v), int(l)) for v, l in self.deepstack_layer_map]
 
         if self.spatial_target_layers is None:
             self.spatial_target_layers = [12, 15, 18, 21]
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "clip_vision_model")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["siglip_vision_model"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "granite4_vision_text")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["llama"]()
-
-        if isinstance(self.qformer_config, dict):
-            model_type = self.qformer_config.get("model_type", "blip_2_qformer")
-            self.qformer_config = CONFIG_MAPPING[model_type](**self.qformer_config)
-        if self.qformer_config is None:
-            vision_hidden_size = self.vision_config.hidden_size
-            self.qformer_config = CONFIG_MAPPING["blip_2_qformer"](
-                num_hidden_layers=1,
-                intermediate_size=3072,
-                cross_attention_frequency=1,
-                max_position_embeddings=2048,
-                use_qformer_text_input=False,
-                hidden_size=vision_hidden_size,
-                num_attention_heads=vision_hidden_size // 64,
-                encoder_hidden_size=vision_hidden_size,
-            )
-        PreTrainedConfig.__post_init__(**kwargs)
 
 
 # ── Processor ───────────────────────────────────────────────────────────────

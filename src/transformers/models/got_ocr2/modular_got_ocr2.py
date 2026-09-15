@@ -19,12 +19,12 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
@@ -63,6 +63,8 @@ class GotOcr2VisionConfig(PreTrainedConfig):
     """
 
     base_config_key = "vision_config"
+    model_type = "got_ocr2_vision"
+
     hidden_size: int = 768
     output_channels: int = 256
     num_hidden_layers: int = 12
@@ -102,49 +104,40 @@ class GotOcr2Config(PreTrainedConfig):
     ```"""
 
     model_type = "got_ocr2"
-    attribute_map = {
-        "image_token_id": "image_token_index",
+    attribute_map = {"image_token_id": "image_token_index"}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="qwen2",
+            init_kwargs={
+                "vocab_size": 151860,
+                "hidden_size": 1024,
+                "intermediate_size": 2816,
+                "num_hidden_layers": 24,
+                "num_attention_heads": 16,
+                "num_key_value_heads": 16,
+                "hidden_act": "silu",
+                "max_position_embeddings": 32768,
+                "initializer_range": 0.02,
+                "rms_norm_eps": 1e-6,
+                "use_cache": True,
+                "tie_word_embeddings": True,
+                "rope_theta": 1000000.0,
+                "rope_parameters": None,
+                "use_sliding_window": False,
+                "sliding_window": 4096,
+                "max_window_layers": 21,
+                "attention_dropout": 0.0,
+            },
+        ),
+        "vision_config": SubConfigSpec(config_class=GotOcr2VisionConfig),
     }
-    sub_configs = {"text_config": AutoConfig, "vision_config": GotOcr2VisionConfig}
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     image_token_index: int = 151859
     image_seq_length: int = 576
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = GotOcr2VisionConfig()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = GotOcr2VisionConfig(**self.vision_config)
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen2"](
-                vocab_size=151860,
-                hidden_size=1024,
-                intermediate_size=2816,
-                num_hidden_layers=24,
-                num_attention_heads=16,
-                num_key_value_heads=16,
-                hidden_act="silu",
-                max_position_embeddings=32768,
-                initializer_range=0.02,
-                rms_norm_eps=1e-6,
-                use_cache=True,
-                tie_word_embeddings=self.tie_word_embeddings,
-                rope_theta=1000000.0,
-                rope_parameters=None,
-                use_sliding_window=False,
-                sliding_window=4096,
-                max_window_layers=21,
-                attention_dropout=0.0,
-            )
-
-        super().__post_init__(**kwargs)
 
 
 class GotOcr2MLPBlock(SamMLPBlock):

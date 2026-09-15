@@ -24,7 +24,7 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -667,7 +667,10 @@ class MuseGlimmerConfig(PreTrainedConfig):
     ```"""
 
     model_type = "muse_glimmer"
-    sub_configs = {"text_config": MuseGlimmerTextConfig, "vision_config": MuseGlimmerVisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=MuseGlimmerTextConfig),
+        "vision_config": SubConfigSpec(config_class=MuseGlimmerVisionConfig),
+    }
     base_model_tp_plan = {
         "vision_adapter.fc1": "colwise",
         "vision_adapter.fc2": "rowwise",
@@ -681,21 +684,6 @@ class MuseGlimmerConfig(PreTrainedConfig):
     out_hidden_size: int = 6144
     projector_hidden_size: int = 4096
     projector_hidden_act: str = "gelu"
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = MuseGlimmerTextConfig()
-            logger.info("text_config is None, using default MuseGlimmerTextConfig text config.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = MuseGlimmerTextConfig(**self.text_config)
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = MuseGlimmerVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = MuseGlimmerVisionConfig()
-            logger.info("vision_config is None, using default MuseGlimmerVisionConfig vision config.")
-
-        super().__post_init__(**kwargs)
 
 
 class MuseGlimmerRMSNorm(Gemma4RMSNorm):

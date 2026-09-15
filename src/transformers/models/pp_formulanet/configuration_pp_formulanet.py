@@ -20,11 +20,8 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-FormulaNet_plus-L_safetensors")
@@ -50,6 +47,9 @@ class PPFormulaNetVisionConfig(PreTrainedConfig):
     """
 
     base_config_key = "vision_config"
+
+    model_type = "pp_formulanet_vision"
+
     hidden_size: int = 768
     output_channels: int = 256
     num_hidden_layers: int = 12
@@ -67,7 +67,6 @@ class PPFormulaNetVisionConfig(PreTrainedConfig):
     window_size: int = 14
     global_attn_indexes: list[int] | tuple[int, ...] = (2, 5, 8, 11)
     mlp_dim: int = 3072
-
     post_conv_in_channels: int = 256
     post_conv_out_channels: int = 1024
     post_conv_mid_channels: int = 512
@@ -93,7 +92,7 @@ class PPFormulaNetTextConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "pp_formulanet"
+    model_type = "pp_formulanet_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",
@@ -130,26 +129,14 @@ class PPFormulaNetTextConfig(PreTrainedConfig):
 @strict
 class PPFormulaNetConfig(PreTrainedConfig):
     model_type = "pp_formulanet"
-    sub_configs = {"text_config": PPFormulaNetTextConfig, "vision_config": PPFormulaNetVisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=PPFormulaNetTextConfig),
+        "vision_config": SubConfigSpec(config_class=PPFormulaNetVisionConfig),
+    }
 
     text_config: dict | PPFormulaNetTextConfig | None = None
     vision_config: dict | PPFormulaNetVisionConfig | None = None
     is_encoder_decoder: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config = PPFormulaNetTextConfig(**self.text_config)
-        elif self.text_config is None:
-            logger.info("text_config is None. Initializing the PPFormulaNetTextConfig with default values.")
-            self.text_config = PPFormulaNetTextConfig()
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = PPFormulaNetVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            logger.info("vision_config is None. Initializing the PPFormulaNetVisionConfig with default values.")
-            self.vision_config = PPFormulaNetVisionConfig()
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["PPFormulaNetConfig", "PPFormulaNetTextConfig", "PPFormulaNetVisionConfig"]
