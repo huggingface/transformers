@@ -1525,6 +1525,32 @@ class ProcessorTesterMixin:
         expected_prompt = "You are a helpful assistant.<|special_start|>user\nWhich of these animals is making the sound?<|special_end|>\nYou are a helpful assistant.<|special_start|>assistant\nIt is a cow.<|special_end|>\n"
         self.assertEqual(formatted_prompt, expected_prompt)
 
+    @require_torch
+    @require_vision
+    def test_apply_chat_template_literal_image_token(self):
+        processor = self.get_processor()
+        if processor.chat_template is None or "image_processor" not in self.processor_class.get_attributes():
+            self.skipTest("Processor does not support image chat templates")
+
+        image_token = getattr(processor, "image_token", None)
+        if image_token is None:
+            self.skipTest("Processor has no image token")
+
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": f"Describe the {image_token} in this image."},
+                        {"type": "image", "url": MODALITY_INPUT_DATA["images"][0]},
+                    ],
+                }
+            ]
+        ]
+        inputs = processor.apply_chat_template(messages, tokenize=True, return_dict=True, return_tensors="pt")
+        image_token_id = processor.tokenizer.convert_tokens_to_ids(image_token)
+        self.assertEqual(inputs["input_ids"][0].tolist().count(image_token_id), 1)
+
     def test_apply_chat_template_assistant_mask(self):
         processor = self.get_processor()
 
