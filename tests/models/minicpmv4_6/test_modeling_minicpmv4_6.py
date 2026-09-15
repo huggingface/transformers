@@ -417,7 +417,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_TEXT = Expectations(
             {
-                ("cuda", (8, 6)): "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
+                ("cuda", (8, 6)): "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
                 ("cuda", (10, 0)): "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
             }
         ).get_expectation()
@@ -499,7 +499,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", (8, 6)): [
-                    "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
+                    "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
                 ] * 2,
                 ("cuda", (10, 0)): [
                     "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
@@ -548,7 +548,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", (8, 6)): [
-                    "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
+                    "The animal in the image is a Pystylus, also known as the Eurasian pystylus or snow leopard cat. It's a",
                     "I'm a model from the MiniCPM series, developed by Modelbest and OpenBMB. For more details, you can visit https://github",
                 ],
                 ("cuda", (10, 0)): [
