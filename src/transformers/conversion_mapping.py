@@ -178,7 +178,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"model\.llm\.layers", target_patterns=r"model.language_model.layers"),
             WeightRenaming(
                 source_patterns=r"model\.llm\.embed_norm\.weight",
-                target_patterns=r"model.language_model.embed_norm.weight",
+                target_patterns=r"model.language_model.embed_tokens.embed_norm.weight",
             ),
             WeightRenaming(
                 source_patterns=r"model\.llm\.embed\.weight",
@@ -426,6 +426,10 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("layer_norm_2", "layernorm_after"),
         ],
         "SegformerForSemanticSegmentation": [WeightRenaming("decode_head.linear_c", "decode_head.linear_projections")],
+        "videomae": [
+            WeightRenaming(r"attention\.attention\.q_bias$", "attention.attention.query.bias"),
+            WeightRenaming(r"attention\.attention\.v_bias$", "attention.attention.value.bias"),
+        ],
         "swin": [
             WeightRenaming("attention.self.query", "attention.q_proj"),
             WeightRenaming("attention.self.key", "attention.k_proj"),
@@ -1319,6 +1323,11 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="feed_forward.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
+        ],
+        "hyperclovax_vision_v2": [
+            WeightRenaming(r"^model.language_model.lm_head", r"lm_head"),
+            WeightRenaming(r"^model.vision_projector", r"model.projector"),
+            PrefixChange(prefix_to_remove="model", model_prefix="model.language_model"),
         ],
         "nomic_bert": [
             WeightRenaming(r"encoder.layers", r"layers"),
