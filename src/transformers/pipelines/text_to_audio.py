@@ -16,6 +16,7 @@ import copy
 from typing import Any, TypedDict, overload
 
 from ..audio_utils import AudioInput
+from ..feature_extraction_utils import BatchFeature
 from ..generation import GenerationConfig
 from ..utils import is_torch_available
 from ..utils.chat_template_utils import Chat, ChatType
@@ -194,7 +195,9 @@ class TextToAudioPipeline(Pipeline):
             if self.model.config.model_type == "dia":
                 text = [f"[S1] {t}" if not t.startswith("[") else t for t in text]
             output = preprocessor(text, **kwargs, return_tensors="pt")
-        output = output.to(dtype=self.model.dtype)
+        # Tokenizers return a `BatchEncoding` of integer tensors, whose `to()` does not accept a `dtype`
+        if isinstance(output, BatchFeature):
+            output = output.to(dtype=self.model.dtype)
 
         return output
 
