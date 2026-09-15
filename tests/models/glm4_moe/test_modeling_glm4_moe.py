@@ -21,11 +21,9 @@ import torch
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
-    backend_device_count,
     require_torch,
     require_torch_accelerator,
     slow,
-    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -69,7 +67,7 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
 class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     MODEL_ID = "zai-org/GLM-4.5-Air"
     NUM_TOKENS_TO_GENERATE = 5
-    EXPECTED_TEXT_COMPLETION = None  # TODO: fill in after first CI run (test will fail and print actual values)
+    EXPECTED_TEXT_COMPLETION = ['hello world" -> "world', "tell me about the history of the"]
 
     @classmethod
     def setUpClass(cls):
@@ -81,21 +79,10 @@ class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.offload_dir = tempfile.TemporaryDirectory()
-            n = backend_device_count(torch_device)
-            if n > 0 and torch_device != "cpu":
-                torch_accel = getattr(torch, torch_device)
-                per_device = int(
-                    min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3
-                )
-                max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
-                max_memory["cpu"] = "60GiB"
-            else:
-                max_memory = None
             cls.model = Glm4MoeForCausalLM.from_pretrained(
                 cls.MODEL_ID,
                 dtype="auto",
                 device_map="auto",
-                max_memory=max_memory,
                 offload_folder=cls.offload_dir.name,
             )
             cls.tokenizer = AutoTokenizer.from_pretrained(cls.MODEL_ID)
@@ -103,12 +90,9 @@ class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        if hasattr(cls, "model"):
-            del cls.model
         if cls.offload_dir is not None:
             cls.offload_dir.cleanup()
-            cls.offload_dir = None
-        del cls.tokenizer
+        super().tearDownClass()
 
     @slow
     @require_torch_accelerator
@@ -133,8 +117,11 @@ class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(self.EXPECTED_TEXT_COMPLETION, static_text)
-        model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
 
+        # clear cache object, initialized when we pass `cache_implementation="static"`
+        model._cache = None
+
+    @unittest.skip("Offloaded models cannot be compiled with torch.compile")
     @slow
     @require_torch_accelerator
     @pytest.mark.torch_compile_test
