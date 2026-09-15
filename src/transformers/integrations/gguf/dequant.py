@@ -46,6 +46,12 @@ GGML_BLOCK = {
     GGML_IQ1_M: (256, 56),
 }
 
+
+def row_bytes(ggml_type: int, in_features: int) -> int:
+    block_elems, block_bytes = GGML_BLOCK[ggml_type]
+    return in_features // block_elems * block_bytes
+
+
 # ggml type id -> its name, for messages
 GGML_NAME = {
     GGML_Q4_0: "Q4_0",
