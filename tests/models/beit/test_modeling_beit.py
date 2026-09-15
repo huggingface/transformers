@@ -22,7 +22,6 @@ from datasets import load_dataset
 from transformers import BeitConfig
 from transformers.testing_utils import (
     require_torch,
-    require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
@@ -280,11 +279,6 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="BEiT does not use inputs_embeds")
     def test_inputs_embeds(self):
-        pass
-
-    @require_torch_multi_gpu
-    @unittest.skip(reason="BEiT has some layers using `add_module` which doesn't work well with `nn.DataParallel`")
-    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     @unittest.skip(reason="BEiT does not support feedforward chunking yet")

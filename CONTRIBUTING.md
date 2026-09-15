@@ -179,15 +179,15 @@ Adding a model to Transformers makes it available for anyone to load and fine-tu
 
 Follow the guides below.
 
-1. [Add a model with modular Transformers](docs/source/en/modular_transformers.md) — implement the model using the modular file and generate standalone modeling files.
-2. [Auto-generate docstrings](docs/source/en/auto_docstring.md) — use the `@auto_docstring` decorator to generate consistent docstrings without boilerplate.
-3. [Testing](docs/source/en/testing.md) — write and run model tests to verify correctness and keep the contribution maintainable. For causal language models, inherit from the causal LM tester where possible. Prioritize integration tests because they verify the full processor, tokenizer, and model path against real checkpoints.
-4. [Model structure rules](docs/source/en/modeling_rules.md) — check your files pass the static model structure rules enforced by `make typing`.
+1. [Add a model with modular Transformers](https://huggingface.co/docs/transformers/main/en/modular_transformers) — implement the model using the modular file and generate standalone modeling files.
+2. [Auto-generate docstrings](https://huggingface.co/docs/transformers/main/en/auto_docstring) — use the `@auto_docstring` decorator to generate consistent docstrings without boilerplate.
+3. [Testing](https://huggingface.co/docs/transformers/main/en/testing) — write and run model tests to verify correctness and keep the contribution maintainable. For causal language models, inherit from the causal LM tester where possible. Prioritize integration tests because they verify the full processor, tokenizer, and model path against real checkpoints.
+4. [Model structure rules](https://huggingface.co/docs/transformers/main/en/modeling_rules) — check your files pass the static model structure rules enforced by `make typing`.
 
 Some model additions need extra integration work.
 
-- [Add vision processing components](docs/source/en/add_vision_processing_components.md) if your model requires image or video inputs.
-- [Dynamic weight loading](docs/source/en/weightconverter.md) if published checkpoint parameter names do not match the Transformers implementation.
+- [Add vision processing components](https://huggingface.co/docs/transformers/main/en/add_vision_processing_components) if your model requires image or video inputs.
+- [Dynamic weight loading](https://huggingface.co/docs/transformers/main/en/weightconverter) if published checkpoint parameter names do not match the Transformers implementation.
 
 ### Model addition timeline
 
@@ -205,15 +205,15 @@ There are four timelines for model additions depending on the model contributor 
 
   Open issues tagged ["New model"](https://github.com/huggingface/transformers/issues?q=is%3Aopen+is%3Aissue+label%3A%22New+model%22) are the entry point for outside contributors. Start with the most-requested architectures to maximize impact. We'll review and guide you through it.
 
-- Hub-first release: ship your model directly on the Hub via Transformers' [remote-code](./docs/source/en/models#custom-models.md) support, with no upstream PR required.
+- Hub-first release: ship your model directly on the Hub via Transformers' [remote-code](https://huggingface.co/docs/transformers/main/en/models#custom-models) support, with no upstream PR required.
 
   Popular Hub-first models often get integrated into Transformers later, which unlocks first-class docs, maintenance, and optimization. Hub-first is the lowest-friction way to add a model. However, it can be more fragile if a model requires weight conversion or other backward compatibility issues.
 
 ## Docs
 
-Improvements to the docs, like typos, missing content or unclear explanations, are always welcome. For API reference generated from source files, use the [`@auto_docstring`](./docs/source/en/auto_docstring.md) decorator when it applies. Open a pull request directly for meaningful documentation fixes.
+Improvements to the docs, like typos, missing content or unclear explanations, are always welcome. For API reference generated from source files, use the [`@auto_docstring`](https://huggingface.co/docs/transformers/main/en/auto_docstring) decorator when it applies. Open a pull request directly for meaningful documentation fixes.
 
-Refer to the docs [README](./docs/README.md) for more details about how to edit the docs and the syntax we use.
+Refer to the docs [README](https://github.com/huggingface/transformers/blob/main/docs/README.md) for more details about how to edit the docs and the syntax we use.
 
 ## Agentic contributions
 

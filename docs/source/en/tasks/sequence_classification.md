@@ -238,6 +238,7 @@ Tokenize the text and return PyTorch tensors:
 Pass your inputs to the model and return the `logits`:
 
 ```py
+>>> import torch
 >>> from transformers import AutoModelForSequenceClassification
 
 >>> model = AutoModelForSequenceClassification.from_pretrained("stevhliu/my_awesome_model")

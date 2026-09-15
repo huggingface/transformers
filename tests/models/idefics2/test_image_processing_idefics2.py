@@ -19,7 +19,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_vision_available():
@@ -29,7 +29,7 @@ if is_torch_available():
     import torch
 
 
-class Idefics2ImageProcessingTester:
+class Idefics2ImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,

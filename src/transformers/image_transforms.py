@@ -995,7 +995,7 @@ def group_images_by_shape(
 ) -> tuple[dict, ...]:
     """
     Groups images by shape.
-    Returns a dictionary with the shape as key and a list of images with that shape as value,
+    Returns a dictionary with the shape or index as key and a list of images with that shape as value,
     and a dictionary with the index of the image in the original list as key and the shape and index in the grouped list as value.
 
     The function supports both flat lists of tensors and nested structures.
@@ -1018,7 +1018,9 @@ def group_images_by_shape(
 
     Returns:
         tuple[dict, ...]:
-            - A dictionary with shape as key and list/batch of images with that shape as value
+            - A dictionary with shape or index as key and list/batch of images with that shape as value.
+              The key is the shape of the images if `disable_grouping` evaluates to True, and the index
+              of the image in the original list otherwise.
             - Zero or more dictionaries (one per argument in `*paired_inputs`) grouped consistently with `images`; these carry
               the corresponding per-item values and are not stacked, or `None` values if the corresponding paired
               input is `None`
@@ -1027,7 +1029,7 @@ def group_images_by_shape(
     # If disable grouping is not explicitly provided, we favor disabling it if the images are on CPU, and enabling it otherwise.
     if disable_grouping is None:
         device = _get_device_from_images(images, is_nested)
-        disable_grouping = device == "cpu"
+        disable_grouping = device.type == "cpu"
 
     if disable_grouping:
         grouped_images_index = {key: (key, 0) for key, _ in _iterate_items(images, is_nested)}
@@ -1044,13 +1046,26 @@ def group_images_by_shape(
 
         return grouped_images, *paired_grouped_values, grouped_images_index
 
+    # A batched tensor is already a single group of images sharing the same shape, no need to unbind and re-stack it.
+    if isinstance(images, torch.Tensor) and not is_nested and len(images) > 0:
+        shape = images.shape[2:]
+        return (
+            {shape: images},
+            *[{shape: list(paired_list)} for paired_list in paired_inputs],
+            {index: (shape, index) for index in range(len(images))},
+        )
+
     # Handle single level nested structure
     grouped_images, *paired_grouped_values, grouped_images_index = _group_images_by_shape(
         images, *paired_inputs, is_nested=is_nested
     )
 
-    # Stack images with the same shape
-    grouped_images = {shape: torch.stack(images_list, dim=0) for shape, images_list in grouped_images.items()}
+    # Stack images with the same shape. Groups holding a single image are unsqueezed instead, as stacking would copy
+    # the image for no reason.
+    grouped_images = {
+        shape: images_list[0].unsqueeze(0) if len(images_list) == 1 else torch.stack(images_list, dim=0)
+        for shape, images_list in grouped_images.items()
+    }
 
     return grouped_images, *paired_grouped_values, grouped_images_index
 
