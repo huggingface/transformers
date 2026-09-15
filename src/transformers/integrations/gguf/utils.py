@@ -71,8 +71,6 @@ def get_gguf_plan(
     for gguf_name, ggml_type in header.ggml_types.items():
         if ggml_type not in GGML_BLOCK:
             continue
-        # As the loader does: all renamings, then at most one converter. The plan is keyed by what the
-        # model calls the parameter, which is what `Dequantize` and the packed modules look up.
         param_name, source_pattern = rename_source_key(gguf_name, renamings, converters)
         quantized[param_name] = ggml_type
         converter = pattern_to_converter.get(source_pattern)
@@ -254,11 +252,10 @@ def replace_with_gguf_modules(model, plan: dict[str, int], kernel, dtype=None) -
     replaced, unsupported = {}, set()
     for module_name, module in model.named_modules():
         if module_name.endswith(".experts"):
-            expert_params = ("gate_up_proj", "down_proj")  # the order `GgufExperts` takes their types
+            expert_params = ("gate_up_proj", "down_proj")
             expert_types = [plan.get(f"{module_name}.{name}") for name in expert_params]
             if any(ggml_type is None for ggml_type in expert_types):
                 continue
-            # Both stay packed or neither: they are read in one forward.
             if not all(kernel.supports(ggml_type) for ggml_type in expert_types):
                 unsupported.update(expert_types)
                 continue
