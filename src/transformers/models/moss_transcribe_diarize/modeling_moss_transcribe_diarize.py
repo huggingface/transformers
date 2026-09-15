@@ -688,5 +688,4 @@ __all__ = [
     "MossTranscribeDiarizeEncoder",
     "MossTranscribeDiarizeModel",
     "MossTranscribeDiarizeForConditionalGeneration",
-    "MossTranscribeDiarizeMultiModalProjector",
 ]

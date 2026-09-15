@@ -453,4 +453,4 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         return sum(float(part) * 60**i for i, part in enumerate(reversed(value.strip().split(":"))))
 
 
-__all__ = ["MossTranscribeDiarizeProcessor", "MossTranscribeDiarizeProcessorKwargs"]
+__all__ = ["MossTranscribeDiarizeProcessor"]
