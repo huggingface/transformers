@@ -434,7 +434,7 @@ class RTDetrV2DecoderLayer(nn.Module):
 @auto_docstring
 class RTDetrV2PreTrainedModel(PreTrainedModel):
     config: RTDetrV2Config
-    base_model_prefix = "rt_detr_v2"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = [r"RTDetrV2HybridEncoder", r"RTDetrV2DecoderLayer"]
