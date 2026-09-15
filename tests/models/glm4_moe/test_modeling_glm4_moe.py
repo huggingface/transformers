@@ -117,8 +117,8 @@ class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         # Dynamic Cache
-        # generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
-        # dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
+        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         # self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
 
         # Static Cache
