@@ -23,7 +23,7 @@ from pathlib import Path
 
 from huggingface_hub.utils import httpx
 
-from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config
+from transformers import AutoConfig, BertConfig, DeepseekV4Config, Florence2Config, GPT2Config
 from transformers.configuration_utils import PreTrainedConfig
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_torch
 
@@ -121,6 +121,12 @@ class ConfigPushToHubTester(unittest.TestCase):
 
 
 class ConfigTestUtils(unittest.TestCase):
+    def test_tied_embeddings_with_ep_only_base_plan(self):
+        config = DeepseekV4Config(tie_word_embeddings=True)
+        self.assertEqual(config.base_model_tp_plan, {"embed_tokens": "embedding_rowwise"})
+        self.assertIsNone(DeepseekV4Config.base_model_tp_plan)
+        self.assertIsNone(DeepseekV4Config(tie_word_embeddings=False).base_model_tp_plan)
+
     def test_config_from_string(self):
         c = GPT2Config()
 
