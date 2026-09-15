@@ -291,21 +291,6 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
     return {}
 
 
-def _prepare_state_dict_for_dcp(state_dict):
-    """Replace disjoint DTensor shards with contiguous shards in the checkpoint view."""
-    from torch.distributed.tensor import Shard
-    from torch.distributed.tensor.placement_types import _StridedShard
-    from torch.utils._pytree import tree_map
-
-    def prepare(value):
-        if is_dtensor(value) and any(isinstance(p, _StridedShard) for p in value.placements):
-            placements = tuple(Shard(p.dim) if isinstance(p, _StridedShard) else p for p in value.placements)
-            return value.redistribute(placements=placements)
-        return value
-
-    return tree_map(prepare, state_dict)
-
-
 def save_model_checkpoint_distributed(
     model, checkpoint_dir: str, *, checkpoint_format: str = "safetensors", consolidate: bool = True
 ) -> None:
@@ -329,12 +314,12 @@ def save_model_checkpoint_distributed(
     import torch.distributed.checkpoint as dcp
     from torch.distributed.checkpoint.state_dict import get_model_state_dict
 
-    # DCP describes each DTensor as one rectangular chunk, which cannot represent packed shards.
-    # We redistribute any strided shards to contiguous shards so DCP can write them out.
-    # Sub-optimal compared to a future DCP that can write strided shards directly, but works for now.
-    state_dict = _prepare_state_dict_for_dcp(get_model_state_dict(model))
+    from .checkpoint import HuggingFaceSavePlanner
+
+    state_dict = get_model_state_dict(model)
+    planner = HuggingFaceSavePlanner()
     if checkpoint_format == "safetensors":
-        from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
+        from .hf_storage import HuggingFaceStorageWriter
 
         writer = HuggingFaceStorageWriter(
             path=checkpoint_dir,
@@ -345,7 +330,7 @@ def save_model_checkpoint_distributed(
         shard_dir = os.path.join(checkpoint_dir, "sharded") if consolidate else checkpoint_dir
         writer = dcp.FileSystemWriter(shard_dir)
 
-    dcp.save(state_dict, storage_writer=writer)
+    dcp.save(state_dict, storage_writer=writer, planner=planner)
 
     if checkpoint_format == "torch" and consolidate and _get_torch_distributed_rank() == 0:
         from torch.distributed.checkpoint.format_utils import dcp_to_torch_save
@@ -372,7 +357,7 @@ def load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike) 
     if has_torch_metadata:
         reader = dcp.FileSystemReader(checkpoint_dir)
     elif has_safetensors:
-        from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageReader
+        from .hf_storage import HuggingFaceStorageReader
 
         reader = HuggingFaceStorageReader(checkpoint_dir)
     else:
@@ -381,12 +366,10 @@ def load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike) 
     original_state = get_model_state_dict(model)
     if any(value.is_meta for value in original_state.values() if isinstance(value, torch.Tensor)):
         raise ValueError("Materialize the model's tensors before loading a distributed checkpoint.")
-    state = _prepare_state_dict_for_dcp(original_state)
-    dcp.load(state, storage_reader=reader)
-    for name, value in state.items():
-        if is_dtensor(value) and value.placements != original_state[name].placements:
-            state[name] = value.redistribute(placements=original_state[name].placements)
-    set_model_state_dict(model, state)
+    from .checkpoint import HuggingFaceLoadPlanner
+
+    dcp.load(original_state, storage_reader=reader, planner=HuggingFaceLoadPlanner())
+    set_model_state_dict(model, original_state)
 
 
 def save_optimizer_distributed(model, optimizer, checkpoint_dir: str, *, consolidate: bool = False) -> None:
@@ -405,8 +388,10 @@ def save_optimizer_distributed(model, optimizer, checkpoint_dir: str, *, consoli
 
     # Key group options by parameter name so regrouping after a mesh change remains loadable.
     options = StateDictOptions(flatten_optimizer_state_dict=True)
-    optimizer_state_dict = _prepare_state_dict_for_dcp(get_optimizer_state_dict(model, optimizer, options=options))
-    dcp.save({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
+    from .checkpoint import HuggingFaceSavePlanner
+
+    optimizer_state_dict = get_optimizer_state_dict(model, optimizer, options=options)
+    dcp.save({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir, planner=HuggingFaceSavePlanner())
     if consolidate:
         if _get_torch_distributed_rank() == 0:
             from torch.distributed.checkpoint.format_utils import dcp_to_torch_save
@@ -433,11 +418,10 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
         get_optimizer_state_dict,
         set_optimizer_state_dict,
     )
-    from torch.utils._pytree import tree_map
 
     options = StateDictOptions(flatten_optimizer_state_dict=True)
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer, options=options)
-    checkpoint_state_dict = _prepare_state_dict_for_dcp(optimizer_state_dict)
+    checkpoint_state_dict = optimizer_state_dict
     if os.path.isfile(checkpoint_dir):
         from torch.distributed.tensor import distribute_tensor
 
@@ -459,14 +443,9 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
                 value = value.to(target.device)
             checkpoint_state_dict[key] = value
     else:
-        dcp.load({"optimizer": checkpoint_state_dict}, checkpoint_id=checkpoint_dir)
-    optimizer_state_dict = tree_map(
-        lambda loaded, original: loaded.redistribute(placements=original.placements)
-        if is_dtensor(original) and loaded.placements != original.placements
-        else loaded,
-        checkpoint_state_dict,
-        optimizer_state_dict,
-    )
+        from .checkpoint import HuggingFaceLoadPlanner
+
+        dcp.load({"optimizer": checkpoint_state_dict}, checkpoint_id=checkpoint_dir, planner=HuggingFaceLoadPlanner())
     set_optimizer_state_dict(model, optimizer, optimizer_state_dict)
 
 
