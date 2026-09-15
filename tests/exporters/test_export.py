@@ -832,8 +832,12 @@ class ExportTesterMixin:
         positions measures nothing.
         """
         # a model with per-layer masks passes a `dict` here, and a flex-attention one a `BlockMask`;
-        # only a plain 2D `(batch, seq)` tensor maps onto output positions
-        attention_mask = (inputs or {}).get("attention_mask")
+        # only a plain 2D `(batch, seq)` tensor maps onto output positions. NaViT-style vision models
+        # (siglip2) mark their valid patches with `pixel_attention_mask` instead.
+        inputs = inputs or {}
+        attention_mask = inputs.get("attention_mask")
+        if not torch.is_tensor(attention_mask):
+            attention_mask = inputs.get("pixel_attention_mask")
         if torch.is_tensor(attention_mask) and attention_mask.dim() == 2:
             actual = _zero_padded_positions(actual, attention_mask)
             expected = _zero_padded_positions(expected, attention_mask)

@@ -1194,11 +1194,53 @@ def _patch_layer_norm(original):
     return patch
 
 
+@register_patch("openvino", "torch.nn.functional.interpolate")
+def _patch_interpolate(original):
+    """Carry `antialias=True` resampling into the graph as explicit weights.
+
+    OV's ``Interpolate`` silently ignores ``antialias``, returning bit-for-bit the *non*-antialiased
+    result, so a model that resamples with it (siglip2's position embeddings) exports subtly wrong.
+    Antialiased resampling is linear and separable: each output sample is a normalised triangle-filter
+    average of the inputs under its footprint, widened to the downsampling ratio. The weights depend only
+    on the two extents, so they are built here and applied as two matmuls that OV reproduces exactly --
+    a real ``interpolate`` call would instead leave an `aten._upsample_bilinear2d_aa` node OV cannot
+    convert. They are built from tensor ops throughout, so an extent read out of a tensor (siglip2 takes
+    its target from `spatial_shapes`) stays symbolic rather than guarding on an unbacked size.
+    """
+
+    def axis_weights(size_in, size_out, dtype, device):
+        in_index = torch.arange(size_in, dtype=torch.float32, device=device)
+        out_index = torch.arange(size_out, dtype=torch.float32, device=device)
+        # The ratio is carried into the graph as a tensor: OV miscompiles a `Divide` of two reduced
+        # extents when it feeds only internal nodes (it comes out inverted), and reading the extents as
+        # Python numbers would instead guard on an unbacked size.
+        scale = torch.zeros((), dtype=torch.float32, device=device) + size_in / size_out
+        support = scale.clamp(min=1.0)
+        center = (out_index + 0.5) * scale
+        distance = (in_index[None, :] + 0.5 - center[:, None]) / support
+        weights = (1.0 - distance.abs()).clamp(min=0.0)
+        return (weights / weights.sum(-1, keepdim=True)).to(dtype)
+
+    def patch(input, size=None, scale_factor=None, mode="nearest", align_corners=None, **kwargs):
+        height_out, width_out = (size, size) if isinstance(size, int) else (size or (None, None))
+        supported = mode in ("bilinear", "bicubic") and input.dim() == 4 and size is not None
+        if not kwargs.get("antialias", False) or not supported:
+            return original(
+                input, size=size, scale_factor=scale_factor, mode=mode, align_corners=align_corners, **kwargs
+            )
+        height_in, width_in = input.shape[-2:]
+        resized = torch.einsum("nchw,oh->ncow", input, axis_weights(height_in, height_out, input.dtype, input.device))
+        return torch.einsum("ncow,pw->ncop", resized, axis_weights(width_in, width_out, input.dtype, input.device))
+
+    return patch
+
+
 @register_patch("openvino", "torch.nn.functional.scaled_dot_product_attention")
 def _patch_sdpa(original):
     """Pre-expand K/V to Q's head count before calling SDPA.
 
-    Also clamps the additive mask so fully-masked rows stay finite.
+    Also clamps the additive mask so fully-masked rows stay finite, and zeroes those rows to match
+    the fused kernels torch runs them through.
 
         OV's ``opset13::ScaledDotProductAttention`` op rejects GQA shapes (e.g. Q=[B,4,T,D],
         K/V=[B,2,T,D]) with ``Key input shape not compatible with other inputs``. Repeating K/V via
@@ -1212,9 +1254,11 @@ def _patch_sdpa(original):
         # legitimate: left padding under a causal mask leaves query 0 with no visible key. Hand OV an
         # additive mask instead, so the op never takes its boolean path, and use fp16's minimum as the
         # masked value to keep the arithmetic in range -- the same workaround optimum-intel applies.
+        unattended = None
         if attn_mask is not None:
             masked_value = torch.finfo(query.dtype).min
             if attn_mask.dtype == torch.bool:
+                unattended = ~attn_mask.any(dim=-1, keepdim=True)
                 attn_mask = torch.where(
                     attn_mask,
                     torch.zeros((), dtype=query.dtype, device=attn_mask.device),
@@ -1222,6 +1266,7 @@ def _patch_sdpa(original):
                 )
             else:
                 attn_mask = attn_mask.clamp_min(masked_value)
+                unattended = attn_mask.amax(dim=-1, keepdim=True) <= masked_value
         q_heads, k_heads = query.shape[-3], key.shape[-3]
         if q_heads != k_heads and q_heads % k_heads == 0:
             reps = q_heads // k_heads
@@ -1236,7 +1281,17 @@ def _patch_sdpa(original):
             default_scale = query.shape[-1] ** -0.5
             if scale != default_scale:
                 query = query * (scale / default_scale)
-        return original(query, key, value, attn_mask, *args, **kwargs)
+        attn_output = original(query, key, value, attn_mask, *args, **kwargs)
+        # A row that masks every key has no defined value: the mask asks for a softmax over nothing.
+        # OV returns the uniform average the mask literally describes, while torch's fused kernels
+        # write zeros (its CPU and `SDPBackend.MATH` paths return the uniform average instead). Zero
+        # them so an exported model answers like the model it was exported from -- rows like these are
+        # routine, since left padding under a causal mask leaves the first query with no visible key.
+        if unattended is not None:
+            attn_output = torch.where(
+                unattended, torch.zeros((), dtype=attn_output.dtype, device=attn_output.device), attn_output
+            )
+        return attn_output
 
     return patch
 
@@ -1263,30 +1318,6 @@ def _patch_repeat_kv(original):
         return hidden_states.repeat_interleave(n_rep, dim=1)
 
     return patch
-
-
-@register_patch(
-    "openvino",
-    "transformers.cache_utils.DynamicSlidingWindowLayer.update",
-    "transformers.cache_utils.DynamicSlidingWindowLayer.get_mask_sizes",
-    "transformers.cache_utils.DynamicSlidingWindowLayer.get_seq_length",
-)
-def _patch_sliding_window_layer(original):
-    """Keep the full KV cache for sliding-window layers during export.
-
-    ``DynamicSlidingWindowLayer`` evicts all but the last ``sliding_window - 1`` tokens from its
-    stored state, reports a windowed ``kv_length``/``kv_offset``, and tracks its length with a
-    Python ``cumulative_length`` counter instead of the state tensor shape. The eviction bakes the
-    sliding-window bound (``0..sliding_window``) into the OV stateful KV tensors, and the counter
-    bakes the trace-time sequence length into the attention mask's ``kv_length`` — both desync the
-    stored cache from the mask at runtime (``Eltwise ... dim index 3 mismatch``). OV's stateful
-    cache is unbounded and never replicates the eviction, and the sliding-window pattern is already
-    enforced by the mask overlay, so falling back to the plain ``DynamicLayer`` behaviour (full
-    cache, shape-derived length) is both correct and export-friendly.
-    """
-    from ..cache_utils import DynamicLayer
-
-    return getattr(DynamicLayer, original.__name__)
 
 
 @register_patch("openvino", "transformers.models.qwen3_vl.modeling_qwen3_vl.Qwen3VLTextModel._deepstack_process")
@@ -1626,6 +1657,74 @@ def _patch_randint(original):
     return patch
 
 
+@register_patch("openvino", "transformers.models.blt.modeling_blt.byte_group_hash_function")
+def _patch_byte_group_hash(original):
+    """Evaluate BLT's rolling hash in base-256 limbs so it survives the CPU plugin's narrow math.
+
+    The hash multiplies each byte of a group by ``prime ** k`` and relies on int64 semantics, but
+    OpenVINO's CPU plugin executes every internal node in `i32` and converts back only at the
+    `Result`, so `1000000007 ** 2` saturates at `2147483647` and the hash reads the wrong embedding
+    rows. Its `%` and `//` are narrower still -- both go through a float and stop being exact above
+    roughly ``2**24`` -- while `Multiply` and `BitwiseAnd` are exact within `i32`.
+
+    The powers are compile-time constants and the hash reaches the model only as ``hash % max_hash``,
+    so each power is pre-split into bytes and the groups are summed one base-256 lane at a time. The
+    single pass below carries each lane and folds it into the running remainder; every intermediate
+    stays under ``2**24`` for the byte-sized ids this architecture is built on, each limb is taken
+    with `BitwiseAnd`, and the only division is by 256 of a value that is already a multiple of it
+    (exact in a float of any width). Dropping the last carry is the int64 wraparound.
+    """
+    limb_bits = 8
+    limb = 1 << limb_bits
+    limb_count = 64 // limb_bits
+
+    def patch(token_ids, group_size: int = 2, prime: int = 1000000007, max_hash: int = 30000):
+        # Beyond a 16-bit table the limb products leave the window where the plugin's `%` is exact
+        if max_hash > (1 << 16):
+            return original(token_ids, group_size=group_size, prime=prime, max_hash=max_hash)
+
+        powers = [pow(prime, index, 1 << 64) for index in range(group_size)]
+        limbs = torch.tensor(
+            [[(power >> (limb_bits * position)) % limb for power in powers] for position in range(limb_count)],
+            dtype=torch.int64,
+            device=token_ids.device,
+        )
+        padding = torch.zeros(token_ids.shape[0], group_size - 1, dtype=torch.int64, device=token_ids.device)
+        windows = torch.cat([padding, token_ids.to(torch.int64)], dim=1).unfold(1, group_size, 1)
+        lanes = (windows.unsqueeze(-2) * limbs).sum(-1)
+
+        value = carry = torch.zeros_like(lanes[..., 0])
+        for position in range(limb_count):
+            total = lanes[..., position] + carry
+            digit = torch.bitwise_and(total, limb - 1)
+            carry = (total - digit) // limb
+            value = (value + digit * ((1 << (limb_bits * position)) % max_hash)) % max_hash
+        # Those limbs spell the *unsigned* value; eager took the remainder of a signed int64, which
+        # is 2**64 lower whenever the top bit -- the last digit's -- is set.
+        negative = (digit >= limb // 2).to(torch.int64)
+        return (value - negative * ((1 << 64) % max_hash) + max_hash) % max_hash
+
+    return patch
+
+
+@register_patch("openvino", "torch.cumsum", "torch.Tensor.cumsum")
+def _patch_cumsum(original):
+    """Promote integral inputs to `int64` the way torch does before summing.
+
+    OV's ``CumSum`` keeps the input element type, so a bool mask accumulates *as bool*: the running sum
+    saturates at ``True`` and ``cumsum([1, 1, 1, 0, 0])`` comes back ``[1, 1, 1, 1, 1]`` instead of
+    ``[1, 2, 3, 3, 3]``. OPT builds its `position_ids` that way, so every token ends up at position 0.
+    Narrower integer types have the same overflow exposure, so they are widened too.
+    """
+
+    def patch(input, dim=None, *args, dtype=None, **kwargs):
+        if dtype is None and input.dtype in (torch.bool, torch.uint8, torch.int8, torch.int16, torch.int32):
+            dtype = torch.int64
+        return original(input, dim, *args, dtype=dtype, **kwargs)
+
+    return patch
+
+
 @register_patch("openvino", "torch.cummax", "torch.Tensor.cummax")
 def _patch_cummax(original):
     """OV has no ``aten.cummax`` lowering — reuse the ONNX triangular-mask decomposition."""
@@ -1694,22 +1793,6 @@ def _patch_bincount(original):
         counts = torch.zeros(bins, dtype=out_dtype, device=input.device)
         src = weights.reshape(-1).to(out_dtype) if weights is not None else torch.ones_like(flat, dtype=out_dtype)
         return counts.scatter_add_(0, flat.long(), src)
-
-    return patch
-
-
-@register_patch("openvino", "torch.nn.functional.interpolate")
-def _patch_interpolate(original):
-    """Disable antialias for ``F.interpolate(..., antialias=True)`` during OV export.
-
-    OV's frontend has no ``aten._upsample_bilinear2d_aa`` lowering. Antialiasing is a
-    pre-resample low-pass filter — turning it off costs a tiny amount of image-side quality but
-    keeps the graph translatable. Affects siglip2 and lfm2_vl.
-    """
-
-    def patch(input, *args, **kwargs):
-        kwargs.pop("antialias", None)
-        return original(input, *args, **kwargs)
 
     return patch
 
