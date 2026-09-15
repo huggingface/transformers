@@ -2509,6 +2509,7 @@ class _LazyModule(ModuleType):
         return result
 
     def __getattr__(self, name: str) -> Any:
+        import_error_message = f"Could not import module '{name}'. Are this object's requirements defined correctly?"
         if name in self._objects:
             return self._objects[name]
         if name in self._object_missing_backend:
@@ -2637,25 +2638,19 @@ class _LazyModule(ModuleType):
                                             setattr(self, lookup_name, value)
                                         setattr(self, name, value)
                                         break
-                            except Exception as e:
-                                logger.debug(f"Could not create tokenizer alias: {e}")
+                            except Exception as alias_error:
+                                logger.debug(f"Could not create tokenizer alias: {alias_error}")
 
                         if value is None:
-                            raise ModuleNotFoundError(
-                                f"Could not import module '{name}'. Are this object's requirements defined correctly?"
-                            ) from e
+                            raise ModuleNotFoundError(f"{import_error_message} Original error: {e}") from e
                 else:
-                    raise ModuleNotFoundError(
-                        f"Could not import module '{name}'. Are this object's requirements defined correctly?"
-                    ) from e
+                    raise ModuleNotFoundError(f"{import_error_message} Original error: {e}") from e
 
         elif name in self._modules:
             try:
                 value = self._get_module(name)
             except (ModuleNotFoundError, RuntimeError) as e:
-                raise ModuleNotFoundError(
-                    f"Could not import module '{name}'. Are this object's requirements defined correctly?"
-                ) from e
+                raise ModuleNotFoundError(f"{import_error_message} Original error: {e}") from e
         else:
             # V5: If a *TokenizerFast symbol is requested but not present in the import structure,
             # try to resolve to the corresponding non-Fast symbol's module if available.
