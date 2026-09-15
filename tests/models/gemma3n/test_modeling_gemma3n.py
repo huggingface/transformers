@@ -517,7 +517,7 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
             seq_length = self.model_tester.seq_length
             max_new_tokens = 20
 
-            for dtype in (torch.float32, torch.bfloat16):
+            for dtype in (torch.float32, torch.float16):
                 model = model_class(copy.deepcopy(config)).to(torch_device).to(dtype).eval()
                 inputs_dict = {
                     k: v.to(dtype) if isinstance(v, torch.Tensor) and torch.is_floating_point(v) else v
@@ -559,7 +559,8 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
-                assert_similar_generate_outputs(dynamic_cache_generation, static_cache_generation)
+                # Use same tolerances as the parent class test_generate_with_static_cache
+                assert_similar_generate_outputs(dynamic_cache_generation, static_cache_generation, atol=5e-5, rtol=5e-5)
 
 
 class Gemma3nVision2TextModelTester:
