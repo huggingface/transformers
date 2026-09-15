@@ -19,7 +19,7 @@ import unittest
 import numpy as np
 
 from transformers import ParakeetFeatureExtractor
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_librosa, require_torch
 from transformers.utils import is_datasets_available, is_torch_available
 
 from ...test_processing_common import floats_list
@@ -87,6 +87,8 @@ class ParakeetFeatureExtractionTester:
         return speech_inputs
 
 
+@require_torch
+@require_librosa
 class ParakeetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = ParakeetFeatureExtractor
 
@@ -179,3 +181,29 @@ class ParakeetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
 
         self.assertEqual(inputs.attention_mask.shape, (5, 2941))
         self.assertTrue(inputs.attention_mask.sum(dim=-1).tolist(), [585, 481, 1248, 990, 2940])
+
+    @require_torch
+    def test_multichannel_batch_to_mono_conversion(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        rng = np.random.default_rng(0)
+        mono_1 = rng.normal(size=(800,)).astype(np.float32)
+        mono_2 = rng.normal(size=(1000,)).astype(np.float32)
+        stereo_1 = np.stack([mono_1, mono_1], axis=-1)
+        stereo_2 = np.stack([mono_2, mono_2], axis=-1)
+
+        # Batch of stereo arrays as list
+        out_mono = feature_extractor(
+            [mono_1, mono_2], sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
+        )
+        out_stereo = feature_extractor(
+            [stereo_1, stereo_2], sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
+        )
+
+        input_name = feature_extractor.model_input_names[0]
+        torch.testing.assert_close(out_stereo[input_name], out_mono[input_name])
+
+        # Batch of stereo arrays as tuple
+        out_tuple = feature_extractor(
+            (stereo_1, stereo_2), sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
+        )
+        torch.testing.assert_close(out_tuple[input_name], out_mono[input_name])
