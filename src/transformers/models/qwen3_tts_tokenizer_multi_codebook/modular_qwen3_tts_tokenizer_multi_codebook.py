@@ -165,10 +165,6 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
         self.decode_upsample_rate = decode_upsample_rate
         self.encode_downsample_rate = encode_downsample_rate
 
-
-#  Component Aliases
-
-
 class Qwen3TTSTokenizerMultiCodebookCausalConvNet(Qwen3OmniMoeCausalConvNet):
     pass
 
@@ -218,9 +214,6 @@ class Qwen3TTSTokenizerMultiCodebookBlock(Qwen3OmniMoeCode2WavTransformerLayer):
     pass
 
 
-#  Output dataclasses
-
-
 class Qwen3TTSTokenizerMultiCodebookEncoderOutput(MimiEncoderOutput):
     pass
 
@@ -236,8 +229,6 @@ class Qwen3TTSTokenizerMultiCodebookOutput(ModelOutput):
 
     audio_values: list[torch.FloatTensor] = None
 
-
-#  PreTrainedModel base
 
 
 class Qwen3TTSTokenizerMultiCodebookPreTrainedModel(MimiPreTrainedModel):
