@@ -421,6 +421,7 @@ class Qwen35GgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
     # Nothing on load recovers it. Every other parameter matches bit for bit.
     inexact_params = {"norm.weight": 1e-6}
 
+
 @require_torch_accelerator
 @slow
 class Qwen35MoeLargeGgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
@@ -436,6 +437,7 @@ class Qwen35MoeLargeGgufModelTest(GgufModelIntegrationTesterMixin, unittest.Test
     @unittest.skip("the bf16 checkpoint is ~70GB and split across shards the reader cannot open")
     def test_state_dict_matches_transformers(self):
         pass
+
 
 @slow
 class Qwen3GgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
