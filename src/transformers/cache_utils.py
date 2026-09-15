@@ -163,6 +163,14 @@ class DynamicLayer(CacheLayerMixin):
         """Returns the maximum sequence length of the cache object. DynamicLayer does not have a maximum length."""
         return -1
 
+    def reset(self) -> None:
+        """Resets the cache values while preserving the objects."""
+        # The states are dropped instead of zeroed, as `update` grows them by concatenation: zeroing would leave the
+        # layer holding stale tokens for the next `update` to append to. This also skips the zeroing in `super`.
+        self.keys = self.values = None
+        self.is_initialized = False
+        super().reset()
+
     @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
         """
@@ -364,8 +372,9 @@ class DynamicIndexedLayer(DynamicLayer):
 
     def reset(self) -> None:
         super().reset()
-        if self.is_indexer_initialized:
-            self.indexer_keys.zero_()
+        # Dropped rather than zeroed, as `update_indexer` grows them by concatenation, like the main states
+        self.indexer_keys = None
+        self.is_indexer_initialized = False
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         super().reorder_cache(beam_idx)
