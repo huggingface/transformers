@@ -1198,12 +1198,30 @@ def _patch_layer_norm(original):
 def _patch_sdpa(original):
     """Pre-expand K/V to Q's head count before calling SDPA.
 
-    OV's ``opset13::ScaledDotProductAttention`` op rejects GQA shapes (e.g. Q=[B,4,T,D],
-    K/V=[B,2,T,D]) with ``Key input shape not compatible with other inputs``. Repeating K/V via
-    ``repeat_interleave`` on the head axis keeps the math identical and gives OV matching shapes.
+    Also clamps the additive mask so fully-masked rows stay finite.
+
+        OV's ``opset13::ScaledDotProductAttention`` op rejects GQA shapes (e.g. Q=[B,4,T,D],
+        K/V=[B,2,T,D]) with ``Key input shape not compatible with other inputs``. Repeating K/V via
+        ``repeat_interleave`` on the head axis keeps the math identical and gives OV matching shapes.
     """
 
-    def patch(query, key, value, *args, **kwargs):
+    def patch(query, key, value, attn_mask=None, *args, **kwargs):
+        # OV's SDPA does not match aten on a *boolean* mask -- it diverges from torch and ONNX even
+        # when nothing is masked, and returns `NaN` for a row that masks every key, taking the whole
+        # batch entry with it (https://github.com/openvinotoolkit/openvino/issues/31630). Such rows are
+        # legitimate: left padding under a causal mask leaves query 0 with no visible key. Hand OV an
+        # additive mask instead, so the op never takes its boolean path, and use fp16's minimum as the
+        # masked value to keep the arithmetic in range -- the same workaround optimum-intel applies.
+        if attn_mask is not None:
+            masked_value = torch.finfo(query.dtype).min
+            if attn_mask.dtype == torch.bool:
+                attn_mask = torch.where(
+                    attn_mask,
+                    torch.zeros((), dtype=query.dtype, device=attn_mask.device),
+                    torch.full((), masked_value, dtype=query.dtype, device=attn_mask.device),
+                )
+            else:
+                attn_mask = attn_mask.clamp_min(masked_value)
         q_heads, k_heads = query.shape[-3], key.shape[-3]
         if q_heads != k_heads and q_heads % k_heads == 0:
             reps = q_heads // k_heads
@@ -1218,7 +1236,7 @@ def _patch_sdpa(original):
             default_scale = query.shape[-1] ** -0.5
             if scale != default_scale:
                 query = query * (scale / default_scale)
-        return original(query, key, value, *args, **kwargs)
+        return original(query, key, value, attn_mask, *args, **kwargs)
 
     return patch
 
