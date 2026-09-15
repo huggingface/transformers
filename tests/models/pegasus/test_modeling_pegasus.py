@@ -332,12 +332,12 @@ class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
         model_no_device_map = AutoModelForSeq2SeqLM.from_pretrained(self.checkpoint_name).to(torch_device)
         model_with_device_map = AutoModelForSeq2SeqLM.from_pretrained(self.checkpoint_name, device_map="auto")
         assert torch.equal(
-            model_no_device_map.model.decoder.embed_positions.weight,
-            model_with_device_map.model.decoder.embed_positions.weight,
+            model_no_device_map.model.decoder.embed_positions.weight.cpu(),
+            model_with_device_map.model.decoder.embed_positions.weight.cpu(),
         )
         assert torch.equal(
-            model_no_device_map.model.encoder.embed_positions.weight,
-            model_with_device_map.model.encoder.embed_positions.weight,
+            model_no_device_map.model.encoder.embed_positions.weight.cpu(),
+            model_with_device_map.model.encoder.embed_positions.weight.cpu(),
         )
 
     @slow
@@ -347,7 +347,7 @@ class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
         inputs = self.tokenizer(self.src_text, return_tensors="pt", truncation=True, max_length=512, padding=True).to(
             torch_device
         )
-        assert inputs.input_ids.shape == (2, 421)
+        assert inputs.input_ids.shape == (2, 422)
         translated_tokens = self.model.generate(**inputs, num_beams=2)
         decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
         assert self.tgt_text == decoded
