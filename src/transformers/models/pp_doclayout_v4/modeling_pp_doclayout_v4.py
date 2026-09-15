@@ -1401,8 +1401,6 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
 
         # No extra "no object" row, unlike the `num_labels + 1` embedding of PP-DocLayoutV3.
         self.denoising_class_embed = (
-            # CODEPATH: PP-DocLayoutV4_safetensors trains with denoising; the `None` branch is only for configs
-            # that disable it.
             nn.Embedding(config.num_labels, config.d_model) if config.num_denoising > 0 else None
         )
 
@@ -1525,8 +1523,6 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
 
         dtype = source_flatten.dtype
-        # CODEPATH: PP-DocLayoutV4_safetensors leaves `anchor_image_size` unset and recomputes the anchors from
-        # the input, the cached branch is for configs that pin a single evaluation resolution.
         if self.training or self.config.anchor_image_size is None:
             # Pass spatial_shapes as tuple to make it hashable and make sure lru_cache is working
             anchors, valid_mask = self.generate_anchors(tuple(spatial_shapes_list), device=device, dtype=dtype)
