@@ -38,7 +38,11 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_hqq_available, is_optimum_quanto_available, is_torch_greater_or_equal
+from transformers.utils import (
+    is_hqq_available,
+    is_optimum_quanto_available,
+    is_torch_greater_or_equal,
+)
 
 
 if is_torch_available():
@@ -75,7 +79,13 @@ TEST_CACHE_IMPLEMENTATIONS = [
     cache_name
     for cache_name in ALL_CACHE_IMPLEMENTATIONS
     # TODO (joao): offloaded_hybrid == offloaded_hybrid_chunked, deprecate one of them
-    if cache_name not in ["offloaded", "offloaded_hybrid", "offloaded_static", "offloaded_hybrid_chunked"]
+    if cache_name
+    not in [
+        "offloaded",
+        "offloaded_hybrid",
+        "offloaded_static",
+        "offloaded_hybrid_chunked",
+    ]
 ]
 
 
@@ -92,11 +102,21 @@ class CacheTest(unittest.TestCase):
         def _random_kvs(config):
             # shape for key and values: (batch_size, num_heads, seq_len, head_dim)
             random_keys = torch.rand(
-                (1, config.num_key_value_heads, 1, config.hidden_size // config.num_attention_heads),
+                (
+                    1,
+                    config.num_key_value_heads,
+                    1,
+                    config.hidden_size // config.num_attention_heads,
+                ),
                 device=torch_device,
             )
             random_values = torch.rand(
-                (1, config.num_key_value_heads, 1, config.hidden_size // config.num_attention_heads),
+                (
+                    1,
+                    config.num_key_value_heads,
+                    1,
+                    config.hidden_size // config.num_attention_heads,
+                ),
                 device=torch_device,
             )
             return random_keys, random_values
@@ -128,7 +148,12 @@ class CacheTest(unittest.TestCase):
         raised a `RuntimeError` (the customer-facing failure, observed e.g. on Neuron). Linear attention layers must
         be left untouched so they lazily take the correct shape on their first update.
         """
-        config = LlamaConfig(num_hidden_layers=2, num_attention_heads=4, num_key_value_heads=2, hidden_size=32)
+        config = LlamaConfig(
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            hidden_size=32,
+        )
         config.layer_types = ["full_attention", "linear_attention"]
         cache = StaticCache(config=config, max_cache_len=8)
         self.assertIsInstance(cache.layers[0], StaticLayer)
@@ -138,7 +163,13 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cache.layers[0].supports_early_init)
         self.assertFalse(linear_layer.supports_early_init)
 
-        cache.early_initialization(batch_size=1, num_heads=2, head_dim=8, dtype=torch.float32, device=torch_device)
+        cache.early_initialization(
+            batch_size=1,
+            num_heads=2,
+            head_dim=8,
+            dtype=torch.float32,
+            device=torch_device,
+        )
         # The attention layer is initialized via the key/value layout, as expected.
         self.assertTrue(cache.layers[0].is_initialized)
 
@@ -155,8 +186,14 @@ class CacheTest(unittest.TestCase):
 
     def test_max_cache_len_ignores_linear_attention_layers(self):
         """`max_cache_len` must skip linear attention layers (which have no such attribute), else the static-cache
-        reuse check in `_prepare_static_cache` raises `AttributeError` on a hybrid model."""
-        config = LlamaConfig(num_hidden_layers=2, num_attention_heads=4, num_key_value_heads=2, hidden_size=32)
+        reuse check in `_prepare_static_cache` raises `AttributeError` on a hybrid model.
+        """
+        config = LlamaConfig(
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            hidden_size=32,
+        )
         config.layer_types = ["full_attention", "linear_attention"]
         cache = StaticCache(config=config, max_cache_len=8)
         self.assertEqual(cache.get_max_length(), 8)
@@ -213,7 +250,9 @@ class CacheIntegrationTest(unittest.TestCase):
         # Load once and reuse across tests
         cls.tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct", padding_side="left")
         cls.model = AutoModelForCausalLM.from_pretrained(
-            "HuggingFaceTB/SmolLM2-135M-Instruct", device_map="auto", dtype=torch.float16
+            "HuggingFaceTB/SmolLM2-135M-Instruct",
+            device_map="auto",
+            dtype=torch.float16,
         )
         cls.model.config.sliding_window = 256  # hack to enable the use of caches with sliding windows
 
@@ -222,10 +261,15 @@ class CacheIntegrationTest(unittest.TestCase):
         """Sanity check: caches' `.update` function expects batched inputs"""
         _skip_on_failed_cache_prerequisites(self, cache_implementation)
 
-        EXPECTED_GENERATION = ["A sequence: 1, 2, 3, 4, 5, 6, 7, 8,", "A sequence: A, B, C, D, E, F, G, H"]
+        EXPECTED_GENERATION = [
+            "A sequence: 1, 2, 3, 4, 5, 6, 7, 8,",
+            "A sequence: A, B, C, D, E, F, G, H",
+        ]
 
         inputs = self.tokenizer(
-            ["A sequence: 1, 2, 3, 4, 5", "A sequence: A, B, C"], padding=True, return_tensors="pt"
+            ["A sequence: 1, 2, 3, 4, 5", "A sequence: A, B, C"],
+            padding=True,
+            return_tensors="pt",
         )
         inputs = inputs.to(self.model.device)
 
@@ -375,7 +419,12 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
         set_seed(42)
         gen_out = model.generate(
-            **inputs, do_sample=True, top_k=5, max_new_tokens=256, return_dict_in_generate=True, output_scores=True
+            **inputs,
+            do_sample=True,
+            top_k=5,
+            max_new_tokens=256,
+            return_dict_in_generate=True,
+            output_scores=True,
         )
         decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         # sum of the scores for the generated tokens
@@ -419,9 +468,15 @@ class CacheHardIntegrationTest(unittest.TestCase):
             device_map="auto",
         )
         inputs = tokenizer(
-            ["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt"
+            ["The best color is", "We should not undermind the issues at hand"],
+            padding=True,
+            return_tensors="pt",
         ).to(model.device)
-        generation_kwargs = {"do_sample": False, "max_new_tokens": 10, "return_dict_in_generate": True}
+        generation_kwargs = {
+            "do_sample": False,
+            "max_new_tokens": 10,
+            "return_dict_in_generate": True,
+        }
 
         set_seed(42)
         gen_out = model.generate(**inputs, **generation_kwargs)
@@ -431,7 +486,12 @@ class CacheHardIntegrationTest(unittest.TestCase):
             self.assertIsInstance(gen_out.past_key_values, DynamicCache)  # sanity check
 
         set_seed(42)
-        gen_out = model.generate(**inputs, **generation_kwargs, cache_implementation="static", disable_compile=True)
+        gen_out = model.generate(
+            **inputs,
+            **generation_kwargs,
+            cache_implementation="static",
+            disable_compile=True,
+        )
         decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, static, eager"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
@@ -495,13 +555,19 @@ class CacheHardIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             prompt_cache = model(**inputs_initial_prompt, past_key_values=prompt_cache).past_key_values
 
-        prompts = ["Help me to write a blogpost about travelling.", "What is the capital of France?"]
+        prompts = [
+            "Help me to write a blogpost about travelling.",
+            "What is the capital of France?",
+        ]
         responses = []
         for prompt in prompts:
             new_inputs = tokenizer(INITIAL_PROMPT + prompt, return_tensors="pt").to(torch_device)
             past_key_values = copy.deepcopy(prompt_cache)
             outputs = model.generate(
-                **new_inputs, past_key_values=past_key_values, max_new_tokens=40, disable_compile=True
+                **new_inputs,
+                past_key_values=past_key_values,
+                max_new_tokens=40,
+                disable_compile=True,
             )
             response = tokenizer.decode(outputs)[0]
             responses.append(response)
@@ -544,7 +610,8 @@ class CacheHardIntegrationTest(unittest.TestCase):
         # Check that the caches are the same
         for layer_idx in range(len(no_parallelism_cache)):
             torch.testing.assert_close(
-                actual=parallelism_cache.layers[layer_idx].keys, expected=no_parallelism_cache.layers[layer_idx].keys
+                actual=parallelism_cache.layers[layer_idx].keys,
+                expected=no_parallelism_cache.layers[layer_idx].keys,
             )
             torch.testing.assert_close(
                 actual=parallelism_cache.layers[layer_idx].values,
@@ -608,7 +675,11 @@ class CacheHardIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(model_repo).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_repo)
         inputs = tokenizer(["The quick brown fox jumps over the lazy dog"], return_tensors="pt").to(torch_device)
-        generation_kwargs = {"max_new_tokens": 3, "do_sample": False, "cache_implementation": "static"}
+        generation_kwargs = {
+            "max_new_tokens": 3,
+            "do_sample": False,
+            "cache_implementation": "static",
+        }
 
         # Without chunked prefill, the static cache is left to lazily initialize on the (eager) prefill.
         with patch.object(Cache, "early_initialization", autospec=True) as eager_init:
@@ -619,7 +690,12 @@ class CacheHardIntegrationTest(unittest.TestCase):
         model._cache = None
         # With chunked prefill, `generate` must initialize the static cache itself, before the prefill runs.
         prefill_chunk_size = max(inputs.input_ids.shape[-1] // 2, 1)
-        with patch.object(Cache, "early_initialization", autospec=True, wraps=Cache.early_initialization) as init:
+        with patch.object(
+            Cache,
+            "early_initialization",
+            autospec=True,
+            wraps=Cache.early_initialization,
+        ) as init:
             model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
         init.assert_called_once()
 
@@ -650,7 +726,12 @@ class CacheHardIntegrationTest(unittest.TestCase):
         model_id = "google/gemma-2-2b-it"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-        device_map = {"model.embed_tokens": 0, "model.norm": 1, "model.rotary_emb": 1, "lm_head": 0}
+        device_map = {
+            "model.embed_tokens": 0,
+            "model.norm": 1,
+            "model.rotary_emb": 1,
+            "lm_head": 0,
+        }
         num_hidden_layers = 26
         for i in range(num_hidden_layers):
             device_map[f"model.layers.{i}"] = 0 if i < 13 else 1
@@ -930,7 +1011,10 @@ class CacheExportIntegrationTest(unittest.TestCase):
         # Export with dynamic shapes
         input_ids = torch.zeros((1, 3), dtype=torch.long, device=device)
         cache_position = torch.tensor([0, 1, 2], dtype=torch.long, device=device)
-        dynamic_shapes = {"input_ids": {1: torch.export.Dim.DYNAMIC}, "cache_position": {0: torch.export.Dim.DYNAMIC}}
+        dynamic_shapes = {
+            "input_ids": {1: torch.export.Dim.DYNAMIC},
+            "cache_position": {0: torch.export.Dim.DYNAMIC},
+        }
         strict = version.parse(torch.__version__) != version.parse("2.7.0")
         exported_program = convert_and_export_with_cache(
             model,
@@ -940,7 +1024,9 @@ class CacheExportIntegrationTest(unittest.TestCase):
             strict=strict,
         )
 
-        from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
+        from transformers.integrations.executorch import (
+            TorchExportableModuleForDecoderOnlyLM,
+        )
 
         exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
         exported_program = exportable_module.export(
@@ -958,7 +1044,9 @@ class CacheExportIntegrationTest(unittest.TestCase):
         if not is_torch_greater_or_equal("2.6"):
             self.skipTest(reason="This test requires torch >= 2.6 to run.")
 
-        from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
+        from transformers.integrations.executorch import (
+            TorchExportableModuleForDecoderOnlyLM,
+        )
 
         set_seed(42)
         model_id = "hf-internal-testing/tiny-random-Gemma3ForCausalLM"
@@ -1004,7 +1092,10 @@ class CacheExportIntegrationTest(unittest.TestCase):
         # Export with dynamic shapes using Dim.AUTO
         input_ids = torch.zeros((1, 3), dtype=torch.long)
         cache_position = torch.tensor([0, 1, 2], dtype=torch.long)
-        dynamic_shapes = {"input_ids": {1: torch.export.Dim.DYNAMIC}, "cache_position": {0: torch.export.Dim.DYNAMIC}}
+        dynamic_shapes = {
+            "input_ids": {1: torch.export.Dim.DYNAMIC},
+            "cache_position": {0: torch.export.Dim.DYNAMIC},
+        }
         strict = version.parse(torch.__version__) < version.parse("2.7.0")
         exported_program = exportable_module.export(
             input_ids=input_ids,
@@ -1066,7 +1157,9 @@ class SyntheticCacheTest(unittest.TestCase):
             layer_idx=0,
         )
         self.assertEqual(
-            static_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 0.0], "StaticCache Scenario 1 failed"
+            static_cache.layers[0].keys[0, 0, :, 0].tolist(),
+            [1.0, 2.0, 3.0, 0.0],
+            "StaticCache Scenario 1 failed",
         )
 
         # Scenario 2: Fill to capacity
@@ -1076,7 +1169,9 @@ class SyntheticCacheTest(unittest.TestCase):
             layer_idx=0,
         )
         self.assertEqual(
-            static_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "StaticCache Scenario 2 failed"
+            static_cache.layers[0].keys[0, 0, :, 0].tolist(),
+            [1.0, 2.0, 3.0, 4.0],
+            "StaticCache Scenario 2 failed",
         )
 
     def test_sliding_window_cache(self):
@@ -1163,10 +1258,16 @@ class SyntheticCacheTest(unittest.TestCase):
         cache = DynamicCache()
         cache.update(prefill, prefill, 0)
         cache.update(update3, update3, 0)
-        self.assertEqual(cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0], "DynamicCache Scenario 1 failed")
+        self.assertEqual(
+            cache.layers[0].keys[0, 0, :, 0].tolist(),
+            [1.0, 2.0, 3.0],
+            "DynamicCache Scenario 1 failed",
+        )
         cache.update(update4, update4, 0)
         self.assertEqual(
-            cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "DynamicCache Scenario 1 (to 4) failed"
+            cache.layers[0].keys[0, 0, :, 0].tolist(),
+            [1.0, 2.0, 3.0, 4.0],
+            "DynamicCache Scenario 1 (to 4) failed",
         )
 
         # Scenario 2: prefill and update for two layers independently
@@ -1183,7 +1284,9 @@ class SyntheticCacheTest(unittest.TestCase):
         cache.update(update4, update4, 0)
         cache.update(update4_1, update4_1, 1)
         self.assertEqual(
-            cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "DynamicCache Scenario 2 layer 0 failed"
+            cache.layers[0].keys[0, 0, :, 0].tolist(),
+            [1.0, 2.0, 3.0, 4.0],
+            "DynamicCache Scenario 2 layer 0 failed",
         )
         self.assertEqual(
             cache.layers[1].keys[0, 0, :, 0].tolist(),
@@ -1651,3 +1754,21 @@ class CacheCroppingTests(unittest.TestCase):
             if hasattr(layer, "indexer_keys"):
                 self.assertEqual(layer.indexer_keys.shape[-2], self.seq_len - 3)
                 self.assertTrue((layer.indexer_keys == indexer_states[..., :-3, :]).all())
+
+    def test_dynamic_layer_crop_oversized_negative(self):
+        """Test DynamicLayer safely clears cache on oversized negative crops."""
+        key = torch.arange(3, dtype=torch.float32).reshape(1, 1, 3, 1)
+        val = torch.arange(3, dtype=torch.float32).reshape(1, 1, 3, 1)
+
+        cache = DynamicCache()
+        cache.update(key, val, layer_idx=0)
+        self.assertEqual(cache.get_seq_length(), 3)
+
+        # Oversized negative crop should empty the cache
+        cache.crop(-5)
+        self.assertEqual(cache.get_seq_length(), 0)
+
+        # Subsequent update should work normally
+        new_token = torch.tensor([[[[1.0]]]])
+        cache.update(new_token, new_token, layer_idx=0)
+        self.assertEqual(cache.get_seq_length(), 1)
