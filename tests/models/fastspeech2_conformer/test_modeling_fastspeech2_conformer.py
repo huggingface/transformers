@@ -39,7 +39,7 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import FastSpeech2ConformerModel, FastSpeech2ConformerWithHifiGan, set_seed
+    from transformers import FastSpeech2ConformerModel, FastSpeech2ConformerWithHifiGan
 
 
 class FastSpeech2ConformerModelTester:
@@ -401,7 +401,6 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
         model.to(torch_device)
         # Set self.training manually to keep deterministic but run the training path
         model.training = True
-        set_seed(42)
 
         tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
         text = "Test that this generates speech"
@@ -409,50 +408,54 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
 
         # NOTE: Dummy numbers since FastSpeech2Conformer does not have a feature extractor due to the package deps required (librosa, MFA)
         batch_size, max_text_len = input_ids.shape
-        pitch_labels = torch.rand((batch_size, max_text_len, 1), dtype=torch.float, device=torch_device)
-        energy_labels = torch.rand((batch_size, max_text_len, 1), dtype=torch.float, device=torch_device)
-        duration_labels = torch.normal(10, 2, size=(batch_size, max_text_len), device=torch_device).clamp(1, 20).int()
+        # Generate the golden fixture on CPU so its values do not depend on the accelerator RNG.
+        generator = torch.Generator(device="cpu").manual_seed(42)
+        pitch_labels = torch.rand((batch_size, max_text_len, 1), dtype=torch.float, device="cpu", generator=generator)
+        energy_labels = torch.rand((batch_size, max_text_len, 1), dtype=torch.float, device="cpu", generator=generator)
+        duration_labels = (
+            torch.normal(10, 2, size=(batch_size, max_text_len), device="cpu", generator=generator).clamp(1, 20).int()
+        )
         max_target_len, _ = duration_labels.sum(dim=1).max(dim=0)
         max_target_len = max_target_len.item()
         spectrogram_labels = torch.rand(
-            (batch_size, max_target_len, model.num_mel_bins), dtype=torch.float, device=torch_device
+            (batch_size, max_target_len, model.num_mel_bins), dtype=torch.float, device="cpu", generator=generator
         )
 
         outputs_dict = model(
             input_ids,
-            spectrogram_labels=spectrogram_labels,
-            duration_labels=duration_labels,
-            pitch_labels=pitch_labels,
-            energy_labels=energy_labels,
+            spectrogram_labels=spectrogram_labels.to(torch_device),
+            duration_labels=duration_labels.to(torch_device),
+            pitch_labels=pitch_labels.to(torch_device),
+            energy_labels=energy_labels.to(torch_device),
             return_dict=True,
         )
         spectrogram = outputs_dict["spectrogram"]
         loss = outputs_dict["loss"]
 
-        # # mel-spectrogram is too large (1, 224, 80), so only check top-left 100 elements
+        # mel-spectrogram is too large (1, 215, 80), so only check top-left 100 elements
         # fmt: off
         expected_mel_spectrogram = torch.tensor(
             [
-                [-5.1726e-01, -2.1546e-01, -6.2949e-01, -4.9966e-01, -6.2329e-01,-1.0024e+00, -5.0756e-01, -4.3783e-01, -7.7909e-01, -7.1529e-01],
-                [3.1639e-01, 4.6567e-01, 2.3859e-01, 6.1324e-01, 6.6993e-01,2.7852e-01, 3.4084e-01, 2.6045e-01, 3.1769e-01, 6.8664e-01],
-                [1.0904e+00, 8.2760e-01, 5.4471e-01, 1.3948e+00, 1.2052e+00,1.3914e-01, 3.0311e-01, 2.9209e-01, 6.6969e-01, 1.4900e+00],
-                [8.7539e-01, 7.7813e-01, 8.5193e-01, 1.7797e+00, 1.5827e+00,2.1765e-01, 9.5736e-02, 1.5207e-01, 9.2984e-01, 1.9718e+00],
-                [1.0156e+00, 7.4948e-01, 8.5781e-01, 2.0302e+00, 1.8718e+00,-4.6816e-02, -8.4771e-02, 1.5288e-01, 9.6214e-01, 2.1747e+00],
-                [9.5446e-01, 7.2816e-01, 8.5703e-01, 2.1049e+00, 2.1529e+00,9.1168e-02, -1.8864e-01, 4.7460e-02, 9.1671e-01, 2.2506e+00],
-                [1.0980e+00, 6.5521e-01, 8.2278e-01, 2.1420e+00, 2.2990e+00,1.1589e-01, -2.2167e-01, 1.1425e-03, 8.5591e-01, 2.2267e+00],
-                [9.2134e-01, 6.2354e-01, 8.9153e-01, 2.1447e+00, 2.2947e+00,9.8064e-02, -1.3171e-01, 1.2306e-01, 9.6330e-01, 2.2747e+00],
-                [1.0625e+00, 6.4575e-01, 1.0348e+00, 2.0821e+00, 2.1834e+00,2.3807e-01, -1.3262e-01, 1.5632e-01, 1.1988e+00, 2.3948e+00],
-                [1.4111e+00, 7.5421e-01, 1.0703e+00, 2.0512e+00, 1.9331e+00,4.0482e-03, -4.2486e-02, 4.6495e-01, 1.4404e+00, 2.3599e+00],
+                [-7.4313e-01, -7.7952e-01, -9.0296e-01, -7.9426e-01, -8.3147e-01, -9.6350e-01, -5.8739e-01, -5.1998e-01, -8.8737e-01, -6.3536e-01],
+                [1.7756e-01, -2.0297e-01, -2.7137e-01, -8.4779e-02, 1.2460e-01, -2.6415e-02, -5.5384e-03, 4.7120e-02, -2.2294e-02, 3.9881e-01],
+                [1.0484e+00, 1.9169e-01, -6.9612e-02, 5.1710e-01, 5.9222e-01, -3.9388e-02, -1.5203e-02, 5.6730e-02, 5.4105e-02, 7.5041e-01],
+                [6.9413e-01, 1.7611e-01, 4.5720e-01, 1.1631e+00, 1.3250e+00, 3.8561e-01, 1.8976e-01, 2.7563e-01, 4.1827e-01, 1.2459e+00],
+                [6.6955e-01, 7.9998e-02, 8.1139e-01, 1.6431e+00, 1.8263e+00, 5.1398e-01, 1.8388e-01, 3.2707e-01, 7.0252e-01, 1.7297e+00],
+                [7.8699e-01, 8.8609e-02, 8.8538e-01, 1.7997e+00, 2.0176e+00, 4.8705e-01, -8.1916e-03, 2.2266e-01, 8.0668e-01, 1.8174e+00],
+                [6.3146e-01, 1.9896e-01, 9.4779e-01, 1.5950e+00, 1.7885e+00, 4.0724e-01, 2.8893e-02, 3.7728e-01, 8.1551e-01, 1.5684e+00],
+                [4.4392e-01, 1.2611e-01, 7.2352e-01, 8.8012e-01, 1.0346e+00, 1.5752e-01, 3.3979e-02, 4.3995e-01, 6.0744e-01, 1.0970e+00],
+                [1.0485e+00, 2.0580e-01, 1.3972e-01, 2.5130e-01, 3.3388e-01, -3.6185e-01, -2.8303e-01, -1.2253e-02, -1.4224e-01, 4.5981e-01],
+                [8.3684e-01, 1.4370e-01, -1.2821e-01, -1.2354e-02, 1.8004e-01, -3.6339e-01, -3.8764e-01, -3.6878e-01, -5.3572e-01, 8.5582e-02],
             ],
             device=torch_device,
         )
         # fmt: on
 
-        expected_loss = torch.tensor(74.127174, device=torch_device)
+        expected_loss = torch.tensor(74.581017, device=torch_device)
 
         torch.testing.assert_close(spectrogram[0, :10, :10], expected_mel_spectrogram, rtol=1e-3, atol=1e-3)
         torch.testing.assert_close(loss, expected_loss, rtol=1e-4, atol=1e-4)
-        self.assertEqual(tuple(spectrogram.shape), (1, 219, model.config.num_mel_bins))
+        self.assertEqual(tuple(spectrogram.shape), (1, 215, model.config.num_mel_bins))
 
 
 class FastSpeech2ConformerWithHifiGanTester:
