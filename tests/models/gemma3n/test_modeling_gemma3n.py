@@ -560,7 +560,10 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
                 # Use same tolerances as the parent class test_generate_with_static_cache
-                assert_similar_generate_outputs(dynamic_cache_generation, static_cache_generation, atol=5e-5, rtol=5e-5)
+                atol = rtol = 1e-5 if dtype == torch.float32 else 5e-5
+                assert_similar_generate_outputs(
+                    dynamic_cache_generation, static_cache_generation, atol=atol, rtol=rtol
+                )
 
 
 class Gemma3nVision2TextModelTester:
