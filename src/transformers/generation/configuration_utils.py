@@ -1205,6 +1205,8 @@ class GenerationConfig(PushToHubMixin):
             del output["_commit_hash"]
         if "_original_object_hash" in output:
             del output["_original_object_hash"]
+        if "_mask_length" in output:
+            del output["_mask_length"]
 
         # Transformers version when serializing this file
         output["transformers_version"] = __version__
