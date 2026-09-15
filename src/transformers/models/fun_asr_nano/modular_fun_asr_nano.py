@@ -165,9 +165,7 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
         for audio_item, prompt_text, keyword_list, language_name in zip(
             audio_items, prompts, keyword_batches, languages
         ):
-            content = [make_audio_chat_template_content(audio_item)]
-            if prompt_text is not None:
-                content.append({"type": "text", "text": prompt_text})
+            content = make_audio_chat_template_content(audio_item, prompt_text)
             if keyword_list:
                 content.append({"type": "keywords", "keywords": keyword_list})
             if language_name is not None:
