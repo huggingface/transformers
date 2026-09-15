@@ -410,8 +410,17 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
         from torch.distributed.tensor import distribute_tensor
 
         loaded_state = torch.load(checkpoint_dir, map_location="cpu", weights_only=True)["optimizer"]
-        for key, value in loaded_state.items():
-            target = checkpoint_state_dict.get(key)
+        missing_keys = checkpoint_state_dict.keys() - loaded_state.keys()
+        if missing_keys:
+            raise ValueError(f"Missing keys in optimizer checkpoint: {sorted(missing_keys)}")
+        for key, target in checkpoint_state_dict.items():
+            value = loaded_state[key]
+            if isinstance(target, torch.Tensor) and (
+                not isinstance(value, torch.Tensor) or value.shape != target.shape
+            ):
+                raise ValueError(f"Optimizer checkpoint tensor {key!r} must have shape {tuple(target.shape)}.")
+        for key, target in checkpoint_state_dict.items():
+            value = loaded_state[key]
             if is_dtensor(target):
                 value = distribute_tensor(value.to(target.device), target.device_mesh, target.placements)
             elif isinstance(target, torch.Tensor):
