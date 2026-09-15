@@ -56,7 +56,7 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring
+@auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
 @strict
 class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(Qwen3OmniMoeCode2WavConfig):
     r"""
@@ -101,7 +101,7 @@ class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(Qwen3OmniMoeCode2WavConfig):
     trim_right_ratio: float = 1.0
 
 
-@auto_docstring
+@auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
 @strict
 class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
     r"""
