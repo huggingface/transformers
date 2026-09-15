@@ -1,4 +1,5 @@
-# Copyright 2026 The HuggingFace Team. All rights reserved.
+# Copyright 2024 The ggml.ai team and The HuggingFace Inc. team. and pygguf author (github.com/99991)
+# https://github.com/99991/pygguf
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,39 +14,72 @@
 # limitations under the License.
 """Building a tokenizer from a GGUF file's metadata.
 
-A GGUF repo ships no `tokenizer.json`: the vocabulary, merges and special token ids are metadata keys.
-The renaming table is llama.cpp's convention, shared with `integrations.ggml.GGUF_TOKENIZER_MAPPING`;
-the only per-architecture fact is which converter reads the result.
+A GGUF has no `tokenizer.json`. It stores the vocabulary, the merges and the special token ids as
+metadata, under llama.cpp's key names. The tokenizer it describes is almost always one transformers
+already has, so we read those out and hand them to that class, which brings its own normalizer,
+pre-tokenizer and decoder:
+
+    architecture, section, config = get_gguf_tokenizer("model.gguf")
+    backend, _ = convert_gguf_tokenizer(architecture, section)
+
+To support a new file, add an entry to `GGUF_TOKENIZER_KINDS`, or a builder if it needs more.
 """
 
-from .reader import read_gguf_metadata
+import re
+from functools import partial
+
+from tokenizers import AddedToken, Regex, Tokenizer, normalizers, pre_tokenizers
+
+from ...convert_slow_tokenizer import bytes_to_unicode
+from ...models.gemma.tokenization_gemma import GemmaTokenizer
+from ...models.gpt2.tokenization_gpt2 import GPT2Tokenizer
+from ...models.llama.tokenization_llama import LlamaTokenizer
+from ...models.qwen2.tokenization_qwen2 import PRETOKENIZE_REGEX as _QWEN2_SPLIT
+from ...models.qwen3_5.tokenization_qwen3_5 import PRETOKENIZE_REGEX as _QWEN35_SPLIT
+from ...models.t5.tokenization_t5 import T5Tokenizer
+from ...tokenization_utils_base import generate_merges
+from ...utils import logging
 
 
-# `general.architecture` -> the `model_type` whose `GGUF_TO_FAST_CONVERTERS` entry reads this vocabulary.
-GGUF_TOKENIZER_ARCHS = {
-    "qwen35": "qwen3_5_text",
-    "qwen35moe": "qwen3_5_moe_text",
+logger = logging.get_logger(__name__)
+
+
+GGUF_TOKENIZER_MAPPING = {
+    "tokenizer": {
+        "ggml.model": "tokenizer_type",
+        "ggml.pre": "pre_tokenizer_type",
+        "ggml.tokens": "tokens",
+        "ggml.scores": "scores",
+        "ggml.token_type": "token_type",
+        "ggml.merges": "merges",
+        "ggml.precompiled_charsmap": "precompiled_charsmap",
+        "ggml.bos_token_id": "bos_token_id",
+        "ggml.eos_token_id": "eos_token_id",
+        "ggml.unknown_token_id": "unk_token_id",
+        "ggml.padding_token_id": "pad_token_id",
+        "ggml.add_space_prefix": "add_prefix_space",
+    },
+    "tokenizer_config": {
+        "chat_template": "chat_template",
+    },
 }
 
-# The metadata arrays a tokenizer needs in full; everything else the reader can leave as a count.
-_VOCABULARY_KEYS = ("tokenizer.ggml.tokens", "tokenizer.ggml.merges")
+
+_SPECIAL_TOKENS = {
+    "bos_token": "bos_token_id",
+    "eos_token": "eos_token_id",
+    "unk_token": "unknown_token_id",
+    "pad_token": "padding_token_id",
+}
 
 
 def get_gguf_tokenizer(gguf_path: str) -> tuple[str, dict, dict]:
-    """`(model_type, tokenizer_dict, tokenizer_config)` for the tokenizer this file describes.
+    """`(architecture, tokenizer_dict, tokenizer_config)` for the tokenizer this file describes."""
+    from .reader import read_gguf_metadata
 
-    Raises for an architecture with no entry above; callers with a fallback check
-    `GGUF_TOKENIZER_ARCHS` first.
-    """
-    from ..ggml import GGUF_TOKENIZER_MAPPING
-
-    metadata, _ = read_gguf_metadata(gguf_path, _VOCABULARY_KEYS)
+    # Only these two are needed in full; the reader leaves every other array as a count.
+    metadata, _ = read_gguf_metadata(gguf_path, ("tokenizer.ggml.tokens", "tokenizer.ggml.merges"))
     architecture = metadata["general.architecture"]
-    if architecture not in GGUF_TOKENIZER_ARCHS:
-        raise ValueError(
-            f"Cannot build a tokenizer from a GGUF file of architecture {architecture!r}. "
-            f"Supported: {sorted(GGUF_TOKENIZER_ARCHS)}."
-        )
     sections = {
         section: {
             name: metadata[f"tokenizer.{key}"] for key, name in renames.items() if f"tokenizer.{key}" in metadata
@@ -53,9 +87,196 @@ def get_gguf_tokenizer(gguf_path: str) -> tuple[str, dict, dict]:
         for section, renames in GGUF_TOKENIZER_MAPPING.items()
     }
     tokenizer, tokenizer_config = sections["tokenizer"], sections["tokenizer_config"]
-    # A GGUF names its special tokens by id, the tokenizer wants the strings. Undeclared ones are stated
-    # as `None` rather than left out, or the sentencepiece `<s>`/`</s>` fallback invents two tokens.
-    for name in ("bos_token", "eos_token", "pad_token", "unk_token"):
-        token_id = tokenizer_config.get(f"{name}_id")
+
+    for name, key in _SPECIAL_TOKENS.items():
+        token_id = metadata.get(f"tokenizer.ggml.{key}")
         tokenizer_config[name] = tokenizer["tokens"][token_id] if token_id is not None else None
-    return GGUF_TOKENIZER_ARCHS[architecture], tokenizer, tokenizer_config
+    return architecture, tokenizer, tokenizer_config
+
+
+def convert_gguf_tokenizer(architecture: str, tokenizer_dict: dict) -> tuple[Tokenizer, dict]:
+    kind = tokenizer_dict.get("tokenizer_type")
+    tokenizer = select_tokenizer_builder(architecture, kind)(tokenizer_dict)
+    tokenizer = add_gguf_special_tokens(tokenizer, tokenizer_dict, byte_level=kind == "gpt2")
+    tokenizer = set_split_regex(tokenizer, tokenizer_dict)
+    return tokenizer.backend_tokenizer, {}
+
+
+def sentencepiece_tokenizer(section, tokenizer_class=LlamaTokenizer, ranks=None):
+    """The vocabulary as the file spells it, and merges from the file or recovered from it."""
+    vocab = {token: index for index, token in enumerate(section["tokens"])}
+    return tokenizer_class(vocab=vocab, merges=get_merges(section, ranks))
+
+
+def phi3_tokenizer(section):
+    """Sentencepiece, but the prefix space comes from a normalizer, not from `Metaspace`.
+
+    There is no `Phi3Tokenizer` to hand this to. Phi-3's shape lives in the `tokenizer.json` of its
+    repo, which a GGUF does not carry, so we rebuild it.
+
+    It only shows on text starting with a space: `"  hi"` becomes `\u2581\u2581\u2581hi` here and `\u2581\u2581hi`
+    with `Metaspace`. Nothing in a GGUF says which a model wants, so this is picked by architecture.
+    """
+    tokenizer = sentencepiece_tokenizer(section)
+    tokenizer.backend_tokenizer.normalizer = normalizers.Sequence(
+        [normalizers.Prepend(prepend="\u2581"), normalizers.Replace(pattern=" ", content="\u2581")]
+    )
+    tokenizer.backend_tokenizer.pre_tokenizer = None
+    return tokenizer
+
+
+def gemma_tokenizer(section):
+    """Sentencepiece, with two fixes for Gemma files.
+
+    1. The file writes a run of spaces as `"  "`, but `GemmaTokenizer` looks up `"\u2581\u2581"`. We rename
+       those tokens, before deriving merges, so both halves of a merge match.
+    2. Gemma's scores are mostly one placeholder, so they cannot order the merges. We order them by
+       the token's position in the file instead.
+    """
+    respelled = dict(
+        section,
+        tokens=["\u2581" * len(t) if " " in t and not t.strip() else t for t in section["tokens"]],
+    )
+    positions = {token: -index for index, token in enumerate(respelled["tokens"])}
+    return sentencepiece_tokenizer(respelled, GemmaTokenizer, ranks=positions)
+
+
+def byte_level_tokenizer(section):
+    """Byte-level BPE"""
+    spelling = bytes_to_unicode()
+    alphabet = set(spelling.values())
+    vocab = {
+        token if set(token) <= alphabet else "".join(spelling[byte] for byte in token.encode("utf-8")): index
+        for index, token in enumerate(section["tokens"])
+    }
+    return GPT2Tokenizer(vocab=vocab, merges=get_merges(section))
+
+
+def unigram_tokenizer(section):
+    """Unigram: a vocabulary of `(token, score)` pairs, and no merges.
+
+    T5 writes a blank in a prompt as `<extra_id_0>`..`<extra_id_99>`, but the file calls those
+    `[PAD32000]`... We rename the first 100 back, which is how many T5 has by default.
+    """
+    count = 100
+    placeholder = re.compile(r"^\[PAD\d+\]$")
+    tokens = list(section["tokens"])
+    blanks = [index for index, token in enumerate(tokens) if placeholder.match(token)]
+    for offset, index in enumerate(blanks[:count]):
+        tokens[index] = f"<extra_id_{count - 1 - offset}>"
+    return T5Tokenizer(vocab=list(zip(tokens, section["scores"])))
+
+
+def get_merges(section, ranks=None):
+    """The merges the file gives, or the ones its vocabulary implies."""
+    if "merges" in section:
+        return [tuple(merge.split(" ")) for merge in section["merges"]]
+
+    tokens = section["tokens"]
+    logger.info("No merges in the file; deriving them from the vocabulary.")
+    if ranks is None:
+        ranks = dict(zip(tokens, section["scores"]))
+    return generate_merges({token: index for index, token in enumerate(tokens)}, ranks)
+
+
+def add_gguf_special_tokens(tokenizer, section, byte_level=False):
+    """Add the tokens the file marks as control, like `<|endoftext|>`, as special tokens.
+
+    Without this they are cut into pieces. A byte-level token not spelled byte-level is skipped:
+    llama.cpp mislabelled it, and adding it would leave the vocabulary larger than the model.
+    """
+    spelled = set(bytes_to_unicode().values()) if byte_level else None
+    control = [
+        AddedToken(token, normalized=False, special=True)
+        for token, token_type in zip(section["tokens"], section.get("token_type") or ())
+        if token_type == 3 and (spelled is None or set(token) <= spelled)  # 3 is CONTROL
+    ]
+    if control:
+        tokenizer.add_special_tokens({"additional_special_tokens": control}, replace_extra_special_tokens=False)
+    return tokenizer
+
+
+def select_tokenizer_builder(architecture: str, tokenizer_type: str | None):
+    """The builder for the tokenizer a file describes, from `tokenizer.ggml.model`."""
+    if tokenizer_type == "llama" and architecture in GGUF_SENTENCEPIECE_BUILDERS:
+        return GGUF_SENTENCEPIECE_BUILDERS[architecture]
+    if tokenizer_type in GGUF_TOKENIZER_KINDS:
+        return GGUF_TOKENIZER_KINDS[tokenizer_type]
+    raise ValueError(
+        f"Cannot build a tokenizer from a GGUF file stating tokenizer {tokenizer_type!r}. "
+        f"Supported: {sorted(GGUF_TOKENIZER_KINDS)}."
+    )
+
+
+_LLAMA3_SPLIT = (
+    r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}"
+    r"| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"
+)
+
+
+_TEKKEN_SPLIT = (
+    r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+"
+    r"|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*"
+    r"|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"
+)
+
+
+_GPT4O_SPLIT = (
+    r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?"
+    r"|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*(?i:'s|'t|'re|'ve|'m|'ll|'d)?"
+    r"|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+"
+)
+
+GGUF_PRE_TOKENIZER_SPLITS = {
+    "llama3": _LLAMA3_SPLIT,
+    "llama-v3": _LLAMA3_SPLIT,
+    "llama-bpe": _LLAMA3_SPLIT,
+    "falcon3": _LLAMA3_SPLIT,
+    "falcon-h1": _LLAMA3_SPLIT,
+    "pixtral": _LLAMA3_SPLIT,
+    "midm-2.0": _LLAMA3_SPLIT,
+    "lfm2": _LLAMA3_SPLIT,
+    "jina-v5-nano": _LLAMA3_SPLIT,
+    "dbrx": _LLAMA3_SPLIT,
+    "smaug-bpe": _LLAMA3_SPLIT,
+    "tekken": _TEKKEN_SPLIT,
+    "qwen2": _QWEN2_SPLIT,
+    "deepseek-r1-qwen": _QWEN2_SPLIT,
+    "kormo": _QWEN2_SPLIT,
+    "f2llmv2": _QWEN2_SPLIT,
+    "megrez": _QWEN2_SPLIT,
+    "qwen35": _QWEN35_SPLIT,
+    "gpt-4o": _GPT4O_SPLIT,
+    "llama4": _GPT4O_SPLIT,
+    "kanana2": _GPT4O_SPLIT,
+    "talkie": _GPT4O_SPLIT,
+    "minimax-m2": _GPT4O_SPLIT,
+}
+
+
+def set_split_regex(tokenizer, section):
+    """Split text the way this vocabulary's merges were learned."""
+    split = GGUF_PRE_TOKENIZER_SPLITS.get(section.get("pre_tokenizer_type"))
+    if split is not None:
+        tokenizer.backend_tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.Split(Regex(split), behavior="isolated"),
+                pre_tokenizers.ByteLevel(add_prefix_space=False, use_regex=False),
+            ]
+        )
+    return tokenizer
+
+
+GGUF_SENTENCEPIECE_BUILDERS = {
+    "gemma": gemma_tokenizer,
+    "gemma2": gemma_tokenizer,
+    "gemma3": gemma_tokenizer,
+    "phi3": phi3_tokenizer,
+}
+
+GGUF_TOKENIZER_KINDS = {
+    "gpt2": byte_level_tokenizer,
+    "llama": sentencepiece_tokenizer,
+    "t5": unigram_tokenizer,
+    "gemma4": partial(sentencepiece_tokenizer, tokenizer_class=GemmaTokenizer),
+}
