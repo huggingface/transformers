@@ -68,12 +68,10 @@ CustomVoice models ship with built-in voice presets. Set a `speaker` on the `use
 `model.get_supported_speakers()` to list available voices for the loaded checkpoint; it is empty on Base
 checkpoints, which have no presets.
 
-The id below is an original checkpoint, so convert it with `convert_qwen3_tts_to_hf.py` and load the result.
-
 ```python
 from transformers import AutoProcessor, AutoModelForTextToWaveform
 
-model_id = "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
+model_id = "shahvandit/qwen3-tts-customvoice-hf"
 
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
@@ -118,13 +116,12 @@ processor.save_audio(audios, ["output_0.wav", "output_1.wav"])
 
 ### Voice Design with Natural Language Instructions
 
-VoiceDesign models accept a natural language description of the desired voice as a `system` message. As above, the
-id below is an original checkpoint and needs converting first:
+VoiceDesign models accept a natural language description of the desired voice as a `system` message.
 
 ```python
 from transformers import AutoProcessor, AutoModelForTextToWaveform
 
-model_id = "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"
+model_id = "shahvandit/qwen3-tts-voicedesign-hf"
 
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
