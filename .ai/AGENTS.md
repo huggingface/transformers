@@ -43,7 +43,8 @@ Two modular traps:
 ## Audio processors
 
 When adding an audio processor, changing its workflow or options, or editing generated audio
-files, read [Choosing an audio integration](../docs/source/en/preprocessing.md#choosing-an-audio-integration).
+files, read the workspace-root `preprocessing.md`, section "Choosing an audio integration"
+(`../preprocessing.md` from the Transformers checkout root; temporarily maintained outside this repository).
 It identifies the schema to extend, the two execution styles, reference implementations, and
 modular source ownership. Use the processor's `valid_kwargs` and operation docstrings as the
 current contract.

@@ -13,15 +13,16 @@
 # limitations under the License.
 
 from dataclasses import replace
-from typing import Annotated
+from typing import Annotated, Any
 
 import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_processing_base import AudioProcessingMixin, BatchFeature
+from ...audio_utils import SpectrogramConfig
 from ...processing_utils import AudioKwargs
-from ...utils import PaddingStrategy
+from ...utils import PaddingStrategy, TensorType
 from ...utils.type_validators import padding_validator
 
 
@@ -121,16 +122,15 @@ class ClapAudioProcessorMixin:
 
     def _preprocess(
         self,
-        audio,
-        *,
-        truncation_mode,
-        padding_mode,
-        max_length,
-        spectrogram_config,
-        return_tensors,
-        padding,
-        **kwargs,
-    ):
+        audio: list[torch.Tensor] | list[np.ndarray],
+        truncation_mode: str,
+        padding_mode: str,
+        max_length: int,
+        spectrogram_config: SpectrogramConfig,
+        return_tensors: str | TensorType | None,
+        padding: bool | str | PaddingStrategy,
+        **kwargs: Any,
+    ) -> BatchFeature:
         """CLAP's two recipes: crop waveforms for one view, or fuse full-clip mels into four views.
 
         Each clip returns its features and metadata together. The backend handles the numerical
@@ -142,6 +142,8 @@ class ClapAudioProcessorMixin:
         # local, including when a caller switches modes or supplies a spectrogram config.
         mel_scale, norm = ("htk", None) if truncation_mode == "fusion" else ("slaney", "slaney")
         mel_config = spectrogram_config.mel_scale_config
+        if mel_config is None:
+            raise ValueError("CLAP requires a mel-scale configuration.")
         if mel_config.mel_scale != mel_scale or mel_config.norm != norm:
             spectrogram_config = replace(
                 spectrogram_config, mel_scale_config=replace(mel_config, mel_scale=mel_scale, norm=norm)

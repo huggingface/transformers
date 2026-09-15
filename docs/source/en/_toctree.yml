@@ -64,8 +64,6 @@
       title: Customizing tokenizers
     - local: tokenizer_summary
       title: Tokenization algorithms
-    - local: preprocessing
-      title: Preprocessing
     - local: image_processors
       title: Image processors
     - local: video_processors
