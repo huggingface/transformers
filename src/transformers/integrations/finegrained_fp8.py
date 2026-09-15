@@ -44,7 +44,6 @@ warnings.warn(
     "receives new recipes; the fine-grained quantization machinery lives in transformers.integrations.finegrained "
     "(block-FP8, MXFP8, MXFP4, NVFP4, weight-only).",
     DeprecationWarning,
-    stacklevel=2,
 )
 
 

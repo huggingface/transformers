@@ -110,18 +110,11 @@ class DtensorShardOperation:
             (mesh_dim, placement) for mesh_dim, placement in enumerate(self.placements) if hasattr(placement, "dim")
         ]
 
-        # A 0-dim tensor has no axis to shard — every owning rank takes the whole value. Reachable
-        # in practice: ModelOpt NVFP4 checkpoints ship one `weight_scale_2` / `input_scale` scalar
-        # per expert projection, thousands per model. Both paths below index the (empty) shape —
-        # `source[()]` is not accepted by a lazy safetensors slice, `[...]` is — so route scalars
-        # here: replicated on the dense path, per-expert-ownership-filtered on the MoE path.
+        # A 0-dim tensor has no axis to shard, so every rank that owns it takes the whole value
+        # (`source[...]`, since a lazy safetensors slice rejects `source[()]`).
         if not source_shape:
-            if tensor_idx is not None:
-                has_axis0_shard = any(self._normalize_param_dim(placement.dim) == 0 for _, placement in dim_placements)
-                if has_axis0_shard and not (
-                    self._axis0_offset <= tensor_idx < self._axis0_offset + self._axis0_local_size
-                ):
-                    return None
+            if tensor_idx is not None and not self._owns_expert(tensor_idx, dim_placements):
+                return None
             return source[...].to(device=device, dtype=dtype)
 
         # Dense path
@@ -330,6 +323,13 @@ class DtensorShardOperation:
     def _normalize_param_dim(self, dim: int) -> int:
         # if dim is negative, it should be normalized to the last axis
         return dim if dim >= 0 else self.param_ndim + dim
+
+    def _owns_expert(self, tensor_idx: int, dim_placements: list) -> bool:
+        """Whether this rank holds expert `tensor_idx`. True when nothing shards axis 0 — the
+        experts are replicated, so every rank owns every one of them."""
+        if not any(self._normalize_param_dim(placement.dim) == 0 for _, placement in dim_placements):
+            return True
+        return self._axis0_offset <= tensor_idx < self._axis0_offset + self._axis0_local_size
 
 
 def _dtensor_from_local_like(local_tensor: torch.Tensor, ref: DTensor) -> DTensor:

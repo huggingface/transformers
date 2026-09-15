@@ -754,6 +754,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
             repo_id = _HUB_KERNEL_MAPPING[kernel_name]["repo_id"]
             revision = _HUB_KERNEL_MAPPING[kernel_name].get("revision", None)
             version = _HUB_KERNEL_MAPPING[kernel_name].get("version", None)
+            check_arch = _HUB_KERNEL_MAPPING[kernel_name].get("check_arch", True)
             # Default version as it's mandatory
             if version is None and revision is None:
                 version = 1
@@ -763,7 +764,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
                 revision=revision,
                 version=version,
                 allow_all_kernels=ALLOW_ALL_KERNELS,
-                check_arch=_HUB_KERNEL_MAPPING[kernel_name].get("check_arch", True),
+                check_arch=check_arch,
             )
             mapping[kernel_name] = kernel
         except FileNotFoundError as e:
@@ -834,16 +835,13 @@ def get_kernel(
         raise ImportError(_MISSING_KERNELS_MESSAGE)
 
     user_agent = {"framework": "transformers", "version": __version__, "repo_id": kernel_name}
-    # `check_arch` (kernels >= 0.16) is only passed when a caller opts out, so older `kernels`
-    # releases without the keyword keep working.
-    arch_kwargs = {} if check_arch else {"check_arch": False}
     return get_kernel_hub(
         kernel_name,
         revision=revision,
         version=version,
         user_agent=user_agent,
         trust_remote_code=allow_all_kernels,
-        **arch_kwargs,
+        check_arch=check_arch,
     )
 
 

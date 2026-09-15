@@ -1691,11 +1691,19 @@ class SpQRConfig(QuantizationConfigMixin):
 class FineGrainedConfig(QuantizationConfigMixin):
     """
     Configuration for the fine-grained quantization family served by the
-    `kernels-community/finegrained-kernels` package: block-FP8 (DeepSeek-style, fp32 or UE8M0
-    scales), MXFP8, MXFP4 and NVFP4 weights, with dynamic, static or weight-matched activation
-    quantization. The weight FORMAT is never declared here — it is resolved from the checkpoint
-    tensors themselves (value dtype, scale dtype/shape, presence of a global scale), exactly the
-    way the kernels resolve it, so the config cannot disagree with the weights.
+    `kernels-community/finegrained-kernels` package.
+
+    | format    | weights                        | block scales            | a checkpoint that ships it     |
+    |-----------|--------------------------------|-------------------------|--------------------------------|
+    | block-FP8 | `float8_e4m3fn`                | fp32 or UE8M0, 128x128  | `deepseek-ai/DeepSeek-V3`      |
+    | MXFP8     | `float8_e4m3fn`                | UE8M0, group-32         | `MiniMaxAI/MiniMax-M3`         |
+    | MXFP4     | E2M1, two values per `int8`    | UE8M0, group-32         | `openai/gpt-oss-20b`           |
+    | NVFP4     | E2M1, two values per `int8`    | E4M3 group-16 + fp32 global | `nvidia/GLM-5.2-NVFP4`     |
+
+    The weight FORMAT is never declared here — it is resolved from the checkpoint tensors
+    themselves (value dtype, scale dtype/shape, presence of a global scale), exactly the way the
+    kernels resolve it, so the config cannot disagree with the weights. What the config does carry
+    is everything the tensors leave open: how activations are quantized, and which modules to skip.
 
     Args:
         activation_scheme (`str`, *optional*, defaults to `"dynamic"`):
@@ -1735,12 +1743,10 @@ class FineGrainedConfig(QuantizationConfigMixin):
         # MiniMax ships the skip-list under ``ignored_layers``; accept it as an alias.
         if modules_to_not_convert is None and "ignored_layers" in kwargs:
             modules_to_not_convert = kwargs.pop("ignored_layers")
-        # NVIDIA modelopt exports (quant_method "modelopt"): translate the payload —
-        # quant_algo names the format (NVFP4 is the one the finegrained kernels serve), the
-        # skip list is a glob-style ``ignore`` (or ``exclude_modules``, the name modelopt's
-        # own ``hf_quant_config.json`` uses), and ``kv_cache_scheme`` is dropped (the KV cache
-        # stays in the compute dtype). The calibrated ``input_scale`` TENSORS are consumed by
-        # the loader's converters — the kernels quantize activations against them.
+        # NVIDIA modelopt exports: `quant_algo` names the format, the skip list is a glob-style
+        # `ignore` (or `exclude_modules`, modelopt's own spelling), and `kv_cache_scheme` is
+        # dropped — the KV cache stays in the compute dtype. The calibrated `input_scale` TENSORS
+        # are the loader's business, not this config's.
         if str(self.quant_method) == "modelopt" or kwargs.get("quant_algo") is not None:
             quant_algo = kwargs.pop("quant_algo", None)
             kwargs.pop("config_groups", None)
