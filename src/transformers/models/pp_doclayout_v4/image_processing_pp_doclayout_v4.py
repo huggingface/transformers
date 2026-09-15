@@ -23,8 +23,13 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
-from ...utils import auto_docstring, requires_backends
+from ...utils import auto_docstring, is_scipy_available, requires_backends
 from ...utils.generic import TensorType
+
+
+if is_scipy_available():
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
 
 
 @auto_docstring
@@ -140,7 +145,7 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
             `polygon_points` and `order_seq` predicted by the model. Predictions are sorted by reading order, so
             `order_seq` is non-decreasing (a query selected under several labels keeps a single rank).
         """
-        requires_backends(self, ["torch"])
+        requires_backends(self, ["torch", "scipy"])
         if target_sizes is None:
             raise ValueError("`target_sizes` is required to map the predictions back to the original image size.")
 
@@ -220,72 +225,47 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
         offsets = pred_boxes[..., 2:].reshape(*pred_boxes.shape[:-1], 4, 2) - 0.5
         return centers + offsets
 
-    def _find_cycle(self, num_nodes, edges):
-        """Detects the first cycle in a directed graph with an iterative depth first search."""
-        graph = defaultdict(list)
-        for i, j in edges:
-            graph[i].append(j)
-        visited = [False] * num_nodes
-        on_stack = [False] * num_nodes
-
-        def depth_first_search(vertex, path):
-            visited[vertex] = True
-            on_stack[vertex] = True
-            path.append(vertex)
-            for neighbor in graph[vertex]:
-                if not visited[neighbor]:
-                    cycle = depth_first_search(neighbor, path)
-                    if cycle is not None:
-                        return cycle
-                elif on_stack[neighbor]:
-                    return path[path.index(neighbor) :]
-            path.pop()
-            on_stack[vertex] = False
-            return None
-
-        for node in range(num_nodes):
-            if not visited[node]:
-                cycle = depth_first_search(node, [])
-                if cycle:
-                    return cycle
-        return None
+    def _to_sparse_graph(self, num_nodes, edges):
+        """Builds the `scipy.sparse` adjacency matrix of a graph given as an iterable of `(row, column)` pairs."""
+        rows = np.fromiter((edge[0] for edge in edges), dtype=np.int64, count=len(edges))
+        columns = np.fromiter((edge[1] for edge in edges), dtype=np.int64, count=len(edges))
+        data = np.ones(len(edges), dtype=np.int8)
+        return coo_matrix((data, (rows, columns)), shape=(num_nodes, num_nodes), dtype=np.int8)
 
     def _remove_cycles(self, num_nodes, edges):
-        """Greedily drops the lowest confidence edge of every cycle until the graph is a DAG."""
+        """
+        Drops the lowest confidence edge of every cyclic component until the graph is a DAG.
+
+        A strongly connected component of more than one node is exactly a set of nodes that lie on a common cycle, so
+        every edge inside one is a cycle edge and dropping the weakest of them always breaks at least one cycle. The
+        graph is a DAG once every strongly connected component is a single node.
+        """
         edges = dict(edges)
         while True:
-            cycle = self._find_cycle(num_nodes, edges)
-            if cycle is None:
-                break
-            weakest_edge, weakest_confidence = None, float("inf")
-            for i, j in zip(cycle, cycle[1:] + cycle[:1]):
-                if (i, j) in edges and edges[(i, j)] < weakest_confidence:
-                    weakest_edge = (i, j)
-                    weakest_confidence = edges[(i, j)]
-            if weakest_edge is None:
-                break
-            del edges[weakest_edge]
-        return list(edges.keys())
+            _, labels = connected_components(
+                self._to_sparse_graph(num_nodes, edges), directed=True, connection="strong"
+            )
+            # Self loops are excluded from `edges`, so a shared label already implies a component of several nodes.
+            weakest = {}
+            for edge, confidence in edges.items():
+                component = labels[edge[0]]
+                if component != labels[edge[1]]:
+                    continue
+                # Ties keep the first edge in insertion order, which keeps the decode deterministic.
+                if component not in weakest or confidence < edges[weakest[component]]:
+                    weakest[component] = edge
+            if not weakest:
+                return list(edges)
+            for edge in weakest.values():
+                del edges[edge]
 
     def _find_connected_components(self, num_nodes, edges):
         """Groups nodes into the connected components of the undirected view of the DAG."""
-        parent = list(range(num_nodes))
-
-        def find(node):
-            while parent[node] != node:
-                parent[node] = parent[parent[node]]
-                node = parent[node]
-            return node
-
-        for i, j in edges:
-            root_i, root_j = find(i), find(j)
-            if root_i != root_j:
-                parent[root_i] = root_j
-
-        components = defaultdict(list)
-        for node in range(num_nodes):
-            components[find(node)].append(node)
-        return list(components.values())
+        num_components, labels = connected_components(self._to_sparse_graph(num_nodes, edges), directed=False)
+        components = [[] for _ in range(num_components)]
+        for node, label in enumerate(labels):
+            components[label].append(node)
+        return components
 
     def _topological_sort(self, num_nodes, edges, relative_scores):
         """

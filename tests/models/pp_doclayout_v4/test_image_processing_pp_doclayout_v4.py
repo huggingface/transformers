@@ -190,6 +190,33 @@ class PPDocLayoutV4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
             # query 3 last.
             self.assertEqual(result["labels"].tolist(), [0, 1, 2, 3])
 
+    def test_post_process_reading_order_breaks_several_cycles(self):
+        """Disjoint cycles are independent, so each one loses its own weakest edge."""
+        num_queries = 6
+        successor = torch.full((1, num_queries, num_queries), -10.0)
+        # `0 -> 1 -> 2 -> 0` and `3 -> 4 -> 5 -> 3`, each closed by its weakest edge.
+        successor[:, 0, 1], successor[:, 1, 2], successor[:, 2, 0] = 5.0, 4.0, 0.5
+        successor[:, 3, 4], successor[:, 4, 5], successor[:, 5, 3] = 5.0, 4.0, 0.5
+        relative = torch.triu(torch.full((num_queries, num_queries), 5.0), diagonal=1)
+        relative = (relative - relative.T).unsqueeze(0).contiguous()
+        outputs = SimpleNamespace(
+            logits=_dummy_logits([6.0, 5.0, 4.0, 3.0, 2.0, 1.0]),
+            pred_boxes=torch.tensor(_DUMMY_QUAD).expand(1, num_queries, 10).contiguous(),
+            relative_order_logits=relative,
+            successor_order_logits=successor,
+        )
+
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            result = image_processor.post_process_object_detection(outputs, threshold=0.0, target_sizes=[(200, 100)])[
+                0
+            ]
+
+            self.assertEqual(result["order_seq"].tolist(), list(range(num_queries)))
+            # Dropping `2 -> 0` and `5 -> 3` leaves the chains `0 -> 1 -> 2` and `3 -> 4 -> 5`, which the relative
+            # order head lays out in that order.
+            self.assertEqual(result["labels"].tolist(), [0, 1, 2, 3, 4, 5])
+
     def test_post_process_repeated_query_keeps_single_rank(self):
         """The top-k is over `query x class`, so one query can be kept under several labels with one shared rank."""
         num_queries = 4
