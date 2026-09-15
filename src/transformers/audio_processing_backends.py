@@ -182,9 +182,12 @@ class NumpyAudioBackend(BaseAudioProcessor):
         return self._stft_framed(frames, window, frame_length, n_fft, stft_cfg)
 
     def _spectrum_magnitude(self, stft_out, power, spectrogram_config=None, **kwargs):
-        # computation_dtype signals that upstream FE used float64 magnitudes
+        # `computation_dtype` names the dtype the upstream FE took magnitudes in, as it does in the
+        # torch leaf and in the mel-filter leaves below. It was previously read as a flag -- any
+        # truthy value meant float64 -- so a config asking for float32 silently got float64 here
+        # while torch honoured it, one field with two meanings.
         if spectrogram_config and spectrogram_config.computation_dtype:
-            return np.abs(stft_out, dtype=np.float64) ** power
+            return np.abs(stft_out, dtype=np.dtype(spectrogram_config.computation_dtype)) ** power
         return np.abs(stft_out) ** power
 
     # ── Mel scale & normalization ─────────────────────────────────────────
