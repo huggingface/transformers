@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch GLM-4.5, GLM-4.6, GLM-4.7 model."""
 
+import tempfile
 import unittest
 
 import pytest
@@ -20,9 +21,11 @@ import torch
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
+    backend_device_count,
     require_torch,
     require_torch_accelerator,
     slow,
+    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -30,7 +33,7 @@ from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
-    from transformers import AutoTokenizer, BitsAndBytesConfig, Glm4MoeForCausalLM, Glm4MoeModel
+    from transformers import AutoTokenizer, Glm4MoeForCausalLM, Glm4MoeModel
 
 
 class Glm4MoeModelTester(CausalLMModelTester):
@@ -68,17 +71,40 @@ class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.model = None
         cls.tokenizer = None
+        cls.offload_dir = None
 
     @classmethod
     def get_model(cls):
         if cls.model is None:
+            cls.offload_dir = tempfile.TemporaryDirectory()
+            n = backend_device_count(torch_device)
+            if n > 0 and torch_device != "cpu":
+                torch_accel = getattr(torch, torch_device)
+                per_device = int(
+                    min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3
+                )
+                max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+                max_memory["cpu"] = "60GiB"
+            else:
+                max_memory = None
             cls.model = Glm4MoeForCausalLM.from_pretrained(
                 "zai-org/GLM-4.5",
-                quantization_config=BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16),
+                dtype="auto",
                 device_map="auto",
+                max_memory=max_memory,
+                offload_folder=cls.offload_dir.name,
             )
             cls.tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.5")
         return cls.model, cls.tokenizer
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "model"):
+            del cls.model
+        if cls.offload_dir is not None:
+            cls.offload_dir.cleanup()
+            cls.offload_dir = None
+        del cls.tokenizer
 
     @slow
     @require_torch_accelerator
