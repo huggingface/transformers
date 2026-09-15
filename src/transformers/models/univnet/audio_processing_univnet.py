@@ -123,8 +123,10 @@ class UnivNetAudioProcessorMixin:
         audio = self._reflect_pad(audio, pad_amount)
         return super()._waveform_to_spectrum(audio, spectrogram_config=spectrogram_config, **kwargs)
 
-    def _log_compress(self, features, *, spectrogram_config, do_normalize, normalize_min, normalize_max, **kwargs):
-        features = super()._log_compress(features, spectrogram_config=spectrogram_config, **kwargs)
+    def _shape_log_features(
+        self, features, spectrogram_config, *, do_normalize, normalize_min, normalize_max, **kwargs
+    ):
+        features = super()._shape_log_features(features, spectrogram_config)
         if do_normalize:
             features = 2 * ((features - normalize_min) / (normalize_max - normalize_min)) - 1
         return features

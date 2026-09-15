@@ -757,7 +757,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
         if spectrogram_config.drop_last_frame:
             result = result[..., :-1]
-        result = self._shape_log_features(result, spectrogram_config)
+        result = self._shape_log_features(result, spectrogram_config, **kwargs)
         return self._maybe_transpose_features(result, spectrogram_config)
 
     def _maybe_transpose_features(self, result, spectrogram_config):
@@ -767,7 +767,8 @@ class BaseAudioProcessor(AudioProcessingMixin):
             result = result.swapaxes(-2, -1)
         return result
 
-    def _shape_log_features(self, result, spectrogram_config):
+    def _shape_log_features(self, result, spectrogram_config, **kwargs):
+        """Hook: rescale the log-domain features. Runs after the log and before any transpose."""
         if spectrogram_config.floor_below_peak is not None:
             max_vals = self._amax_over_features(result)
             result = _array_namespace(result).maximum(result, max_vals - spectrogram_config.floor_below_peak)

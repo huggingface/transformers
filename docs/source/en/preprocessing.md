@@ -102,7 +102,7 @@ construction rather than during a call and so has no place in a call flow.
 | `_finalize_output` | 17 — AST, CLAP, Cohere-ASR, Fun-ASR-Nano, Gemma4, Granite-Speech, Granite-Speech5, Inkling, Kyutai-STT, Nemotron-ASR-Streaming, NeuCodec, Parakeet, Phi4-Multimodal, Qwen3-ASR, SeamlessM4T, Speech2Text, XCodec2 |
 | `compute_features` | CLAP, Gemma4-Unified, Granite-Speech, Musicgen-Melody, SeamlessM4T |
 | `_prepare_waveform` | NeuCodec, Qwen3-ASR, VibeVoice, Wav2Vec2, XCodec2 |
-| `_log_compress` | CLVP, UnivNet, Voxtral-Realtime |
+| `_shape_log_features` | UnivNet, Voxtral-Realtime |
 | `_padded_frame_count` | Inkling, Qwen3-ASR, UnivNet |
 | `_finalize_features` | Fun-ASR-Nano, SeamlessM4T |
 | `_waveform_to_spectrum` | Inkling, UnivNet |
@@ -110,6 +110,7 @@ construction rather than during a call and so has no place in a call flow.
 | `_pad_feature_single` | NeuCodec, XCodec2 |
 | `_project_to_mel` · `_valid_frame_counts` | UnivNet |
 | `_process_frames` · `_stft_framed` | Phi4-Multimodal |
+| `_log_compress` | CLVP |
 | `_pad_features` | AST |
 | `pad` · `_pad_waveform` · `_truncate_waveform` · `_stack_waveforms` · `_resolve_padding_strategy` · `_set_attributes` | CLAP |
 | `_dither_waveform` · `_preprocess_audio_like_inputs` | Cohere-ASR |
