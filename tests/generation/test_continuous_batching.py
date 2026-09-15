@@ -802,6 +802,7 @@ class ContinuousBatchingPauseTest(unittest.TestCase):
     def _get_minimal_manager(status: BackgroundThreadStatus, thread: threading.Thread | None):
         """Builds a bare manager with just enough states for `pause` and `stop` to work."""
         manager = ContinuousBatchingManager.__new__(ContinuousBatchingManager)
+        manager._wake_up_loop = threading.Event()
         manager.background_thread_status = status
         manager._generation_thread = thread
         manager.distributed_helper = SimpleNamespace(cpu_comm_group=None, global_rank=0)

@@ -245,7 +245,7 @@ class BackgroundThreadStatus:
             self._paused = False
         self._condition.notify_all()
 
-    def acquire_pause(self, loop_wake_up: threading.Event) -> None:
+    def acquire_pause(self, wake_up_loop: threading.Event) -> None:
         """Called by a thread sharing the model to ask the generation loop to pause. The request is picked up by the
         loop at its next TP all-reduce, see `is_pause_requested`. Any number of threads may ask at the same time. The
         thread then waits until the loop is paused, and raises if the loop is gone before waiting is over."""
@@ -254,7 +254,7 @@ class BackgroundThreadStatus:
             self._pauses_requested += 1
             self._local_pauses_requested.value += 1
             # This wakes up the loop if it is waiting for new work (new or cancelled requests)
-            loop_wake_up.set()
+            wake_up_loop.set()
 
             # Wait for the pause, in a try block so we can handle an error that happens while waiting
             try:
@@ -700,7 +700,7 @@ class ContinuousBatchingManager:
         self.cancel_queue: queue.Queue[str] = queue.Queue()
         self._request_counter = 0
         self._request_lock = threading.Lock()
-        self._loop_wake_up = threading.Event()
+        self._wake_up_loop = threading.Event()
 
         # Processor-related attributes
         self.background_thread_status = BackgroundThreadStatus()
@@ -897,7 +897,7 @@ class ContinuousBatchingManager:
         if not self.is_running():
             raise RuntimeError("Cannot pause generation while no generation loop is running.")
 
-        self.background_thread_status.acquire_pause(self._loop_wake_up)
+        self.background_thread_status.acquire_pause(self._wake_up_loop)
         try:
             yield
         finally:
@@ -960,7 +960,7 @@ class ContinuousBatchingManager:
 
         # Use block=True with timeout to handle backpressure if queue is full
         self.input_queue.put(state, block=True, timeout=10)
-        self._loop_wake_up.set()
+        self._wake_up_loop.set()
         return request_id
 
     def add_requests(
@@ -1003,7 +1003,7 @@ class ContinuousBatchingManager:
         driver processes interact with the manager."""
         if self.is_tp_driver:
             self.cancel_queue.put(request_id)
-            self._loop_wake_up.set()
+            self._wake_up_loop.set()
 
     # TODO (remi-or) : handle benchmarking properly when updating / fixing the requeue logic
     # TODO (remi-or) : this NEEDS to get fixed in a future PR -- it's quite wasteful
@@ -1093,8 +1093,8 @@ class ContinuousBatchingManager:
             return False
         # Otherwise, we wait for new requests and retry
         else:
-            self._loop_wake_up.wait(timeout=0.1)  # wait for new requests instead of busy-spinning.
-            self._loop_wake_up.clear()
+            self._wake_up_loop.wait(timeout=0.1)  # wait for new requests instead of busy-spinning.
+            self._wake_up_loop.clear()
             return True
 
     def _run_generation_loop(self) -> None:
