@@ -27,8 +27,7 @@ from .configuration_utils import DistributedConfig
 
 if TYPE_CHECKING:
     from torch import nn
-
-    from .utils import MeshManager
+    from torch.distributed.device_mesh import DeviceMesh
 
 
 logger = logging.get_logger(__name__)
@@ -1007,17 +1006,30 @@ def resolve_parallel_plans(model: nn.Module, distributed_config: DistributedConf
     return tp_plan, ep_plan
 
 
-def apply_expert_parallelism(
-    model: nn.Module, distributed_config: DistributedConfig, mesh_manager: MeshManager, plan: dict[str, str]
-):
-    """Apply the resolved expert rules on the TP or EP mesh."""
-    tp_mesh = mesh_manager.get_mesh("tp")
-    # All-reduce EP requires ep_size == tp_size: apply the EP rules on those same ranks,
-    # using the TP mesh so expert parameters remain on the dense mesh used by FSDP.
-    ep_mesh = mesh_manager.get_mesh("ep") if "ep_dispatch_experts" in plan.values() else tp_mesh
-
+def apply_masked_expert_parallelism(model: nn.Module, tp_mesh: DeviceMesh, plan: dict[str, str]):
+    """Shard experts and install router masking and all-reduce hooks on the TP mesh."""
     for name, module in model.named_modules():
-        # Create expert DTensor placeholders for the loader.
+        for p_name, _ in list(module.named_parameters(recurse=False)):
+            full = f"{name}.{p_name}" if name else p_name
+            style_name = _get_parameter_plan(parameter_name=full, plan=plan, is_weight=True)
+            if style_name is not None and style_name in ALL_PARALLEL_STYLES:
+                style = ALL_PARALLEL_STYLES[style_name]
+                style.validate_param(module, p_name, tp_mesh, parameter_name=full)
+                style.shard_param(module, p_name, tp_mesh)
+
+        style_name = _get_parameter_plan(parameter_name=name, plan=plan, is_weight=False)
+        if style_name is not None and style_name in ALL_PARALLEL_STYLES:
+            ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
+        module._is_hooked = True
+
+    return model
+
+
+def apply_dispatch_expert_parallelism(
+    model: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh, plan: dict[str, str]
+):
+    """Shard experts on EP; use TP to split shared tokens and reconstruct outputs around dispatch."""
+    for name, module in model.named_modules():
         for p_name, _ in list(module.named_parameters(recurse=False)):
             full = f"{name}.{p_name}" if name else p_name
             style_name = _get_parameter_plan(parameter_name=full, plan=plan, is_weight=True)

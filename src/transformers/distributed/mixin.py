@@ -25,7 +25,8 @@ from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
     _validate_parallel_plan_styles,
-    apply_expert_parallelism,
+    apply_dispatch_expert_parallelism,
+    apply_masked_expert_parallelism,
     apply_tensor_parallelism,
     gather_state_dict_for_save,
     resolve_parallel_plans,
@@ -195,7 +196,12 @@ class DistributedMixin:
         if tp_plan:
             model = apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), tp_plan)
         if ep_plan:
-            model = apply_expert_parallelism(model, distributed_config, mesh_manager, ep_plan)
+            if "ep_dispatch_experts" in ep_plan.values():
+                model = apply_dispatch_expert_parallelism(
+                    model, mesh_manager.get_mesh("ep"), mesh_manager.get_mesh("tp"), ep_plan
+                )
+            else:
+                model = apply_masked_expert_parallelism(model, mesh_manager.get_mesh("tp"), ep_plan)
 
         if distributed_config.fsdp_size > 1 or "ep_dispatch_experts" in ep_plan.values():
             model = apply_fully_sharded_data_parallelism(model, mesh_manager)
