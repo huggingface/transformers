@@ -120,7 +120,17 @@ class NumpyAudioBackend(BaseAudioProcessor):
             w = (0.5 + 0.5 * np.cos(fac)) ** 0.85
         else:
             raise ValueError(f"Unknown window function '{name}'")
-        return w[:win_length] if stft_cfg.periodic else w
+        w = w[:win_length] if stft_cfg.periodic else w
+        # Honour `window_dtype` as the torch leaf does. Without this the cosine's float64 result
+        # was returned unconditionally, and `_frame_waveform`'s `result_type` promotion then
+        # carried the whole framing/preemphasis path into float64 while torch stayed in float32.
+        # Honour `window_dtype` as the torch leaf does. Left unread, the cosine's float64 result
+        # was returned unconditionally and `_frame_waveform`'s `result_type` promotion carried
+        # framing and preemphasis into float64 while torch stayed in float32 -- the same config
+        # computed at two different precisions. The *fallback* deliberately stays float64 rather
+        # than following the audio dtype as torch does: these numpy leaves are bit-exact against
+        # the numpy legacy extractors, and narrowing it moves qwen3_asr and voxtral_realtime.
+        return w.astype(np.dtype(stft_cfg.window_dtype), copy=False) if stft_cfg.window_dtype else w
 
     @staticmethod
     def _np_frame(x, frame_length, hop_length):
