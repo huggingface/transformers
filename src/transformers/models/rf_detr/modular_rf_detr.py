@@ -151,7 +151,7 @@ class RfDetrImageProcessor(DetrImageProcessor):
 
         for key, stacked_images in grouped_images.items():
             stacked_annotations = grouped_annotations[key]
-            # Rescale then resize like in the original RF-DETR implementation
+            # Different from DETR: rescale then resize instead of resize then rescale
             if do_rescale:
                 stacked_images = self.rescale(stacked_images, rescale_factor)
             if do_resize:
