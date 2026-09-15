@@ -26,6 +26,9 @@ rendered properly in your Markdown viewer.
 
 [Qwen3MoE](https://huggingface.co/papers/2505.09388) is the mixture-of-experts variant in the Qwen3 family, with 30.5B total parameters and 3.3B active parameters per token. It uses 128 routed experts with 8 activated per token across 48 layers, and supports up to 131K context with YaRN. See also the dense variant [Qwen3](qwen3).
 
+> [!TIP]
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
+
 The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModelForCausalLM`] class.
 
 <hfoptions id="usage">
