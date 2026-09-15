@@ -1782,8 +1782,10 @@ def _prepare_attention_mask(model_kwargs: dict[str, Any], new_length: int, is_en
         return model_kwargs
 
     mask = model_kwargs[mask_key]
-    mask_length_diff = new_length - mask.shape[1]
+    if mask is None:
+        return model_kwargs
 
+    mask_length_diff = new_length - mask.shape[1]
     if mask_length_diff < 0:
         model_kwargs[mask_key] = mask[:, :mask_length_diff]
     elif mask_length_diff > 0:

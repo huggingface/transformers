@@ -2700,6 +2700,13 @@ class GenerationMixin(ContinuousMixin):
         if not kwargs_has_position_ids and accepts_position_ids and not self.config.is_encoder_decoder:
             model_kwargs["position_ids"] = self._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
+        # We can drop the mask altogether if it's all 1s, i.e. no padding, to make downstream attention mask creation and inference
+        # faster (we will never have padding). Note that we cannot drop it earlier, as position_ids creation absolutely needs to check
+        # the mask even if it's only 1s, in case we restart from an existing cache and only new sequence input_ids
+        if not self.config.is_encoder_decoder and accepts_attention_mask:
+            if (attention_mask == 1).all():
+                model_kwargs["attention_mask"] = None
+
         if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
             # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`
             model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
