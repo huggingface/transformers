@@ -2218,9 +2218,8 @@ class ProcessorMixin(PushToHubMixin):
             if return_tensors:
                 processor_kwargs["return_tensors"] = return_tensors
 
-            # Audio was loaded/resampled by us above, so let the audio processor know at which rate. Otherwise
-            # it warns about a missing `sampling_rate` and cannot detect a mismatch with the model's expected rate
-            # Replace explicit None with the resolved rate, preserving its location to avoid duplicates in `_merge_kwargs`.
+            # Audio was loaded/resampled by us above, so let the audio processor know at which rate.
+            # (we additionally preserve the location of the kwarg in the nested structure kwargs -> processor -> audio)
             if batch_audios:
                 if "sampling_rate" in audio_kwargs_from_user:
                     processor_kwargs["audio_kwargs"] = {**audio_kwargs_from_user, "sampling_rate": sampling_rate}
