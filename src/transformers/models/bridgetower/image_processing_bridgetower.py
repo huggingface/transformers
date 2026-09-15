@@ -147,16 +147,16 @@ class BridgeTowerImageProcessor(TorchvisionBackend):
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_images = self.resize(stacked_images, size=size, resample=resample, size_divisor=size_divisor)
-            resized_images_grouped[shape] = stacked_images
+            resized_images_grouped[key] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         # Group images by size for further processing
         grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_center_crop:
                 stacked_images = self.center_crop(
                     stacked_images, size=SizeDict(height=crop_size.shortest_edge, width=crop_size.shortest_edge)
@@ -165,7 +165,7 @@ class BridgeTowerImageProcessor(TorchvisionBackend):
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            processed_images_grouped[shape] = stacked_images
+            processed_images_grouped[key] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 

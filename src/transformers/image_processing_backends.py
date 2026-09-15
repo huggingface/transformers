@@ -176,7 +176,7 @@ class TorchvisionBackend(BaseImageProcessor):
         )
         processed_images_grouped = {}
         processed_masks_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             image_size = stacked_images.shape[-2:]
             padding_height = pad_size[0] - image_size[0]
             padding_width = pad_size[1] - image_size[1]
@@ -188,16 +188,16 @@ class TorchvisionBackend(BaseImageProcessor):
             if image_size != pad_size:
                 padding = (0, 0, padding_width, padding_height)
                 stacked_images = tvF.pad(stacked_images, padding, fill=fill_value, padding_mode=padding_mode)
-            processed_images_grouped[shape] = stacked_images
+            processed_images_grouped[key] = stacked_images
 
             if return_mask:
                 stacked_masks = torch.zeros_like(stacked_images, dtype=torch.int64)[..., 0, :, :]
                 stacked_masks[..., : image_size[0], : image_size[1]] = 1
-                processed_masks_grouped[shape] = stacked_masks
+                processed_masks_grouped[key] = stacked_masks
 
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index, is_nested=is_nested)
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         if return_mask:
-            processed_masks = reorder_images(processed_masks_grouped, grouped_images_index, is_nested=is_nested)
+            processed_masks = reorder_images(processed_masks_grouped, grouped_images_index)
             return processed_images, processed_masks
 
         return processed_images
@@ -388,23 +388,23 @@ class TorchvisionBackend(BaseImageProcessor):
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_images = self.resize(image=stacked_images, size=size, resample=resample)
-            resized_images_grouped[shape] = stacked_images
+            resized_images_grouped[key] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         # Group images by size for further processing
         grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
+        for key, stacked_images in grouped_images.items():
             if do_center_crop:
                 stacked_images = self.center_crop(stacked_images, crop_size)
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            processed_images_grouped[shape] = stacked_images
+            processed_images_grouped[key] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         if do_pad:
