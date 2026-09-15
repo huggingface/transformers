@@ -435,7 +435,7 @@ class PPDocLayoutV4PreTrainedModel(PreTrainedModel):
             init.constant_(module.output_proj.bias, 0.0)
 
         elif isinstance(module, PPDocLayoutV4ClassificationHead):
-            # The class heads are untied, so `enc_score_head` and every decoder layer's head are visited separately.
+            # The class heads are untied, so `enc_score_head` and the decoder head are visited separately.
             prior_prob = self.config.initializer_bias_prior_prob
             init.xavier_uniform_(module.weight)
             init.constant_(module.bias, float(-math.log((1 - prior_prob) / prior_prob)))
@@ -1127,11 +1127,11 @@ def quad_to_rect(quad: torch.Tensor) -> torch.Tensor:
 class PPDocLayoutV4Decoder(PPDocLayoutV4PreTrainedModel):
     """
     Main differences to `PPDocLayoutV3Decoder`:
-        1. The bbox and class heads are untied and there is one of each per decoder layer, instead of a single head
-           shared with the encoder.
+        1. The bbox and class heads are untied from the encoder heads. There is one bbox head per decoder layer, while
+           classification and reading order are scored once, after the last layer.
         2. Reference points are `config.num_coords` dimensional quads. Deformable attention samples on the enclosing
            rect of the quad, while the query position embedding consumes the full quad.
-        3. Classification and reading order are only evaluated on the last layer, and there is no mask branch.
+        3. There is no mask branch.
     """
 
     _can_record_outputs = {
@@ -1155,18 +1155,15 @@ class PPDocLayoutV4Decoder(PPDocLayoutV4PreTrainedModel):
                 for _ in range(config.decoder_layers)
             ]
         )
-        self.class_embed = nn.ModuleList(
-            [PPDocLayoutV4ClassificationHead(config.d_model, config.num_labels) for _ in range(config.decoder_layers)]
-        )
+        # Only the bbox head runs per layer, to refine the reference points handed to the next one. PaddleDetection
+        # also carries a class and a reading order head per layer for its auxiliary losses, but scores the last layer
+        # alone, so a single head of each is enough here and the conversion keeps only the last layer's weights.
+        self.class_embed = PPDocLayoutV4ClassificationHead(config.d_model, config.num_labels)
 
         self.num_queries = config.num_queries
-        self.order_head = nn.ModuleList(
-            [nn.Linear(config.d_model, config.d_model) for _ in range(config.decoder_layers)]
-        )
+        self.order_head = nn.Linear(config.d_model, config.d_model)
         self.global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=True)
-        self.successor_order_head = nn.ModuleList(
-            [nn.Linear(config.d_model, config.d_model) for _ in range(config.decoder_layers)]
-        )
+        self.successor_order_head = nn.Linear(config.d_model, config.d_model)
         self.successor_global_pointer = PPDocLayoutV4GlobalPointer(config, antisymmetric=False)
         self.s2r_fusion = PPDocLayoutV4S2RFusion(config)
 
@@ -1244,12 +1241,12 @@ class PPDocLayoutV4Decoder(PPDocLayoutV4PreTrainedModel):
             intermediate_reference_points += (reference_points,)
 
         # PP-DocLayoutV3 scores every layer from inside the loop, on hidden states passed through a `norm` first.
-        # PP-DocLayoutV4 has no such norm and only scores the last layer, so the earlier heads stay unused.
-        logits = self.class_embed[-1](hidden_states)
+        # PP-DocLayoutV4 has no such norm and scores the last layer only.
+        logits = self.class_embed(hidden_states)
         valid_query = hidden_states[:, -self.num_queries :] if self.num_queries is not None else hidden_states
         # The direct successor branch and its fusion into the relative order logits are new in PP-DocLayoutV4.
-        successor_order_logits = self.successor_global_pointer(self.successor_order_head[-1](valid_query))
-        relative_order_logits = self.global_pointer(self.order_head[-1](valid_query))
+        successor_order_logits = self.successor_global_pointer(self.successor_order_head(valid_query))
+        relative_order_logits = self.global_pointer(self.order_head(valid_query))
         relative_order_logits = self.s2r_fusion(relative_order_logits, successor_order_logits)
 
         return PPDocLayoutV4DecoderOutput(

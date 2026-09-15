@@ -134,10 +134,10 @@ DECODER_MAPPING = [
     (r"^transformer\.decoder\.layers\.(\d+)\.self_attn\.", r"decoder.layers.\1.self_attn."),
     (r"^transformer\.query_pos_head\.", r"decoder.query_pos_head."),
     (r"^transformer\.dec_bbox_head\.", r"decoder.bbox_embed."),
-    (r"^transformer\.dec_score_head\.", r"decoder.class_embed."),
-    (r"^transformer\.dec_roor_order_head\.", r"decoder.successor_order_head."),
+    (r"^transformer\.dec_score_head\.\d+\.", r"decoder.class_embed."),
+    (r"^transformer\.dec_roor_order_head\.\d+\.", r"decoder.successor_order_head."),
     (r"^transformer\.dec_roor_global_pointer\.", r"decoder.successor_global_pointer."),
-    (r"^transformer\.dec_order_head\.", r"decoder.order_head."),
+    (r"^transformer\.dec_order_head\.\d+\.", r"decoder.order_head."),
     (r"^transformer\.dec_global_pointer\.", r"decoder.global_pointer."),
     (r"^transformer\.s2r_fusion\.a$", r"decoder.s2r_fusion.closure_weight"),
     (r"^transformer\.s2r_fusion\.", r"decoder.s2r_fusion."),
@@ -145,6 +145,17 @@ DECODER_MAPPING = [
 ]
 
 MAPPING = BACKBONE_MAPPING + ENCODER_MAPPING + DECODER_MAPPING
+
+# PaddleDetection keeps a class and a reading order head per decoder layer for its auxiliary losses, but scores the
+# last layer alone. The Transformers model therefore carries a single head of each, and every earlier layer's copy is
+# dropped by the conversion.
+LAST_LAYER_ONLY_HEADS = re.compile(r"^transformer\.(dec_score_head|dec_order_head|dec_roor_order_head)\.(\d+)\.")
+
+
+def is_unused_head(key: str, decoder_layers: int) -> bool:
+    """`True` for the per-layer head copies that the Transformers model does not carry."""
+    match = LAST_LAYER_ONLY_HEADS.match(key)
+    return match is not None and int(match.group(2)) != decoder_layers - 1
 
 
 def rename_key(key: str) -> str:
@@ -161,7 +172,7 @@ def rename_key(key: str) -> str:
 
 def convert_state_dict(paddle_state_dict: dict, model: PPDocLayoutV4ForObjectDetection) -> dict:
     """
-    Renames, transposes and splits the Paddle parameters into a Transformers state dict.
+    Renames, transposes, splits and drops the Paddle parameters into a Transformers state dict.
 
     Whether a 2D weight has to be transposed is decided by looking up the owning module in `model`: Paddle stores
     `nn.Linear` weights as `(in_features, out_features)` while torch uses `(out_features, in_features)`. Deciding this
@@ -173,6 +184,8 @@ def convert_state_dict(paddle_state_dict: dict, model: PPDocLayoutV4ForObjectDet
 
     state_dict = {}
     for key, value in paddle_state_dict.items():
+        if is_unused_head(key, model.config.decoder_layers):
+            continue
         new_key = rename_key(key)
         tensor = torch.from_numpy(value.copy())
 
