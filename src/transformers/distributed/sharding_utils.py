@@ -110,6 +110,13 @@ class DtensorShardOperation:
             (mesh_dim, placement) for mesh_dim, placement in enumerate(self.placements) if hasattr(placement, "dim")
         ]
 
+        # A 0-dim tensor has no axis to shard, so every rank that owns it takes the whole value
+        # (`source[...]`, since a lazy safetensors slice rejects `source[()]`).
+        if not source_shape:
+            if tensor_idx is not None and not self._owns_expert(tensor_idx, dim_placements):
+                return None
+            return source[...].to(device=device, dtype=dtype)
+
         # Dense path
         if tensor_idx is None:
             if not dim_placements:
@@ -316,6 +323,13 @@ class DtensorShardOperation:
     def _normalize_param_dim(self, dim: int) -> int:
         # if dim is negative, it should be normalized to the last axis
         return dim if dim >= 0 else self.param_ndim + dim
+
+    def _owns_expert(self, tensor_idx: int, dim_placements: list) -> bool:
+        """Whether this rank holds expert `tensor_idx`. True when nothing shards axis 0 — the
+        experts are replicated, so every rank owns every one of them."""
+        if not any(self._normalize_param_dim(placement.dim) == 0 for _, placement in dim_placements):
+            return True
+        return self._axis0_offset <= tensor_idx < self._axis0_offset + self._axis0_local_size
 
 
 def _dtensor_from_local_like(local_tensor: torch.Tensor, ref: DTensor) -> DTensor:

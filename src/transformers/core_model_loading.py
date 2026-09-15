@@ -81,6 +81,11 @@ def build_glob_alternation(
 class ConversionOps(ABC):
     """Base class for weight conversion operations."""
 
+    # Whether this op maps SEVERAL sources onto SEVERAL targets in one call — a converter is
+    # otherwise restricted to one-to-many, one-to-one or many-to-one, since an m:n mapping only
+    # makes sense when a single operation owns the whole relation (see `WeightConverter`).
+    supports_many_to_many: bool = False
+
     def __repr__(self):
         if hasattr(self, "dim"):
             return f"{self.__class__.__name__}(dim={self.dim})"
@@ -613,6 +618,8 @@ class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
     The final fusions are defined by the amount of original module lists.
     """
 
+    supports_many_to_many = True
+
     def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
         self.stack_dim = stack_dim
         self.concat_dim = concat_dim
@@ -674,6 +681,8 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
     The splits are equal and are defined by the amount of original module lists.
     The final decoupled module lists are defined by the amount of keys.
     """
+
+    supports_many_to_many = True
 
     def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
         self.stack_dim = stack_dim
@@ -1142,13 +1151,6 @@ class PrefixChange(WeightRenaming):
         return result
 
 
-# List of classes that are known to be able to use m:n
-_INTERNAL_MANY_TO_MANY_CONVERSIONS = (
-    ErnieFuseAndSplitTextVisionExperts,
-    ErnieSplitAndDecoupleTextVisionExperts,
-)
-
-
 class WeightConverter(WeightTransform):
     __slots__ = ("operations", "force_cpu")
 
@@ -1164,8 +1166,8 @@ class WeightConverter(WeightTransform):
         self.force_cpu = force_cpu
 
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
-            # We allow many-to-many only if we use an internal operation that can handle it
-            if not any(isinstance(op, _INTERNAL_MANY_TO_MANY_CONVERSIONS) for op in self.operations):
+            # We allow many-to-many only if an operation declares that it handles the whole relation
+            if not any(op.supports_many_to_many for op in self.operations):
                 raise ValueError(
                     f"source keys={self.source_patterns}, target_patterns={self.target_patterns} but you can only have one to many, one to one or many to one."
                 )
@@ -1699,8 +1701,10 @@ def convert_and_load_state_dict_in_model(
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
-            elif empty_param is not None and empty_param.dtype != _dtype:
-                _dtype = empty_param.dtype  # usually correct when initializing
+            elif empty_param is not None and empty_param.dtype != _dtype and not needs_quantization:
+                # usually correct when initializing; only exception can be quants (int8 storage
+                # would zero it, float8 would double-round it)
+                _dtype = empty_param.dtype
 
             # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
             # distributed op selects whole experts. The signal is a `MergeModulelist`
