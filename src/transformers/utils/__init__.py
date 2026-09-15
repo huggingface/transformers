@@ -182,6 +182,7 @@ from .import_utils import (
     is_onnxruntime_available,
     is_onnxscript_available,
     is_openai_available,
+    is_openvino_available,
     is_optimum_available,
     is_optimum_quanto_available,
     is_pandas_available,
