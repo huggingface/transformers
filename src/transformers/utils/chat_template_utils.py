@@ -15,6 +15,7 @@
 import inspect
 import json
 import re
+import secrets
 import types
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -629,3 +630,166 @@ class Chat:
             if not is_valid_message(message):
                 raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
         self.messages = messages
+
+
+@lru_cache
+def _compile_special_token_pattern(all_special_tokens: tuple[str, ...]) -> re.Pattern | None:
+    if not all_special_tokens:
+        return None
+    # Match longest-first to catch cases where one token is a substring of another
+    escaped = sorted((re.escape(token) for token in all_special_tokens if token), key=len, reverse=True)
+    return re.compile("|".join(escaped))
+
+
+def sanitize_chat_inputs(
+    tokenizer, conversations, tools, documents, kwargs: dict, tokenize: bool, return_assistant_tokens_mask: bool
+) -> tuple[Any, Any, Any, dict, dict[str, str]]:
+    """Replace special-token text anywhere in the chat inputs with unique placeholders, for
+    `encode_sanitized_chats` to encode as ordinary (non-special) tokens after the template has rendered.
+    Returns the sanitized inputs plus the `{placeholder: original_text}` substitutions made."""
+    if not tokenize or return_assistant_tokens_mask:
+        raise ValueError(
+            "`sanitize_special_tokens=True` requires `tokenize=True` and does not support "
+            "`return_assistant_tokens_mask`."
+        )
+    substitutions: dict[str, str] = {}
+    pattern = _compile_special_token_pattern(tuple(sanitization_special_tokens(tokenizer)))
+    conversations, tools, documents, kwargs = (
+        _sanitize_chat_input(chat_input, pattern, substitutions)
+        for chat_input in (conversations, tools, documents, kwargs)
+    )
+    return conversations, tools, documents, kwargs, substitutions
+
+
+def _sanitize_chat_input(chat_input: Any, pattern: re.Pattern | None, substitutions: dict[str, str]) -> Any:
+    """Recursively replace each special-token occurrence with a unique placeholder, recorded in
+    `substitutions` as `{placeholder: original_text}`."""
+    if pattern is None:
+        return chat_input
+    if isinstance(chat_input, Chat):
+        # Rebuilt rather than mutated, so the caller's Chat doesn't end up holding placeholders
+        return Chat(_sanitize_chat_input(chat_input.messages, pattern, substitutions))
+    if isinstance(chat_input, dict):
+        return {key: _sanitize_chat_input(value, pattern, substitutions) for key, value in chat_input.items()}
+    elif isinstance(chat_input, list):
+        return [_sanitize_chat_input(item, pattern, substitutions) for item in chat_input]
+    elif isinstance(chat_input, tuple):
+        return tuple(_sanitize_chat_input(item, pattern, substitutions) for item in chat_input)
+    elif isinstance(chat_input, str):
+
+        def replacement(match: re.Match) -> str:
+            # Pure-digit placeholders survive template filters like tojson/trim/upper unchanged
+            placeholder = str(int.from_bytes(secrets.token_bytes(10), "big"))
+            substitutions[placeholder] = match.group(0)
+            return placeholder
+
+        # A single pass suffices; rescanning would corrupt placeholders whenever a special token is digits-only
+        return pattern.sub(replacement, chat_input)
+    else:
+        return chat_input
+
+
+def sanitization_special_tokens(tokenizer) -> list[str]:
+    """The token strings protected by `sanitize_special_tokens`: every added token flagged as special, plus
+    the named special tokens — a superset of `all_special_tokens`, which misses unnamed chat control tokens
+    like `<|start_header_id|>`."""
+    protected = {token.content for token in tokenizer.added_tokens_decoder.values() if token.special}
+    protected.update(str(token) for token in tokenizer.all_special_tokens)
+    return sorted(protected)
+
+
+def encode_sanitized_chats(
+    tokenizer,
+    rendered_chat: str | list[str],
+    substitutions: dict[str, str],
+    padding=False,
+    truncation: bool = False,
+    max_length: int | None = None,
+    return_tensors=None,
+    **tokenizer_kwargs,
+):
+    """Encode rendered chats whose inputs had special-token text replaced with placeholders, given the
+    `{placeholder: original_text}` substitutions it made. Text between placeholders is encoded normally, so
+    only the special tokens the template itself emitted act as control tokens; each placeholder becomes the
+    ids of its original text encoded without special-token matching (as with `split_special_tokens=True`).
+    Tokenization at placeholder boundaries can therefore differ from encoding the same text inline (e.g. a
+    SentencePiece dummy space). Returns the padded `BatchEncoding`, unbatched when `rendered_chat` is a
+    single string."""
+    single = isinstance(rendered_chat, str)
+    rendered_batch = [rendered_chat] if single else rendered_chat
+    verbose = tokenizer_kwargs.pop("verbose", True)
+    padding_side = tokenizer_kwargs.pop("padding_side", None)
+    pad_to_multiple_of = tokenizer_kwargs.pop("pad_to_multiple_of", None)
+    return_attention_mask = tokenizer_kwargs.pop("return_attention_mask", None)
+    if tokenizer_kwargs:
+        # Arbitrary kwargs don't compose with the assembled encoding; reject rather than silently ignore
+        raise ValueError(
+            f"`sanitize_special_tokens=True` does not support these tokenizer kwargs: {sorted(tokenizer_kwargs)}"
+        )
+    padding_strategy, truncation_strategy, max_length, _ = tokenizer._get_padding_truncation_strategies(
+        padding=padding,
+        truncation=truncation,
+        max_length=max_length,
+        pad_to_multiple_of=pad_to_multiple_of,
+        verbose=verbose,
+    )
+
+    protected_ids = set(tokenizer.convert_tokens_to_ids(sanitization_special_tokens(tokenizer)))
+    protected_ids.discard(tokenizer.unk_token_id)  # OOV text legitimately encodes to unk
+    inert_ids = {}
+    for placeholder, original in substitutions.items():
+        ids = tokenizer.encode(original, add_special_tokens=False, split_special_tokens=True)
+        # Some vocabularies can assemble a special token out of ordinary pieces; refuse rather than rewrite
+        if protected_ids.intersection(ids):
+            raise ValueError(
+                "`sanitize_special_tokens=True` cannot make these chat inputs safe: the special-token text "
+                "still produces special token ids even when encoded as ordinary text."
+            )
+        inert_ids[placeholder] = ids
+
+    # Longest-first, so that a placeholder which happens to start with another is still matched whole
+    placeholder_pattern = re.compile("|".join(sorted(substitutions, key=len, reverse=True)))
+    batch_ids = []
+    seen = set()
+    for rendered in rendered_batch:
+        ids, last = [], 0
+        for match in placeholder_pattern.finditer(rendered):
+            if text := rendered[last : match.start()]:
+                ids += tokenizer.encode(text, add_special_tokens=False)
+            ids += inert_ids[match.group(0)]
+            seen.add(match.group(0))
+            last = match.end()
+        if text := rendered[last:]:
+            ids += tokenizer.encode(text, add_special_tokens=False)
+        batch_ids.append(ids)
+    if seen != set(substitutions):
+        logger.warning_once(
+            "Some special tokens in the chat inputs were transformed or dropped by the chat template, "
+            "so their original text could not be restored after sanitization."
+        )
+
+    if truncation_strategy.value != "do_not_truncate" and max_length is not None:
+        for i, ids in enumerate(batch_ids):
+            if len(ids) > max_length:
+                keep = slice(-max_length, None) if tokenizer.truncation_side == "left" else slice(None, max_length)
+                batch_ids[i] = ids[keep]
+    for ids in batch_ids:
+        tokenizer._eventual_warn_about_too_long_sequence(ids, max_length, verbose)
+
+    encoded_inputs = {"input_ids": batch_ids}
+    if "token_type_ids" in tokenizer.model_input_names:
+        encoded_inputs["token_type_ids"] = [[0] * len(ids) for ids in batch_ids]
+    out = tokenizer.pad(
+        encoded_inputs,
+        padding=padding_strategy.value,
+        max_length=max_length,
+        pad_to_multiple_of=pad_to_multiple_of,
+        padding_side=padding_side,
+        return_attention_mask=return_attention_mask,
+        return_tensors=return_tensors,
+        verbose=verbose,
+    )
+    if single and return_tensors is None:
+        # type(out) is BatchEncoding, which cannot be imported here (circular import)
+        out = type(out)({key: value[0] for key, value in out.items()})
+    return out

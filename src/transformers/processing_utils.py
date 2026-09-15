@@ -1988,6 +1988,7 @@ class ProcessorMixin(PushToHubMixin):
         continue_final_message: bool | str = False,
         return_assistant_tokens_mask: bool = False,
         tokenize: bool = False,
+        sanitize_special_tokens: bool = False,
         return_tensors: str | TensorType | None = None,
         return_dict: bool = False,
         load_audio_from_video: bool = False,
@@ -2018,6 +2019,9 @@ class ProcessorMixin(PushToHubMixin):
             chat_template (`Optional[str]`, *optional*):
                 The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
                 chat template is used.
+            sanitize_special_tokens (`bool`, defaults to `False`):
+                Sanitization of chat inputs (see [`~PreTrainedTokenizerBase.apply_chat_template`]) is not yet
+                supported for processors; passing `True` raises an error.
         """
         processor_kwargs = processor_kwargs or {}
 
@@ -2173,6 +2177,12 @@ class ProcessorMixin(PushToHubMixin):
                 # So we'll make a batched list of images and let the processor handle it
                 batch_images.append(images)
                 batch_videos.append(videos)
+
+        if sanitize_special_tokens:
+            # In the signature only to be rejected: as an unknown kwarg it would silently become a template variable
+            raise NotImplementedError(
+                "`sanitize_special_tokens` is not yet supported for processors, only for tokenizers."
+            )
 
         # `kwargs` overwrite special tokens if both are present
         template_kwargs = {**self.tokenizer.special_tokens_map, **kwargs}
