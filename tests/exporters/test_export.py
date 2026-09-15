@@ -16,7 +16,6 @@ import copy
 import functools
 import inspect
 import itertools
-import os
 import re
 
 import pytest
@@ -130,6 +129,11 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     },
     # Every backend, dynamic-shape only.
     "dynamic": {
+        "HieraForPreTraining": (
+            "With `bool_masked_pos` set, `HieraEncoder.reroll` reshapes on the mask's unbacked token count, so "
+            "dynamic shapes raise `GuardOnDataDependentSymNode` on `416*((u0//416)) < 2`. The other Hiera heads "
+            "export fine under dynamic shapes, and every one of them exports under static shapes."
+        ),
         "Sam2Model": (
             "`torch.export` of the Hiera vision backbone under dynamic shapes exceeds the 10-minute "
             "test timeout (12 attention blocks × 3 Q-pool stage transitions on symbolic H/W). Backend-"
@@ -864,8 +868,8 @@ class ExportTesterMixin:
     @pytest.mark.openvino_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @disable_hub_kernels
-    def test_openvino_export(self, dynamic):
-        """Export each model class to OpenVINO IR and verify output names match eager."""
+    def test_openvino_export(self, dynamic, atol=1e-4, rtol=1e-4):
+        """Export each model class to OpenVINO IR, run it, and verify outputs match eager."""
         self._skip_if_not_exportable()
         exporter = OpenVINOExporter()
         config = OpenVINOConfig(dynamic=dynamic)
@@ -883,6 +887,10 @@ class ExportTesterMixin:
                     ov_outputs = _run_openvino_model(ov_model, inputs)
                     self.assertTrue(ov_outputs, f"OpenVINO outputs are empty for {name}.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
+                    # the OpenVINO runtime hands back numpy arrays on CPU, whatever device eager ran on
+                    ov_tensors = {key: torch.as_tensor(value) for key, value in ov_outputs.items()}
+                    expected = {key: value.cpu() for key, value in eager_outputs[name].items()}
+                    self._check_outputs_close(ov_tensors, expected, atol=atol, rtol=rtol, check_device=False)
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 

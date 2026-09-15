@@ -102,7 +102,7 @@ class OpenVINOExporter(DynamoExporter):
     """
 
     required_packages = ["torch", "openvino"]
-    tested_versions = {"torch": "2.12.0", "openvino": "2025.0.0"}
+    tested_versions = {"torch": "2.12.0", "openvino": "2026.3.1"}
 
     def export(
         self,

@@ -86,7 +86,7 @@ pip install transformers "torch==2.12.0" "executorch==1.3.1"
 <hfoption id="OpenVINO">
 
 ```bash
-pip install transformers "torch==2.12.0" "openvino==2025.0.0"
+pip install transformers "torch==2.12.0" "openvino==2026.3.1"
 ```
 
 </hfoption>
