@@ -357,6 +357,38 @@ def save_model_checkpoint_distributed(
     _distributed_barrier()
 
 
+def load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike) -> None:
+    """Load local DCP weights into an initialized model, preserving its current mesh and placements."""
+    if not is_torch_greater_or_equal("2.7"):
+        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
+
+    import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.state_dict import get_model_state_dict, set_model_state_dict
+
+    has_torch_metadata = os.path.isfile(os.path.join(checkpoint_dir, ".metadata"))
+    has_safetensors = any(name.endswith(".safetensors") for name in os.listdir(checkpoint_dir))
+    if has_torch_metadata and has_safetensors:
+        raise ValueError("Checkpoint directory contains both Torch DCP metadata and safetensors files.")
+    if has_torch_metadata:
+        reader = dcp.FileSystemReader(checkpoint_dir)
+    elif has_safetensors:
+        from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageReader
+
+        reader = HuggingFaceStorageReader(checkpoint_dir)
+    else:
+        raise ValueError(f"No Torch DCP metadata or safetensors files found in {checkpoint_dir}.")
+
+    original_state = get_model_state_dict(model)
+    if any(value.is_meta for value in original_state.values() if isinstance(value, torch.Tensor)):
+        raise ValueError("Materialize the model's tensors before loading a distributed checkpoint.")
+    state = _prepare_state_dict_for_dcp(original_state)
+    dcp.load(state, storage_reader=reader)
+    for name, value in state.items():
+        if is_dtensor(value) and value.placements != original_state[name].placements:
+            state[name] = value.redistribute(placements=original_state[name].placements)
+    set_model_state_dict(model, state)
+
+
 def save_optimizer_distributed(model, optimizer, checkpoint_dir: str, *, consolidate: bool = False) -> None:
     """Save optimizer state via DCP, optionally also writing `optimizer.pt`.
 
