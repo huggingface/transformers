@@ -66,6 +66,7 @@ deps = {
     "scikit-learn": "scikit-learn",
     "scipy": "scipy",
     "sentencepiece": "sentencepiece>=0.1.91,!=0.1.92",
+    "soxr": "soxr",
     "starlette": "starlette",
     "sudachipy": "sudachipy>=0.6.6",
     "sudachidict_core": "sudachidict_core>=20220729",

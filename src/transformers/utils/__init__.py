@@ -214,6 +214,7 @@ from .import_utils import (
     is_sinq_available,
     is_sklearn_available,
     is_soundfile_available,
+    is_soxr_available,
     is_spacy_available,
     is_speech_available,
     is_spqr_available,
