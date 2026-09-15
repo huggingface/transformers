@@ -460,6 +460,8 @@ class UnivNetModel(PreTrainedModel):
                 for i in range(num_layers)
             ]
         )
+        # Samples of waveform each input frame is upsampled into.
+        self.total_hop_length = hop_lengths[-1]
 
         self.conv_post = nn.Conv1d(config.model_hidden_channels, 1, 7, padding=3, padding_mode="reflect")
 
@@ -482,13 +484,13 @@ class UnivNetModel(PreTrainedModel):
             sequence_length, config.model_in_channels)`, or un-batched and of shape (sequence_length,
             config.model_in_channels)`. If not supplied, will be randomly generated.
         padding_mask (`torch.BoolTensor`, *optional*):
-            Mask indicating which parts of each sequence are padded. Mask values are selected in `[0, 1]`:
+            Mask indicating which frames of `input_features` are padded. Mask values are selected in `[0, 1]`:
 
-            - 1 for tokens that are **not masked**
-            - 0 for tokens that are **masked**
+            - 1 for frames that are **not masked**
+            - 0 for frames that are **masked**
 
             The mask can be batched and of shape `(batch_size, sequence_length)` or un-batched and of shape
-            `(sequence_length,)`.
+            `(sequence_length,)`, matching the frame axis of `input_features`.
         generator (`torch.Generator`, *optional*):
             A [torch generator](https://pytorch.org/docs/stable/generated/torch.Generator.html) to make generation
             deterministic.
@@ -575,11 +577,12 @@ class UnivNetModel(PreTrainedModel):
         # NOTE: keep waveforms batched even if there's only one
         waveform = hidden_states.squeeze(1)
 
-        # Get sequence lengths for UnivNetFeatureExtractor.batch_decode.
+        # Unpadded waveform lengths, for trimming the generated audio.
         waveform_lengths = None
         if padding_mask is not None:
-            # Padding is always contiguous and added on the right
-            waveform_lengths = torch.sum(padding_mask, dim=1)
+            # Padding is always contiguous and added on the right. Each unpadded input frame
+            # becomes `total_hop_length` waveform samples.
+            waveform_lengths = torch.sum(padding_mask, dim=1) * self.total_hop_length
 
         if not return_dict:
             outputs = (waveform, waveform_lengths)

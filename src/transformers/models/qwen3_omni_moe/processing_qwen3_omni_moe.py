@@ -100,7 +100,7 @@ class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):
             "sampling_rate": 16000,
             "padding": True,
             "truncation": False,
-            "return_attention_mask": True,
+            "return_padding_mask": True,
         },
     }
 

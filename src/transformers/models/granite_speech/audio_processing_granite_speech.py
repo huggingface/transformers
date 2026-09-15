@@ -1,0 +1,89 @@
+# Copyright 2025 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import math
+
+import torch
+
+from ...audio_processing_backends import TorchAudioBackend
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+from ...processing_utils import AudioKwargs
+
+
+class GraniteSpeechAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    projector_window_size (`int`, *optional*, defaults to 15):
+        Window size, in mel frames, consumed by the audio projector.
+    projector_downsample_rate (`int`, *optional*, defaults to 5):
+        Factor by which the audio projector downsamples its input.
+    """
+
+    projector_window_size: int
+    projector_downsample_rate: int
+
+
+class GraniteSpeechAudioProcessorMixin:
+    sampling_rate = 16000
+    # `_postprocess_output` builds its own mask over the projector output length,
+    # which is why `return_padding_mask` is False below.
+    extra_model_input_names = ["audio_features_mask", "audio_embed_sizes"]
+    return_padding_mask = False
+    do_extract_spectrogram = True
+
+    # Native pipeline, bit-equal to the upstream FE's `torchaudio.transforms.MelSpectrogram`
+    # + log10 + Whisper-style max-clip/rescale (ADR 0004 post-log fields).
+    spectrogram_config = SpectrogramConfig(
+        stft_config=StftConfig(
+            n_fft=512,
+            win_length=400,
+            hop_length=160,
+            power=2.0,
+        ),
+        mel_scale_config=MelScaleConfig(n_mels=80),
+        log_mode="log10",
+        mel_floor=1e-10,
+        clip_max_offset=8.0,
+        post_log_shift=4.0,
+        post_log_scale=0.25,
+    )
+
+    projector_window_size = 15
+    projector_downsample_rate = 5
+    valid_kwargs = GraniteSpeechAudioProcessorKwargs
+
+    def extract_spectrogram(self, audio, **kwargs):
+        logmel = super().extract_spectrogram(audio, **kwargs).swapaxes(-1, -2)  # (batch, time, n_mels)
+        if logmel.shape[1] % 2 == 1:
+            logmel = logmel[:, :-1]
+        return logmel.reshape(logmel.shape[0], -1, 2 * logmel.shape[-1])
+
+    def _postprocess_output(self, output, audio_ranges=None, **kwargs):
+        hop_length = self.spectrogram_config.stft_config.hop_length
+        effective_window_size = self.projector_window_size // self.projector_downsample_rate
+        audio_embed_sizes = []
+        for start, end in audio_ranges:
+            mel_length = (end - start) // hop_length + 1
+            nblocks = math.ceil((mel_length // 2) / self.projector_window_size)
+            audio_embed_sizes.append(nblocks * effective_window_size)
+        output["audio_embed_sizes"] = audio_embed_sizes
+        output["audio_features_mask"] = self._embed_mask(audio_embed_sizes)
+        return output
+
+
+class GraniteSpeechAudioProcessor(GraniteSpeechAudioProcessorMixin, TorchAudioBackend):
+    def _embed_mask(self, sizes):
+        return torch.arange(max(sizes)).view(1, -1) < torch.tensor(sizes).view(-1, 1)
+
+
+__all__ = ["GraniteSpeechAudioProcessor"]

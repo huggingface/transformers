@@ -35,7 +35,7 @@ class CohereAsrProcessorKwargs(ProcessingKwargs, total=False):
         "audio_kwargs": {
             "sampling_rate": 16000,
             "padding": "longest",
-            "return_attention_mask": True,
+            "return_padding_mask": True,
         },
         "text_kwargs": {
             "padding": True,
@@ -98,12 +98,14 @@ class CohereAsrProcessor(ProcessorMixin):
             sampling rate, and an error will be raised if they don't match. If not provided, a warning will be
             issued and the default sampling rate will be assumed.
         """
-        if sampling_rate != self.feature_extractor.sampling_rate:
-            raise ValueError(
-                f"The sampling rate you provided ({sampling_rate}) does not match the sampling rate of the processor ({self.feature_extractor.sampling_rate}). Please provide resampled the audio to the expected sampling rate."
+        if sampling_rate is None:
+            logger.warning_once(
+                f"You've provided audio without specifying the sampling rate. It will be assumed to be "
+                f"{self.feature_extractor.sampling_rate}, which can result in silent errors."
             )
-
-        kwargs["sampling_rate"] = sampling_rate
+        else:
+            # Forward the caller's assertion; the audio processor resamples if it differs from its own rate.
+            kwargs["sampling_rate"] = sampling_rate
         model_inputs = super().__call__(audio=audio, text=text, **kwargs)
         prompt_ids = self.get_decoder_prompt_ids(language=language, punctuation=punctuation)
         batch_size = model_inputs["input_features"].shape[0]
@@ -170,9 +172,16 @@ class CohereAsrProcessor(ProcessorMixin):
         return outputs
 
     @property
+    def unused_input_names(self) -> list[str]:
+        "Input names returned always by subprocessors but not used in model's `forward`"
+        # `CohereAsrForConditionalGeneration.prepare_inputs_for_generation` absorbs it.
+        return ["audio_chunk_index"]
+
+    @property
     def model_input_names(self):
         feature_extractor_input_names = self.feature_extractor.model_input_names
-        return feature_extractor_input_names + ["labels"]
+        names = feature_extractor_input_names + ["labels"]
+        return [name for name in names if name not in self.unused_input_names]
 
 
 __all__ = ["CohereAsrProcessor"]

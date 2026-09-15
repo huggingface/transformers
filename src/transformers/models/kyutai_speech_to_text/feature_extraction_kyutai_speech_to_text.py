@@ -21,15 +21,15 @@
 
 import numpy as np
 
-from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
+from ..encodec.audio_processing_encodec import EncodecAudioProcessor
 
 
 logger = logging.get_logger(__name__)
 
 
-class KyutaiSpeechToTextFeatureExtractor(SequenceFeatureExtractor):
+class KyutaiSpeechToTextFeatureExtractor(EncodecAudioProcessor):
     r"""
     Constructs an KyutaiSpeechToText feature extractor.
 
@@ -54,40 +54,15 @@ class KyutaiSpeechToTextFeatureExtractor(SequenceFeatureExtractor):
             The silence prefix in seconds to add before the audio (left padding).
     """
 
-    model_input_names = ["input_values", "padding_mask"]
-
     def __init__(
         self,
-        feature_size: int = 1,
-        sampling_rate: int = 24000,
-        padding_value: float = 0.0,
-        chunk_length_s: float | None = None,
-        overlap: float | None = None,
         audio_delay_seconds: float | None = 0.0,
         audio_silence_prefix_seconds: float | None = 0.0,
-        **kwargs,
+        **super_kwargs,
     ):
-        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
-        self.chunk_length_s = chunk_length_s
-        self.overlap = overlap
+        super().__init__(**super_kwargs)
         self.audio_delay_seconds = audio_delay_seconds
         self.audio_silence_prefix_seconds = audio_silence_prefix_seconds
-
-    # This is a property because you might want to change the chunk_length_s on the fly
-    @property
-    def chunk_length(self) -> int | None:
-        if self.chunk_length_s is None:
-            return None
-        else:
-            return int(self.chunk_length_s * self.sampling_rate)
-
-    # This is a property because you might want to change the chunk_length_s on the fly
-    @property
-    def chunk_stride(self) -> int | None:
-        if self.chunk_length_s is None or self.overlap is None:
-            return None
-        else:
-            return max(1, int((1.0 - self.overlap) * self.chunk_length))
 
     def __call__(
         self,
@@ -195,7 +170,7 @@ class KyutaiSpeechToTextFeatureExtractor(SequenceFeatureExtractor):
                 max_length=max_length,
                 truncation=truncation,
                 padding=padding,
-                return_attention_mask=padding,
+                return_padding_mask=padding,
             )
 
             if padding:

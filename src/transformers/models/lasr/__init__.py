@@ -18,6 +18,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .audio_processing_numpy_lasr import *
     from .configuration_lasr import *
     from .feature_extraction_lasr import *
     from .modeling_lasr import *
