@@ -83,9 +83,9 @@ class Xcodec2AudioProcessorMixin:
     feature_padding_value = 1.0
     valid_kwargs = Xcodec2AudioProcessorKwargs
 
-    def _downmix_to_mono(self, audio_el, **kwargs):
+    def _prepare_waveform(self, audio_el, **kwargs):
         # the legacy FE appends one zero sample to every waveform before padding
-        return self._pad_axis(super()._downmix_to_mono(audio_el, **kwargs), 0, 1, axis=-1)
+        return self._pad_axis(audio_el, 0, 1, axis=-1)
 
     def _pad_semantic_waveform(self, waveform, *, hop_length):
         # half a codec hop of zeros on both sides, so the fbank frames line up with the codec frames

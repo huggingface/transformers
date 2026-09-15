@@ -35,9 +35,7 @@ class Wav2Vec2AudioProcessorMixin:
 
 
 class Wav2Vec2AudioProcessor(Wav2Vec2AudioProcessorMixin, TorchAudioBackend):
-    def _downmix_to_mono(self, audio_el, *, do_normalize, **kwargs):
-        audio_el = super()._downmix_to_mono(audio_el, **kwargs)
-
+    def _prepare_waveform(self, audio_el, *, do_normalize, **kwargs):
         if do_normalize:
             audio_el = (audio_el - audio_el.mean()) / torch.sqrt(audio_el.var(correction=0) + 1e-7)
 

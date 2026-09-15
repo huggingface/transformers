@@ -86,8 +86,7 @@ class Qwen3ASRAudioProcessorMixin:
                     )
         return output
 
-    def _downmix_to_mono(self, audio_el, *, min_length, padding_side, padding_value, **kwargs):
-        audio_el = super()._downmix_to_mono(audio_el, **kwargs)
+    def _prepare_waveform(self, audio_el, *, min_length, padding_side, padding_value, **kwargs):
         if min_length and audio_el.shape[-1] < min_length:
             audio_el = self._pad_waveform(audio_el, min_length, padding_side=padding_side, padding_value=padding_value)
         return audio_el

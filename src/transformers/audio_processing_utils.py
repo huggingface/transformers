@@ -153,9 +153,8 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
     def _prepare_audio_like_inputs(self, audio: AudioInput, *args, sampling_rate: int | None = None, **kwargs) -> list:
         audio, sampling_rate = self._prepare_audio_structure(audio, sampling_rate=sampling_rate)
-        audio = [self._downmix_to_mono(audio_el, **kwargs) for audio_el in audio]
-        # Resample after `_downmix_to_mono`, so `_resample` always sees a mono waveform in the backend's
-        # own array type.
+        audio = [self._prepare_waveform(self._downmix_to_mono(audio_el), **kwargs) for audio_el in audio]
+        # Resample last, so `_resample` always sees a mono waveform in the backend's own array type.
         if sampling_rate != self.sampling_rate:
             logger.warning_once(
                 f"Resampling audio from {sampling_rate} Hz to {self.__class__.__name__}'s native sampling rate "
@@ -449,11 +448,18 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """Right-pad one feature array/tensor along its first (time) axis with `padding_value`."""
         return self._pad_axis(feature, 0, max_length - feature.shape[0], axis=0, value=padding_value)
 
-    def _downmix_to_mono(self, audio_el, **kwargs):
+    def _downmix_to_mono(self, audio_el):
+        """Average any channel axis away. To change the waveform itself, override `_prepare_waveform`."""
         audio_el = self._as_backend_array(audio_el)
         if audio_el.ndim > 1:
             # Multi-channel input is always averaged down to mono.
             audio_el = self._squeeze_axis0(audio_el) if audio_el.shape[0] == 1 else self._mean_axis0(audio_el)
+        return audio_el
+
+    def _prepare_waveform(self, audio_el, **kwargs):
+        """Hook: condition one mono waveform, before any resampling and before the batch is assembled.
+        Override for level normalization, a length floor, or anything else the utterance needs on its own.
+        """
         return audio_el
 
     def _stack_waveforms(self, audio, *, add_channel_dim):
@@ -517,9 +523,13 @@ class BaseAudioProcessor(AudioProcessingMixin):
         needs_manual_framing = self._needs_manual_framing(spectrogram_config)
         if stft_cfg.extra_samples_per_frame:
             if stft_cfg.extra_samples_per_frame != 1:
-                raise ValueError(f"Only extra_samples_per_frame=1 is supported, got {stft_cfg.extra_samples_per_frame}.")
+                raise ValueError(
+                    f"Only extra_samples_per_frame=1 is supported, got {stft_cfg.extra_samples_per_frame}."
+                )
             if stft_cfg.center is True:
-                raise ValueError("extra_samples_per_frame requires center=False or center='left', not symmetric centering.")
+                raise ValueError(
+                    "extra_samples_per_frame requires center=False or center='left', not symmetric centering."
+                )
             if spectrogram_config.remove_dc_offset:
                 raise ValueError("remove_dc_offset is not supported with extra_samples_per_frame.")
         elif spectrogram_config.preemphasis_mode == "htk_per_frame":

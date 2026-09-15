@@ -45,8 +45,7 @@ class VibevoiceAcousticTokenizerAudioProcessorMixin:
     legacy_field_mapping = {"db_normalize": None, "speech_tok_compress_ratio": None}
     valid_kwargs = VibevoiceAcousticTokenizerAudioProcessorKwargs
 
-    def _downmix_to_mono(self, audio_el, *, normalize_audio, target_dB_FS, eps, **kwargs):
-        audio_el = super()._downmix_to_mono(audio_el, **kwargs)
+    def _prepare_waveform(self, audio_el, *, normalize_audio, target_dB_FS, eps, **kwargs):
         if not normalize_audio:
             return audio_el
         rms = (audio_el**2).mean() ** 0.5

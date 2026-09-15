@@ -52,8 +52,8 @@ from the instance, validates the merged set, canonicalises it, and only then dis
 below receives its options as named parameters. A step that reads `self.<option>` for a declared
 option is a bug: it means the caller's value was computed, validated and then discarded.
 
-**The per-utterance boundary sits above the branch.** `_downmix_to_mono` and `_resample` run once per
-clip, on one waveform at a time. Everything after the branch is either explicitly per-clip or
+**The per-utterance boundary sits above the branch.** `_downmix_to_mono`, `_prepare_waveform` and
+`_resample` run once per clip, on one waveform at a time. Everything after the branch is either explicitly per-clip or
 explicitly batched, and a step written for one will not work in the other.
 
 **The two paths differ on one question:** whether padding happens before or after feature extraction.
@@ -101,7 +101,7 @@ construction rather than during a call and so has no place in a call flow.
 |---|---|
 | `_finalize_output` | 17 — AST, CLAP, Cohere-ASR, Fun-ASR-Nano, Gemma4, Granite-Speech, Granite-Speech5, Inkling, Kyutai-STT, Nemotron-ASR-Streaming, NeuCodec, Parakeet, Phi4-Multimodal, Qwen3-ASR, SeamlessM4T, Speech2Text, XCodec2 |
 | `compute_features` | CLAP, Gemma4-Unified, Granite-Speech, Musicgen-Melody, SeamlessM4T |
-| `_downmix_to_mono` | NeuCodec, Qwen3-ASR, VibeVoice, Wav2Vec2, XCodec2 |
+| `_prepare_waveform` | NeuCodec, Qwen3-ASR, VibeVoice, Wav2Vec2, XCodec2 |
 | `_log_compress` | CLVP, UnivNet, Voxtral-Realtime |
 | `_padded_frame_count` | Inkling, Qwen3-ASR, UnivNet |
 | `_finalize_features` | Fun-ASR-Nano, SeamlessM4T |
@@ -204,8 +204,8 @@ class MyAudioProcessor(TorchAudioBackend):
     def __init__(self, **kwargs: Unpack[MyAudioProcessorKwargs]):
         super().__init__(**kwargs)
 
-    def _downmix_to_mono(self, audio_el, *, gain, **kwargs):
-        return super()._downmix_to_mono(audio_el, **kwargs) * gain
+    def _prepare_waveform(self, audio_el, *, gain, **kwargs):
+        return audio_el * gain
 ```
 
 Document custom parameters on the `TypedDict`, assign `valid_kwargs`, and annotate the constructor
@@ -213,7 +213,7 @@ with `Unpack` — the same pattern as [image processors](./image_processors). `t
 to be omitted.
 
 Declaring an option is not enough. **The step that acts on it must name it as a parameter**, as
-`_downmix_to_mono` does above. The parameter is un-defaulted on purpose: you cannot override the step
+`_prepare_waveform` does above. The parameter is un-defaulted on purpose: you cannot override the step
 without typing the option's name, so an option cannot quietly stop being read. `preprocess`
 guarantees the value is always supplied, so no fallback is needed and none should be written.
 
