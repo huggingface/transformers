@@ -167,6 +167,8 @@ class ZgcmAttention(nn.Module):
         )
         self.q_norm = ZgcmRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = ZgcmRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
+        # CODEPATH: zgcagi/ZGCM-1-7B enables attention gates in sliding-attention
+        # layers and disables them in full-attention layers.
         self.g_proj = (
             nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
             if config.attention_gate_layers[layer_idx]
