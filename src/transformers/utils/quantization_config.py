@@ -1802,8 +1802,69 @@ class FineGrainedConfig(QuantizationConfigMixin):
         return {"dequantize": self.dequantize, "modules_to_not_convert": self.modules_to_not_convert}
 
 
-# Back-compat alias: serialized checkpoints and released code reference the FP8-era name.
-FineGrainedFP8Config = FineGrainedConfig
+class FineGrainedFP8Config(QuantizationConfigMixin):
+    """
+    FineGrainedFP8Config is a configuration class for fine-grained FP8 quantization used mainly for deepseek models.
+
+    Frozen for backward compatibility: it configures the frozen `finegrained_fp8` integration and no
+    longer receives new recipes. [`FineGrainedConfig`] is the one that serves the whole family
+    (block-FP8, MXFP8, MXFP4, NVFP4), and a checkpoint declaring `quant_method="fp8"` builds that one.
+
+    Args:
+        activation_scheme (`str`, *optional*, defaults to `"dynamic"`):
+            The scheme used for activation, the defaults and only support scheme for now is "dynamic".
+        weight_block_size (`typing.tuple[int, int]`, *optional*, defaults to `(128, 128)`):
+            The size of the weight blocks for quantization, default is (128, 128).
+        dequantize (`bool`, *optional*, defaults to `False`):
+            Whether to dequantize the model during loading.
+        modules_to_not_convert (`list`, *optional*):
+            A list of module names that should not be converted during quantization.
+        modules_to_convert (`list`, *optional*):
+            A list of additional module names, such as embedding tables, that should be converted during quantization.
+        scale_fmt (`str`, *optional*, defaults to `"float"`):
+            Storage dtype of the per-block weight scales: `"float"` (fp32, V3-style) or
+            `"ue8m0"` (1-byte `torch.float8_e8m0fnu`, V4-style).
+    """
+
+    def __init__(
+        self,
+        activation_scheme: str = "dynamic",
+        weight_block_size: tuple[int, int] = (128, 128),
+        dequantize: bool = False,
+        modules_to_not_convert: list | None = None,
+        modules_to_convert: list | None = None,
+        scale_fmt: str = "float",
+        **kwargs,
+    ):
+        self.quant_method = kwargs.pop("quant_method", QuantizationMethod.FP8)
+        # MiniMax ships the skip-list under ``ignored_layers``; accept it as an alias.
+        if modules_to_not_convert is None and "ignored_layers" in kwargs:
+            modules_to_not_convert = kwargs.pop("ignored_layers")
+        self.modules_to_not_convert = modules_to_not_convert
+        # TODO: check overlap with not to convert
+        self.modules_to_convert = modules_to_convert
+        self.activation_scheme = activation_scheme
+        self.weight_block_size = weight_block_size
+        self.dequantize = dequantize
+        self.scale_fmt = scale_fmt
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        self.activation_scheme = self.activation_scheme.lower()
+        if self.activation_scheme not in ["dynamic", "static"]:
+            raise ValueError(f"Activation scheme {self.activation_scheme} not supported")
+        if self.weight_block_size is not None and len(self.weight_block_size) != 2:
+            raise ValueError("weight_block_size must be a tuple of two integers")
+        if self.weight_block_size is not None and (self.weight_block_size[0] <= 0 or self.weight_block_size[1] <= 0):
+            raise ValueError("weight_block_size must be a tuple of two positive integers")
+        if self.scale_fmt not in ("float", "ue8m0"):
+            raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
+
+    def get_loading_attributes(self):
+        return {"dequantize": self.dequantize, "modules_to_not_convert": self.modules_to_not_convert}
 
 
 class QuarkConfig(QuantizationConfigMixin):
