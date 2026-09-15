@@ -709,8 +709,7 @@ class GenerationMixin(ContinuousMixin):
         if (
             isinstance(past_key_values, Cache)
             and past_key_values.is_compileable
-            and attention_mask is not None
-            and attention_mask.ndim == 2
+            and (attention_mask is None or attention_mask.ndim == 2)
         ):
             # Some models may overwrite the general one
             causal_mask_creation_function = getattr(self, "create_masks_for_generate", create_masks_for_generate)
@@ -2703,9 +2702,14 @@ class GenerationMixin(ContinuousMixin):
         # We can drop the mask altogether if it's all 1s, i.e. no padding, to make downstream attention mask creation and inference
         # faster (we will never have padding). Note that we cannot drop it earlier, as position_ids creation absolutely needs to check
         # the mask even if it's only 1s, in case we restart from an existing cache and only new sequence input_ids
-        if not self.config.is_encoder_decoder and accepts_attention_mask:
-            if (model_kwargs["attention_mask"] == 1).all():
-                model_kwargs["attention_mask"] = None
+        attention_mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
+        generation_config._mask_length = model_kwargs[attention_mask_key].shape[1]
+        if (
+            not self.config.is_encoder_decoder
+            and accepts_attention_mask
+            and (model_kwargs["attention_mask"] == 1).all()
+        ):
+            model_kwargs["attention_mask"] = None
 
         if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
             # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`
@@ -4098,13 +4102,8 @@ class GenerationMixin(ContinuousMixin):
             if use_inputs_embeds:
                 next_sequence_length = model_kwargs["inputs_embeds"].shape[1] - past_length
             else:
-                attention_mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
-                attention_mask = model_kwargs.get(attention_mask_key)
-                position_ids = model_kwargs.get("position_ids")
                 # In this case we need to slice - if it's smaller than the mask, only the new inputs were passed -> no need to do anything
-                if (attention_mask is not None and input_ids.shape[1] == attention_mask.shape[1]) or (
-                    position_ids is not None and input_ids.shape[1] == position_ids.shape[1]
-                ):
+                if generation_config._mask_length == input_ids.shape[1]:
                     # inputs will be sliced as `input_ids[:, -next_sequence_length :]` in `prepare_inputs_for_generation`
                     next_sequence_length = input_ids.shape[1] - past_length
 
