@@ -1505,6 +1505,7 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "chunked_attention": create_chunked_causal_mask,
     "compressed_sparse_attention": create_sliding_window_causal_mask,
     "heavily_compressed_attention": create_sliding_window_causal_mask,
+    "shared_compressed_attention": create_sliding_window_causal_mask,
     "minimax_m3_sparse": create_causal_mask,
     # DSA always needs to materialize the mask to account for causality (no SDPA `is_cauasal` shortcut)
     "deepseek_sparse_attention": partial(create_causal_mask, allow_is_causal_skip=False),

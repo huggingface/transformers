@@ -1627,6 +1627,10 @@ class Cache:
         minimal working size. This means that `crop(0)` will not necessarily always be a no-op, as it may still remove useless states
         (i.e. states that are not needed for the next `forward`) from the Cache.
         """
+        # Refuse unsupported rollback before any preceding layer is mutated.
+        # Zero still dispatches trim-only operations on recorded working state.
+        if tokens_to_remove != 0 and not self.is_croppable:
+            raise RuntimeError("This cache does not support rollback of its states.")
         for layer_idx in range(len(self.layers)):
             self.layers[layer_idx].crop(tokens_to_remove)
 
@@ -1744,7 +1748,11 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], dic
     if "chunked_attention" in layer_types:
         layer_kwargs["sliding_window"] = config.attention_chunk_size
     # In this case, we need to pass the config as well to properly __init__ the layer classes
-    if "heavily_compressed_attention" in layer_types or "compressed_sparse_attention" in layer_types:
+    if (
+        "heavily_compressed_attention" in layer_types
+        or "compressed_sparse_attention" in layer_types
+        or "shared_compressed_attention" in layer_types
+    ):
         layer_kwargs["config"] = config
     # We may need more than 1 conv/recurrent state
     if any(layer_type in ("conv", "linear_attention", "hybrid", "hybrid_sliding") for layer_type in layer_types):

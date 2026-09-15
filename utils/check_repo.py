@@ -274,6 +274,7 @@ IGNORE_NON_TESTED = (
         "InternVLVisionModel",  # Building part of bigger (tested) model
         "DeepseekOcr2TextModel",  # Building part of bigger (tested) model
         "DeepseekOcr2VisionModel",  # Building part of bigger (tested) model
+        "DeepseekV41VisionModel",  # Building part of bigger (tested) model. Tested implicitly through DeepseekV41ForConditionalGeneration.
         "QianfanOCRVisionModel",  # Building part of bigger (tested) model
         "JanusVisionModel",  # Building part of bigger (tested) model
         "PPDocLayoutV3Model",  # Building part of bigger (tested) model
