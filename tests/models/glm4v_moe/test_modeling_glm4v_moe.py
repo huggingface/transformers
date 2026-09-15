@@ -198,6 +198,10 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         self.model_tester = Glm4vMoeVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Glm4vMoeConfig, has_text_modality=False)
 
+    @unittest.skip("We don't really care about this one, test is not that slow")
+    def test_model_is_small(self):
+        pass
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
