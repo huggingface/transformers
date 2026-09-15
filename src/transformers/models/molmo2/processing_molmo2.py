@@ -54,17 +54,11 @@ class Molmo2VideosKwargs(VideosKwargs, total=False):
         `[pool_h, pool_w]` pooling window applied to video patch features.
     max_fps (`int`, *optional*):
         Maximum sampling rate in frames per second for short videos.
-    frame_sample_mode (`str`, *optional*):
-        Frame sampling strategy declared by the checkpoint.
-    sampling_fps (`int` or `float`, *optional*):
-        Base frames-per-second step declared by the checkpoint for frame sampling.
     """
 
     patch_size: int
     pooling_size: list[int]
     max_fps: int
-    frame_sample_mode: str
-    sampling_fps: int | float
 
 
 class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):

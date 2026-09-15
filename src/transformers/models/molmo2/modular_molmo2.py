@@ -256,18 +256,6 @@ class Molmo2TextConfig(PreTrainedConfig):
         if self.qk_norm_type not in ("qwen3", "olmo"):
             raise ValueError(f"Unsupported `qk_norm_type`: {self.qk_norm_type}")
 
-    @property
-    def rope_theta(self) -> float:
-        # vLLM reads `rope_theta` then assigns it back; raising keeps it out of `to_dict()`.
-        rope_parameters = self.rope_parameters or {}
-        if "rope_theta" not in rope_parameters:
-            raise AttributeError("rope_theta")
-        return rope_parameters["rope_theta"]
-
-    @rope_theta.setter
-    def rope_theta(self, value: float):
-        self.rope_parameters["rope_theta"] = value
-
 
 @auto_docstring(checkpoint="allenai/Molmo2-8B")
 @strict
@@ -350,11 +338,6 @@ class Molmo2Config(PreTrainedConfig):
             self.vision_config.num_hidden_layers = last_layer_needed
 
         super().__post_init__(**kwargs)
-
-    # Read by vLLM's native Molmo2 port, which predates the rename to `vision_config`.
-    @property
-    def vit_config(self) -> Molmo2VisionConfig:
-        return self.vision_config
 
 
 def select_tiling(height: int, width: int, patch_size: int, max_num_crops: int) -> tuple[int, int]:
@@ -798,17 +781,11 @@ class Molmo2VideosKwargs(VideosKwargs, total=False):
         `[pool_h, pool_w]` pooling window applied to video patch features.
     max_fps (`int`, *optional*):
         Maximum sampling rate in frames per second for short videos.
-    frame_sample_mode (`str`, *optional*):
-        Frame sampling strategy declared by the checkpoint.
-    sampling_fps (`int` or `float`, *optional*):
-        Base frames-per-second step declared by the checkpoint for frame sampling.
     """
 
     patch_size: int
     pooling_size: list[int]
     max_fps: int
-    frame_sample_mode: str
-    sampling_fps: int | float
 
 
 @auto_docstring
@@ -822,9 +799,6 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
     num_frames = 64
     do_sample_frames = True
     max_fps = 2
-    # Read by vLLM's native Molmo2 port, which runs its own frame sampling from these attributes.
-    frame_sample_mode = "uniform_last_frame"
-    sampling_fps = 2
     valid_kwargs = Molmo2VideosKwargs
     model_input_names = ["pixel_values_videos", "video_token_pooling", "video_grids"]
 

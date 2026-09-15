@@ -191,18 +191,6 @@ class Molmo2TextConfig(PreTrainedConfig):
         if self.qk_norm_type not in ("qwen3", "olmo"):
             raise ValueError(f"Unsupported `qk_norm_type`: {self.qk_norm_type}")
 
-    @property
-    def rope_theta(self) -> float:
-        # vLLM reads `rope_theta` then assigns it back; raising keeps it out of `to_dict()`.
-        rope_parameters = self.rope_parameters or {}
-        if "rope_theta" not in rope_parameters:
-            raise AttributeError("rope_theta")
-        return rope_parameters["rope_theta"]
-
-    @rope_theta.setter
-    def rope_theta(self, value: float):
-        self.rope_parameters["rope_theta"] = value
-
 
 @auto_docstring(checkpoint="allenai/Molmo2-8B")
 @strict
@@ -285,11 +273,6 @@ class Molmo2Config(PreTrainedConfig):
             self.vision_config.num_hidden_layers = last_layer_needed
 
         super().__post_init__(**kwargs)
-
-    # Read by vLLM's native Molmo2 port, which predates the rename to `vision_config`.
-    @property
-    def vit_config(self) -> Molmo2VisionConfig:
-        return self.vision_config
 
 
 __all__ = ["Molmo2AdapterConfig", "Molmo2Config", "Molmo2TextConfig", "Molmo2VisionConfig"]

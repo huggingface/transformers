@@ -141,9 +141,6 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
     num_frames = 64
     do_sample_frames = True
     max_fps = 2
-    # Read by vLLM's native Molmo2 port, which runs its own frame sampling from these attributes.
-    frame_sample_mode = "uniform_last_frame"
-    sampling_fps = 2
     valid_kwargs = Molmo2VideosKwargs
     model_input_names = ["pixel_values_videos", "video_token_pooling", "video_grids"]
 
