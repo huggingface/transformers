@@ -1,3 +1,16 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import re
 from typing import TYPE_CHECKING
 
@@ -17,23 +30,41 @@ logger = logging.get_logger(__name__)
 
 
 class FineGrainedHfQuantizer(HfQuantizer):
-    """
-    FP8 quantization implementation supporting both standard and MoE models.
-    Supports both e4m3fn formats based on platform.
+    """Quantizer for the fine-grained family the `kernels-community/finegrained-kernels` package
+    serves: block-FP8 (fp32 or UE8M0 scales), MXFP8, MXFP4 and NVFP4, for dense linears, embeddings
+    and MoE experts alike.
+
+    It never declares the weight format — that is resolved from the checkpoint tensors themselves,
+    the way the kernels resolve it. What it does own is the vocabulary each producer ships its
+    scales under (modelopt's `weight_scale_2` / `input_scale`, GPT-OSS's `_blocks` / `_scales`) and
+    the conversion ops that bring them to the layout `FineGrainedExperts` holds.
     """
 
     requires_calibration = False
     quantization_config: "FineGrainedConfig"
+
+    def _assert_dequantize_supported(self) -> None:
+        """The dequantize chain folds a weight into full precision with its per-block scale alone.
+        NVFP4 carries a second level (modelopt's `weight_scale_2`) that the chain has no slot for,
+        so refuse rather than hand back a weight scaled by `1 / global`."""
+        if self._quant_method() in ("nvfp4", "modelopt"):
+            raise NotImplementedError(
+                f"`dequantize=True` is not supported for {self._quant_method()!r} checkpoints: their "
+                "two-level scales cannot be folded into a full-precision weight by this path. Load "
+                "them quantized on a GPU that serves NVFP4, or start from a bf16 checkpoint."
+            )
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
             raise ImportError("Loading an FP8 quantized model requires accelerate (`pip install accelerate`)")
 
         if self.quantization_config.dequantize:
+            self._assert_dequantize_supported()
             return
 
         if not torch.cuda.is_available() and not is_torch_xpu_available():
             if self.pre_quantized:
+                self._assert_dequantize_supported()
                 logger.warning_once(
                     "Using FP8 quantized models requires a GPU or XPU, we will default to dequantizing the model to bf16 since no GPU or XPU is available"
                 )
@@ -46,6 +77,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
             compute_capability = torch.cuda.get_device_capability()
             major, minor = compute_capability
             if (major < 8) or (major == 8 and minor < 9):
+                self._assert_dequantize_supported()
                 logger.warning_once(
                     "FP8 quantized models is only supported on GPUs with compute capability >= 8.9 (e.g 4090/H100)"
                     f", actual = `{major}.{minor}`. We will default to dequantizing the model to bf16. Feel free "
@@ -239,15 +271,26 @@ class FineGrainedHfQuantizer(HfQuantizer):
                 ]
             return converters
 
-        # modelopt NVFP4: E4M3 group-16 `weight_scale`, fp32 `weight_scale_2` weight globals and
-        # calibrated fp32 `input_scale` activation globals, in EITHER of the two layouts a modelopt
-        # checkpoint ships them in — one tensor per expert per projection (GLM-5.2-NVFP4) or one
-        # already-stacked tensor per layer (the fused vLLM layout, Muse-Spark). Both sets are
-        # returned: a checkpoint matches one of them and the other never fires. The arch plan
-        # stacks the expert WEIGHTS; these bring the scales and globals to the same layout, and
-        # `_with_expert_layout_ops` adds the gate|up interleave + swizzle to the block scales.
-        # Only the routed experts are quantized, so no dense converters — a generic `weight_scale*`
-        # rename would run before converter collection and mangle these keys.
+        # The same GPT-OSS keys under `dequantize=True`: the blocks regroup into the packed rows
+        # and the exponent-byte scales come back out of them as bf16, in the (E, hidden, 2I)
+        # orientation the unquantized experts hold.
+        if self.pre_quantized and self._quant_method() == "mxfp4" and self.quantization_config.dequantize:
+            from ..core_model_loading import Transpose
+
+            return [
+                WeightConverter(
+                    source_patterns=[rf"{proj}_blocks$", rf"{proj}_scales$"],
+                    target_patterns=proj,
+                    operations=[FineGrainedPackedBlocks(self), FineGrainedDequantize(self), Transpose(1, 2)],
+                )
+                for proj in ("gate_up_proj", "down_proj")
+            ]
+
+        # modelopt NVFP4 scales (`weight_scale`, `weight_scale_2`, `input_scale`), in both layouts
+        # a modelopt checkpoint ships them in: per expert per projection (GLM-5.2-NVFP4) or already
+        # stacked per layer (the fused vLLM layout, Muse-Spark). A checkpoint matches one set and
+        # the other never fires. Routed experts only — a generic `weight_scale*` rename would run
+        # before converter collection and mangle these keys.
         if self.pre_quantized and self._quant_method() == "modelopt" and not self.quantization_config.dequantize:
             # A weight-only run keeps activations bf16, so its experts hold no activation global
             # and the checkpoint's calibrated `input_scale` has nowhere to land: leave those keys

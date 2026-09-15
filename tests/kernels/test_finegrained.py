@@ -21,6 +21,7 @@ from unittest import mock
 
 import torch
 
+import transformers.integrations.deepgemm as deepgemm
 import transformers.integrations.finegrained as fg
 from transformers.integrations.finegrained import (
     FineGrainedExperts,
@@ -125,7 +126,7 @@ class FineGrainedLinearMarshallingTest(unittest.TestCase):
     def _run(self, **linear_kwargs):
         kernel, rec = _fake_bundle()
         p1, p2, p3, p4 = _loaded(kernel)
-        with p1, p2, p3, p4, mock.patch.object(fg, "is_deepgemm_loadable", return_value=False):
+        with p1, p2, p3, p4, mock.patch.object(deepgemm, "is_deepgemm_loadable", return_value=False):
             x = torch.randn(3, 5, 64, dtype=torch.bfloat16)
             w = torch.randn(32, 64).to(torch.float8_e4m3fn)
             ws = torch.randn(1, 1, dtype=torch.float32)
@@ -155,7 +156,7 @@ class FineGrainedLinearMarshallingTest(unittest.TestCase):
     def test_module_forward_threads_everything(self):
         kernel, rec = _fake_bundle()
         p1, p2, p3, p4 = _loaded(kernel)
-        with p1, p2, p3, p4, mock.patch.object(fg, "is_deepgemm_loadable", return_value=False):
+        with p1, p2, p3, p4, mock.patch.object(deepgemm, "is_deepgemm_loadable", return_value=False):
             m = FineGrainedLinear(
                 64,
                 32,
@@ -234,7 +235,7 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
             p2,
             p3,
             p4,
-            mock.patch.object(fg, "is_deepgemm_loadable", return_value=False),
+            mock.patch.object(deepgemm, "is_deepgemm_loadable", return_value=False),
             mock.patch.object(fg, "finegrained_linear", linear),
         ):
             m(*self._route())
@@ -356,7 +357,7 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
                 return x
 
         m.post_expert_norm = m._apply_post_norm = _Recording()
-        with p1, p2, p3, p4, mock.patch.object(fg, "is_deepgemm_loadable", return_value=False):
+        with p1, p2, p3, p4, mock.patch.object(deepgemm, "is_deepgemm_loadable", return_value=False):
             m(*self._route())
         self.assertTrue(m.post_expert_norm.rows, "the eager loop never applied the post-expert norm")
 
@@ -499,7 +500,7 @@ class FineGrainedMxfp4ConverterTest(unittest.TestCase):
 
 @require_torch
 class FineGrainedDeepGemmDispatchTest(unittest.TestCase):
-    """`deepgemm_preferred` carries two independent gates: a correctness one (a pre-swizzled
+    """`prefers_deepgemm_linear` carries two independent gates: a correctness one (a pre-swizzled
     scale is not readable as row-major, so DeepGEMM would consume a permuted buffer as affine
     and silently return garbage) and an SM100 perf one. They cover different cases — block-FP8
     scales have no swizzled layout, so the first never fires for the shape the second catches."""
@@ -515,8 +516,8 @@ class FineGrainedDeepGemmDispatchTest(unittest.TestCase):
             p2,
             p3,
             p4,
-            mock.patch.object(fg, "is_deepgemm_loadable", return_value=True),
-            mock.patch.object(fg, "is_sm100", return_value=sm100),
+            mock.patch.object(deepgemm, "is_deepgemm_loadable", return_value=True),
+            mock.patch.object(deepgemm, "is_sm100", return_value=sm100),
             mock.patch.object(fg, "deepgemm_fp8_fp4_linear") as dg,
         ):
             fg.finegrained_linear(torch.randn(4, 64, dtype=torch.bfloat16), w, s, block_size=[128, 128])
@@ -607,7 +608,7 @@ class FineGrainedScaleLayoutTest(unittest.TestCase):
         # block-FP8's (N/128, K/128) grid never reaches a scaled-MMA, whatever its scale dtype
         _, experts = self._experts("fp8")
         self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 2, 2))
-        with mock.patch.dict("os.environ", {"TRANSFORMERS_FINEGRAINED_NO_SWIZZLE": "1"}):
+        with mock.patch.object(fg, "_swizzles_scales", return_value=False):
             _, experts = self._experts("mxfp8")
         self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 256, 8))
 
@@ -875,6 +876,27 @@ class FineGrainedScaleLayoutTest(unittest.TestCase):
 class FineGrainedOnTheFlyQuantizeTest(unittest.TestCase):
     """`FineGrainedQuantize` reads the module's format: block-FP8 in torch (the group formats run the
     kernels' quantizers — covered with real kernels below), emitted in the module's layout."""
+
+    def test_mxfp4_blocks_dequantize_like_the_integration_they_replace(self):
+        """`dequantize=True` on a GPT-OSS MXFP4 checkpoint used to be the mxfp4 integration's job.
+        The finegrained chain has to land the same bf16 tensor, in the (E, hidden, 2I) orientation
+        the unquantized experts hold — so it is compared against that integration directly."""
+        from transformers.core_model_loading import Transpose
+        from transformers.integrations.finegrained import FineGrainedDequantize, FineGrainedPackedBlocks
+        from transformers.integrations.mxfp4 import convert_moe_packed_tensors
+
+        torch.manual_seed(0)
+        num_experts, rows, hidden = 2, 8, 64
+        blocks = torch.randint(0, 256, (num_experts, rows, hidden // 32, 16), dtype=torch.uint8)
+        scales = torch.randint(120, 134, (num_experts, rows, hidden // 32), dtype=torch.uint8)
+        reference = convert_moe_packed_tensors(blocks.clone(), scales.clone(), dtype=torch.bfloat16)
+
+        sources = ["gate_up_proj_blocks$", "gate_up_proj_scales$"]
+        tensors = {sources[0]: blocks.clone(), sources[1]: scales.clone()}
+        for op in (FineGrainedPackedBlocks(None), FineGrainedDequantize(None), Transpose(1, 2)):
+            tensors = op.convert(tensors, source_patterns=sources, target_patterns=["gate_up_proj"])
+        self.assertEqual(len(tensors), 1)  # the scale is consumed, not passed down the chain
+        torch.testing.assert_close(next(iter(tensors.values())).float(), reference.float(), rtol=0, atol=0)
 
     def test_block_fp8_round_trips_within_its_floor(self):
         from transformers.integrations.finegrained import FineGrainedDequantize, FineGrainedQuantize
@@ -1335,7 +1357,7 @@ class FineGrainedRealKernelTest(unittest.TestCase):
         )  # K >= 256: the swizzled arm has tiles
         cfg._experts_implementation = "grouped_mm"
         experts = FineGrainedExperts(cfg, weight_format="mxfp8").cuda()
-        with mock.patch.dict("os.environ", {"TRANSFORMERS_FINEGRAINED_NO_SWIZZLE": "1"}):
+        with mock.patch.object(fg, "_swizzles_scales", return_value=False):
             affine_experts = FineGrainedExperts(cfg, weight_format="mxfp8").cuda()
         model = torch.nn.Module()
         model.experts = experts
