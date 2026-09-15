@@ -112,6 +112,36 @@ class NemotronAsrStreamingEncoderModelTest(ParakeetEncoderModelTest):
             self, config_class=NemotronAsrStreamingEncoderConfig, has_text_modality=False
         )
 
+    def test_eager_matches_sdpa_no_nan(self):
+        # Regression test for the inverted eager mask: `create_bidirectional_mask` returns an additive
+        # *float* mask for eager (0 = allowed, dtype-min = disallowed) but a bool one for sdpa, and the
+        # attention used to apply `masked_fill_(mask.logical_not(), -inf)` unconditionally — inverting the
+        # eager mask and NaN-ing every fully-allowed row in softmax.
+        # 回归测试（eager 掩码反转）：`create_bidirectional_mask` 对 eager 返回加性浮点掩码
+        # （0 = 允许，dtype 最小值 = 屏蔽）、对 sdpa 返回布尔掩码；而注意力此前无条件执行
+        # `masked_fill_(mask.logical_not(), -inf)`，会把 eager 掩码反转，并让全合法行在 softmax 中产生 NaN。
+        # A single layer keeps this exact: with more layers the tiny random-weight config amplifies
+        # innocent fp32 kernel noise through near-constant LayerNorm inputs (a flaky-test property,
+        # not a logic difference).
+        # 单层配置保持精确性：更多层时，这个微型随机权重配置会把正常的 fp32 kernel 噪声
+        # 经近常数输入的 LayerNorm 放大（属于测试不稳定因素，而非逻辑差异）。
+        config = self.model_tester.get_config()
+        config.num_hidden_layers = 1
+        _, input_features, _ = self.model_tester.prepare_config_and_inputs()
+
+        last_hidden = {}
+        for impl in ["eager", "sdpa"]:
+            torch.manual_seed(42)  # identical weight init for both implementations / 保证两种实现的权重一致
+            model = NemotronAsrStreamingEncoder(config).to(torch_device).eval()
+            model.set_attn_implementation(impl)
+            with torch.no_grad():
+                last_hidden[impl] = model(input_features.to(torch_device)).last_hidden_state
+
+        # Pre-fix the eager output was full of NaNs; it must now be finite and match sdpa.
+        # 修复前 eager 输出含大量 NaN；现在必须有限且与 sdpa 一致。
+        self.assertTrue(torch.isfinite(last_hidden["eager"]).all().item())
+        self.assertTrue(torch.allclose(last_hidden["eager"], last_hidden["sdpa"], atol=1e-5, rtol=1e-5))
+
 
 class NemotronAsrStreamingForRNNTModelTester(ParakeetForRNNTModelTester):
     def __init__(self, parent, encoder_kwargs=None, vocab_size=128, **kwargs):

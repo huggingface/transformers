@@ -625,7 +625,17 @@ class NemotronAsrStreamingEncoderAttention(nn.Module):
             # here the original codebase uses -10000.0 rather than float("-inf") and then manual masked fill with 0.0s
             # see: https://github.com/NVIDIA-NeMo/NeMo/blob/8cfedd7203462cb251a914e700e5605444277561/nemo/collections/asr/parts/submodules/multi_head_attention.py#L320-L340
             # we rather went for a straight-forward approach with float("-inf")
-            matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), float("-inf"))
+            if attention_mask.dtype == torch.bool:
+                # Bool mask convention (sdpa/fa2/flex): True = allowed / True = 允许参与注意力
+                matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), float("-inf"))
+            else:
+                # Additive float mask convention (eager): 0 = allowed, dtype-min = disallowed.
+                # `masked_fill_(mask.logical_not(), ...)` would invert the mask here (logical_not(0.0) is True),
+                # which both masks out allowed positions and NaNs fully-allowed rows in softmax.
+                # 加性浮点掩码约定（eager）：0 = 允许，dtype 最小值 = 屏蔽。
+                # 若用 masked_fill_(mask.logical_not(), ...) 会把掩码反转（logical_not(0.0) 为 True），
+                # 既屏蔽了合法位置，又让全合法行在 softmax 中产生 NaN。
+                matrix_bd = matrix_bd + attention_mask
 
         # will compute matrix_ac - terms (a) and (c) - and add matrix_bd
         attn_output, attn_weights = attention_interface(
