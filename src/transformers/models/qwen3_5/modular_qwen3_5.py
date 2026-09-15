@@ -19,6 +19,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
@@ -30,7 +31,14 @@ from ...modeling_layers import (
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_flash_linear_attention_available,
+    is_torchdynamo_exporting,
+    logging,
+)
 from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
@@ -47,6 +55,7 @@ from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextModel,
     Qwen3NextPreTrainedModel,
     Qwen3NextRMSNorm,
+    Qwen3NextRMSNormGated,
     apply_mask_to_padding_states,
     causal_conv1d_fn,
     causal_conv1d_update,
@@ -62,6 +71,12 @@ from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLVisionModel,
     Qwen3VLVisionRotaryEmbedding,
 )
+
+
+def _use_fla_norm(x: torch.Tensor) -> bool:
+    # perf: fused Triton RMSNorm kernels from flash-linear-attention, when the package is installed. The reference
+    # forwards run 6 unfused fp32 element-wise passes (plus ~10 in backward) per norm; the fused kernel does one.
+    return is_flash_linear_attention_available() and x.is_cuda and not is_torchdynamo_exporting()
 
 
 logger = logging.get_logger(__name__)
@@ -291,7 +306,15 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         beta = b.sigmoid()
         # If the model is loaded in fp16, without the .float() here, A might be -inf
         g = -self.A_log.float().exp() * F.softplus(a.float() + self.dt_bias)
-        if self.num_v_heads // self.num_k_heads > 1:
+        # perf: fla's chunk kernel applies grouped value attention itself when num_v_heads > num_k_heads
+        # (`HV % H == 0`), so the query/key repeat (and its backward reduction) is only needed on the torch path.
+        fla_gva = (
+            is_flash_linear_attention_available()  # the chunk kernel below resolves to fla
+            and query.is_cuda
+            and not is_torchdynamo_exporting()
+            and not (use_precomputed_states and seq_len == 1)
+        )
+        if self.num_v_heads // self.num_k_heads > 1 and not fla_gva:
             query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
             key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 
@@ -347,9 +370,40 @@ class Qwen3_5MLP(Qwen3NextMLP):
         self.intermediate_size = intermediate_size
 
 
+class Qwen3_5RMSNormGated(Qwen3NextRMSNormGated):
+    def forward(self, hidden_states: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+        if _use_fla_norm(hidden_states):
+            # fused: fp32 rms-norm, * weight, * silu(gate), cast back; one Triton kernel each way
+            from fla.modules.fused_norm_gate import rms_norm_gated
+
+            return rms_norm_gated(
+                hidden_states, gate, self.weight, None, activation="swish", eps=self.variance_epsilon
+            )
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        # Norm before gate
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = self.weight * hidden_states.to(input_dtype)
+        hidden_states = hidden_states * ACT2FN[self.activation](gate.to(torch.float32))
+
+        return hidden_states.to(input_dtype)
+
+
 @use_kernel_forward_from_hub("RMSNormZeroCentered")
 class Qwen3_5RMSNorm(Qwen3NextRMSNorm):
-    pass
+    def forward(self, x):
+        if _use_fla_norm(x):
+            # fused: fp32 rms-norm * (1 + weight), cast back to x.dtype; one Triton kernel each way.
+            # The add is done in fp32 like the reference: in bf16 it would round every channel scale by up to 0.4%.
+            from fla.modules.layernorm import rms_norm
+
+            return rms_norm(x, 1.0 + self.weight.float(), None, eps=self.eps)
+        output = self._norm(x.float())
+        # Llama does x.to(float16) * w whilst Qwen3_5 is (x * w).to(float16)
+        # See https://github.com/huggingface/transformers/pull/29402
+        output = output * (1.0 + self.weight.float())
+        return output.type_as(x)
 
 
 class Qwen3_5DecoderLayer(GradientCheckpointingLayer):

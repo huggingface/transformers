@@ -53,6 +53,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    is_flash_linear_attention_available,
     is_torchdynamo_exporting,
     torch_compilable_check,
 )
@@ -211,27 +212,6 @@ class Qwen3_5TextRotaryEmbedding(nn.Module):
             idx = slice(offset, length, 3)
             freqs_thw[..., idx] = freq[dim, ..., idx]
         return torch.cat((freqs_thw, freqs_thw), dim=-1)
-
-
-# NOTE: the FLA package does not re-cast to `input_dtype` in its implementation, maybe we should do the same
-@use_kernel_forward_from_hub("RMSNormGated")
-class Qwen3_5RMSNormGated(nn.Module):
-    def __init__(self, hidden_size: int, eps: float = 1e-6, **kwargs) -> None:
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-        self.activation = "silu"
-
-    def forward(self, hidden_states: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        # Norm before gate
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        hidden_states = self.weight * hidden_states.to(input_dtype)
-        hidden_states = hidden_states * ACT2FN[self.activation](gate.to(torch.float32))
-
-        return hidden_states.to(input_dtype)
 
 
 def apply_mask_to_padding_states(hidden_states, attention_mask):
@@ -617,7 +597,15 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         beta = b.sigmoid()
         # If the model is loaded in fp16, without the .float() here, A might be -inf
         g = -self.A_log.float().exp() * F.softplus(a.float() + self.dt_bias)
-        if self.num_v_heads // self.num_k_heads > 1:
+        # perf: fla's chunk kernel applies grouped value attention itself when num_v_heads > num_k_heads
+        # (`HV % H == 0`), so the query/key repeat (and its backward reduction) is only needed on the torch path.
+        fla_gva = (
+            is_flash_linear_attention_available()  # the chunk kernel below resolves to fla
+            and query.is_cuda
+            and not is_torchdynamo_exporting()
+            and not (use_precomputed_states and seq_len == 1)
+        )
+        if self.num_v_heads // self.num_k_heads > 1 and not fla_gva:
             query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
             key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 
@@ -837,6 +825,40 @@ class Qwen3_5MLP(nn.Module):
         return down_proj
 
 
+def _use_fla_norm(x: torch.Tensor) -> bool:
+    # perf: fused Triton RMSNorm kernels from flash-linear-attention, when the package is installed. The reference
+    # forwards run 6 unfused fp32 element-wise passes (plus ~10 in backward) per norm; the fused kernel does one.
+    return is_flash_linear_attention_available() and x.is_cuda and not is_torchdynamo_exporting()
+
+
+# NOTE: the FLA package does not re-cast to `input_dtype` in its implementation, maybe we should do the same
+@use_kernel_forward_from_hub("RMSNormGated")
+class Qwen3_5RMSNormGated(nn.Module):
+    def __init__(self, hidden_size: int, eps: float = 1e-6, **kwargs) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+        self.activation = "silu"
+
+    def forward(self, hidden_states: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+        if _use_fla_norm(hidden_states):
+            # fused: fp32 rms-norm, * weight, * silu(gate), cast back; one Triton kernel each way
+            from fla.modules.fused_norm_gate import rms_norm_gated
+
+            return rms_norm_gated(
+                hidden_states, gate, self.weight, None, activation="swish", eps=self.variance_epsilon
+            )
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        # Norm before gate
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = self.weight * hidden_states.to(input_dtype)
+        hidden_states = hidden_states * ACT2FN[self.activation](gate.to(torch.float32))
+
+        return hidden_states.to(input_dtype)
+
+
 @use_kernel_forward_from_hub("RMSNormZeroCentered")
 class Qwen3_5RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
@@ -848,6 +870,12 @@ class Qwen3_5RMSNorm(nn.Module):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
 
     def forward(self, x):
+        if _use_fla_norm(x):
+            # fused: fp32 rms-norm * (1 + weight), cast back to x.dtype; one Triton kernel each way.
+            # The add is done in fp32 like the reference: in bf16 it would round every channel scale by up to 0.4%.
+            from fla.modules.layernorm import rms_norm
+
+            return rms_norm(x, 1.0 + self.weight.float(), None, eps=self.eps)
         output = self._norm(x.float())
         # Llama does x.to(float16) * w whilst Qwen3_5 is (x * w).to(float16)
         # See https://github.com/huggingface/transformers/pull/29402
