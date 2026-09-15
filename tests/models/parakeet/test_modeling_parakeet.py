@@ -43,7 +43,7 @@ if is_torch_available():
         ParakeetTDTConfig,
     )
     from transformers.loss.loss_rnnt import rnnt_loss
-    from transformers.loss.loss_tdt import tdt_loss
+    from transformers.loss.loss_tdt import ParakeetForTDTLoss, tdt_loss
 
 
 FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures/parakeet"
@@ -124,6 +124,39 @@ class TDTLossTest(unittest.TestCase):
         self.assertIsNotNone(inputs["duration_logits"].grad)
         self.assertFalse(torch.all(inputs["token_logits"].grad == 0))
         self.assertFalse(torch.all(inputs["duration_logits"].grad == 0))
+
+    def test_tdt_loss_accepts_int32_and_int64_targets(self):
+        # Anything reaching the gather as int32 used to raise below torch 2.8, so cover both entry
+        # points (the model's labels= path and a direct tdt_loss call) and both integer dtypes.
+        batch, max_t, max_u, vocab = 2, 6, 4, 8
+        durations = [0, 1, 2]
+        token_logits = torch.randn(batch, max_t, max_u, vocab + 1)
+        duration_logits = torch.randn(batch, max_t, max_u, len(durations))
+        targets = torch.tensor([[1, 2, 3], [4, 5, 6]])
+
+        for dtype in (torch.int32, torch.int64):
+            with self.subTest(dtype=dtype):
+                loss = ParakeetForTDTLoss(
+                    token_logits=token_logits,
+                    duration_logits=duration_logits,
+                    labels=targets.to(dtype),
+                    logit_lengths=torch.tensor([max_t, max_t]),
+                    label_lengths=torch.tensor([3, 3]),
+                    blank_token_id=vocab,
+                    durations=durations,
+                )
+                self.assertTrue(torch.isfinite(loss))
+
+                loss = tdt_loss(
+                    token_logits=token_logits,
+                    duration_logits=duration_logits,
+                    targets=targets.to(dtype),
+                    logit_lengths=torch.tensor([max_t, max_t]),
+                    target_lengths=torch.tensor([3, 3]),
+                    blank_token_id=vocab,
+                    durations=durations,
+                )
+                self.assertTrue(torch.isfinite(loss))
 
 
 @require_torch
