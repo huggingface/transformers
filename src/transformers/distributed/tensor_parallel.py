@@ -241,6 +241,25 @@ class ColwiseParallel(TensorParallelLayer):
         return output.to_local() if self.use_local_output else output
 
 
+class UnitColwiseParallel(TensorParallelLayer):
+    """This forces all ranks to own at least 1 unit of the tensor.
+    It is designed to be used on `query/key/value` layers when running TP. You cannot
+    For `query = nn.Linear(hidden_dim, head_dim * num_heads)` you can't divide the second dimension blindly by the world size as the attention REQUIRES to split per-head. You cannot split 2 heads of dim 64 into 4 GPUs by just separating into 4 x 32. This would mix the heads.
+
+    The unit colwise handles 2 cases:
+    - Less heads than world size: 2 heads, 4 process -> we replicate the heads.
+          Rank: | 0 |  1 |  2 | 3 |
+    This gives: |h0 | h0 | h1 | h1|
+    And we normalize the contributions from rank 0,1 and from 2,3.
+    - More heads than world size: 6 heads, 4 process -> we also replicate the heads.
+          Rank: |  0 |  1 |  2 |  3 |
+    This gives: |h0h1|h2h3|h4h5|h4h5|
+    And we "ignore" the results from rank 2,3.
+    """
+
+    pass
+
+
 class RowwiseParallel(TensorParallelLayer):
     """Row-wise: weight → Shard(1), bias → Replicate (Embedding: weight → Shard(0)).
 
