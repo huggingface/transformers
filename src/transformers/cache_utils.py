@@ -759,8 +759,7 @@ class QuantizedLayer(DynamicLayer):
 
         dequant_keys = self._dequantize(self._quantized_keys)
         dequant_values = self._dequantize(self._quantized_values)
-        # Beam idx reordering has been deferred to when we dequantize anyways to avoid double round trips around
-        # quantization (which is lossy)
+        # Beam idx reordering is deferred to here, to avoid a lossy round trip around quantization
         dequant_keys, dequant_values = self._apply_pending_reorder(dequant_keys, dequant_values)
 
         keys_to_return = torch.cat([dequant_keys, self.keys, key_states], dim=-2)
