@@ -462,7 +462,7 @@ class AXK1Attention(nn.Module):
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
-        if self.config.rope_interleave:  # support using interleaved weights for efficiency
+        if self.config.rope_interleave:  # CODEPATH: support using interleaved weights for efficiency
             q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
         else:
             q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
