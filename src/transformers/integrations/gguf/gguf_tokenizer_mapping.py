@@ -42,9 +42,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-# `LLAMA_TOKEN_TYPE_CONTROL`, as llama.cpp numbers it.
-_CONTROL_TOKEN = 3
-
 
 GGUF_TOKENIZER_MAPPING = {
     "tokenizer": {
@@ -77,8 +74,6 @@ _SPECIAL_TOKENS = {
 
 def get_gguf_tokenizer(gguf_path: str) -> tuple[str, dict, dict]:
     """`(architecture, tokenizer_dict, tokenizer_config)` for the tokenizer this file describes."""
-    # Not at module scope: the reader needs torch, and `configuration_utils` reaches this file for
-    # `GGUF_TOKENIZER_MAPPING` alone, on a path that has to import without it.
     from .reader import read_gguf_metadata
 
     # Only these two are needed in full; the reader leaves every other array as a count.
@@ -101,8 +96,8 @@ def get_gguf_tokenizer(gguf_path: str) -> tuple[str, dict, dict]:
 def convert_gguf_tokenizer(architecture: str, tokenizer_dict: dict) -> tuple[Tokenizer, dict]:
     kind = tokenizer_dict.get("tokenizer_type")
     tokenizer = select_tokenizer_builder(architecture, kind)(tokenizer_dict)
-    tokenizer = with_control_tokens(tokenizer, tokenizer_dict, byte_level=kind == "gpt2")
-    tokenizer = with_split(tokenizer, tokenizer_dict)
+    tokenizer = add_gguf_special_tokens(tokenizer, tokenizer_dict, byte_level=kind == "gpt2")
+    tokenizer = set_split_regex(tokenizer, tokenizer_dict)
     return tokenizer.backend_tokenizer, {}
 
 
@@ -146,8 +141,7 @@ def gemma_tokenizer(section):
 
 
 def byte_level_tokenizer(section):
-    """Byte-level BPE, with the vocabulary keyed the way the file's own merges spell it.
-    """
+    """Byte-level BPE"""
     spelling = bytes_to_unicode()
     alphabet = set(spelling.values())
     vocab = {
@@ -163,9 +157,7 @@ def unigram_tokenizer(section):
 
 
 def get_merges(section, ranks=None):
-    """The merges the file gives, or the ones its vocabulary implies.
-
-    """
+    """The merges the file gives, or the ones its vocabulary implies."""
     if "merges" in section:
         return [tuple(merge.split(" ")) for merge in section["merges"]]
 
@@ -176,20 +168,17 @@ def get_merges(section, ranks=None):
     return generate_merges({token: index for index, token in enumerate(tokens)}, ranks)
 
 
-def with_control_tokens(tokenizer, section, byte_level=False):
-    """Tell the tokenizer which tokens are special, like `<|endoftext|>`.
+def add_gguf_special_tokens(tokenizer, section, byte_level=False):
+    """Add the tokens the file marks as control, like `<|endoftext|>`, as special tokens.
 
-    A GGUF marks them with a type per token rather than listing them, so only we can. Without this
-    they are cut into pieces: `"<|begin_of_text|>hello<|eot_id|>"` comes out as 15 tokens, not 3.
-
-    On a byte-level file we skip any token not spelled byte-level. That one is a byte sequence
-    llama.cpp mislabelled, and adding it would leave the vocabulary larger than the model.
+    Without this they are cut into pieces. A byte-level token not spelled byte-level is skipped:
+    llama.cpp mislabelled it, and adding it would leave the vocabulary larger than the model.
     """
     spelled = set(bytes_to_unicode().values()) if byte_level else None
     control = [
         AddedToken(token, normalized=False, special=True)
         for token, token_type in zip(section["tokens"], section.get("token_type") or ())
-        if token_type == _CONTROL_TOKEN and (spelled is None or set(token) <= spelled)
+        if token_type == 3 and (spelled is None or set(token) <= spelled)  # 3 is CONTROL
     ]
     if control:
         tokenizer.add_special_tokens({"additional_special_tokens": control}, replace_extra_special_tokens=False)
@@ -197,7 +186,7 @@ def with_control_tokens(tokenizer, section, byte_level=False):
 
 
 def select_tokenizer_builder(architecture: str, tokenizer_type: str | None):
-    """The builder for the tokenizer a file describes."""
+    """The builder for the tokenizer a file describes, from `tokenizer.ggml.model`."""
     if tokenizer_type == "llama" and architecture in GGUF_SENTENCEPIECE_BUILDERS:
         return GGUF_SENTENCEPIECE_BUILDERS[architecture]
     if tokenizer_type in GGUF_TOKENIZER_KINDS:
@@ -254,8 +243,9 @@ GGUF_PRE_TOKENIZER_SPLITS = {
 }
 
 
-def with_split(tokenizer, section):
-    """Cut text into the chunks this vocabulary's merges were learned on."""
+def set_split_regex(tokenizer, section):
+    """Split text the way this vocabulary's merges were learned.
+    """
     split = GGUF_PRE_TOKENIZER_SPLITS.get(section.get("pre_tokenizer_type"))
     if split is not None:
         tokenizer.backend_tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
