@@ -24,7 +24,7 @@ from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
-    _validate_tp_plan_styles,
+    _validate_parallel_plan_styles,
     apply_expert_parallelism,
     apply_tensor_parallelism,
     gather_state_dict_for_save,
@@ -87,7 +87,7 @@ class DistributedMixin:
     @property
     def tp_plan(self) -> dict[str, str]:
         """The full tp plan for the model's modules."""
-        return self._tp_plan
+        return self._tp_plan if self._tp_plan is not None else {}
 
     @property
     def ep_plan(self) -> dict[str, str]:
@@ -110,7 +110,7 @@ class DistributedMixin:
         if not isinstance(plan, dict):
             raise ValueError("Can only set a dictionary as `tp_plan`")
 
-        _validate_tp_plan_styles(plan)
+        _validate_parallel_plan_styles(plan)
 
         model_param_names = [name for name, _ in self.named_parameters()]
         for layer_pattern in plan.keys():
@@ -133,7 +133,7 @@ class DistributedMixin:
         plan = {} if plan is None else plan
         if not isinstance(plan, dict):
             raise ValueError("Can only set a dictionary as `ep_plan`")
-        _validate_tp_plan_styles(plan)
+        _validate_parallel_plan_styles(plan)
         self._ep_plan = plan
 
     @pp_plan.setter

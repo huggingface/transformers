@@ -943,24 +943,46 @@ class ParallelInterface(GeneralInterface):
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
-def _validate_tp_plan_styles(tp_plan: dict[str, str] | None) -> None:
-    unsupported_styles = {style for style in (tp_plan or {}).values() if style not in ALL_PARALLEL_STYLES}
+def _validate_parallel_plan_styles(plan: dict[str, str] | None) -> None:
+    unsupported_styles = {style for style in (plan or {}).values() if style not in ALL_PARALLEL_STYLES}
     if unsupported_styles:
         raise ValueError(
-            f"Unsupported tensor parallel styles: {unsupported_styles}. "
+            f"Unsupported parallel styles: {unsupported_styles}. "
             f"Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
         )
 
 
 def resolve_parallel_plans(model: nn.Module, distributed_config: DistributedConfig):
     """Resolve overrides and give EP ownership of its modules before applying any sharding."""
+    # Reject invalid paths before merging, e.g. "layers.*" when the model uses "model.layers.*".
+    model_names = {name for name, _ in model.named_modules()} | {name for name, _ in model.named_parameters()}
+    if isinstance(distributed_config.tp_plan, dict):
+        valid_names = model_names | set(model.tp_plan)
+        for pattern in distributed_config.tp_plan:
+            if not any(fnmatchcase(name, pattern) for name in valid_names):
+                raise ValueError(
+                    f"The `tp_plan` pattern {pattern!r} does not match any module, parameter, "
+                    f"or existing plan entry in {type(model).__name__}. "
+                    "Check the full path, including any 'model.' prefix."
+                )
+
+    if isinstance(distributed_config.ep_plan, dict):
+        valid_names = model_names | set(model.ep_plan)
+        for pattern in distributed_config.ep_plan:
+            if not any(fnmatchcase(name, pattern) for name in valid_names):
+                raise ValueError(
+                    f"The `ep_plan` pattern {pattern!r} does not match any module, parameter, "
+                    f"or existing plan entry in {type(model).__name__}. "
+                    "Check the full path, including any 'model.' prefix."
+                )
+
     # Take user-defined plans
     if isinstance(distributed_config.tp_plan, dict):
-        model.tp_plan = (model.tp_plan or {}) | distributed_config.tp_plan
+        model.tp_plan = model.tp_plan | distributed_config.tp_plan
     if isinstance(distributed_config.ep_plan, dict):
         model.ep_plan = model.ep_plan | distributed_config.ep_plan
 
-    tp_plan = (model.tp_plan or {}) if distributed_config.tp_size > 1 else {}
+    tp_plan = model.tp_plan if distributed_config.tp_size > 1 else {}
     ep_plan = model.ep_plan if distributed_config.ep_size > 1 else {}
 
     if distributed_config.ep_size > 1 and not ep_plan:
@@ -980,8 +1002,8 @@ def resolve_parallel_plans(model: nn.Module, distributed_config: DistributedConf
         expert_paths = [name for name, style in ep_plan.items() if style in ("moe_tp_experts", "ep_dispatch_experts")]
         ep_plan = {name: style for name, style in ep_plan.items() if is_expert_path(name)}
     tp_plan = {name: style for name, style in tp_plan.items() if not is_expert_path(name)}
-    _validate_tp_plan_styles(tp_plan)
-    _validate_tp_plan_styles(ep_plan)
+    _validate_parallel_plan_styles(tp_plan)
+    _validate_parallel_plan_styles(ep_plan)
     return tp_plan, ep_plan
 
 
