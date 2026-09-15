@@ -32,6 +32,7 @@ from transformers.configuration_utils import PretrainedConfig
 from transformers.image_processing_backends import TorchvisionBackend
 from transformers.image_processing_utils import BatchFeature
 from transformers.image_utils import ImageInput
+from transformers.modeling_layers import GenericForSequenceClassification
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.modeling_utils import PreTrainedModel
 from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
@@ -796,6 +797,7 @@ Args:
         source_args_dict = get_args_doc_from_source([ModelArgs, get_model_for_args("XForAbc")])
         self.assertEqual(source_args_dict["labels"], ModelArgs.labels)
 
+    def test_task_specific_args_take_precedence_over_default_args(self):
         # Task args take precedence over the language modeling default of `ModelArgs`.
         source_args_dict = get_args_doc_from_source(
             [ModelArgs, get_model_for_args("XForSequenceClassification"), ImageProcessorArgs]
@@ -807,6 +809,10 @@ Args:
         self.assertIn(
             "Labels for computing the sequence classification/regression loss.",
             DummyModelForSequenceClassification.forward.__doc__,
+        )
+        self.assertIn(
+            "Labels for computing the sequence classification/regression loss.",
+            GenericForSequenceClassification.forward.__doc__,
         )
 
 
