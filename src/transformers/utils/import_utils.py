@@ -2927,10 +2927,12 @@ def requires(*, backends=()):
     return inner_fn
 
 
+_TORCHVISION_BACKEND_SUBCLASS = re.compile(r"^class\s+\w+\s*\([^)]*\bTorchvisionBackend\b", re.MULTILINE)
+
 BASE_FILE_REQUIREMENTS = {
     lambda name, content: "modeling_" in name: ("torch",),
     lambda name, content: "tokenization_" in name and name.endswith("_fast"): ("tokenizers",),
-    lambda name, content: "image_processing_" in name and "TorchvisionBackend" in content: (
+    lambda name, content: "image_processing_" in name and _TORCHVISION_BACKEND_SUBCLASS.search(content): (
         "vision",
         "torch",
         "torchvision",

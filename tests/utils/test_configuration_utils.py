@@ -21,7 +21,7 @@ import unittest.mock as mock
 import warnings
 from pathlib import Path
 
-import httpx
+from huggingface_hub.utils import httpx
 
 from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config
 from transformers.configuration_utils import PreTrainedConfig

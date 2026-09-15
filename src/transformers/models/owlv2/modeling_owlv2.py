@@ -798,7 +798,7 @@ class Owlv2VisionModel(Owlv2PreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Owlv2VisionModel
 
@@ -939,7 +939,7 @@ class Owlv2Model(Owlv2PreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Owlv2Model
 
@@ -1345,7 +1345,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
         Examples:
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
@@ -1448,7 +1448,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
         Examples:
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
