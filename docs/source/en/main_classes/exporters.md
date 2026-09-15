@@ -16,7 +16,9 @@ rendered properly in your Markdown viewer.
 
 # Exporters
 
-New export backends can be added to Transformers by subclassing [`HfExporter`].
+New export formats can be added to Transformers by subclassing [`HfExporter`]. ExecuTorch backends
+extend the existing exporter with `register_executorch_backend` and an `ExecutorchBackendRecipe`;
+see [Extending the exporters](../exporters_extend#register-an-executorch-backend).
 
 <Tip>
 
@@ -50,6 +52,26 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 [[autodoc]] exporters.exporter_executorch.ExecutorchExporter
     - export
+    - capture
+    - lower
+
+## ExecuTorch backend recipes
+
+[[autodoc]] exporters.exporter_executorch.register_executorch_backend
+
+[[autodoc]] exporters.exporter_executorch.ExecutorchBackendRecipe
+
+[[autodoc]] exporters.exporter_executorch.ExecutorchBackendPreparation
+
+[[autodoc]] exporters.exporter_executorch.ExecutorchCompatibilityPolicy
+
+[[autodoc]] exporters.exporter_executorch.ExecutorchCapture
+
+[[autodoc]] exporters.exporter_executorch.ExecutorchExportPatch
+
+[[autodoc]] exporters.exporter_executorch.ExecutorchAttention
+
+[[autodoc]] exporters.exporter_executorch.scoped_executorch_attention
 
 ## DynamoConfig
 

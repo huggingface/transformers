@@ -42,7 +42,9 @@ import enum
 import functools
 import inspect
 import sys
+import threading
 from collections.abc import MutableMapping
+from dataclasses import dataclass
 from typing import Any
 
 from ..utils import logging
@@ -69,44 +71,138 @@ if is_torch_available():
 
 # ── Patch and fix registries ────────────────────────────────────────────────
 # Single contract across exporters: `_PATCHES[backend]` lists `(obj, attribute, factory)` triples
-# to install reversibly, and `_FX_NODE_FIXES[backend]` lists `(gm, node) -> bool` fixers to
+# to install reversibly (lazy entries store a `_LazyPatchTarget` owner), and
+# `_FX_NODE_FIXES[backend]` lists `(gm, node) -> bool` fixers to
 # apply in place. Each exporter populates its slot at module load (via `@register_patch` /
 # `@register_fx_node_fix` decorators, or direct list-append for cases that can't be expressed
 # as dotted paths). The export pipeline drives them via the backend-keyed helpers below.
+
+
+@dataclass(frozen=True)
+class _LazyPatchTarget:
+    path: str
+
 
 _PATCHES: dict[str, list[tuple[Any, str, callable]]] = {}
 _FX_NODE_FIXES: dict[str, list[callable]] = {}
 _FX_PROGRAM_FIXES: dict[str, list[callable]] = {}
 
 
+_EXPORT_PATCH_LOCK = threading.RLock()
+_ACTIVE_PATCHES: dict[tuple[int, str], list[tuple[bool, str]]] = {}
+
+
 @contextlib.contextmanager
-def patch_attribute(obj: Any, attribute: str, factory: Any):
-    """Swap `obj.<attribute>` with `factory(original)` for the duration of the block."""
-    original = getattr(obj, attribute)
-    setattr(obj, attribute, factory(original))
-    try:
+def export_patch_scope():
+    """Serialize cooperating exports from before snapshots until after restoration.
+
+    Scopes are reentrant on the same thread, including scopes with no patches. This
+    does not isolate unrelated eager code from global patches. Do not wait for a
+    worker-thread export while holding this scope: that worker needs the same lock.
+    Registration decorators must not acquire it during module import, since Python's
+    import locks could otherwise form a cycle with an export resolving lazy targets.
+    """
+    with _EXPORT_PATCH_LOCK:
         yield
-    finally:
-        setattr(obj, attribute, original)
 
 
 @contextlib.contextmanager
-def patch_attributes(patches: list[tuple[Any, str, callable]]):
+def patch_attribute(obj: Any, attribute: str, factory: Any, *, exclusive: bool = False, source: str | None = None):
+    """Swap `obj.<attribute>` with `factory(original)` for the duration of the block.
+
+    Legacy patches stack in scope order. If either patch is exclusive, overlapping
+    physical slots are rejected before the incoming factory runs. `source` labels
+    the patch in collision diagnostics.
+    """
+    with export_patch_scope():
+        slot = (id(obj), attribute)
+        source = source or f"{type(obj).__qualname__}.{attribute}"
+        records = _ACTIVE_PATCHES.get(slot, [])
+        for active_exclusive, active_source in records:
+            if exclusive or active_exclusive:
+                raise RuntimeError(
+                    f"Patch conflict on {type(obj).__qualname__}.{attribute}: {source!r} overlaps "
+                    f"{active_source!r}; exclusive patches cannot overlap. For registry patches, use "
+                    "excluded_patch_targets to explicitly exclude the competing registry target."
+                )
+        # Reserve before calling user code, including factories that reenter exports.
+        records.append((exclusive, source))
+        _ACTIVE_PATCHES[slot] = records
+        try:
+            original = getattr(obj, attribute)
+            replacement = factory(original)
+            try:
+                # A setter can mutate the attribute before raising.
+                setattr(obj, attribute, replacement)
+                yield
+            finally:
+                setattr(obj, attribute, original)
+        finally:
+            records.pop()
+            if not records:
+                del _ACTIVE_PATCHES[slot]
+
+
+@contextlib.contextmanager
+def patch_attributes(patches: list[tuple[Any, str, callable]], *, exclusive: bool = False, source: str | None = None):
     """Install `(obj, attribute, factory)` patches for the duration of the block.
 
     Plural form of `patch_attribute` — each `factory(original)` returns the replacement
-    callable. Originals are restored on exit, even if the body raises.
+    callable. Originals are restored on exit, even if installation or the body raises.
+    Exclusive collections reject duplicate physical slots before running any factory.
     """
-    with contextlib.ExitStack() as stack:
+    with export_patch_scope(), contextlib.ExitStack() as stack:
+        if exclusive:
+            slots = set()
+            for obj, attribute, _factory in patches:
+                slot = (id(obj), attribute)
+                if slot in slots:
+                    raise RuntimeError(
+                        f"Duplicate exclusive patch target {type(obj).__qualname__}.{attribute} "
+                        f"from {source or 'patch_attributes'!r}"
+                    )
+                slots.add(slot)
         for obj, attribute, factory in patches:
-            stack.enter_context(patch_attribute(obj, attribute, factory))
+            stack.enter_context(patch_attribute(obj, attribute, factory, exclusive=exclusive, source=source))
         yield
 
 
 @contextlib.contextmanager
-def apply_patches(backend: str):
-    """Install `_PATCHES[backend]` for the duration of the block."""
-    with patch_attributes(_PATCHES.get(backend, [])):
+def apply_patches(backend: str, *, exclude: tuple[str, ...] = ()):
+    """Install `_PATCHES[backend]` in registration order, resolving lazy owners on entry.
+
+    Missing optional lazy targets are logged and retried on the next scope entry.
+    Eager entries (including directly appended triples) retain their original owners.
+    `exclude` names dotted attribute paths, matched by owner identity and attribute
+    (including aliases). Exact lazy paths are skipped without importing their owners.
+    Exclusions apply only to this registry application, never to nested scopes.
+    """
+    with export_patch_scope(), contextlib.ExitStack() as stack:
+        patches = list(_PATCHES.get(backend, []))
+        excluded_lazy_paths = {
+            f"{obj.path}.{attribute}"
+            for obj, attribute, _factory in patches
+            if isinstance(obj, _LazyPatchTarget) and f"{obj.path}.{attribute}" in exclude
+        }
+        for obj, attribute, factory in patches:
+            if isinstance(obj, _LazyPatchTarget):
+                path = f"{obj.path}.{attribute}"
+                if path in exclude:
+                    continue
+                obj = _resolve_dotted_path(obj.path)
+                if obj is None or not hasattr(obj, attribute):
+                    logger.debug("Skipping unavailable optional export patch target %s for %s", path, backend)
+                    continue
+            # Resolve aliases at installation time, so earlier patches can affect
+            # later owner resolution and unavailable optional owners remain retryable.
+            if any(
+                path.rpartition(".")[2] == attribute
+                and _resolve_dotted_path(path.rpartition(".")[0], import_modules=path not in excluded_lazy_paths)
+                is obj
+                for path in exclude
+            ):
+                continue
+            stack.enter_context(patch_attribute(obj, attribute, factory, source=f"registry {backend!r}"))
         yield
 
 
@@ -140,7 +236,7 @@ def apply_fx_program_fixes(backend: str, exported_program) -> None:
         fix(exported_program)
 
 
-def register_patch(backend: str, *paths: str):
+def register_patch(backend: str, *paths: str, lazy: bool = False):
     """Append the decorated `factory(original)` to `_PATCHES[backend]`, once per `path`.
 
     Each `path` is a dotted Python path like `"torch.where"`, `"torch.Tensor.unsqueeze"`,
@@ -148,7 +244,10 @@ def register_patch(backend: str, *paths: str):
     The rightmost segment is the attribute to swap; the rest is the object that owns it.
     Paths are resolved at decoration time — submodules are imported as needed, falling
     back to `getattr` for class attributes. A path that fails to resolve (e.g. the backend
-    isn't installed) is silently skipped so the module still imports.
+    isn't installed) is silently skipped so the module still imports. With `lazy=True`,
+    the owner path is stored in the same ordered list and resolved on each scope entry;
+    unavailable owners or attributes are logged at debug level and retried next time.
+    Registration itself never acquires the export lock, including during imports.
 
     Passing multiple paths registers the SAME factory against each — useful for swapping
     the same method or torch op across several call sites (e.g. ``torch.unsqueeze`` +
@@ -158,7 +257,7 @@ def register_patch(backend: str, *paths: str):
     def decorator(fn):
         for path in paths:
             obj_path, _, attribute = path.rpartition(".")
-            obj = _resolve_dotted_path(obj_path)
+            obj = _LazyPatchTarget(obj_path) if lazy else _resolve_dotted_path(obj_path)
             if obj is None:
                 continue
             _PATCHES.setdefault(backend, []).append((obj, attribute, fn))
@@ -167,16 +266,20 @@ def register_patch(backend: str, *paths: str):
     return decorator
 
 
-def _resolve_dotted_path(path: str):
+def _resolve_dotted_path(path: str, *, import_modules: bool = True):
     """Resolve a dotted Python path to the actual object — importing submodules where
     possible, falling back to `getattr` for class attributes (e.g. `torch.Tensor`).
-    Returns `None` if the path can't be resolved (e.g. the backend isn't installed)."""
+    Returns `None` if the path can't be resolved (e.g. the backend isn't installed).
+    With `import_modules=False`, only inspect already-loaded modules and attributes."""
     import importlib
 
     parts = path.split(".")
     try:
-        obj = importlib.import_module(parts[0])
+        obj = importlib.import_module(parts[0]) if import_modules else sys.modules.get(parts[0])
         for part in parts[1:]:
+            if not import_modules:
+                obj = inspect.getattr_static(obj, part)
+                continue
             try:
                 obj = importlib.import_module(f"{obj.__name__}.{part}")
             except (ImportError, AttributeError):
@@ -341,6 +444,7 @@ def module_dtype(model: PreTrainedModel | torch.nn.Module) -> torch.dtype | None
 _OUTPUT_FLAGS = ("use_cache", "output_attentions", "output_hidden_states", "return_dict", "return_loss")
 
 
+@export_patch_scope()
 def prepare_for_export(
     model: PreTrainedModel | torch.nn.Module, inputs: MutableMapping[str, Any]
 ) -> tuple[PreTrainedModel | torch.nn.Module, MutableMapping[str, Any], dict[str, Any]]:
@@ -582,6 +686,7 @@ def _prepare_qwen3_asr_audio_inputs(model: torch.nn.Module, inputs: dict[str, An
     inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], model.config, kwargs=inputs)
 
 
+@export_patch_scope()
 def precompute_export_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
     """Inject precomputed tensors for data-dependent ops the model would otherwise hit during tracing.
 
@@ -626,28 +731,26 @@ def _capture_forward(module: torch.nn.Module):
     captured dicts can be passed directly as `kwargs=inputs` to `torch.export`.
     """
 
-    calls: list[dict] = []
-    original = module.forward
-    sig = inspect.signature(original)
+    with export_patch_scope():
+        calls: list[dict] = []
+        original = module.forward
+        sig = inspect.signature(original)
 
-    @functools.wraps(original)
-    def wrapper(*args, **kwargs):
-        captured = {}
-        bound = sig.bind(*args, **kwargs)
-        for name, value in bound.arguments.items():
-            param = sig.parameters[name]
-            if param.kind == inspect.Parameter.VAR_KEYWORD:
-                captured.update(copy.deepcopy(value))
-            elif param.kind != inspect.Parameter.VAR_POSITIONAL:
-                captured[name] = copy.deepcopy(value)
-        calls.append(captured)
-        return original(*args, **kwargs)
+        @functools.wraps(original)
+        def wrapper(*args, **kwargs):
+            captured = {}
+            bound = sig.bind(*args, **kwargs)
+            for name, value in bound.arguments.items():
+                param = sig.parameters[name]
+                if param.kind == inspect.Parameter.VAR_KEYWORD:
+                    captured.update(copy.deepcopy(value))
+                elif param.kind != inspect.Parameter.VAR_POSITIONAL:
+                    captured[name] = copy.deepcopy(value)
+            calls.append(captured)
+            return original(*args, **kwargs)
 
-    module.forward = wrapper
-    try:
-        yield calls
-    finally:
-        module.forward = original
+        with patch_attribute(module, "forward", lambda _original: wrapper):
+            yield calls
 
 
 def _merge_decode_calls(decode_calls: list[dict]) -> dict:

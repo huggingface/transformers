@@ -13,7 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from enum import Enum
 from os import PathLike
 from typing import Any
@@ -163,6 +164,13 @@ class ExecutorchConfig(DynamoConfig):
 
             - `"xnnpack"` — CPU inference via the XNNPACK library (default; runs anywhere).
             - `"cuda"` — GPU inference via the ExecuTorch CUDA backend.
+        backend_options (`Mapping[str, Any]`, *optional*):
+            String-keyed options passed to an explicitly registered backend recipe factory.
+            Builtins currently accept no options. Capture snapshots configuration so later
+            caller changes do not affect deferred lowering; config subclasses are supported.
+            The entire config and options must support deepcopy and contain configuration data,
+            not identity-sensitive resources (keep those in backend preparation state). Values
+            are not restricted to JSON types; copyable dataclasses, dtypes and shape specs work.
         alloc_graph_input (`bool`, *optional*, defaults to `True`):
             Whether the memory-planning pass reserves arena memory for graph inputs. When `False`,
             the runtime uses the caller-provided input buffers directly instead of copying into the
@@ -180,6 +188,21 @@ class ExecutorchConfig(DynamoConfig):
     export_format: ExportFormat = ExportFormat.EXECUTORCH
 
     backend: str = "xnnpack"
+    backend_options: Mapping[str, Any] = field(default_factory=dict)
     alloc_graph_input: bool = True
     alloc_graph_output: bool = True
     alloc_mutable_buffers: bool = True
+
+    def __post_init__(self):
+        self._validate_backend()
+        self.backend_options = dict(self.backend_options)
+
+    def _validate_backend(self):
+        if not isinstance(self.backend, str):
+            raise TypeError("ExecuTorch backend name must be a string")
+        if not self.backend.strip():
+            raise ValueError("ExecuTorch backend name must not be empty")
+        if not isinstance(self.backend_options, Mapping) or any(
+            not isinstance(key, str) for key in self.backend_options
+        ):
+            raise TypeError("ExecuTorch backend_options must be a string-keyed mapping")
