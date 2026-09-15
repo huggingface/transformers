@@ -82,7 +82,7 @@ class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             cls.offload_dir = tempfile.TemporaryDirectory()
             cls.model = Glm4MoeForCausalLM.from_pretrained(
                 cls.MODEL_ID,
-                dtype="auto",
+                dtype=torch.bfloat16,
                 device_map="auto",
                 offload_folder=cls.offload_dir.name,
             )
