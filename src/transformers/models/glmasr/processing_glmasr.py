@@ -21,7 +21,7 @@
 
 import numpy as np
 
-from ...audio_utils import AudioInput, make_audio_chat_content, make_audio_chat_template_content, make_list_of_audio_chat_template
+from ...audio_utils import AudioInput, make_audio_chat_content, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
