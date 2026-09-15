@@ -619,12 +619,24 @@ def deepgemm_fp8_fp4_linear(
     return output
 
 
+def _assert_no_post_expert_norm(self: torch.nn.Module) -> None:
+    """DeepGEMM's experts chain ends at the routing-weighted reduce, with no slot for a model's
+    per-expert output norm — which it would drop silently, so refuse instead."""
+    if getattr(self, "post_expert_norm", None) is not None:
+        raise NotImplementedError(
+            "DeepGEMM experts dispatch cannot apply this model's per-expert output norm; use "
+            "`experts_implementation='grouped_mm'` (or 'batched_mm')."
+        )
+
+
 def deepgemm_bf16_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
+    _assert_no_post_expert_norm(self)
+
     if hidden_states.dtype != torch.bfloat16:
         raise ValueError(f"DeepGEMM experts path requires bfloat16 hidden states, got {hidden_states.dtype}")
 
@@ -702,7 +714,7 @@ def _assert_stacked_gate_up(module: torch.nn.Module) -> None:
     """Mega MoE's ``transform_weights_for_mega_moe`` does its own gate/up interleave, so it takes the
     stacked ``[gate; up]`` rows. A module loaded for a triton backend holds them interleaved; switched
     to this backend after load, silently re-permuting would be a wrong answer rather than a failure."""
-    if module.has_gate and getattr(module, "_gate_up_interleaved", False):
+    if module.has_gate and getattr(module, "holds_interleaved_gate_up", False):
         raise RuntimeError(
             "Mega MoE needs gate|up stacked, but this module was loaded interleaved for the triton "
             "experts backend. Switching to 'deepgemm_megamoe' after load is not supported — pass "
@@ -725,6 +737,7 @@ def deepgemm_fp8_fp4_experts_forward(
             "`experts_implementation='grouped_mm'`, or run one device per process (TP/EP)."
         )
 
+    _assert_no_post_expert_norm(self)
     # A module loaded for a triton backend holds swizzled block scales, which DeepGEMM would read as
     # affine and turn into garbage — refuse before any kernel work.
     _assert_affine_scales(self)
@@ -733,12 +746,13 @@ def deepgemm_fp8_fp4_experts_forward(
     # SM100 gate; the explicit `!= int8` check below covers a non-FP4 (misconfigured) checkpoint.
     _assert_sm100_requirements(self.gate_up_proj, self.down_proj_scale_inv)
 
-    deepgemm = load_deepgemm_kernel()
-
     if self.activation_scheme == "static":
         raise NotImplementedError("DeepGEMM experts dispatch does not support static activation quantization.")
     if hidden_states.dtype != torch.bfloat16:
         raise ValueError(f"DeepGEMM experts path requires bfloat16 hidden states, got {hidden_states.dtype}")
+
+    deepgemm = load_deepgemm_kernel()
+
     grouped_fp8_fp4_matmul = (
         deepgemm.grouped_fp8_fp4_matmul_nn if self.is_transposed else deepgemm.grouped_fp8_fp4_matmul_nt
     )
@@ -897,6 +911,8 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
       `transform_weights_for_mega_moe((gate_up, gate_up_sf), (down, down_sf))`.
       - `config.swiglu_limit` (optional): SwiGLU clamp; absent → unclamped.
     """
+
+    _assert_no_post_expert_norm(self)
     # A module loaded for a triton backend holds swizzled block scales, which DeepGEMM would read as
     # affine and turn into garbage — refuse before any kernel work.
     _assert_affine_scales(self)
@@ -910,7 +926,6 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
             f"DeepGEMM Mega MoE requires FP4-packed expert weights (dtype=`int8`), got "
             f"`{self.gate_up_proj.dtype}`. Use the 'deepgemm' dispatch for FP8 experts."
         )
-
     if process_group is None:
         raise ValueError(
             "DeepGEMM Mega MoE requires a `process_group` for the EP group. The TP wrapping "

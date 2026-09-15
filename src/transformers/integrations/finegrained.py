@@ -17,8 +17,10 @@ import functools
 import importlib
 import os
 import sys
+from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
+from types import MethodType
 
 import torch
 import torch.nn as nn
@@ -82,7 +84,8 @@ class FineGrained:
     forwards hand the kernels' MoE forwards the module's tensors and let them run the chain
     (scheduling, fused GLU + intermediate requant, biases, the routing-weighted reduce); an
     activation outside ``get_supported_act_fns()`` is passed as the module's own callable and runs
-    on the host between the two GEMMs. The quantizers serve
+    on the host between the two GEMMs; a per-expert output norm the kernels implement
+    (``get_supported_norms()``) rides the same way, by name, and is fused into the chain's reduce. The quantizers serve
     on-the-fly quantization into the group formats. All symbols are required — a build missing any
     raises at load with the full list.
     """
@@ -98,6 +101,8 @@ class FineGrained:
     mxfp4_act_quant: Callable
     nvfp4_act_quant: Callable
     get_supported_act_fns: Callable
+    get_supported_norms: Callable
+    rms_norm_rows: Callable
 
 
 # Cache the loaded kernel but not failures: re-checking each call is cheap and intended, since the env
@@ -288,13 +293,16 @@ def finegrained_triton_linear(
     bias: torch.Tensor | None = None,
     activation_scale: torch.Tensor | None = None,
     weight_global_scale: torch.Tensor | None = None,
+    input_global_scale: torch.Tensor | None = None,
     activation_format: str | None = None,
 ) -> torch.Tensor:
     """Triton fine-grained linear: fused act-quant + matmul, then optional bias add.
 
     Serves every weight format the kernel resolves off the tensors themselves — block-FP8
     (fp32 or UE8M0 scales), MXFP8, MXFP4 and NVFP4 (``int8``-packed values; the two-level
-    per-tensor ``weight_global_scale`` recovers on the accumulator). ``activation_scale=None`` →
+    per-tensor ``weight_global_scale`` recovers on the accumulator; ``input_global_scale`` is
+    NVFP4's CALIBRATED activation global, the checkpoint's ``input_scale`` — the quant divides by it
+    and the accumulator multiplies it back). ``activation_scale=None`` →
     dynamic activation quant (inline); a per-tensor scalar → static quant against it.
     ``activation_format`` picks the activation format where the weights leave it open (``None`` =
     the weight-native choice; ``"bf16"`` = weight-only, no activation quant — W4A16).
@@ -308,6 +316,7 @@ def finegrained_triton_linear(
         weight_scale_inv,
         activation_format=activation_format,
         output_dtype=input.dtype,
+        a_global_scale=input_global_scale,
         b_global_scale=weight_global_scale,
     )
     output = output.reshape(*original_shape[:-1], output.shape[-1])
@@ -325,6 +334,7 @@ def finegrained_linear(
     activation_scale: torch.Tensor | None = None,
     allow_deepgemm: bool = True,
     weight_global_scale: torch.Tensor | None = None,
+    input_global_scale: torch.Tensor | None = None,
     activation_format: str | None = None,
 ) -> torch.Tensor:
     """End-to-end FP8/FP4 linear used by `FineGrainedLinear` and the eager `FineGrainedExperts` loop.
@@ -351,7 +361,10 @@ def finegrained_linear(
             model spans multiple CUDA devices in one process — DeepGEMM's cached kernels are bound
             to a single CUDA context and produce garbage across devices (see
             ``disable_deepgemm_on_multi_device``).
-        weight_global_scale: the NVFP4 two-level per-tensor global (None for other formats).
+        weight_global_scale: the NVFP4 two-level weight global, one value for this matrix
+            (None for other formats).
+        input_global_scale: the NVFP4 calibrated activation global, the checkpoint's
+            ``input_scale`` (None = quantize against the block scales alone).
         activation_format: the activation format where the weights leave it open (see
             ``finegrained_triton_linear``).
     """
@@ -373,8 +386,9 @@ def finegrained_linear(
         and weight_scale_inv.ndim <= 2
         and is_deepgemm_loadable()
         and activation_scale is None
-        # DeepGEMM serves neither the NVFP4 two-level global nor an explicit activation format
+        # DeepGEMM serves neither the NVFP4 two-level globals nor an explicit activation format
         and weight_global_scale is None
+        and input_global_scale is None
         and activation_format is None
         and (weight.dtype == torch.int8 or (block_size is not None and block_size[0] == block_size[1] == 128))
         and os.environ.get("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", "0") != "1"
@@ -410,6 +424,7 @@ def finegrained_linear(
         bias,
         activation_scale,
         weight_global_scale=weight_global_scale,
+        input_global_scale=input_global_scale,
         activation_format=activation_format,
     )
 
@@ -594,6 +609,15 @@ class FineGrainedGroupedLinear(FineGrainedLinear):
         return y
 
 
+def _norm_eps(norm: nn.Module) -> float:
+    """A norm module's epsilon, under either name transformers modules give it. ``nn.RMSNorm``
+    leaves it ``None`` and resolves it to the dtype's own, so this does the same."""
+    eps = getattr(norm, "eps", None)
+    if eps is None:
+        eps = getattr(norm, "variance_epsilon", None)
+    return float(eps) if eps is not None else torch.finfo(norm.weight.dtype).eps
+
+
 def _moe_operands(kernel, module) -> dict:
     """Everything the kernels' MoE forwards take from the module: the two projections with their
     scales (held swizzled for dot_scaled chains), the per-expert globals and biases,
@@ -602,30 +626,53 @@ def _moe_operands(kernel, module) -> dict:
     change."""
     up = "gate_up_proj" if module.has_gate else "up_proj"
 
-    def local(name):
-        t = getattr(module, name, None)
-        return to_local(t) if t is not None else None
-
     act_name = module.act_fn_name
     fused = act_name in kernel.get_supported_act_fns() and (module.swiglu_alpha is None or act_name == "silu")
     if fused:
         act_fn = act_name
     else:
         act_fn = module._apply_gate if module.has_gate else module.act_fn
+
+    norm, norm_eps, norm_weight = module.post_expert_norm, 1e-6, None
+    if norm is None:
+        post_expert_norm = None
+    elif module.post_expert_norm_name in kernel.get_supported_norms():
+        post_expert_norm = module.post_expert_norm_name
+        norm_weight, norm_eps = norm.weight, _norm_eps(norm)
+    else:
+        post_expert_norm = module._apply_post_norm
+
+    def local(name):
+        t = getattr(module, name, None)
+        return to_local(t) if t is not None else None
+
+    def both(suffix: str) -> dict:
+        """One kernel argument per projection. The kernels always say ``gate_up_proj``; the module
+        names that weight ``up_proj`` when the model has no gate. A tensor the module does not
+        hold passes as ``None``, which is the argument the kernels take for it."""
+        return {
+            f"gate_up_proj{suffix}": local(f"{up}{suffix}"),
+            f"down_proj{suffix}": local(f"down_proj{suffix}"),
+        }
+
     return {
-        "gate_up_proj": local(up),
-        "down_proj": local("down_proj"),
-        "gate_up_proj_scale_inv": local(f"{up}_scale_inv"),
-        "down_proj_scale_inv": local("down_proj_scale_inv"),
-        "gate_up_proj_global_scale": local(f"{up}_global_scale"),
-        "down_proj_global_scale": local("down_proj_global_scale"),
-        "gate_up_proj_bias": local(f"{up}_bias"),
-        "down_proj_bias": local("down_proj_bias"),
+        **both(""),
+        **both("_scale_inv"),
+        **both("_weight_global_scale"),
+        **both("_input_global_scale"),
+        **both("_bias"),
+        # a supported activation NAME is fused into the gate_up epilogue; any other callable
+        # leaves that GEMM plain and runs on the host between the two
         "act_fn": act_fn,
+        "gate": module.has_gate,
         "swiglu_alpha": module.swiglu_alpha,
         "swiglu_limit": module.swiglu_limit,
         "activation_format": module.activation_format,
-        "gate": module.has_gate,
+        # a supported norm NAME is folded into the routing-weighted reduce, one pass ahead of it
+        # computing the rows' rsqrt; any other callable is applied to the routed rows before it
+        "post_expert_norm": post_expert_norm,
+        "post_expert_norm_weight": norm_weight,
+        "post_expert_norm_eps": norm_eps,
     }
 
 
@@ -685,19 +732,19 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         self.config = config
         self.has_bias = has_bias
         self.has_gate = has_gate
-        # the model's own gate|up row order (transformers' experts flag): stacked ``[gate; up]`` or,
-        # like GPT-OSS, already the kernels' interleaved ``[g0, u0, ...]`` — decides whether the
-        # loader interleaves
-        self.is_concatenated = is_concatenated
         self.block_size = block_size
-        self.hidden_dim = config.hidden_size
+        # The model's own gate|up row order (transformers' experts flag): stacked ``[gate; up]``
+        # or, like GPT-OSS, already the kernels' interleaved ``[g0, u0, ...]``. It describes the
+        # CHECKPOINT only — what this module holds is `holds_interleaved_gate_up` below.
+        self.is_concatenated = is_concatenated
         self.activation_format = activation_format
         self.activation_scheme = activation_scheme
-        self.swiglu_alpha = getattr(config, "swiglu_alpha", None)
-        self.swiglu_limit = getattr(config, "swiglu_limit", None)
+        self.hidden_dim = _first_attr(config, "moe_hidden_size", "hidden_size")
         self.num_experts = _first_attr(config, "num_local_experts", "num_experts")
         self.intermediate_dim = _first_attr(config, "moe_intermediate_size", "intermediate_size")
         self.act_fn_name = _first_attr(config, "hidden_activation", "hidden_act")
+        self.swiglu_alpha = getattr(config, "swiglu_alpha", None)
+        self.swiglu_limit = getattr(config, "swiglu_limit", None)
         self.act_fn = ACT2FN[self.act_fn_name]
 
         # Expert weight storage is declared by the QUANT config's format key, not the model
@@ -713,12 +760,13 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         # arg would silently drop the nvfp4 global at every forward)
         self.has_global_scale = fmt.has_global_scale if has_global_scale is None else has_global_scale
 
-        # what the module HOLDS, as the loader's conversion ops deliver it (and their reverses
+        # What the module HOLDS, as the loader's conversion ops deliver it (and their reverses
         # restore for the checkpoint): gate|up rows in the kernels' interleaved order unless the
         # backend packs gate|up itself (DeepGEMM Mega MoE), block scales swizzled where the
-        # scaled-MMA reads them
+        # scaled-MMA reads them. `is_concatenated` above is the checkpoint's own order: the
+        # loader interleaves where the two disagree, and everything at runtime reads this one.
         impl = getattr(config, "_experts_implementation", None)
-        self._gate_up_interleaved = self.has_gate and impl != "deepgemm_megamoe"
+        self.holds_interleaved_gate_up = self.has_gate and impl != "deepgemm_megamoe"
         swizzled = _swizzles_scales(config, fmt, activation_format)
 
         up_name = "gate_up_proj" if self.has_gate else "up_proj"
@@ -738,19 +786,47 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
                 setattr(self, f"{proj}_bias", nn.Parameter(torch.empty(self.num_experts, rows)))
             else:
                 self.register_parameter(f"{proj}_bias", None)
-            # NVFP4 two-level: per-expert fp32 globals the kernels recover on the accumulator
+            # NVFP4 two-level: the fp32 globals the kernels recover on the accumulator. The
+            # weight's is one per expert — a gate|up stack whose halves modelopt calibrated
+            # separately is merged to that at load (`FineGrainedWeightGlobals`), SwiGLU being
+            # linear in the up half. The activation's is the checkpoint's calibrated
+            # `input_scale`: the quant divides by it and the accumulator multiplies it back. The
+            # gate_up's is ONE value (its rows are the hidden states, quantized once, before
+            # routing); the down's is per expert, because its rows ARE per expert — the gate_up
+            # epilogue requantizes each against its own expert's value.
             if self.has_global_scale:
-                setattr(self, f"{proj}_global_scale", nn.Parameter(torch.ones(self.num_experts, dtype=torch.float32)))
+                setattr(
+                    self,
+                    f"{proj}_weight_global_scale",
+                    nn.Parameter(torch.ones(self.num_experts, dtype=torch.float32)),
+                )
             else:
-                self.register_parameter(f"{proj}_global_scale", None)
+                self.register_parameter(f"{proj}_weight_global_scale", None)
+            if self.has_global_scale and self.activation_format != "bf16":
+                setattr(
+                    self,
+                    f"{proj}_input_global_scale",
+                    nn.Parameter(torch.ones(1 if proj == up_name else self.num_experts, dtype=torch.float32)),
+                )
+            else:
+                self.register_parameter(f"{proj}_input_global_scale", None)
 
         if self.activation_scheme == "static":
             self.gate_up_proj_activation_scale = nn.Parameter(torch.ones(self.num_experts, dtype=torch.float32))
             self.down_proj_activation_scale = nn.Parameter(torch.ones(self.num_experts, dtype=torch.float32))
 
+        # The model's per-expert output norm and the name it gave the form (its
+        # `use_experts_implementation(post_expert_norm=...)`), both carried over by the swap.
+        # A submodule slot, not a class attribute: a class attribute of the same name shadows
+        # what `nn.Module.__setattr__` registers, so the norm would never be read back.
+        self.post_expert_norm = None
+        self.post_expert_norm_name = None
+
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        # the GEMM's output columns alternate gate/up; mirrors the fused epilogue's
-        # `split_gate_up`, which the fused/unfused parity tests compare against
+        # the interleaved rows give alternating output columns, mirroring the fused epilogue's
+        # `split_gate_up` that the fused/unfused parity tests compare against. Only the chains
+        # that hold that layout come through here — DeepGEMM Mega MoE, the one backend keeping
+        # the stack, runs its own forward end to end.
         gate, up = gate_up[..., 0::2], gate_up[..., 1::2]
         if self.swiglu_alpha is not None:
             # Clamped SwiGLU-OAI gate (same math as the model's non-quantized experts).
@@ -795,6 +871,8 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
                 self.down_proj_activation_scale[expert_idx] if self.activation_scheme == "static" else None
             )
             proj_out = self.linear(proj_out, "down_proj", expert_idx, activation_scale=down_act_scale)
+            if self.post_expert_norm is not None:
+                proj_out = self._apply_post_norm(proj_out)
             routing_weights = top_k_weights[token_idx, top_k_pos, None]
             weighted_out = proj_out * routing_weights.to(proj_out.dtype)
             final_hidden_states.index_add_(0, token_idx, weighted_out.to(final_hidden_states.dtype))
@@ -812,7 +890,9 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         if weight.element_size() > 1:
             return F.linear(input, weight, bias)
         scale = getattr(self, f"{proj}_scale_inv")
-        global_scale = getattr(self, f"{proj}_global_scale")
+        weight_globals = getattr(self, f"{proj}_weight_global_scale")
+        input_globals = getattr(self, f"{proj}_input_global_scale")
+        weight_global = None if weight_globals is None else weight_globals[expert_idx]
         return finegrained_linear(
             input,
             weight,
@@ -821,7 +901,12 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
             bias=bias,
             activation_scale=activation_scale,
             allow_deepgemm=not self._deepgemm_disabled,
-            weight_global_scale=global_scale[expert_idx] if global_scale is not None else None,
+            weight_global_scale=weight_global,
+            input_global_scale=(
+                None
+                if input_globals is None or self.activation_format == "bf16"
+                else input_globals.reshape(-1)[expert_idx if input_globals.numel() > 1 else 0].reshape(1)
+            ),
             activation_format=self.activation_format,
         )
 
@@ -940,6 +1025,21 @@ def replace_with_finegrained_layer(model, modules_to_not_convert: list[str] | No
                 if getattr(module, "alpha", None) is not None and new_module.swiglu_alpha is None:
                     new_module.swiglu_alpha = module.alpha
                     new_module.swiglu_limit = getattr(module, "limit", None)
+                # A per-expert output norm belongs to the model, not the quantization: carry the
+                # submodule, the name, and the model's own `_apply_post_norm` over, or the swap
+                # would drop the norm or quietly substitute different math for applying it. The
+                # method is rebound to THIS module, which holds the same submodule — binding the
+                # original's would pin the unquantized weights alive.
+                if getattr(module, "post_expert_norm", None) is not None:
+                    apply_post_norm = getattr(type(module), "_apply_post_norm", None)
+                    if apply_post_norm is None:
+                        raise TypeError(
+                            f"{type(module).__name__} holds a post-expert norm but does not define "
+                            "`_apply_post_norm(self, expert_out)`; see `use_experts_implementation`."
+                        )
+                    new_module.post_expert_norm = module.post_expert_norm
+                    new_module.post_expert_norm_name = getattr(module, "post_expert_norm_name", None)
+                    new_module._apply_post_norm = MethodType(apply_post_norm, new_module)
             elif type(module) is nn.Linear:
                 # Vanilla `nn.Linear` → standard FineGrainedLinear swap.
                 new_module = FineGrainedLinear(
@@ -1026,10 +1126,9 @@ def _checkpoint_scale_container(model) -> torch.dtype | None:
 
 class FineGrainedInterleaveGateUp(ConversionOps):
     """Stacked ``[gate; up]`` expert rows into the kernels' ``[g0, u0, g1, u1, ...]`` order (weight,
-    scale grid and bias share the row axis) — the core ``Interleave`` along dim 1. Decided off the
-    model's experts modules, on load and on save alike: skipped when the model's own rows already
-    come interleaved (``is_concatenated=False``, GPT-OSS) or the backend holds them stacked
-    (``_gate_up_interleaved`` False, DeepGEMM Mega MoE)."""
+    scale grid and bias share the row axis) — the core ``Interleave`` along dim 1. Runs on load and
+    on save alike wherever the checkpoint's row order (``is_concatenated``) differs from the one
+    the experts hold (``holds_interleaved_gate_up``)."""
 
     def __init__(self, hf_quantizer=None, inverse: bool = False):
         self.hf_quantizer = hf_quantizer
@@ -1038,7 +1137,7 @@ class FineGrainedInterleaveGateUp(ConversionOps):
     def convert(self, input_dict, model=None, target_patterns=None, **kwargs):
         input_dict = _keyed_by_target(input_dict, target_patterns)
         experts = next((m for m in model.modules() if isinstance(m, FineGrainedExperts)), None) if model else None
-        if experts is None or not experts.is_concatenated or not experts._gate_up_interleaved:
+        if experts is None or not (experts.is_concatenated and experts.holds_interleaved_gate_up):
             return input_dict
         interleave = Interleave(dim=1, inverse=not self.inverse)  # inverse=True is stacked -> interleaved
         return {key: interleave.convert({key: value}, None, [key])[key] for key, value in input_dict.items()}
@@ -1163,29 +1262,108 @@ class FineGrainedViewPackedInt8(ConversionOps):
         return out
 
 
-class FineGrainedFuseEqualGlobals(ConversionOps):
-    """Reduce modelopt's per-half second-level globals to the single per-expert global the
-    stacked gate_up GEMM applies: the halves are calibrated together and ship bit-identical
-    (verified across the GLM-5.2-NVFP4 checkpoint), so this asserts equality and keeps one.
-    Also handles the single-source (down_proj) case, where it just flattens to ``(E,)``."""
+class FineGrainedWeightGlobals(ConversionOps):
+    """modelopt's second-level globals, and the calibrated ``input_scale`` they have to travel
+    with, as the kernels index them: one fp32 global per expert per projection.
+
+    A gate|up stack arrives with TWO per expert, because modelopt calibrates the two projections
+    separately — they differ by up to 1.6x per expert on Muse-Spark, and agree on GLM-5.2. The
+    stack keeps the gate's and the up half's folds onto the DOWN projection, which is why this one
+    op owns every global of a layer: ``inter = silu(gate) * up`` is linear in the up half, so
+    running the stack on the gate's global alone scales the expert's output by ``1 / ratio``, and
+    the down's weight global scales it back. The down's calibrated input global moves the other
+    way, because it is what the fused epilogue normalizes the intermediate by before requantizing
+    it: without that the requant drifts off the calibrated range and a large enough ratio pushes
+    the e4m3 block scales past their 448 ceiling.
+
+    Rescaling the up half's e4m3 block scales instead — the other way to merge — would re-round
+    them against codes already chosen for the old global, moving every value in a block by up to
+    6%.
+
+    Sources are either the per-expert keys (``experts.*.gate_proj.weight_scale_2``, merged into a
+    list per expert) or one stacked ``(E, 2)`` tensor per layer (the fused vLLM layout)."""
+
+    supports_many_to_many = True
 
     def __init__(self, hf_quantizer=None):
         self.hf_quantizer = hf_quantizer
 
-    def convert(self, input_dict, model=None, full_layer_name=None, missing_keys=None, **kwargs):
-        stacks = []
-        for v in input_dict.values():
-            v = torch.stack(v, dim=0) if isinstance(v, list) else v
-            stacks.append(v.reshape(-1).float())
-        first = stacks[0]
-        for other in stacks[1:]:
-            if not torch.equal(first, other):
-                raise ValueError(
-                    f"modelopt per-half globals differ for {full_layer_name} — the stacked "
-                    "gate_up GEMM applies one global per expert; this checkpoint needs a "
-                    "block-scale refold, which is not implemented."
-                )
-        return {full_layer_name: first}
+    def convert(self, input_dict, target_patterns=None, model=None, **kwargs):
+        sources = defaultdict(dict)
+        for key, value in input_dict.items():
+            sources[_global_role(key)][key] = value
+        globals_ = {}
+        for target in target_patterns:
+            if role_sources := sources.get(_global_role(target)):
+                globals_[target] = _stack_globals(role_sources)
+        targets = {_global_role(target): target for target in globals_}
+        stack = targets.get(("gate_up", "weight"))
+
+        # a stack calibrated per half keeps the gate's global; the up half's leaves as a ratio,
+        # which the down's weight global takes on (scaling the expert output back up) and its
+        # input global gives back (keeping the requantized intermediate on the calibrated range)
+        if stack is not None and globals_[stack].shape[1] == 2:
+            self._assert_no_gate_up_bias(model)
+            gate, up = globals_[stack][:, 0], globals_[stack][:, 1]
+            globals_[stack] = gate
+            ratio = (up / gate)[:, None]
+            for role, factor in ((("down", "weight"), ratio), (("down", "input"), 1 / ratio)):
+                if target := targets.get(role):
+                    globals_[target] = globals_[target] * factor
+        return {target: value.reshape(-1).contiguous() for target, value in globals_.items()}
+
+    @staticmethod
+    def _assert_no_gate_up_bias(model) -> None:
+        """A gate|up bias is added AFTER the global, so merging the halves would have to divide
+        its up rows by the same ratio — in the bias converter, which the layout ops own. No
+        checkpoint pairs the two, so refuse rather than carry a silent half-correction."""
+        experts = next((m for m in model.modules() if isinstance(m, FineGrainedExperts)), None) if model else None
+        if experts is not None and experts.has_bias:
+            raise NotImplementedError(
+                "this checkpoint calibrates the gate|up halves separately AND carries an expert "
+                "bias; the up half's bias would have to be folded with the globals."
+            )
+
+
+def _global_role(key: str) -> tuple[str, str]:
+    """What a global-scale key holds, for a checkpoint key and a module target alike: which
+    projection it belongs to, and which of modelopt's two levels it is — the weight's second-level
+    global (``weight_scale_2``) or the calibrated activation one (``input_scale``)."""
+    projection = "down" if "down_proj" in key or "w2" in key else "gate_up"
+    level = "input" if "input_scale" in key or "input_global" in key else "weight"
+    return projection, level
+
+
+def _stack_globals(sources: dict) -> torch.Tensor:
+    """One ``(E, calibrated projections)`` fp32 tensor from a layer's globals, gate column first:
+    two sources are the stack's halves, one source is the fused ``(E, 2)`` pair or a single
+    projection's ``(E,)``."""
+    columns = []
+    for key, value in sorted(sources.items(), key=lambda kv: 0 if "gate_proj" in kv[0] else 1):
+        value = torch.stack(value, dim=0) if isinstance(value, list) else value
+        columns.append(value.float().reshape(value.shape[0], -1))
+    return torch.cat(columns, dim=1)
+
+
+class FineGrainedInputGlobals(ConversionOps):
+    """modelopt's calibrated ``input_scale`` in the layout the module holds: one value for the
+    gate_up (its rows are the hidden states, quantized once BEFORE routing, so the halves and
+    experts reduce to their max — the global is a split of the block scale, exact for any value
+    the accumulator multiplies back), and one per expert for the down, whose rows are per expert
+    by construction."""
+
+    def __init__(self, hf_quantizer=None):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict, full_layer_name=None, **kwargs):
+        values = []
+        for value in input_dict.values():
+            value = torch.stack(value, dim=0) if isinstance(value, list) else value
+            values.append(value.float())
+        stacked = torch.stack([v.reshape(v.shape[0], -1) if v.ndim > 1 else v.reshape(-1, 1) for v in values], dim=-1)
+        per_expert = stacked.reshape(stacked.shape[0], -1).amax(dim=1)
+        one_value = full_layer_name.endswith("gate_up_proj_input_global_scale")
+        return {full_layer_name: (per_expert.amax().reshape(1) if one_value else per_expert).contiguous()}
 
 
 class FineGrainedQuantize(ConversionOps):
@@ -1247,7 +1425,12 @@ class FineGrainedQuantize(ConversionOps):
             scale = load_finegrained_kernel().swizzle_mx_scales(scale)
         out = {key: weight, f"{prefix}_scale_inv": scale}
         if global_scale is not None:
-            out[f"{prefix}_global_scale"] = global_scale
+            out[f"{prefix}_weight_global_scale"] = global_scale
+        # activations are quantized dynamically against the block scales alone here — there is no
+        # calibration pass — so the module's activation globals are the identity
+        held_input = getattr(module, holder[1].replace("_scale_inv", "_input_global_scale"), None)
+        if held_input is not None:
+            out[f"{prefix}_input_global_scale"] = torch.ones_like(held_input)
         return out
 
     def _config_block(self, value: torch.Tensor) -> tuple[int, int]:

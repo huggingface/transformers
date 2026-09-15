@@ -1736,10 +1736,11 @@ class FineGrainedConfig(QuantizationConfigMixin):
         if modules_to_not_convert is None and "ignored_layers" in kwargs:
             modules_to_not_convert = kwargs.pop("ignored_layers")
         # NVIDIA modelopt exports (quant_method "modelopt"): translate the payload —
-        # quant_algo names the format (NVFP4 is the one the finegrained kernels serve),
-        # ``ignore`` is a glob-style skip list, and the calibrated per-tensor
-        # ``input_scale``/``kv_cache_scheme`` entries are dropped for now (activations run
-        # the kernels' dynamic quant, KV cache stays in the compute dtype).
+        # quant_algo names the format (NVFP4 is the one the finegrained kernels serve), the
+        # skip list is a glob-style ``ignore`` (or ``exclude_modules``, the name modelopt's
+        # own ``hf_quant_config.json`` uses), and ``kv_cache_scheme`` is dropped (the KV cache
+        # stays in the compute dtype). The calibrated ``input_scale`` TENSORS are consumed by
+        # the loader's converters — the kernels quantize activations against them.
         if str(self.quant_method) == "modelopt" or kwargs.get("quant_algo") is not None:
             quant_algo = kwargs.pop("quant_algo", None)
             kwargs.pop("config_groups", None)
@@ -1748,7 +1749,7 @@ class FineGrainedConfig(QuantizationConfigMixin):
             if quant_algo != "NVFP4":
                 raise ValueError(f"modelopt checkpoints are supported for quant_algo='NVFP4' only; got {quant_algo!r}")
             self.activation_format = activation_format or "nvfp4"
-            ignore = kwargs.pop("ignore", None)
+            ignore = kwargs.pop("ignore", None) or kwargs.pop("exclude_modules", None)
             if modules_to_not_convert is None and ignore is not None:
                 # modelopt ships glob-style subtree entries ("model.layers.0*",
                 # "model.layers.1.*"); translate each to a BOUNDED regex — a naive
@@ -1756,6 +1757,8 @@ class FineGrainedConfig(QuantizationConfigMixin):
                 # layers 10-19 (and ``should_convert_module``'s bare-prefix clause
                 # would even match "layers.16" from "layers.1")
 
+                # (``exclude_modules`` entries are bare subtrees — "self_attn", "layers.0." —
+                # which land on the same bounded form)
                 def _subtree_regex(glob):
                     prefix = glob[:-2] if glob.endswith(".*") else glob.rstrip("*").rstrip(".")
                     return re.escape(prefix) + r"(\..*)?$"

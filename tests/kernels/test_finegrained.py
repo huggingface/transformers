@@ -77,6 +77,7 @@ def _fake_bundle():
     ):
         setattr(kernel, name, rec._op(name))
     kernel.get_supported_act_fns = lambda: ("silu", "gelu", "relu")
+    kernel.get_supported_norms = lambda: ("rms_norm", "centered_rms_norm", "input_scaled_rms_norm")
     return kernel, rec
 
 
@@ -240,8 +241,12 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         self.assertTrue(linear.call_args_list)
         for call in linear.call_args_list:
             self.assertEqual(call.kwargs["bias"].ndim, 1)  # this expert's bias (added after the matmul)
-            self.assertEqual(call.kwargs["weight_global_scale"].ndim, 0)  # this expert's NVFP4 global
+            # this expert's NVFP4 weight global: one value for the down, and (1, 2) for the
+            # gate|up stack, whose halves modelopt calibrates separately
+            self.assertIn(tuple(call.kwargs["weight_global_scale"].shape), {(), (1, 2)})
             self.assertEqual(call.kwargs["activation_format"], "bf16")
+            # weight-only: the activations stay bf16, so no activation global is quantized against
+            self.assertIsNone(call.kwargs["input_global_scale"])
         for call in rec.calls["matmul_2d"]:
             self.assertIsNotNone(call.kwargs["b_global_scale"])
             self.assertEqual(call.kwargs["activation_format"], "bf16")
@@ -260,7 +265,7 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         # one scale tensor per projection: the affine Parameter, or the swizzled cache when the
         # post-load hook built one (not here — the hook runs on SM100 for dot_scaled chains)
         self.assertIs(call.kwargs["gate_up_proj_scale_inv"], m.gate_up_proj_scale_inv)
-        self.assertIsNone(call.kwargs["gate_up_proj_global_scale"])
+        self.assertIsNone(call.kwargs["gate_up_proj_weight_global_scale"])
         self.assertEqual(call.kwargs["act_fn"], "silu")  # fusable: passed by name
         self.assertIs(call.kwargs["gate"], True)
         self.assertIsNone(call.kwargs["activation_format"])  # None = the weight family's format
@@ -296,8 +301,98 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         with p1, p2, p3, p4:
             fg.finegrained_batched_mm_experts_forward(m, *self._route())
         (call,) = rec.calls["moe_fused_batched"]
-        self.assertIs(call.kwargs["gate_up_proj_global_scale"], m.gate_up_proj_global_scale)
-        self.assertIs(call.kwargs["down_proj_global_scale"], m.down_proj_global_scale)
+        self.assertIs(call.kwargs["gate_up_proj_weight_global_scale"], m.gate_up_proj_weight_global_scale)
+        self.assertIs(call.kwargs["down_proj_weight_global_scale"], m.down_proj_weight_global_scale)
+        # one weight global per expert on both projections: a gate|up stack calibrated per half
+        # is merged to that at load, so nothing downstream carries the pair
+        self.assertEqual(tuple(m.gate_up_proj_weight_global_scale.shape), (m.num_experts,))
+        self.assertEqual(tuple(m.down_proj_weight_global_scale.shape), (m.num_experts,))
+        # the calibrated activation globals (the checkpoint's `input_scale`): one value for the
+        # gate_up, whose rows are quantized once before routing, and one per expert for the down,
+        # whose rows the gate_up epilogue requantizes per expert
+        self.assertIs(call.kwargs["gate_up_proj_input_global_scale"], m.gate_up_proj_input_global_scale)
+        self.assertIs(call.kwargs["down_proj_input_global_scale"], m.down_proj_input_global_scale)
+        self.assertEqual(tuple(m.gate_up_proj_input_global_scale.shape), (1,))
+        self.assertEqual(tuple(m.down_proj_input_global_scale.shape), (m.num_experts,))
+
+    def test_weight_only_experts_hold_no_activation_global(self):
+        """W4A16 keeps the activations bf16 and requantizes nothing, so there is no activation
+        quant for a calibrated global to normalize: the module never allocates one, and the ops
+        would refuse a two-level path without it."""
+        kernel, rec = _fake_bundle()
+        m = self._experts(has_gate=True, weight_format="nvfp4", activation_format="bf16")
+        p1, p2, p3, p4 = _loaded(kernel)
+        with p1, p2, p3, p4:
+            fg.finegrained_grouped_mm_experts_forward(m, *self._route())
+        (call,) = rec.calls["moe_fused_grouped"]
+        self.assertIsNone(m.gate_up_proj_input_global_scale)
+        self.assertIsNone(m.down_proj_input_global_scale)
+        self.assertIsNone(call.kwargs["gate_up_proj_input_global_scale"])
+        self.assertIsNone(call.kwargs["down_proj_input_global_scale"])
+        # the WEIGHT globals are the format's own second level and stay
+        self.assertIsNotNone(call.kwargs["gate_up_proj_weight_global_scale"])
+
+    def test_post_expert_norm_rides_the_chain_and_the_eager_loop(self):
+        """A model whose experts norm the down output before the routing weights (Muse-Spark):
+        the swap carries the norm over, the kernel chain runs it on the routed rows, and the
+        eager loop applies it per expert application — the same place the reference forwards do.
+        A form the kernels do not implement rides as the module's own ``_apply_post_norm``."""
+        kernel, rec = _fake_bundle()
+        m = self._experts(has_gate=True)
+        norm = torch.nn.LayerNorm(m.hidden_dim)
+        m.post_expert_norm, m._apply_post_norm = norm, norm
+        p1, p2, p3, p4 = _loaded(kernel)
+        with p1, p2, p3, p4:
+            fg.finegrained_grouped_mm_experts_forward(m, *self._route())
+        self.assertEqual(rec.calls["moe_fused_grouped"][-1].kwargs["post_expert_norm"], m._apply_post_norm)
+
+        class _Recording(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.rows = 0
+
+            def forward(self, x):
+                self.rows += x.shape[0]
+                return x
+
+        m.post_expert_norm = m._apply_post_norm = _Recording()
+        with p1, p2, p3, p4, mock.patch.object(fg, "is_deepgemm_loadable", return_value=False):
+            m(*self._route())
+        self.assertTrue(m.post_expert_norm.rows, "the eager loop never applied the post-expert norm")
+
+    def test_naming_a_post_expert_norm_requires_the_hook_that_applies_it(self):
+        """The shared experts interface: a class that names a post-expert norm has to define
+        `_apply_post_norm`, where its own math lives — there is no default passthrough to fall
+        back on, the way `act_fn` has no default activation."""
+        from transformers.integrations.moe import use_experts_implementation
+
+        with self.assertRaises(TypeError):
+
+            @use_experts_implementation(post_expert_norm="rms_norm")
+            class _NoHook(torch.nn.Module):
+                def forward(self, hidden_states, top_k_index, top_k_weights):
+                    return hidden_states
+
+    def test_post_expert_norm_rides_by_name_when_the_kernels_know_it(self):
+        """The norm follows `act_fn`'s shape: the name the model declared goes to the kernels
+        when they implement it, with the weight and epsilon the fused form needs, so the chain
+        folds it into its reduce instead of calling the module."""
+        kernel, rec = _fake_bundle()
+        m = self._experts(has_gate=True)
+        m.post_expert_norm = m._apply_post_norm = torch.nn.RMSNorm(m.hidden_dim, eps=1e-4)
+        p1, p2, p3, p4 = _loaded(kernel)
+        for name, fused in (("rms_norm", True), ("input_scaled_rms_norm", True), ("a_models_own_norm", False)):
+            m.post_expert_norm_name = name
+            with p1, p2, p3, p4:
+                fg.finegrained_grouped_mm_experts_forward(m, *self._route())
+            call = rec.calls["moe_fused_grouped"][-1]
+            if fused:
+                self.assertEqual(call.kwargs["post_expert_norm"], name)
+                self.assertIs(call.kwargs["post_expert_norm_weight"], m.post_expert_norm.weight)
+                self.assertAlmostEqual(call.kwargs["post_expert_norm_eps"], 1e-4)
+            else:
+                self.assertEqual(call.kwargs["post_expert_norm"], m._apply_post_norm)
+                self.assertIsNone(call.kwargs["post_expert_norm_weight"])
 
     def test_biases_ride_the_kernel_chain(self):
         kernel, rec = _fake_bundle()
@@ -490,7 +585,7 @@ class FineGrainedScaleLayoutTest(unittest.TestCase):
         self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 2, 2, 2, 256))  # (E, 256/128, (256/32)/4, 2, 256)
         self.assertEqual(experts.down_proj_scale_inv.shape, (4, 2, 1, 2, 256))
         self.assertEqual(experts.gate_up_proj_scale_inv.dtype, torch.float8_e8m0fnu)
-        self.assertTrue(experts._gate_up_interleaved)
+        self.assertTrue(experts.holds_interleaved_gate_up)
         # every MX group-32 format holds UE8M0 scales whatever `scale_fmt` says (the kernels reject a
         # float32 grid there; GPT-OSS's config has no scale_fmt at all)
         _, experts = self._experts("mxfp4", activation_format="bf16")
@@ -518,7 +613,7 @@ class FineGrainedScaleLayoutTest(unittest.TestCase):
 
     def test_megamoe_holds_gate_up_stacked(self):
         _, experts = self._experts("fp8", impl="deepgemm_megamoe")
-        self.assertFalse(experts._gate_up_interleaved)
+        self.assertFalse(experts.holds_interleaved_gate_up)
 
     def _op_kernel(self):
         kernel, _ = _fake_bundle()
@@ -772,7 +867,7 @@ class FineGrainedScaleLayoutTest(unittest.TestCase):
         experts.is_concatenated = False
         self.assertIs(op.convert({"x": stacked}, model=model)["x"], stacked)
         experts.is_concatenated = True
-        experts._gate_up_interleaved = False
+        experts.holds_interleaved_gate_up = False
         self.assertIs(op.convert({"x": stacked}, model=model)["x"], stacked)
 
 
@@ -825,7 +920,14 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
     def test_global_scale_converters_carry_an_expert_index(self):
         from transformers.core_model_loading import MergeModulelist
 
-        globals_converters = [c for c in self._modelopt_conversions() if any("global_scale" in t for t in _targets(c))]
+        # the per-expert layout only (`experts.*.`): a checkpoint that ships one already-stacked
+        # tensor per layer has no per-expert sources to stamp — it is sharded like the fused
+        # expert weight next to it
+        globals_converters = [
+            c
+            for c in self._modelopt_conversions()
+            if any("global_scale" in t for t in _targets(c)) and any("experts.*." in p for p in c.source_patterns)
+        ]
         self.assertTrue(globals_converters, "no global-scale converter found")
         for conv in globals_converters:
             self.assertTrue(
@@ -833,6 +935,162 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
                 f"{_targets(conv)} has no MergeModulelist, so expert parallelism cannot select "
                 "experts and every rank would collect all of them",
             )
+
+    def test_both_modelopt_scale_layouts_have_converters(self):
+        """modelopt ships the scales either as one tensor per expert per projection (GLM-5.2) or
+        as one already-stacked tensor per layer (the fused vLLM layout, Muse-Spark). Both are
+        converted; the block scale takes the module's layout ops either way."""
+        sources = {p for c in self._modelopt_conversions() for p in c.source_patterns}
+        for suffix in ("weight_scale$", "weight_scale_2", "input_scale"):
+            self.assertTrue(
+                any(p.startswith("mlp.experts.*.gate_proj.") and p.endswith(suffix) for p in sources),
+                f"no per-expert converter for {suffix}",
+            )
+            self.assertTrue(
+                any("gate_up_proj_" in p and p.endswith(suffix.rstrip("$") + "$") for p in sources),
+                f"no fused converter for {suffix}",
+            )
+
+    def test_one_converter_merges_a_layer_s_globals(self):
+        """modelopt calibrates the gate|up halves separately. One converter owns every global of
+        a layer, because merging them to the one-per-expert the kernels take moves the up half's
+        onto the down projection: SwiGLU is linear in the up half, so the stack keeps the gate's
+        global and the down's weight global scales the expert output back. The down's calibrated
+        input scale moves the other way, keeping the requantized intermediate on the range the
+        checkpoint calibrated."""
+        from transformers.integrations.finegrained import FineGrainedWeightGlobals
+
+        gate, up = torch.tensor([1.0, 2.0]), torch.tensor([3.0, 4.0])
+        down, down_input = torch.tensor([5.0, 6.0]), torch.tensor([0.5, 2.0])
+        targets = [
+            "mlp.experts.gate_up_proj_weight_global_scale",
+            "mlp.experts.down_proj_weight_global_scale",
+            "mlp.experts.down_proj_input_global_scale",
+        ]
+        out = FineGrainedWeightGlobals().convert(
+            {
+                "mlp.experts.*.up_proj.weight_scale_2": up,
+                "mlp.experts.*.gate_proj.weight_scale_2": gate,
+                "mlp.experts.*.down_proj.weight_scale_2": down,
+                "mlp.experts.*.down_proj.input_scale": down_input,
+            },
+            target_patterns=targets,
+        )
+        ratio = up / gate
+        torch.testing.assert_close(out[targets[0]], gate)
+        torch.testing.assert_close(out[targets[1]], down * ratio)
+        torch.testing.assert_close(out[targets[2]], down_input / ratio)
+
+    def test_globals_with_one_calibrated_projection_pass_through(self):
+        """A checkpoint that calibrates the stack as one matrix (its halves agree, or it ships a
+        single global) has nothing to merge, so every global reaches its module unchanged."""
+        from transformers.integrations.finegrained import FineGrainedWeightGlobals
+
+        targets = [
+            "experts.gate_up_proj_weight_global_scale",
+            "experts.down_proj_weight_global_scale",
+            "experts.down_proj_input_global_scale",
+        ]
+        out = FineGrainedWeightGlobals().convert(
+            {
+                "experts.gate_up_proj_weight_scale_2": torch.tensor([[1.0], [2.0]]),
+                "experts.down_proj_weight_scale_2": torch.tensor([3.0, 4.0]),
+                "experts.down_proj_input_scale": torch.tensor([0.5, 0.25]),
+            },
+            target_patterns=targets,
+        )
+        torch.testing.assert_close(out[targets[0]], torch.tensor([1.0, 2.0]))
+        torch.testing.assert_close(out[targets[1]], torch.tensor([3.0, 4.0]))
+        torch.testing.assert_close(out[targets[2]], torch.tensor([0.5, 0.25]))
+
+    def test_the_fused_layout_ships_both_halves_in_one_tensor(self):
+        """Muse-Spark's `(E, 2)` `weight_scale_2` is the same pair as the per-expert layout's two
+        keys, and merges the same way."""
+        from transformers.integrations.finegrained import FineGrainedWeightGlobals
+
+        targets = [
+            "experts.gate_up_proj_weight_global_scale",
+            "experts.down_proj_weight_global_scale",
+        ]
+        out = FineGrainedWeightGlobals().convert(
+            {
+                "experts.gate_up_proj_weight_scale_2": torch.tensor([[1.0, 3.0], [2.0, 4.0]]),
+                "experts.down_proj_weight_scale_2": torch.tensor([5.0, 6.0]),
+            },
+            target_patterns=targets,
+        )
+        torch.testing.assert_close(out[targets[0]], torch.tensor([1.0, 2.0]))
+        torch.testing.assert_close(out[targets[1]], torch.tensor([5.0 * 3.0, 6.0 * 2.0]))
+
+    def test_activation_global_is_one_value_for_the_gate_up_and_per_expert_for_the_down(self):
+        """The gate_up quantizes the hidden states once, BEFORE routing, so its calibrated
+        `input_scale` reduces to one value; the down's rows are per expert, so its stays per
+        expert — the requant epilogue normalizes each row by its own expert's value."""
+        from transformers.integrations.finegrained import FineGrainedInputGlobals
+
+        up = FineGrainedInputGlobals().convert(
+            {
+                "mlp.experts.*.gate_proj.input_scale": torch.tensor([1.0, 3.0]),
+                "mlp.experts.*.up_proj.input_scale": torch.tensor([2.0, 1.0]),
+            },
+            full_layer_name="mlp.experts.gate_up_proj_input_global_scale",
+        )["mlp.experts.gate_up_proj_input_global_scale"]
+        torch.testing.assert_close(up, torch.tensor([3.0]))
+        down = FineGrainedInputGlobals().convert(
+            {"mlp.experts.*.down_proj.input_scale": torch.tensor([1.0, 4.0])},
+            full_layer_name="mlp.experts.down_proj_input_global_scale",
+        )["mlp.experts.down_proj_input_global_scale"]
+        torch.testing.assert_close(down, torch.tensor([1.0, 4.0]))
+
+
+class _InputScaledRMSNorm(torch.nn.Module):
+    """Muse-Spark's post-expert norm: scale by ``1 + weight`` BEFORE normalizing, so the row's
+    mean square is taken on the scaled values (not the same function as normalizing first)."""
+
+    def __init__(self, dim, eps=1e-6):
+        super().__init__()
+        self.eps = eps
+        self.weight = torch.nn.Parameter(torch.zeros(dim, dtype=torch.bfloat16))
+
+    def forward(self, x):
+        out = x.float() * (1.0 + self.weight.float())
+        return (out * torch.rsqrt(out.pow(2).mean(-1, keepdim=True) + self.eps)).type_as(x)
+
+
+class _UnfusableNorm(torch.nn.Module):
+    """A norm whose math is none of the fused forms (a bias the kernels have no slot for): the
+    binder has to leave it a module call rather than pick the nearest form."""
+
+    def __init__(self, dim, eps=1e-6):
+        super().__init__()
+        self.eps = eps
+        self.weight = torch.nn.Parameter(torch.ones(dim, dtype=torch.bfloat16))
+        self.bias = torch.nn.Parameter(torch.full((dim,), 0.5, dtype=torch.bfloat16))
+
+    def forward(self, x):
+        xf = x.float()
+        normed = xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + self.eps)
+        return (normed * self.weight.float() + self.bias.float()).type_as(x)
+
+
+def _nvfp4_two_level(kernel, weight):
+    """Canonical two-level NVFP4 quant of one matrix: the global is ``amax / (6 * 448)`` — the
+    smallest one that keeps every e4m3 block scale in range — and the block quant runs on the
+    normalized values. Returns ``(packed_e2m1, e4m3 block scales, fp32 global)``."""
+    global_scale = (weight.abs().amax() / (6.0 * 448.0)).clamp(min=torch.finfo(torch.float32).tiny)
+    packed, block = kernel.nvfp4_act_quant((weight.float() / global_scale).contiguous())
+    return packed.view(torch.int8), block, global_scale
+
+
+def _unpack_e2m1(packed):
+    """Packed-E2M1 bytes (two codes per byte along the last axis) back to fp32 values."""
+    lut = torch.tensor(
+        [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0],
+        device=packed.device,
+    )
+    b = packed.view(torch.uint8)
+    pairs = torch.stack([lut[(b & 0x0F).long()], lut[(b >> 4).long()]], dim=-1)
+    return pairs.reshape(*packed.shape[:-1], packed.shape[-1] * 2)
 
 
 def _targets(conv):
@@ -913,12 +1171,155 @@ class FineGrainedRealKernelTest(unittest.TestCase):
                     scale = kernel.unswizzle_mx_scales(scale, 512, scale.shape[2] * 4, num_experts=4)
                 deq = FineGrainedDequantize(None)._dequantize_one(weight, scale.float(), output_dtype=torch.float32)
                 if fmt == "nvfp4":
-                    deq = deq * out["experts.gate_up_proj_global_scale"].reshape(-1, 1, 1)
+                    global_scale = out["experts.gate_up_proj_weight_global_scale"]
+                    deq = deq * global_scale.reshape(-1, 1, 1)
                 else:
-                    self.assertNotIn("experts.gate_up_proj_global_scale", out)
+                    self.assertNotIn("experts.gate_up_proj_weight_global_scale", out)
                 rel = ((deq - original.float()).norm() / original.float().norm()).item()
                 self.assertLess(rel, floor, f"{fmt}: {rel:.3f}")
                 self.assertGreater(rel, 0.0)
+
+    def _nvfp4_experts_modelopt_layout(self, cfg, activation_format=None, magnitudes=(8.0, 1.0)):
+        """NVFP4 experts in the layout a modelopt checkpoint delivers: every (expert, half) of the
+        gate|up stack quantized against its OWN global (``weight_scale_2`` is per projection, and
+        the two differ per expert on Muse-Spark), the down per expert, plus calibrated activation
+        globals. Returns the module, the exact dequantized weights (so the reference is the
+        quantization floor rather than the pre-quant weight), and the dequantization a reader that
+        applied ONE of the two globals to both halves would get."""
+        from transformers.integrations.finegrained import FineGrainedWeightGlobals
+
+        kernel = load_finegrained_kernel()
+        experts = FineGrainedExperts(cfg, weight_format="nvfp4", activation_format=activation_format).cuda()
+        dequantized, single_global, checkpoint_globals = {}, {}, {}
+        for proj, rows, cols in (
+            ("gate_up_proj", 2 * cfg.intermediate_size, cfg.hidden_size),
+            ("down_proj", cfg.hidden_size, cfg.intermediate_size),
+        ):
+            reference = torch.randn(cfg.num_local_experts, rows, cols, device="cuda")
+            if proj == "gate_up_proj":  # the halves interleave by row; draw them far apart
+                reference[:, 0::2] *= magnitudes[0]
+                reference[:, 1::2] *= magnitudes[1]
+            packed = torch.empty(cfg.num_local_experts, rows, cols // 2, dtype=torch.int8, device="cuda")
+            block = torch.empty(cfg.num_local_experts, rows, cols // 16, dtype=torch.float8_e4m3fn, device="cuda")
+            halves = 2 if proj == "gate_up_proj" else 1
+            globals_ = torch.empty(cfg.num_local_experts, halves, device="cuda")
+            deq, deq_one = torch.empty_like(reference), torch.empty_like(reference)
+            for e in range(cfg.num_local_experts):
+                for h in range(halves):
+                    rows_h = slice(h, None, halves)
+                    q, b, g = _nvfp4_two_level(kernel, reference[e, rows_h])
+                    packed[e, rows_h], block[e, rows_h], globals_[e, h] = q, b, g
+                    values = _unpack_e2m1(q) * b.float().repeat_interleave(16, dim=-1)
+                    deq[e, rows_h] = values * g
+                if halves == 2:
+                    # the control: BOTH halves read the up half's global, which is what a kernel
+                    # that ignored the layout does. It has to be the up one — putting the gate's
+                    # global on both scales the expert's whole output uniformly, and the
+                    # post-expert RMSNorm divides exactly that out; a wrong GATE scale goes
+                    # through the SiLU and survives.
+                    for h in (0, 1):
+                        rows_h = slice(h, None, 2)
+                        deq_one[e, rows_h] = deq[e, rows_h] * (globals_[e, 1] / globals_[e, h])
+            scale = block if getattr(experts, f"{proj}_scale_inv").dim() != 5 else kernel.swizzle_mx_scales(block)
+            setattr(experts, proj, torch.nn.Parameter(packed, requires_grad=False))
+            setattr(experts, f"{proj}_scale_inv", torch.nn.Parameter(scale, requires_grad=False))
+            checkpoint_globals[f"experts.{proj}_weight_scale_2"] = globals_
+            dequantized[proj], single_global[proj] = deq, deq_one
+        # calibrated input_scale: one value for the gate_up (quantized before routing), one per
+        # expert for the down (its rows are per expert). A weight-only module holds neither —
+        # nothing there quantizes activations — so the checkpoint's keys stay unused.
+        if activation_format != "bf16":
+            experts.gate_up_proj_input_global_scale = torch.nn.Parameter(
+                torch.full((1,), 0.05, device="cuda"), requires_grad=False
+            )
+            checkpoint_globals["experts.down_proj_input_scale"] = torch.linspace(
+                0.02, 0.08, cfg.num_local_experts, device="cuda"
+            )
+        single_global["down_proj"] = dequantized["down_proj"]  # the down has one global either way
+        # The globals go in through the loader's own converter, so the module holds exactly what a
+        # real checkpoint puts there: one per expert, with the gate|up pair merged onto the down.
+        targets = [
+            "experts.gate_up_proj_weight_global_scale",
+            "experts.down_proj_weight_global_scale",
+            "experts.down_proj_input_global_scale",
+        ]
+        for target, value in FineGrainedWeightGlobals().convert(checkpoint_globals, target_patterns=targets).items():
+            setattr(experts, target.split(".")[-1], torch.nn.Parameter(value, requires_grad=False))
+        return experts, dequantized, single_global
+
+    def _moe_reference(self, dequantized, x, idx, wts, post_norm=None):
+        """The experts chain in torch over the dequantized weights: gate|up (interleaved columns),
+        SwiGLU, down, the optional per-expert output norm, then the routing-weighted sum."""
+        out = torch.zeros_like(x, dtype=torch.float32)
+        for token in range(x.shape[0]):
+            for slot in range(idx.shape[1]):
+                e = int(idx[token, slot])
+                pre = x[token].float() @ dequantized["gate_up_proj"][e].t()
+                inter = torch.nn.functional.silu(pre[0::2]) * pre[1::2]
+                row = inter @ dequantized["down_proj"][e].t()
+                if post_norm is not None:
+                    row = post_norm(row.to(x.dtype)).float()
+                out[token] += row * float(wts[token, slot])
+        return out
+
+    def test_modelopt_nvfp4_experts_merge_their_globals_and_fuse_the_post_norm(self):
+        """The Muse-Spark checkpoint shape end to end through the integration: a gate|up stack
+        calibrated per half (merged at load), calibrated activation globals, and a per-expert
+        output norm the binder fuses, on all three forwards. Weight-only pins the numbers against the dequantized weights (nothing else
+        rounds); the W4A4 chain rides the 4-bit activation floor, so it is pinned by being far
+        closer to the right globals than to one global folded over both halves — what a kernel
+        that ignored the layout computes."""
+        torch.manual_seed(0)
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size, cfg.num_local_experts = 512, 256, 4
+        cfg._experts_implementation = "grouped_mm"
+        x = torch.randn(8, cfg.hidden_size, device="cuda", dtype=torch.bfloat16) * 0.1
+        idx = torch.randint(0, cfg.num_local_experts, (8, 2), device="cuda", dtype=torch.long)
+        wts = torch.rand(8, 2, device="cuda", dtype=torch.bfloat16)
+        forwards = (
+            ("grouped", fg.finegrained_grouped_mm_experts_forward),
+            ("batched", fg.finegrained_batched_mm_experts_forward),
+            ("eager", lambda module, *args: module(*args)),
+        )
+
+        def relative(out, reference):
+            return ((out.float() - reference).norm() / reference.norm()).item()
+
+        for activation_format, floor in (("bf16", 0.02), (None, 0.35)):
+            experts, dequantized, one_global = self._nvfp4_experts_modelopt_layout(cfg, activation_format)
+            reference = self._moe_reference(dequantized, x, idx, wts)
+            wrong = self._moe_reference(one_global, x, idx, wts)
+            for name, forward in forwards:
+                with self.subTest(forward=name, activation_format=activation_format):
+                    out = forward(experts, x, idx, wts)
+                    rel, rel_wrong = relative(out, reference), relative(out, wrong)
+                    self.assertLess(rel, floor, f"{name} diverged from the dequantized reference: {rel:.3f}")
+                    self.assertLess(
+                        3 * rel,
+                        rel_wrong,
+                        f"{name} is as close to ONE global over both gate|up halves ({rel_wrong:.3f}) "
+                        f"as to the per-half ones ({rel:.3f}) — the fold is not reading the halves",
+                    )
+
+            # the same chain with the model's per-expert output norm, which runs on the routed
+            # rows: every forward has to apply it where the reference forwards do. A name the
+            # kernels implement is folded into the chain's reduce and anything else is the module
+            # itself, so both have to land on the same numbers as the reference.
+            for norm, norm_name in (
+                (torch.nn.RMSNorm(cfg.hidden_size, device="cuda", dtype=torch.bfloat16), "rms_norm"),
+                (_InputScaledRMSNorm(cfg.hidden_size).cuda(), "input_scaled_rms_norm"),
+                # a form the kernels do not implement: the module is called on the rows
+                (_UnfusableNorm(cfg.hidden_size).cuda(), "a_models_own_norm"),
+            ):
+                norm.weight.data.uniform_(0.5, 1.5)
+                experts.post_expert_norm, experts.post_expert_norm_name = norm, norm_name
+                experts._apply_post_norm = norm  # what the swap carries from the model's class
+                normed = self._moe_reference(dequantized, x, idx, wts, norm)
+                self.assertGreater(relative(normed, reference), 0.05, "the norm has to change the output")
+                for name, forward in forwards:
+                    with self.subTest(forward=name, activation_format=activation_format, norm=norm_name):
+                        rel = relative(forward(experts, x, idx, wts), normed)
+                        self.assertLess(rel, floor, f"{name} diverged with the post-expert norm: {rel:.3f}")
 
     def test_experts_scale_layout_op_keeps_the_forward_correct(self):
         """End-to-end over the integration: real MXFP8 experts hold swizzled scales, the loader's op
