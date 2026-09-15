@@ -25,11 +25,9 @@ The abstract from the paper is the following:
 
 *We release Qwen3-TTS, a series of powerful speech generation models offering comprehensive support for voice clone, voice design, ultra-high-quality human-like speech generation, and natural language-based voice control. Powered by the self-developed Qwen3-TTS-Tokenizer-12Hz, it achieves efficient acoustic compression and high-dimensional semantic modeling of speech signals. Utilizing a discrete multi-codebook LM architecture, it realizes full-information end-to-end speech modeling that completely bypasses the information bottlenecks and cascading errors inherent in traditional LM+DiT schemes. It covers 10 major languages (Chinese, English, Japanese, Korean, German, French, Russian, Portuguese, Spanish, and Italian) and supports streaming generation with end-to-end latency as low as 97ms.*
 
-The original `Qwen3-TTS` checkpoints can be found on the
-[Hugging Face Hub](https://huggingface.co/collections/Qwen/qwen3-tts). They are in the format of the original
-implementation, so convert them with `convert_qwen3_tts_to_hf.py` before use; the snippets below load an
-already converted Base checkpoint,
-[shahvandit/qwen3-tts-base-hf](https://huggingface.co/shahvandit/qwen3-tts-base-hf).
+The model checkpoints can be found [here](https://huggingface.co/collections/Qwen/qwen3-tts-hf).
+
+<!-- TODO: contact Qwen to add checkpoints to their org! -->
 
 Qwen3-TTS generates codes for a separate audio codec, which decodes them to a waveform. That codec is its own
 model, documented in [Qwen3-TTS Multi-Codebook Tokenizer](./qwen3_tts_tokenizer_multi_codebook); the processor
@@ -47,13 +45,12 @@ with [`~Qwen3TTSProcessor.apply_chat_template`], generate the speech codes, then
 [`~Qwen3TTSProcessor.batch_decode`]:
 
 ```python
-import torch
-from transformers import AutoProcessor, Qwen3TTSForConditionalGeneration
+from transformers import AutoProcessor, AutoModelForTextToWaveform
 
 model_id = "shahvandit/qwen3-tts-base-hf"
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 conversation = [
     {"role": "user", "content": [{"type": "text", "text": "Hello, how are you doing today?"}]},
@@ -74,13 +71,12 @@ checkpoints, which have no presets.
 The id below is an original checkpoint, so convert it with `convert_qwen3_tts_to_hf.py` and load the result.
 
 ```python
-import torch
-from transformers import AutoProcessor, Qwen3TTSForConditionalGeneration
+from transformers import AutoProcessor, AutoModelForTextToWaveform
 
 model_id = "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 conversation = [
     {
@@ -102,13 +98,12 @@ processor.save_audio(audio, "output_ryan.wav")
 Pass a list of conversations to generate a batch:
 
 ```python
-import torch
-from transformers import AutoProcessor, Qwen3TTSForConditionalGeneration
+from transformers import AutoProcessor, AutoModelForTextToWaveform
 
 model_id = "shahvandit/qwen3-tts-base-hf"
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 conversations = [
     [{"role": "user", "content": [{"type": "text", "text": "The weather is nice today."}]}],
@@ -127,13 +122,12 @@ VoiceDesign models accept a natural language description of the desired voice as
 id below is an original checkpoint and needs converting first:
 
 ```python
-import torch
-from transformers import AutoProcessor, Qwen3TTSForConditionalGeneration
+from transformers import AutoProcessor, AutoModelForTextToWaveform
 
 model_id = "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 conversation = [
     {
@@ -159,16 +153,14 @@ Base checkpoints carry a speaker encoder, which turns a reference recording into
 conditions generation. The reference has to be mono 24 kHz:
 
 ```python
-import torch
-
-from transformers import AutoProcessor, Qwen3TTSForConditionalGeneration
+from transformers import AutoProcessor, AutoModelForTextToWaveform
 from transformers.audio_utils import load_audio_librosa
 
 
 model_id = "shahvandit/qwen3-tts-base-hf"
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = Qwen3TTSForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
 reference = load_audio_librosa(
     "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
