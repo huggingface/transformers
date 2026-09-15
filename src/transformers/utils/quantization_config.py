@@ -1806,10 +1806,6 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
     """
     FineGrainedFP8Config is a configuration class for fine-grained FP8 quantization used mainly for deepseek models.
 
-    Frozen for backward compatibility: it configures the frozen `finegrained_fp8` integration and no
-    longer receives new recipes. [`FineGrainedConfig`] is the one that serves the whole family
-    (block-FP8, MXFP8, MXFP4, NVFP4), and a checkpoint declaring `quant_method="fp8"` builds that one.
-
     Args:
         activation_scheme (`str`, *optional*, defaults to `"dynamic"`):
             The scheme used for activation, the defaults and only support scheme for now is "dynamic".
