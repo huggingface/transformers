@@ -147,7 +147,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         duration = metadata.duration or round(max_frame_idx / metadata.fps) + 1
 
         if duration <= self.max_duration:
-            n = int(math.floor(duration * requested_fps))
+            n = max(int(math.floor(duration * requested_fps)), 1)  # sample at least 1 frame
             frame_indices = [min(max_frame_idx, int(math.ceil(i * metadata.fps / requested_fps))) for i in range(n)]
         else:
             num_samples = int(self.max_duration * requested_fps)
@@ -166,7 +166,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         if len(uniq) & 1:
             uniq.append(uniq[-1])
 
-        return np.array(uniq)
+        return np.array(uniq, dtype=int)
 
     def resize(
         self,

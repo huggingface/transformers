@@ -82,9 +82,11 @@ Subclass [`DataCollatorMixin`] for full control over batch assembly and implemen
 
 ```py
 import torch
-from transformers import DataCollatorMixin
+from dataclasses import dataclass
+from transformers.data.data_collator import DataCollatorMixin
 from trl.trainer.utils import pad
 
+@dataclass
 class DataCollatorForPreference(DataCollatorMixin):
     pad_token_id: int
     pad_to_multiple_of: int | None = None

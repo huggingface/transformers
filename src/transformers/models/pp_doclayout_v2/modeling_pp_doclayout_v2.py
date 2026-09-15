@@ -76,7 +76,7 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
     inv_freq: torch.Tensor
 
     @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config, device=None):
+    def __init__(self, config: PPDocLayoutV2Config, device=None):
         super().__init__()
         self.config = config
         self.embed_dim = config.relation_bias_embed_dim
@@ -723,7 +723,7 @@ class PPDocLayoutV2MultiscaleDeformableAttention(nn.Module):
 @auto_docstring
 class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
     config: PPDocLayoutV2Config
-    base_model_prefix = "pp_doclayout_v2"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = [r"PPDocLayoutV2HybridEncoder", r"PPDocLayoutV2DecoderLayer"]
@@ -795,7 +795,7 @@ class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         if isinstance(module, PPDocLayoutV2PositionRelationEmbedding):
             inv_freq, _ = module.compute_default_rope_parameters(module.config)
-            module.register_buffer("inv_freq", inv_freq, persistent=False)
+            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring(
@@ -2164,7 +2164,7 @@ class PPDocLayoutV2Model(PPDocLayoutV2PreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, PPDocLayoutV2Model
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -2395,11 +2395,11 @@ class PPDocLayoutV2ForObjectDetection(PPDocLayoutV2PreTrainedModel):
         ```python
         >>> from transformers import AutoModelForObjectDetection, AutoImageProcessor
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 
-        >>> url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_layout_demo.jpg"
         >>> with httpx.stream("GET", url) as response:
         ...     image = Image.open(BytesIO(response.read()))
 
