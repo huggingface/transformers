@@ -29,6 +29,9 @@ rendered properly in your Markdown viewer.
 - It uses SmolLM2 for the text model.
 - It supports multi-image and video inputs
 
+> [!TIP]
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
+
 ## Usage tips
 
 Input images are processed either by upsampling (if resizing is enabled) or at their original resolution. The resizing behavior depends on two parameters: do_resize and size.

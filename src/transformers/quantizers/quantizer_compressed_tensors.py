@@ -106,9 +106,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                 modules_to_not_convert=self.modules_to_not_convert,
             )
 
-        if not remaining_groups:
-            return
-
         from compressed_tensors.quantization import apply_quantization_config
 
         remaining_config = deepcopy(ct_config)

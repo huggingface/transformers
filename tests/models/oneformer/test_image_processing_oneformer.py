@@ -19,15 +19,14 @@ import tempfile
 import unittest
 
 import numpy as np
-from datasets import load_dataset
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import (
+    ImageProcessingTester,
     ImageProcessingTestMixin,
     PostProcessSemanticSegmentationTestMixin,
-    prepare_image_inputs,
 )
 
 
@@ -41,7 +40,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class OneFormerImageProcessorTester:
+class OneFormerImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -99,59 +98,11 @@ class OneFormerImageProcessorTester:
             "num_text": self.num_text,
         }
 
-    def get_expected_values(self, image_inputs, batched=False):
-        """
-        This function computes the expected height and width when providing images to OneFormerImageProcessor,
-        assuming do_resize is set to True with a scalar size.
-        """
-        if not batched:
-            image = image_inputs[0]
-            if isinstance(image, Image.Image):
-                w, h = image.size
-            elif isinstance(image, np.ndarray):
-                h, w = image.shape[0], image.shape[1]
-            else:
-                h, w = image.shape[1], image.shape[2]
-            if w < h:
-                expected_height = int(self.size["shortest_edge"] * h / w)
-                expected_width = self.size["shortest_edge"]
-            elif w > h:
-                expected_height = self.size["shortest_edge"]
-                expected_width = int(self.size["shortest_edge"] * w / h)
-            else:
-                expected_height = self.size["shortest_edge"]
-                expected_width = self.size["shortest_edge"]
-
-        else:
-            expected_values = []
-            for image in image_inputs:
-                expected_height, expected_width = self.get_expected_values([image])
-                expected_values.append((expected_height, expected_width))
-            expected_height = max(expected_values, key=lambda item: item[0])[0]
-            expected_width = max(expected_values, key=lambda item: item[1])[1]
-
-        return expected_height, expected_width
-
     def get_fake_oneformer_outputs(self):
         return OneFormerForUniversalSegmentationOutput(
             # +1 for null class
             class_queries_logits=torch.randn((self.batch_size, self.num_queries, self.num_classes + 1)),
             masks_queries_logits=torch.randn((self.batch_size, self.num_queries, self.height, self.width)),
-        )
-
-    def expected_output_image_shape(self, images):
-        height, width = self.get_expected_values(images, batched=True)
-        return self.num_channels, height, width
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
         )
 
     def prepare_post_process_semantic_segmentation_inputs(self):
@@ -164,19 +115,6 @@ class OneFormerImageProcessorTester:
         return inputs, expected_shape
 
 
-# Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_single_inputs
-def prepare_semantic_single_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-    example = ds[0]
-    return example["image"], example["map"]
-
-
-# Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_batch_inputs
-def prepare_semantic_batch_inputs():
-    ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
-    return list(ds["image"][:2]), list(ds["map"][:2])
-
-
 @require_torch
 @require_vision
 class OneFormerImageProcessingTest(
@@ -184,7 +122,7 @@ class OneFormerImageProcessingTest(
 ):
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = OneFormerImageProcessorTester(self)
+        self.image_processor_tester = OneFormerImageProcessingTester(self)
 
     @property
     def image_processor_dict(self):
@@ -360,7 +298,7 @@ class OneFormerImageProcessingTest(
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image, dummy_map = prepare_semantic_single_inputs()
+        dummy_image, dummy_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():
@@ -389,7 +327,9 @@ class OneFormerImageProcessingTest(
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_images, dummy_maps = prepare_semantic_batch_inputs()
+        dummy_images, dummy_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+            batched=True
+        )
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():

@@ -151,10 +151,6 @@ visualizer("LLMs generate text through a process known as")
 
 [[autodoc]] GemmaTokenizer
 
-## GemmaTokenizerFast
-
-[[autodoc]] GemmaTokenizerFast
-
 ## GemmaModel
 
 [[autodoc]] GemmaModel

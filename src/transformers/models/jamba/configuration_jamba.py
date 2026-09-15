@@ -39,6 +39,15 @@ class JambaConfig(PreTrainedConfig):
         `True` and kernels are not available
     mamba_dt_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
         Rank of the mamba discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
+    use_mambapy (`bool`, *optional*, defaults to `False`):
+        Determines the fallback strategy during training if the CUDA-based official implementation of Mamba is not available. If `True`,
+        the mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive
+        version if memory is limited.
+    use_associative_scan (`bool`, *optional*, defaults to `True`):
+        Whether to use PyTorch's `torch._higher_order_ops.associative_scan` for the parallel scan instead of the naive
+        sequential implementation. The associative scan is only active during `torch.compile` tracing and
+        requires torch >= 2.9.0. Both paths are tested to produce numerically identical results (see
+        `test_associative_scan_matches_sequential`). Set to `False` to fall back to the sequential loop.
     """
 
     model_type = "jamba"
@@ -78,6 +87,8 @@ class JambaConfig(PreTrainedConfig):
     mamba_dt_rank: int | str = "auto"
     mamba_conv_bias: bool = True
     mamba_proj_bias: bool = False
+    use_mambapy: bool = False
+    use_associative_scan: bool = True
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:

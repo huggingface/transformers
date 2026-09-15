@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-# Knowledge Distillation for Computer Vision
+# Knowledge distillation for computer vision
 
 [[open-in-colab]]
 

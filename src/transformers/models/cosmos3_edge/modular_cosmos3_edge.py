@@ -38,21 +38,17 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack, VideosKwargs
 from ...utils import (
-    add_start_docstrings,
     auto_docstring,
     can_return_tuple,
     logging,
     torch_compilable_check,
 )
 from ...utils.generic import (
-    accepts_precomputed_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
-    maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING
 from ...video_utils import VideoMetadata
 from ...vision_utils import get_vision_attention_seqlens
 from ..clip.modeling_clip import CLIPMLP
@@ -65,7 +61,6 @@ from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaModel,
     LlamaRMSNorm,
-    LlamaRotaryEmbedding,
     eager_attention_forward,
 )
 from ..qwen2_vl.modeling_qwen2_vl import (
@@ -75,6 +70,7 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     TransformersKwargs,
 )
 from ..qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeVisionPatchMerger
+from ..qwen3_vl.modeling_qwen3_vl import Qwen3VLTextRotaryEmbedding
 from ..qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ..siglip2.modeling_siglip2 import (
@@ -88,7 +84,7 @@ from ..siglip2.modeling_siglip2 import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
+@auto_docstring(checkpoint="nvidia/Cosmos3-Edge")
 @strict
 class Cosmos3EdgeTextConfig(LlamaConfig):
     model_type = "cosmos3_edge_text"
@@ -147,7 +143,7 @@ class Cosmos3EdgeTextConfig(LlamaConfig):
             )
 
 
-@auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
+@auto_docstring(checkpoint="nvidia/Cosmos3-Edge")
 @strict
 class Cosmos3EdgeVisionConfig(Siglip2VisionConfig):
     r"""
@@ -164,7 +160,7 @@ class Cosmos3EdgeVisionConfig(Siglip2VisionConfig):
     spatial_merge_size: int = 2
 
 
-@auto_docstring(checkpoint="nvidia/Cosmos3-Edge-Reasoner")
+@auto_docstring(checkpoint="nvidia/Cosmos3-Edge")
 @strict
 class Cosmos3EdgeConfig(PreTrainedConfig):
     r"""
@@ -218,41 +214,8 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
             raise TypeError("`vision_config` must be a `Cosmos3EdgeVisionConfig` or a dictionary.")
 
 
-class Cosmos3EdgeTextRotaryEmbedding(LlamaRotaryEmbedding):
-    """Interleaved M-RoPE used for Cosmos3 Edge text and visual tokens."""
-
-    def compute_default_rope_parameters(
-        config: Cosmos3EdgeTextConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
-        """Construct an axis-aware inverse-frequency matrix for interleaved temporal, height, and width RoPE."""
-        base = config.rope_parameters["rope_theta"]
-        dim = config.head_dim
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-
-        indices = torch.arange(inv_freq.shape[0])
-        mrope_section = config.rope_parameters["mrope_section"]
-        height_mask = (indices % 3 == 1) & (indices < mrope_section[1] * 3)
-        width_mask = (indices % 3 == 2) & (indices < mrope_section[2] * 3)
-        temporal_mask = ~(height_mask | width_mask)
-        inv_freq = torch.stack(
-            (
-                inv_freq * temporal_mask,
-                inv_freq * height_mask,
-                inv_freq * width_mask,
-            )
-        )
-        return inv_freq.to(device), 1.0
-
-    @torch.no_grad()
-    def forward(self, x, position_ids):
-        position_ids = position_ids.permute(1, 2, 0).float()
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = position_ids.float() @ self.inv_freq.float().to(x.device)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+class Cosmos3EdgeTextRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
+    pass
 
 
 class Cosmos3EdgeTextAttention(LlamaAttention):
@@ -566,9 +529,8 @@ class Cosmos3EdgeTextModel(LlamaModel, Cosmos3EdgePreTrainedModel):
         return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 
+@auto_docstring(custom_intro="Packed variable-resolution SigLIP2 vision tower used by Cosmos3 Edge.")
 class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
-    """Packed variable-resolution SigLIP2 vision tower used by Cosmos3 Edge."""
-
     config_class = Cosmos3EdgeVisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image", "video")
@@ -627,21 +589,12 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         self.rope_deltas = None
         self.post_init()
 
-    @accepts_precomputed_kwargs(modality="image")
-    @can_return_tuple
-    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor` of shape `(num_patches, num_channels * patch_size * patch_size)`):
-            Packed image patches.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height, and width dimensions of every packed image patch grid.
-        """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         image_embeds = self.projector(vision_outputs.last_hidden_state)
@@ -650,21 +603,12 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
 
         return vision_outputs
 
-    @accepts_precomputed_kwargs(modality="video")
-    @can_return_tuple
-    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(num_patches, num_channels * patch_size * patch_size)`):
-            Packed video-frame patches.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height, and width dimensions of every packed video patch grids.
-        """
         # Video frames use the same vision tower and projector path as images.
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
@@ -709,12 +653,6 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height, and width of the feature grid for each image.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height, and width of the feature grid for each video.
-        """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -762,6 +700,7 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         )
 
 
+@auto_docstring
 class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmos3EdgePreTrainedModel):
     config_class = Cosmos3EdgeConfig
     _tied_weights_keys = {}
@@ -903,15 +842,6 @@ class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmo
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), and the loss is only computed for tokens with labels in `[0, ..., config.vocab_size]`.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height, and width of the feature grid for each image.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height, and width of the feature grid for each video.
-
         Example:
 
         ```python
@@ -1087,23 +1017,20 @@ class Cosmos3EdgeImageProcessorPil(Glm4vImageProcessorPil):
 
 
 class Cosmos3EdgeVideoProcessorInitKwargs(VideosKwargs, total=False):
+    r"""
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 1):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    """
+
     patch_size: int
     temporal_patch_size: int
     merge_size: int
 
 
-@add_start_docstrings(
-    "Constructs a fast GLM-4V image processor that dynamically resizes videos based on the original videos.",
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-    """
-        patch_size (`int`, *optional*, defaults to 14):
-            The spacial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 1):
-            The temporal patch size of the vision encoder.
-        merge_size (`int`, *optional*, defaults to 2):
-            The merge size of the vision encoder to llm encoder.
-    """,
-)
 class Cosmos3EdgeVideoProcessor(Glm4vVideoProcessor):
     size = {"shortest_edge": 64 * 64, "longest_edge": 24 * 1024 * 1024}
     image_mean = IMAGENET_STANDARD_MEAN

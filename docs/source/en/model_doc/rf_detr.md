@@ -75,7 +75,7 @@ pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
 ```python
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 from PIL import Image
-import httpx
+from huggingface_hub.utils import httpx
 from io import BytesIO
 import torch
 
@@ -115,7 +115,7 @@ from transformers import AutoImageProcessor, AutoModelForObjectDetection
 from PIL import Image
 import supervision as sv
 
-import httpx
+from huggingface_hub.utils import httpx
 from io import BytesIO
 import torch
 
@@ -155,7 +155,7 @@ sv.plot_image(annotated_image)
 from transformers import AutoImageProcessor, AutoModelForInstanceSegmentation
 from PIL import Image
 import supervision as sv
-import httpx
+from huggingface_hub.utils import httpx
 from io import BytesIO
 import torch
 

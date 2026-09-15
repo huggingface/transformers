@@ -267,7 +267,7 @@ def get_quantize_fp8_per_row():
 
 
 def replace_with_fbgemm_fp8_linear(
-    model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False, tp_plan=None
+    model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False
 ):
     """
     A helper function to replace all `torch.nn.Linear` modules by `FbgemmFp8Linear` modules.
@@ -297,9 +297,6 @@ def replace_with_fbgemm_fp8_linear(
         with init_empty_weights(include_buffers=True):
             if module.__class__.__name__ == "Llama4TextExperts":
                 # TODO: make sure tp works later
-                # if tp_plan is not None:
-                #     tp_key = re.sub(r"\d+", "*", f"{module_name}.down_proj_scale")
-                #     tp_plan[tp_key] = None
                 text_config = getattr(model.config, "text_config", model.config)
                 new_module = FbgemmFp8Llama4TextExperts(text_config or model.config)
             elif isinstance(module, nn.Linear):

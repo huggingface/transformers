@@ -20,8 +20,11 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/sam2_video.1-hiera-tiny")
@@ -132,8 +135,6 @@ class Sam2VideoConfig(PreTrainedConfig):
         The non-linear activation function in the feedforward network in the memory attention module.
     memory_attention_dropout (`float`, *optional*, defaults to 0.1):
         The dropout rate for the memory attention module.
-    memory_attention_rope_theta (`float`, *optional*, defaults to 10000):
-        The Rope theta parameter.
     memory_attention_rope_feat_sizes (`list[int]`, *optional*, defaults to `[64, 64]`):
         The feature sizes for the Rope positional encoding.
     memory_attention_rope_dropout (`float`, *optional*, defaults to 0.1):
@@ -199,6 +200,7 @@ class Sam2VideoConfig(PreTrainedConfig):
     ```"""
 
     model_type = "sam2_video"
+    default_rope_type = "axial"
     sub_configs = {
         "vision_config": AutoConfig,
         "prompt_encoder_config": Sam2VideoPromptEncoderConfig,
@@ -228,11 +230,12 @@ class Sam2VideoConfig(PreTrainedConfig):
     memory_attention_feed_forward_hidden_size: int = 2048
     memory_attention_feed_forward_hidden_act: str = "relu"
     memory_attention_dropout: float | int = 0.1
-    memory_attention_rope_theta: int = 10000
     memory_attention_rope_feat_sizes: list[int] | None = None
     memory_attention_rope_dropout: float | int = 0.1
     memory_encoder_hidden_size: int = 256
     memory_encoder_output_channels: int = 64
+    rope_parameters: dict | None = None
+
     mask_downsampler_embed_dim: int = 256
     mask_downsampler_kernel_size: int = 3
     mask_downsampler_stride: int = 2
@@ -269,6 +272,22 @@ class Sam2VideoConfig(PreTrainedConfig):
             self.mask_decoder_config = Sam2VideoMaskDecoderConfig()
 
         super().__post_init__(**kwargs)
+
+    @property
+    def memory_attention_rope_theta(self):
+        logger.warning_once(
+            "`memory_attention_rope_theta` is deprecated and will be removed in v5.0. "
+            "Use `rope_parameters['rope_theta']` instead."
+        )
+        return self.rope_parameters.get("rope_theta", 10_000)
+
+    @memory_attention_rope_theta.setter
+    def memory_attention_rope_theta(self, value):
+        logger.warning_once(
+            "`memory_attention_rope_theta` is deprecated and will be removed in v5.0. "
+            "Use `rope_parameters['rope_theta']` instead."
+        )
+        self.rope_parameters["rope_theta"] = value
 
 
 __all__ = ["Sam2VideoMaskDecoderConfig", "Sam2VideoPromptEncoderConfig", "Sam2VideoConfig"]

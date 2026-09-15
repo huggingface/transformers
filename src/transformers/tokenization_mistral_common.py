@@ -1187,7 +1187,11 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
             if tokenize:
                 outputs.append(tokenized_request.tokens)
             else:
-                outputs.append(tokenized_request.text)
+                outputs.append(
+                    self.tokenizer.decode(
+                        tokens=tokenized_request.tokens, special_token_policy=SpecialTokenPolicy.KEEP
+                    )
+                )
             images.extend(tokenized_request.images)
             audios.extend([el.audio_array for el in tokenized_request.audios])
 

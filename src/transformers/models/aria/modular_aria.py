@@ -494,7 +494,7 @@ class AriaImageProcessor(TorchvisionBackend):
             tensor_type=return_tensors,
         )
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
         A utility that returns number of image patches for a given image size.
 
@@ -509,6 +509,7 @@ class AriaImageProcessor(TorchvisionBackend):
         Returns:
             `int`: Number of patches per image.
         """
+        images_kwargs = images_kwargs or {}
         split_image = images_kwargs.get("split_image", self.split_image)
         max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
         split_resolutions = images_kwargs.get("split_resolutions", self.split_resolutions)
@@ -982,7 +983,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         Example:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
         >>> from PIL import Image
@@ -992,9 +993,9 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         >>> from transformers.image_utils import load_image
 
         >>> # Note that passing the image urls (instead of the actual pil images) to the processor is also possible
-        >>> image1 = load_image("https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg")
-        >>> image2 = load_image("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg")
-        >>> image3 = load_image("https://cdn.britannica.com/68/170868-050-8DDE8263/Golden-Gate-Bridge-San-Francisco.jpg")
+        >>> image1 = load_image("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg")
+        >>> image2 = load_image("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/skyline_chicago.jpg")
+        >>> image3 = load_image("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg")
 
         >>> processor = AutoProcessor.from_pretrained("Rhymes-AI/Aria")
         >>> model = AutoModel.from_pretrained("Rhymes-AI/Aria", dtype=torch.bfloat16, device_map="auto")

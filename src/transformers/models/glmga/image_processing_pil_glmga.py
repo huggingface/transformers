@@ -231,7 +231,7 @@ class GlmgaImageProcessorPil(PilBackend):
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
         A utility that returns number of image patches for a given image size.
 
@@ -245,14 +245,10 @@ class GlmgaImageProcessorPil(PilBackend):
         Returns:
             `int`: Number of image patches per image.
         """
-        if images_kwargs is not None:
-            patch_size = images_kwargs.get("patch_size", self.patch_size)
-            merge_size = images_kwargs.get("merge_size", self.merge_size)
-            size = images_kwargs.get("size", {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000})
-        else:
-            patch_size = self.patch_size
-            merge_size = self.merge_size
-            size = self.size
+        images_kwargs = images_kwargs or {}
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        merge_size = images_kwargs.get("merge_size", self.merge_size)
+        size = images_kwargs.get("size", self.size)
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(

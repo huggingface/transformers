@@ -216,7 +216,7 @@ def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
     non-overlapping lifetimes may have the same id.
     """
     if is_dtensor(tensor):
-        local_tensor = tensor.to_local()
+        local_tensor = tensor.to_local()  # type: ignore
         return tensor.device, local_tensor.storage().data_ptr(), tensor.nbytes
 
     if tensor.device.type == "xla" and is_torch_xla_available():
