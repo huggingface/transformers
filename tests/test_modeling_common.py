@@ -1253,7 +1253,7 @@ class ModelTesterMixin(ExportTesterMixin):
         # This is used to get the addition year of the model
         filename = inspect.getfile(config.__class__)
         # No easy way to get model addition date -> check copyright year on top of file
-        with open(filename) as file:
+        with open(filename, encoding="utf-8") as file:
             source_code = file.read()
         addition_year = 0  # if we cannot find it, set it to 0 (i.e. oldest)
         if match_object := re.search(r"^# Copyright (\d{4})", source_code, re.MULTILINE | re.IGNORECASE):
