@@ -1060,11 +1060,14 @@ class GgufModelTests(unittest.TestCase):
         self.assertIsNone(deci_mapping["rope.dimension_count"])
 
     def test_deci_architecture_mapping(self):
-        """Test that Deci architectures are mapped to GGUFLlamaConverter."""
-        from transformers.integrations.gguf.gguf_tokenizer_mapping import GGUFLlamaConverter, _select_converter
+        """Test that Deci architectures use the plain sentencepiece tokenizer."""
+        from transformers.integrations.gguf.gguf_tokenizer_mapping import (
+            select_tokenizer_builder,
+            sentencepiece_tokenizer,
+        )
 
-        self.assertEqual(_select_converter("deci", "llama"), GGUFLlamaConverter)
-        self.assertEqual(_select_converter("decilm", "llama"), GGUFLlamaConverter)
+        self.assertEqual(select_tokenizer_builder("deci", "llama"), sentencepiece_tokenizer)
+        self.assertEqual(select_tokenizer_builder("decilm", "llama"), sentencepiece_tokenizer)
 
     @unittest.skipUnless(is_gguf_available("0.16.0"), "test requires gguf version >= 0.16.0")
     def test_qwen3_q8_0(self):
