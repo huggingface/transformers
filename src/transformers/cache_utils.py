@@ -759,11 +759,9 @@ class QuantizedLayer(DynamicLayer):
 
         dequant_keys = self._dequantize(self._quantized_keys)
         dequant_values = self._dequantize(self._quantized_values)
-        # Apply the beam reordering requested since the last update, now that the states are back in full precision
-        if self._pending_beam_idx is not None:
-            beam_idx = self._pending_beam_idx.to(dequant_keys.device)
-            dequant_keys = dequant_keys.index_select(0, beam_idx)
-            dequant_values = dequant_values.index_select(0, beam_idx)
+        # Beam idx reordering has been deferred to when we dequantize anyways to avoid double round trips around
+        # quantization (which is lossy)
+        dequant_keys, dequant_values = self._apply_pending_reorder(dequant_keys, dequant_values)
 
         keys_to_return = torch.cat([dequant_keys, self.keys, key_states], dim=-2)
         values_to_return = torch.cat([dequant_values, self.values, value_states], dim=-2)
@@ -791,27 +789,29 @@ class QuantizedLayer(DynamicLayer):
         if not self.is_initialized:
             return
 
-        # The quantized states cannot be indexed, and dequantizing them here only to quantize them back would be
-        # both costly and lossy. Instead, the reordering is recorded and applied by the next `update`, which
-        # dequantizes them anyway. Reorderings accumulated while the residual cache fills up are composed together.
-        # It is cloned, as `beam_idx` belongs to the caller and is reused across steps in beam search.
+        # Deferred to the next `update`, which dequantizes the states anyway. It is cloned as `beam_idx` belongs to
+        # the caller, and composed with any pending one to cover several reorders in a row.
         beam_idx = beam_idx.to(self.device)
         self._pending_beam_idx = (
             beam_idx.clone() if self._pending_beam_idx is None else self._pending_beam_idx.index_select(0, beam_idx)
         )
 
-        # The residual cache is emptied whenever it is flushed into the quantized states, and holds nothing to
-        # reorder then. `super().reorder_cache` cannot be used to guard against it, as it checks the sequence
-        # length, which counts the quantized tokens as well.
+        # Optional, as the residual cache is emptied whenever it is flushed into the quantized states
         if self.keys.numel() > 0:
             self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
             self.values = self.values.index_select(0, beam_idx.to(self.values.device))
 
+    def _apply_pending_reorder(self, keys: torch.Tensor, values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Applies the reordering deferred by `reorder_cache` to freshly dequantized states."""
+        if self._pending_beam_idx is None:
+            return keys, values
+        beam_idx = self._pending_beam_idx.to(keys.device)
+        return keys.index_select(0, beam_idx), values.index_select(0, beam_idx)
+
     def reset(self) -> None:
         """Resets the cache values while preserving the objects."""
         super().reset()
-        # Most of the cache lives in the quantized states, which `super().reset()` knows nothing about. They are
-        # dropped instead of zeroed, so that the next `update` quantizes the new states from scratch.
+        # The quantized states are dropped instead of zeroed, so that the next `update` quantizes from scratch
         self._quantized_keys = self._quantized_values = None
         self._pending_beam_idx = None
         self.is_initialized = False
