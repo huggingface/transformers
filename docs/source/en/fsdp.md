@@ -121,6 +121,9 @@ TrainingArguments(
 </hfoption>
 </hfoptions>
 
+> [!TIP]
+> For mixture-of-experts models, `fsdp_size` can be combined with `tp_size` and `enable_expert_parallel=True` to shard the experts across one mesh dimension and everything else across the other. See [expert parallelism](./expert_parallelism#combining-with-fsdp2).
+
 ## Next steps
 
 - See [DDP](./ddp) for data-parallel training when your model fits on one GPU.
