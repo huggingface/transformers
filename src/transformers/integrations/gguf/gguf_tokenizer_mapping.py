@@ -25,6 +25,7 @@ pre-tokenizer and decoder:
 To support a new file, add an entry to `GGUF_TOKENIZER_KINDS`, or a builder if it needs more.
 """
 
+import re
 from functools import partial
 
 from tokenizers import AddedToken, Regex, Tokenizer, normalizers, pre_tokenizers
@@ -152,8 +153,18 @@ def byte_level_tokenizer(section):
 
 
 def unigram_tokenizer(section):
-    """A unigram vocabulary is `(token, score)` pairs, and has no merges at all."""
-    return T5Tokenizer(vocab=list(zip(section["tokens"], section["scores"])))
+    """Unigram: a vocabulary of `(token, score)` pairs, and no merges.
+
+    T5 writes a blank in a prompt as `<extra_id_0>`..`<extra_id_99>`, but the file calls those
+    `[PAD32000]`... We rename the first 100 back, which is how many T5 has by default.
+    """
+    count = 100
+    placeholder = re.compile(r"^\[PAD\d+\]$")
+    tokens = list(section["tokens"])
+    blanks = [index for index, token in enumerate(tokens) if placeholder.match(token)]
+    for offset, index in enumerate(blanks[:count]):
+        tokens[index] = f"<extra_id_{count - 1 - offset}>"
+    return T5Tokenizer(vocab=list(zip(tokens, section["scores"])))
 
 
 def get_merges(section, ranks=None):
@@ -244,8 +255,7 @@ GGUF_PRE_TOKENIZER_SPLITS = {
 
 
 def set_split_regex(tokenizer, section):
-    """Split text the way this vocabulary's merges were learned.
-    """
+    """Split text the way this vocabulary's merges were learned."""
     split = GGUF_PRE_TOKENIZER_SPLITS.get(section.get("pre_tokenizer_type"))
     if split is not None:
         tokenizer.backend_tokenizer.pre_tokenizer = pre_tokenizers.Sequence(

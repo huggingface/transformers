@@ -85,6 +85,28 @@ class GgufTokenizerTesterMixin:
                     reference(text, add_special_tokens=False).input_ids,
                 )
 
+    def test_decodes_like_transformers(self):
+        """The decoder comes from the tokenizer class, and nothing else here exercises it."""
+        from_gguf, reference = self.tokenizer, self.reference_tokenizer
+        for text in self.tokenizer_texts:
+            with self.subTest(text=text):
+                ids = reference(text, add_special_tokens=False).input_ids
+                self.assertEqual(from_gguf.decode(ids), reference.decode(ids))
+
+    def test_the_models_own_special_tokens_survive(self):
+        """A model's own markers must come back as single ids rather than be split into characters."""
+        from_gguf, reference = self.tokenizer, self.reference_tokenizer
+        markers = [token.content for token in reference.added_tokens_decoder.values() if token.special]
+        if not markers:
+            self.skipTest("the reference declares no special tokens")
+        for marker in markers[:6]:
+            with self.subTest(marker=marker):
+                text = f"{marker}hello{marker}"
+                self.assertEqual(
+                    from_gguf(text, add_special_tokens=False).input_ids,
+                    reference(text, add_special_tokens=False).input_ids,
+                )
+
     def test_special_tokens_match_transformers(self):
         """Stated by id in the file, so only the vocabulary turns them back into strings."""
         from_gguf, reference = self.tokenizer, self.reference_tokenizer
@@ -458,6 +480,15 @@ class Gemma4GgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
     gguf_repo = "unsloth/gemma-4-E4B-it-GGUF"
     quantized_gguf_file = "gemma-4-E4B-it-Q4_K_M.gguf"
     reference_repo = "google/gemma-4-E4B-it"
+
+
+@slow
+class FlanT5GgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
+    """A second T5, to keep the `[PAD...]` -> `<extra_id_...>` renaming honest."""
+
+    gguf_repo = "Felladrin/gguf-flan-t5-small"
+    quantized_gguf_file = "flan-t5-small.Q8_0.gguf"
+    reference_repo = "google/flan-t5-small"
 
 
 @slow
