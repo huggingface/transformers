@@ -124,6 +124,16 @@ TrainingArguments(
 > [!TIP]
 > For mixture-of-experts models, `fsdp_size` can be combined with `tp_size` and `enable_expert_parallel=True` to shard the experts across one mesh dimension and everything else across the other. See [expert parallelism](./expert_parallelism#combining-with-fsdp2).
 
+## Evaluate with context parallelism
+
+Context parallelism (CP) with FSDP2 is set through Accelerate [`~accelerate.ParallelismConfig`] `cp_size` (or `--parallelism_config_cp_size` at launch). Under FSDP2, CP shards the sequence across ranks so each GPU holds a slice of the context (`allgather` or `alltoall`). That differs from [Ulysses sequence parallelism](./deepspeed_alst), which runs through DeepSpeed ALST and uses `sp_size` on the same config. Pick CP or Ulysses SP. Do not set both `cp_size` and `sp_size` above 1.
+
+[`~Trainer.evaluate`] and [`~Trainer.predict`] use the same context-parallel context as [`~Trainer.train`]. Both go through [`~Trainer.prediction_step`]. Each rank runs its sequence shard while that context is active, and `eval_loss` is the correct loss (not multiplied by `cp_size`). Early stopping and `load_best_model_at_end` see that metric.
+
+Reuse your existing FSDP2 + `cp_size` launch, and set `eval_strategy` or call `evaluate`/`predict` as usual.
+
+If you subclass [`~Trainer.prediction_step`] and count tokens yourself, count `num_items_in_batch` before entering the context-parallel context. While that context is active, sequence buffers are sharded in place across ranks. Counting afterward undercounts the batch. The default [`Trainer`] already counts first, and you only need this if you override `prediction_step`.
+
 ## Next steps
 
 - See [DDP](./ddp) for data-parallel training when your model fits on one GPU.
