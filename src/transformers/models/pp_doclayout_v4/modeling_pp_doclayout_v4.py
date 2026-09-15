@@ -1324,8 +1324,6 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
     _tied_weights_keys = {}
 
     def __init__(self, config: PPDocLayoutV4Config):
-        # Spelled out rather than reusing the [`PPDocLayoutV3Model`] body, which branches on
-        # `config.learn_initial_query` -- a field PP-DocLayoutV4 does not define.
         super().__init__(config)
 
         # Create backbone
@@ -1333,17 +1331,16 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
         intermediate_channel_sizes = self.backbone.intermediate_channel_sizes
 
         # Create encoder input projection layers
-        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/hybrid_encoder.py#L212
+        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/PPDocLayoutV4_pytorch/src/zoo/PPDocLayoutV4/hybrid_encoder.py#L212
         num_backbone_outs = len(intermediate_channel_sizes)
 
         # The backbone emits exactly the three levels the encoder consumes, so unlike PP-DocLayoutV3 there is no
-        # leading projection to drop here. The `nn.Sequential` shape is what names the released weights
-        # `encoder_input_proj.<level>.0`/`.1`, so it is kept as inherited from the RT-DETR lineage.
+        # leading projection to drop here.
         encoder_input_proj_list = []
         for i in range(num_backbone_outs):
             in_channels = intermediate_channel_sizes[i]
             encoder_input_proj_list.append(
-                nn.Sequential(  # trf-ignore: TRF036
+                nn.Sequential(
                     nn.Conv2d(in_channels, config.encoder_hidden_dim, kernel_size=1, bias=False),
                     nn.BatchNorm2d(config.encoder_hidden_dim),
                 )
@@ -1353,8 +1350,18 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
         # Create encoder
         self.encoder = PPDocLayoutV4HybridEncoder(config)
 
+        # denoising part
+        if config.num_denoising > 0:
+            self.denoising_class_embed = nn.Embedding(
+                config.num_labels + 1, config.d_model, padding_idx=config.num_labels
+            )
+
+        # decoder embedding
+        if config.learn_initial_query:
+            self.weight_embedding = nn.Embedding(config.num_queries, config.d_model)
+
         # encoder head
-        self.enc_output = nn.Sequential(  # trf-ignore: TRF036
+        self.enc_output = nn.Sequential(
             nn.Linear(config.d_model, config.d_model),
             nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
         )
@@ -1365,26 +1372,24 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
         )
 
         # init encoder output anchors and valid_mask
-        # CODEPATH: PP-DocLayoutV4_safetensors leaves `anchor_image_size` unset and generates the anchors from the
-        # feature map shapes on every forward; this branch only runs for configs that pin the eval resolution.
         if config.anchor_image_size:
             self.anchors, self.valid_mask = self.generate_anchors(dtype=self.dtype)
 
         # Create decoder input projection layers
-        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L412
+        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/PPDocLayoutV4_pytorch/src/zoo/PPDocLayoutV4/PPDocLayoutV4_decoder.py#L412
         num_backbone_outs = len(config.decoder_in_channels)
         decoder_input_proj_list = []
         for i in range(num_backbone_outs):
             in_channels = config.decoder_in_channels[i]
             decoder_input_proj_list.append(
-                nn.Sequential(  # trf-ignore: TRF036
+                nn.Sequential(
                     nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False),
                     nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
                 )
             )
         for _ in range(config.num_feature_levels - num_backbone_outs):
             decoder_input_proj_list.append(
-                nn.Sequential(  # trf-ignore: TRF036
+                nn.Sequential(
                     nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1, bias=False),
                     nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
                 )
@@ -1392,11 +1397,9 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
             in_channels = config.d_model
         self.decoder_input_proj = nn.ModuleList(decoder_input_proj_list)
 
-        # [`PPDocLayoutV3Model`] keeps its reading order heads at the model level and passes them into the decoder
-        # `forward`. PP-DocLayoutV4 instead owns them on the decoder, next to the other prediction heads.
         self.decoder = PPDocLayoutV4Decoder(config)
 
-        # denoising part. No extra "no object" row, unlike the `num_labels + 1` embedding of PP-DocLayoutV3.
+        # No extra "no object" row, unlike the `num_labels + 1` embedding of PP-DocLayoutV3.
         self.denoising_class_embed = (
             # CODEPATH: PP-DocLayoutV4_safetensors trains with denoising; the `None` branch is only for configs
             # that disable it.

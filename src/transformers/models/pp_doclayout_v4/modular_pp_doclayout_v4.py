@@ -170,8 +170,6 @@ class PPDocLayoutV4Config(PPDocLayoutV3Config):
     # `hidden_size` above and keeps `d_model` only as an `attribute_map` alias.
     d_model = AttributeError()  # trf-ignore: TRF023
     layer_types = AttributeError()
-    # Every released checkpoint takes the top-k encoder features as queries, so there is no learned query embedding.
-    learn_initial_query = AttributeError()
 
     def __post_init__(self, **kwargs):
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
@@ -202,6 +200,10 @@ class PPDocLayoutV4Config(PPDocLayoutV3Config):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if self.num_coords != 10:
             raise ValueError(f"PP-DocLayoutV4 only supports `num_coords=10`, got {self.num_coords}.")
+
+    # Not a config field: kept as a class attribute so the `__init__` code inherited from
+    # RT-DETR stays inert. Every released checkpoint takes the top-k encoder features as queries.
+    learn_initial_query: ClassVar[bool] = False
 
 
 class PPDocLayoutV4ImageProcessor(PPDocLayoutV3ImageProcessor):
@@ -946,86 +948,36 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
     _tied_weights_keys = {}
 
     def __init__(self, config: PPDocLayoutV4Config):
-        # Spelled out rather than reusing the [`PPDocLayoutV3Model`] body, which branches on
-        # `config.learn_initial_query` -- a field PP-DocLayoutV4 does not define.
-        PPDocLayoutV4PreTrainedModel.__init__(self, config)
-
-        # Create backbone
-        self.backbone = PPDocLayoutV4ConvEncoder(config)
-        intermediate_channel_sizes = self.backbone.intermediate_channel_sizes
-
-        # Create encoder input projection layers
-        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/hybrid_encoder.py#L212
-        num_backbone_outs = len(intermediate_channel_sizes)
+        super().__init__(config)
 
         # The backbone emits exactly the three levels the encoder consumes, so unlike PP-DocLayoutV3 there is no
-        # leading projection to drop here. The `nn.Sequential` shape is what names the released weights
-        # `encoder_input_proj.<level>.0`/`.1`, so it is kept as inherited from the RT-DETR lineage.
+        # leading projection to drop here.
         encoder_input_proj_list = []
-        for i in range(num_backbone_outs):
-            in_channels = intermediate_channel_sizes[i]
-            encoder_input_proj_list.append(
-                nn.Sequential(  # trf-ignore: TRF036
-                    nn.Conv2d(in_channels, config.encoder_hidden_dim, kernel_size=1, bias=False),
-                    nn.BatchNorm2d(config.encoder_hidden_dim),
-                )
-            )
         self.encoder_input_proj = nn.ModuleList(encoder_input_proj_list)
-
-        # Create encoder
-        self.encoder = PPDocLayoutV4HybridEncoder(config)
-
-        # encoder head
-        self.enc_output = nn.Sequential(  # trf-ignore: TRF036
-            nn.Linear(config.d_model, config.d_model),
-            nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
-        )
-        self.enc_score_head = PPDocLayoutV4ClassificationHead(config.d_model, config.num_labels)
 
         self.enc_bbox_head = PPDocLayoutV4MLPPredictionHead(
             config.d_model, config.d_model, config.num_coords, num_layers=3
         )
+        self.enc_score_head = PPDocLayoutV4ClassificationHead(config.d_model, config.num_labels)
 
-        # init encoder output anchors and valid_mask
-        # CODEPATH: PP-DocLayoutV4_safetensors leaves `anchor_image_size` unset and generates the anchors from the
-        # feature map shapes on every forward; this branch only runs for configs that pin the eval resolution.
-        if config.anchor_image_size:
-            self.anchors, self.valid_mask = self.generate_anchors(dtype=self.dtype)
-
-        # Create decoder input projection layers
-        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L412
-        num_backbone_outs = len(config.decoder_in_channels)
-        decoder_input_proj_list = []
-        for i in range(num_backbone_outs):
-            in_channels = config.decoder_in_channels[i]
-            decoder_input_proj_list.append(
-                nn.Sequential(  # trf-ignore: TRF036
-                    nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False),
-                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
-                )
-            )
-        for _ in range(config.num_feature_levels - num_backbone_outs):
-            decoder_input_proj_list.append(
-                nn.Sequential(  # trf-ignore: TRF036
-                    nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1, bias=False),
-                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
-                )
-            )
-            in_channels = config.d_model
-        self.decoder_input_proj = nn.ModuleList(decoder_input_proj_list)
-
-        # [`PPDocLayoutV3Model`] keeps its reading order heads at the model level and passes them into the decoder
-        # `forward`. PP-DocLayoutV4 instead owns them on the decoder, next to the other prediction heads.
-        self.decoder = PPDocLayoutV4Decoder(config)
-
-        # denoising part. No extra "no object" row, unlike the `num_labels + 1` embedding of PP-DocLayoutV3.
+        # No extra "no object" row, unlike the `num_labels + 1` embedding of PP-DocLayoutV3.
         self.denoising_class_embed = (
             # CODEPATH: PP-DocLayoutV4_safetensors trains with denoising; the `None` branch is only for configs
             # that disable it.
             nn.Embedding(config.num_labels, config.d_model) if config.num_denoising > 0 else None
         )
 
-        self.post_init()
+        self.decoder = PPDocLayoutV4Decoder(config)
+        del self.decoder.class_embed
+        del self.decoder.bbox_embed
+        # [`PPDocLayoutV3Model`] keeps its reading order heads at the model level and passes them into the decoder
+        # `forward`. PP-DocLayoutV4 instead owns them on the decoder, next to the other prediction heads.
+        del self.decoder_order_head
+        del self.decoder_global_pointer
+
+        del self.decoder_norm
+        del self.mask_enhanced
+        del self.mask_query_head
 
     def _cached_generate_anchors(
         spatial_shapes: tuple[tuple[int, int], ...],
