@@ -42,7 +42,6 @@ if is_torch_available():
     import torch
 
 
-
 class GgufDequantizeTest(unittest.TestCase):
     """Each block type unpacks to exactly what ggml's own reference produces."""
 
