@@ -67,6 +67,10 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 @slow
 class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    MODEL_ID = "zai-org/GLM-4.5-Air"
+    NUM_TOKENS_TO_GENERATE = 10
+    EXPECTED_TEXT_COMPLETION = None  # TODO: update after first CI run
+
     @classmethod
     def setUpClass(cls):
         cls.model = None
@@ -88,13 +92,13 @@ class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             else:
                 max_memory = None
             cls.model = Glm4MoeForCausalLM.from_pretrained(
-                "zai-org/GLM-4.5-Air",
+                cls.MODEL_ID,
                 dtype="auto",
                 device_map="auto",
                 max_memory=max_memory,
                 offload_folder=cls.offload_dir.name,
             )
-            cls.tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.5-Air")
+            cls.tokenizer = AutoTokenizer.from_pretrained(cls.MODEL_ID)
         return cls.model, cls.tokenizer
 
     @classmethod
@@ -108,31 +112,40 @@ class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @slow
     @require_torch_accelerator
-    @pytest.mark.torch_compile_test
-    def test_compile_static_cache(self):
-        NUM_TOKENS_TO_GENERATE = 3
-
+    def test_1_dynamic_cache(self):
         model, tokenizer = self.get_model()
         prompts = ["[gMASK]<sop>hello", "[gMASK]<sop>tell me"]
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
-        # Dynamic Cache
-        # generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
-        # dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        # self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
+        generated_ids = model.generate(**inputs, max_new_tokens=self.NUM_TOKENS_TO_GENERATE, do_sample=False)
+        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(self.EXPECTED_TEXT_COMPLETION, dynamic_text)
 
-        # Static Cache
-        # generated_ids = model.generate(
-        #     **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        # )
-        # static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        # self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
+    @slow
+    @require_torch_accelerator
+    def test_2_static_cache(self):
+        model, tokenizer = self.get_model()
+        prompts = ["[gMASK]<sop>hello", "[gMASK]<sop>tell me"]
+        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
-        # Static Cache + compile
-        # model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
-        # model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        # generated_ids = model.generate(
-        #     **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        # )
-        # static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        # self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
+        generated_ids = model.generate(
+            **inputs, max_new_tokens=self.NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        )
+        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(self.EXPECTED_TEXT_COMPLETION, static_text)
+        model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
+
+    @slow
+    @require_torch_accelerator
+    @pytest.mark.torch_compile_test
+    def test_3_compile_static_cache(self):
+        model, tokenizer = self.get_model()
+        prompts = ["[gMASK]<sop>hello", "[gMASK]<sop>tell me"]
+        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+
+        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+        generated_ids = model.generate(
+            **inputs, max_new_tokens=self.NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        )
+        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(self.EXPECTED_TEXT_COMPLETION, static_compiled_text)
