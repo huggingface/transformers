@@ -87,7 +87,7 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder",
-    "huggingface-hub>=1.5.0,<2.0",
+    "huggingface-hub>=1.31.0,<2.0",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
     "kenlm",
@@ -104,7 +104,7 @@ _deps = [
     "pandas<2.3.0",  # `datasets` requires `pandas` while `pandas==2.3.0` has issues with CircleCI on 2025/06/05
     "packaging>=20.0",
     "parameterized>=0.9",  # older version of parameterized cause pytest collection to fail on .expand
-    "peft>=0.19.1",
+    "peft>=0.20.0",
     "phonemizer",
     "protobuf",
     "psutil",

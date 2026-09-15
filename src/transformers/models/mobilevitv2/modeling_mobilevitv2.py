@@ -869,7 +869,7 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
         Examples:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
         >>> from PIL import Image

@@ -40,7 +40,6 @@ from transformers.testing_utils import (
     CaptureLogger,
     require_bitsandbytes,
     require_peft,
-    require_peft_greater_or_equal,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -211,7 +210,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     model_from_pretrained = transformers_class.from_pretrained(tmpdirname).to(torch_device)
                     self.assertTrue(self._check_lora_correctly_converted(model_from_pretrained))
 
-    @require_peft_greater_or_equal("0.20.0")
     def test_peft_save_reload_preserves_adapter_weights(self):
         """
         Regression test: after save_pretrained + from_pretrained roundtrip, the reloaded model's LoRA
@@ -380,6 +378,46 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 for _, param in model.named_parameters():
                     if param.requires_grad:
                         self.assertTrue(param.grad is not None)
+
+    def test_peft_from_pretrained_restores_modules_to_save(self):
+        from peft import LoraConfig
+
+        cases = [
+            # A model with no classification head, ...
+            (AutoModel, "hf-internal-testing/tiny-random-BertModel"),
+            # ..., and another model with a classification head.
+            (
+                AutoModelForSequenceClassification,
+                "hf-internal-testing/tiny-random-BertForSequenceClassification",
+            ),
+        ]
+        sentinel = 0.1234
+
+        for auto_class, model_id in cases:
+            with self.subTest(model=model_id):
+                with tempfile.TemporaryDirectory() as base_model_dir, tempfile.TemporaryDirectory() as adapter_dir:
+                    auto_class.from_pretrained(model_id).save_pretrained(base_model_dir)
+                    model = AutoModelForSequenceClassification.from_pretrained(base_model_dir)
+                    model.add_adapter(
+                        LoraConfig(
+                            init_lora_weights=False,
+                            r=4,
+                            modules_to_save=["classifier"],
+                            task_type="SEQ_CLS",
+                        )
+                    )
+                    with torch.no_grad():
+                        model.classifier.modules_to_save.default.weight.fill_(sentinel)
+
+                    model.save_pretrained(adapter_dir)
+                    reloaded = AutoModelForSequenceClassification.from_pretrained(adapter_dir).to(torch_device)
+
+                self.assertTrue(
+                    torch.allclose(
+                        reloaded.classifier.modules_to_save.default.weight,
+                        torch.full_like(reloaded.classifier.modules_to_save.default.weight, sentinel),
+                    )
+                )
 
     def test_peft_add_adapter_training_gradient_checkpointing(self):
         """
@@ -1115,7 +1153,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 # should be different
                 assert not torch.allclose(output_base, output_peft, atol=atol, rtol=rtol)
 
-    @require_peft_greater_or_equal("0.20.0")
     def test_mixtral_lora_conversion(self):
         inputs = torch.arange(10).view(1, -1).to(torch_device)
         model_name = "hf-internal-testing/Mixtral-tiny"
