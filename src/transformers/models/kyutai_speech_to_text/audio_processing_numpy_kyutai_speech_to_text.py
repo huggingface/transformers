@@ -12,32 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
-
 from ...audio_processing_backends import NumpyAudioBackend
 from .audio_processing_kyutai_speech_to_text import KyutaiSpeechToTextAudioProcessorMixin
 
 
 class KyutaiSpeechToTextAudioProcessorNumpy(KyutaiSpeechToTextAudioProcessorMixin, NumpyAudioBackend):
-    def _finalize_output(self, output, *, audio_silence_prefix_seconds, audio_delay_seconds, **kwargs):
-        pad_left = int(audio_silence_prefix_seconds * self.sampling_rate)
-        pad_right = int((audio_delay_seconds + 1.0) * self.sampling_rate)
-
-        if pad_left > 0 or pad_right > 0:
-            output["audio_values"] = np.pad(
-                output["audio_values"],
-                [(0, 0), (0, 0), (pad_left, pad_right)],
-                mode="constant",
-                constant_values=0.0,
-            )
-            output["audio_values_mask"] = np.pad(
-                output["audio_values_mask"],
-                [(0, 0), (pad_left, pad_right)],
-                mode="constant",
-                constant_values=0,
-            )
-
-        return output
+    pass
 
 
 __all__ = ["KyutaiSpeechToTextAudioProcessorNumpy"]

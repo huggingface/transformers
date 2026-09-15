@@ -46,7 +46,7 @@ class WhisperAudioProcessingTest(AudioProcessingTestMixin, unittest.TestCase):
                 self.assertEqual(loaded.spectrogram_config.stft_config.hop_length, 200)
                 self.assertEqual(loaded.spectrogram_config.mel_scale_config.n_mels, 64)
                 self.assertEqual(loaded.spectrogram_config.mel_scale_config.norm, "slaney")
-                self.assertEqual(loaded.spectrogram_config.post_log_scale, 0.25)
+                self.assertEqual(loaded.spectrogram_config.log_scale, 0.25)
                 self.assertEqual(processor_class().spectrogram_config, config)
                 self.assertEqual(processor_class.from_dict(processor.to_dict()).spectrogram_config, config)
 

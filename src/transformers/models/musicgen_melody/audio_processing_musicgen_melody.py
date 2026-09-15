@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_base import BatchFeature
 from ...audio_utils import SpectrogramConfig, StftConfig
 from ...processing_utils import AudioKwargs
 from ...utils.import_utils import requires
@@ -38,13 +39,19 @@ class MusicgenMelodyAudioProcessorKwargs(AudioKwargs, total=False):
 
 class MusicgenMelodyAudioProcessorMixin:
     sampling_rate = 32000
-    do_extract_spectrogram = True
-    return_padding_mask = False
+    model_input_names = ["audio_features"]
     # `chroma_filters` is an array and `power_spectrogram_config` is derived, so neither may
     # reach `to_json_string()`
-    _excluded_dict_keys = {"mel_filters", "window", "chroma_filters", "power_spectrogram_config"}
+    _excluded_dict_keys = {
+        "mel_filters",
+        "window",
+        "chroma_filters",
+        "power_spectrogram_config",
+        "_chroma_key",
+        "_cached_stft_window",
+    }
     # The legacy FE mapped its chroma count to `num_chroma`.
-    legacy_field_mapping = {"num_chroma": "n_chroma"}
+    legacy_field_mapping = {"num_chroma": "n_chroma", "return_attention_mask": None, "return_padding_mask": None}
 
     n_fft = 16384
     hop_length = 4096
@@ -55,14 +62,17 @@ class MusicgenMelodyAudioProcessorMixin:
     @requires(backends=("librosa",))
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self._chroma_key = (self.n_fft, self.hop_length, self.n_chroma)
+        self.power_spectrogram_config, self.chroma_filters = self._make_chroma_recipe(*self._chroma_key)
+
+    def _make_chroma_recipe(self, n_fft, hop_length, n_chroma):
         import librosa
 
-        # Only used by the numpy sibling; the torch one goes through `torchaudio.transforms.Spectrogram`.
-        self.power_spectrogram_config = SpectrogramConfig(
+        config = SpectrogramConfig(
             stft_config=StftConfig(
-                n_fft=self.n_fft,
-                win_length=self.n_fft,
-                hop_length=self.hop_length,
+                n_fft=n_fft,
+                win_length=n_fft,
+                hop_length=hop_length,
                 power=2.0,
                 center=True,
                 normalized=True,
@@ -70,9 +80,57 @@ class MusicgenMelodyAudioProcessorMixin:
                 periodic=True,
             ),
         )
+        filters = librosa.filters.chroma(sr=self.sampling_rate, n_fft=n_fft, tuning=0, n_chroma=n_chroma)
+        return config, self._astype(self._as_backend_array(filters), "float32")
 
-        filters = librosa.filters.chroma(sr=self.sampling_rate, n_fft=self.n_fft, tuning=0, n_chroma=self.n_chroma)
-        self.chroma_filters = self._astype(self._as_backend_array(filters), "float32")
+    def _validate_preprocess_kwargs(self, *, n_fft, hop_length, n_chroma, chunk_length, max_length, **kwargs):
+        if min(n_fft, hop_length, n_chroma, chunk_length) <= 0:
+            raise ValueError("MusicGen Melody FFT, hop, chroma count and chunk length must be positive.")
+        super()._validate_preprocess_kwargs(
+            max_length=max_length if max_length is not None else chunk_length * self.sampling_rate, **kwargs
+        )
+
+    def _preprocess(
+        self,
+        audio,
+        *,
+        n_fft,
+        hop_length,
+        n_chroma,
+        chunk_length,
+        padding,
+        max_length,
+        truncation,
+        pad_to_multiple_of,
+        padding_side,
+        padding_value,
+        return_tensors,
+        **kwargs,
+    ):
+        """Pad waveforms and compute chroma using one recipe resolved from this call's options."""
+        if max_length is None:
+            max_length = chunk_length * self.sampling_rate
+        padded, _ = self.pad(
+            audio,
+            padding,
+            max_length,
+            truncation,
+            pad_to_multiple_of,
+            padding_side=padding_side,
+            padding_value=padding_value,
+        )
+        if (n_fft, hop_length, n_chroma) == self._chroma_key:
+            config, filters = self.power_spectrogram_config, self.chroma_filters
+        else:
+            config, filters = self._make_chroma_recipe(n_fft, hop_length, n_chroma)
+        features = self._compute_chroma(
+            self._stack(padded),
+            n_fft=n_fft,
+            hop_length=hop_length,
+            power_spectrogram_config=config,
+            chroma_filters=filters,
+        )
+        return BatchFeature({"audio_features": features}, tensor_type=return_tensors)
 
     def _pad_for_fft(self, waveform, *, n_fft):
         if waveform.shape[-1] >= n_fft:
@@ -82,7 +140,7 @@ class MusicgenMelodyAudioProcessorMixin:
 
 
 class MusicgenMelodyAudioProcessor(MusicgenMelodyAudioProcessorMixin, TorchAudioBackend):
-    def compute_features(self, audio, *, n_fft, hop_length, **kwargs):
+    def _compute_chroma(self, audio, *, n_fft, hop_length, chroma_filters, power_spectrogram_config):
         import torch
         import torchaudio
 
@@ -111,7 +169,7 @@ class MusicgenMelodyAudioProcessor(MusicgenMelodyAudioProcessorMixin, TorchAudio
         spec = spec_transform(waveform).squeeze(1)
 
         # Chroma features
-        chroma_filters = self.chroma_filters.to(device)
+        chroma_filters = chroma_filters.to(device)
         raw_chroma = torch.einsum("cf, ...ft->...ct", chroma_filters, spec)
 
         # Normalize with inf norm

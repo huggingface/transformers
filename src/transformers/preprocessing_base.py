@@ -690,10 +690,10 @@ class PreprocessingMixin(PushToHubMixin):
             `dict[str, Any]`: Dictionary of all the attributes that make up this instance.
         """
         output = copy.deepcopy(self.__dict__)
-        output[self._type_key] = self.__class__.__name__
         output.pop("_valid_kwargs_names", None)
         for key in output.pop("_undeclared_config_keys", set()):
             output.pop(key, None)
+        output[self._type_key] = self.__class__.__name__
         for key in self._excluded_dict_keys:
             if key in output:
                 del output[key]

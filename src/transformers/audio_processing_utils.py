@@ -495,6 +495,16 @@ class BaseAudioProcessor(AudioProcessingMixin):
     # ── Spectrogram core ─────────────────────────────────────────────────
 
     def compute_features(self, audio, *, spectrogram_config: SpectrogramConfig | None, **kwargs):
+        """Compute features without padding, mask construction, or model-specific output assembly.
+
+        `audio` is one backend waveform, a batch with samples on the last axis, or a list of
+        waveforms. A list returns a list; an array preserves its leading batch dimensions.
+        Output axes are (..., frequency/mel, frames), except `matmul_order="features_first"`
+        projects to (..., frames, mel). `transpose_features=True` swaps the final two axes.
+        Dtype and numerical stages come from `spectrogram_config`. Supply resolved options
+        such as `dither` through kwargs; an optional `mel_filters` selects a call-local bank.
+        Length metadata and padding policy belong to the calling workflow.
+        """
         config_field_names = {f.name for f in fields(SpectrogramConfig)}
         overrides = {k: kwargs.pop(k) for k in list(kwargs) if k in config_field_names}
         if overrides:

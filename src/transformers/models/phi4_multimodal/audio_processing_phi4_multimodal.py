@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import numpy as np
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
@@ -66,6 +67,11 @@ class Phi4MultimodalAudioProcessorMixin:
     audio_feat_stride = 1
     valid_kwargs = Phi4MultimodalAudioProcessorKwargs
 
+    def _validate_preprocess_kwargs(self, *, do_extract_spectrogram, **kwargs):
+        if not do_extract_spectrogram:
+            raise ValueError("Phi4 requires spectrogram extraction to compute audio embedding sizes.")
+        super()._validate_preprocess_kwargs(do_extract_spectrogram=do_extract_spectrogram, **kwargs)
+
     def _compute_audio_embed_size(self, audio_frames, *, audio_compression_rate, audio_downsample_rate):
         integer = audio_frames // audio_compression_rate
         result = integer + (audio_frames % audio_compression_rate > 0)
@@ -73,8 +79,27 @@ class Phi4MultimodalAudioProcessorMixin:
         integer = result // audio_downsample_rate
         return integer + (result % audio_downsample_rate > 0)
 
-    def _finalize_output(self, output, *, audio_feat_stride, audio_compression_rate, audio_downsample_rate, **kwargs):
-        feature_lengths = output["audio_features_mask"].sum(-1) * audio_feat_stride
+    def _finalize_output(
+        self,
+        output,
+        audio_ranges=None,
+        feature_ranges=None,
+        *,
+        spectrogram_config,
+        audio_feat_stride,
+        audio_compression_rate,
+        audio_downsample_rate,
+        **kwargs,
+    ):
+        mask = output.get("audio_features_mask")
+        if mask is None:
+            if feature_ranges is None:
+                lengths = self._valid_frame_counts(
+                    np.asarray([end - start for start, end in audio_ranges]), spectrogram_config
+                )
+                feature_ranges = [(0, int(length)) for length in lengths]
+            mask = self._get_mask(feature_ranges, max(end for _, end in feature_ranges))
+        feature_lengths = mask.sum(-1) * audio_feat_stride
         output["audio_embed_sizes"] = self._compute_audio_embed_size(
             feature_lengths,
             audio_compression_rate=audio_compression_rate,

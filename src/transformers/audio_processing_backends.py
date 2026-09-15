@@ -298,8 +298,9 @@ class NumpyAudioBackend(BaseAudioProcessor):
     def _cast_mel_filters_to_default_float(self, mel_filters):
         return mel_filters.astype(np.float32, copy=False)
 
-    def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
-        mel_filters = self.mel_filters.astype(features.dtype, copy=False)
+    def _project_to_mel(self, features, *, spectrogram_config, mel_filters=None, **kwargs):
+        mel_filters = self.mel_filters if mel_filters is None else mel_filters
+        mel_filters = mel_filters.astype(features.dtype, copy=False)
         if spectrogram_config.mel_scale_config.matmul_order == "features_first":
             mel_spec = np.matmul(features.swapaxes(-2, -1), mel_filters)
         else:
@@ -640,10 +641,11 @@ class TorchAudioBackend(BaseAudioProcessor):
     def _cast_mel_filters_to_default_float(self, mel_filters):
         return mel_filters.to(torch.get_default_dtype())
 
-    def _project_to_mel(self, features, *, spectrogram_config, **kwargs):
+    def _project_to_mel(self, features, *, spectrogram_config, mel_filters=None, **kwargs):
         # Match the filters to the feature dtype: unlike numpy, `torch.matmul` refuses mixed
         # dtypes, so float64 filters against float32 features would raise instead of promoting.
-        mel_filters = self.mel_filters.to(device=features.device, dtype=features.dtype)
+        mel_filters = self.mel_filters if mel_filters is None else mel_filters
+        mel_filters = mel_filters.to(device=features.device, dtype=features.dtype)
         matmul_order = spectrogram_config.mel_scale_config.matmul_order
         if matmul_order == "features_first":
             mel_spec = torch.matmul(features.transpose(-2, -1), mel_filters)

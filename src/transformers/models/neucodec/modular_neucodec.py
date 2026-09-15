@@ -15,20 +15,17 @@
 import numpy as np
 from huggingface_hub.dataclasses import strict
 
-from ...audio_utils import AudioInput, make_list_of_audio
-from ...feature_extraction_utils import BatchFeature
 from ...masking_utils import create_bidirectional_mask
 from ...processing_utils import Unpack
 from ...utils import (
-    PaddingStrategy,
-    TensorType,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     is_torch_available,
     logging,
 )
-from ...utils.import_utils import is_torchaudio_available, requires
+from ..xcodec2.audio_processing_numpy_xcodec2 import Xcodec2AudioProcessorNumpy
+from ..xcodec2.audio_processing_xcodec2 import Xcodec2AudioProcessor, Xcodec2AudioProcessorMixin
 from ..xcodec2.configuration_xcodec2 import Xcodec2Config
 from ..xcodec2.modeling_xcodec2 import (
     Xcodec2DecoderOutput,
@@ -41,10 +38,6 @@ from ..xcodec2.modeling_xcodec2 import (
 
 if is_torch_available():
     import torch
-    import torch.nn.functional as F
-
-if is_torchaudio_available():
-    import torchaudio
 
 
 logger = logging.get_logger(__name__)
@@ -292,4 +285,33 @@ class NeuCodecModel(Xcodec2Model):
         )
 
 
-__all__ = ["NeuCodecConfig", "NeuCodecModel", "NeuCodecPreTrainedModel"]
+class NeuCodecAudioProcessorMixin(Xcodec2AudioProcessorMixin):
+    """Same dual-encoder geometry as XCodec2: raw padded audio for the acoustic encoder, kaldi
+    povey fbank features for the semantic one."""
+
+    def _select_semantic_waveform(self, original, acoustic, start, end, *, hop_length):
+        """NeuCodec's semantic encoder remains independent of acoustic truncation."""
+        valid_length = (original.shape[-1] + hop_length - 1) // hop_length * hop_length
+        return self._pad_axis(original, 0, valid_length - original.shape[-1], axis=-1)
+
+    def _pad_semantic_waveform(self, waveform, *, hop_length):
+        # NeuCodec's reference feeds the hop-rounded clip straight to the fbank, without XCodec2's
+        # half-hop context: https://github.com/neuphonic/neucodec/blob/ed3e6cd/neucodec/model.py#L128
+        return waveform
+
+
+class NeuCodecAudioProcessor(NeuCodecAudioProcessorMixin, Xcodec2AudioProcessor):
+    pass
+
+
+class NeuCodecAudioProcessorNumpy(NeuCodecAudioProcessorMixin, Xcodec2AudioProcessorNumpy):
+    pass
+
+
+__all__ = [
+    "NeuCodecConfig",
+    "NeuCodecModel",
+    "NeuCodecPreTrainedModel",
+    "NeuCodecAudioProcessor",
+    "NeuCodecAudioProcessorNumpy",
+]

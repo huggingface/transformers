@@ -15,6 +15,7 @@
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_base import BatchFeature
 from ...audio_utils import _array_namespace
 from ...processing_utils import AudioKwargs
 
@@ -35,12 +36,7 @@ class Xcodec2AudioProcessorKwargs(AudioKwargs, total=False):
 
 
 class Xcodec2AudioProcessorMixin:
-    add_channel_dim = True
-    do_extract_spectrogram = False
-    # Two consumers: the acoustic encoder takes the zero-padded waveform (`audio_values`), the
-    # semantic encoder a kaldi fbank of it, computed per clip in `_finalize_output` and padded with
-    # 1.0 (the legacy FE's `padding_value`). Legacy hub configs also carry the fbank geometry as
-    # flat keys, which are fixed here.
+    # Acoustic waveforms and semantic fbank features are assembled together by `_preprocess`.
     legacy_field_mapping = {
         "feature_size": None,
         "frame_length": None,
@@ -95,39 +91,58 @@ class Xcodec2AudioProcessorMixin:
     def _pad_feature_single(self, feature, max_length, *, feature_padding_value, **kwargs):
         return self._pad_axis(feature, 0, max_length - feature.shape[0], axis=0, value=feature_padding_value)
 
-    def _finalize_output(
+    def _validate_preprocess_kwargs(self, *, padding_side, hop_length, stride, **kwargs):
+        super()._validate_preprocess_kwargs(**kwargs)
+        if padding_side != "right":
+            raise ValueError("Dual-codec waveforms use right padding.")
+        if hop_length <= 0 or stride <= 0:
+            raise ValueError("Codec hop_length and stride must be positive.")
+
+    def _select_semantic_waveform(self, original, acoustic, start, end, *, hop_length):
+        """XCodec2's semantic encoder sees the acoustic-truncated clip rounded to codec hops."""
+        valid_length = min((end - start + hop_length - 1) // hop_length * hop_length, acoustic.shape[-1])
+        return acoustic[:valid_length]
+
+    def _preprocess(
         self,
-        output,
-        audio_ranges=None,
-        padding=True,
-        max_length=None,
-        truncation=False,
-        pad_to_multiple_of=None,
-        semantic_waveforms=None,
+        audio,
         *,
+        padding,
+        max_length,
+        truncation,
+        pad_to_multiple_of,
+        padding_side,
+        padding_value,
+        return_padding_mask,
+        return_tensors,
         spectrogram_config,
         hop_length,
         stride,
         feature_padding_value,
         **kwargs,
     ):
-        audio_values = output["audio_values"]
-        padded_length = audio_values.shape[-1]
+        """Assemble acoustic and semantic branches; `max_length` retains each branch's legacy units.
+
+        Acoustic padding uses samples, semantic padding uses frames. The semantic mask is
+        required by the model; `return_padding_mask` controls the optional acoustic mask.
+        """
+        padded, audio_ranges = self.pad(
+            audio,
+            padding,
+            max_length,
+            truncation,
+            pad_to_multiple_of,
+            padding_side=padding_side,
+            padding_value=padding_value,
+        )
+        audio_values = self._stack_waveforms(padded, add_channel_dim=True)
+        output = {"audio_values": audio_values}
+        if return_padding_mask:
+            output["audio_values_mask"] = self._get_mask(audio_ranges, audio_values.shape[-1])
 
         features = []
         for i, (start, end) in enumerate(audio_ranges):
-            if semantic_waveforms is None:
-                # XCodec2's fbank sees the truncated clip rounded up to whole codec hops.
-                valid_length = min(
-                    (end - start + hop_length - 1) // hop_length * hop_length,
-                    padded_length,
-                )
-                waveform = audio_values[i, 0, :valid_length]
-            else:
-                # NeuCodec's semantic branch remains independent of acoustic truncation.
-                waveform = semantic_waveforms[i]
-                valid_length = (waveform.shape[-1] + hop_length - 1) // hop_length * hop_length
-                waveform = self._pad_axis(waveform, 0, valid_length - waveform.shape[-1], axis=-1)
+            waveform = self._select_semantic_waveform(audio[i], audio_values[i, 0], start, end, hop_length=hop_length)
             waveform = self._pad_semantic_waveform(waveform, hop_length=hop_length)
             features.append(
                 self._standardize_frames(
@@ -136,7 +151,14 @@ class Xcodec2AudioProcessorMixin:
             )
 
         features, frame_ranges = self._pad_features(
-            features, padding, max_length, truncation, stride, feature_padding_value=feature_padding_value, **kwargs
+            features,
+            padding,
+            max_length,
+            truncation,
+            stride,
+            padding_value=padding_value,
+            feature_padding_value=feature_padding_value,
+            **kwargs,
         )
         batch = self._stack(features)
         mask = self._get_mask(frame_ranges, batch.shape[1])
@@ -145,7 +167,7 @@ class Xcodec2AudioProcessorMixin:
         output["audio_features"] = batch.reshape(batch_size, num_frames // stride, num_mel_bins * stride)
         stride_groups = mask.reshape(batch_size, num_frames // stride, stride)
         output["audio_features_mask"] = _array_namespace(mask).amin(stride_groups, -1)
-        return output
+        return BatchFeature(output, tensor_type=return_tensors)
 
 
 class Xcodec2AudioProcessor(Xcodec2AudioProcessorMixin, TorchAudioBackend):

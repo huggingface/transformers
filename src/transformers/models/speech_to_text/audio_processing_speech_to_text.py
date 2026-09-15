@@ -70,6 +70,18 @@ class SpeechToTextAudioProcessorMixin:
     normalize_vars = True
     valid_kwargs = SpeechToTextAudioProcessorKwargs
 
+    def _validate_preprocess_kwargs(
+        self, *, do_extract_spectrogram, do_batch_spectrogram, do_ceptral_normalize, **kwargs
+    ):
+        if do_ceptral_normalize and (not do_extract_spectrogram or do_batch_spectrogram):
+            raise ValueError("SpeechToText CMVN requires per-utterance spectrogram extraction.")
+        super()._validate_preprocess_kwargs(
+            do_extract_spectrogram=do_extract_spectrogram,
+            do_batch_spectrogram=do_batch_spectrogram,
+            do_ceptral_normalize=do_ceptral_normalize,
+            **kwargs,
+        )
+
 
 class SpeechToTextAudioProcessor(SpeechToTextAudioProcessorMixin, TorchAudioBackend):
     @staticmethod

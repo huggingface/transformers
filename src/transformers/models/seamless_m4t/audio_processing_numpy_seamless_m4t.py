@@ -35,25 +35,5 @@ class SeamlessM4tAudioProcessorNumpy(SeamlessM4tAudioProcessorMixin, NumpyAudioB
             normalized.append((f - mean) / np.sqrt(var + 1e-7))
         return normalized
 
-    def _finalize_output(self, output, feature_ranges=None, *, stride, **kwargs):
-        features = output["audio_features"]
-        batch_size, num_frames, num_channels = features.shape
-
-        remainder = num_frames % stride
-        if remainder != 0:
-            features = features[:, : num_frames - remainder, :]
-            num_frames = num_frames - remainder
-
-        output["audio_features"] = features.reshape(batch_size, num_frames // stride, num_channels * stride)
-
-        if "audio_features_mask" in output:
-            mask = output["audio_features_mask"]
-            if remainder != 0:
-                mask = mask[:, :num_frames]
-            indices = np.arange(0, num_frames)
-            output["audio_features_mask"] = mask[:, indices % stride == 1]
-
-        return output
-
 
 __all__ = ["SeamlessM4tAudioProcessorNumpy"]

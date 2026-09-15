@@ -109,15 +109,15 @@ class CohereAsrAudioProcessorMixin:
         output["audio_features"] = self._standardize_features(output["audio_features"], frame_counts, eps=1e-5)
         return output
 
-    def _preprocess_audio_like_inputs(self, audio, *args, sampling_rate=None, **kwargs):
-        prepared = self._prepare_audio_like_inputs(audio=audio, sampling_rate=sampling_rate, **kwargs)
+    def _preprocess(self, audio, *args, max_audio_clip_s, overlap_chunk_second, min_energy_window_samples, **kwargs):
+        """Split prepared waveforms, run the default feature workflow, and attach chunk ownership."""
         chunked, audio_chunk_index = self._split_audio_chunks(
-            prepared,
-            max_audio_clip_s=kwargs["max_audio_clip_s"],
-            overlap_chunk_second=kwargs["overlap_chunk_second"],
-            min_energy_window_samples=kwargs["min_energy_window_samples"],
+            audio,
+            max_audio_clip_s=max_audio_clip_s,
+            overlap_chunk_second=overlap_chunk_second,
+            min_energy_window_samples=min_energy_window_samples,
         )
-        result = self._preprocess(chunked, *args, **kwargs)
+        result = super()._preprocess(chunked, *args, **kwargs)
         result["audio_chunk_index"] = audio_chunk_index
         return result
 

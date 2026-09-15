@@ -30,29 +30,8 @@ class GraniteSpeech5AudioProcessorNumpy(GraniteSpeech5AudioProcessorMixin, Numpy
         windows = np.lib.stride_tricks.sliding_window_view(padded, kernel.size, axis=-1)
         return (windows * kernel).sum(-1) / denominator
 
-    def _finalize_output(
-        self, output, audio_ranges=None, *, frame_stacking, delta_win_length, spectrogram_config, **kwargs
-    ):
-        logmel = output.pop("audio_features")
-        stacking = frame_stacking
-
-        num_frames = stacking * -(-(logmel.shape[-1] - 1) // stacking)
-        if logmel.shape[-1] < num_frames:
-            logmel = np.pad(logmel, ((0, 0), (0, 0), (0, num_frames - logmel.shape[-1])))
-        else:
-            logmel = logmel[..., :num_frames]
-
-        logmel = np.concatenate((logmel, self._compute_deltas(logmel, delta_win_length=delta_win_length)), axis=-2)
-        logmel = np.swapaxes(logmel, -1, -2)
-        batch_size = logmel.shape[0]
-        output["audio_features"] = logmel.reshape(batch_size, -1, stacking * logmel.shape[-1])
-
-        if audio_ranges is not None:
-            hop = spectrogram_config.stft_config.hop_length
-            lengths = np.array([-(-((end - start) // hop) // stacking) for start, end in audio_ranges])
-            max_frames = output["audio_features"].shape[1]
-            output["audio_features_mask"] = (np.arange(max_frames)[None, :] < lengths[:, None]).astype(np.int64)
-        return output
+    def _stacked_mask(self, lengths, width, like):
+        return (np.arange(width)[None, :] < np.asarray(lengths)[:, None]).astype(np.int64)
 
 
 __all__ = ["GraniteSpeech5AudioProcessorNumpy"]

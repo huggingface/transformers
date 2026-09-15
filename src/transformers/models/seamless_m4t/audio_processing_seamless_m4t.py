@@ -61,6 +61,32 @@ class SeamlessM4tAudioProcessorMixin:
     stride = 2
     valid_kwargs = SeamlessM4tAudioProcessorKwargs
 
+    def _validate_preprocess_kwargs(self, *, stride, do_extract_spectrogram, do_batch_spectrogram, **kwargs):
+        if stride < 1 or not do_extract_spectrogram or do_batch_spectrogram:
+            raise ValueError("SeamlessM4T requires a positive stride and per-utterance spectrogram extraction.")
+        super()._validate_preprocess_kwargs(
+            do_extract_spectrogram=do_extract_spectrogram, do_batch_spectrogram=do_batch_spectrogram, **kwargs
+        )
+
+    def _finalize_output(self, output, feature_ranges=None, *, stride, **kwargs):
+        features = output["audio_features"]
+        batch_size, num_frames, num_channels = features.shape
+
+        remainder = num_frames % stride
+        if remainder != 0:
+            features = features[:, : num_frames - remainder, :]
+            num_frames = num_frames - remainder
+
+        output["audio_features"] = features.reshape(batch_size, num_frames // stride, num_channels * stride)
+
+        if "audio_features_mask" in output:
+            mask = output["audio_features_mask"]
+            if remainder != 0:
+                mask = mask[:, :num_frames]
+            output["audio_features_mask"] = mask[:, stride - 1 :: stride]
+
+        return output
+
 
 class SeamlessM4tAudioProcessor(SeamlessM4tAudioProcessorMixin, TorchAudioBackend):
     def compute_features(self, audio, *, spectrogram_config, **kwargs):
@@ -80,26 +106,6 @@ class SeamlessM4tAudioProcessor(SeamlessM4tAudioProcessorMixin, TorchAudioBacken
             x = (x - np.expand_dims(x.mean(0), 0)) / np.sqrt(np.expand_dims(x.var(0, ddof=1), 0) + 1e-7)
             normalized.append(torch.from_numpy(x))
         return normalized
-
-    def _finalize_output(self, output, feature_ranges=None, *, stride, **kwargs):
-        features = output["audio_features"]
-        batch_size, num_frames, num_channels = features.shape
-
-        remainder = num_frames % stride
-        if remainder != 0:
-            features = features[:, : num_frames - remainder, :]
-            num_frames = num_frames - remainder
-
-        output["audio_features"] = features.reshape(batch_size, num_frames // stride, num_channels * stride)
-
-        if "audio_features_mask" in output:
-            mask = output["audio_features_mask"]
-            if remainder != 0:
-                mask = mask[:, :num_frames]
-            indices = torch.arange(0, num_frames)
-            output["audio_features_mask"] = mask[:, indices % stride == 1]
-
-        return output
 
 
 __all__ = ["SeamlessM4tAudioProcessor"]

@@ -20,6 +20,7 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ...audio_processing_utils import BaseAudioProcessor
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
@@ -36,6 +37,8 @@ from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
 from ..llama.modeling_llama import eager_attention_forward
+from ..parakeet.audio_processing_numpy_parakeet import ParakeetAudioProcessorNumpy
+from ..parakeet.audio_processing_parakeet import ParakeetAudioProcessor, ParakeetAudioProcessorMixin
 from ..parakeet.configuration_parakeet import ParakeetEncoderConfig, ParakeetRNNTConfig
 from ..parakeet.modeling_parakeet import (
     ParakeetEncoder,
@@ -887,7 +890,33 @@ class NemotronAsrStreamingForRNNT(
         )
 
 
+class NemotronAsrStreamingAudioProcessorMixin(ParakeetAudioProcessorMixin):
+    def _validate_preprocess_kwargs(self, *, do_extract_spectrogram, **kwargs):
+        if not do_extract_spectrogram:
+            raise ValueError("Nemotron streaming requires spectrogram extraction.")
+        BaseAudioProcessor._validate_preprocess_kwargs(self, do_extract_spectrogram=do_extract_spectrogram, **kwargs)
+
+    def _finalize_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
+        features = output.pop("audio_features")
+        mask = output.pop("audio_features_mask", None)
+        if mask is not None:
+            features = features * self._astype(mask[..., None], str(features.dtype).removeprefix("torch."))
+            output["audio_features_mask"] = mask
+        output["audio_features"] = features
+        return output
+
+
+class NemotronAsrStreamingAudioProcessor(NemotronAsrStreamingAudioProcessorMixin, ParakeetAudioProcessor):
+    pass
+
+
+class NemotronAsrStreamingAudioProcessorNumpy(NemotronAsrStreamingAudioProcessorMixin, ParakeetAudioProcessorNumpy):
+    pass
+
+
 __all__ = [
+    "NemotronAsrStreamingAudioProcessor",
+    "NemotronAsrStreamingAudioProcessorNumpy",
     "NemotronAsrStreamingConfig",
     "NemotronAsrStreamingEncoderConfig",
     "NemotronAsrStreamingEncoderModelOutput",

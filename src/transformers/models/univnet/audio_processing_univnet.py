@@ -12,9 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import replace
+
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
+from ...audio_utils import _clamp_min
 from ...processing_utils import AudioKwargs
 
 
@@ -33,16 +36,9 @@ class UnivNetAudioProcessorKwargs(AudioKwargs, total=False):
     compression_factor (`float`, *optional*, defaults to 1.0):
         Multiplicative factor for dynamic range compression during spectral normalization.
     compression_clip_val (`float`, *optional*, defaults to 1e-05):
-        Value the waveform is clipped to before dynamic range compression.
+        Minimum mel magnitude before dynamic range compression.
     max_length_s (`int`, *optional*, defaults to 10):
-        Maximum waveform length in seconds, used to derive `num_max_samples`.
-    model_in_channels (`int`, *optional*, defaults to 64):
-        Channel count of the noise [`UnivNetModel`] is conditioned on. Config only: the legacy
-        extractor used it in `generate_noise`, which this processor does not implement. Declared so
-        a checkpoint round-trips rather than carrying it as undeclared instance state.
-    pad_end_length (`int`, *optional*, defaults to 10):
-        Number of hops of silence the legacy `pad_end` helper appended. Config only, for the same
-        reason as `model_in_channels`.
+        Default maximum waveform length in seconds when `max_length` is omitted.
     """
 
     magnitude_floor: float
@@ -52,8 +48,6 @@ class UnivNetAudioProcessorKwargs(AudioKwargs, total=False):
     compression_factor: float
     compression_clip_val: float
     max_length_s: int
-    model_in_channels: int
-    pad_end_length: int
 
 
 class UnivNetAudioProcessorMixin:
@@ -63,7 +57,13 @@ class UnivNetAudioProcessorMixin:
     # The legacy FE's `mel_floor` is UnivNet's *magnitude* floor (added inside the magnitude
     # before the sqrt), not the pre-`log()` clamp the base mapping assumes. Route it accordingly;
     # `spectrogram_config.mel_floor` is a separate value the port introduced.
-    legacy_field_mapping = {"feature_size": None, "mel_floor": "magnitude_floor"}
+    legacy_field_mapping = {
+        "feature_size": None,
+        "mel_floor": "magnitude_floor",
+        # Belong to legacy noise-generation/pad-end helpers, not this feature workflow.
+        "model_in_channels": None,
+        "pad_end_length": None,
+    }
 
     spectrogram_config = {
         "stft_config": {
@@ -95,17 +95,27 @@ class UnivNetAudioProcessorMixin:
     compression_factor = 1.0
     compression_clip_val = 1e-5
     max_length_s = 10
-    model_in_channels = 64
-    pad_end_length = 10
     valid_kwargs = UnivNetAudioProcessorKwargs
 
-    # Derived in `__init__` from `max_length_s`, so it is internal state rather than configuration
-    # and must not reach a saved config: a stale copy would silently contradict `max_length_s`.
-    _excluded_dict_keys = {"mel_filters", "window", "_cached_stft_window", "num_max_samples"}
+    def _validate_preprocess_kwargs(
+        self, *, max_length, max_length_s, compression_factor, compression_clip_val, **kwargs
+    ):
+        if min(max_length_s, compression_factor, compression_clip_val) <= 0:
+            raise ValueError("UnivNet length and compression parameters must be positive.")
+        super()._validate_preprocess_kwargs(
+            max_length=max_length if max_length is not None else int(max_length_s * self.sampling_rate), **kwargs
+        )
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.num_max_samples = self.max_length_s * self.sampling_rate
+    def _preprocess(self, audio, *, max_length, max_length_s, **kwargs):
+        return super()._preprocess(
+            audio,
+            max_length=max_length if max_length is not None else int(max_length_s * self.sampling_rate),
+            **kwargs,
+        )
+
+    def _log_compress(self, features, *, spectrogram_config, compression_factor, compression_clip_val, **kwargs):
+        features = _clamp_min(features, compression_clip_val) * compression_factor
+        return super()._log_compress(features, spectrogram_config=replace(spectrogram_config, mel_floor=0.0), **kwargs)
 
     def _padded_frame_count(self, padded_length, spectrogram_config) -> int:
         # UnivNet's frame count is exactly `samples // hop_length` — not the base's window

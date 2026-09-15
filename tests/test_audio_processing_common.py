@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import pathlib
 import sys
+import unittest
+from functools import partial
 
 import numpy as np
 
@@ -255,39 +257,42 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
         for backend, cls in self.audio_processing_classes.items():
             with self.subTest(backend=backend):
                 processor = cls(**init_dict)
+                pad = partial(
+                    processor.pad, padding_side=processor.padding_side, padding_value=processor.padding_value
+                )
                 audio, lengths = self._padding_fixture(backend)
                 longest = lengths[-1]
 
                 # `padding=False` leaves every length untouched.
-                out, _ = processor.pad(audio, padding=False)
+                out, _ = pad(audio, padding=False)
                 self.assertEqual(self._lengths(out), lengths)
 
                 # `padding="longest"` equalizes to the longest input.
-                out_longest, ranges_longest = processor.pad(audio, padding="longest")
+                out_longest, ranges_longest = pad(audio, padding="longest")
                 self.assertEqual(self._lengths(out_longest), [longest] * len(lengths))
                 self.assertEqual([end - start for start, end in ranges_longest], lengths)
                 self._assert_padding_region(processor, out_longest, ranges_longest)
 
                 # `padding="max_length"` at the same target is equivalent to `"longest"`.
-                out_max, _ = processor.pad(audio, padding="max_length", max_length=longest)
+                out_max, _ = pad(audio, padding="max_length", max_length=longest)
                 self.assertEqual(self._lengths(out_max), [longest] * len(lengths))
                 for from_longest, from_max in zip(out_longest, out_max):
                     self.assertTrue(np.allclose(np.asarray(from_longest), np.asarray(from_max), atol=1e-3))
 
                 # `max_length` is required by `padding="max_length"`.
                 with self.assertRaises(ValueError):
-                    processor.pad(audio, padding="max_length")
+                    pad(audio, padding="max_length")
 
                 # `pad_to_multiple_of` alone rounds the (implicit longest) target up.
-                out_multiple, _ = processor.pad(audio, pad_to_multiple_of=10)
-                out_multiple_longest, _ = processor.pad(audio, padding="longest", pad_to_multiple_of=10)
+                out_multiple, _ = pad(audio, pad_to_multiple_of=10)
+                out_multiple_longest, _ = pad(audio, padding="longest", pad_to_multiple_of=10)
                 self.assertEqual(self._lengths(out_multiple), [self._round_up(longest, 10)] * len(lengths))
                 self.assertTrue(all(length % 10 == 0 for length in self._lengths(out_multiple)))
                 self.assertEqual(self._lengths(out_multiple), self._lengths(out_multiple_longest))
 
                 # `pad_to_multiple_of` rounds an explicit `max_length` up too.
                 pad_max_length = longest + self.pad_test_length_diff
-                out_rounded, ranges_rounded = processor.pad(
+                out_rounded, ranges_rounded = pad(
                     audio, padding="max_length", max_length=pad_max_length, pad_to_multiple_of=12
                 )
                 expected = self._round_up(pad_max_length, 12)
@@ -312,37 +317,38 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
         for backend, cls in self.audio_processing_classes.items():
             with self.subTest(backend=backend):
                 processor = cls(**init_dict)
+                pad = partial(
+                    processor.pad, padding_side=processor.padding_side, padding_value=processor.padding_value
+                )
                 audio, lengths = self._padding_fixture(backend)
                 shortest, middle = lengths[0], lengths[1]
 
                 # Truncating to the shortest input equalizes the batch...
-                out, _ = processor.pad(audio, padding="max_length", max_length=shortest, truncation=True)
+                out, _ = pad(audio, padding="max_length", max_length=shortest, truncation=True)
                 self.assertEqual(self._lengths(out), [shortest] * len(lengths))
 
                 # ...whereas without truncation the longer inputs keep their own length.
-                out, _ = processor.pad(audio, padding="max_length", max_length=shortest)
+                out, _ = pad(audio, padding="max_length", max_length=shortest)
                 self.assertEqual(self._lengths(out), lengths)
 
                 # Truncating to the middle input truncates the longest and pads the shortest.
-                out, ranges = processor.pad(audio, padding="max_length", max_length=middle, truncation=True)
+                out, ranges = pad(audio, padding="max_length", max_length=middle, truncation=True)
                 self.assertEqual(self._lengths(out), [middle] * len(lengths))
                 self.assertEqual([end - start for start, end in ranges], [shortest, middle, middle])
                 self._assert_padding_region(processor, out, ranges)
 
                 # Truncation composes with `padding="longest"` (see docstring: legacy forbade this).
-                out, _ = processor.pad(audio, padding="longest", max_length=middle, truncation=True)
+                out, _ = pad(audio, padding="longest", max_length=middle, truncation=True)
                 self.assertEqual(self._lengths(out), [middle] * len(lengths))
 
                 # `pad_to_multiple_of` rounds the truncation target up as well.
-                out, _ = processor.pad(
-                    audio, padding="max_length", max_length=shortest, pad_to_multiple_of=12, truncation=True
-                )
+                out, _ = pad(audio, padding="max_length", max_length=shortest, pad_to_multiple_of=12, truncation=True)
                 self.assertEqual(self._lengths(out), [self._round_up(shortest, 12)] * len(lengths))
 
                 # `truncation=True` requires `max_length`, whatever the padding strategy.
                 for padding in (False, "longest", "max_length"):
                     with self.subTest(padding=padding), self.assertRaises(ValueError):
-                        processor.pad(audio, padding=padding, truncation=True)
+                        pad(audio, padding=padding, truncation=True)
 
     @require_torch
     def test_call_padding_equalizes_batch(self):
@@ -384,3 +390,29 @@ class AudioProcessingTestMixin(PreprocessingTesterMixin):
     # ── JSON round-trip ───────────────────────────────────────────────────
 
     # ── Basic instantiation ───────────────────────────────────────────────
+
+
+@require_torch
+class AudioWorkflowContractTest(unittest.TestCase):
+    def test_custom_waveform_workflow_inherits_common_options(self):
+        from transformers.audio_processing_backends import NumpyAudioBackend, TorchAudioBackend
+        from transformers.audio_processing_base import BatchFeature
+        from transformers.processing_utils import AudioKwargs
+
+        for backend in (NumpyAudioBackend, TorchAudioBackend):
+
+            class CustomAudioProcessor(backend):
+                sampling_rate = 16000
+                valid_kwargs = AudioKwargs
+                model_input_names = ["audio_values"]
+
+                def _preprocess(self, audio, *, return_tensors, **kwargs):
+                    return BatchFeature({"audio_values": audio}, tensor_type=return_tensors)
+
+            with self.subTest(backend=backend):
+                processor = CustomAudioProcessor()
+                restored = CustomAudioProcessor.from_dict(processor.to_dict())
+                waveform = np.arange(10, dtype=np.float32)
+                np.testing.assert_array_equal(restored(waveform, return_tensors="np")["audio_values"], waveform[None])
+                self.assertNotIn("spectrogram_config", processor.to_dict())
+                self.assertEqual(restored.to_dict(), processor.to_dict())

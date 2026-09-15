@@ -29,13 +29,89 @@ Audio processors replace the legacy feature extractors; they all derive from
 configuration, loading, saving and argument resolution across every modality, so the rules below hold
 for image and video processors too except where noted.
 
-Model files are deliberately terse: an audio processor declares its configuration and overrides only
-the steps that differ from the shared pipeline. The pipeline itself is explained once, here.
+Audio processors either customize the default workflow or own their processing order. Both reuse
+input preparation, configuration handling and numerical backend operations.
 
-## The audio pipeline
+## Choosing an audio integration
 
-An audio processor is a fixed sequence of steps with named override points. A model changes behaviour
-by overriding a step, never by rewriting the sequence.
+Choose execution and authoring independently:
+
+| Processing requirements | Integration | Reference |
+|---|---|---|
+| Default order, different numerical parameters | Declare a spectrogram configuration | `models/whisper/audio_processing_whisper.py` |
+| Default order, different individual operation | Override a meaningful hook | `models/wav2vec2/audio_processing_wav2vec2.py` |
+| Different order, branching, or coordination between stages | Override `_preprocess` and call backend operations | `models/clap/audio_processing_clap.py` |
+| A variation of an existing model family | Author the differences in modular, then generate | `models/neucodec/modular_neucodec.py` |
+
+Modular is an authoring choice for either execution style. Numerical backends remain shared at
+runtime. A new model-specific recipe does not require adding flags or hooks to the universal
+workflow. Prefer a main-method override when several hooks would have to coordinate through
+instance state or compensate for earlier stages.
+
+### Declare the workflow's options
+
+Audio processors extend the full `AudioKwargs` schema, including when they override
+`_preprocess`. This follows image processors, which inherit `ImagesKwargs` for custom workflows.
+Model-specific kwargs classes add their own options; validators check constraints required by
+the workflow. Legacy configuration fields can be mapped or explicitly dropped through
+`legacy_field_mapping`.
+
+A shared schema may include options a custom workflow does not consume. Whether to narrow those
+schemas or change how unused options are handled is an unresolved cross-modality API question,
+separate from choosing hooks versus a main-method override. The schema controls defaults and
+serialization; read the workflow to establish which operations it performs.
+
+Read the current declarations in `processing_utils.py` and the model's kwargs class. For an
+instantiated processor, `processor.valid_kwargs.__annotations__` includes inherited names; it is
+more reliable than maintaining a separate list of supported options. Resolved options must reach
+the methods that consume them as named parameters. Read call options from those parameters;
+`self.sampling_rate` remains the processor's native-rate identity.
+
+### Keep operation contracts explicit
+
+A custom `_preprocess` receives a list of mono waveforms already converted to its backend and
+resampled to the processor's native rate, plus resolved call options. It owns cropping, padding,
+feature extraction order and output assembly. Return `BatchFeature` with the requested tensor
+conversion and the keys expected by the model.
+
+Reuse `compute_features` for STFT/mel/log processing, or narrower backend operations when the
+recipe needs them. Check each operation's docstring and the spectrogram configuration for axis
+order and dtype. Keep waveform lengths in samples distinct from feature lengths in frames.
+Return per-call metadata alongside the features it describes. Numerical caches are internal
+implementation state and must stay out of saved configuration.
+
+The common hooks remain appropriate for independent changes to the default order. Their
+contracts specify whether data is per waveform, per frame, or padded and batched; choose the hook
+by those conditions rather than by a similar-sounding name.
+
+### Author related models with modular
+
+NeuCodec and Nemotron streaming audio processors are generated from their existing modular
+files, alongside their models and configurations. Edit that source and regenerate with the existing modular converter; inspect all
+resulting files. The generated audio classes reuse the core backends without runtime inheritance
+from XCodec2 or Parakeet. Read [the modular guide](./modular_transformers) for converter conventions.
+
+The converter routes `AudioProcessor`, `AudioProcessorMixin` and `AudioProcessorKwargs` to
+`audio_processing_<model>.py`, and `AudioProcessorNumpy` to `audio_processing_numpy_<model>.py`.
+Keep optional dependency imports safe: the NumPy sibling must remain importable when Torch is
+unavailable. Modular expands model-family inheritance; imports of shared runtime backends remain
+imports. When a parent model does not define a method itself, an explicit call to the shared
+implementation can express delegation without asking the converter to expand an absent method
+(see Nemotron streaming's `_validate_preprocess_kwargs`).
+
+### Verify the chosen integration
+
+Test through the processor call: numerical compatibility, metadata and feature alignment,
+non-default per-call options, and save/load behavior. Exercise both backends and the cases that
+change workflow order, such as long versus short inputs. For modular sources, also verify
+regeneration and optional-dependency imports. `tests/repo_utils/test_audio_modular_conversion.py`
+checks those properties for both families. Follow the model's established numerical
+comparison policy; generation does not change that policy.
+
+## The default audio pipeline
+
+The default workflow is a fixed sequence with named override points. Models using it override
+individual steps; models owning their sequence override `_preprocess`.
 
 In both figures the highlighted steps are the override points, each labelled with the models that
 actually override it — so the diagram shows not just where you *may* intervene, but who does.
@@ -83,44 +159,44 @@ next to the figure:
   the window geometry — some extractors report the shorter count, and the padding mask has to agree
   with whichever the model expects.
 
-### Which models override what
+### Examples to read
 
-Most models need no code at all: **9 of the 33 audio processors override nothing**, and are a
-configuration block and nothing else — including [Whisper](./model_doc/whisper), [Gemma3n](./model_doc/gemma3n),
-[EnCodec](./model_doc/encodec), [DAC](./model_doc/dac), [Dia](./model_doc/dia), [SpeechT5](./model_doc/speecht5),
-LASR, PE-Audio and [Pop2Piano](./model_doc/pop2piano).
+Use these references to choose an integration; each model's source and `valid_kwargs` define its
+current behavior. The pipeline figures above illustrate the shared workflow; their model labels
+may reflect older integrations.
 
-The remaining 24 override a hook or two. Both figures name the models at each override point; the
-table repeats them as text, because the figures are images and their contents are neither searchable
-nor selectable.
-
-Every overridden hook appears in one of the figures except `_set_attributes` (CLAP), which runs at
-construction rather than during a call and so has no place in a call flow.
-
-| hook | models that override it |
+| Requirement | Example |
 |---|---|
-| `_finalize_output` | 17 — AST, CLAP, Cohere-ASR, Fun-ASR-Nano, Gemma4, Granite-Speech, Granite-Speech5, Inkling, Kyutai-STT, Nemotron-ASR-Streaming, NeuCodec, Parakeet, Phi4-Multimodal, Qwen3-ASR, SeamlessM4T, Speech2Text, XCodec2 |
-| `compute_features` | CLAP, Gemma4-Unified, Granite-Speech, Musicgen-Melody, SeamlessM4T |
-| `_prepare_waveform` | NeuCodec, Qwen3-ASR, VibeVoice, Wav2Vec2, XCodec2 |
-| `_shape_log_features` | UnivNet, Voxtral-Realtime |
-| `_padded_frame_count` | Inkling, Qwen3-ASR, UnivNet |
-| `_finalize_features` | Fun-ASR-Nano, SeamlessM4T |
-| `_waveform_to_spectrum` | Inkling, UnivNet |
-| `_spectrum_magnitude` | Inkling, UnivNet |
-| `_pad_feature_single` | NeuCodec, XCodec2 |
-| `_project_to_mel` · `_valid_frame_counts` | UnivNet |
-| `_process_frames` · `_stft_framed` | Phi4-Multimodal |
-| `_log_compress` | CLVP |
-| `_pad_features` | AST |
-| `pad` · `_pad_waveform` · `_truncate_waveform` · `_stack_waveforms` · `_resolve_padding_strategy` · `_set_attributes` | CLAP |
-| `_dither_waveform` · `_preprocess_audio_like_inputs` | Cohere-ASR |
-| `_preprocess` | NeuCodec |
+| Configuration alone | Whisper, Gemma3n, EnCodec |
+| Independent waveform preparation | Wav2Vec2, VibeVoice |
+| Independent normalization or numerical operation | Parakeet, CLVP, UnivNet, Voxtral Realtime |
+| Independent output metadata, masking or frame grouping | Phi4 Multimodal, Gemma4, Kyutai, SeamlessM4T |
+| Chunk before delegating to the default workflow | Cohere-ASR `_preprocess` |
+| Branch between crop and fusion | CLAP `_preprocess` |
+| Frame raw audio into tokens | Gemma4 Unified `_preprocess` |
+| Coordinate mel extraction, frame grouping and model masks | Granite Speech and Granite Speech 5 `_preprocess` |
+| Resolve a chroma recipe for the current call | MusicGen Melody `_preprocess` |
+| Assemble acoustic and semantic inputs together | XCodec2 `_preprocess`; NeuCodec modular source |
+| Reuse a related model's configuration with a different output hook | Nemotron streaming modular source |
 
-Two patterns are worth reading off it. `_finalize_output` dominates because most model-specific work
-is *after* the features exist — an extra output key, a per-utterance normalisation, a reshape for the
-encoder. And the two models with the widest surface are the two with genuinely unusual pipelines:
-CLAP, whose fusion mode crops the mel rather than the waveform, and UnivNet, which is a vocoder and
-runs the spectrogram in float64 throughout.
+Custom workflows document their length units and required outputs. Gemma4 Unified pads in tokens.
+MusicGen Melody pads in samples, with `chunk_length` supplying a default maximum in seconds.
+XCodec2 and NeuCodec preserve the legacy dual meaning of `max_length`: samples for the acoustic
+branch, frames for semantic padding. Their semantic mask is mandatory; `return_padding_mask`
+controls only the acoustic mask. Granite's masks describe model-specific frame or projector
+geometry and are always returned.
+
+CLAP expresses its processing order in one `_preprocess` workflow: `rand_trunc` crops waveforms
+and returns one mel view; `fusion` keeps long waveforms and returns four mel views. Both modes fill
+short waveforms to `max_length` using `padding_mode="repeatpad"`, `"repeat"`, or `"pad"`. A
+per-call `truncation_mode` selects the matching mel filter bank. Each clip returns its views and
+`is_longer` together; the workflow keeps no temporary metadata on the processor.
+
+CLAP always returns mel views and `is_longer`. Its custom workflow consumes `max_length` in
+waveform samples, `padding_mode` for short clips, and `truncation_mode` for long clips. Legacy
+fill-method spellings passed as `padding` remain accepted. It still inherits the generic
+`AudioKwargs` options; those declarations do not add raw output, generic padding or mask
+operations to CLAP's workflow.
 
 ## Configuration files
 
@@ -294,6 +370,9 @@ the native rate, so an argument given alongside it is ignored, also with a warni
 
 ## Backends
 
-Each audio processor has a torch and a numpy implementation, `TorchAudioBackend` and
-`NumpyAudioBackend`, sharing one configuration. They are required to produce bit-identical output for
-the same input, so a model's behaviour does not depend on which is installed.
+Audio processors provide paired implementations sharing one configuration and workflow. Most use
+`TorchAudioBackend` and `NumpyAudioBackend`; DAC intentionally uses NumPy for both entry points.
+Preserve each model's tested numerical contract: some legacy accumulation orders require exact
+comparisons, while cross-backend tests use model-specific tolerances. CLAP's NumPy fusion path
+currently uses Torch interpolation, so a NumPy class name alone does not guarantee Torch-free
+execution.

@@ -17,6 +17,7 @@ import math
 import torch
 
 from ...audio_processing_backends import TorchAudioBackend
+from ...audio_processing_base import BatchFeature
 from ...processing_utils import AudioKwargs
 
 
@@ -34,11 +35,9 @@ class GraniteSpeechAudioProcessorKwargs(AudioKwargs, total=False):
 
 class GraniteSpeechAudioProcessorMixin:
     sampling_rate = 16000
-    # `_finalize_output` builds its own mask over the projector output length,
-    # which is why `return_padding_mask` is False below.
+    # The workflow builds a mandatory projector mask rather than the default frame mask.
     extra_model_input_names = ["audio_features_mask", "audio_embed_sizes"]
     return_padding_mask = False
-    do_extract_spectrogram = True
 
     # Native pipeline, bit-equal to the upstream FE's `torchaudio.transforms.MelSpectrogram`
     # + log10 + Whisper-style max-clip/rescale (ADR 0004 post-log fields).
@@ -61,32 +60,51 @@ class GraniteSpeechAudioProcessorMixin:
     projector_downsample_rate = 5
     valid_kwargs = GraniteSpeechAudioProcessorKwargs
 
-    def compute_features(self, audio, **kwargs):
-        logmel = super().compute_features(audio, **kwargs).swapaxes(-1, -2)  # (batch, time, n_mels)
-        if logmel.shape[1] % 2 == 1:
-            logmel = logmel[:, :-1]
-        return logmel.reshape(logmel.shape[0], -1, 2 * logmel.shape[-1])
+    legacy_field_mapping = {"return_attention_mask": None, "return_padding_mask": None}
 
-    def _finalize_output(
+    def _preprocess(
         self,
-        output,
-        audio_ranges=None,
+        audio,
         *,
+        padding,
+        max_length,
+        truncation,
+        pad_to_multiple_of,
+        padding_side,
+        padding_value,
         spectrogram_config,
         projector_window_size,
         projector_downsample_rate,
+        return_tensors,
         **kwargs,
     ):
+        """Pad waveforms, pair mel frames, and derive the projector mask in one workflow."""
+        padded, ranges = self.pad(
+            audio,
+            padding,
+            max_length,
+            truncation,
+            pad_to_multiple_of,
+            padding_side=padding_side,
+            padding_value=padding_value,
+        )
+        logmel = self.compute_features(
+            self._stack(padded), spectrogram_config=spectrogram_config, audio_ranges=ranges, **kwargs
+        ).swapaxes(-1, -2)
+        if logmel.shape[1] % 2 == 1:
+            logmel = logmel[:, :-1]
+        features = logmel.reshape(logmel.shape[0], -1, 2 * logmel.shape[-1])
         hop_length = spectrogram_config.stft_config.hop_length
         effective_window_size = projector_window_size // projector_downsample_rate
-        audio_embed_sizes = []
-        for start, end in audio_ranges:
+        sizes = []
+        for start, end in ranges:
             mel_length = (end - start) // hop_length + 1
             nblocks = math.ceil((mel_length // 2) / projector_window_size)
-            audio_embed_sizes.append(nblocks * effective_window_size)
-        output["audio_embed_sizes"] = audio_embed_sizes
-        output["audio_features_mask"] = self._embed_mask(audio_embed_sizes)
-        return output
+            sizes.append(nblocks * effective_window_size)
+        return BatchFeature(
+            {"audio_features": features, "audio_embed_sizes": sizes, "audio_features_mask": self._embed_mask(sizes)},
+            tensor_type=return_tensors,
+        )
 
 
 class GraniteSpeechAudioProcessor(GraniteSpeechAudioProcessorMixin, TorchAudioBackend):

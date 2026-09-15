@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
-
 from ...audio_processing_backends import TorchAudioBackend
 from ...processing_utils import AudioKwargs
 
@@ -38,27 +36,23 @@ class KyutaiSpeechToTextAudioProcessorMixin:
     audio_delay_seconds = 2.5
     valid_kwargs = KyutaiSpeechToTextAudioProcessorKwargs
 
+    def _validate_preprocess_kwargs(self, *, do_extract_spectrogram, **kwargs):
+        if do_extract_spectrogram:
+            raise ValueError("Kyutai consumes padded waveforms, without spectrogram extraction.")
+        super()._validate_preprocess_kwargs(do_extract_spectrogram=do_extract_spectrogram, **kwargs)
 
-class KyutaiSpeechToTextAudioProcessor(KyutaiSpeechToTextAudioProcessorMixin, TorchAudioBackend):
     def _finalize_output(self, output, *, audio_silence_prefix_seconds, audio_delay_seconds, **kwargs):
         pad_left = int(audio_silence_prefix_seconds * self.sampling_rate)
         pad_right = int((audio_delay_seconds + 1.0) * self.sampling_rate)
-
         if pad_left > 0 or pad_right > 0:
-            output["audio_values"] = torch.nn.functional.pad(
-                output["audio_values"],
-                (pad_left, pad_right),
-                mode="constant",
-                value=0.0,
-            )
-            output["audio_values_mask"] = torch.nn.functional.pad(
-                output["audio_values_mask"],
-                (pad_left, pad_right),
-                mode="constant",
-                value=0,
-            )
-
+            for key in ("audio_values", "audio_values_mask"):
+                if key in output:
+                    output[key] = self._pad_axis(output[key], pad_left, pad_right, axis=-1, value=0)
         return output
+
+
+class KyutaiSpeechToTextAudioProcessor(KyutaiSpeechToTextAudioProcessorMixin, TorchAudioBackend):
+    pass
 
 
 __all__ = ["KyutaiSpeechToTextAudioProcessor"]

@@ -38,3 +38,12 @@ Two modular traps:
 
 - **Other models inherit your modular file.** `modular_deepseek_vl.py` also generates `modeling_deepseek_vl_hybrid.py`. Run `make fix-repo` and check everything it rewrote; hand-editing only the generated file you had in mind leaves the rest stale and `Check repository consistency` red.
 - **`attr = AttributeError()` deletes an inherited attribute** — it is an instruction to the converter, not a bug or placeholder. `raise AttributeError("...")` in a method body does the same for a method. Substituting a "real" value silently changes behaviour (`_no_split_modules = AttributeError()` → `[]` changes how the model may be sharded). See [Removing attributes](../docs/source/en/modular_transformers.md#removing-attributes) and [Deleting unused methods](../docs/source/en/modular_transformers.md#deleting-unused-methods).
+
+
+## Audio processors
+
+When adding an audio processor, changing its workflow or options, or editing generated audio
+files, read [Choosing an audio integration](../docs/source/en/preprocessing.md#choosing-an-audio-integration).
+It identifies the schema to extend, the two execution styles, reference implementations, and
+modular source ownership. Use the processor's `valid_kwargs` and operation docstrings as the
+current contract.

@@ -57,15 +57,19 @@ class Gemma4AudioProcessorMixin:
     }
     truncation = True
 
-
-class Gemma4AudioProcessor(Gemma4AudioProcessorMixin, TorchAudioBackend):
     def _finalize_output(self, output, audio_ranges=None, **kwargs):
         # Zero the padded frames, as the legacy extractor does.
         mask = output.get("audio_features_mask")
         if mask is not None and "audio_features" in output:
             features = output["audio_features"]
-            output["audio_features"] = features * mask.to(features.dtype).unsqueeze(-1)
+            output["audio_features"] = (
+                features * self._astype(mask, str(features.dtype).removeprefix("torch."))[..., None]
+            )
         return output
+
+
+class Gemma4AudioProcessor(Gemma4AudioProcessorMixin, TorchAudioBackend):
+    pass
 
 
 __all__ = ["Gemma4AudioProcessor"]
