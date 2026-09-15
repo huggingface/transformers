@@ -40,7 +40,7 @@ from transformers.utils.import_utils import define_import_structure
 CHECKER_CONFIG = {
     "name": "inits",
     "label": "Model init files",
-    "cache_globs": ["src/transformers/models/**/*.py"],
+    "cache_globs": ["src/transformers/models/**/*.py", "src/transformers/utils/import_utils.py"],
     "check_args": [],
     "fix_args": ["--fix_and_overwrite"],
 }
@@ -107,6 +107,8 @@ def get_import_structure() -> dict[str, set[str]]:
     for modules in import_structure.values():
         for dotted_module in modules:
             model_name, _, module_name = dotted_module.partition(".")
+            if model_name in IGNORED_DIRECTORIES or model_name.startswith("_"):
+                continue
             modules_per_model.setdefault(model_name, set()).add(module_name)
     return modules_per_model
 
