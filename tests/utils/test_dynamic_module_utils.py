@@ -230,7 +230,14 @@ def _build_symlinked_hub_cache(repo_root: Path, files: dict[str, str], revision:
     for name, content in files.items():
         sha = hashlib.sha256(content.encode("utf-8")).hexdigest()
         (blobs / sha).write_text(content, encoding="utf-8")
-        (snapshot / name).symlink_to(Path("..") / ".." / "blobs" / sha)
+        try:
+            (snapshot / name).symlink_to(Path("..") / ".." / "blobs" / sha)
+        except OSError as exc:
+            # Windows refuses symlink creation unless the process is elevated or
+            # Developer Mode is enabled, neither of which is the default. The test
+            # exists to prove relative-import discovery follows hub-cache symlinks,
+            # so there is nothing meaningful left to assert without them.
+            pytest.skip(f"Can't create symlinks: {exc}")
 
     return snapshot
 
