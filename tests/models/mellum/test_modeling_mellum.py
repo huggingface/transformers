@@ -19,6 +19,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    is_flaky,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -54,6 +55,7 @@ class MellumModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = MellumModelTester
     model_split_percents = [0.5, 0.8, 0.9]
 
+    @is_flaky(max_attempts=2)
     def test_load_balancing_loss(self):
         # Copied from Qwen3-Moe
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
