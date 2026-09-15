@@ -20,6 +20,7 @@ from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
+from ...utils.import_utils import requires
 from .image_processing_apertus1p5 import Apertus1p5ImageProcessorKwargs
 
 
@@ -71,6 +72,7 @@ def _is_all_empty(media) -> bool:
       as is a declared `sampling_rate` other than 24000.
     """
 )
+@requires(backends=("vision", "torch", "torchvision"))
 class Apertus1p5Processor(ProcessorMixin):
     valid_processor_kwargs = Apertus1p5ProcessorKwargs
 
