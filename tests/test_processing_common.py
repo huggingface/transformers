@@ -1563,15 +1563,36 @@ class ProcessorTesterMixin:
         dummy_template = (
             "{% for message in messages %}"
             "{% if (message['role'] != 'assistant') %}"
-            "{{'<|special_start|>' + message['role'] + '\n' + message['content'][0]['text'] + '<|special_end|>' + '\n'}}"
+            "{{'<|special_start|>' + message['role'] + '\n'}}"
+            "{% for content in message['content'] %}"
+            "{{ image_token if content['type'] == 'image' else content['text'] }}"
+            "{% endfor %}"
+            "{{'<|special_end|>' + '\n'}}"
             "{% elif (message['role'] == 'assistant')%}"
             "{{'<|special_start|>' + message['role'] + '\n'}}"
             "{% generation %}"
-            "{{message['content'][0]['text'] + '<|special_end|>' + '\n'}}"
+            "{{message['content'][0]['text'] + '<|special_end|>'}}"
             "{% endgeneration %}"
+            "{{'\n'}}"
             "{% endif %}"
             "{% endfor %}"
         )
+
+        # The tokenizer's own implementation on the text-only conversation is the reference for the assistant ids. Note
+        # that the generation span ends on a non-whitespace char above: `char_to_token` has no token for stripped whitespace
+        reference = processor.tokenizer.apply_chat_template(
+            messages, tokenize=True, return_dict=True, return_assistant_tokens_mask=True, chat_template=dummy_template
+        )
+        expected_ids = [
+            token_id
+            for token_id, is_assistant in zip(reference["input_ids"][0], reference["assistant_masks"][0])
+            if is_assistant
+        ]
+
+        # Regression test for #44521: expanding the placeholder into N image tokens must not shift the assistant spans
+        image_token = getattr(self, "image_token", None)
+        if image_token and self.does_processor_return_mm_offsets(processor.__class__, "replace_image_token"):
+            messages[0][0]["content"].insert(0, {"type": "image", "image": self.prepare_images_inputs()})
 
         inputs = processor.apply_chat_template(
             messages,
@@ -1581,22 +1602,13 @@ class ProcessorTesterMixin:
             return_tensors="pt",
             return_assistant_tokens_mask=True,
             chat_template=dummy_template,
+            image_token=image_token,
         )
         self.assertTrue("assistant_masks" in inputs)
         self.assertEqual(len(inputs["assistant_masks"]), len(inputs["input_ids"]))
 
         mask = inputs["assistant_masks"].bool()
-        assistant_ids = inputs["input_ids"][mask]
-
-        assistant_text = (
-            "The capital of France is Paris.<|special_end|>\nThe capital of Italy is Rome.<|special_end|>\n"
-        )
-
-        # Some tokenizers add extra spaces which aren't then removed when decoding, so we need to check token ids
-        # if we can't get identical text outputs
-        text_is_same = assistant_text == processor.decode(assistant_ids, clean_up_tokenization_spaces=True)
-        ids_is_same = processor.tokenizer.encode(assistant_text, add_special_tokens=False), assistant_ids.tolist()
-        self.assertTrue(text_is_same or ids_is_same)
+        self.assertEqual(inputs["input_ids"][mask].tolist(), expected_ids)
 
     def test_apply_chat_template_tool_calls_no_content(self):
         processor = self.get_processor()

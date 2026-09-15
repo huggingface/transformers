@@ -2081,6 +2081,7 @@ class ProcessorMixin(PushToHubMixin):
                 processor_kwargs["return_offsets_mapping"] = (
                     True  # force offset mapping so we can infer token boundaries
                 )
+                processor_kwargs["return_text_replacement_offsets"] = True
 
         # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`
         sampling_rate = kwargs.get("sampling_rate", processor_kwargs.get("sampling_rate"))
@@ -2227,13 +2228,30 @@ class ProcessorMixin(PushToHubMixin):
                     assistant_masks = []
                     offset_mapping = out.pop("offset_mapping")
                     input_ids = out["input_ids"]
+                    # We do some corrections here to ensure the assistant masks aren't
+                    # misaligned when we expand up image tokens
+                    replacement_offsets = out.pop("text_replacement_offsets", None)
+                    if replacement_offsets is None or len(replacement_offsets) == 0:
+                        replacement_offsets = [[]] * len(input_ids)
                     for i in range(len(input_ids)):
                         current_mask = [0] * len(input_ids[i])
                         offsets = offset_mapping[i]
                         offset_starts = [start for start, end in offsets]
+                        placeholder_ends = [r["span"][1] for r in replacement_offsets[i]]
+                        chars_gained = [0] + [r["new_span"][1] - r["span"][1] for r in replacement_offsets[i]]
                         for assistant_start_char, assistant_end_char in generation_indices[i]:
+                            assistant_start_char, assistant_end_char = (
+                                char + chars_gained[bisect.bisect_right(placeholder_ends, char)]
+                                for char in (assistant_start_char, assistant_end_char)
+                            )
                             start_pos = bisect.bisect_left(offset_starts, assistant_start_char)
                             end_pos = bisect.bisect_left(offset_starts, assistant_end_char)
+                            # The span may start inside the previous token, e.g. `▁The` absorbing the newline before it
+                            if (
+                                start_pos > 0
+                                and offsets[start_pos - 1][0] < assistant_start_char < offsets[start_pos - 1][1]
+                            ):
+                                start_pos -= 1
 
                             if not (
                                 start_pos >= 0
