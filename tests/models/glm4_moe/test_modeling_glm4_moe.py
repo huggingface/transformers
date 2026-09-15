@@ -92,7 +92,7 @@ class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                     min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3
                 )
                 max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
-                max_memory["cpu"] = f"{int(get_cpu_ram_total_gib())}GiB"
+                max_memory["cpu"] = f"{int(get_cpu_ram_total_gib() * 0.9)}GiB"  # To avoid runner failing with exit code 137.
             else:
                 max_memory = None
             cls.model = Glm4MoeForCausalLM.from_pretrained(
