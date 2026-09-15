@@ -270,24 +270,20 @@ class CacheIntegrationTest(unittest.TestCase):
 
     def test_reset_dynamic_cache_matches_a_fresh_one(self):
         """A reset cache must behave exactly like a newly built one, so that it can be reused across generations."""
-        inputs = self.tokenizer(["A sequence: 1, 2, 3, 4, 5"], return_tensors="pt").to(self.model.device)
-
-        with torch.no_grad():
-            reference = self.model(**inputs, past_key_values=DynamicCache(config=self.model.config)).logits
+        first = self.tokenizer(["The capital of France is"], return_tensors="pt").to(self.model.device)
+        second = self.tokenizer(["A sequence: 1, 2, 3, 4, 5"], return_tensors="pt").to(self.model.device)
 
         cache = DynamicCache(config=self.model.config)
-        with torch.no_grad():
-            self.model(
-                **self.tokenizer(["Some other prompt"], return_tensors="pt").to(self.model.device),
-                past_key_values=cache,
-            )
+        self.model.generate(**first, past_key_values=cache, max_new_tokens=10, do_sample=False)
+
+        # Reuse the same cache for a different prompt, which is what `reset` is for.
         cache.reset()
         self.assertEqual(cache.get_seq_length(), 0)
+        reused = self.model.generate(**second, past_key_values=cache, max_new_tokens=10, do_sample=False)
 
-        # Before the fix, the reset kept the first prompt's states around, so the logits silently differed.
-        with torch.no_grad():
-            logits = self.model(**inputs, past_key_values=cache).logits
-        torch.testing.assert_close(logits, reference)
+        # Before the fix, the reset kept the first prompt's states around, so this silently generated gibberish.
+        expected = self.model.generate(**second, max_new_tokens=10, do_sample=False)
+        self.assertEqual(self.tokenizer.decode(reused[0]), self.tokenizer.decode(expected[0]))
 
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_beam_search(self, cache_implementation):
