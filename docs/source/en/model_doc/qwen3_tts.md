@@ -31,7 +31,7 @@ The model checkpoints can be found [here](https://huggingface.co/collections/Qwe
 
 Qwen3-TTS generates codes for a separate audio codec, which decodes them to a waveform. That codec is its own
 model, documented in [Qwen3-TTS Multi-Codebook Tokenizer](./qwen3_tts_tokenizer_multi_codebook); the processor
-loads it alongside the text tokenizer and the feature extractor, so [`~Qwen3TTSProcessor.batch_decode`] works
+loads it alongside the text tokenizer and the feature extractor, so [`~Qwen3TTSProcessor.decode`] works
 without setting it up yourself.
 
 This model was contributed by [Vandit Shah](https://huggingface.co/shahvandit).
@@ -42,7 +42,7 @@ This model was contributed by [Vandit Shah](https://huggingface.co/shahvandit).
 
 The processor bundles the text tokenizer, the speaker feature extractor, and the audio tokenizer. Build a conversation
 with [`~Qwen3TTSProcessor.apply_chat_template`], generate the speech codes, then decode them to audio with
-[`~Qwen3TTSProcessor.batch_decode`]:
+[`~Qwen3TTSProcessor.decode`]:
 
 ```python
 from transformers import AutoProcessor, AutoModelForTextToWaveform
@@ -58,7 +58,7 @@ conversation = [
 inputs = processor.apply_chat_template(conversation)
 
 codes, _ = model.generate(**inputs)
-audio = processor.batch_decode(codes)
+audio = processor.decode(codes)
 processor.save_audio(audio, "output.wav")
 ```
 
@@ -89,7 +89,7 @@ conversation = [
 inputs = processor.apply_chat_template(conversation)
 
 codes, _ = model.generate(**inputs)
-audio = processor.batch_decode(codes)
+audio = processor.decode(codes)
 processor.save_audio(audio, "output_ryan.wav")
 ```
 
@@ -112,7 +112,7 @@ conversations = [
 inputs = processor.apply_chat_template(conversations)
 
 codes, _ = model.generate(**inputs)
-audios = processor.batch_decode(codes)
+audios = processor.decode(codes)
 processor.save_audio(audios, ["output_0.wav", "output_1.wav"])
 ```
 
@@ -143,7 +143,7 @@ conversation = [
 inputs = processor.apply_chat_template(conversation)
 
 codes, _ = model.generate(**inputs)
-audio = processor.batch_decode(codes)
+audio = processor.decode(codes)
 processor.save_audio(audio, "output_voice_design.wav")
 ```
 
@@ -188,7 +188,7 @@ codes, _ = model.generate(
         "ref_code": None,
     },
 )
-audio = processor.batch_decode(codes)
+audio = processor.decode(codes)
 processor.save_audio(audio, "output_cloned.wav")
 ```
 
@@ -210,7 +210,7 @@ processor.save_audio(audio, "output_cloned.wav")
 [[autodoc]] Qwen3TTSProcessor
     - __call__
     - apply_chat_template
-    - batch_decode
+    - decode
     - save_audio
 
 ## Qwen3TTSForConditionalGeneration

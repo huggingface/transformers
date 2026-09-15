@@ -276,14 +276,14 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             processor.apply_chat_template(conversation)
 
-    def test_batch_decode_and_save_audio(self):
+    def test_decode_batch_and_save_audio(self):
         if not is_soundfile_available():
             self.skipTest("soundfile is required to save audio")
         processor = self.get_processor()
         processor.audio_tokenizer = _build_tiny_audio_tokenizer(num_quantizers=4)
 
         codes = [torch.randint(0, 8, (6, 4)), torch.randint(0, 8, (5, 4))]
-        audios = processor.batch_decode(codes)
+        audios = processor.decode(codes)
 
         self.assertEqual(len(audios), 2)
         self.assertTrue(all(isinstance(a, torch.Tensor) for a in audios))
