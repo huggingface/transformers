@@ -17,7 +17,6 @@ import tempfile
 import unittest
 
 import pytest
-import torch
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
@@ -31,6 +30,8 @@ from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
+    import torch
+
     from transformers import AutoTokenizer, Glm4MoeForCausalLM, Glm4MoeModel
 
 
