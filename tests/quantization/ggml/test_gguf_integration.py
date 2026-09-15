@@ -437,6 +437,7 @@ class Qwen35MoeLargeGgufModelTest(GgufModelIntegrationTesterMixin, unittest.Test
     def test_state_dict_matches_transformers(self):
         pass
 
+@slow
 class Qwen3GgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
     gguf_repo = "unsloth/Qwen3-0.6B-GGUF"
     quantized_gguf_file = "Qwen3-0.6B-Q8_0.gguf"
