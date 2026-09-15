@@ -1626,19 +1626,13 @@ class BigBirdModel(BigBirdPreTrainedModel):
             band_mask = None
             from_mask = None
             to_mask = None
-            if self.config.is_decoder:
-                attention_mask = create_causal_mask(
-                    config=self.config,
-                    inputs_embeds=embedding_output,
-                    attention_mask=attention_mask,
-                    past_key_values=past_key_values,
-                )
-            else:
-                attention_mask = create_bidirectional_mask(
-                    config=self.config,
-                    inputs_embeds=embedding_output,
-                    attention_mask=attention_mask,
-                )
+            mask_function = create_causal_mask if self.config.is_decoder else create_bidirectional_mask
+            attention_mask = mask_function(
+                config=self.config,
+                inputs_embeds=embedding_output,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values if self.config.is_decoder else None,
+            )
         else:
             raise ValueError(
                 f"attention_type can either be original_full or block_sparse, but is {self.attention_type}"
