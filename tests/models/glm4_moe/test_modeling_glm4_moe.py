@@ -99,7 +99,7 @@ class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 max_memory = None
             cls.model = Glm4MoeForCausalLM.from_pretrained(
                 cls.MODEL_ID,
-                dtype=torch.bfloat16,
+                dtype="auto",
                 device_map="auto",
                 max_memory=max_memory,
                 offload_folder=cls.offload_dir.name,
