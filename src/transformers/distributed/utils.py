@@ -306,39 +306,54 @@ def _prepare_state_dict_for_dcp(state_dict):
     return tree_map(prepare, state_dict)
 
 
-def save_model_checkpoint_distributed(model, checkpoint_dir: str) -> None:
-    """Save model parameters as standard HF-format sharded safetensors using
-    DCP + HuggingFaceStorageWriter with consolidation enabled.
+def save_model_checkpoint_distributed(
+    model, checkpoint_dir: str, *, checkpoint_format: str = "safetensors", consolidate: bool = True
+) -> None:
+    """Save rank-local model shards with DCP, optionally consolidating them.
 
-    Every rank first writes its own shard in parallel under
-    `<checkpoint_dir>/sharded/`, then a consolidation pass reads those shards
-    and emits HF-compatible `model-*-of-N.safetensors` (+ index) at
-    `<checkpoint_dir>/`. The result is a directory `from_pretrained` reads
-    through its normal path — no special flag needed at load time.
+        - `checkpoint_format` selects safetensors or native Torch DCP storage.
+        - With `consolidate=True`, rank-local files are kept in `sharded/` and complete
+          weights are written at the root.
+
+    Torch consolidation materializes the full state dict in rank 0's CPU memory.
+    Without consolidation, load the root directory with DCP and the matching
+    storage reader, these rank-local files are not `from_pretrained` checkpoints.
     """
+    if checkpoint_format not in ("safetensors", "torch"):
+        raise ValueError("`checkpoint_format` must be 'safetensors' or 'torch'.")
     if not is_torch_greater_or_equal("2.7"):
         raise OSError("Distributed checkpointing requires `torch>=2.7`.")
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
     import torch.distributed.checkpoint as dcp
-    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
     from torch.distributed.checkpoint.state_dict import get_model_state_dict
 
     # DCP describes each DTensor as one rectangular chunk, which cannot represent packed shards.
     # We redistribute any strided shards to contiguous shards so DCP can write them out.
     # Sub-optimal compared to a future DCP that can write strided shards directly, but works for now.
     state_dict = _prepare_state_dict_for_dcp(get_model_state_dict(model))
-    dcp.save(
-        state_dict,
-        storage_writer=HuggingFaceStorageWriter(
+    if checkpoint_format == "safetensors":
+        from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
+
+        writer = HuggingFaceStorageWriter(
             path=checkpoint_dir,
             save_distributed=True,
-            enable_consolidation=True,
-        ),
-    )
-    # Wait for rank 0 to finish writing the HF safetensors so other
-    # ranks don't return (and hit `from_pretrained`) before the files exist.
+            enable_consolidation=consolidate,
+        )
+    else:
+        shard_dir = os.path.join(checkpoint_dir, "sharded") if consolidate else checkpoint_dir
+        writer = dcp.FileSystemWriter(shard_dir)
+
+    dcp.save(state_dict, storage_writer=writer)
+
+    if checkpoint_format == "torch" and consolidate and _get_torch_distributed_rank() == 0:
+        from torch.distributed.checkpoint.format_utils import dcp_to_torch_save
+
+        from ..utils import WEIGHTS_NAME
+
+        dcp_to_torch_save(shard_dir, os.path.join(checkpoint_dir, WEIGHTS_NAME))
+    # All ranks wait until consolidated weights are ready for loading.
     _distributed_barrier()
 
 
