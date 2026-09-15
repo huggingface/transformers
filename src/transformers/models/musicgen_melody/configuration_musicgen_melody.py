@@ -135,8 +135,8 @@ class MusicgenMelodyConfig(PreTrainedConfig):
 
     model_type = "musicgen_melody"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="t5"),
-        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="encodec"),
+        "text_encoder": SubConfigSpec(config_class=AutoConfig, model_type="t5"),
+        "audio_encoder": SubConfigSpec(config_class=AutoConfig, model_type="encodec"),
         "decoder": SubConfigSpec(config_class=MusicgenMelodyDecoderConfig),
     }
 

@@ -199,7 +199,7 @@ class DiffusionGemmaConfig(PreTrainedConfig):
     model_type = "diffusion_gemma"
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=DiffusionGemmaTextConfig),
-        "vision_config": SubConfigSpec(config_class=AutoConfig),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="gemma4_vision"),
     }
 
     text_config: DiffusionGemmaTextConfig | dict[str, Any] | None = None
