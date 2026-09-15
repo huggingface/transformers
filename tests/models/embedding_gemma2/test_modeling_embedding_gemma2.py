@@ -1,0 +1,532 @@
+# Copyright 2026 the HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Testing suite for the PyTorch EmbeddingGemma2 model."""
+
+import unittest
+
+from parameterized import parameterized
+
+from transformers import (
+    EmbeddingGemma2Config,
+    EmbeddingGemma2TextConfig,
+    is_torch_available,
+    set_seed,
+)
+from transformers.testing_utils import (
+    require_torch,
+    torch_device,
+)
+from transformers.utils import ModelOutput
+
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+
+
+if is_torch_available():
+    import torch
+
+    from transformers import (
+        EmbeddingGemma2Model,
+        EmbeddingGemma2TextModel,
+        Gemma4AudioModel,
+        Gemma4VisionModel,
+    )
+
+
+class EmbeddingGemma2TextModelTester:
+    """Builds a tiny `EmbeddingGemma2TextConfig` and matching text-only inputs."""
+
+    config_class = EmbeddingGemma2TextConfig
+    if is_torch_available():
+        base_model_class = EmbeddingGemma2TextModel
+
+    def __init__(
+        self,
+        parent,
+        batch_size=3,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_labels=False,
+        vocab_size=99,
+        hidden_size=32,
+        intermediate_size=37,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        head_dim=8,
+        max_position_embeddings=512,
+        sliding_window=8,
+        hidden_size_per_layer_input=16,
+        embedding_dim=24,
+        pad_token_id=0,
+        initializer_range=0.02,
+        enable_moe_block=True,
+        num_experts=8,
+        top_k_experts=2,
+        moe_intermediate_size=16,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_input_mask = use_input_mask
+        self.use_labels = use_labels
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
+        self.head_dim = head_dim
+        self.max_position_embeddings = max_position_embeddings
+        self.sliding_window = sliding_window
+        self.hidden_size_per_layer_input = hidden_size_per_layer_input
+        self.embedding_dim = embedding_dim
+        self.pad_token_id = pad_token_id
+        self.initializer_range = initializer_range
+        # Mirrors the Gemma 4 tester: MoE blocks are enabled so the expert kernels are exercised.
+        self.enable_moe_block = enable_moe_block
+        self.num_experts = num_experts
+        self.top_k_experts = top_k_experts
+        self.moe_intermediate_size = moe_intermediate_size
+
+        # Both attention flavours are exercised; the last layer is always forced to `full_attention`.
+        self.layer_types = ["sliding_attention", "full_attention"]
+        # Gemma 4 (and therefore EmbeddingGemma 2) uses a wider `head_dim` on the full attention layers.
+        # Without an explicit override the config falls back to `global_head_dim=512`, which would blow
+        # up the size of this tiny model.
+        self.per_layer_config = {
+            layer_idx: {"head_dim": 2 * self.head_dim}
+            for layer_idx, layer_type in enumerate(self.layer_types)
+            if layer_type == "full_attention"
+        }
+        self.encoder_seq_length = seq_length
+
+    def get_config(self):
+        return EmbeddingGemma2TextConfig(
+            vocab_size=self.vocab_size,
+            hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            num_key_value_heads=self.num_key_value_heads,
+            head_dim=self.head_dim,
+            max_position_embeddings=self.max_position_embeddings,
+            sliding_window=self.sliding_window,
+            hidden_size_per_layer_input=self.hidden_size_per_layer_input,
+            embedding_dim=self.embedding_dim,
+            pad_token_id=self.pad_token_id,
+            initializer_range=self.initializer_range,
+            layer_types=self.layer_types,
+            per_layer_config=self.per_layer_config,
+            enable_moe_block=self.enable_moe_block,
+            num_experts=self.num_experts,
+            top_k_experts=self.top_k_experts,
+            moe_intermediate_size=self.moe_intermediate_size,
+        )
+
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size - 1) + 1
+        attention_mask = None
+        if self.use_input_mask:
+            attention_mask = torch.ones_like(input_ids).to(torch_device)
+        return self.get_config(), input_ids, attention_mask
+
+    def prepare_config_and_inputs_for_common(self):
+        config, input_ids, attention_mask = self.prepare_config_and_inputs()
+        return config, {"input_ids": input_ids, "attention_mask": attention_mask}
+
+
+@require_torch
+class EmbeddingGemma2TextModelTest(ModelTesterMixin, unittest.TestCase):
+    # EmbeddingGemma 2 is an encoder: there is no `ForCausalLM` / `ForConditionalGeneration`, hence no
+    # `GenerationTesterMixin` and no generative classes.
+    all_model_classes = (EmbeddingGemma2TextModel,) if is_torch_available() else ()
+    all_generative_model_classes = ()
+
+    def setUp(self):
+        self.model_tester = EmbeddingGemma2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=EmbeddingGemma2TextConfig, hidden_size=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+        model = EmbeddingGemma2TextModel(config).to(torch_device).eval()
+        with torch.no_grad():
+            result = model(input_ids, attention_mask=attention_mask)
+        self.assertEqual(
+            result.last_hidden_state.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, config.embedding_dim),
+        )
+
+    def test_embedding_projection(self):
+        """The embedding head lives on the text model and maps `hidden_size` -> `embedding_dim`."""
+        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+        model = EmbeddingGemma2TextModel(config).to(torch_device).eval()
+
+        self.assertIsInstance(model.embedding_projection, torch.nn.Linear)
+        self.assertEqual(model.embedding_projection.out_features, config.embedding_dim)
+        self.assertEqual(model.embedding_projection.in_features, config.hidden_size)
+        self.assertIsNone(model.embedding_projection.bias)
+
+        with torch.no_grad():
+            outputs = model(input_ids, attention_mask=attention_mask)
+        self.assertEqual(outputs.last_hidden_state.shape[-1], config.embedding_dim)
+
+    def test_projection_only_per_layer_inputs(self):
+        """EmbeddingGemma 2 has no per-layer embedding table; the PLE signal comes from `inputs_embeds`."""
+        config, input_ids, _ = self.model_tester.prepare_config_and_inputs()
+        self.assertFalse(hasattr(config, "vocab_size_per_layer_input"))
+        self.assertFalse(hasattr(config, "final_logit_softcapping"))
+
+        model = EmbeddingGemma2TextModel(config).to(torch_device).eval()
+        self.assertFalse(hasattr(model, "embed_tokens_per_layer"))
+        self.assertFalse(hasattr(model, "per_layer_input_scale"))
+
+        inputs_embeds = model.embed_tokens(input_ids)
+        # The token-identity term does not exist, so `get_per_layer_inputs` is a no-op.
+        self.assertIsNone(model.get_per_layer_inputs(input_ids, inputs_embeds))
+
+        # `project_per_layer_inputs` takes a *single* argument (Gemma 4 takes two).
+        per_layer_inputs = model.project_per_layer_inputs(inputs_embeds)
+        self.assertEqual(
+            per_layer_inputs.shape,
+            (
+                self.model_tester.batch_size,
+                self.model_tester.seq_length,
+                config.num_hidden_layers,
+                config.hidden_size_per_layer_input,
+            ),
+        )
+
+    def test_per_layer_embeddings_accessors_raise(self):
+        config, _, _ = self.model_tester.prepare_config_and_inputs()
+        model = EmbeddingGemma2TextModel(config)
+        with self.assertRaises(AttributeError):
+            model.get_per_layer_input_embeddings()
+        with self.assertRaises(AttributeError):
+            model.set_per_layer_input_embeddings(None)
+
+
+class EmbeddingGemma2ModelTester:
+    """Builds a tiny composite config: text backbone + reused Gemma 4 vision and audio towers."""
+
+    def __init__(
+        self,
+        parent,
+        mm_tokens_per_image=2,
+        image_token_id=4,
+        video_token_id=7,
+        audio_token_id=8,
+        boi_token_id=5,
+        eoi_token_id=6,
+        seq_length=25,
+        is_training=True,
+        vision_config={
+            "use_labels": True,
+            "image_size": 20,
+            "patch_size": 5,
+            "num_channels": 3,
+            "is_training": True,
+            "hidden_size": 32,
+            "num_key_value_heads": 1,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 37,
+            "dropout": 0.1,
+            "attention_dropout": 0.1,
+            "initializer_range": 0.02,
+        },
+        audio_config={
+            "hidden_size": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 37,
+            "output_proj_dims": 32,
+            "subsampling_conv_channels": [8, 8],
+        },
+    ):
+        self.parent = parent
+        self.mm_tokens_per_image = mm_tokens_per_image
+        self.image_token_id = image_token_id
+        self.video_token_id = video_token_id
+        self.audio_token_id = audio_token_id
+        self.boi_token_id = boi_token_id
+        self.eoi_token_id = eoi_token_id
+        self.llm_tester = EmbeddingGemma2TextModelTester(self.parent)
+        self.text_config = self.llm_tester.get_config()
+        self.vision_config = vision_config
+        self.audio_config = audio_config
+        self.seq_length = seq_length
+        self.pad_token_id = self.text_config.pad_token_id
+
+        self.num_hidden_layers = self.text_config.num_hidden_layers
+        self.vocab_size = self.text_config.vocab_size
+        self.hidden_size = self.text_config.hidden_size
+        self.embedding_dim = self.text_config.embedding_dim
+        self.num_attention_heads = self.text_config.num_attention_heads
+        self.is_training = is_training
+
+        self.batch_size = 3
+        self.num_channels = vision_config["num_channels"]
+        self.image_size = vision_config["image_size"]
+        self.encoder_seq_length = seq_length
+
+    def get_config(self):
+        return EmbeddingGemma2Config(
+            text_config=self.text_config,
+            vision_config=self.vision_config,
+            audio_config=self.audio_config,
+            image_token_id=self.image_token_id,
+            video_token_id=self.video_token_id,
+            audio_token_id=self.audio_token_id,
+            boi_token_id=self.boi_token_id,
+            eoi_token_id=self.eoi_token_id,
+        )
+
+    def prepare_config_and_inputs(self):
+        config = self.get_config()
+        config.vision_config.pooling_kernel_size = 2
+
+        # (num_images, max_num_patches, patch_size * patch_size * num_channels)
+        patch_size = config.vision_config.patch_size
+        pixel_values = floats_tensor(
+            [
+                self.batch_size,
+                self.vision_config["image_size"],
+                patch_size * patch_size * self.vision_config["num_channels"],
+            ]
+        )
+
+        # create (h*w, 2) grid of (x, y) coords for a non-square input image
+        num_patches = self.vision_config["image_size"]
+        h = int(num_patches**0.5)
+        w = num_patches // h
+
+        xs = torch.arange(w).repeat(h)
+        ys = torch.arange(h).repeat_interleave(w)
+        pixel_position_ids = torch.stack([xs, ys], dim=-1).to(device=torch_device)
+        pixel_position_ids = pixel_position_ids.unsqueeze(0).repeat(self.batch_size, 1, 1)
+
+        return config, pixel_values, pixel_position_ids
+
+    def prepare_config_and_inputs_for_common(self):
+        config, pixel_values, pixel_position_ids = self.prepare_config_and_inputs()
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
+        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
+
+        # Ensure no tokens accidentally match special token IDs
+        for token_id in [config.image_token_id, config.video_token_id, config.audio_token_id]:
+            input_ids[input_ids == token_id] = self.pad_token_id
+        input_ids[:, :5] = config.image_token_id
+
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == config.image_token_id] = 1
+
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "image_position_ids": pixel_position_ids,
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "mm_token_type_ids": mm_token_type_ids,
+        }
+        return config, inputs_dict
+
+
+@require_torch
+class EmbeddingGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
+    # No generative classes: EmbeddingGemma 2 only ever produces embeddings.
+    all_model_classes = (EmbeddingGemma2Model,) if is_torch_available() else ()
+    all_generative_model_classes = ()
+    additional_model_inputs = ["mm_token_type_ids", "image_position_ids"]
+    model_split_percents = [0.85, 0.9]
+
+    def setUp(self):
+        self.model_tester = EmbeddingGemma2ModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=EmbeddingGemma2Config, hidden_size=37)
+        self.skip_flash_attn_inference_equivalence_tests()
+
+    def skip_flash_attn_inference_equivalence_tests(self):
+        skippable_tests = [
+            "test_flash_attn_2_inference_equivalence",
+            "test_flash_attn_3_inference_equivalence",
+            "test_flash_attn_4_inference_equivalence",
+        ]
+        for test in skippable_tests:
+            if self._testMethodName.startswith(test):
+                self.skipTest(
+                    reason="The base test does not pass image_position_ids and mm_token_type_ids required by "
+                    "EmbeddingGemma 2"
+                )
+
+    # NOTE: no `test_config` here (unlike the text-model test): `ConfigTester.run_common_tests`
+    # asserts a `vocab_size` attribute, which on a composite config only lives on `text_config`.
+    # Gemma 4's multimodal test leaves its config tester unused for the same reason.
+
+    @unittest.skip("The tester has no audios in input dict")
+    def test_get_audio_features_hidden_states(self):
+        pass
+
+    @unittest.skip("The tester has no audios in input dict")
+    def test_get_audio_features_attentions(self):
+        pass
+
+    @parameterized.expand([True, False, None])
+    @unittest.skip("The tester has no audios in input dict")
+    def test_get_audio_features_output(self, return_dict: bool | None):
+        pass
+
+    @unittest.skip("The tester has no videos in input dict")
+    def test_get_video_features_hidden_states(self):
+        pass
+
+    @unittest.skip("The tester has no videos in input dict")
+    def test_get_video_features_attentions(self):
+        pass
+
+    @parameterized.expand([True, False, None])
+    @unittest.skip("The tester has no videos in input dict")
+    def test_get_video_features_output(self, return_dict: bool | None):
+        pass
+
+    @parameterized.expand([True, False, None])
+    def test_get_image_features_output(self, return_dict: bool | None):
+        "Override to infer last hidden states' `batch_size` from image position ids"
+        for model_class in self.all_model_classes:
+            if not hasattr(model_class, "get_image_features"):
+                continue
+
+            config, inputs_dict = self._image_features_prepare_config_and_inputs()
+            if return_dict is not None:
+                config.return_dict = return_dict
+
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+
+            set_seed(42)
+            with torch.no_grad():
+                outputs = model.get_image_features(**inputs_dict)
+
+            if return_dict in (True, None):
+                self.assertTrue(isinstance(outputs, ModelOutput), "get_image_features() must return a BaseModelOutput")
+                self.assertTrue(
+                    hasattr(outputs, "last_hidden_state"),
+                    "get_image_features() must return a BaseModelOutput with last_hidden_state",
+                )
+                self.assertTrue(
+                    hasattr(outputs, "pooler_output"),
+                    "get_image_features() must return a BaseModelOutput with pooler_output",
+                )
+                self.assertTrue(
+                    hasattr(outputs, "hidden_states"),
+                    "get_image_features() must return a BaseModelOutput with hidden_states",
+                )
+                if self.has_attentions:
+                    self.assertTrue(
+                        hasattr(outputs, "attentions"),
+                        "get_image_features() must return a BaseModelOutput with attentions",
+                    )
+
+                last_hidden_state_shape = outputs.last_hidden_state.shape
+                batch_size = inputs_dict["pixel_values"].shape[0]
+                output_length = inputs_dict["pixel_values"].shape[-2] // (
+                    model.config.vision_config.pooling_kernel_size**2
+                )
+                k_squared = int((inputs_dict["image_position_ids"].shape[1] // output_length) ** 0.5) ** 2
+                batch_size *= inputs_dict["image_position_ids"].shape[1] // k_squared
+
+                self.assertEqual(
+                    last_hidden_state_shape[0],
+                    batch_size,
+                    f"batch_size mismatch, full shape: {last_hidden_state_shape}",
+                )
+                self.assertEqual(
+                    last_hidden_state_shape[-1],
+                    config.vision_config.hidden_size,
+                    f"hidden_size mismatch, full shape: {last_hidden_state_shape}",
+                )
+
+                self.assertEqual(
+                    len(outputs.pooler_output),
+                    self.model_tester.batch_size,
+                    f"batch_size mismatch for `pooler_output`: {len(outputs.pooler_output)} != "
+                    f"{self.model_tester.batch_size}",
+                )
+                self.assertEqual(
+                    outputs.pooler_output[0].ndim,
+                    2,
+                    f"each sample in `pooler_output` should be a 2D array but got {outputs.pooler_output[0].ndim}",
+                )
+            else:
+                self.assertIsInstance(outputs, tuple, "get_image_features() must return a tuple if return_dict=False")
+
+    def test_model_outputs_embedding_dim(self):
+        """The composite model returns the projected embedding, not `hidden_size` states."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = EmbeddingGemma2Model(config).to(torch_device).eval()
+
+        with torch.no_grad():
+            outputs = model(**inputs_dict)
+
+        self.assertEqual(
+            outputs.last_hidden_state.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, config.text_config.embedding_dim),
+        )
+        self.assertNotEqual(config.text_config.embedding_dim, config.text_config.hidden_size)
+
+    def test_embedding_projection_lives_on_the_text_model(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = EmbeddingGemma2Model(config).to(torch_device).eval()
+
+        projection = model.language_model.embedding_projection
+        self.assertIsInstance(projection, torch.nn.Linear)
+        self.assertEqual(projection.out_features, config.text_config.embedding_dim)
+        self.assertEqual(projection.in_features, config.text_config.hidden_size)
+        self.assertIsNone(projection.bias)
+        # The composite model owns no projection of its own.
+        self.assertFalse(hasattr(model, "embedding_projection"))
+
+    def test_towers_are_reused_from_gemma4(self):
+        """Vision and audio towers are resolved through `AutoModel` and come out as Gemma 4 classes."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = EmbeddingGemma2Model(config)
+
+        self.assertIsInstance(model.vision_tower, Gemma4VisionModel)
+        self.assertIsInstance(model.audio_tower, Gemma4AudioModel)
+        self.assertEqual(config.vision_config.model_type, "gemma4_vision")
+        self.assertEqual(config.audio_config.model_type, "gemma4_audio")
+
+    def test_projection_only_ple_in_composite_model(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        self.assertFalse(hasattr(config.text_config, "vocab_size_per_layer_input"))
+
+        model = EmbeddingGemma2Model(config).to(torch_device).eval()
+        text_model = model.language_model
+
+        inputs_embeds = text_model.embed_tokens(inputs_dict["input_ids"])
+        self.assertIsNone(text_model.get_per_layer_inputs(inputs_dict["input_ids"], inputs_embeds))
+
+        per_layer_inputs = text_model.project_per_layer_inputs(inputs_embeds)
+        self.assertEqual(
+            per_layer_inputs.shape,
+            (
+                self.model_tester.batch_size,
+                self.model_tester.seq_length,
+                config.text_config.num_hidden_layers,
+                config.text_config.hidden_size_per_layer_input,
+            ),
+        )
