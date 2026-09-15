@@ -2083,7 +2083,6 @@ class ProcessorMixin(PushToHubMixin):
                 )
 
         # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`.
-        # Audio kwargs can be passed flat or nested under `audio_kwargs`, so we check both
         audio_kwargs_from_user = processor_kwargs.get("audio_kwargs", {})
         sampling_rate = kwargs.get(
             "sampling_rate", processor_kwargs.get("sampling_rate", audio_kwargs_from_user.get("sampling_rate"))
