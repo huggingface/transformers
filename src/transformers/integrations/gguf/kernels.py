@@ -110,15 +110,12 @@ def get_ggml_layer_mapping() -> dict:
     from kernels import LayerRepository, Mode
 
     return {
-        # Named for the weight convention rather than the model: this is the norm that computes
-        # `x * (1 + w)`, which the plain `RMSNorm` kernels would get silently wrong.
         "SoftmaxTopKRouter": {
             "mps": {
                 Mode.INFERENCE: LayerRepository(
-                    repo_id="kernels-staging/topk",
+                    repo_id="transformers-community/topk",
                     layer_name="SoftmaxTopKRouter",
-                    # TODO: `version=1` once kernels-staging/topk#1124 is merged and tagged
-                    revision="pr-1124",
+                    version=1,
                 )
             },
         },

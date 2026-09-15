@@ -197,7 +197,6 @@ class GgufExperts(nn.Module):
         )
 
     def forward(self, hidden_states, top_k_index, top_k_weights):
-        """Every expert in two dispatches, rather than two per expert the router picked."""
         num_tokens, top_k = top_k_index.shape
         ids = top_k_index.to(torch.int32)
         gate, up = mul_mat_id(
