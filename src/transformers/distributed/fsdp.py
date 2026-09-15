@@ -211,7 +211,7 @@ def apply_fully_sharded_data_parallelism(
     reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
 
     fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
-    if distributed_config.experts_dispatch == "all-to-all":
+    if distributed_config.ep_size > 1 and "ep_dispatch_experts" in model.ep_plan.values():
         expert_mesh = mesh_manager.get_mesh("efsdp")
         for module in model.modules():
             if getattr(module, "_is_expert_parallel", False):

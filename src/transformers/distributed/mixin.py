@@ -25,8 +25,8 @@ from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
     _validate_tp_plan_styles,
-    apply_tensor_parallelism_moe,
-    apply_tensor_parallelism_non_moe,
+    apply_expert_parallelism,
+    apply_tensor_parallelism,
     gather_state_dict_for_save,
     resolve_parallel_plans,
 )
@@ -92,7 +92,7 @@ class DistributedMixin:
     @property
     def ep_plan(self) -> dict[str, str]:
         """The full expert parallel plan for the model's modules."""
-        return self._ep_plan
+        return self._ep_plan if self._ep_plan is not None else {}
 
     @property
     def fsdp_plan(self) -> dict[str, str]:
@@ -165,9 +165,6 @@ class DistributedMixin:
             raise ValueError("Tensor parallelism and `device_map` are mutually exclusive.")
         if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
             raise OSError("FSDP2 requires `torch>=2.7` (distributed checkpoint save/load).")
-        if distributed_config.experts_dispatch == "all-to-all" and not is_torch_greater_or_equal("2.7"):
-            raise OSError("Expert-parallel token dispatch requires `torch>=2.7`.")
-
         device_map, mesh_manager = initialize_distributed_mesh(distributed_config)
 
         return distributed_config, device_map, mesh_manager
@@ -189,16 +186,18 @@ class DistributedMixin:
         model._tp_size = distributed_config.tp_size
         model._fsdp_size = distributed_config.fsdp_size
 
+        tp_plan, ep_plan = resolve_parallel_plans(model, distributed_config)
+        distributed_config._validate_resolved_ep_plan(ep_plan)
+
         if distributed_config.pp_size > 1:
             model = apply_pipeline_parallelism(model, mesh_manager.get_mesh("pp"))
 
-        tp_plan, ep_plan = resolve_parallel_plans(model, distributed_config)
         if tp_plan:
-            model = apply_tensor_parallelism_non_moe(model, mesh_manager, tp_plan)
+            model = apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), tp_plan)
         if ep_plan:
-            model = apply_tensor_parallelism_moe(model, distributed_config, mesh_manager, ep_plan)
+            model = apply_expert_parallelism(model, distributed_config, mesh_manager, ep_plan)
 
-        if distributed_config.fsdp_size > 1 or distributed_config.experts_dispatch == "all-to-all":
+        if distributed_config.fsdp_size > 1 or "ep_dispatch_experts" in ep_plan.values():
             model = apply_fully_sharded_data_parallelism(model, mesh_manager)
         return model
 
@@ -260,7 +259,9 @@ class DistributedMixin:
         if distributed_config is None:
             return state_dict
 
-        if distributed_config.fsdp_size > 1 or distributed_config.experts_dispatch == "all-to-all":
+        if distributed_config.fsdp_size > 1 or (
+            distributed_config.ep_size > 1 and "ep_dispatch_experts" in self.ep_plan.values()
+        ):
             # Also covers the 2-D (fsdp, tp) mesh and token dispatch: every parameter is FSDP-managed, and
             # the full state dict is only materialized on rank 0.
             if not _is_torch_distributed_initialized():
