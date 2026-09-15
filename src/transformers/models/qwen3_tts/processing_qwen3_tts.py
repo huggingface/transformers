@@ -182,41 +182,34 @@ class Qwen3TTSProcessor(ProcessorMixin):
             data["instruct_ids"] = instruct_ids
         return BatchFeature(data=data)
 
-    def batch_decode(self, audio_codes):
+    def decode(self, audio_codes):
         """
-        Decode a batch of generated audio codes into audio waveforms using the audio tokenizer.
+        Decode generated audio codes into audio waveforms using the audio tokenizer.
 
         Args:
-            audio_codes (`list[torch.Tensor]` or `torch.Tensor`):
-                The audio codes returned by [`Qwen3TTSForConditionalGeneration.generate`]. Either a list of tensors of
-                shape `(codes_length, num_quantizers)` (one per sample) or a single batched tensor of shape
-                `(batch_size, codes_length, num_quantizers)`.
+            audio_codes (`torch.Tensor` or `list[torch.Tensor]`):
+                The audio codes returned by [`Qwen3TTSForConditionalGeneration.generate`]. Either a single sequence of
+                shape `(codes_length, num_quantizers)`, a list of such tensors (one per sample), or a single batched
+                tensor of shape `(batch_size, codes_length, num_quantizers)`.
 
         Returns:
-            `list[torch.Tensor]`: A list of decoded audio waveforms, one per sample.
+            `torch.Tensor` or `list[torch.Tensor]`: A single decoded waveform when a single sequence is passed,
+            otherwise a list of waveforms, one per sample.
         """
+        is_batched = isinstance(audio_codes, (list, tuple)) or (
+            isinstance(audio_codes, torch.Tensor) and audio_codes.dim() == 3
+        )
         if isinstance(audio_codes, torch.Tensor) and audio_codes.dim() == 3:
             audio_codes = list(audio_codes)
+        elif not is_batched:
+            audio_codes = [audio_codes]
 
         audios = []
         with torch.no_grad():
             for codes in audio_codes:
                 codes = codes.unsqueeze(0).to(self.audio_tokenizer.device)
                 audios.append(self.audio_tokenizer.decode(codes, return_dict=True).audio_values[0])
-        return audios
-
-    def decode(self, audio_codes):
-        """
-        Decode a single sequence of generated audio codes into an audio waveform.
-
-        Args:
-            audio_codes (`torch.Tensor`):
-                Audio codes of shape `(codes_length, num_quantizers)` for a single sample.
-
-        Returns:
-            `torch.Tensor`: The decoded audio waveform.
-        """
-        return self.batch_decode([audio_codes])[0]
+        return audios if is_batched else audios[0]
 
     def save_audio(
         self,
