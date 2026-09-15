@@ -638,10 +638,8 @@ class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditional
 __all__ = [
     "MossTranscribeDiarizeConfig",
     "MossTranscribeDiarizeProcessor",
-    "MossTranscribeDiarizeProcessorKwargs",
     "MossTranscribeDiarizePreTrainedModel",
     "MossTranscribeDiarizeEncoder",
     "MossTranscribeDiarizeModel",
     "MossTranscribeDiarizeForConditionalGeneration",
-    "MossTranscribeDiarizeMultiModalProjector",
 ]
