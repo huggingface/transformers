@@ -6312,9 +6312,9 @@ class ModelTesterMixin(ExportTesterMixin):
         hidden_states = torch.empty(1, dtype=torch.float32, device=torch_device)
         cos, sin = rope_module(hidden_states, position_ids)
         self.assertEqual(cos.shape[-1], inv_freq.shape[-1] * 4)  # the freq are `//4` of head dim
-    
+
     def test_model_rope_with_partial_rotation(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         text_config = config.get_text_config(decoder=True)
         base_model_class = None
         for model_class in self.all_model_classes:
@@ -6342,10 +6342,15 @@ class ModelTesterMixin(ExportTesterMixin):
         if n_required_args > 1:
             self.skipTest("This model requires more than single main input, skip for now as it's not supported")
 
-        input = ids_tensor([1, 10], text_config.vocab_size)
+        input_ids = ids_tensor([1, 10], text_config.vocab_size)
         model_kwargs = {}
+        if base_model_class.main_input_name != "input_ids":
+            model_kwargs[base_model_class.main_input_name] = input_dict[base_model_class.main_input_name][:1]
+        else:
+            model_kwargs = {"input_ids": input_ids}
+
         if config.is_encoder_decoder:
-            model_kwargs = {"decoder_input_ids": input.clone()}
+            model_kwargs["decoder_input_ids"] = input_ids.clone()
 
         if "partial_rotary_factor" not in text_config.rope_parameters:
             self.skipTest("This model does not have partial rope supported")
@@ -6363,7 +6368,7 @@ class ModelTesterMixin(ExportTesterMixin):
         )
         model = base_model_class(config)
         model.to(torch_device).eval()
-        model(input, **model_kwargs)
+        model(**model_kwargs)
 
 
 global_rng = random.Random()
