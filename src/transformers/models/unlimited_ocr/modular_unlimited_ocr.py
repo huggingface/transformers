@@ -404,7 +404,7 @@ class UnlimitedOcrTextConfig(DeepseekOcr2TextConfig):
         Attention type for each decoder layer. Defaults to `"reference_sliding_attention"` on every layer.
     sliding_window (`int`, *optional*, defaults to `128`):
         Sliding window size for reference sliding window attention. If set, every token attends to the last
-        `sliding_window` and all image and prompt tokens. Set to `None` to use full attention on every layer.
+        `sliding_window` and all image and prompt tokens.
 
     Example:
 
