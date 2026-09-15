@@ -3828,6 +3828,51 @@ class DisableMmapLoadingTest(unittest.TestCase):
 
 
 @require_torch
+class CachingAllocatorWarmupTest(unittest.TestCase):
+    """Tests that `caching_allocator_warmup` degrades gracefully when the device cannot report its free memory."""
+
+    def test_warmup_skipped_when_mem_get_info_unavailable(self):
+        """
+        Some backends cannot answer free-memory queries (e.g. Intel XPU under WSL2, where the Level Zero Sysman
+        interface is not exposed, so `torch.xpu.mem_get_info` raises). Warmup is a best-effort optimization and must
+        not turn such a failure into a model loading failure.
+        """
+        from transformers.modeling_utils import caching_allocator_warmup
+
+        model = BertModel(BertConfig(hidden_size=32, num_hidden_layers=2, num_attention_heads=4, intermediate_size=37))
+        # Pretend everything is loaded on an accelerator; the warmup must bail out before touching the device
+        expanded_device_map = {name: "cuda:0" for name, _ in model.named_parameters()}
+        error = RuntimeError("The device doesn't support querying the available free memory.")
+
+        logger = logging.get_logger("transformers.modeling_utils")
+        # The warning is emitted through `warning_once`, which is cached globally
+        logging.warning_once.cache_clear()
+        with patch("torch.cuda.mem_get_info", side_effect=error):
+            with LoggingLevel(logging.WARNING):
+                with CaptureLogger(logger) as cl:
+                    caching_allocator_warmup(model, expanded_device_map, None)
+
+        self.assertIn("Skipping caching allocator warmup", cl.out)
+
+    @require_accelerate
+    @require_torch_accelerator
+    def test_from_pretrained_when_mem_get_info_unavailable(self):
+        """Loading with a `device_map` must succeed even if the accelerator cannot report its free memory."""
+        device_type = torch.device(torch_device).type
+        if device_type not in ["cuda", "xpu"]:
+            self.skipTest(f"`mem_get_info` is only used for cuda and xpu devices, got {device_type}")
+
+        with patch(
+            f"torch.{device_type}.mem_get_info",
+            side_effect=RuntimeError("The device doesn't support querying the available free memory."),
+        ):
+            model = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL, device_map={"": torch_device})
+
+        for param in model.parameters():
+            self.assertEqual(param.device.type, device_type)
+
+
+@require_torch
 class RemoteAndCustomCodeModelTests(unittest.TestCase):
     def test_remote_code_registration(self):
         """
