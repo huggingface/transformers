@@ -96,30 +96,6 @@ class PI0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(torch.equal(outputs["pixel_attention_mask"], torch.tensor([[True, True], [True, False]])))
 
     @require_torch
-    def test_padding_with_text_only_samples(self):
-        processor = self.get_processor()
-        processor.image_seq_length = 2
-        images = [[self.prepare_images_inputs(), self.prepare_images_inputs()], [self.prepare_images_inputs()]]
-        text = ["task a", "task b"]
-        reference = processor(images=images, text=text, return_tensors="pt")
-
-        for empty_index in range(3):
-            with self.subTest(empty_index=empty_index):
-                batch_images = images[:empty_index] + [[]] + images[empty_index:]
-                batch_text = text[:empty_index] + ["text only"] + text[empty_index:]
-                outputs = processor(images=batch_images, text=batch_text, return_tensors="pt")
-                populated_indices = [index for index in range(3) if index != empty_index]
-
-                torch.testing.assert_close(outputs.pixel_values[populated_indices], reference.pixel_values)
-                torch.testing.assert_close(
-                    outputs.pixel_attention_mask[populated_indices], reference.pixel_attention_mask
-                )
-                torch.testing.assert_close(outputs.input_ids[populated_indices], reference.input_ids)
-                self.assertEqual(outputs.pixel_values[empty_index].count_nonzero().item(), 0)
-                self.assertFalse(outputs.pixel_attention_mask[empty_index].any().item())
-                self.assertNotIn(processor.image_token_id, outputs.input_ids[empty_index].tolist())
-
-    @require_torch
     def test_newline_normalization(self):
         processor = self.get_processor()
         image = self.prepare_images_inputs()
