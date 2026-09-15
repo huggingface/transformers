@@ -26,7 +26,6 @@ from transformers import (
 )
 from transformers.testing_utils import (
     backend_device_count,
-    cleanup,
     get_cpu_ram_total_gib,
     require_flash_attn,
     require_torch,
@@ -327,12 +326,9 @@ class Glm4vMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        if hasattr(cls, "model"):
-            del cls.model
         if cls.offload_dir is not None:
             cls.offload_dir.cleanup()
-            cls.offload_dir = None
-        cleanup(torch_device, gc_collect=True)
+        super().tearDownClass()
 
     def setUp(self):
         super().setUp()

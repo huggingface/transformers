@@ -22,7 +22,6 @@ from parameterized import parameterized
 from transformers import StaticCache, is_torch_available
 from transformers.testing_utils import (
     backend_device_count,
-    cleanup,
     get_cpu_ram_total_gib,
     require_torch,
     slow,
@@ -30,6 +29,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -114,7 +114,7 @@ class PhimoeModelTest(CausalLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch
-class PhimoeIntegrationTest(unittest.TestCase):
+class PhimoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model = None
     offload_dir = None
 
@@ -150,17 +150,10 @@ class PhimoeIntegrationTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        del cls.model
         if cls.offload_dir is not None:
             cls.offload_dir.cleanup()
-            cls.offload_dir = None
-        cleanup(torch_device, gc_collect=True)
+        super().tearDownClass()
 
-    def setUp(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     def test_model_phimoe_instruct_logits(self):
         input_ids = {"input_ids": torch.tensor([[1212, 318, 281, 1672]], dtype=torch.long, device=torch_device)}
