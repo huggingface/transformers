@@ -18,6 +18,7 @@ from typing import Any
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
@@ -29,6 +30,7 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
 from ...video_utils import VideoInput, make_batched_videos
+
 from ..auto import AutoConfig
 from ..minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6Config, MiniCPMV4_6VisionConfig
 from ..minicpmv4_6.image_processing_minicpmv4_6 import MiniCPMV4_6ImageProcessor, MiniCPMV4_6ImageProcessorKwargs
@@ -37,6 +39,7 @@ from ..minicpmv4_6.modeling_minicpmv4_6 import (
     MiniCPMV4_6ForConditionalGeneration,
     MiniCPMV4_6Model,
     MiniCPMV4_6PreTrainedModel,
+    MiniCPMV4_6ViTWindowAttentionMerger,
 )
 from ..minicpmv4_6.processing_minicpmv4_6 import MiniCPMV4_6Processor, MiniCPMV4_6ProcessorKwargs
 from ..minicpmv4_6.video_processing_minicpmv4_6 import MiniCPMV4_6VideoProcessor, MiniCPMV4_6VideoProcessorKwargs
@@ -660,6 +663,56 @@ class MiniCPMV4_7VisionConfig(MiniCPMV4_6VisionConfig):
     """
 
     model_type = "minicpmv4_7_vision"
+
+
+class MiniCPMV4_7ViTWindowAttentionMerger(MiniCPMV4_6ViTWindowAttentionMerger):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        target_sizes: torch.IntTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        residual = hidden_states
+        hidden_states = self.layer_norm1(hidden_states)
+        device = hidden_states.device
+
+        window_index, window_cu_seqlens, window_max_seqlens = self.get_window_index(target_sizes, kwargs=kwargs)
+        window_index = window_index.to(device)
+
+        hidden_states = hidden_states[:, window_index, :]
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            cu_seqlens=window_cu_seqlens.to(device),
+            max_seqlen=window_max_seqlens,
+        )
+        hidden_states = hidden_states[:, torch.argsort(window_index), :]
+        hidden_states = residual + hidden_states
+
+        batch_size, _ = target_sizes.shape
+        window_h, window_w = self.window_kernel_size
+        cu_seqlens = F.pad(
+            torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32).to(device), (1, 0)
+        )
+        all_patches = []
+        for batch_idx in range(batch_size):
+            height = int(target_sizes[batch_idx, 0])
+            width = int(target_sizes[batch_idx, 1])
+            patch = hidden_states[0, cu_seqlens[batch_idx] : cu_seqlens[batch_idx + 1], :]
+
+            embed_dim = patch.shape[-1]
+            merged_h, merged_w = height // window_h, width // window_w
+            patch_5d = patch.view(merged_h, window_h, merged_w, window_w, embed_dim).permute(0, 2, 1, 3, 4)
+            hidden_state = patch_5d.reshape(merged_h * merged_w, window_h * window_w * embed_dim)
+            patch_residual = patch_5d.reshape(merged_h * merged_w, window_h * window_w, embed_dim).mean(dim=1)
+
+            hidden_state = self.pre_norm(hidden_state)
+            hidden_state = self.linear_1(hidden_state)
+            hidden_state = self.act(hidden_state)
+            hidden_state = self.linear_2(hidden_state)
+
+            all_patches.append(hidden_state + patch_residual)
+
+        return torch.concat(all_patches, dim=0).unsqueeze(0)
 
 
 @auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7")
