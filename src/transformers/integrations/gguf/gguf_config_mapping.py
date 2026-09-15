@@ -72,7 +72,6 @@ def _qwen35_config(metadata: dict, tensor_names: tuple[str, ...], prefix: str = 
 
 
 def _qwen35moe_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
-    """Qwen3.5 MoE: `_qwen35_config`'s model, with each layer's FFN replaced by an expert bank."""
     config = _qwen35_config(metadata, tensor_names, prefix="qwen35moe")
     key = lambda name: metadata[f"qwen35moe.{name}"]  # noqa: E731
     return config | {

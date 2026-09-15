@@ -178,16 +178,7 @@ def _qwen35(config) -> list[WeightTransform]:
 
 
 def _qwen35moe(config) -> list[WeightTransform]:
-    """Qwen3.5 MoE: the same hybrid stack as `_qwen35`, with each layer's FFN replaced by an expert bank.
-
-    Everything about the attention and linear-attention halves is `_qwen35`'s, including the value-head
-    reorder -- llama.cpp converts both through the same base class, so what it does to those tensors does
-    not change. What is new is the FFN: a router, a bank of stacked experts, and a shared expert that
-    runs for every token.
-
-    Experts arrive stacked, `(n_experts, rows, cols)`, which is the layout the model wants; the
-    per-expert `experts.{i}` split some safetensors checkpoints use never appears in a GGUF.
-    """
+    """Everything outside the FFN is `_qwen35`'s: llama.cpp converts both through the same base class."""
     routed = [
         WeightRenaming(r"\.ffn_gate_inp\.", ".mlp.gate."),
         WeightRenaming(r"\.ffn_down_exps\.weight", ".mlp.experts.down_proj"),
@@ -205,7 +196,7 @@ def _qwen35moe(config) -> list[WeightTransform]:
     restore_gate = WeightConverter(
         source_patterns="mlp.shared_expert_gate.weight",
         target_patterns="mlp.shared_expert_gate.weight",
-        operations=[RestoreLeadingAxis()],
+        operations=[Unsqueeze(0, expected_ndim=2)],
     )
     return _qwen35(config) + routed + [fuse_gate_up, restore_gate]
 
@@ -218,7 +209,10 @@ GGUF_ARCHS = {
 
 
 class SubtractOne(ConversionOps):
-    """Undo llama.cpp storing zero-centred RMSNorm weights as `w + 1`."""
+    """Subtract `offset` from the tensor, in float32.
+
+    Example: `[1.02, 0.98] -> [0.02, -0.02]`
+    """
 
     def __init__(self, offset: float = 1.0):
         self.offset = offset
@@ -232,7 +226,10 @@ class SubtractOne(ConversionOps):
 
 
 class LogNegate(ConversionOps):
-    """`A_log = log(-a)`, undoing llama.cpp storing `ssm_a = -exp(A_log)`."""
+    """Take the log of the negated tensor, `log(-x)`.
+
+    Example: `[-2.0, -1.0] -> [0.69, 0.0]`
+    """
 
     @torch.no_grad
     def convert(
@@ -243,24 +240,34 @@ class LogNegate(ConversionOps):
 
 
 class Unsqueeze(ConversionOps):
-    """Add a size-1 dim, undoing llama.cpp squeezing `conv1d` from `(C, 1, K)` to `(C, K)`."""
+    """Add a size-1 dim at `dim`, unless the tensor already has `expected_ndim` dims.
 
-    def __init__(self, dim: int):
+    Pass `expected_ndim` when a file may store the tensor either way, so that both load through the
+    same mapping. Safe on packed blocks: a new axis does not move any bytes.
+
+    Example: `[[1, 2, 3]] -> [[[1, 2, 3]]]`
+    """
+
+    supports_packed = True
+
+    def __init__(self, dim: int, expected_ndim: int | None = None):
         self.dim = dim
+        self.expected_ndim = expected_ndim
 
     @torch.no_grad
     def convert(
         self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
     ) -> dict[str, torch.Tensor]:
         tensor = _single_tensor(input_dict)
+        if self.expected_ndim is not None and tensor.dim() >= self.expected_ndim:
+            return {target_patterns[0]: tensor}
         return {target_patterns[0]: tensor.unsqueeze(self.dim)}
 
 
 class PermuteRows(ConversionOps):
-    """Reorder rows (dim 0), optionally only those from `offset` onwards.
+    """Reorder rows (dim 0), optionally only those from `offset` on.
 
-    `offset` covers tensors whose leading rows must stay put, e.g. Qwen3.5's fused `in_proj_qkv`.
-    Safe on packed blocks: a block never spans two rows.
+    Example: `[[1, 2], [3, 4], [5, 6]] -> [[5, 6], [1, 2], [3, 4]]` for `[2, 0, 1]`
     """
 
     supports_packed = True
@@ -284,12 +291,10 @@ class PermuteRows(ConversionOps):
 
 
 class PermuteInputFeatures(ConversionOps):
-    """Reorder columns (dim 1), for a tensor that *consumes* an axis llama.cpp reordered.
+    """Reorder columns (dim 1). Columns cross blocks, so a packed tensor is left as stored and `GgufLinear`
+    permutes its input instead.
 
-    Columns cross quantization blocks, so permuting packed bytes would mean requantizing. It is not
-    needed on the weight at all, since `x @ W[:, p].T == x[:, argsort(p)] @ W.T`: a packed weight is
-    left as stored and `GgufLinear` gathers its input through `input_permutation` instead. A dense
-    tensor still has its columns permuted here.
+    Example: `[[1, 2, 3]] -> [[3, 1, 2]]` for `[2, 0, 1]`
     """
 
     supports_packed = True
@@ -318,10 +323,12 @@ class PermuteInputFeatures(ConversionOps):
 
 
 class TiledToGroupedRows(PermuteRows):
-    """`PermuteRows` undoing llama.cpp's head reorder, for a tensor that *produces* the head axis.
+    """Reorder rows from tiled to grouped by key head, for a tensor that *produces* the head axis.
 
-    llama.cpp stores head-indexed axes tiled (`v0k0 v0k1 ... v1k0 ...`), transformers groups them by
-    key head (`k0v0 k0v1 k1v0 ...`). `head_dim` defaults to 1, for per-head vectors like `A_log`.
+    Tiled is `v0k0 v0k1 v1k0 v1k1`, grouped is `v0k0 v1k0 v0k1 v1k1`. `head_dim` defaults to 1, for
+    tensors with one row per head rather than a block of rows.
+
+    Example: `[a, b, c, d] -> [a, c, b, d]` for 2 key heads and 2 heads each
     """
 
     def __init__(self, num_k_heads: int, heads_per_k: int, head_dim: int = 1, offset: int = 0):
@@ -335,9 +342,9 @@ class TiledToGroupedRows(PermuteRows):
 
 
 class TiledToGroupedInputs(PermuteInputFeatures):
-    """`PermuteInputFeatures` undoing the same reorder, for a tensor that *consumes* the head axis.
+    """The same reorder as `TiledToGroupedRows`, on columns, for a tensor that *consumes* the head axis.
 
-    The permutation is the one `TiledToGroupedRows` builds, applied to columns instead of rows.
+    Example: `[[a, b, c, d]] -> [[a, c, b, d]]` for 2 key heads and 2 heads each
     """
 
     def __init__(self, num_k_heads: int, heads_per_k: int, head_dim: int = 1):
@@ -351,11 +358,10 @@ class TiledToGroupedInputs(PermuteInputFeatures):
 
 
 class Cast(ConversionOps):
-    """Cast to the model's dtype, after every other transform has run.
+    """Cast to the model's dtype, last in the chain so that the transforms before it keep their precision. Blocks
+    pass through untouched.
 
-    Last, not first: llama.cpp stores values this path does arithmetic on (`w + 1` norms, `-exp(A_log)`),
-    and rounding those to bf16 before the arithmetic would spend the precision near 1.0. Blocks pass
-    through untouched. The loader skips this itself for a pre-quantized checkpoint under renamed keys.
+    Example: `[0.02] f32 -> [0.02] bf16`
     """
 
     def __init__(self, dtype: "torch.dtype"):
@@ -377,50 +383,21 @@ class Cast(ConversionOps):
         return {name: tensor.to(self.dtype)}
 
 
-class RestoreLeadingAxis(ConversionOps):
-    """Put back a leading axis of 1 that `llama-quantize` drops.
-
-    ggml stores a `(1, n)` tensor as `n` values with one dimension, and the quantizer rewrites the
-    tensor table that way even for a tensor it leaves in f32 -- so the same weight reads `(1, n)` out
-    of an unquantized file and `(n,)` out of a quantized one. Qwen3.5 MoE's `shared_expert_gate` is
-    one row, so it lands on exactly that difference, and the mismatch only shows up as a broadcast
-    error deep in the MLP.
-
-    Idempotent, because both files have to load through one mapping: a tensor that still has the axis
-    passes through untouched.
-    """
-
-    supports_packed = True
-
-    @torch.no_grad
-    def convert(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
-    ) -> dict[str, torch.Tensor]:
-        tensor = _single_tensor(input_dict)
-        return {target_patterns[0]: tensor if tensor.dim() > 1 else tensor.unsqueeze(0)}
-
-
 class ConcatenateRows(Concatenate):
-    """`Concatenate` along an axis of whole rows, which packed GGUF blocks survive.
+    """`Concatenate` on a row axis, which packed blocks survive. A block never spans two rows; joining on the last
+    axis would cut through them.
 
-    A quantized weight is stored as `(..., rows, bytes_per_row)`: a block never spans two rows, so
-    joining tensors along a row axis moves whole blocks and their scales together. Concatenating along
-    the *last* axis would cut through them, which is why this is a separate op rather than a flag on
-    the shared one -- it is only safe for the axis it is given.
-
-    Qwen3.5 MoE needs it: the file keeps a layer's gate and up expert banks apart, the model wants them
-    fused, and doing that on blocks is what lets the experts stay packed.
+    Example: `[[1, 2]] + [[3, 4]] -> [[1, 2], [3, 4]]`
     """
 
     supports_packed = True
 
 
 class Dequantize(ConversionOps):
-    """Unpack GGUF blocks into values, on the parameter's own device.
+    """Unpack GGUF blocks into values. First in its chain, since later transforms need dense values, and the ggml
+    type is looked up per parameter.
 
-    First in its chain, since every later transform is defined on dense values. One instance serves the
-    whole file: llama.cpp mixes quantization types, so the type is looked up per parameter, and a
-    parameter that is not listed keeps its blocks.
+    Example: `[[210, 17, ...]] u8 -> [[0.31, -1.20, ...]] f32`
     """
 
     def __init__(self, ggml_types: dict[str, int], dtype: "torch.dtype"):
@@ -440,14 +417,11 @@ class Dequantize(ConversionOps):
         if ggml_type is None:
             return input_dict
         block_elements, block_bytes = GGML_BLOCK[ggml_type]
-        # Every source: a chain can start with more than one tensor, and all must arrive unpacked.
         values = {}
         for key, tensors in input_dict.items():
             blocks = tensors[0] if isinstance(tensors, list) else tensors
-            if blocks.dtype != torch.uint8:  # already dense: another op in the chain got there first
-                values[key] = blocks
-                continue
-            # Only the last axis holds bytes, so a stacked bank's leading axes are flattened and restored.
+            if blocks.dtype != torch.uint8:
+                raise ValueError(f"{key} is {blocks.dtype}, not torch.uint8")
             cols = blocks.shape[-1] // block_bytes * block_elements
             flat = blocks.reshape(-1, blocks.shape[-1])
             unpacked = dequantize_blocks(flat, ggml_type, flat.shape[0], cols, self.dtype)

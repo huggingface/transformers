@@ -29,7 +29,6 @@ GGML_BLOCK = {
 
 
 def row_bytes(ggml_type: int, in_features: int) -> int:
-    """Bytes one row of `in_features` values occupies, packed as `ggml_type`."""
     block_elems, block_bytes = GGML_BLOCK[ggml_type]
     return in_features // block_elems * block_bytes
 

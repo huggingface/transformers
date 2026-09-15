@@ -49,7 +49,6 @@ class GgufHfQuantizer(HfQuantizer):
         self.packed_modules = {}
         self.input_permutations = {}
         self.quantized = {}
-        self.names = []
         self.mapping = []
         self.header = None
         self.kernel = None
@@ -64,9 +63,6 @@ class GgufHfQuantizer(HfQuantizer):
         if self.quantization_config.dequantize:
             return
         if not self.header.has_quantized_weights:
-            # Nothing is in blocks, so there is nothing to keep packed and nothing to unpack: this is
-            # the dequantized path already, on any device. Setting the flag is what leaves it an
-            # ordinary dense model, and no fallback happened, so there is nothing to warn about.
             self.quantization_config.dequantize = True
             return
         self.kernel = get_gguf_kernel()
@@ -77,9 +73,6 @@ class GgufHfQuantizer(HfQuantizer):
 
     def update_device_map(self, device_map):
         """Default to the backend the blocks are computed on, rather than the host."""
-        # Rejected whatever the caller asked for, dequantized loads included, because this is not about
-        # the blocks: a GGUF is one memory-mapped file, so there is no per-layer shard for the offload
-        # machinery to leave on disk and page back in.
         if "disk" in {str(place) for place in getattr(device_map, "values", lambda: [device_map])()}:
             raise RuntimeError(
                 "One or more modules is configured to be mapped to disk. Disk offload is not supported "
@@ -134,7 +127,7 @@ class GgufHfQuantizer(HfQuantizer):
         if not self.supported:
             return
         self.mapping = get_gguf_conversion_mapping(self.header.architecture, model.config)
-        self.quantized, packable, self.input_permutations, self.names = get_gguf_plan(self.header, self.mapping)
+        self.quantized, packable, self.input_permutations = get_gguf_plan(self.header, self.mapping)
         if self.quantization_config.dequantize:
             return
         self.packed_modules = replace_with_gguf_modules(model, packable, self.kernel, self.dtype)
@@ -150,20 +143,19 @@ class GgufHfQuantizer(HfQuantizer):
             if permutation is not None:
                 module.input_permutation = permutation.to(module.weight.device)
         kernelize_ggml_layers(model)
-        # `save_pretrained` writes a checkpoint back by reversing whatever loaded the model, and this
-        # mapping does not reverse: `Dequantize` has no inverse worth defining, and nobody wants a GGUF
-        # written back. Dropped once the weights are in place, so saving falls back on the model's own
-        # mapping -- which is what it needs, a dequantized model being an ordinary dense one. A model
-        # that kept its blocks never reaches that code: `is_serializable` refuses it first.
+        # Dropping the weight_conversions related to GGUF ops. When saving, it will fetch back the original specific ops of the model.
         model._weight_conversions = None
         return model
 
     def update_weight_conversions(self, weight_conversions):
-        """Prepend this file's conversions: the GGUF -> transformers mapping, and the unpacking."""
+        """Swap in this file's conversions, dropping the model's own.
+
+        The model's describe a safetensors checkpoint, and match nothing in a GGUF.
+        """
         if not self.supported:
             return weight_conversions
-        to_unpack = {name: t for name, t in self.quantized.items() if name not in self.packed_modules}
-        return add_gguf_load_ops(self.mapping + weight_conversions, to_unpack, self.names, self.dtype)
+        needs_unpacking = {name: t for name, t in self.quantized.items() if name not in self.packed_modules}
+        return add_gguf_load_ops(self.mapping, needs_unpacking, self.header, self.dtype)
 
     def param_needs_quantization(self, model, param_name: str, **kwargs) -> bool:
         return False

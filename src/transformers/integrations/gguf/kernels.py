@@ -28,12 +28,7 @@ DEQUANT_CHUNK_ELEMS = 64 << 20  # ~128 MB of bf16 per unpacked chunk
 
 
 def mul_mat_id(blocks: torch.Tensor, x: torch.Tensor, ids: torch.Tensor, ggml_type: int, out_features: int):
-    """One dispatch for a bank of routed experts -- ggml's `mul_mv_id`.
-
-    `blocks` is `(n_experts, out_features, bytes_per_row)`, `x` is `(n_tokens, in_features)`, `ids` is
-    `(n_tokens, n_used)`; the result is `(n_tokens, n_used, out_features)` f32. The alternative is a
-    gemv per expert per layer, which is dispatch overhead rather than arithmetic.
-    """
+    """The MoE version of `mul_mat_vec`: each token goes through the experts that `ids` chose for it."""
     return _gguf_kernel.mul_mat_id(blocks, x, ids, ggml_type, out_features)
 
 

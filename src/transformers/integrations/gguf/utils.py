@@ -18,7 +18,7 @@ from copy import deepcopy
 import torch
 from torch import nn
 
-from ...core_model_loading import WeightConverter, WeightRenaming, WeightTransform
+from ...core_model_loading import WeightConverter, WeightRenaming, WeightTransform, rename_source_key
 from ...utils import logging
 from .dequant import GGML_BLOCK, row_bytes
 from .gguf_conversion_mapping import GGUF_ARCHS, Cast, Dequantize
@@ -43,12 +43,21 @@ def get_gguf_conversion_mapping(gguf_arch: str, config) -> list[WeightTransform]
 
 def get_gguf_plan(
     header: GgufHeader, mapping: list[WeightTransform]
-) -> tuple[dict[str, int], dict[str, int], dict[str, torch.Tensor], list[str]]:
-    """The file's quantized tensors, the subset that can stay packed, their input permutations, and
-    every tensor's renamed name.
+) -> tuple[dict[str, int], dict[str, int], dict[str, torch.Tensor]]:
+    """Work out, for every tensor the file stores as blocks, whether it can stay that way.
 
-    Read before `add_gguf_load_ops` inserts the unpacking op: what a converter does to a tensor
-    decides whether it can stay packed.
+    It can if none of the conversions on its way to the model touch the bytes. `mapping` is the whole
+    of what will run, so this is decided, not guessed.
+
+    Returns:
+        `quantized`: every block tensor, keyed by the model's name for it -> ggml type.
+            `{"lm_head.weight": 14, "model.embed_tokens.weight": 8}`
+        `packable`: the subset whose conversions are all safe on packed bytes, so the layer can be
+            swapped for a `GgufLinear` / `GgufExperts` / `GgufEmbedding` and keep its blocks.
+            `{"model.layers.0.mlp.experts.gate_up_proj": 12}`
+        `permutations`: model name -> index tensor, for a packed weight whose *input* is gathered
+            instead, since permuting its columns would mean requantizing.
+            `{"model.layers.0.linear_attn.out_proj.weight": tensor([0, 1, 2, ...])}`
     """
     # On a copy: asking a transform whether it matches a name marks it as used and arms the stateful
     # renamings, and the mapping handed back to the loader has to be untouched by that.
@@ -56,22 +65,17 @@ def get_gguf_plan(
     renamings = [entry for entry in mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in mapping if isinstance(entry, WeightConverter)]
 
-    quantized, packable, permutations, names = {}, {}, {}, []
+    pattern_to_converter = {pattern: converter for converter in converters for pattern in converter.source_patterns}
+
+    quantized, packable, permutations = {}, {}, {}
     for gguf_name, ggml_type in header.ggml_types.items():
-        param_name = gguf_name
-        for renaming in renamings:
-            param_name, _ = renaming.rename_source_key(param_name)
-        names.append(param_name)
         if ggml_type not in GGML_BLOCK:
             continue
-        # A converter may rename as well as transform, so a parameter's name is the converter's target.
-        converter = None
-        for entry in converters:
-            renamed, matched = entry.rename_source_key(param_name)
-            if matched:
-                converter, param_name = entry, renamed
-                break
+        # As the loader does: all renamings, then at most one converter. The plan is keyed by what the
+        # model calls the parameter, which is what `Dequantize` and the packed modules look up.
+        param_name, source_pattern = rename_source_key(gguf_name, renamings, converters)
         quantized[param_name] = ggml_type
+        converter = pattern_to_converter.get(source_pattern)
         operations = getattr(converter, "operations", ())
         # every conversion applied to this tensor must be safe on packed bytes
         if converter is None or all(getattr(op, "supports_packed", False) for op in operations):
@@ -80,13 +84,29 @@ def get_gguf_plan(
             for operation in operations:
                 if (permutation := getattr(operation, "input_permutation", None)) is not None:
                     permutations[param_name] = permutation
-    return quantized, packable, permutations, names
+    return quantized, packable, permutations
 
 
-def add_gguf_load_ops(mapping: list[WeightTransform], to_unpack: dict[str, int], names: list[str], dtype) -> list:
-    """Bracket every conversion chain: unpack blocks first where needed, cast to `dtype` last."""
+def get_unconverted_keys(mapping: list[WeightTransform], header: GgufHeader) -> list[str]:
+    """The keys of the tensors no converter claims, in the form the loader will match them."""
+    mapping = deepcopy(mapping)
+    renamings = [entry for entry in mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in mapping if isinstance(entry, WeightConverter)]
-    dequantize_op = Dequantize(to_unpack, dtype) if to_unpack else None
+    renamed = [rename_source_key(name, renamings, converters) for name in header.ggml_types]
+    return [name for name, converter_pattern in renamed if converter_pattern is None]
+
+
+def add_gguf_load_ops(
+    mapping: list[WeightTransform], needs_unpacking: dict[str, int], header: GgufHeader, dtype
+) -> list:
+    """Give every tensor the two ops it needs: unpack its blocks first, cast to `dtype` last.
+
+    A tensor that already has a converter gets them added at either end of it. One that has none gets
+    a converter created for it, which only runs those two ops and leaves the name alone.
+    """
+    unconverted = get_unconverted_keys(mapping, header)
+    converters = [entry for entry in mapping if isinstance(entry, WeightConverter)]
+    dequantize_op = Dequantize(needs_unpacking, dtype) if needs_unpacking else None
     cast_op = Cast(dtype)
     for converter in converters:
         if dequantize_op is not None:
@@ -94,7 +114,6 @@ def add_gguf_load_ops(mapping: list[WeightTransform], to_unpack: dict[str, int],
         converter.operations.append(cast_op)
     # `Dequantize` passes through a name it was not given, so one converter serves both kinds here
     operations = [dequantize_op, cast_op] if dequantize_op is not None else [cast_op]
-    unconverted = [name for name in names if not any(c.rename_source_key(name)[1] for c in converters)]
     if unconverted:
         return mapping + [
             WeightConverter(
@@ -158,15 +177,7 @@ class GgufLinear(nn.Module):
 
 
 class GgufExperts(nn.Module):
-    """A MoE expert bank whose weights stay as GGUF blocks: `(n_experts, rows, bytes_per_row)`.
-
-    Worth keeping packed more than anything else in the model: a router hands each token a handful of
-    experts, so the bank is never needed at once, and it is most of the weights -- Qwen3.5-35B-A3B's
-    routed experts are 32B parameters, 60 GB unpacked against 20 GB of blocks. Only the experts a
-    token hits are read, each through the same fused dequant-gemv a `GgufLinear` uses.
-
-    The loop is the model's own: one pass per expert that was hit, over the tokens that chose it.
-    """
+    """One MoE layer's experts, stacked and left as GGUF blocks: `(n_experts, rows, bytes_per_row)`."""
 
     def __init__(self, num_experts, hidden_dim, intermediate_dim, gate_up_type, down_type, act_fn):
         super().__init__()
@@ -186,20 +197,13 @@ class GgufExperts(nn.Module):
         )
 
     def forward(self, hidden_states, top_k_index, top_k_weights):
-        """The whole bank in two dispatches, rather than two per expert the router picked.
-
-        `mul_mat_id` is ggml's own MoE matmul: it takes the bank as one `(n_experts, rows, bytes)`
-        tensor and the router's choices, and computes every (token, expert) pair in a single grid.
-        The loop this replaces spent its time launching kernels, not running them.
-        """
+        """Every expert in two dispatches, rather than two per expert the router picked."""
         num_tokens, top_k = top_k_index.shape
-        # required by mul_mat_id
         ids = top_k_index.to(torch.int32)
         gate, up = mul_mat_id(
             self.gate_up_proj, hidden_states, ids, self.gate_up_type, 2 * self.intermediate_dim
         ).chunk(2, dim=-1)
         current_hidden_states = (self.act_fn(gate) * up).reshape(num_tokens * top_k, self.intermediate_dim)
-        # Each (token, top_k_pos) carries its own vector, so the pair flattens into the token axis.
         current_hidden_states = mul_mat_id(
             self.down_proj, current_hidden_states, ids.reshape(-1, 1), self.down_type, self.hidden_dim
         )
