@@ -57,6 +57,7 @@ from .configuration_utils import PreTrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .distributed.fsdp import get_fsdp_ckpt_kwargs, update_fsdp_plugin_peft
+from .distributed.utils import clip_grad_norm_
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 from .feature_extraction_utils import FeatureExtractionMixin
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
@@ -2644,15 +2645,6 @@ class Trainer:
         input_tokens = torch.as_tensor(input_tokens, device=self.args.device, dtype=torch.int64)
         self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
 
-    def _mixed_mesh_grad_norm(self, model, max_norm):
-        """
-        Gradient norm (and clip) when the gradients live on different device meshes, which `clip_grad_norm_` cannot
-        span: one norm per mesh, each already reduced over its own mesh.
-        """
-        from .distributed.utils import clip_grad_norm_
-
-        return clip_grad_norm_(model.parameters(), max_norm)
-
     def _has_mixed_mesh_grads(self, model) -> bool:
         # Static for the life of the run (sharding never changes after setup), so scan the
         # parameters only on the first call.
@@ -2665,7 +2657,7 @@ class Trainer:
         if is_sagemaker_mp_enabled() and self.args.fp16:
             return self.optimizer.clip_master_grads(self.args.max_grad_norm)
         if self._has_mixed_mesh_grads(model):
-            return self._mixed_mesh_grad_norm(model, self.args.max_grad_norm)
+            return clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
         return self.accelerator.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
 
     def _get_grad_norm(self, model, grad_norm=None):
@@ -2673,7 +2665,7 @@ class Trainer:
         if grad_norm is None:
             # Compute norm without clipping (inf means no actual clipping happens)
             if self._has_mixed_mesh_grads(model):
-                grad_norm = self._mixed_mesh_grad_norm(model, float("inf"))
+                grad_norm = clip_grad_norm_(model.parameters(), float("inf"))
             else:
                 grad_norm = self.accelerator.clip_grad_norm_(model.parameters(), float("inf"))
 
