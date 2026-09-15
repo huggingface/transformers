@@ -190,8 +190,12 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         impl = getattr(config, "_experts_implementation", None)
         layer_overrides = FP8Experts._impl_tp_layer_overrides.get(impl, {})
+        # Composite configs (e.g. text + vision) keep the plans on their text config; the
+        # rewrite must land where the sharding reads them, or the expert scales stay
+        # replicated while their weights are sharded (the MX dispatch then misroutes).
+        plan_config = config.get_text_config(decoder=True)
         for plan_attr in ("base_model_tp_plan", "base_model_ep_plan"):
-            base_plan = getattr(config, plan_attr, None) or {}
+            base_plan = getattr(plan_config, plan_attr, None) or {}
             # Per-impl rewrite of the experts parallel-layer kind. Applied LAST so it composes
             # on top of any plan written above (e.g. the Qwen3 dense plan). Models carry the
             # experts mapping under `base_model_tp_plan` and/or `base_model_ep_plan` — rewrite
@@ -204,7 +208,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                     updated_plan.setdefault(f"{key}_scale_inv", style)
 
             if updated_plan != base_plan:
-                setattr(config, plan_attr, updated_plan)
+                setattr(plan_config, plan_attr, updated_plan)
 
         return config
 

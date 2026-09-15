@@ -1451,6 +1451,35 @@ class CacheCroppingTests(unittest.TestCase):
     conv_state_shape = (2, 32, 45)
     indexer_shape = (2, 45, 32)
 
+    def test_cache_crop_refusal_is_atomic_and_allows_trimming(self):
+        """Recurrent rollback cannot leave an earlier attention layer cropped."""
+        attention_layer = DynamicLayer()
+        recurrent_layer = LinearAttentionLayer()
+        cache = Cache(layers=[attention_layer, recurrent_layer])
+        cache.activate_past_recording()
+        keys = torch.arange(6, dtype=torch.float32).reshape(1, 1, 6, 1)
+        conv_states = torch.arange(6, dtype=torch.float32).reshape(1, 1, 6)
+        recurrent_states = torch.ones(1, 1, 2, 2)
+        cache.update(keys, keys, layer_idx=0)
+        recurrent_layer.update_conv_state(conv_states, conv_kernel_size=3)
+        recurrent_layer.update_recurrent_state(recurrent_states)
+
+        with self.assertRaises(RuntimeError):
+            cache.crop(-1)
+        self.assertEqual(cache.get_seq_length(), 6)
+        torch.testing.assert_close(attention_layer.keys, keys)
+        torch.testing.assert_close(recurrent_layer.conv_states[0], conv_states)
+        torch.testing.assert_close(recurrent_layer.recurrent_states[0], recurrent_states)
+
+        cache.crop(0)
+        self.assertEqual(cache.get_seq_length(), 6)
+        torch.testing.assert_close(recurrent_layer.conv_states[0], conv_states[..., -3:])
+        torch.testing.assert_close(recurrent_layer.recurrent_states[0], recurrent_states)
+        continued_keys, _ = cache.update(torch.tensor([[[[6.0]]]]), torch.tensor([[[[6.0]]]]), layer_idx=0)
+        continued_conv = recurrent_layer.update_conv_state(torch.tensor([[[6.0]]]))
+        torch.testing.assert_close(continued_keys, torch.arange(7, dtype=torch.float32).reshape(1, 1, 7, 1))
+        torch.testing.assert_close(continued_conv, torch.tensor([[[3.0, 4.0, 5.0, 6.0]]]))
+
     def test_crop_with_past(self):
         """Test that `crop` works correctly for all general layer classes, even with past recording activated"""
         keys = torch.rand(*self.attention_shape)

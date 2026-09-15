@@ -1,0 +1,1851 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from dataclasses import dataclass
+
+import numpy as np
+import torch
+import torch.nn.functional as F
+from torch import nn
+
+from ... import initialization as init
+from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache, DynamicSlidingWindowLayer
+from ...generation import GenerationMixin
+from ...integrations.moe import use_experts_implementation
+from ...masking_utils import create_sliding_window_causal_mask
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.hub import cached_file
+from ...utils.import_utils import is_torch_distributed_available
+from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3RMSNorm
+from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4HyperConnection, DeepseekV4RotaryEmbedding
+from ..mixtral.modeling_mixtral import MixtralExperts, MixtralTopKRouter, load_balancing_loss_func
+from .configuration_deepseek_v41 import DeepseekV41Config, DeepseekV41TextConfig
+
+
+if is_torch_distributed_available():
+    from torch.distributed.tensor import DTensor, Shard
+else:  # the engram table's TP path is only reachable with torch.distributed
+    DTensor = Shard = None
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float | int = 0.0,
+    selected_kv: torch.Tensor | None = None,
+    selected_valid: torch.Tensor | None = None,
+    **kwargs,
+):
+    """Eager shared-KV attention with the per-head learnable sink of V4.1, over up to
+    two KV sources: the sliding window (`key` == `value`, masked by `attention_mask`)
+    and, on compressed layers, the `top_k` compressed entries the indexer picked per
+    query (`selected_kv` `[B, S, top_k, D]`, `selected_valid` `[B, S, top_k]`). Both
+    join one softmax, so this equals attention over the whole compressed cache with a
+    -inf bias on the unpicked entries — without the `[heads, S, T]` scores.
+
+    The sink joins the softmax as one extra logit column and is then dropped — i.e. it
+    only grows the denominator, matching the reference kernel (where
+    `sum_exp += exp(attn_sink - max)` and the output is normalized by it). Rows whose
+    every slot is masked still get a finite result thanks to the sink."""
+    # The shared K=V head ([B, 1, W, D]) broadcasts against the query heads in the
+    # matmuls — no Hx materialization of the KV tensor.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling  # [B, H, S, W]
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+    window = attn_weights.shape[-1]
+    if selected_kv is not None:
+        selected_kv = selected_kv.to(query.dtype)
+        picked = torch.einsum("bhsd,bskd->bhsk", query, selected_kv) * scaling  # [B, H, S, top_k]
+        picked = picked.masked_fill(~selected_valid.unsqueeze(1), float("-inf"))
+        attn_weights = torch.cat([attn_weights, picked], dim=-1)
+
+    sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
+    combined_logits = torch.cat([attn_weights, sinks.float()], dim=-1)
+    combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
+    probs = F.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)
+    scores = probs[..., :-1]  # the sink only appears in the denominator
+    attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training).to(value.dtype)
+    attn_output = torch.matmul(attn_weights[..., :window], value)
+    if selected_kv is not None:
+        attn_output = attn_output + torch.einsum("bhsk,bskd->bhsd", attn_weights[..., window:], selected_kv)
+    return attn_output.transpose(1, 2).contiguous(), attn_weights  # [B, S, H, D]
+
+
+_FP8_MAX = 448.0  # float8_e4m3fn finite max
+_FP4_MAX = 6.0  # float4_e2m1fn max
+_FP4_TABLE = torch.tensor(
+    [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0],
+    dtype=torch.float32,
+)
+_FP4_LUT_CACHE = {}  # device-keyed cache of the e2m1 value table
+
+
+def _fp4_lut(device: torch.device) -> torch.Tensor:
+    lut = _FP4_LUT_CACHE.get(device)
+    if lut is None:
+        lut = _FP4_TABLE.to(device)
+        _FP4_LUT_CACHE[device] = lut
+    return lut
+
+
+def _pow2_ceil_scale(t: torch.Tensor) -> torch.Tensor:
+    """`2^ceil(log2(t))` for fp32 `t > 0`, via the same IEEE-754 bit manipulation
+    the reference kernel uses (exponent field minus 127, plus any nonzero
+    mantissa) — the ue8m0 power-of-two scale rounding."""
+    bits = t.contiguous().view(torch.int32)
+    exponent = (bits >> 23) & 0xFF
+    mantissa = bits & 0x7FFFFF
+    k = exponent - 127 + (mantissa != 0).to(torch.int32)
+    return torch.exp2(k.to(torch.float32))
+
+
+def _e2m1_codes(q: torch.Tensor) -> torch.Tensor:
+    """Round-to-nearest-even cast of pre-clamped fp32 values onto the e2m1 grid;
+    returns uint8 codes with the sign in bit 3. Ties at even-code boundaries
+    (0.25, 1.25, 2.5, 5.0) round down, at odd-code boundaries round up."""
+    magnitude = q.abs()
+    negative = torch.signbit(q)
+    boundaries = torch.tensor([0.25, 0.75, 1.25, 1.75, 2.5, 3.5, 5.0], dtype=torch.float32, device=q.device)
+    ties_up = torch.tensor([False, True, False, True, False, True, False], device=q.device)
+    thresholds = torch.where(
+        ties_up, boundaries, torch.nextafter(boundaries, torch.full_like(boundaries, float("inf")))
+    )
+    codes = (magnitude.unsqueeze(-1) >= thresholds).sum(-1).to(torch.uint8)
+    return codes | (negative.to(torch.uint8) << 3)
+
+
+def _fake_quant_fp8_block(x: torch.Tensor, block_size: int = 32) -> torch.Tensor:
+    """Block-wise FP8 fake-quantization with ue8m0 (power-of-two) scales — the
+    reference's window-KV quantizer, applied to the whole post-RoPE vector. Returns
+    the quantized-then-dequantized tensor (out of place: training needs the original
+    in the autograd graph; the values are identical to the reference's in-place
+    call)."""
+    n = x.shape[-1]
+    if n % block_size:
+        return x  # shapes the reference cannot block (tiny test configs) run unquantized
+    blocks = x.float().view(*x.shape[:-1], n // block_size, block_size)
+    amax = blocks.abs().amax(-1).clamp_min(1e-4)
+    scale = _pow2_ceil_scale(amax * (1.0 / _FP8_MAX))
+    quantized = (blocks / scale.unsqueeze(-1)).clamp(-_FP8_MAX, _FP8_MAX)
+    dequantized = quantized.to(torch.float8_e4m3fn).float() * scale.unsqueeze(-1)
+    return dequantized.view(*x.shape[:-1], n).to(x.dtype)
+
+
+def _fake_quant_fp4_block(x: torch.Tensor, block_size: int, e4m3_scales: bool = False) -> torch.Tensor:
+    """Block-wise FP4 fake-quantization — the reference's indexer (block 32, ue8m0
+    scales) and compressed-KV (block 16, e4m3 scales) quantizers. Returns the tensor
+    quantized onto the e2m1 grid and dequantized (out of place; values identical to
+    the reference's in-place call)."""
+    n = x.shape[-1]
+    if n % block_size:
+        return x  # shapes the reference cannot block (tiny test configs) run unquantized
+    blocks = x.float().view(*x.shape[:-1], n // block_size, block_size)
+    amax = blocks.abs().amax(-1)
+    if e4m3_scales:
+        scale = (amax.clamp_min(6.0 * 2.0**-9) / _FP4_MAX).to(torch.float8_e4m3fn).float()
+    else:
+        scale = _pow2_ceil_scale(amax.clamp_min(6.0 * 2.0**-126) * (1.0 / _FP4_MAX))
+    quantized = (blocks / scale.unsqueeze(-1)).clamp(-_FP4_MAX, _FP4_MAX)
+    codes = _e2m1_codes(quantized)
+    values = _fp4_lut(x.device)[codes.long()]
+    return (values * scale.unsqueeze(-1)).view(*x.shape[:-1], n).to(x.dtype)
+
+
+logger = logging.get_logger(__name__)
+
+
+def apply_rotary_pos_emb(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, inverse: bool = False):
+    """Interleaved-pair RoPE on the trailing rope slice of `x`.
+
+    DeepSeek-V4.1 pairs *adjacent* channels of the rope slice (even, odd) and rotates
+    each pair as a complex number — matching the reference implementation's
+    ``torch.view_as_complex(x.unflatten(-1, (-1, 2)))`` convention. `cos` / `sin`
+    carry one entry per pair (``rope_dim // 2``). The leading nope channels pass
+    through. ``inverse=True`` conjugates the rotation: the attention output carries
+    the query's RoPE, and the inverse rotation removes it so the shared rotated cache
+    stays in one form. Accepts ``[B, S, D]`` and ``[B, S, H, D]``.
+    """
+    if inverse:
+        sin = -sin
+    rope_dim = cos.shape[-1] * 2
+    nope, rope = x[..., :-rope_dim], x[..., -rope_dim:]
+    if x.ndim == 4:
+        cos, sin = cos.unsqueeze(2), sin.unsqueeze(2)  # [B, S, 1, rd/2]
+    even, odd = rope[..., 0::2].float(), rope[..., 1::2].float()
+    rotated = torch.stack([even * cos - odd * sin, even * sin + odd * cos], dim=-1).flatten(-2)
+    return torch.cat([nope, rotated.to(x.dtype)], dim=-1)
+
+
+class DeepseekV41RMSNorm(DeepseekV3RMSNorm):
+    pass
+
+
+class DeepseekV41UnweightedRMSNorm(nn.Module):
+    """RMS normalization without a learned weight — used on the flattened
+    hyper-connection stream before the mix projection."""
+
+    def __init__(self, eps: float = 1.0e-6):
+        super().__init__()
+        self.eps = eps
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x * torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.eps).to(x.dtype)
+
+
+class DeepseekV41HyperConnection(DeepseekV4HyperConnection):
+    r"""One mHC site of V4.1's **single-pass** hyper-connections. Same `(fn, base,
+    scale)` parametrization and the same `pre` / `post` / `comb` mapping as V4 (one
+    projection of the normalized flattened stream; `comb` Sinkhorn-projected onto the
+    doubly-stochastic manifold), with one difference in who consumes `pre`: V4 collapses
+    the streams with the `pre` of the site that computed it, V4.1 feeds it to the NEXT
+    site (attention collapses with the previous site's `pre`, the FFN with the
+    attention's, the final norm with the last FFN's). The module therefore returns
+    `(pre, post, comb)` and leaves the collapse / expand to the decoder layer."""
+
+    def __init__(self, config: DeepseekV41TextConfig):
+        super().__init__(config)
+
+    def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """`(pre, post, comb)` of this site — `pre` is for the NEXT site's collapse (see
+        the class docstring). Normalization is over the whole flattened hc·D stream
+        (one statistic per token); `comb` is Sinkhorn-projected onto the
+        doubly-stochastic manifold for `hc_sinkhorn_iters` steps."""
+        hc = self.hc_mult
+        # fp32 from the start — the reference upcasts before normalizing, so a
+        # bf16/fp16 model must not round the stream before the mix projection.
+        flat = self.input_norm(hidden_streams.flatten(start_dim=2).float())
+        pre_w, post_w, comb_w = F.linear(flat, self.fn.float()).split([hc, hc, hc * hc], dim=-1)
+        pre_b, post_b, comb_b = self.base.float().split([hc, hc, hc * hc])
+        pre_scale, post_scale, comb_scale = self.scale.float().unbind(0)
+
+        pre = torch.sigmoid(pre_w * pre_scale + pre_b) + self.hc_eps
+        post = 2 * torch.sigmoid(post_w * post_scale + post_b)
+        comb_logits = comb_w.view(*comb_w.shape[:-1], hc, hc) * comb_scale + comb_b.view(hc, hc)
+        comb = torch.softmax(comb_logits, dim=-1) + self.hc_eps
+        comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
+        for _ in range(self.hc_sinkhorn_iters - 1):
+            comb = comb / (comb.sum(dim=-1, keepdim=True) + self.hc_eps)
+            comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
+        return pre, post, comb
+
+
+class DeepseekV41RotaryEmbedding(DeepseekV4RotaryEmbedding):
+    """Same two-rope scheme as V4, reused verbatim: `main` = plain `rope_theta` for
+    pure sliding-window layers, `compress` = `compress_rope_theta` + optional YaRN for
+    layers with a compressed branch (one latent stands for `compress_ratio` tokens, so
+    its positions are further apart — hence the larger base). The config folds the
+    checkpoint's flat `rope_scaling` into `rope_parameters` the same way V4 does."""
+
+    pass
+
+
+class DeepseekV41GroupedLinear(nn.Linear):
+    """Block-diagonal grouped linear of the attention output projection.
+
+    The stacked attention output is `num_heads * head_dim`-dim (32768 for the released
+    model) — a direct projection to `hidden_size` would dominate the per-token cost.
+    Instead the heads are split into `o_groups` groups, each projected independently
+    to `o_lora_rank`, then mixed to `hidden_size` by `o_b_proj`. This module owns the
+    per-group block (`o_a_proj`)."""
+
+    def __init__(self, in_features_per_group: int, out_features: int, n_groups: int, bias: bool = False):
+        super().__init__(in_features_per_group, out_features, bias=bias)
+        self.n_groups = n_groups
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        input_shape = x.shape[:-2]
+        hidden_dim = x.shape[-1]
+        w = self.weight.view(self.n_groups, -1, hidden_dim).transpose(1, 2)
+        x = x.reshape(-1, self.n_groups, hidden_dim).transpose(0, 1)
+        y = torch.bmm(x, w).transpose(0, 1)
+        return y.reshape(*input_shape, self.n_groups, -1)
+
+
+# Sentinel in the engram token history: an n-gram never reaches across it (the
+# sequence start, a pad, an image span). Any negative value is safe — compressed ids
+# are non-negative and the sentinel is replaced by `engram_pad_id` before hashing.
+ENGRAM_DEAD = -1
+
+
+class DeepseekV41EngramHistoryLayer:
+    r"""Cache-layer mixin carrying the engram's n-gram look-back: the last
+    `max_ngram_size - 1` compressed token ids of every batch row, `ENGRAM_DEAD` where an
+    n-gram must not reach. Same trick as Qwen4-Exp's token context in `conv_states`,
+    minus the linear-attention layer it rides on there.
+
+    The history is a property of the *sequence* (hashed once per forward for every
+    engram layer), so it is parked on ONE cache layer: the first
+    :class:`DeepseekV41CSACache`, the only V4.1-owned layer class and therefore the
+    only one whose batch hooks we control. Mixed in ahead of the base layer so the
+    layer's `reorder_cache` / `batch_repeat_interleave` / `batch_select_indices` /
+    `reset` chains reach it: beam search and `num_return_sequences` permute the
+    look-back together with the KV, with no model-side hook.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.engram_context: torch.Tensor | None = None
+
+    def update_engram_context(self, compressed: torch.Tensor, context_len: int) -> torch.Tensor:
+        """Return `[B, context_len + S]`: the stored look-back (`ENGRAM_DEAD` on the
+        first call) followed by `compressed`; keep the last `context_len` ids for the
+        next call. CSA cannot rewind, even when sliding-window past recording is on."""
+        if self.engram_context is None:
+            self.engram_context = compressed.new_full((compressed.shape[0], context_len), ENGRAM_DEAD)
+        full = torch.cat([self.engram_context.to(compressed.device), compressed], dim=1)
+        self.engram_context = full[:, -context_len:]
+        return full[:, -(context_len + compressed.shape[1]) :]
+
+    def reset(self) -> None:
+        super().reset()
+        self.engram_context = None
+
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        if self.engram_context is not None:
+            self.engram_context = self.engram_context.index_select(0, beam_idx.to(self.engram_context.device))
+
+    def batch_repeat_interleave(self, repeats: int) -> None:
+        super().batch_repeat_interleave(repeats)
+        if self.engram_context is not None:
+            self.engram_context = self.engram_context.repeat_interleave(repeats, dim=0)
+
+    def batch_select_indices(self, indices: torch.Tensor) -> None:
+        super().batch_select_indices(indices)
+        if self.engram_context is not None:
+            self.engram_context = self.engram_context[indices, ...]
+
+
+class DeepseekV41CSACache(DeepseekV41EngramHistoryLayer, DynamicSlidingWindowLayer):
+    r"""Cache layer for a V4.1 **KV-source** layer (CSA2). On top of the shared-KV
+    sliding-window ring every layer keeps, it holds the group state of the shared
+    compressed branch:
+
+      * `buffer_kv` / `buffer_gate` — source tokens arrived since the last complete
+        compress group; once `compress_ratio` tokens accumulate the compressor closes a
+        group and drains the buffer. This is what makes chunked prefill seamless:
+        partial groups simply carry across forward calls.
+      * `compressed_kv["compressor"]` — the running compressed KV entries (one per
+        complete group, at `head_dim`), published to the whole group via the per-forward
+        shared state; consumer layers hold plain sliding layers and read this one.
+      * `compressed_kv["indexer"]` — the running *indexer keys* (one per complete
+        group, at `index_head_dim`), derived from the same pooled latents by the
+        source's indexer (`k_proj` + `k_norm`): the whole group scores against one key set.
+      * `entry_count["compressor"]` / `token_count["compressor"]` — per-row
+        completed groups and live source tokens. Padding never advances either
+        sequence; partial groups retain their source positions across calls.
+
+    The compress ratio is passed per call by the compressor (it is a per-layer config
+    value, not a per-layer-type one, so it cannot be resolved at cache-construction
+    time).
+    """
+
+    _layer_type = "shared_compressed_attention"
+    is_croppable = False
+
+    def __init__(self, config: "DeepseekV41TextConfig", **kwargs):
+        super().__init__(sliding_window=config.sliding_window)
+        self.buffer_kv: dict[str, torch.Tensor | None] = {"compressor": None}
+        self.buffer_gate: dict[str, torch.Tensor | None] = {"compressor": None}
+        self.buffer_positions: dict[str, torch.Tensor | None] = {"compressor": None}
+        self.buffer_lengths: dict[str, torch.Tensor | None] = {"compressor": None}
+        self.compressed_kv: dict[str, torch.Tensor | None] = {"compressor": None, "indexer": None}
+        self.entry_count: dict[str, torch.Tensor | None] = {"compressor": None}
+        self.token_count: dict[str, torch.Tensor | None] = {"compressor": None}
+
+    def crop(self, tokens_to_remove: int) -> None:
+        # KV and engram updates already retain their needed look-back, so a
+        # trim-only crop is also a no-op before lazy initialization.
+        if tokens_to_remove != 0:
+            raise RuntimeError("DeepseekV41CSACache cannot roll back compressed states.")
+
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        for attr in (
+            "compressed_kv",
+            "buffer_kv",
+            "buffer_gate",
+            "buffer_positions",
+            "buffer_lengths",
+            "entry_count",
+            "token_count",
+        ):
+            state = getattr(self, attr)
+            for name, tensor in state.items():
+                if tensor is not None:
+                    state[name] = tensor.index_select(0, beam_idx.to(tensor.device))
+
+    def batch_repeat_interleave(self, repeats: int) -> None:
+        super().batch_repeat_interleave(repeats)
+        for attr in (
+            "compressed_kv",
+            "buffer_kv",
+            "buffer_gate",
+            "buffer_positions",
+            "buffer_lengths",
+            "entry_count",
+            "token_count",
+        ):
+            state = getattr(self, attr)
+            for name, tensor in state.items():
+                if tensor is not None:
+                    state[name] = tensor.repeat_interleave(repeats, dim=0)
+
+    def batch_select_indices(self, indices: torch.Tensor) -> None:
+        super().batch_select_indices(indices)
+        for attr in (
+            "compressed_kv",
+            "buffer_kv",
+            "buffer_gate",
+            "buffer_positions",
+            "buffer_lengths",
+            "entry_count",
+            "token_count",
+        ):
+            state = getattr(self, attr)
+            for name, tensor in state.items():
+                if tensor is not None:
+                    state[name] = tensor.index_select(0, indices.to(tensor.device))
+
+    def reset(self) -> None:
+        self.keys = self.values = None
+        self.is_initialized = False
+        super().reset()
+        for attr in (
+            "compressed_kv",
+            "buffer_kv",
+            "buffer_gate",
+            "buffer_positions",
+            "buffer_lengths",
+            "entry_count",
+            "token_count",
+        ):
+            state = getattr(self, attr)
+            for name in state:
+                state[name] = None
+
+    def update(self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs):
+        """Sliding-window K=V update: return everything seen so far (the attention
+        mask selects the window), keep the last `sliding_window - 1` entries cached."""
+        if not self.is_initialized:
+            self.lazy_initialization(key_states, value_states)
+            self.values = self.keys
+        self.cumulative_length += key_states.shape[-2]
+        full = torch.cat([self.keys, key_states], dim=-2)
+        self.keys = full[:, :, -self.sliding_window + 1 :, :]
+        self.values = self.keys
+        return full, full
+
+    def update_compressor_states(
+        self, name: str, compressed: torch.Tensor, group_counts: torch.Tensor, compress_ratio: int
+    ) -> torch.Tensor:
+        """Write each row's new groups immediately after its own previous groups.
+
+        Capacity follows physical sequence length, avoiding a device-to-host
+        synchronization to find the longest live row. Unused trailing slots are
+        excluded by the per-query completed-group counts.
+        """
+        capacity = self.cumulative_length // compress_ratio
+        previous = self.compressed_kv[name]
+        if previous is None:
+            updated = compressed.new_zeros(compressed.shape[0], 1, capacity, compressed.shape[-1])
+        elif capacity > previous.shape[2]:
+            updated = F.pad(previous, (0, 0, 0, capacity - previous.shape[2]))
+        else:
+            # Inference can fill unused slots without copying the running cache;
+            # keep previous forward graphs intact when gradients are enabled.
+            updated = previous.clone() if torch.is_grad_enabled() else previous
+        slots = torch.arange(compressed.shape[2], device=compressed.device).unsqueeze(0)
+        valid = slots < group_counts.unsqueeze(-1)
+        destinations = torch.where(valid, self.entry_count["compressor"].unsqueeze(-1) + slots, 0)
+        updates = compressed.masked_fill(~valid[:, None, :, None], 0)
+        # New groups occupy previously unused zero slots. Invalid rows add zero
+        # at slot zero rather than overwriting a live entry or requiring a dummy slot.
+        updated.scatter_add_(2, destinations[:, None, :, None].expand_as(updates), updates)
+        self.compressed_kv[name] = updated
+        if name == "compressor":
+            self.entry_count[name] = self.entry_count[name] + group_counts
+        return self.compressed_kv[name]
+
+
+class DeepseekV41Compressor(nn.Module):
+    r"""Pools `compress_ratio` consecutive tokens into one KV latent with a learned
+    softmax gate (pooling in fp32). Returns the latent **before RoPE** — the indexer
+    derives its keys from the unrotated form. At ratio 1 there is no pooling and no
+    gate: a plain per-token projection (the CED "decoder" branch — full-resolution KV
+    projected once by the source layer instead of per layer)."""
+
+    def __init__(self, config: DeepseekV41TextConfig, layer_idx: int):
+        super().__init__()
+        self.compress_ratio = config.compress_ratios[layer_idx]
+        self.head_dim = config.head_dim
+        self.kv_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
+        self.gate_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False) if self.compress_ratio > 1 else None
+        self.kv_norm = DeepseekV41RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cache_layer: DeepseekV41CSACache | None,
+        position_ids: torch.Tensor,
+        token_mask: torch.Tensor | None,
+    ) -> tuple[torch.Tensor | None, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Pool complete groups of live tokens; retain partial groups per row.
+
+        Returns latents, their first-token RoPE positions, newly completed group
+        counts, and the live-token count at each current query.
+        """
+        batch, seq_len, _ = hidden_states.shape
+        ratio = self.compress_ratio
+        positions = position_ids.expand(batch, -1)
+        live = torch.ones_like(positions, dtype=torch.bool) if token_mask is None else token_mask.bool()
+        previous_count = positions.new_zeros(batch)
+        if cache_layer is not None:
+            if cache_layer.token_count["compressor"] is not None:
+                previous_count = cache_layer.token_count["compressor"]
+            if cache_layer.entry_count["compressor"] is None:
+                cache_layer.entry_count["compressor"] = positions.new_zeros(batch)
+        query_lengths = previous_count.unsqueeze(-1) + live.long().cumsum(-1)
+
+        if self.gate_proj is None:
+            kv = self.kv_proj(hidden_states)
+            gate = None
+        else:
+            # Pooling and its gate use fp32, including when weights are stored in bf16.
+            kv = F.linear(hidden_states.float(), self.kv_proj.weight.float())
+            gate = F.linear(hidden_states.float(), self.gate_proj.weight.float())
+
+        if cache_layer is not None and cache_layer.buffer_kv["compressor"] is not None:
+            buffered = cache_layer.buffer_kv["compressor"]
+            buffer_live = torch.arange(buffered.shape[1], device=kv.device).unsqueeze(0) < cache_layer.buffer_lengths[
+                "compressor"
+            ].unsqueeze(-1)
+            kv = torch.cat([buffered, kv], dim=1)
+            if gate is not None:
+                gate = torch.cat([cache_layer.buffer_gate["compressor"], gate], dim=1)
+            positions = torch.cat([cache_layer.buffer_positions["compressor"], positions], dim=1)
+            live = torch.cat([buffer_live, live], dim=1)
+
+        length = kv.shape[1]
+        counts = live.long().sum(-1)
+        group_counts = counts // ratio
+        # Stable compaction without sorting projected KV or synchronizing on a
+        # data-dependent output size. Invalid input indices go to a discarded slot.
+        destinations = torch.where(live, live.long().cumsum(-1) - 1, length)
+        order = positions.new_zeros(batch, length + 1)
+        order.scatter_(1, destinations, torch.arange(length, device=kv.device).expand(batch, -1))
+        n_groups = length // ratio
+        if cache_layer is not None:
+            n_groups = min(n_groups, cache_layer.cumulative_length // ratio)
+            remainder = counts % ratio
+            tail_slots = (group_counts.unsqueeze(-1) * ratio + torch.arange(ratio - 1, device=kv.device)).clamp_max(
+                length
+            )
+            tail_indices = order.gather(1, tail_slots)
+            cache_layer.buffer_kv["compressor"] = kv.gather(1, tail_indices.unsqueeze(-1).expand(-1, -1, kv.shape[-1]))
+            cache_layer.buffer_gate["compressor"] = (
+                None if gate is None else gate.gather(1, tail_indices.unsqueeze(-1).expand(-1, -1, gate.shape[-1]))
+            )
+            cache_layer.buffer_positions["compressor"] = positions.gather(1, tail_indices)
+            cache_layer.buffer_lengths["compressor"] = remainder
+            cache_layer.token_count["compressor"] = query_lengths[:, -1]
+
+        group_indices = order[:, : n_groups * ratio]
+        group_positions = positions.gather(1, group_indices[:, ::ratio])
+        if n_groups == 0:
+            return None, group_positions, group_counts, query_lengths
+        grouped_kv = kv.gather(1, group_indices.unsqueeze(-1).expand(-1, -1, kv.shape[-1]))
+        valid = torch.arange(n_groups, device=kv.device).unsqueeze(0) < group_counts.unsqueeze(-1)
+        if gate is None:
+            latent = grouped_kv
+        else:
+            grouped_gate = gate.gather(1, group_indices.unsqueeze(-1).expand(-1, -1, gate.shape[-1]))
+            grouped_kv = grouped_kv.reshape(batch, n_groups, ratio, -1)
+            grouped_gate = grouped_gate.reshape(batch, n_groups, ratio, -1)
+            latent = (grouped_kv * grouped_gate.softmax(dim=2, dtype=torch.float32)).sum(dim=2)
+        latent = latent.masked_fill(~valid.unsqueeze(-1), 0)
+        return self.kv_norm(latent.to(hidden_states.dtype)), group_positions, group_counts, query_lengths
+
+
+def select_candidate_blocks(
+    logits: torch.Tensor,
+    compress_lens: torch.Tensor,
+    topk_blocks: int,
+    block_size: int,
+) -> torch.Tensor:
+    """Level one of the two-level top-k (hierarchical sparse indexer): keep the
+    `topk_blocks` highest-scoring blocks of `block_size` compressed positions per query.
+
+    `logits` is `[..., n_positions]` with unreachable positions already at -inf, which
+    makes a block score of -inf mean "not reachable yet". The block holding the query's
+    newest position is only partly filled, so it is pinned in — it holds the most recent
+    tokens but could otherwise be outscored by an older, full block. Returns a bool mask
+    shaped like `logits`."""
+    width = logits.size(-1)
+    scores = F.pad(logits, (0, -width % block_size), value=float("-inf"))
+    scores = scores.unflatten(-1, (-1, block_size)).amax(dim=-1)
+    num_blocks = scores.size(-1)
+
+    # `compress_lens` carries a trailing axis: [.., 1] against the [.., blocks] scores.
+    last = (compress_lens - 1) // block_size
+    scores = scores.masked_fill(torch.arange(num_blocks, device=logits.device).view(-1) == last, torch.inf)
+
+    top = scores.topk(min(topk_blocks, num_blocks), dim=-1)
+    # Fewer reachable blocks than topk_blocks: leftover picks come back -inf — drop them.
+    keep = torch.zeros_like(scores, dtype=torch.bool).scatter_(-1, top.indices, top.values > float("-inf"))
+    return keep.repeat_interleave(block_size, dim=-1)[..., :width]
+
+
+class DeepseekV41Indexer(nn.Module):
+    r"""Sparse indexer of a CSA2 **index-source** layer. Scores each query against the
+    shared indexer keys (one per compressed group, at `index_head_dim`) and keeps the
+    top `index_topk` groups per query; the resulting per-query block bias is published
+    to the group's other layers ("Reuse" mode).
+
+    Key sharing: the keys are `k_norm(k_proj(latent))` of the *compressor latent* — only a
+    layer that also owns its compressor (`kv_source_layer_ids`) can produce them
+    (`owns_k`); every later index source ("Reindex" mode) rescores with its own weights
+    against the keys published by its group's source. Queries come from the attention's
+    low-rank residual (`q_a_norm(q_a_proj(x))`) through `q_b_proj`, rotated with the compress
+    rope. The candidate source layer additionally publishes the two-level-top-k
+    candidate mask that constrains all later index sources."""
+
+    # Query chunking of the [chunk, heads, T] score tensor: at most this many fp32
+    # elements per chunk (2 GiB). T is the number of compressed groups seen so far.
+    _SCORE_BUDGET = 2**29
+
+    def __init__(self, config: DeepseekV41TextConfig, layer_idx: int):
+        super().__init__()
+        self.layer_idx = layer_idx
+        self.owns_k = layer_idx in config.kv_source_layer_ids
+        self.compress_ratio = config.compress_ratios[layer_idx]
+        self.is_candidate_source = layer_idx == config.candidate_source_layer_id
+        self.uses_candidates = 0 <= config.candidate_source_layer_id < layer_idx
+        self.candidate_topk_blocks = config.candidate_topk_blocks
+        self.candidate_block_size = config.candidate_block_size
+        self.num_heads = config.index_n_heads
+        self.head_dim = config.index_head_dim
+        self.index_topk = config.index_topk
+        self.softmax_scale = self.head_dim**-0.5
+        self.heads_scaling = self.num_heads**-0.5
+        self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
+        self.weights_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
+        self.rotary_emb = DeepseekV41RotaryEmbedding(config)
+        if self.owns_k:
+            self.k_proj = nn.Linear(config.head_dim, self.head_dim, bias=False)
+            self.k_norm = DeepseekV41RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        q_residual: torch.Tensor,
+        latent: torch.Tensor | None,
+        group_positions: torch.Tensor | None,
+        position_ids: torch.Tensor,
+        cache_layer: DeepseekV41CSACache | None,
+        shared: dict,
+    ) -> None:
+        """Publishes `shared["topk_idx"]` — the `index_topk` compressed entries each
+        query attends to (`[B, S, top_k]`, `-1` = no entry) — and `shared["candidates"]`
+        at the candidate source layer."""
+        batch, seq_len, _ = hidden_states.shape
+        ratio = self.compress_ratio
+
+        # 1. Publish the index keys of the groups that completed in this call. The keys
+        #    are derived from the PRE-rope latent, before the compressor rotates the
+        #    same values into the main cache.
+        if self.owns_k:
+            if cache_layer is None:
+                # Without a cache, the shared slot belongs to this source's current
+                # forward only, not to a preceding source layer.
+                shared["index_k"] = None
+            if latent is not None:
+                k = self.k_norm(self.k_proj(latent))
+                cos, sin = self.rotary_emb(k, position_ids=group_positions, layer_type="compress")
+                k = apply_rotary_pos_emb(k, cos, sin)
+                # QAT semantics: indexer keys are FP4-quantized (ue8m0 scale per 32
+                # channels) before they land in the shared key cache.
+                k = _fake_quant_fp4_block(k, block_size=32)
+                k = k.unsqueeze(1)  # [B, 1, G, idh]
+                if cache_layer is not None:
+                    cache_layer.update_compressor_states("indexer", k, shared["group_counts"], ratio)
+                else:
+                    shared["index_k"] = k
+            # Publish the RUNNING key cache — decode steps between group boundaries emit
+            # nothing new but the group still scores against everything emitted so far.
+            if cache_layer is not None:
+                shared["index_k"] = cache_layer.compressed_kv["indexer"]
+        index_k = shared.get("index_k")
+        if index_k is not None:
+            index_k = index_k.to(hidden_states.device)  # source group may sit on another device
+        compressed_len = 0 if index_k is None else index_k.shape[2]
+        if compressed_len == 0:
+            shared["topk_idx"] = None
+            if self.is_candidate_source:
+                shared["candidates"] = None
+            return
+
+        # 2. Score the queries against the shared keys, in query chunks: the score
+        #    tensor is [chunk, heads, T], and T grows with the context (one entry per
+        #    `ratio` tokens), so a whole-prefill [S, heads, T] would not fit at long
+        #    context. Each chunk publishes its own top-k; only [S, top_k] indices leave.
+        cos_q, sin_q = self.rotary_emb(hidden_states, position_ids=position_ids, layer_type="compress")
+        q = self.q_b_proj(q_residual).view(batch, seq_len, self.num_heads, self.head_dim)
+        q = apply_rotary_pos_emb(q, cos_q, sin_q)
+        # QAT semantics: the indexer query is FP4-quantized too, so the top-k
+        # selection matches the trained quantized scoring.
+        q = _fake_quant_fp4_block(q, block_size=32).float()
+        keys = index_k[:, 0].float()  # [B, T, idh]
+        weights = self.weights_proj(hidden_states).float() * self.heads_scaling  # [B, S, heads]
+        # Counts follow live tokens, independently of padding offsets or custom
+        # RoPE coordinates. A pooled entry becomes visible only after its last token.
+        compress_lens = shared["compress_lens"].to(keys.device).unsqueeze(-1)
+        entry_indices = torch.arange(compressed_len, device=keys.device).view(1, 1, -1)
+        top_k = min(self.index_topk, compressed_len)
+        candidates_prev = shared.get("candidates") if (self.uses_candidates and not self.is_candidate_source) else None
+        if candidates_prev is not None:
+            candidates_prev = candidates_prev.to(keys.device)
+
+        chunk = max(1, min(seq_len, self._SCORE_BUDGET // max(self.num_heads * compressed_len, 1)))
+        topk_idx, candidates_out = [], []
+        for start in range(0, seq_len, chunk):
+            end = min(start + chunk, seq_len)
+            scores = torch.einsum("bshd,btd->bsht", q[:, start:end], keys)
+            scores = scores.relu_() * self.softmax_scale
+            index_scores = (scores * weights[:, start:end].unsqueeze(-1)).sum(dim=2)  # [B, c, T]
+            index_scores = index_scores.masked_fill(entry_indices >= compress_lens[:, start:end], float("-inf"))
+            # Two-level top-k: the candidate source publishes its block mask; every
+            # later index source scores only inside it.
+            if self.is_candidate_source:
+                cand = select_candidate_blocks(
+                    index_scores, compress_lens[:, start:end], self.candidate_topk_blocks, self.candidate_block_size
+                )
+                candidates_out.append(cand)
+            elif candidates_prev is not None:
+                index_scores = index_scores.masked_fill(~candidates_prev[:, start:end], float("-inf"))
+            # Early queries can have fewer visible groups than `index_topk`: those picks
+            # come back with a -inf score and are marked -1 (never attended).
+            if top_k > 0:
+                picked = index_scores.topk(top_k, dim=-1, sorted=False)
+                idx = torch.where(picked.values > float("-inf"), picked.indices, torch.full_like(picked.indices, -1))
+            else:
+                idx = index_scores.new_empty((batch, end - start, 0), dtype=torch.long)
+            topk_idx.append(idx)
+        if self.is_candidate_source:
+            shared["candidates"] = torch.cat(candidates_out, dim=1)
+        shared["topk_idx"] = torch.cat(topk_idx, dim=1)  # [B, S, top_k], -1 = no entry
+
+
+class DeepseekV41Attention(nn.Module):
+    r"""Latent shared-KV attention over two KV sources: a sliding window of raw KV plus,
+    when the layer has a compressed branch, the *shared* compressed KV of its group.
+
+    - Q and the output projection are low-rank; the output projection is grouped
+      (block-diagonal `o_a_proj` over `o_groups`, then the mixing `o_b_proj`).
+    - K=V is a single latent (`kv_proj` + `kv_norm`); the attention output's rope slice is
+      inverse-rotated so the shared rotated cache works.
+    - Per-head learnable attention sink (`sinks`), like gpt-oss.
+    - **KV sharing (CSA2)**: only `kv_source_layer_ids` layers own a
+      :class:`DeepseekV41Compressor` — the layers in between read the source's
+      compressed cache through the per-forward `shared` dict ("Reuse" mode). Index
+      sources run the indexer and publish the top-k bias; the layers in between reuse
+      it. `shared` is keyed per forward, but the persistent state (group buffers,
+      compressed KV, indexer keys) lives on the source's cache layer, so this stays
+      correct across prefill / chunked prefill / decode."""
+
+    def __init__(self, config: DeepseekV41TextConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.compress_ratio = config.compress_ratios[layer_idx]
+        self.num_heads = config.num_attention_heads
+        # Shared-KV latent attention: a single KV head broadcast to all heads.
+        self.num_key_value_groups = config.num_attention_heads
+        self.head_dim = config.head_dim
+        self.rope_layer_type = "compress" if self.compress_ratio else "main"
+        self.sliding_window = config.sliding_window
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+        self.scaling = self.head_dim**-0.5
+
+        self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=False)
+        self.q_a_norm = DeepseekV41RMSNorm(config.q_lora_rank, eps=config.rms_norm_eps)
+        self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
+        self.kv_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
+        self.kv_norm = DeepseekV41RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.o_a_proj = DeepseekV41GroupedLinear(
+            self.num_heads * self.head_dim // config.o_groups,
+            config.o_groups * config.o_lora_rank,
+            config.o_groups,
+        )
+        self.o_b_proj = nn.Linear(config.o_groups * config.o_lora_rank, config.hidden_size, bias=False)
+        self.sinks = nn.Parameter(torch.empty(self.num_heads))
+
+        self.is_kv_source = layer_idx in config.kv_source_layer_ids
+        self.is_index_source = layer_idx in config.index_source_layer_ids
+        self.compressor = DeepseekV41Compressor(config, layer_idx) if self.is_kv_source else None
+        self.indexer = DeepseekV41Indexer(config, layer_idx) if self.is_index_source else None
+        # Latent RoPE positions come from each complete group's first live token,
+        # including partial groups carried across cached calls.
+        # Only kv-source layers own one (shared by their group).
+        self.compress_rotary = DeepseekV41RotaryEmbedding(config) if self.is_kv_source else None  # trf-ignore: TRF050
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: dict[str, tuple[torch.Tensor, torch.Tensor]],
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None,
+        shared: dict,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        # position_ids flows through **kwargs (TRF043): the decoder layer passes the
+        # model-level kwargs straight in, and it must stay available to the attention
+        # interface below (padding-free paths read it from kwargs).
+        position_ids = kwargs["position_ids"]
+        padding_mask = kwargs.pop("padding_mask", None)
+        batch, seq_len, _ = hidden_states.shape
+        cos, sin = position_embeddings[self.rope_layer_type]
+
+        q_residual = self.q_a_norm(self.q_a_proj(hidden_states))
+        q = self.q_b_proj(q_residual).view(batch, seq_len, self.num_heads, self.head_dim)
+        q = apply_rotary_pos_emb(q, cos, sin).transpose(1, 2)  # [B, H, S, D]
+
+        kv = self.kv_norm(self.kv_proj(hidden_states))
+        kv = apply_rotary_pos_emb(kv, cos, sin).view(batch, seq_len, 1, self.head_dim).transpose(1, 2)
+        # QAT semantics: the window KV cache stores FP8-quantized values (one ue8m0
+        # scale per 32 channels, RoPE tail included) — part of the model, applied
+        # even in otherwise-unquantized runs.
+        kv = _fake_quant_fp8_block(kv, block_size=32)
+        if past_key_values is not None:  # K == V
+            kv = past_key_values.update(kv, kv, self.layer_idx)[0]
+
+        selected_kv = selected_valid = None
+        if self.compress_ratio:
+            cache_layer = past_key_values.layers[self.layer_idx] if past_key_values is not None else None
+            latent = group_positions = None
+            if self.is_kv_source:
+                if cache_layer is None:
+                    shared["compress_kv"] = None
+                latent, group_positions, group_counts, query_lengths = self.compressor(
+                    hidden_states, cache_layer, position_ids, padding_mask
+                )
+                shared["group_counts"] = group_counts
+                shared["compress_lens"] = query_lengths // self.compress_ratio
+                if padding_mask is not None:
+                    shared["compress_lens"] = shared["compress_lens"].masked_fill(~padding_mask, 0)
+
+            # The indexer consumes the PRE-rope latent; it must run before the latent is
+            # rotated into the main compressed cache.
+            if self.is_index_source:
+                self.indexer(hidden_states, q_residual, latent, group_positions, position_ids, cache_layer, shared)
+            topk_idx = shared.get("topk_idx")
+
+            if latent is not None:
+                cos_c, sin_c = self.compress_rotary(latent, position_ids=group_positions, layer_type="compress")
+                rotated = apply_rotary_pos_emb(latent, cos_c, sin_c)
+                # QAT semantics: the compressed KV cache stores FP4-quantized latents
+                # (e2m1 grid, one e4m3 scale per 16 channels).
+                rotated = _fake_quant_fp4_block(rotated, block_size=16, e4m3_scales=True)
+                rotated = rotated.unsqueeze(1)  # [B, 1, G, hd]
+                if cache_layer is not None:
+                    cache_layer.update_compressor_states(
+                        "compressor", rotated, shared["group_counts"], self.compress_ratio
+                    )
+                else:
+                    shared["compress_kv"] = rotated
+            if self.is_kv_source and cache_layer is not None:
+                # Publish the RUNNING compressed cache — a decode step between group
+                # boundaries emits nothing new, but the group still attends over
+                # everything emitted so far.
+                shared["compress_kv"] = cache_layer.compressed_kv["compressor"]
+            compressed_kv = shared.get("compress_kv")
+            # Gather ONLY the entries the indexer picked for each query ([B, S, top_k, D]):
+            # attention over the whole compressed cache with a -inf bias is the same
+            # softmax, but its [heads, S, T] scores would not fit at long context. A
+            # compressed branch with no index source in this forward (legal but unusual
+            # schedule) attends no compressed entry.
+            if compressed_kv is not None and topk_idx is not None and topk_idx.shape[-1] > 0:
+                entries = compressed_kv[:, 0].to(kv.device)  # [B, T, D]; source may sit elsewhere
+                topk_idx = topk_idx.to(kv.device)
+                selected_valid = topk_idx >= 0
+                rows = torch.arange(batch, device=kv.device).view(batch, 1, 1)
+                selected_kv = entries[rows, topk_idx.clamp_min(0)]  # [B, S, top_k, D]
+
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, attn_weights = attention_interface(
+            self,
+            q,
+            kv,
+            kv,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            sliding_window=self.sliding_window,
+            selected_kv=selected_kv,
+            selected_valid=selected_valid,
+            **kwargs,
+        )
+
+        # K == V carried RoPE on its rope slice; remove the query's rotation from the
+        # output before the grouped projection mixes the heads.
+        attn_output = apply_rotary_pos_emb(attn_output, cos, sin, inverse=True)
+        grouped = attn_output.reshape(batch, seq_len, self.config.o_groups, -1)
+        output = self.o_b_proj(self.o_a_proj(grouped).flatten(2))
+        return output, attn_weights
+
+
+class DeepseekV41TopKRouter(MixtralTopKRouter):
+    """MoE gate. The correction bias (`e_score_correction_bias`) steers expert
+    *selection* only; the routing weights come from the unbiased scores. Image-span
+    tokens switch to a separate `e_score_correction_bias_vl` (training
+    `noaux_tc_for_vl`). Both are persistent fp32 buffers, like V4's."""
+
+    def __init__(self, config: DeepseekV41TextConfig):
+        super().__init__(config)
+        self.score_fn = ACT2FN[config.scoring_func]
+        self.gate_temp = config.gate_temp
+        self.norm_topk_prob = config.norm_topk_prob
+        self.routed_scaling_factor = config.routed_scaling_factor
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
+        self.e_score_correction_bias_vl = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
+
+    def forward(
+        self, hidden_states: torch.Tensor, image_mask: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        flat = hidden_states.reshape(-1, self.hidden_dim).float()
+        logits = F.linear(flat, self.weight.float()) / self.gate_temp
+        scores = self.score_fn(logits)
+        bias = self.e_score_correction_bias
+        if image_mask is not None and image_mask.any():
+            bias = torch.where(image_mask.reshape(-1, 1), self.e_score_correction_bias_vl, bias)
+        indices = (scores + bias).topk(self.top_k, dim=-1)[1]
+        weights = scores.gather(1, indices)
+        if self.norm_topk_prob and self.top_k > 1:
+            # `+1e-20` on the sum — NOT `rms_norm_eps`; matches training.
+            weights = weights / (weights.sum(dim=-1, keepdim=True) + 1e-20)
+        # `logits` first so `OutputRecorder(..., index=0)` records router logits.
+        return logits, weights * self.routed_scaling_factor, indices
+
+
+class DeepseekV41MLP(nn.Module):
+    """The shared expert: a SwiGLU MLP with the training-time clamps that keep fp8/fp4
+    activations in range (`up` on both sides, `gate` from above), computed in fp32."""
+
+    def __init__(self, config: DeepseekV41TextConfig):
+        super().__init__()
+        self.gate_proj = nn.Linear(config.hidden_size, config.moe_intermediate_size, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, config.moe_intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.moe_intermediate_size, config.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.limit = config.swiglu_limit
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        gate, up = self.gate_proj(x).float(), self.up_proj(x).float()
+        if self.limit > 0:
+            up = up.clamp(min=-self.limit, max=self.limit)
+            gate = gate.clamp(max=self.limit)
+        return self.down_proj((self.act_fn(gate) * up).to(x.dtype))
+
+
+@use_experts_implementation
+class DeepseekV41Experts(MixtralExperts):
+    """Routed experts as 3D tensors: `gate_up_proj[e]` = `[w1; w3]` (gate rows first),
+    `down_proj[e]` = `w2`. Same clamped SwiGLU as the shared expert; the routing
+    weight multiplies the fp32 activation BEFORE the down projection (the reference's
+    order — `w2(weight * act)`, not `weight * w2(act)`)."""
+
+    def __init__(self, config: DeepseekV41TextConfig):
+        super().__init__(config)
+        self.limit = config.swiglu_limit
+
+    def _clamped_swiglu(self, gate: torch.Tensor, up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate.float(), up.float()
+        if self.limit > 0:
+            up = up.clamp(min=-self.limit, max=self.limit)
+            gate = gate.clamp(max=self.limit)
+        return self.act_fn(gate) * up
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        # Lives on the class (like V4 / gpt-oss) so the batched_mm / grouped_mm backends
+        # swapped in by `@use_experts_implementation` apply the same clamp + SiLU on their
+        # packed gate_up output.
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self._clamped_swiglu(gate, up).to(gate_up.dtype)
+
+    def forward(
+        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
+    ) -> torch.Tensor:
+        """Eager dispatch: returns the fp32 accumulator (the block adds the shared
+        expert in fp32 before casting back, as the reference does)."""
+        inter = self.intermediate_dim
+        final = torch.zeros_like(hidden_states, dtype=torch.float32)
+        with torch.no_grad():
+            mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
+            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            # Token-major order (`mask[e].T` is [tokens, top_k]), and gate / up as two
+            # GEMMs over the halves of the fused weight: both keep the accumulation
+            # order of the reference's per-expert `w1` / `w3` loop (one fused GEMM or a
+            # top_k-major row order rounds differently at some shapes).
+            token_idx, top_k_pos = torch.where(mask[expert_idx].T)
+            current_state = hidden_states[token_idx]
+            weight = self.gate_up_proj[expert_idx]
+            gate, up = F.linear(current_state, weight[:inter]), F.linear(current_state, weight[inter:])
+            current = self._clamped_swiglu(gate, up) * top_k_weights[token_idx, top_k_pos, None]
+            current = F.linear(current.to(current_state.dtype), self.down_proj[expert_idx])
+            final.index_add_(0, token_idx, current.float())
+        return final
+
+
+class DeepseekV41SparseMoeBlock(nn.Module):
+    """Top-k routed experts plus one shared expert every token goes through."""
+
+    def __init__(self, config: DeepseekV41TextConfig, layer_idx: int):
+        super().__init__()
+        # DSpark draft layers (M2) have their own expert counts; this block is only
+        # ever built for backbone layers.
+        self.gate = DeepseekV41TopKRouter(config)
+        self.experts = DeepseekV41Experts(config)
+        self.shared_experts = DeepseekV41MLP(config)
+
+    def forward(self, hidden_states: torch.Tensor, image_mask: torch.Tensor | None = None) -> torch.Tensor:
+        shape = hidden_states.shape
+        flat = hidden_states.reshape(-1, shape[-1])
+        _, weights, indices = self.gate(hidden_states, image_mask)
+        # routed + shared summed in fp32 (eager experts return fp32; the batched_mm /
+        # grouped_mm backends return the model dtype), then one cast back.
+        y = self.experts(flat, indices, weights).float() + self.shared_experts(flat).float()
+        return y.to(hidden_states.dtype).view(shape)
+
+
+class DeepseekV41EngramEmbedding(nn.Embedding):
+    """The n-gram hash table: fp8 rows with per-row / per-32-channel E8M0 scales in the
+    checkpoint, dequantized on lookup. The scales are `weight_scale_inv`, the name the
+    FP8 quantizer gives every checkpoint `.scale` (and that `FP8Linear` uses), so a
+    `dequantize=False` load lands them here. When the model is loaded in a float dtype
+    (`dequantize=True`, or a bf16 checkpoint) the quantizer has already folded the
+    scales into the rows, the table is a plain embedding and `weight_scale_inv` is
+    unused. ~98 GB per table in the released checkpoint — memory-map friendly (pure
+    row gather).
+
+    An `nn.Embedding` so tensor parallelism shards it along the embedding dim
+    (`colwise_gather_output`, like Qwen4-Exp's n-gram table): each rank holds
+    `head_dim / tp_size` channels of every row — whole 32-channel scale blocks, so the
+    per-block dequantization stays rank-local before the output gather."""
+
+    def __init__(self, num_embeddings: int, head_dim: int, block_size: int = 32):
+        super().__init__(num_embeddings, head_dim)
+        self.block_size = block_size
+        self.weight_scale_inv = nn.Parameter(torch.empty(num_embeddings, head_dim // block_size))
+
+    def forward(self, hash_ids: torch.Tensor) -> torch.Tensor:
+        weight, scale = self.weight, self.weight_scale_inv
+        mesh = None
+        if DTensor is not None and isinstance(weight, DTensor):
+            # TP: gather on the local shards, hand back a Shard(-1) DTensor for the output gather
+            mesh, weight, scale = weight.device_mesh, weight.to_local(), scale.to_local()
+        if DTensor is not None and isinstance(hash_ids, DTensor):
+            hash_ids = hash_ids.to_local()
+        # Under `device_map` the table is in `_no_placement_params` and stays wherever it
+        # fits (typically host RAM) while the ids arrive on the layer's device: run the
+        # gather where the table lives and move only the rows (Qwen4-Exp pattern).
+        table_device = weight.device if weight.device.type != "meta" else hash_ids.device
+        ids = hash_ids.to(table_device)
+        values = F.embedding(ids, weight)
+        if weight.dtype == torch.float8_e4m3fn:
+            scales = F.embedding(ids, scale).float()
+            values = values.float().unflatten(-1, (-1, self.block_size)) * scales.unsqueeze(-1)
+            values = values.flatten(-2)
+        values = values.to(hash_ids.device)
+        if mesh is not None:
+            values = DTensor.from_local(values, mesh, [Shard(-1)], run_check=False)
+        return values
+
+
+class DeepseekV41Engram(nn.Module):
+    """Writes an n-gram lookup into the residual stream, gated by how well it matches.
+
+    `wkv` turns the gathered rows (`n_hash_cols` of them per token) into one key per hc
+    stream plus a shared value. The gate is a sigmoid of the signed sqrt of a
+    normalized dot product between the stream and the key (weights
+    `q_weight * k_weight`, used only as a product). The hash ids are computed and the
+    rows gathered once per forward by the model (:class:`DeepseekV41NgramHashState` +
+    the model-level :class:`DeepseekV41EngramEmbedding` tables) and passed in per
+    engram layer — the ~98 GB tables must live outside the decoder layer so the layer
+    stays a no-split unit under `device_map` while the table is excluded from
+    placement."""
+
+    def __init__(self, config: DeepseekV41TextConfig, layer_idx: int):
+        super().__init__()
+        self.layer_hash_index = config.engram_layer_ids.index(layer_idx)
+        self.hidden_size = config.hidden_size
+        self.hc_mult = config.hc_mult
+        self.eps = config.rms_norm_eps
+        self.clamp_value = 1e-6
+        n_hash_cols = (config.engram_max_ngram_size - 1) * config.engram_n_heads
+        self.wkv = nn.Linear(
+            n_hash_cols * config.engram_head_dim,
+            config.hidden_size * (config.hc_mult + 1),
+            bias=False,
+        )
+        self.q_weight = nn.Parameter(torch.empty(config.hc_mult, config.hidden_size))
+        self.k_weight = nn.Parameter(torch.empty(config.hc_mult, config.hidden_size))
+
+    def forward(
+        self, hidden_streams: torch.Tensor, rows: torch.Tensor, token_mask: torch.Tensor | None
+    ) -> torch.Tensor:
+        """hidden_streams: [B, S, hc, D]; rows: [B, S, n_hash_cols, head_dim] gathered
+        table rows; token_mask: [B, S], False shuts the gate so those positions pass
+        through untouched."""
+        # The dequantized fp8 rows are exact in any dtype; cast to the stream's dtype
+        # (NOT the weight's: under `dequantize=False` `wkv` is an FP8Linear whose
+        # weight is float8, and its input must stay bf16).
+        kv = self.wkv(rows.flatten(-2).to(hidden_streams.dtype))
+        key, value = kv.split([self.hc_mult * self.hidden_size, self.hidden_size], dim=-1)
+        key = key.float().unflatten(-1, (self.hc_mult, self.hidden_size))
+        weight = self.q_weight.float() * self.k_weight.float()  # only ever used as a product
+        h = hidden_streams.float()
+        # Normalized per (token, hc stream) over D — NOT jointly over the streams.
+        rstd = torch.rsqrt(h.square().mean(-1) + self.eps) * torch.rsqrt(key.square().mean(-1) + self.eps)
+        dot = (h * weight * key).sum(-1) * rstd * self.hidden_size**-0.5
+        # Signed sqrt before the sigmoid, matching the training kernel.
+        gate = torch.sigmoid(torch.copysign(dot.abs().clamp_min(self.clamp_value).sqrt(), dot))
+        if token_mask is not None:
+            gate = gate.masked_fill(~token_mask.unsqueeze(-1), 0.0)
+        out = h + gate.unsqueeze(-1) * value.float().unsqueeze(-2)
+        return out.to(hidden_streams.dtype)
+
+
+def _is_prime(n: int) -> bool:
+    if n < 2:
+        return False
+    if n % 2 == 0:
+        return n == 2
+    i = 3
+    while i * i <= n:
+        if n % i == 0:
+            return False
+        i += 2
+    return True
+
+
+def _find_next_prime(start: int, seen: set) -> int:
+    candidate = start + 1
+    while not _is_prime(candidate) or candidate in seen:
+        candidate += 1
+    return candidate
+
+
+@dataclass(frozen=True)
+class EngramLayout:
+    """Bucket layout of the n-gram hash tables: a position is hashed as
+    `max_ngram_size - 1` n-grams (2..N-gram), each split over `n_heads` heads; every
+    (n-gram size, head) pair owns a disjoint prime-sized bucket range — the primes are
+    drawn in order above `engram_vocab_size` and never reused. `primes` is
+    `[L][n-gram-1][heads]` (the per-step modulus is over all heads of one n-gram size);
+    `offsets` is `[L][n_cols]`, PER LAYER over the flat (n-gram, head) order: each
+    layer's table is addressed from its own start, and the ranges inside it are
+    disjoint because the primes are never reused."""
+
+    max_ngram_size: int
+    layer_ids: tuple
+    num_embeddings: tuple
+    primes: tuple
+    offsets: tuple
+    n_heads: int
+    head_dim: int
+
+    @classmethod
+    def from_config(cls, config: DeepseekV41TextConfig):
+        layer_ids = tuple(config.engram_layer_ids)
+        if not layer_ids:
+            return None
+        primes, seen = [], set()
+        for _ in layer_ids:
+            per_ngram = []
+            for _ in range(config.engram_max_ngram_size - 1):
+                sizes, current = [], config.engram_vocab_size - 1
+                for _ in range(config.engram_n_heads):
+                    current = _find_next_prime(current, seen)
+                    seen.add(current)
+                    sizes.append(current)
+                per_ngram.append(tuple(sizes))
+            primes.append(tuple(per_ngram))
+        offsets = []
+        for layer in primes:
+            row, total = [], 0
+            for prime in (p for per in layer for p in per):
+                row.append(total)
+                total += prime
+            offsets.append(tuple(row))
+        return cls(
+            max_ngram_size=config.engram_max_ngram_size,
+            layer_ids=layer_ids,
+            num_embeddings=tuple(config.engram_num_embeddings),
+            primes=tuple(primes),
+            offsets=tuple(offsets),
+            n_heads=config.engram_n_heads,
+            head_dim=config.engram_head_dim,
+        )
+
+
+def build_compressed_token_map(tokenizer) -> tuple[list[int], int]:
+    """Map every token id onto a smaller id space where tokens that normalize alike
+    collapse together (" The", "the", "THE" hash the same). The compressed vocab size
+    must match `engram_compressed_vocab_size` — every hash multiplier derives from it,
+    so a mismatch means the whole table rehashes to garbage."""
+    from tokenizers import Regex, normalizers
+
+    # A private-use char, so a token that is exactly one space survives Strip() instead
+    # of collapsing to the empty string and merging with unrelated tokens.
+    sentinel = "\ue000"
+    normalizer = normalizers.Sequence(
+        [
+            normalizers.NFKC(),
+            normalizers.NFD(),
+            normalizers.StripAccents(),
+            normalizers.Lowercase(),
+            normalizers.Replace(Regex(r"[ \t\r\n]+"), " "),
+            normalizers.Replace(Regex(r"^ $"), sentinel),
+            normalizers.Strip(),
+            normalizers.Replace(sentinel, " "),
+        ]
+    )
+
+    # The raw Rust tokenizer, matching what training decodes with.
+    backend = tokenizer.backend_tokenizer
+    key_to_new: dict[str, int] = {}
+    lookup = [0] * len(tokenizer)
+    for token_id in range(len(tokenizer)):
+        text = backend.decode([token_id], skip_special_tokens=False)
+        if "\ufffd" in text:
+            # A partial UTF-8 byte token: nothing to normalize, key it by its raw form.
+            key = backend.id_to_token(token_id)
+        else:
+            normalized = normalizer.normalize_str(text)
+            key = normalized or text
+        new_id = key_to_new.get(key)
+        if new_id is None:
+            new_id = len(key_to_new)
+            key_to_new[key] = new_id
+        lookup[token_id] = new_id
+    return lookup, len(key_to_new)
+
+
+def compute_hash_multipliers(layer_ids: tuple, max_ngram_size: int, compressed_vocab_size: int) -> torch.Tensor:
+    """One multiplier per (layer, look-back), from a per-layer RNG so layers hash
+    differently. Kept odd and bounded so `id * multiplier` cannot overflow int64."""
+    multiplier_bound = max(1, (np.iinfo(np.int64).max // compressed_vocab_size) // 2)
+    rows = []
+    for layer_id in layer_ids:
+        generator = np.random.default_rng(10007 * layer_id)
+        values = generator.integers(low=0, high=multiplier_bound, size=(max_ngram_size,), dtype=np.int64)
+        rows.append(torch.tensor(values * 2 + 1))
+    return torch.stack(rows)
+
+
+class DeepseekV41NgramHashState(nn.Module):
+    """Maps each position to the hash ids of the n-grams ending there — once per
+    forward, for all engram layers.
+
+    Ids go through the compressed table, then each position is hashed with the
+    `max_ngram_size - 1` tokens before it; look-back stops at the start of the sequence
+    and at any DEAD token (a pad, an image-span token), so an n-gram never spans one.
+    Across the prefill / chunked prefill / decode split the look-back is read from and
+    written to the cache (:class:`DeepseekV41EngramHistoryLayer`), so it follows the
+    KV through beam reorders and batch expansion; without a cache every call starts
+    from an empty look-back.
+
+    The prime buckets and per-layer multipliers depend only on the config and are
+    non-persistent buffers (rebuilt by `_init_weights` after the meta-device load, like
+    `inv_freq`); the compressed token map is the tokenizer's and is filled by
+    `bind_tokenizer` — until then the module refuses to hash."""
+
+    def __init__(self, config: DeepseekV41TextConfig):
+        super().__init__()
+        self.layout = EngramLayout.from_config(config)
+        self.max_ngram_size = self.layout.max_ngram_size
+        self.compressed_vocab_size = config.engram_compressed_vocab_size
+        self.engram_pad_id = config.engram_pad_id
+        self.pad_id: int | None = None  # compressed id of `engram_pad_id`, known once bound
+        tables = self.hash_tables()
+        self.primes = nn.Buffer(tables["primes"], persistent=False)
+        self.offsets = nn.Buffer(tables["offsets"], persistent=False)
+        self.multipliers = nn.Buffer(tables["multipliers"], persistent=False)
+        # Filled by `bind_tokenizer` (tokenizer-derived); empty until then. A buffer so
+        # it follows `.to()` / device_map like the config tables.
+        self.token_map = nn.Buffer(torch.empty(0, dtype=torch.long), persistent=False)
+
+    def hash_tables(self) -> dict[str, torch.Tensor]:
+        """The config-derived tables as fresh tensors: `primes` [L, n-gram-1, heads],
+        `offsets` [L, n_cols], `multipliers` [L, max_ngram_size]."""
+        return {
+            "primes": torch.tensor(self.layout.primes),
+            "offsets": torch.tensor(self.layout.offsets),
+            "multipliers": compute_hash_multipliers(
+                self.layout.layer_ids, self.max_ngram_size, self.compressed_vocab_size
+            ),
+        }
+
+    def bind_tokenizer(self, tokenizer):
+        token_map, vocab_size = build_compressed_token_map(tokenizer)
+        if vocab_size != self.compressed_vocab_size:
+            raise ValueError(
+                f"The tokenizer-derived compressed vocabulary size ({vocab_size}) does not match "
+                f"`engram_compressed_vocab_size` ({self.compressed_vocab_size}); the hash "
+                "multipliers would silently rehash the whole engram table."
+            )
+        self.pad_id = token_map[self.engram_pad_id]
+        self.token_map = torch.tensor(token_map, device=self.primes.device)
+
+    def forward(
+        self, input_ids: torch.Tensor, token_mask: torch.Tensor | None, past_key_values: Cache | None
+    ) -> torch.Tensor:
+        """Returns `[B, S, n_engram_layers, n_hash_cols]` hash ids. `token_mask` is
+        `[B, S]`, False marking DEAD tokens."""
+        if self.token_map.numel() == 0:
+            raise ValueError(
+                "The engram layers need the tokenizer to build their n-gram hash state "
+                "(compressed token map). Call `model.model.bind_tokenizer(tokenizer)` on a "
+                "`DeepseekV41ForCausalLM` (or `model.bind_tokenizer(tokenizer)` on a "
+                "`DeepseekV41TextModel`), or load the model with `from_pretrained` from a "
+                "checkpoint that ships its tokenizer (it binds automatically)."
+            )
+        context_len = self.max_ngram_size - 1
+        compressed = self.token_map[input_ids]
+        if token_mask is not None:
+            compressed = compressed.masked_fill(~token_mask, ENGRAM_DEAD)
+        if past_key_values is None:
+            empty = compressed.new_full((compressed.shape[0], context_len), ENGRAM_DEAD)
+            history = torch.cat([empty, compressed], dim=1)
+        else:
+            layer = next((l for l in past_key_values.layers if isinstance(l, DeepseekV41EngramHistoryLayer)), None)
+            if layer is None:
+                raise ValueError(
+                    "The engram n-gram look-back lives on a `shared_compressed_attention` cache layer "
+                    "(a KV-source layer); this cache has none."
+                )
+            history = layer.update_engram_context(compressed, context_len)
+
+        # Look-back windows over [context | current]: once a shift hits DEAD, that
+        # position's longer n-grams are blocked too and hash the pad id instead.
+        seq_len = compressed.shape[1]
+        tokens, blocked = [], torch.zeros_like(compressed, dtype=torch.bool)
+        for shift in range(self.max_ngram_size):
+            source = history[:, context_len - shift : context_len - shift + seq_len]
+            blocked = blocked | (source == ENGRAM_DEAD)
+            tokens.append(torch.where(blocked, torch.full_like(source, self.pad_id), source))
+        tokens = torch.stack(tokens, dim=-1)  # [B, S, max_ngram_size]
+
+        # XOR the multiplied ids one look-back at a time: after step i the running value
+        # is the hash of the (i+1)-gram, landing in its own prime bucket range.
+        products = tokens.unsqueeze(2) * self.multipliers  # [B, S, L, max_ngram_size]
+        rolling, hashes = products[..., 0], []
+        for i in range(1, self.max_ngram_size):
+            rolling = torch.bitwise_xor(rolling, products[..., i])
+            hashes.append(rolling.unsqueeze(-1) % self.primes[:, i - 1])
+        return torch.cat(hashes, dim=-1) + self.offsets.unsqueeze(0)
+
+
+class DeepseekV41DecoderLayer(GradientCheckpointingLayer):
+    r"""A V4.1 block: the residual stream is `hc_mult` parallel copies (hyper-
+    connections), with the engram lookup injected at its layers before the block.
+
+    Single-pass mHC: each site's :class:`DeepseekV41HyperConnection` returns
+    `(pre, post, comb)`, but the `pre` a site computes is consumed by the *next* site —
+    attention collapses with `pre_mix` (the previous site's), the FFN with the
+    attention site's, and the layer hands its FFN `pre` on."""
+
+    def __init__(self, config: DeepseekV41TextConfig, layer_idx: int):
+        super().__init__()
+        self.layer_idx = layer_idx
+        self.self_attn = DeepseekV41Attention(config, layer_idx)
+        self.mlp = DeepseekV41SparseMoeBlock(config, layer_idx)
+        self.input_layernorm = DeepseekV41RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = DeepseekV41RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        # CODEPATH: DeepSeek-V4.1-Flash ships n-gram hash tables on layers 1 and 14
+        # (engram_layer_ids=[1, 14]); every other checkpoint — and the tiny test
+        # configs — sets engram_layer_ids=[] and takes the None side (no engram path).
+        self.engram = DeepseekV41Engram(config, layer_idx) if layer_idx in config.engram_layer_ids else None
+        self.attn_hc = DeepseekV41HyperConnection(config)
+        self.ffn_hc = DeepseekV41HyperConnection(config)
+
+    @staticmethod
+    def hc_collapse(hidden_streams: torch.Tensor, pre: torch.Tensor) -> torch.Tensor:
+        """Collapse the hc copies into one sublayer input, weighted by `pre`."""
+        return (pre.unsqueeze(-1) * hidden_streams.float()).sum(dim=2).to(hidden_streams.dtype)
+
+    @staticmethod
+    def hc_expand(x: torch.Tensor, residual: torch.Tensor, post: torch.Tensor, comb: torch.Tensor):
+        """Place the sublayer output into the streams and mix the residual through
+        `comb`: out_k = post_k * x + Σ_j comb[j, k] * residual_j."""
+        mixed = torch.einsum("bsjk,bsjd->bskd", comb.float(), residual.float())
+        out = post.unsqueeze(-1) * x.float().unsqueeze(-2) + mixed
+        return out.to(residual.dtype)
+
+    def forward(
+        self,
+        hidden_streams: torch.Tensor,
+        pre_mix: torch.Tensor,
+        engram_rows: torch.Tensor | None,
+        token_mask: torch.Tensor | None,
+        shared: dict,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # hidden_streams: [B, S, hc, hidden]; engram_rows: this layer's gathered table
+        # rows [B, S, n_hash_cols, head_dim] (None on non-engram layers)
+        if self.engram is not None and engram_rows is not None:
+            hidden_streams = self.engram(hidden_streams, engram_rows, token_mask)
+
+        residual = hidden_streams
+        attn_pre, attn_post, attn_comb = self.attn_hc(hidden_streams)
+        collapsed = self.hc_collapse(hidden_streams, pre_mix)
+        attn_output, _ = self.self_attn(self.input_layernorm(collapsed), shared=shared, **kwargs)
+        hidden_streams = self.hc_expand(attn_output, residual, attn_post, attn_comb)
+
+        residual = hidden_streams
+        ffn_pre, ffn_post, ffn_comb = self.ffn_hc(hidden_streams)
+        collapsed = self.hc_collapse(hidden_streams, attn_pre)
+        ffn_output = self.mlp(self.post_attention_layernorm(collapsed))
+        hidden_streams = self.hc_expand(ffn_output, residual, ffn_post, ffn_comb)
+        return hidden_streams, ffn_pre
+
+
+# Deliberate: this base serves BOTH model types. The text backbone chain
+# (DeepseekV41TextModel, registered as `deepseek_v41_text`) needs the flat
+# DeepseekV41TextConfig; DeepseekV41ForCausalLM overrides with the composite
+# DeepseekV41Config because the released checkpoint's config.json is composite and
+# its top-level quantization_config must reach the quantizer.
+@auto_docstring
+class DeepseekV41PreTrainedModel(PreTrainedModel):  # trf-ignore: TRF001
+    config_class = DeepseekV41TextConfig
+
+    base_model_prefix = "model"
+    # `DeepseekV41EngramEmbedding` is no-split so `_no_placement_params` can exclude
+    # its whole table (see below) instead of splitting it into offloaded pieces.
+    _no_split_modules = ["DeepseekV41DecoderLayer", "DeepseekV41EngramEmbedding"]
+    # `past_key_values` as everywhere; `shared` is the per-forward CSA2 group-state dict
+    # that every layer must see as ONE object (accelerate's hooks would otherwise hand
+    # each layer a device-moved copy, losing the source layers' writes).
+    _skip_keys_device_placement = ["past_key_values", "shared"]
+    # Eager-only, same reasons as V4: FA caps head_dim at 256 (V4.1 uses 512); SDPA has
+    # no per-head sink term; the compressed branch concatenates entries onto the KV axis
+    # inside the block, after the model-level mask was built.
+    _supports_flash_attn = False
+    _supports_sdpa = False
+    _supports_flex_attn = False
+    _can_compile_fullgraph = False
+    # The compressor's group-buffer state isn't rewindable across drafts.
+    _is_stateful = True
+    # DSpark draft layers, the vision tower, the aligner and the image delimiter
+    # embeddings ship in the checkpoint but their modules land in follow-up PRs.
+    _keys_to_ignore_on_load_unexpected = [
+        r"(^|\.)mtp\..*",
+        r"^vision\..*",
+        r"^aligner\..*",
+        r"^image_(start|end|newline)$",
+    ]
+    # The engram tables' `weight_scale_inv` only exists as a parameter under
+    # `dequantize=False`; a dequantized (or bf16) load has folded it into the rows.
+    _keys_to_ignore_on_load_missing = [r"engram_tables\.\d+\.weight_scale_inv$"]
+    # fp32-critical parameters: exactly the tensors the released checkpoint stores in
+    # F32 — the mHC sites, the attention sinks and the router's correction biases
+    # (fp32 buffers from construction; listed so `from_pretrained(dtype=...)` keeps
+    # them fp32, as V4 does). The norms and the ratio-2 compressor gate ship BF16 and
+    # stay in the model dtype (the reference upcasts them at load; the forward
+    # computes in fp32 either way).
+    _keep_in_fp32_modules_strict = [
+        "attn_hc",
+        "ffn_hc",
+        "sinks",
+        "e_score_correction_bias",
+        "e_score_correction_bias_vl",
+    ]
+    # The released checkpoint ships these projections in BF16 with no companion
+    # `.scale` (every other linear is fp8 / packed fp4). Listed here (non-strict) so
+    # the FP8 quantizer's `get_modules_to_not_convert` auto-skips them, like V4;
+    # non-strict has no dtype effect at BF16, so they stay BF16.
+    _keep_in_fp32_modules = [
+        "self_attn.compressor.kv_proj",
+        "self_attn.compressor.gate_proj",
+        "self_attn.indexer.k_proj",
+        "self_attn.indexer.weights_proj",
+    ]
+    # The two engram tables are ~98 GB each in the released checkpoint. Like
+    # Qwen4-Exp's n-gram table they are excluded from `device_map` placement (names are
+    # relative to the no-split `DeepseekV41EngramEmbedding` module): when a table does
+    # not fit an accelerator it is skipped by the device-map inference and loads into
+    # host RAM with no offload hook — the model-level gather runs there and moves only
+    # the rows. On an accelerator large enough to hold it, it is placed normally.
+    _no_placement_params = ["weight", "weight_scale_inv"]
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        std = self.config.initializer_range
+        if isinstance(module, DeepseekV41TopKRouter):
+            init.normal_(module.weight, mean=0.0, std=std)
+            init.zeros_(module.e_score_correction_bias)
+            init.zeros_(module.e_score_correction_bias_vl)
+        elif isinstance(module, DeepseekV41Experts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, DeepseekV41Attention):
+            init.zeros_(module.sinks)
+        elif isinstance(module, DeepseekV41HyperConnection):
+            init.normal_(module.fn, mean=0.0, std=std)
+            init.zeros_(module.base)
+            init.ones_(module.scale)
+        elif isinstance(module, DeepseekV41EngramEmbedding):
+            init.normal_(module.weight, mean=0.0, std=std)
+            init.ones_(module.weight_scale_inv)
+        elif isinstance(module, DeepseekV41Engram):
+            init.ones_(module.q_weight)
+            init.ones_(module.k_weight)
+        elif isinstance(module, DeepseekV41NgramHashState):
+            # Config-derived hash tables are non-persistent buffers: like `inv_freq`, the
+            # meta-device load leaves them empty. The token map is the tokenizer's
+            # (`bind_tokenizer` fills it) and is never touched here.
+            for name, table in module.hash_tables().items():
+                init.copy_(getattr(module, name), table)
+        elif isinstance(module, DeepseekV41RotaryEmbedding):
+            # `from_pretrained` builds on the meta device, so the inv_freq buffers
+            # computed in __init__ never materialize — rebuild them here.
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        """Loads as usual, then binds the checkpoint's own tokenizer to the engram hash
+        state (the compressed token map is tokenizer-derived, and the forward must stay
+        free of hub / disk access). Checkpoints without a tokenizer — e.g. weights saved
+        on their own — load unbound; `bind_tokenizer` is then the caller's job."""
+        loaded = super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        model = loaded[0] if isinstance(loaded, tuple) else loaded  # `output_loading_info=True`
+        text_model = model.base_model  # the text backbone owns the hash state
+        if getattr(text_model, "engram_hash_state", None) is not None and pretrained_model_name_or_path is not None:
+            hub_kwargs = {
+                key: kwargs[key]
+                for key in ("cache_dir", "force_download", "local_files_only", "token", "revision", "subfolder")
+                if key in kwargs
+            }
+            has_tokenizer = cached_file(
+                pretrained_model_name_or_path,
+                "tokenizer_config.json",
+                **hub_kwargs,
+                _raise_exceptions_for_gated_repo=False,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+            )
+            if has_tokenizer is not None:
+                from ..auto import AutoTokenizer
+
+                text_model.bind_tokenizer(AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **hub_kwargs))
+        return loaded
+
+
+@auto_docstring
+class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
+    def __init__(self, config: DeepseekV41TextConfig):
+        super().__init__(config)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
+        # CODEPATH: DeepSeek-V4.1-Flash ships engram layers ([1, 14]) and takes the
+        # hash-state path; tiny test configs set engram_layer_ids=[] and take None.
+        # The ~98 GB tables are model-level (keyed by layer index, `engram_tables["1"]`)
+        # rather than inside their decoder layer: a no-split layer holding a
+        # `_no_placement_params` tensor gets split down to parameter-level device-map
+        # entries, which carry no accelerate hooks. Registered BEFORE `layers` so the
+        # device-map inference always has a later accelerator to test against.
+        self.engram_hash_state = DeepseekV41NgramHashState(config) if config.engram_layer_ids else None
+        self.engram_tables = nn.ModuleDict(
+            {
+                str(layer_idx): DeepseekV41EngramEmbedding(config.engram_num_embeddings[k], config.engram_head_dim)
+                for k, layer_idx in enumerate(config.engram_layer_ids)
+            }
+        )
+        self.layers = nn.ModuleList([DeepseekV41DecoderLayer(config, i) for i in range(config.num_hidden_layers)])
+        self.norm = DeepseekV41RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = DeepseekV41RotaryEmbedding(config)
+        self.engram_layout = EngramLayout.from_config(config)
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value: nn.Module):
+        self.embed_tokens = value
+
+    def bind_tokenizer(self, tokenizer):
+        """Give the engram hash state its tokenizer (the compressed token map). The
+        hashes must be replicated exactly or the pretrained tables are meaningless.
+        `from_pretrained` binds the checkpoint's own tokenizer; call this explicitly
+        when the model was built any other way."""
+        if self.engram_hash_state is not None:
+            self.engram_hash_state.bind_tokenizer(tokenizer)
+        return self
+
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(DeepseekV41TopKRouter, index=0),
+        # The residual stream is `hc_mult` parallel copies; the recorded
+        # `hidden_states` are the collapsed per-block inputs (each layer's
+        # `input_layernorm` in/out, plus the initial embedding collapse).
+        "hidden_states": OutputRecorder(DeepseekV41RMSNorm, layer_name="input_layernorm"),
+        "attentions": DeepseekV41Attention,
+    }
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MoeModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+        elif self.engram_layout:
+            # The engram hashes token ids; there is no way to recover them from embeddings.
+            raise ValueError("engram layers require `input_ids` (the hash state cannot consume `inputs_embeds`)")
+        seq_len = inputs_embeds.shape[1]
+        padding_mask = None
+        source_mask = next(iter(attention_mask.values())) if isinstance(attention_mask, dict) else attention_mask
+        if isinstance(source_mask, torch.Tensor):
+            if source_mask.ndim == 2:
+                padding_mask = source_mask[:, -seq_len:].bool()
+            elif source_mask.ndim == 4:
+                # A causal mask's current-token diagonal retains key liveness even
+                # after padding has been folded into an additive mask.
+                visible = source_mask if source_mask.dtype == torch.bool else source_mask == 0
+                padding_mask = visible.diagonal(offset=source_mask.shape[-1] - seq_len, dim1=-2, dim2=-1).any(1)
+            if padding_mask is not None:
+                padding_mask = padding_mask.to(inputs_embeds.device).expand(inputs_embeds.shape[0], -1)
+        if position_ids is None:
+            if isinstance(source_mask, torch.Tensor) and source_mask.ndim == 2:
+                position_ids = (source_mask.long().cumsum(-1) - 1)[:, -seq_len:].to(inputs_embeds.device)
+                position_ids = position_ids.masked_fill(~padding_mask, 0)
+            else:
+                past_seen = past_key_values.get_seq_length() if past_key_values is not None else 0
+                # CODEPATH: DeepSeek-V4.1-Flash has KV sources [2, 8, 14, 20].
+                # Custom sliding-only configs have none and use the physical cache length.
+                if past_key_values is not None and self.config.kv_source_layer_ids:
+                    source_cache = past_key_values.layers[self.config.kv_source_layer_ids[0]]
+                    count = source_cache.token_count["compressor"]
+                    if count is not None:
+                        past_seen = count.to(inputs_embeds.device).unsqueeze(-1)
+                if padding_mask is None:
+                    position_ids = torch.arange(seq_len, device=inputs_embeds.device).unsqueeze(0) + past_seen
+                else:
+                    position_ids = (padding_mask.long().cumsum(-1) - 1 + past_seen).masked_fill(~padding_mask, 0)
+                position_ids = position_ids.expand(inputs_embeds.shape[0], -1)
+        if isinstance(attention_mask, dict):
+            # `generate()` may pass a per-layer-type mask dict; both V4.1 layer types
+            # attend over the same sliding window, so any of them works.
+            causal_mask = next(iter(attention_mask.values()))
+        else:
+            causal_mask = create_sliding_window_causal_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                position_ids=position_ids,
+            )
+        if causal_mask is not None and causal_mask.dtype == torch.bool:
+            causal_mask = torch.where(
+                causal_mask,
+                inputs_embeds.new_zeros(()),
+                inputs_embeds.new_full((), torch.finfo(inputs_embeds.dtype).min),
+            )
+
+        hidden_states = inputs_embeds.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
+        position_embeddings = {
+            "main": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="main"),
+            "compress": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="compress"),
+        }
+        engram_rows: dict[int, torch.Tensor] = {}
+        if self.engram_hash_state is not None:
+            # Padding is DEAD in the hash history, including when a precomputed
+            # causal mask supplied the current-token liveness.
+            hash_ids = self.engram_hash_state(input_ids, padding_mask, past_key_values)
+            # Gather each engram layer's rows here, where the tables live (host RAM under
+            # `device_map`); the layers receive dense rows on their own device.
+            for k, layer_idx in enumerate(self.config.engram_layer_ids):
+                engram_rows[layer_idx] = self.engram_tables[str(layer_idx)](hash_ids[:, :, k, :])
+
+        # `shared` carries the CSA2 group state between layers within ONE forward. It is
+        # passed as a keyword and listed in `_skip_keys_device_placement` so accelerate's
+        # hooks hand every layer the same dict instead of a per-layer copy (writes by a
+        # source layer must be visible to its consumers); readers move what they use.
+        shared: dict = {}
+        # One-hot initial mix: the first site collapses stream 0 only.
+        pre_mix = hidden_states.new_zeros(*hidden_states.shape[:-1], dtype=torch.float32)
+        pre_mix[..., 0] = 1.0
+        for layer in self.layers:
+            hidden_states, pre_mix = layer(
+                hidden_states,
+                pre_mix,
+                engram_rows.get(layer.layer_idx),
+                None,
+                shared=shared,
+                position_embeddings=position_embeddings,
+                position_ids=position_ids,
+                attention_mask=causal_mask,
+                padding_mask=padding_mask,
+                past_key_values=past_key_values,
+            )
+        # Final collapse with the last site's pre mix, then the shared norm.
+        hidden_states = DeepseekV41DecoderLayer.hc_collapse(hidden_states, pre_mix)
+        hidden_states = self.norm(hidden_states)
+        return MoeModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
+
+
+@auto_docstring
+class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
+    # The released checkpoint's config.json is composite (top-level `quantization_config`,
+    # `text_config`, `vision_config`) with `architectures: [DeepseekV41ForCausalLM]`, so this
+    # class must accept the composite config: `get_hf_quantizer` only sees `quantization_config`
+    # on the config produced from `config_class` — pointing it at the bare text config silently
+    # dropped the FP8 quantization config and fp8 tensors then failed to load. The text config
+    # is unwrapped in `__init__` (same pattern as `MllamaForCausalLM`; explicit bases rather
+    # than `MixtralForCausalLM`, whose inlined `__init__` would drop the unwrap); a text config
+    # passed directly is returned unchanged by `get_text_config()`.
+    config_class = DeepseekV41Config
+
+    def __init__(self, config):
+        super().__init__(config.get_text_config())
+        self.model = DeepseekV41TextModel(self.config)
+        self.vocab_size = self.config.vocab_size
+        self.lm_head = nn.Linear(self.config.hidden_size, self.config.vocab_size, bias=False)
+        self.router_aux_loss_coef = self.config.router_aux_loss_coef
+        self.num_experts = self.config.n_routed_experts
+        self.num_experts_per_tok = self.config.num_experts_per_tok
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_router_logits: bool | None = None,
+        shift_labels: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MoeCausalLMOutputWithPast:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or `-100` (see `input_ids` docstring). Tokens with indices set to `-100` are
+            ignored (masked), the loss is computed over tokens with labels in `[0, ..., config.vocab_size]`.
+        shift_labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Already-shifted next-token targets, aligned with `logits` (used for sequence and context
+            parallel training, where the shift must happen before sharding). When given, they take
+            precedence over `labels` for the loss.
+        """
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_router_logits=output_router_logits,
+            **kwargs,
+        )
+        # Only compute the logits that are needed, and do not upcast them unless the loss needs it
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(outputs.last_hidden_state[:, slice_indices, :])
+        loss = None
+        if labels is not None or shift_labels is not None:
+            # `shift_labels` carries already-aligned targets (sequence / context
+            # parallel training); `self.loss_function` shifts plain `labels` itself.
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.vocab_size, shift_labels=shift_labels
+            )
+
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits,
+                self.num_experts,
+                self.num_experts_per_tok,
+                attention_mask,
+            )
+            if loss is not None:
+                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+
+        return MoeCausalLMOutputWithPast(
+            loss=loss,
+            aux_loss=aux_loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
+        )
+
+
+__all__ = [
+    "DeepseekV41PreTrainedModel",
+    "DeepseekV41TextModel",
+    "DeepseekV41ForCausalLM",
+    "DeepseekV41CSACache",
+    "DeepseekV41EngramEmbedding",
+    "EngramLayout",
+    "DeepseekV41NgramHashState",
+]
