@@ -199,8 +199,6 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
     test_torchscript = False
     test_pruning = False
     test_head_masking = False
-    skip_test_image_features_output_shape = True
-    skip_test_video_features_output_shape = True
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
@@ -216,10 +214,12 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
         expand_size = 3
         input_ids = inputs_dict["input_ids"]
         image_token_pooling = inputs_dict["image_token_pooling"]
+        image_grids = inputs_dict["image_grids"]
         expanded_input_ids, expanded_kwargs = model._expand_inputs_for_generation(
             expand_size=expand_size,
             input_ids=input_ids,
             image_token_pooling=image_token_pooling,
+            image_grids=image_grids,
         )
 
         image_token_counts = (input_ids == config.image_token_id).sum(dim=-1).tolist()
@@ -233,6 +233,7 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
 
         self.assertEqual(expanded_input_ids.shape[0], input_ids.shape[0] * expand_size)
         self.assertTrue(torch.equal(expanded_kwargs["image_token_pooling"], expected_pooling))
+        self.assertTrue(torch.equal(expanded_kwargs["image_grids"], image_grids.repeat_interleave(expand_size, dim=0)))
 
     # overwrite inputs_embeds tests because we need to delete "pixel_values" for VLMs
     def test_inputs_embeds(self):
@@ -267,11 +268,13 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
 
     def _video_features_prepare_config_and_inputs(self):
         # The generic helper only renames `pixel_values`; Molmo2's `get_video_features` also needs the
-        # pooling index tensor under its video name.
+        # pooling index tensor under its video name and a `[num_frames, rows, cols]` grid per video.
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        batch_size = inputs_dict["image_grids"].shape[0]
         inputs_dict = {
             "pixel_values_videos": inputs_dict["pixel_values"],
             "video_token_pooling": inputs_dict["image_token_pooling"],
+            "video_grids": torch.tensor([[2, 4, 4]] * batch_size, device=torch_device),
         }
         return config, inputs_dict
 

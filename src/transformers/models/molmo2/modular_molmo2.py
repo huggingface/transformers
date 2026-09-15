@@ -1658,13 +1658,14 @@ class Molmo2Model(Molmo2PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring(
-        custom_intro="Obtains pooled image features from the vision tower and the adapter: the `pooler_output` holds "
-        "one projected feature per pooled image token."
+        custom_intro="Obtains pooled image features from the vision tower and the adapter: the `pooler_output` is a "
+        "tuple with one `(num_image_tokens, hidden_size)` tensor per image."
     )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_token_pooling: torch.Tensor,
+        image_grids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         image_shape = None
@@ -1679,21 +1680,27 @@ class Molmo2Model(Molmo2PreTrainedModel):
 
         if image_shape is not None:
             image_features = image_features.reshape(*image_shape, -1)
-        image_outputs.pooler_output = self.multi_modal_projector(image_features, image_token_pooling).last_hidden_state
+        pooled_features = self.multi_modal_projector(image_features, image_token_pooling).last_hidden_state
+        split_sizes = (image_grids[:, 0] * image_grids[:, 1] + image_grids[:, 2] * image_grids[:, 3]).tolist()
+        image_outputs.pooler_output = torch.split(pooled_features, split_sizes)
         return image_outputs
 
     @can_return_tuple
     @auto_docstring(
-        custom_intro="Obtains pooled video features from the vision tower and the adapter: the `pooler_output` holds "
-        "one projected feature per pooled video token."
+        custom_intro="Obtains pooled video features from the vision tower and the adapter: the `pooler_output` is a "
+        "tuple with one `(num_video_tokens, hidden_size)` tensor per video."
     )
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_token_pooling: torch.Tensor,
+        video_grids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        return self.get_image_features(pixel_values_videos, video_token_pooling, **kwargs)
+        # Video frames only go through the low-res path: `num_frames` frames of `rows x cols` tokens, no high-res crops.
+        num_frames, rows, cols = video_grids.unbind(-1)
+        image_grids = torch.stack([num_frames * rows, cols, torch.zeros_like(cols), torch.zeros_like(cols)], dim=-1)
+        return self.get_image_features(pixel_values_videos, video_token_pooling, image_grids, **kwargs)
 
     # Copied from transformers.models.llava.modeling_llava.LlavaModel.get_placeholder_mask
     def get_placeholder_mask(
@@ -1750,11 +1757,14 @@ class Molmo2Model(Molmo2PreTrainedModel):
 
         image_features: torch.FloatTensor | None = None
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_token_pooling).pooler_output
+            image_features = self.get_image_features(pixel_values, image_token_pooling, image_grids).pooler_output
         elif pixel_values_videos is not None:
-            image_features = self.get_video_features(pixel_values_videos, video_token_pooling).pooler_output
+            image_features = self.get_video_features(
+                pixel_values_videos, video_token_pooling, video_grids
+            ).pooler_output
 
         if image_features is not None:
+            image_features = torch.cat(image_features, dim=0)
             # `get_placeholder_mask` returns a [batch, seq, 1] mask; Molmo2 *adds* the image features onto
             # the placeholder-token embeddings (residual), which means we index `inputs_embeds` directly.
             # Boolean indexing does not broadcast, so the mask must be expanded to the hidden dim first.
@@ -1936,6 +1946,9 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
                 if visual.get(pooling_key) is not None:
                     chunks = visual[pooling_key].split(patch_counts)
                     visual[pooling_key] = torch.cat([chunk for chunk in chunks for _ in range(expand_size)], dim=0)
+            for grid_key in ("image_grids", "video_grids"):
+                if visual.get(grid_key) is not None:
+                    visual[grid_key] = visual[grid_key].repeat_interleave(expand_size, dim=0)
         model_kwargs.update(visual)
         return input_ids, model_kwargs
 
