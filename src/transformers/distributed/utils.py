@@ -357,8 +357,12 @@ def save_model_checkpoint_distributed(
     _distributed_barrier()
 
 
-def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
-    """Save optimizer state via DCP."""
+def save_optimizer_distributed(model, optimizer, checkpoint_dir: str, *, consolidate: bool = False) -> None:
+    """Save optimizer state via DCP, optionally also writing `optimizer.pt`.
+
+    Native DCP files are retained in `checkpoint_dir` in both cases. Consolidation
+    materializes the full optimizer state in rank 0's CPU memory. All ranks must call.
+    """
     if not is_torch_greater_or_equal("2.7"):
         raise OSError("Distributed checkpointing requires `torch>=2.7`.")
 
@@ -371,10 +375,21 @@ def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     options = StateDictOptions(flatten_optimizer_state_dict=True)
     optimizer_state_dict = _prepare_state_dict_for_dcp(get_optimizer_state_dict(model, optimizer, options=options))
     dcp.save({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
+    if consolidate:
+        if _get_torch_distributed_rank() == 0:
+            from torch.distributed.checkpoint.format_utils import dcp_to_torch_save
+
+            dcp_to_torch_save(checkpoint_dir, os.path.join(checkpoint_dir, "optimizer.pt"))
+        _distributed_barrier()
 
 
 def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
-    """Load optimizer state via DCP."""
+    """Load optimizer state from a DCP directory or a consolidated `optimizer.pt` file.
+
+    Passing a directory uses the retained DCP shards. Passing the file loads the
+    full optimizer state on each rank's CPU before distributing it into the current
+    layout. Prefer the directory when memory is limited. All ranks must call.
+    """
     if not is_torch_greater_or_equal("2.7"):
         raise OSError("Distributed checkpointing requires `torch>=2.7`.")
 
@@ -391,7 +406,19 @@ def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
     options = StateDictOptions(flatten_optimizer_state_dict=True)
     optimizer_state_dict = get_optimizer_state_dict(model, optimizer, options=options)
     checkpoint_state_dict = _prepare_state_dict_for_dcp(optimizer_state_dict)
-    dcp.load({"optimizer": checkpoint_state_dict}, checkpoint_id=checkpoint_dir)
+    if os.path.isfile(checkpoint_dir):
+        from torch.distributed.tensor import distribute_tensor
+
+        loaded_state = torch.load(checkpoint_dir, map_location="cpu", weights_only=True)["optimizer"]
+        for key, value in loaded_state.items():
+            target = checkpoint_state_dict.get(key)
+            if is_dtensor(target):
+                value = distribute_tensor(value.to(target.device), target.device_mesh, target.placements)
+            elif isinstance(target, torch.Tensor):
+                value = value.to(target.device)
+            checkpoint_state_dict[key] = value
+    else:
+        dcp.load({"optimizer": checkpoint_state_dict}, checkpoint_id=checkpoint_dir)
     optimizer_state_dict = tree_map(
         lambda loaded, original: loaded.redistribute(placements=original.placements)
         if is_dtensor(original) and loaded.placements != original.placements
