@@ -2704,7 +2704,7 @@ class GenerationMixin(ContinuousMixin):
         # faster (we will never have padding). Note that we cannot drop it earlier, as position_ids creation absolutely needs to check
         # the mask even if it's only 1s, in case we restart from an existing cache and only new sequence input_ids
         if not self.config.is_encoder_decoder and accepts_attention_mask:
-            if (attention_mask == 1).all():
+            if (model_kwargs["attention_mask"] == 1).all():
                 model_kwargs["attention_mask"] = None
 
         if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
