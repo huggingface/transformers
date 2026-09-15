@@ -21,13 +21,13 @@ from pathlib import Path
 from pprint import pformat
 from typing import Any
 
-import httpx
 import torch
 import torchvision.transforms as T
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
 from detectron2.projects.deeplab import add_deeplab_config
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 from torch import Tensor, nn
 

@@ -18,7 +18,7 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-import httpx
+from huggingface_hub.utils import httpx
 
 from transformers import AutoImageProcessor, ViTImageProcessor, ViTImageProcessorFast
 from transformers.image_processing_utils import get_size_dict

@@ -4149,7 +4149,7 @@ class PreTrainedModel(
 
         if distributed_config is not None:
             distributed_config, device_map, device_mesh = cls.prepare_distribute_model(
-                distributed_config, device_mesh=device_mesh, device_map=device_map
+                distributed_config, device_map=device_map
             )
 
         if gguf_file is not None and not is_accelerate_available():
@@ -4288,7 +4288,8 @@ class PreTrainedModel(
         # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
-        model = cls.maybe_distribute_model(model, distributed_config, device_mesh)
+        if distributed_config is not None:
+            model = cls.maybe_distribute_model(model, distributed_config, device_mesh)
 
         # Prepare the full device map
         if device_map is not None:
@@ -4612,6 +4613,14 @@ class PreTrainedModel(
         """
         # if None, the model didn't undergo tensor parallel sharding
         return self._tp_size
+
+    @property
+    def fsdp_size(self):
+        """
+        Returns the model's FSDP sharding degree.
+        """
+        # if None, the model didn't undergo FSDP sharding
+        return self._fsdp_size
 
     @property
     def supports_pp_plan(self):
