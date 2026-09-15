@@ -13,13 +13,27 @@
 # limitations under the License.
 """Generation mixin for Qwen3-TTS."""
 
+from dataclasses import dataclass
+
 import torch
 
-from ...generation import GenerationMixin
+from ...generation import GenerateDecoderOnlyOutput, GenerationMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+
+@dataclass
+class Qwen3TTSGenerateOutput(GenerateDecoderOnlyOutput):
+    """
+    Output of [`Qwen3TTSForConditionalGeneration.generate`].
+
+    Args:
+        sequences (`list[torch.LongTensor]`):
+            The generated audio codes, one `(codes_length, num_quantizers)` tensor per sample. Decode them to
+            waveforms with [`~Qwen3TTSProcessor.decode`].
+    """
 
 
 class Qwen3TTSGenerationMixin(GenerationMixin):
@@ -372,7 +386,6 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
         )
 
         talker_codes = torch.stack([hid[-1] for hid in talker_result.hidden_states if hid[-1] is not None], dim=1)
-        talker_hidden_states = torch.cat([hid[0][-1][:, -1:] for hid in talker_result.hidden_states], dim=1)[:, :-1]
 
         first_codebook = talker_codes[:, :, 0]
         is_stop_token = first_codebook == self.config.talker_config.codec_eos_token_id
@@ -381,6 +394,5 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
         effective_lengths = torch.where(has_stop_token, stop_indices, talker_codes.shape[1])
 
         talker_codes_list = [talker_codes[i, :length] for i, length in enumerate(effective_lengths)]
-        talker_hidden_states_list = [talker_hidden_states[i, :length, :] for i, length in enumerate(effective_lengths)]
 
-        return talker_codes_list, talker_hidden_states_list
+        return Qwen3TTSGenerateOutput(sequences=talker_codes_list)

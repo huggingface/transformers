@@ -57,7 +57,7 @@ conversation = [
 ]
 inputs = processor.apply_chat_template(conversation)
 
-codes, _ = model.generate(**inputs)
+codes = model.generate(**inputs).sequences
 audio = processor.decode(codes)
 processor.save_audio(audio, "output.wav")
 ```
@@ -86,7 +86,7 @@ conversation = [
 ]
 inputs = processor.apply_chat_template(conversation)
 
-codes, _ = model.generate(**inputs)
+codes = model.generate(**inputs).sequences
 audio = processor.decode(codes)
 processor.save_audio(audio, "output_ryan.wav")
 ```
@@ -109,7 +109,7 @@ conversations = [
 ]
 inputs = processor.apply_chat_template(conversations)
 
-codes, _ = model.generate(**inputs)
+codes = model.generate(**inputs).sequences
 audios = processor.decode(codes)
 processor.save_audio(audios, ["output_0.wav", "output_1.wav"])
 ```
@@ -139,7 +139,7 @@ conversation = [
 ]
 inputs = processor.apply_chat_template(conversation)
 
-codes, _ = model.generate(**inputs)
+codes = model.generate(**inputs).sequences
 audio = processor.decode(codes)
 processor.save_audio(audio, "output_voice_design.wav")
 ```
@@ -176,7 +176,7 @@ conversation = [
 ]
 inputs = processor.apply_chat_template(conversation)
 
-codes, _ = model.generate(
+codes = model.generate(
     **inputs,
     voice_clone_prompt={
         "ref_spk_embedding": [speaker_embedding],
@@ -184,9 +184,34 @@ codes, _ = model.generate(
         "icl_mode": [False],
         "ref_code": None,
     },
-)
+).sequences
 audio = processor.decode(codes)
 processor.save_audio(audio, "output_cloned.wav")
+```
+
+### Pipeline usage
+
+Qwen3-TTS is also available through the `text-to-speech` pipeline, which builds the inputs, generates the codes,
+and decodes them to a waveform in a single call. Pass a conversation the same way as
+[`~Qwen3TTSProcessor.apply_chat_template`]; the per-message `language` and `speaker` keys are supported on
+CustomVoice checkpoints.
+
+```python
+import soundfile as sf
+from transformers import pipeline
+
+pipe = pipeline("text-to-speech", model="shahvandit/qwen3-tts-customvoice-hf", device_map="auto")
+
+conversation = [
+    {
+        "role": "user",
+        "content": [{"type": "text", "text": "Welcome to the future of voice technology."}],
+        "language": "English",
+        "speaker": "Ryan",
+    },
+]
+output = pipe(conversation)
+sf.write("output.wav", output["audio"], output["sampling_rate"])
 ```
 
 ### Torch compile
@@ -215,7 +240,7 @@ conversation = [
 inputs = processor.apply_chat_template(conversation)
 
 # the first generate() call triggers compilation (slow); later calls reuse the compiled graphs
-codes, _ = model.generate(**inputs)
+codes = model.generate(**inputs).sequences
 audio = processor.decode(codes)
 processor.save_audio(audio, "output.wav")
 ```
