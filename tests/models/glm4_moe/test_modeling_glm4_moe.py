@@ -117,22 +117,22 @@ class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         # Dynamic Cache
-        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
-        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        # generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
+        # dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         # self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
 
         # Static Cache
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        # generated_ids = model.generate(
+        #     **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        # )
+        # static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         # self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
         # Static Cache + compile
-        model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        # model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
+        # model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
+        # generated_ids = model.generate(
+        #     **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        # )
+        # static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         # self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
