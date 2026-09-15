@@ -81,6 +81,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         self.n_fft = n_fft
         self.win_length = win_length
         self.preemphasis = preemphasis
+        self.window = torch.hann_window(self.win_length, periodic=False)
 
         # TODO: @eustlb, for now we use librosa to compute the mel filters
         # indeed mel_filter_bank uses np.float64 (while librosa uses np.float32), giving numerical differences
@@ -99,8 +100,18 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         self.mel_filters = torch.from_numpy(mel_filters).to(torch.float32)
 
     def _torch_extract_fbank_features(self, waveform, device="cpu"):
+        # Keep the static frontend tensors on the last-used device instead of copying them for every audio sample.
+        device = waveform.device
+        window = self.window
+        if window.device != device:
+            window = window.to(device)
+            self.window = window
+        mel_filters = self.mel_filters
+        if mel_filters.device != device:
+            mel_filters = mel_filters.to(device)
+            self.mel_filters = mel_filters
+
         # spectrogram
-        window = torch.hann_window(self.win_length, periodic=False, device=device)
         stft = torch.stft(
             waveform,
             self.n_fft,
@@ -117,7 +128,6 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         magnitudes = magnitudes.pow(2)
 
         # log mel spectrogram
-        mel_filters = self.mel_filters.to(device)
         mel_spec = mel_filters @ magnitudes
         mel_spec = torch.log(mel_spec + LOG_ZERO_GUARD_VALUE)
 
@@ -137,7 +147,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         max_length: int | None = None,
         sampling_rate: int | None = None,
         do_normalize: bool | None = None,
-        device: str | None = "cpu",
+        device: str | torch.device | None = "cpu",
         return_token_timestamps: bool | None = None,
         **kwargs,
     ) -> BatchFeature:
@@ -209,9 +219,9 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
 
         # Convert to torch tensor
         if isinstance(raw_speech, np.ndarray):
-            raw_speech = torch.tensor(raw_speech)
+            raw_speech = torch.from_numpy(np.ascontiguousarray(raw_speech))
         elif isinstance(raw_speech, (list, tuple)) and isinstance(raw_speech[0], np.ndarray):
-            raw_speech = [torch.tensor(speech) for speech in raw_speech]
+            raw_speech = [torch.from_numpy(np.ascontiguousarray(speech)) for speech in raw_speech]
 
         is_batched_torch = isinstance(raw_speech, torch.Tensor) and len(raw_speech.shape) > 1
         if is_batched_torch and len(raw_speech.shape) > 2:
@@ -237,32 +247,47 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
             raw_speech = [raw_speech[:, None].to(torch.float32)]
 
         audio_lengths = [len(speech) for speech in raw_speech]
-        batched_speech = BatchFeature({"input_features": raw_speech, "audio_lengths": audio_lengths})
-
-        padded_inputs = self.pad(
-            batched_speech,
-            padding=padding,
-            max_length=max_length,
-            truncation=truncation,
-            pad_to_multiple_of=pad_to_multiple_of,
-            return_tensors="pt",
+        device = torch.device("cpu" if device is None else device)
+        use_fast_padding = (
+            (padding is True or padding == "longest")
+            and not truncation
+            and max_length is None
+            and pad_to_multiple_of is None
+            and self.padding_side == "right"
         )
-        input_features = padded_inputs.input_features.squeeze(-1)
+        if use_fast_padding:
+            waveforms = [speech.squeeze(-1).to(device) for speech in raw_speech]
+            input_features = (
+                waveforms[0].unsqueeze(0)
+                if len(waveforms) == 1
+                else torch.nn.utils.rnn.pad_sequence(waveforms, batch_first=True, padding_value=self.padding_value)
+            )
+            audio_lengths = torch.tensor(audio_lengths, dtype=torch.long, device=device)
+        else:
+            batched_speech = BatchFeature({"input_features": raw_speech, "audio_lengths": audio_lengths})
+            padded_inputs = self.pad(
+                batched_speech,
+                padding=padding,
+                max_length=max_length,
+                truncation=truncation,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_tensors="pt",
+            )
+            input_features = padded_inputs.input_features.squeeze(-1).to(device)
+            audio_lengths = padded_inputs.audio_lengths.to(device)
 
         # preemphasis
         if self.preemphasis is not None:
             timemask = torch.arange(input_features.shape[1], device=input_features.device).unsqueeze(
                 0
-            ) < padded_inputs.audio_lengths.unsqueeze(1)
+            ) < audio_lengths.unsqueeze(1)
             input_features = torch.cat(
                 [input_features[:, :1], input_features[:, 1:] - self.preemphasis * input_features[:, :-1]], dim=1
             )
             input_features = input_features.masked_fill(~timemask, 0.0)
 
         input_features = self._torch_extract_fbank_features(input_features, device)
-        features_lengths = torch.floor_divide(
-            padded_inputs.audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length
-        )
+        features_lengths = torch.floor_divide(audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length)
         attention_mask = torch.arange(input_features.shape[1], device=device)[None, :] < features_lengths[:, None]
 
         # normalize mel features, ignoring padding

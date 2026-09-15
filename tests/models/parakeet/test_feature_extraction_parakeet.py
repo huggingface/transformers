@@ -19,7 +19,7 @@ import unittest
 import numpy as np
 
 from transformers import ParakeetFeatureExtractor
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_torch, require_torch_gpu
 from transformers.utils import is_datasets_available, is_torch_available
 
 from ...test_processing_common import floats_list
@@ -127,6 +127,54 @@ class ParakeetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         self.assertEqual(inputs.attention_mask.shape, (1, 586))
         # last frame should be masked
         self.assertEqual(inputs.attention_mask.sum(), 585)
+
+    @require_torch_gpu
+    def test_torch_integration_cuda(self):
+        feature_extractor = ParakeetFeatureExtractor(
+            feature_size=8,
+            sampling_rate=16_000,
+            hop_length=160,
+            n_fft=512,
+            win_length=400,
+        )
+        inputs = feature_extractor(
+            np.zeros(1600, dtype=np.float32),
+            sampling_rate=16_000,
+            return_tensors="pt",
+            device="cuda",
+        )
+
+        self.assertEqual(inputs.input_features.device.type, "cuda")
+        self.assertEqual(inputs.input_features.dtype, torch.float32)
+        self.assertEqual(inputs.attention_mask.device.type, "cuda")
+
+        window_pointer = feature_extractor.window.data_ptr()
+        mel_filters_pointer = feature_extractor.mel_filters.data_ptr()
+        repeated_inputs = feature_extractor(
+            np.zeros(1600, dtype=np.float32),
+            sampling_rate=16_000,
+            return_tensors="pt",
+            device="cuda",
+        )
+
+        self.assertEqual(feature_extractor.window.data_ptr(), window_pointer)
+        self.assertEqual(feature_extractor.mel_filters.data_ptr(), mel_filters_pointer)
+        torch.testing.assert_close(repeated_inputs.input_features, inputs.input_features, rtol=0, atol=0)
+
+        audio_batch = [
+            np.linspace(-1.0, 1.0, 1600, dtype=np.float32),
+            np.linspace(-0.5, 0.5, 1200, dtype=np.float32),
+        ]
+        fast_inputs = feature_extractor(audio_batch, sampling_rate=16_000, return_tensors="pt", device="cuda")
+        fallback_inputs = feature_extractor(
+            audio_batch,
+            sampling_rate=16_000,
+            pad_to_multiple_of=1,
+            return_tensors="pt",
+            device="cuda",
+        )
+        torch.testing.assert_close(fast_inputs.input_features, fallback_inputs.input_features, rtol=0, atol=0)
+        self.assertTrue(torch.equal(fast_inputs.attention_mask, fallback_inputs.attention_mask))
 
     @require_torch
     def test_torch_integration_batch(self):
