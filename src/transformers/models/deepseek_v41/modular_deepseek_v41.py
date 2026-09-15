@@ -28,9 +28,10 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ..deepseek_v3.modeling_deepseek_v4 import DeepseekV3RMSNorm
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3RMSNorm
 from ..deepseek_v4.configuration_deepseek_v4 import DeepseekV4Config
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4RotaryEmbedding
+from ..glm5_next.modeling_glm5_next import Glm5NextTextExperts
 
 
 logger = logging.get_logger(__name__)
@@ -92,6 +93,10 @@ class DeepseekV41RMSNorm(DeepseekV3RMSNorm):
 
 
 class DeepseekV41RotaryEmbedding(DeepseekV4RotaryEmbedding):
+    pass
+
+
+class DeepseekV41Experts(Glm5NextTextExperts):
     pass
 
 
