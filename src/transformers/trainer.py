@@ -2649,24 +2649,9 @@ class Trainer:
         Gradient norm (and clip) when the gradients live on different device meshes, which `clip_grad_norm_` cannot
         span: one norm per mesh, each already reduced over its own mesh.
         """
-        from torch.distributed.tensor import DTensor
-        from torch.nn.utils import clip_grads_with_norm_, get_total_norm
+        from .distributed.utils import clip_grad_norm_
 
-        params_by_mesh = defaultdict(list)
-        for param in model.parameters():
-            if param.grad is not None:
-                params_by_mesh[param.grad.device_mesh if isinstance(param.grad, DTensor) else None].append(param)
-
-        norms = []
-        for params in params_by_mesh.values():
-            norm = get_total_norm([p.grad for p in params])
-            norms.append(norm.full_tensor() if isinstance(norm, DTensor) else norm)
-        total_norm = torch.linalg.vector_norm(torch.stack(norms))
-
-        if max_norm != float("inf"):
-            for params in params_by_mesh.values():
-                clip_grads_with_norm_(params, max_norm, total_norm)
-        return total_norm
+        return clip_grad_norm_(model.parameters(), max_norm)
 
     def _has_mixed_mesh_grads(self, model) -> bool:
         # Static for the life of the run (sharding never changes after setup), so scan the
