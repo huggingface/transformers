@@ -154,7 +154,6 @@ class PhimoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             cls.offload_dir.cleanup()
         super().tearDownClass()
 
-
     def test_model_phimoe_instruct_logits(self):
         input_ids = {"input_ids": torch.tensor([[1212, 318, 281, 1672]], dtype=torch.long, device=torch_device)}
 
