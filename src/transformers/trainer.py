@@ -1682,6 +1682,28 @@ class Trainer:
 
         return epochs_trained, steps_trained_in_current_epoch
 
+    def _average_grads_of_unsharded_params(self, model: nn.Module) -> None:
+        """Average across ranks the gradients of trainable parameters FSDP2 does not manage.
+
+        Parameters added after `fully_shard`, such as PEFT adapters, are plain tensors replicated on every
+        rank. FSDP2 reduce-scatters only the parameters it sharded, and this path skips the DDP wrap, so
+        each rank would otherwise keep the gradient of its own batch and the replicas would drift apart.
+        """
+        if not dist.is_initialized() or dist.get_world_size() == 1:
+            return
+        from torch.distributed.tensor import DTensor
+
+        def average(param):
+            dist.all_reduce(param.grad, op=dist.ReduceOp.AVG)
+
+        count = 0
+        for param in model.parameters():
+            if param.requires_grad and not isinstance(param, DTensor) and not isinstance(param.data, DTensor):
+                param.register_post_accumulate_grad_hook(average)
+                count += 1
+        if count:
+            logger.info(f"Averaging the gradients of {count} parameters that FSDP2 does not shard across ranks.")
+
     def _prepare_for_training(self, max_steps, train_dataloader, resume_from_checkpoint):
         """Wrap model, create optimizer and scheduler, and run accelerator.prepare. Returns (model, train_dataloader)."""
         delay_optimizer_creation = is_sagemaker_mp_enabled() or self.is_fsdp_xla_enabled or self.is_fsdp_enabled
@@ -1720,6 +1742,7 @@ class Trainer:
             # asking Accelerate to wrap these DTensor parameters in DDP or to shard them again.
             model = self.accelerator.prepare_model(model, device_placement=False, evaluation_mode=True)
             self.optimizer = self.accelerator.prepare(self.optimizer)
+            self._average_grads_of_unsharded_params(model)
         elif use_accelerator_prepare:
             if delay_optimizer_creation:
                 # TODO: check if we can move this somewhere else
