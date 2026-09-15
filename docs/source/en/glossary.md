@@ -350,6 +350,8 @@ Parallelism technique in which the model is split up vertically (layer-level) ac
 several layers of the model are placed on a single GPU. Each GPU processes in parallel different stages of the pipeline
 and working on a small chunk of the batch. Learn more about how PipelineParallel works [here](perf_train_gpu_many#from-naive-model-parallelism-to-pipeline-parallelism).
 
+For Transformers' native pipeline parallel `generate` path, see [pipeline parallelism for inference](pipeline_parallel_inference).
+
 ### pixel values
 
 A tensor of the numerical representations of an image that is passed to a model. The pixel values have a shape of [`batch_size`, `num_channels`, `height`, `width`], and are generated from an image processor.
