@@ -236,6 +236,22 @@ class DogeModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+    def create_and_check_sdpa_decoder_is_causal(self, config, input_ids, *args):
+        model = DogeForCausalLM(config).to(torch_device).eval()
+        model.set_attn_implementation("sdpa")
+        other_input_ids = input_ids.clone()
+        other_input_ids[:, -1] = (input_ids[:, -1] + 1) % config.vocab_size
+        # The three inputs for which `create_causal_mask` may return `None` under sdpa
+        for attention_mask, use_cache in ((None, False), (torch.ones_like(input_ids), False), (None, True)):
+            with torch.no_grad():
+                logits = model(input_ids, attention_mask=attention_mask, use_cache=use_cache).logits
+                other_logits = model(other_input_ids, attention_mask=attention_mask, use_cache=use_cache).logits
+            self.parent.assertTrue(
+                torch.allclose(logits[:, :-1], other_logits[:, :-1], atol=1e-5, rtol=1e-5),
+                msg=f"Max diff: {(logits[:, :-1] - other_logits[:, :-1]).abs().max().item():.6f} "
+                f"(attention_mask={attention_mask is not None}, use_cache={use_cache})",
+            )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -337,21 +353,8 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         pass
 
     def test_sdpa_decoder_is_causal(self):
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs["input_ids"]
-        other_input_ids = input_ids.clone()
-        other_input_ids[:, -1] = (input_ids[:, -1] + 1) % config.vocab_size
-        model = DogeForCausalLM._from_config(config, attn_implementation="sdpa").to(torch_device).eval()
-        cases = {
-            "no mask": {"use_cache": False},
-            "all-ones mask": {"attention_mask": torch.ones_like(input_ids), "use_cache": False},
-            "with cache": {"use_cache": True},
-        }
-        for name, kwargs in cases.items():
-            with self.subTest(name), torch.no_grad():
-                torch.testing.assert_close(
-                    model(input_ids, **kwargs).logits[:, :-1], model(other_input_ids, **kwargs).logits[:, :-1]
-                )
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_sdpa_decoder_is_causal(*config_and_inputs)
 
     def test_tp_plan_matches_params(self):
         """Need to overwrite as the plan contains keys that are valid but depend on some configs flags and cannot
