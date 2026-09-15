@@ -20,9 +20,11 @@ import pytest
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
+    backend_device_count,
     require_torch,
     require_torch_accelerator,
     slow,
+    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -80,10 +82,22 @@ class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.offload_dir = tempfile.TemporaryDirectory()
+            # A 70% per-GPU max_memory cap reserves the headroom to avoid CUDA OOM on
+            # multi-GPU runners related to MergeModulelist.
+            n = backend_device_count(torch_device)
+            if n > 0 and torch_device != "cpu":
+                torch_accel = getattr(torch, torch_device)
+                per_device = int(
+                    min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3
+                )
+                max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+            else:
+                max_memory = None
             cls.model = Glm4MoeForCausalLM.from_pretrained(
                 cls.MODEL_ID,
                 dtype=torch.bfloat16,
                 device_map="auto",
+                max_memory=max_memory,
                 offload_folder=cls.offload_dir.name,
             )
             cls.tokenizer = AutoTokenizer.from_pretrained(cls.MODEL_ID)
