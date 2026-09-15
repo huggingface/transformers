@@ -378,6 +378,14 @@ class Tipsv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     has_attentions = False
     _is_composite = True
 
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip(
+        reason="Tipsv2ModelTester does not define the `num_masks`/`mask_length` attributes the shared eager/sdpa "
+        "equivalence harness needs for models taking `bool_masked_pos`"
+    )
+    def test_eager_matches_sdpa_inference(self, *args):
+        pass
+
     def setUp(self):
         self.model_tester = Tipsv2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Tipsv2Config, has_text_modality=False)

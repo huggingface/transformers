@@ -19,11 +19,19 @@ import unittest
 from pathlib import Path
 from threading import Thread
 
+from parameterized import parameterized
+
 from transformers import is_datasets_available, is_torch_available
 from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    ModelTesterMixin,
+    floats_tensor,
+    ids_tensor,
+    random_attention_mask,
+)
 
 
 if is_datasets_available():
@@ -168,6 +176,14 @@ class Nemotron3_5AsrForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="No available flash-SDPA kernels for Nemotron3_5Asr test shapes on this setup")
     def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip(
+        reason="The RNN-T head's own outputs are not covered by the shared eager/sdpa equivalence harness "
+        "(eager/sdpa equivalence of the reused FastConformer encoder is covered by NemotronAsr's test suite)"
+    )
+    def test_eager_matches_sdpa_inference(self, *args):
         pass
 
     def setUp(self):

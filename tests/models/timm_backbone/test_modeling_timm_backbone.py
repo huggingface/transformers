@@ -16,6 +16,8 @@ import copy
 import inspect
 import unittest
 
+from parameterized import parameterized
+
 from transformers import AutoBackbone, MaskFormerConfig
 from transformers.backbone_utils import load_backbone
 from transformers.testing_utils import is_flaky, require_timm, require_torch, torch_device
@@ -23,7 +25,7 @@ from transformers.utils.import_utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_modeling_common import TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION, ModelTesterMixin, floats_tensor
 
 
 if is_torch_available():
@@ -86,6 +88,14 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
 
     test_resize_embeddings = False
     has_attentions = False
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip(
+        reason="TimmBackbone loads checkpoints through timm's own loader, so the save_pretrained/from_pretrained "
+        "round-trip on a local directory used by the shared eager/sdpa equivalence harness does not apply"
+    )
+    def test_eager_matches_sdpa_inference(self, *args):
+        pass
 
     def setUp(self):
         # self.config_class = PreTrainedConfig
