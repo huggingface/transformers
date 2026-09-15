@@ -633,7 +633,10 @@ def parse_generate_flags(generate_flags: list[str] | None) -> dict:
         s = s.removeprefix("-")
         return s.replace(".", "", 1).isdigit()
 
-    generate_flags_as_dict = {k: f'"{v}"' if not is_number(v) else v for k, v in generate_flags_as_dict.items()}
+    generate_flags_as_dict = {
+        k: v if v.startswith("[") and v.endswith("]") else json.dumps(v) if not is_number(v) else v
+        for k, v in generate_flags_as_dict.items()
+    }
     # 2. c. [no processing needed] lists are lists of ints because `generate` doesn't take lists of strings :)
     # We also mention in the help message that we only accept lists of ints for now.
 
