@@ -19,7 +19,10 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_pop2piano import *
+    from .feature_extraction_pop2piano import *
     from .modeling_pop2piano import *
+    from .processing_pop2piano import *
+    from .tokenization_pop2piano import *
 else:
     import sys
 

@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from .configuration_blenderbot_small import *
     from .modeling_blenderbot_small import *
     from .tokenization_blenderbot_small import *
-    from .tokenization_blenderbot_small_fast import *
 else:
     import sys
 
