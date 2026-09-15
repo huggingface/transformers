@@ -714,6 +714,53 @@ class ParakeetForTDTModelTest(ModelTesterMixin, unittest.TestCase):
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
 
+    def test_generate_does_not_share_request_state_across_threads(self):
+        import concurrent.futures
+        import itertools
+        import threading
+        import time
+        from unittest.mock import patch
+
+        from transformers.models.parakeet import generation_parakeet
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = ParakeetForTDT(config)
+        batch_size = self.model_tester.batch_size
+
+        barrier = threading.Barrier(2)
+        call_index = itertools.count()
+        call_index_lock = threading.Lock()
+
+        def fake_generate(self, inputs=None, generation_config=None, **kwargs):
+            with call_index_lock:
+                index = next(call_index)
+
+            durations = torch.full((batch_size,), index + 1, dtype=torch.long)
+            generation_state = getattr(generation_parakeet, "_PARAKEET_GENERATION_STATE", None)
+            state_container = generation_state.get() if generation_state is not None else None
+            if state_container is not None and hasattr(state_container, "step_durations"):
+                state_container.step_durations.append(durations)
+            else:
+                self._step_durations.append(durations)
+
+            barrier.wait()
+            if index == 1:
+                time.sleep(0.05)
+
+            return torch.tensor([[index]], dtype=torch.long)
+
+        with patch("transformers.models.parakeet.generation_parakeet.GenerationMixin.generate", new=fake_generate):
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                outputs = list(pool.map(lambda _: model.generate(), range(2)))
+
+        outputs = sorted(outputs, key=lambda output: int(output.sequences.item()))
+        self.assertEqual(outputs[0].sequences.item(), 0)
+        self.assertEqual(outputs[1].sequences.item(), 1)
+        self.assertEqual(outputs[0].durations.shape, (batch_size, 2))
+        self.assertEqual(outputs[1].durations.shape, (batch_size, 2))
+        torch.testing.assert_close(outputs[0].durations[:, 1], torch.ones(batch_size, dtype=torch.long))
+        torch.testing.assert_close(outputs[1].durations[:, 1], torch.full((batch_size,), 2, dtype=torch.long))
+
 
 @require_torch
 class ParakeetForTDTIntegrationTest(unittest.TestCase):
