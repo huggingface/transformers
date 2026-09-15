@@ -148,7 +148,9 @@ class CpmAntTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
         for special_token in [space_token, line_token]:
-            token_id = self.added_tokens_encoder.pop(special_token, None)
+            # pop from the real `_added_tokens_encoder` dict; `added_tokens_encoder` is a
+            # property returning a fresh dict, so popping it has no effect
+            token_id = self._added_tokens_encoder.pop(special_token, None)
             if token_id is not None:
                 self._added_tokens_decoder.pop(token_id, None)
         self._update_total_vocab_size()
