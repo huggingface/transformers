@@ -241,6 +241,29 @@ class MegatronBertModelTester:
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
+    def create_and_check_decoder_causal_mask(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+    ):
+        config.is_decoder = True
+        model = MegatronBertModel(config)
+        model.to(torch_device)
+        model.eval()
+        input_ids_modified = input_ids.clone()
+        input_ids_modified[:, -1] = (input_ids_modified[:, -1] + 1) % config.vocab_size
+        res_orig = model(input_ids).last_hidden_state
+        res_mod = model(input_ids_modified).last_hidden_state
+        self.parent.assertTrue(
+            torch.allclose(res_orig[:, :-1], res_mod[:, :-1], atol=1e-4),
+            "Decoder model attended to future tokens!",
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -341,6 +364,10 @@ class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_megatron_bert_for_token_classification(*config_and_inputs)
+
+    def test_decoder_causal_mask(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_decoder_causal_mask(*config_and_inputs)
 
 
 def _long_tensor(tok_lst):
