@@ -726,11 +726,10 @@ class GenerationMixin(ContinuousMixin):
                 mm_token_type_ids=model_inputs.get("mm_token_type_ids"),
                 is_first_iteration=is_first_iteration,
             )
-            if attention_mask is not None:
-                if isinstance(attention_mask, dict):
-                    attention_mask = {k: v.contiguous() for k, v in attention_mask.items()}
-                else:
-                    attention_mask = attention_mask.contiguous()
+            if isinstance(attention_mask, dict):
+                attention_mask = {k: v.contiguous() if v is not None else None for k, v in attention_mask.items()}
+            else:
+                attention_mask = attention_mask.contiguous() if attention_mask is not None else None
 
         if attention_mask is not None:
             model_inputs[attention_mask_key] = attention_mask
