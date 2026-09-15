@@ -241,14 +241,14 @@ class Qwen3TTSForConditionalGenerationIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(input_ids[0].cpu(), torch.tensor(expected["input_ids"]))
 
         with torch.no_grad():
-            talker_codes_list, _ = model.generate(
+            talker_codes_list = model.generate(
                 input_ids=input_ids,
                 languages=["Auto"],
                 do_sample=False,
                 max_new_tokens=50,
                 repetition_penalty=1.05,
                 subtalker_dosample=False,
-            )
+            ).sequences
 
         torch.testing.assert_close(
             talker_codes_list[0].cpu(),
@@ -280,14 +280,14 @@ class Qwen3TTSForConditionalGenerationIntegrationTest(unittest.TestCase):
         languages = ["Auto"] * len(expected["input_texts"])
 
         with torch.no_grad():
-            talker_codes_list, _ = model.generate(
+            talker_codes_list = model.generate(
                 input_ids=input_ids,
                 languages=languages,
                 do_sample=False,
                 max_new_tokens=50,
                 repetition_penalty=1.05,
                 subtalker_dosample=False,
-            )
+            ).sequences
 
         for i, exp_codes in enumerate(expected["generated_codes"]):
             torch.testing.assert_close(
