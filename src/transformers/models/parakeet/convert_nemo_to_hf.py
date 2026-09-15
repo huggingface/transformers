@@ -61,6 +61,15 @@ NEMO_TDT_WEIGHT_MAPPING = {
 }
 
 
+def blank_is_pad(nemo_config, model_type):
+    """Whether a transducer checkpoint has to reuse its blank token as the pad token.
+
+    True when the NeMo vocab carries no `<pad>` of its own, in which case `len(labels)` is both NeMo's blank id
+    and the first free tokenizer id, so `<blank>` must take that slot instead of a freshly appended `<pad>`.
+    """
+    return model_type in ("rnnt", "tdt") and "<pad>" not in nemo_config.get("labels", [])
+
+
 def convert_key(key, mapping):
     for pattern, replacement in mapping.items():
         key = re.sub(pattern, replacement, key)
@@ -158,13 +167,12 @@ def write_processor(
         tokenizer_converted_fast.add_tokens([AddedToken("<unk>", normalized=False, special=True)])
         print(f"Added <unk> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<unk>')}")
 
-    if model_type == "rnnt":
-        # RNN-T (unlike TDT) has no dedicated pad token in its NeMo vocab. NeMo's blank is the final vocab entry,
-        # i.e. `config.blank_token_id == len(labels)`, and the joint head emits exactly `len(labels) + 1` logits.
-        # Add `<blank>` *first* so it lands on that id (no `<pad>` is appended to push it past the model's vocab),
-        # and reuse it as the pad token: decoding already skips the pad id, and padding decoder/label tensors with
-        # the blank id keeps every id within the joint vocab. This aligns the tokenizer's `<blank>` id with the
-        # model's blank logit, so the processor can prepend `<blank>` to build decoder_input_ids unchanged.
+    if blank_is_pad(nemo_config, model_type):
+        # No `<pad>` in the NeMo vocab (every RNN-T checkpoint, and TDT ones such as `parakeet-tdt-1.1b`): NeMo's
+        # blank is the final vocab entry, `config.blank_token_id == len(labels)`, and the joint head emits exactly
+        # `len(labels) + 1` token logits. Adding `<blank>` *first* lands it on that id instead of being pushed past
+        # the model's vocab by a `<pad>`, and reusing it as the pad token keeps every padded decoder/label id
+        # inside the joint vocab - decoding skips the pad id either way.
         tokenizer_converted_fast.add_tokens([AddedToken("<blank>", normalized=False, special=True)])
         print(f"Added <blank> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<blank>')}")
         pad_token = AddedToken("<blank>", normalized=False, special=True)
@@ -349,7 +357,8 @@ def convert_tdt_config(nemo_config, encoder_config):
         hidden_act="relu",
         max_symbols_per_step=10,
         encoder_config=encoder_config.to_dict(),
-        pad_token_id=labels.index("<pad>"),
+        # `<pad>` when the NeMo vocab has one, else the blank token doubles as pad (see `blank_is_pad`).
+        pad_token_id=labels.index("<pad>") if "<pad>" in labels else blank_token_id,
         blank_token_id=blank_token_id,  # blank token is different from pad token for TDT
     )
 
