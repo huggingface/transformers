@@ -1638,6 +1638,7 @@ def convert_and_load_state_dict_in_model(
     renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
     param_name_to_load: dict[str, WeightRenaming | WeightConverter] = {}
+    concatenation_offsets: dict[str, int] = defaultdict(int)
 
     if dtype_plan != {}:
         dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
@@ -1717,7 +1718,19 @@ def convert_and_load_state_dict_in_model(
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
             sharding_op = None
             if is_dtensor(empty_param):
-                sharding_op = DtensorShardOperation(empty_param)
+                source_offset = None
+                # Consecutive checkpoint chunks must be sharded in the concatenated parameter's coordinates.
+                if (
+                    isinstance(mapping, WeightConverter)
+                    and len(mapping.operations) == 1
+                    and isinstance(mapping.operations[0], Concatenate)
+                    and len(mapping.source_patterns) == 1
+                ):
+                    concat_dim = mapping.operations[0].dim
+                    source_offset = (concat_dim, concatenation_offsets[renamed_key])
+                    source_shape = tensor.shape if isinstance(tensor, torch.Tensor) else tensor.get_shape()
+                    concatenation_offsets[renamed_key] += source_shape[concat_dim]
+                sharding_op = DtensorShardOperation(empty_param, source_offset=source_offset)
 
             # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
             # directly on the device, as it will completely blow up the memory during the ops memory spike. So defer to "cpu", then

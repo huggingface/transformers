@@ -81,10 +81,13 @@ class DtensorShardOperation:
        we skip it. Later, `MergeModulelist` will stack the owned expert we kept to create the rank's local shard
     """
 
-    def __init__(self, param: DTensor):
+    def __init__(self, param: DTensor, source_offset: tuple[int, int] | None = None):
         self.device_mesh = param.device_mesh
         self.placements = tuple(param.placements)
         self.param_ndim = param.ndim
+        self.param_shape = param.shape
+        # (dimension, offset) of a checkpoint chunk in a concatenated parameter.
+        self.source_offset = source_offset
         local_shape, offsets = compute_local_shape_and_global_offset(param.shape, self.device_mesh, self.placements)
         # Axis-0 range owned by this rank (used to filter per-expert pieces)
         # [_axis0_offset, _axis0_offset + _axis0_local_size)
@@ -127,6 +130,9 @@ class DtensorShardOperation:
 
             # prepare the slices to fetch on disk for each tensor dimension.
             intervals_by_dim = [[(0, size)] for size in source_shape]
+            if self.source_offset is not None:
+                concat_dim, offset = self.source_offset
+                intervals_by_dim[concat_dim] = [(0, self.param_shape[concat_dim])]
             for dim_idx, planned_ops in enumerate(planned_ops_by_dim):
                 intervals = intervals_by_dim[dim_idx]
                 for placement, rank, world_size in planned_ops:
@@ -135,6 +141,14 @@ class DtensorShardOperation:
                     else:
                         intervals = self._compute_strided_slice(intervals, rank, world_size, placement.split_factor)
                 intervals_by_dim[dim_idx] = intervals
+
+            if self.source_offset is not None:
+                # Intersect the global shard with this checkpoint chunk, then use chunk-local indices.
+                intervals_by_dim[concat_dim] = [
+                    (max(start, offset) - offset, min(end, offset + source_shape[concat_dim]) - offset)
+                    for start, end in intervals_by_dim[concat_dim]
+                    if max(start, offset) < min(end, offset + source_shape[concat_dim])
+                ] or [(0, 0)]
 
             has_strided_shard = any(not placement.is_shard() for _, placement in dim_placements)
             # finally fetch from the disk only the slices
