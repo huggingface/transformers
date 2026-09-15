@@ -728,7 +728,7 @@ class GenerationMixin(ContinuousMixin):
             )
             if attention_mask is not None:
                 if isinstance(attention_mask, dict):
-                    attention_mask = {x.contiguous() for x in attention_mask}
+                    attention_mask = {k: v.contiguous() for k, v in attention_mask.items()}
                 else:
                     attention_mask = attention_mask.contiguous()
 
