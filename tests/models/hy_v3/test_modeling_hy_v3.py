@@ -18,12 +18,13 @@ import unittest
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
 )
+
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -67,16 +68,10 @@ class HYV3ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch
-class HYV3IntegrationTest(unittest.TestCase):
+class HYV3IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     """Integration tests for HYV3 with a small randomized model."""
 
     model_id = "hf-internal-testing/HYV3-tiny-random"
-
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     @require_torch_accelerator
     def test_small_model_logits_batched(self):

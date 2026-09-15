@@ -874,7 +874,7 @@ class ProcessorTesterMixin:
         # we have only a few processors that are old and dont follow TypedDict format
         if any(
             name in self.processor_class.__name__.lower()
-            for name in ["instructblipvideo", "mgpstr", "sam3", "layoutlmv"]
+            for name in ["instructblipvideo", "mgpstr", "sam3", "layoutlmv", "layoutxlm"]
         ):
             self.skipTest(f"{self.processor_class} doesn't have typed kwargs.")
 
