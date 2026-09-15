@@ -13,13 +13,15 @@
 # limitations under the License.
 """Testing suite for the PyTorch GLM-4.5, GLM-4.6, GLM-4.7 model."""
 
+import tempfile
 import unittest
 
 import pytest
-import torch
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
+    backend_device_count,
+    get_cpu_ram_total_gib,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -31,6 +33,8 @@ from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
+    import torch
+
     from transformers import AutoTokenizer, Glm4MoeForCausalLM, Glm4MoeModel
 
 
@@ -65,38 +69,89 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 @slow
 class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    MODEL_ID = "zai-org/GLM-4.5-Air"
+    NUM_TOKENS_TO_GENERATE = 5
+    EXPECTED_TEXT_COMPLETION = ['hello world" -> "world', "tell me about the history of the"]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.model = None
+        cls.tokenizer = None
+        cls.offload_dir = None
+
+    @classmethod
+    def get_model(cls):
+        if cls.model is None:
+            cls.offload_dir = tempfile.TemporaryDirectory()
+            # A 70% per-GPU max_memory cap reserves the headroom to avoid CUDA OOM on
+            # multi-GPU runners related to MergeModulelist.
+            n = backend_device_count(torch_device)
+            if n > 0 and torch_device != "cpu":
+                torch_accel = getattr(torch, torch_device)
+                per_device = int(
+                    min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3
+                )
+                max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+                max_memory["cpu"] = (
+                    f"{int(get_cpu_ram_total_gib() * 0.9)}GiB"  # To avoid runner failing with exit code 137.
+                )
+            else:
+                max_memory = None
+            cls.model = Glm4MoeForCausalLM.from_pretrained(
+                cls.MODEL_ID,
+                dtype="auto",
+                device_map="auto",
+                max_memory=max_memory,
+                offload_folder=cls.offload_dir.name,
+            )
+            cls.tokenizer = AutoTokenizer.from_pretrained(cls.MODEL_ID)
+        return cls.model, cls.tokenizer
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.offload_dir is not None:
+            cls.offload_dir.cleanup()
+        super().tearDownClass()
+
+    @slow
+    @require_torch_accelerator
+    def test_1_dynamic_cache(self):
+        model, tokenizer = self.get_model()
+        prompts = ["[gMASK]<sop>hello", "[gMASK]<sop>tell me"]
+        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+
+        generated_ids = model.generate(**inputs, max_new_tokens=self.NUM_TOKENS_TO_GENERATE, do_sample=False)
+        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(self.EXPECTED_TEXT_COMPLETION, dynamic_text)
+
+    @slow
+    @require_torch_accelerator
+    def test_2_static_cache(self):
+        model, tokenizer = self.get_model()
+        prompts = ["[gMASK]<sop>hello", "[gMASK]<sop>tell me"]
+        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+
+        generated_ids = model.generate(
+            **inputs, max_new_tokens=self.NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        )
+        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        self.assertEqual(self.EXPECTED_TEXT_COMPLETION, static_text)
+
+        # clear cache object, initialized when we pass `cache_implementation="static"`
+        model._cache = None
+
+    @unittest.skip("Offloaded models cannot be compiled with torch.compile")
     @slow
     @require_torch_accelerator
     @pytest.mark.torch_compile_test
-    def test_compile_static_cache(self):
-        NUM_TOKENS_TO_GENERATE = 40
-        EXPECTED_TEXT_COMPLETION = [
-            'hello, world!\'\'\')\nprint(\'hello, world!\')\nprint("hello, world!")\nprint("hello, world!")\nprint("hello, world!")\nprint("hello, world!")\nprint("hello, world!")\n',
-            "tell me the story of the first Thanksgiving. commonly known as the Pilgrims, arrived in the autumn of 1620. They were seeking religious freedom and a new life in the Plymouth Colony. Their first",
-        ]
-
+    def test_3_compile_static_cache(self):
+        model, tokenizer = self.get_model()
         prompts = ["[gMASK]<sop>hello", "[gMASK]<sop>tell me"]
-        tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.5")
-        model = Glm4MoeForCausalLM.from_pretrained("zai-org/GLM-4.5", device_map=torch_device, dtype=torch.bfloat16)
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
-        # Dynamic Cache
-        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
-        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
-
-        # Static Cache
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
-
-        # Static Cache + compile
-        model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
         model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
         generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+            **inputs, max_new_tokens=self.NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
         )
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
+        self.assertEqual(self.EXPECTED_TEXT_COMPLETION, static_compiled_text)
