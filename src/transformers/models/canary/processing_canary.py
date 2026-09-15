@@ -150,8 +150,7 @@ class CanaryProcessor(ProcessorMixin):
 
         conversations = []
         for source, target, audio_item in zip(source_languages, target_languages, audio_items):
-            content = [
-                make_audio_chat_template_content(audio_item),
+            content = make_audio_chat_template_content(audio_item) + [
                 {
                     "type": "text",
                     "source_language": source,
