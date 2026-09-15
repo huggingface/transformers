@@ -207,9 +207,33 @@ class TestTensorParallelLayer(TestCasePlus):
         op.device_mesh = mesh
         op.placements = (placement,)
         op.param_ndim = len(param_shape)
+        op.param_shape = param_shape
+        op.source_offset = None
         op._axis0_offset = 0
         op._axis0_local_size = local_shape[0]
         return op
+
+    def test_concatenated_checkpoint_chunks_preserve_global_row_order(self):
+        from torch.distributed.tensor import Shard
+
+        weight = torch.arange(20).reshape(10, 2)
+        checkpoint_chunks = weight.split([3, 4, 3], dim=0)
+        expected_shards = [
+            torch.tensor([[0, 1], [2, 3], [4, 5], [6, 7]]),
+            torch.tensor([[8, 9], [10, 11], [12, 13], [14, 15]]),
+            torch.tensor([[16, 17], [18, 19]]),
+        ]
+        for rank, expected in enumerate(expected_shards):
+            with self.subTest(rank=rank):
+                mesh = self.MockDeviceMesh(world_size=3, rank=rank)
+                op = self._make_dtensor_shard_op(mesh, Shard(0), weight.shape, expected.shape)
+                local_chunks = []
+                offset = 0
+                for chunk in checkpoint_chunks:
+                    op.source_offset = (0, offset)
+                    local_chunks.append(op.shard_tensor(chunk))
+                    offset += chunk.shape[0]
+                torch.testing.assert_close(torch.cat(local_chunks), expected)
 
     def test_colwise_gather_output_rejects_indivisible_out_features(self):
         model = torch.nn.Module()

@@ -76,6 +76,8 @@ def _make_dtensor_shard_op(mesh, placements, param_shape, local_shape):
     op.device_mesh = mesh
     op.placements = tuple(placements)
     op.param_ndim = len(param_shape)
+    op.param_shape = param_shape
+    op.source_offset = None
     op._axis0_offset = 0
     op._axis0_local_size = local_shape[0]
     for mesh_dim, p in enumerate(placements):
@@ -141,6 +143,21 @@ class TestDtensorShardOperation(unittest.TestCase):
             mesh = FakeMesh(shape=(2,), rank=rank)
             op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(4, 4), local_shape=(2, 4))
             torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
+
+    def test_concatenated_chunks_with_fsdp_and_tp(self):
+        tensor = torch.arange(32).reshape(8, 4)
+        chunks = tensor.split([3, 3, 2], dim=0)
+        expected = [tensor[:4, :2], tensor[:4, 2:], tensor[4:, :2], tensor[4:, 2:]]
+        for rank in range(4):
+            mesh = FakeMesh(shape=(2, 2), rank=rank)
+            op = _make_dtensor_shard_op(mesh, [Shard(0), Shard(1)], tensor.shape, (4, 2))
+            local_chunks = []
+            offset = 0
+            for chunk in chunks:
+                op.source_offset = (0, offset)
+                local_chunks.append(op.shard_tensor(chunk))
+                offset += chunk.shape[0]
+            torch.testing.assert_close(torch.cat(local_chunks), expected[rank], msg=f"rank {rank}")
 
     def test_1D_strided_shard(self):
         tensor = torch.arange(16).reshape(4, 4).float()
