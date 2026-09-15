@@ -92,7 +92,6 @@ class FlexOlmoIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                     min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3
                 )
                 max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
-                max_memory["cpu"] = "60GiB"
             else:
                 max_memory = None
             cls.model = FlexOlmoForCausalLM.from_pretrained(

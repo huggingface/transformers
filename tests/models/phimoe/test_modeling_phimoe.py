@@ -14,7 +14,6 @@
 
 """Testing suite for the PyTorch PhiMoE model."""
 
-import contextlib
 import tempfile
 import unittest
 
@@ -22,6 +21,7 @@ from parameterized import parameterized
 
 from transformers import StaticCache, is_torch_available
 from transformers.testing_utils import (
+    backend_device_count,
     cleanup,
     require_torch,
     slow,
@@ -124,15 +124,15 @@ class PhimoeIntegrationTest(unittest.TestCase):
             # `device_map="auto"` budgets each device to its full capacity when more
             # than one is visible, leaving nothing for the ~1.6 GiB temporary the
             # expert gate/up merge allocates while loading.
-            with contextlib.suppress(Exception):  # absent on older torch
-                torch.cuda.memory._set_allocator_settings("expandable_segments:True")
-            if not torch.cuda.is_available() or torch.cuda.device_count() == 0:
-                raise unittest.SkipTest("phimoe integration test needs an accelerator")
-            accel = getattr(torch, torch_device)
-            n = accel.device_count()
-            per_device = int(min(accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3)
-            max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
-            max_memory["cpu"] = "60GiB"
+            n = backend_device_count(torch_device)
+            if n > 0 and torch_device != "cpu":
+                torch_accel = getattr(torch, torch_device)
+                per_device = int(
+                    min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3
+                )
+                max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+            else:
+                max_memory = None
             cls.model = PhimoeForCausalLM.from_pretrained(
                 "microsoft/Phi-3.5-MoE-instruct",
                 experts_implementation="eager",
