@@ -21,48 +21,15 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class LevitImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_center_crop=True,
-        crop_size=None,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-    ):
-        size = size if size is not None else {"shortest_edge": 18}
-        crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-
-    def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
-            "do_resize": self.do_resize,
-            "do_center_crop": self.do_center_crop,
-            "size": self.size,
-            "crop_size": self.crop_size,
-        }
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("do_center_crop", True)
+        kwargs.setdefault("size", {"shortest_edge": 18})
+        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
+        super().__init__(parent, **kwargs)
 
 
 @require_torch

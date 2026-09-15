@@ -30,58 +30,19 @@ if is_torch_available():
 
 
 class Idefics2ImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        num_images=1,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_convert_rgb=True,
-        do_pad=True,
-        do_image_splitting=True,
-    ):
-        size = size if size is not None else {"shortest_edge": 378, "longest_edge": 980}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
+    def __init__(self, parent, num_images=1, **kwargs):
+        kwargs.setdefault("do_convert_rgb", True)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"shortest_edge": 378, "longest_edge": 980})
+        kwargs.setdefault("do_rescale", True)
+        kwargs.setdefault("rescale_factor", 1 / 255)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+        kwargs.setdefault("do_pad", True)
+        kwargs.setdefault("do_image_splitting", True)
+        super().__init__(parent, **kwargs)
         self.num_images = num_images
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_convert_rgb = do_convert_rgb
-        self.do_pad = do_pad
-        self.do_image_splitting = do_image_splitting
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_convert_rgb": self.do_convert_rgb,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_rescale": self.do_rescale,
-            "rescale_factor": self.rescale_factor,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_pad": self.do_pad,
-            "do_image_splitting": self.do_image_splitting,
-        }
 
     def get_expected_values(self, image_inputs, batched=False):
         if not batched:

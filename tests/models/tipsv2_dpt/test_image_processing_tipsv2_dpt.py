@@ -33,43 +33,15 @@ if is_torch_available():
 
 
 class Tipsv2DptImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_normalize=False,
-        do_convert_rgb=True,
-        num_labels=3,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size if size is not None else {"height": 18, "width": 18}
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.do_convert_rgb = do_convert_rgb
+    def __init__(self, parent, num_labels=3, **kwargs):
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+        kwargs.setdefault("do_rescale", True)
+        kwargs.setdefault("rescale_factor", 1 / 255)
+        kwargs.setdefault("do_normalize", False)
+        kwargs.setdefault("do_convert_rgb", True)
+        super().__init__(parent, **kwargs)
         self.num_labels = num_labels
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_rescale": self.do_rescale,
-            "rescale_factor": self.rescale_factor,
-            "do_normalize": self.do_normalize,
-            "do_convert_rgb": self.do_convert_rgb,
-        }
 
 
 @require_torch

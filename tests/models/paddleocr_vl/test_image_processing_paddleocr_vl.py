@@ -35,53 +35,23 @@ if is_vision_available():
 
 
 class PaddleOCRVLImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=56,
-        max_resolution=80,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=OPENAI_CLIP_MEAN,
-        image_std=OPENAI_CLIP_STD,
-        temporal_patch_size=1,
-        patch_size=14,
-        merge_size=2,
-        do_convert_rgb=True,
-    ):
+    def __init__(self, parent, size=None, **kwargs):
         # Use small pixel bounds so tests run quickly with small images
         size = size if size is not None else {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
+        kwargs.setdefault("min_resolution", 56)
+        kwargs.setdefault("max_resolution", 80)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("image_mean", OPENAI_CLIP_MEAN)
+        kwargs.setdefault("image_std", OPENAI_CLIP_STD)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("min_pixels", size["shortest_edge"])
+        kwargs.setdefault("max_pixels", size["longest_edge"])
+        kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("temporal_patch_size", 1)
+        kwargs.setdefault("merge_size", 2)
+        kwargs.setdefault("do_convert_rgb", True)
+        super().__init__(parent, **kwargs)
         self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.temporal_patch_size = temporal_patch_size
-        self.patch_size = patch_size
-        self.merge_size = merge_size
-        self.do_convert_rgb = do_convert_rgb
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
-            "min_pixels": self.size["shortest_edge"],
-            "max_pixels": self.size["longest_edge"],
-            "patch_size": self.patch_size,
-            "temporal_patch_size": self.temporal_patch_size,
-            "merge_size": self.merge_size,
-            "do_convert_rgb": self.do_convert_rgb,
-        }
 
     def expected_output_image_shape(self, images):
         """

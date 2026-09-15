@@ -40,31 +40,11 @@ if is_torch_available():
 
 
 class LayoutLMv2ImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        apply_ocr=True,
-    ):
-        size = size if size is not None else {"height": 18, "width": 18}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.apply_ocr = apply_ocr
-
-    def prepare_image_processor_dict(self):
-        return {"do_resize": self.do_resize, "size": self.size, "apply_ocr": self.apply_ocr}
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+        kwargs.setdefault("apply_ocr", True)
+        super().__init__(parent, **kwargs)
 
 
 @require_torch

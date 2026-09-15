@@ -41,62 +41,25 @@ if is_vision_available():
 
 
 class OneFormerImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=400,
-        size=None,
-        do_resize=True,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        num_labels=10,
-        do_reduce_labels=False,
-        ignore_index=255,
-        repo_path="shi-labs/oneformer_demo",
-        class_info_file="ade20k_panoptic.json",
-        num_text=10,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = {"shortest_edge": 32, "longest_edge": 1333} if size is None else size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.class_info_file = class_info_file
-        self.num_text = num_text
+    def __init__(self, parent, repo_path="shi-labs/oneformer_demo", **kwargs):
+        kwargs.setdefault("batch_size", 2)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"shortest_edge": 32, "longest_edge": 1333})
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+        kwargs.setdefault("num_labels", 10)
+        kwargs.setdefault("do_reduce_labels", False)
+        kwargs.setdefault("ignore_index", 255)
+        kwargs.setdefault("class_info_file", "ade20k_panoptic.json")
+        kwargs.setdefault("num_text", 10)
+        super().__init__(parent, **kwargs)
         self.repo_path = repo_path
-
         # for the post_process_functions
-        self.batch_size = 2
         self.num_queries = 10
         self.num_classes = 10
         self.height = 3
         self.width = 4
-        self.num_labels = num_labels
-        self.do_reduce_labels = do_reduce_labels
-        self.ignore_index = ignore_index
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "num_labels": self.num_labels,
-            "do_reduce_labels": self.do_reduce_labels,
-            "ignore_index": self.ignore_index,
-            "class_info_file": self.class_info_file,
-            "num_text": self.num_text,
-        }
 
     def get_fake_oneformer_outputs(self):
         return OneFormerForUniversalSegmentationOutput(

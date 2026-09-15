@@ -23,49 +23,18 @@ from ...test_processing_common import url_to_local_path
 
 
 class BridgeTowerImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        do_resize: bool = True,
-        size: dict[str, int] | None = None,
-        size_divisor: int = 32,
-        do_rescale: bool = True,
-        rescale_factor: int | float = 1 / 255,
-        do_normalize: bool = True,
-        do_center_crop: bool = True,
-        image_mean: float | list[float] | None = [0.48145466, 0.4578275, 0.40821073],
-        image_std: float | list[float] | None = [0.26862954, 0.26130258, 0.27577711],
-        do_pad: bool = True,
-        batch_size=7,
-        min_resolution=30,
-        max_resolution=400,
-        num_channels=3,
-    ):
-        self.parent = parent
-        self.do_resize = do_resize
-        self.size = size if size is not None else {"shortest_edge": 288}
-        self.size_divisor = size_divisor
+    def __init__(self, parent, do_rescale=True, rescale_factor=1 / 255, do_center_crop=True, do_pad=True, **kwargs):
+        kwargs.setdefault("image_mean", [0.48145466, 0.4578275, 0.40821073])
+        kwargs.setdefault("image_std", [0.26862954, 0.26130258, 0.27577711])
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"shortest_edge": 288})
+        kwargs.setdefault("size_divisor", 32)
+        super().__init__(parent, **kwargs)
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
         self.do_center_crop = do_center_crop
-        self.image_mean = image_mean
-        self.image_std = image_std
         self.do_pad = do_pad
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-
-    def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "size_divisor": self.size_divisor,
-        }
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["shortest_edge"], self.size["shortest_edge"]

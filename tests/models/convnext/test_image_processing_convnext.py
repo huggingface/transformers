@@ -21,44 +21,14 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class ConvNextImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        crop_pct=0.875,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-    ):
-        size = size if size is not None else {"shortest_edge": 20}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.crop_pct = crop_pct
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-
-    def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "crop_pct": self.crop_pct,
-        }
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"shortest_edge": 20})
+        kwargs.setdefault("crop_pct", 0.875)
+        super().__init__(parent, **kwargs)
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["shortest_edge"], self.size["shortest_edge"]

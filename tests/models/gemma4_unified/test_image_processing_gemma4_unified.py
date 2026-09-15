@@ -35,50 +35,16 @@ if is_vision_available():
 
 
 class Gemma4UnifiedImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        do_normalize=False,
-        image_mean=None,
-        image_std=None,
-        do_convert_rgb=True,
-        patch_size=6,
-        max_soft_tokens=70,
-        pooling_kernel_size=1,
-    ):
-        super().__init__()
-        image_mean = image_mean if image_mean is not None else [0.0, 0.0, 0.0]
-        image_std = image_std if image_std is not None else [1.0, 1.0, 1.0]
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
-        self.patch_size = patch_size
-        self.max_soft_tokens = max_soft_tokens
-        self.pooling_kernel_size = pooling_kernel_size
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-            "patch_size": self.patch_size,
-            "max_soft_tokens": self.max_soft_tokens,
-            "pooling_kernel_size": self.pooling_kernel_size,
-        }
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("do_normalize", False)
+        kwargs.setdefault("image_mean", [0.0, 0.0, 0.0])
+        kwargs.setdefault("image_std", [1.0, 1.0, 1.0])
+        kwargs.setdefault("do_convert_rgb", True)
+        kwargs.setdefault("patch_size", 6)
+        kwargs.setdefault("max_soft_tokens", 70)
+        kwargs.setdefault("pooling_kernel_size", 1)
+        super().__init__(parent, **kwargs)
 
     def expected_output_image_shape(self, images=None):
         """Return the expected per-image output shape: (max_soft_tokens, model_patch_size² * 3)."""

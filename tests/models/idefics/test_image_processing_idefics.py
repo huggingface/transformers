@@ -43,32 +43,13 @@ if is_vision_available():
 
 
 class IdeficsImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        image_mean=[0.48145466, 0.4578275, 0.40821073],
-        image_std=[0.26862954, 0.26130258, 0.27577711],
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.image_mean = image_mean
-        self.image_std = image_std
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_mean", [0.48145466, 0.4578275, 0.40821073])
+        kwargs.setdefault("image_std", [0.26862954, 0.26130258, 0.27577711])
+        super().__init__(parent, **kwargs)
 
     def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "image_size": self.image_size,
-        }
+        return {**super().prepare_image_processor_dict(), "image_size": self.image_size}
 
     def expected_output_image_shape(self, images):
         return (self.num_channels, self.image_size, self.image_size)

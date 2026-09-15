@@ -45,104 +45,34 @@ else:
 
 
 class FlavaImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_center_crop=True,
-        crop_size=None,
-        resample=None,
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_normalize=True,
-        image_mean=FLAVA_IMAGE_MEAN,
-        image_std=FLAVA_IMAGE_STD,
-        input_size_patches=14,
-        total_mask_patches=75,
-        mask_group_min_patches=16,
-        mask_group_min_aspect_ratio=0.3,
-        mask_group_max_aspect_ratio=None,
-        codebook_do_resize=True,
-        codebook_size=None,
-        codebook_resample=None,
-        codebook_do_center_crop=True,
-        codebook_crop_size=None,
-        codebook_do_map_pixels=True,
-        codebook_do_normalize=True,
-        codebook_image_mean=FLAVA_CODEBOOK_MEAN,
-        codebook_image_std=FLAVA_CODEBOOK_STD,
-    ):
-        size = size if size is not None else {"height": 224, "width": 224}
-        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
-        codebook_size = codebook_size if codebook_size is not None else {"height": 112, "width": 112}
-        codebook_crop_size = codebook_crop_size if codebook_crop_size is not None else {"height": 112, "width": 112}
-
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.do_resize = do_resize
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.size = size
-        self.resample = resample if resample is not None else PILImageResampling.BICUBIC
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
-
-        self.input_size_patches = input_size_patches
-        self.total_mask_patches = total_mask_patches
-        self.mask_group_min_patches = mask_group_min_patches
-        self.mask_group_min_aspect_ratio = mask_group_min_aspect_ratio
-        self.mask_group_max_aspect_ratio = mask_group_max_aspect_ratio
-
-        self.codebook_do_resize = codebook_do_resize
-        self.codebook_size = codebook_size
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_mean", FLAVA_IMAGE_MEAN)
+        kwargs.setdefault("image_std", FLAVA_IMAGE_STD)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"height": 224, "width": 224})
+        kwargs.setdefault("resample", PILImageResampling.BICUBIC)
+        kwargs.setdefault("do_rescale", True)
+        kwargs.setdefault("rescale_factor", 1 / 255)
+        kwargs.setdefault("do_center_crop", True)
+        kwargs.setdefault("crop_size", {"height": 224, "width": 224})
+        kwargs.setdefault("input_size_patches", 14)
+        kwargs.setdefault("total_mask_patches", 75)
+        kwargs.setdefault("mask_group_min_patches", 16)
+        kwargs.setdefault("mask_group_min_aspect_ratio", 0.3)
+        kwargs.setdefault("mask_group_max_aspect_ratio", 0.3)
+        kwargs.setdefault("codebook_do_resize", True)
+        kwargs.setdefault("codebook_size", {"height": 112, "width": 112})
         # LANCZOS resample is natively supported with torchvision >= 0.27.
         # On older versions, the base class falls back to BICUBIC automatically.
-        self.codebook_resample = codebook_resample if codebook_resample is not None else PILImageResampling.LANCZOS
-        self.codebook_do_center_crop = codebook_do_center_crop
-        self.codebook_crop_size = codebook_crop_size
-        self.codebook_do_map_pixels = codebook_do_map_pixels
-        self.codebook_do_normalize = codebook_do_normalize
-        self.codebook_image_mean = codebook_image_mean
-        self.codebook_image_std = codebook_image_std
-
-    def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "resample": self.resample,
-            "do_rescale": self.do_rescale,
-            "rescale_factor": self.rescale_factor,
-            "do_center_crop": self.do_center_crop,
-            "crop_size": self.crop_size,
-            "input_size_patches": self.input_size_patches,
-            "total_mask_patches": self.total_mask_patches,
-            "mask_group_min_patches": self.mask_group_min_patches,
-            "mask_group_min_aspect_ratio": self.mask_group_min_aspect_ratio,
-            "mask_group_max_aspect_ratio": self.mask_group_min_aspect_ratio,
-            "codebook_do_resize": self.codebook_do_resize,
-            "codebook_size": self.codebook_size,
-            "codebook_resample": self.codebook_resample,
-            "codebook_do_center_crop": self.codebook_do_center_crop,
-            "codebook_crop_size": self.codebook_crop_size,
-            "codebook_do_map_pixels": self.codebook_do_map_pixels,
-            "codebook_do_normalize": self.codebook_do_normalize,
-            "codebook_image_mean": self.codebook_image_mean,
-            "codebook_image_std": self.codebook_image_std,
-        }
+        kwargs.setdefault("codebook_resample", PILImageResampling.LANCZOS)
+        kwargs.setdefault("codebook_do_center_crop", True)
+        kwargs.setdefault("codebook_crop_size", {"height": 112, "width": 112})
+        kwargs.setdefault("codebook_do_map_pixels", True)
+        kwargs.setdefault("codebook_do_normalize", True)
+        kwargs.setdefault("codebook_image_mean", FLAVA_CODEBOOK_MEAN)
+        kwargs.setdefault("codebook_image_std", FLAVA_CODEBOOK_STD)
+        super().__init__(parent, **kwargs)
 
     def get_expected_image_size(self):
         return (self.size["height"], self.size["width"])

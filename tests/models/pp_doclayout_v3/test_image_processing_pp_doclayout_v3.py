@@ -26,39 +26,13 @@ if is_torch_available():
 
 
 class PPDocLayoutV3ImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=[0.0, 0.0, 0.0],
-        image_std=[1.0, 1.0, 1.0],
-    ):
-        size = size if size is not None else {"height": 40, "width": 40}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-        }
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"height": 40, "width": 40})
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", [0.0, 0.0, 0.0])
+        kwargs.setdefault("image_std", [1.0, 1.0, 1.0])
+        super().__init__(parent, **kwargs)
 
 
 @require_torch

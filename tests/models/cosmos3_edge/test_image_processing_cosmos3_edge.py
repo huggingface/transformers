@@ -24,48 +24,19 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class Cosmos3EdgeImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        num_channels=3,
-        min_resolution=32,
-        max_resolution=64,
-        size=None,
-        do_resize=True,
-        do_normalize=True,
-        image_mean=None,
-        image_std=None,
-        do_convert_rgb=True,
-        patch_size=16,
-        merge_size=2,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.size = size if size is not None else {"shortest_edge": 32 * 32, "longest_edge": 64 * 64}
-        self.do_resize = do_resize
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else [0.5, 0.5, 0.5]
-        self.image_std = image_std if image_std is not None else [0.5, 0.5, 0.5]
-        self.do_convert_rgb = do_convert_rgb
-        self.patch_size = patch_size
-        self.merge_size = merge_size
-
-    def prepare_image_processor_dict(self):
-        """Return the Edge resize and patch-packing configuration used by the tests."""
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-            "patch_size": self.patch_size,
-            "merge_size": self.merge_size,
-        }
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("batch_size", 3)
+        kwargs.setdefault("min_resolution", 32)
+        kwargs.setdefault("max_resolution", 64)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"shortest_edge": 32 * 32, "longest_edge": 64 * 64})
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+        kwargs.setdefault("do_convert_rgb", True)
+        kwargs.setdefault("patch_size", 16)
+        kwargs.setdefault("merge_size", 2)
+        super().__init__(parent, **kwargs)
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         """Wrap one image per sample to exercise Edge's nested multimodal input form."""

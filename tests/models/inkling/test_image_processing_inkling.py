@@ -33,41 +33,14 @@ if is_vision_available():
 
 
 class InklingImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        do_normalize=False,
-        image_mean=None,
-        image_std=None,
-        do_convert_rgb=True,
-        size=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else [0.0, 0.0, 0.0]
-        self.image_std = image_std if image_std is not None else [1.0, 1.0, 1.0]
-        self.do_convert_rgb = do_convert_rgb
-        self.size = size if size is not None else {"height": 40, "width": 40}
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-            "size": self.size,
-        }
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("do_normalize", False)
+        kwargs.setdefault("image_mean", [0.0, 0.0, 0.0])
+        kwargs.setdefault("image_std", [1.0, 1.0, 1.0])
+        kwargs.setdefault("do_convert_rgb", True)
+        kwargs.setdefault("size", {"height": 40, "width": 40})
+        super().__init__(parent, **kwargs)
 
 
 @require_torch

@@ -20,47 +20,16 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class PoolFormerImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize_and_center_crop=True,
-        size=None,
-        crop_pct=0.9,
-        crop_size=None,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-    ):
-        size = size if size is not None else {"shortest_edge": 30}
-        crop_size = crop_size if crop_size is not None else {"height": 30, "width": 30}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize_and_center_crop = do_resize_and_center_crop
-        self.size = size
-        self.crop_pct = crop_pct
-        self.crop_size = crop_size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-
-    def prepare_image_processor_dict(self):
-        return {
-            "size": self.size,
-            "do_resize": self.do_resize_and_center_crop,
-            "do_center_crop": self.do_resize_and_center_crop,
-            "crop_pct": self.crop_pct,
-            "crop_size": self.crop_size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-        }
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("size", {"shortest_edge": 30})
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("do_center_crop", True)
+        kwargs.setdefault("crop_pct", 0.9)
+        kwargs.setdefault("crop_size", {"height": 30, "width": 30})
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+        super().__init__(parent, **kwargs)
 
 
 @require_torch

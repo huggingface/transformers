@@ -34,48 +34,17 @@ if is_vision_available():
 
 
 class Glm4vImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=80,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        temporal_patch_size=2,
-        patch_size=14,
-        merge_size=2,
-    ):
-        size = size if size is not None else {"longest_edge": 20, "shortest_edge": 10}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.temporal_patch_size = temporal_patch_size
-        self.patch_size = patch_size
-        self.merge_size = merge_size
-
-    def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "temporal_patch_size": self.temporal_patch_size,
-            "patch_size": self.patch_size,
-            "merge_size": self.merge_size,
-        }
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("max_resolution", 80)
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"longest_edge": 20, "shortest_edge": 10})
+        kwargs.setdefault("temporal_patch_size", 2)
+        kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("merge_size", 2)
+        super().__init__(parent, **kwargs)
 
     def expected_output_image_shape(self, images):
         grid_t = 1

@@ -31,34 +31,11 @@ if is_vision_available():
 
 
 class GLPNImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size_divisor=32,
-        do_rescale=True,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size_divisor = size_divisor
-        self.do_rescale = do_rescale
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size_divisor": self.size_divisor,
-            "do_rescale": self.do_rescale,
-        }
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size_divisor", 32)
+        kwargs.setdefault("do_rescale", True)
+        super().__init__(parent, **kwargs)
 
     def expected_output_image_shape(self, images):
         if isinstance(images[0], Image.Image):

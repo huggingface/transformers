@@ -29,47 +29,18 @@ if is_torch_available():
 
 
 class EfficientNetImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_rescale=True,
-        rescale_offset=True,
-        rescale_factor=1 / 127.5,
-        resample=PILImageResampling.BILINEAR,  # NEAREST is too different between PIL and torchvision
-    ):
-        size = size if size is not None else {"height": 18, "width": 18}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.resample = resample
-
-    def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "resample": self.resample,
-        }
+    def __init__(self, parent, do_rescale=True, rescale_offset=True, rescale_factor=1 / 127.5, **kwargs):
+        kwargs.setdefault("batch_size", 13)
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+        kwargs.setdefault("resample", PILImageResampling.BILINEAR)
+        super().__init__(parent, **kwargs)
+        self.do_rescale = do_rescale
+        self.rescale_offset = rescale_offset
+        self.rescale_factor = rescale_factor
 
 
 @require_torch

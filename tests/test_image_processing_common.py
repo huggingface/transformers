@@ -182,6 +182,32 @@ def prepare_video_inputs(
 class ImageProcessingTester:
     """Base class for the `<Model>ImageProcessingTester` classes used by `ImageProcessingTestMixin`."""
 
+    def __init__(
+        self,
+        parent,
+        batch_size: int = 7,
+        num_channels: int = 3,
+        image_size: int = 18,
+        min_resolution: int = 30,
+        max_resolution: int = 400,
+        # kwargs passed to the image processor __init__
+        **images_kwargs,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.min_resolution = min_resolution
+        self.max_resolution = max_resolution
+
+        self._images_kwargs = images_kwargs
+        for key, value in images_kwargs.items():
+            setattr(self, key, value)
+
+    def prepare_image_processor_dict(self):
+        """Returns dict to instantiate the image processor with."""
+        return dict(self._images_kwargs)
+
     def prepare_image_inputs(
         self,
         batch_size=None,

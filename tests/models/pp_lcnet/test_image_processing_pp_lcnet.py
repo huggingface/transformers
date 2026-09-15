@@ -21,58 +21,20 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class PPLCNetImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=[0.406, 0.456, 0.485],
-        image_std=[0.225, 0.224, 0.229],
-        rescale_factor=0.00392156862745098,
-        do_rescale=True,
-        do_center_crop=True,
-        crop_size=None,
-        resize_short=256,
-        resample=2,
-    ):
-        size = size if size is not None else {"height": 256, "width": 256}
-        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.rescale_factor = rescale_factor
-        self.do_rescale = do_rescale
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
-        self.resize_short = resize_short
-        self.resample = resample
-
-    def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
-            "do_resize": self.do_resize,
-            "rescale_factor": self.rescale_factor,
-            "do_rescale": self.do_rescale,
-            "do_center_crop": self.do_center_crop,
-            "crop_size": self.crop_size,
-            "resize_short": self.resize_short,
-            "resample": self.resample,
-        }
+    def __init__(self, parent, size=None, **kwargs):
+        kwargs.setdefault("batch_size", 3)
+        kwargs.setdefault("image_mean", [0.406, 0.456, 0.485])
+        kwargs.setdefault("image_std", [0.225, 0.224, 0.229])
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("rescale_factor", 0.00392156862745098)
+        kwargs.setdefault("do_rescale", True)
+        kwargs.setdefault("do_center_crop", True)
+        kwargs.setdefault("crop_size", {"height": 224, "width": 224})
+        kwargs.setdefault("resize_short", 256)
+        kwargs.setdefault("resample", 2)
+        super().__init__(parent, **kwargs)
+        self.size = size if size is not None else {"height": 256, "width": 256}
 
 
 @require_torch

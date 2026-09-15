@@ -37,34 +37,13 @@ if is_vision_available():
 
 
 class Pix2StructImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        size=None,
-        do_normalize=True,
-        do_convert_rgb=True,
-        patch_size=None,
-    ):
-        size = size if size is not None else {"height": 20, "width": 20}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.size = size
-        self.do_normalize = do_normalize
-        self.do_convert_rgb = do_convert_rgb
-        self.max_patches = [512, 1024, 2048, 4096]
+    def __init__(self, parent, size=None, patch_size=None, **kwargs):
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("do_convert_rgb", True)
+        super().__init__(parent, **kwargs)
+        self.size = size if size is not None else {"height": 20, "width": 20}
         self.patch_size = patch_size if patch_size is not None else {"height": 16, "width": 16}
-
-    def prepare_image_processor_dict(self):
-        return {"do_normalize": self.do_normalize, "do_convert_rgb": self.do_convert_rgb}
+        self.max_patches = [512, 1024, 2048, 4096]
 
     def prepare_dummy_image(self):
         img_url = url_to_local_path(
