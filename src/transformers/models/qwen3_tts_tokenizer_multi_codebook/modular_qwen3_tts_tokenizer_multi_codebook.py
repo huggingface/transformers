@@ -60,31 +60,26 @@ logger = logging.get_logger(__name__)
 @strict
 class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(Qwen3OmniMoeCode2WavConfig):
     r"""
-    Configuration class for the Qwen3-TTS V2 tokenizer decoder (Code2Wav). Only the fields specific to the
-    multi-codebook tokenizer are documented below; the remaining transformer and vocoder defaults are shared with
-    [`Qwen3OmniMoeCode2WavConfig`].
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 512):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 1024):
-            MLP intermediate dimension.
-        head_dim (`int`, *optional*, defaults to 64):
-            Attention head dimension.
-        codebook_dim (`int`, *optional*, defaults to 512):
-            Dimension of quantizer codebook vectors.
-        num_semantic_quantizers (`int`, *optional*, defaults to 1):
-            Number of semantic quantizer layers.
-        semantic_codebook_size (`int`, *optional*, defaults to 4096):
-            Size of the semantic codebook.
-        latent_dim (`int`, *optional*, defaults to 1024):
-            Latent dimension used between pre-conv and transformer.
-        vector_quantization_hidden_dimension (`int`, *optional*, defaults to 512):
-            Hidden dimension for the vector quantization projection.
-        use_causal_conv (`bool`, *optional*, defaults to `True`):
-            Whether to use causal convolutions in the decoder.
-        trim_right_ratio (`float`, *optional*, defaults to 1.0):
-            Ratio for trimming the right side of transposed convolution output.
+    num_quantizers (`int`, *optional*, defaults to 16):
+        Number of residual vector quantizers used in the vocoder for fine-grained audio reconstruction.
+    upsample_rates (`Tuple[int]`, *optional*, defaults to `(8, 5, 4, 3)`):
+        Rate at which features are upsampled in the final waveform synthesis stage.
+    upsampling_ratios (`Tuple[int]`, *optional*, defaults to `(2, 2)`):
+        Ratios used in transposed convolutional layers to progressively upsample feature maps to waveform.
+    decoder_dim (`int`, *optional*, defaults to 1536):
+        Final dimensionality of the decoder's output before waveform generation.
+    num_semantic_quantizers (`int`, *optional*, defaults to 1):
+        Number of semantic quantizer layers.
+    semantic_codebook_size (`int`, *optional*, defaults to 4096):
+        Size of the semantic codebook.
+    latent_dim (`int`, *optional*, defaults to 1024):
+        Latent dimension used between pre-conv and transformer.
+    vector_quantization_hidden_dimension (`int`, *optional*, defaults to 512):
+        Hidden dimension for the vector quantization projection.
+    use_causal_conv (`bool`, *optional*, defaults to `True`):
+        Whether to use causal convolutions in the decoder.
+    trim_right_ratio (`float`, *optional*, defaults to 1.0):
+        Ratio for trimming the right side of transposed convolution output.
     """
 
     model_type = "qwen3_tts_tokenizer_multi_codebook_code2wav"
