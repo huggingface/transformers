@@ -102,6 +102,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "granitemoeshared": "granitemoe",
     "granitemoehybrid": "granitemoe",
     "gemma3n_text": "qwen3_5_text",
+    "glm5_next_text": "glm5_next",
     "qwen3_5_moe_text": "qwen3_5_text",
     "llava_next_video": "llava_next",
     "llava_onevision": "llava_next",
@@ -143,6 +144,23 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "hy_v4": [
+            # General HC prefix which is dropped
+            WeightRenaming(r"\.hc_pre\.hc_", ".hc_"),
+            # Attn gating + sinks
+            WeightRenaming(r"\.learnable_sink_param$", ".sinks"),
+            WeightRenaming(r"\.linear_gate", ".gate_proj"),
+            # Follow DSv4 HC standards
+            WeightRenaming(r"\.hc_attn_layer\.hc_fn", ".attn_hc.fn"),
+            WeightRenaming(r"\.hc_attn_layer\.hc_base", ".attn_hc.base"),
+            WeightRenaming(r"\.hc_attn_layer\.hc_scale", ".attn_hc.scale"),
+            WeightRenaming(r"\.hc_mlp_layer\.hc_fn", ".ffn_hc.fn"),
+            WeightRenaming(r"\.hc_mlp_layer\.hc_base", ".ffn_hc.base"),
+            WeightRenaming(r"\.hc_mlp_layer\.hc_scale", ".ffn_hc.scale"),
+            WeightRenaming(r"\.hc_head_fn", ".hc_fn"),
+            WeightRenaming(r"\.hc_head_base", ".hc_base"),
+            WeightRenaming(r"\.hc_head_scale", ".hc_scale"),
+        ],
         # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
         # blocks. The visual/projector tensors already use their native module names and intentionally need no mapping.
         "cosmos3_edge": [
@@ -160,7 +178,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"model\.llm\.layers", target_patterns=r"model.language_model.layers"),
             WeightRenaming(
                 source_patterns=r"model\.llm\.embed_norm\.weight",
-                target_patterns=r"model.language_model.embed_norm.weight",
+                target_patterns=r"model.language_model.embed_tokens.embed_norm.weight",
             ),
             WeightRenaming(
                 source_patterns=r"model\.llm\.embed\.weight",
@@ -408,6 +426,10 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("layer_norm_2", "layernorm_after"),
         ],
         "SegformerForSemanticSegmentation": [WeightRenaming("decode_head.linear_c", "decode_head.linear_projections")],
+        "videomae": [
+            WeightRenaming(r"attention\.attention\.q_bias$", "attention.attention.query.bias"),
+            WeightRenaming(r"attention\.attention\.v_bias$", "attention.attention.value.bias"),
+        ],
         "swin": [
             WeightRenaming("attention.self.query", "attention.q_proj"),
             WeightRenaming("attention.self.key", "attention.k_proj"),
@@ -1013,6 +1035,9 @@ def _build_checkpoint_conversion_mapping():
         ],
         "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
         "dinov3_vit": [WeightRenaming(r"(?<!model\.)layer.", r"model.layer.")],
+        "yolos": [
+            WeightRenaming(r"encoder.mid_position_embeddings", r"encoder.interpolation.mid_position_embeddings")
+        ],
         "timesfm2_5": [
             WeightRenaming("ff0", "fc1"),
             WeightRenaming("ff1", "fc2"),
@@ -1353,6 +1378,11 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="feed_forward.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
+        ],
+        "hyperclovax_vision_v2": [
+            WeightRenaming(r"^model.language_model.lm_head", r"lm_head"),
+            WeightRenaming(r"^model.vision_projector", r"model.projector"),
+            PrefixChange(prefix_to_remove="model", model_prefix="model.language_model"),
         ],
         "nomic_bert": [
             WeightRenaming(r"encoder.layers", r"layers"),

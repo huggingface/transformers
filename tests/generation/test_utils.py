@@ -411,6 +411,41 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             self._check_generate_outputs(output_generate, model.config, use_cache=True)
 
     @pytest.mark.generate
+    def test_cached_decode_matches_cacheless(self):
+        """Greedy decoding with a cache must produce what recomputing the whole sequence produces.
+
+        The two tests above run both configurations but only check their own shapes, so a cache that feeds
+        its layers the wrong positions or a mask of the wrong width passes both. Models whose state *is*
+        their cache (`_is_stateful`) have no cacheless form to compare against and are skipped.
+        """
+        for model_class in self.all_generative_model_classes:
+            if model_class._is_stateful:
+                self.skipTest(reason=f"{model_class.__name__} keeps recurrent state, so decode has no cacheless form")
+            # Only the weights are pinned; the testers draw inputs from a `global_rng` this does not touch,
+            # so the input varies per process — the invariant has to hold for any input.
+            set_seed(42)
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            model = model_class(config).to(torch_device).eval()
+
+            cached, cacheless = (
+                self._greedy_generate(
+                    model=model,
+                    inputs_dict=inputs_dict,
+                    output_logits=True,
+                    output_scores=True,
+                    return_dict_in_generate=True,
+                    use_cache=use_cache,
+                )
+                for use_cache in (True, False)
+            )
+
+            assert_similar_generate_outputs(cached, cacheless, atol=1e-3, rtol=1e-3)
+            # That check is id-first, so it cannot see a cache bug that moves the logits without flipping
+            # the argmax. This tolerance is loose enough for kernel noise, tight enough for a real one.
+            for step, (with_cache, without_cache) in enumerate(zip(cached.logits, cacheless.logits)):
+                torch.testing.assert_close(with_cache, without_cache, rtol=1e-2, atol=1e-2, msg=f"step {step}")
+
+    @pytest.mark.generate
     def test_sample_generate(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()

@@ -81,7 +81,7 @@ class ImageTextToTextPipeline(Pipeline):
     >>>         "content": [
     >>>             {
     >>>                 "type": "image",
-    >>>                 "url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+    >>>                 "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen_vl_demo.jpeg",
     >>>             },
     >>>             {"type": "text", "text": "Describe this image."},
     >>>         ],
@@ -96,7 +96,7 @@ class ImageTextToTextPipeline(Pipeline):
     >>> pipe(text=messages, max_new_tokens=20, return_full_text=False)
     [{'input_text': [{'role': 'user',
         'content': [{'type': 'image',
-        'url': 'https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg'},
+        'url': 'https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen_vl_demo.jpeg'},
         {'type': 'text', 'text': 'Describe this image.'}]},
     {'role': 'assistant',
         'content': [{'type': 'text', 'text': 'There is a dog and'}]}],
