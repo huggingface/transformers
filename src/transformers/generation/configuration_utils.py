@@ -357,6 +357,8 @@ class GenerationConfig(PushToHubMixin):
             `p_target`, trading a controlled distributional bias for a higher acceptance rate. Defaults
             to `None`, which keeps decoding lossless. Requires the assistant model to return logits, so it
             is not compatible with prompt lookup decoding.
+        speculation_type (`str`, *optional*):
+            The requested speculation type. Accepted values are [`dflash`].
 
         > Parameters related to performances and compilation
 
@@ -379,6 +381,10 @@ class GenerationConfig(PushToHubMixin):
 
     # Hash to detect whether the instance was modified after loading
     _original_object_hash: int | None
+
+    # Set at runtime to correctly slice inputs in `_prefill` in case we restart from an existing non-empty Cache, and the mask would
+    # otherwise be dropped due to containing only 1s. This allows to differentiate between restarting with full or sliced input_ids
+    _mask_length: int | None
 
     def __init__(self, **kwargs):
         # Snapshot of the attributes the caller explicitly provided (before the `kwargs.pop(...)` calls below
@@ -463,6 +469,7 @@ class GenerationConfig(PushToHubMixin):
         self.assistant_lookbehind = kwargs.pop("assistant_lookbehind", None)
         self.target_lookbehind = kwargs.pop("target_lookbehind", None)
         self.assistant_ensemble_weight = kwargs.pop("assistant_ensemble_weight", None)
+        self.speculation_type = kwargs.pop("speculation_type", None)
 
         # Performance
         self.compile_config = kwargs.pop("compile_config", None)
@@ -576,7 +583,7 @@ class GenerationConfig(PushToHubMixin):
                 generation_mode = GenerationMode.ASSISTED_GENERATION
             else:
                 logger.warning(
-                    "You've set `assistant_model`or `use_mtp`, which triggers assisted generate. Currently, assisted generate "
+                    "You've set `assistant_model` or `use_mtp`, which triggers assisted generate. Currently, assisted generate "
                     "is only supported with Greedy Search and Sample. However, the base decoding mode (based on "
                     f"current flags) is {generation_mode} -- some of the set flags will be ignored."
                 )
@@ -822,6 +829,24 @@ class GenerationConfig(PushToHubMixin):
                     minor_issues[extra_output_flag] = (
                         f"`return_dict_in_generate` is NOT set to `True`, but `{extra_output_flag}` is. When "
                         f"`return_dict_in_generate` is not `True`, `{extra_output_flag}` is ignored."
+                    )
+
+        # 2.7. Forcing a token while suppressing it. If every forced (bos/eos) token is also suppressed, all logits
+        # become `-inf` at the forcing step, yielding `nan` probabilities and a generation crash (see #24099).
+        if self.suppress_tokens is not None:
+            suppressed_tokens = set(self.suppress_tokens)
+            for forced_attr in ("forced_bos_token_id", "forced_eos_token_id"):
+                forced_tokens = getattr(self, forced_attr)
+                if forced_tokens is None:
+                    continue
+                forced_tokens = {forced_tokens} if isinstance(forced_tokens, int) else set(forced_tokens)
+                if forced_tokens and forced_tokens.issubset(suppressed_tokens):
+                    raise ValueError(
+                        f"Every token in `{forced_attr}` ({sorted(forced_tokens)}) is also in `suppress_tokens`. "
+                        "Forcing a token while suppressing it sets all logits to `-inf` at the forcing step, which "
+                        "produces `nan` probabilities and crashes generation. Remove the overlapping token(s) from "
+                        f"either `{forced_attr}` or `suppress_tokens` (if you meant to prevent an early EOS token, use "
+                        "`min_new_tokens` instead)."
                     )
 
         # 3. Check common issue: passing `generate` arguments inside the generation config
@@ -1180,6 +1205,8 @@ class GenerationConfig(PushToHubMixin):
             del output["_commit_hash"]
         if "_original_object_hash" in output:
             del output["_original_object_hash"]
+        if "_mask_length" in output:
+            del output["_mask_length"]
 
         # Transformers version when serializing this file
         output["transformers_version"] = __version__
@@ -1332,6 +1359,8 @@ class GenerationConfig(PushToHubMixin):
                 to_remove.append(key)
             elif hasattr(self, key):
                 if not defaults_only or getattr(self, key) is None:
+                    if key == "watermarking_config" and isinstance(value, dict):
+                        value = WatermarkingConfig.from_dict(value)
                     setattr(self, key, value)
                     to_remove.append(key)
 

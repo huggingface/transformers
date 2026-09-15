@@ -19,7 +19,7 @@ import re
 from typing import Any
 
 from ...tokenization_python import PreTrainedTokenizer
-from ...utils import is_phonemizer_available, is_uroman_available, logging
+from ...utils import is_phonemizer_available, is_uroman_available, logging, requires_backends
 
 
 if is_phonemizer_available():
@@ -186,8 +186,7 @@ class VitsTokenizer(PreTrainedTokenizer):
                 filtered_text = uroman.romanize_string(filtered_text)
 
         if self.phonemize:
-            if not is_phonemizer_available():
-                raise ImportError("Please install the `phonemizer` Python package to use this tokenizer.")
+            requires_backends(self, ["phonemizer"])
 
             filtered_text = phonemizer.phonemize(
                 filtered_text,

@@ -33,11 +33,10 @@ from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return
 from .configuration_tipsv2_dpt import Tipsv2DptConfig
 
 
+@auto_docstring
 @dataclass
 class Tipsv2DptDensePredictorOutput(ModelOutput):
     r"""
-    predicted_depth (`torch.FloatTensor` of shape `(batch_size, height, width)`):
-        Predicted depth for each pixel.
     normals (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
         Raw normal map predictions (unnormalized).
     segmentation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels, height, width)`):

@@ -33,13 +33,13 @@ permissions:
 
 jobs:
   setup:
-    if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu"]'), inputs.job)
+    if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu", "run_quantization_torch_gpu"]'), inputs.job)
     name: Setup
     runs-on: ubuntu-latest
     outputs:
       slice_ids: ${{ steps.set-matrix.outputs.slice_ids }}
       folder_slices: ${{ steps.set-matrix.outputs.folder_slices }}
-      quantization_matrix: ${{ steps.set-matrix.outputs.quantization_matrix }}
+      quantization_matrix: ${{ steps.set-matrix-quantization.outputs.quantization_matrix }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -325,6 +325,92 @@ jobs:
           name: ${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
           path: reports/${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
 
+  run_quantization_torch_gpu:
+    if: ${{ inputs.job == 'run_quantization_torch_gpu' }}
+    name: " "
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        folders: ${{ fromJson(needs.setup.outputs.quantization_matrix) }}
+        machine_type: [1gaudi, 2gaudi]
+    runs-on:
+      group: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
+    container:
+      image: vault.habana.ai/gaudi-docker/1.21.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
+      options: --runtime=habana
+        -v /mnt/cache/.cache/huggingface:/mnt/cache/.cache/huggingface
+        --env OMPI_MCA_btl_vader_single_copy_mechanism=none
+        --env HABANA_VISIBLE_DEVICES
+        --env HABANA_VISIBLE_MODULES
+        --cap-add=sys_nice
+        --shm-size=64G
+    steps:
+      - name: Echo folder ${{ matrix.folders }}
+        shell: bash
+        # For a folder like `quantization/gptq`, set `matrix_folders` to `quantization_gptq`, which is what the
+        # report and artifact names below use (artifact names cannot contain `/`).
+        env:
+          matrix_folders_raw: ${{ matrix.folders }}
+        run: |
+          echo "$matrix_folders_raw"
+          matrix_folders="${matrix_folders_raw/'quantization/'/'quantization_'}"
+          echo "$matrix_folders"
+          echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install dependencies
+        run: |
+          pip install -e .[testing,torch] "numpy<2.0.0" scipy scikit-learn librosa soundfile
+
+      - name: HL-SMI
+        run: |
+          hl-smi
+          echo "HABANA_VISIBLE_DEVICES=${HABANA_VISIBLE_DEVICES}"
+          echo "HABANA_VISIBLE_MODULES=${HABANA_VISIBLE_MODULES}"
+
+      - name: Environment
+        run: python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        run: pip freeze
+
+      - name: Set `machine_type` for report and artifact names
+        shell: bash
+        run: |
+          if [ "${{ matrix.machine_type }}" = "1gaudi" ]; then
+            machine_type=single-gpu
+          elif [ "${{ matrix.machine_type }}" = "2gaudi" ]; then
+            machine_type=multi-gpu
+          else
+            machine_type=${{ matrix.machine_type }}
+          fi
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
+
+      - name: Run quantization tests on Intel Gaudi
+        env:
+          folders: ${{ matrix.folders }}
+        run: |
+          python3 -m pytest -v --make-reports="${machine_type}_run_quantization_torch_gpu_${matrix_folders}_test_reports" "tests/${folders}" -m "not not_device_test"
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: |
+          cat "reports/${machine_type}_run_quantization_torch_gpu_${matrix_folders}_test_reports/failures_short.txt"
+
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports
+          path: reports/${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports
+
   send_results:
     name: Slack Report
     needs:
@@ -335,6 +421,7 @@ jobs:
         run_torch_cuda_extensions_gpu,
         run_pipelines_torch_gpu,
         run_trainer_and_fsdp_gpu,
+        run_quantization_torch_gpu,
       ]
     if: ${{ always() }}
     uses: ./.github/workflows/slack-report.yml

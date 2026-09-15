@@ -293,8 +293,10 @@ def _reshaped_vision_attention_forward(
         "Chunked vision attention received an empty input.",
     )
     num_segments = cu_seqlens.shape[0] - 1
+    # The reshape-into-batch below needs equal-length segments.
+    segment_lengths = cu_seqlens[1:] - cu_seqlens[:-1]
     torch_compilable_check(
-        seq_length % num_segments == 0,
+        (segment_lengths == segment_lengths[0]).all(),
         "Chunked vision attention requires uniform segment lengths during export. "
         "Ensure all images have the same resolution (use do_resize=True in the processor) "
         "or pad inputs to a common size.",
@@ -384,12 +386,15 @@ def _reshaped_vision_attention_forward(
     "transformers.models.glm4v_moe.modeling_glm4v_moe.Glm4vMoeVisionAttention.forward",
     "transformers.models.glm_ocr.modeling_glm_ocr.GlmOcrVisionAttention.forward",
     "transformers.models.ernie4_5_vl_moe.modeling_ernie4_5_vl_moe.Ernie4_5_VLMoeVisionAttention.forward",
+    # Combined `qkv` + optional `(cos, sin)` rotary + `.proj`
+    "transformers.models.cohere_compass.modeling_cohere_compass.CohereCompassVisionAttention.forward",
     # Asymmetric `qkv` split + `(cos, sin)` rotary + `.proj`
     "transformers.models.exaone4_5.modeling_exaone4_5.Exaone4_5_VisionAttention.forward",
     # Separate `.q` / `.k` / `.v` + single rotary tensor + `.proj`
     "transformers.models.qwen2_5_omni.modeling_qwen2_5_omni.Qwen2_5OmniVisionAttention.forward",
     # Separate `q_proj`/`k_proj`/`v_proj` + `(cos, sin)` rotary + `.proj` (single return)
     "transformers.models.kimi_k25.modeling_kimi_k25.Kimi_K25VisionAttention.forward",
+    "transformers.models.muse_glimmer.modeling_muse_glimmer.MuseGlimmerVisionAttention.forward",
     # Separate `_proj` + `(cos, sin)` rotary + `.out_proj` (tuple return)
     "transformers.models.video_llama_3.modeling_video_llama_3.VideoLlama3VisionAttention.forward",
     "transformers.models.paddleocr_vl.modeling_paddleocr_vl.PaddleOCRVisionAttention.forward",
@@ -640,8 +645,9 @@ def get_auto_dynamic_shapes(inputs: Any) -> Any:
 
     - Tensors → per-dimension Dim.AUTO spec.
     - Scalars / None → None (no dynamic dims).
-    - Objects with ``__dict__`` (ModelOutput, Cache, …) → flat list of leaf specs,
-      matching the ``TreeSpec(list, …)`` that torch.export produces for these types.
+    - Registered pytree nodes (ModelOutput, Cache, …) → list of one spec per child of the
+      registered flatten, recursed, matching the ``TreeSpec(list, …)`` torch.export compares against.
+    - Other objects with ``__dict__`` → flat list of leaf specs.
     - Lists / tuples → same container type, recursed element-wise.
     - Plain dicts → recursed dict of specs.
     - Everything else → None.
@@ -650,13 +656,21 @@ def get_auto_dynamic_shapes(inputs: Any) -> Any:
         return _auto_dynamic_shape(inputs)
     if inputs is None or isinstance(inputs, (int, float, bool, str)):
         return None
-    if hasattr(inputs, "__dict__"):
-        leaves, _ = _pytree_flatten(inputs)
-        return get_auto_dynamic_shapes(leaves)
     if type(inputs) in (list, tuple, set, frozenset):
         return type(inputs)(get_auto_dynamic_shapes(v) for v in inputs)
     if type(inputs) is dict:
         return {k: get_auto_dynamic_shapes(v) for k, v in inputs.items()}
+    if (node := torch.utils._pytree.SUPPORTED_NODES.get(type(inputs))) is not None:
+        # Registered pytree node (a `ModelOutput`, a `Cache` subclass, ...). Mirror one level of its
+        # registered flatten and recurse, so a field holding a container keeps that container in the
+        # spec. A `Cache` is registered with a flatten that collapses to tensors, so it still yields a
+        # flat list; a `ModelOutput` yields one child per field, which is what `torch.export` compares
+        # against -- flattening it to tensors hands over a flat spec where nested children are expected.
+        children, _ = node.flatten_fn(inputs)
+        return [get_auto_dynamic_shapes(child) for child in children]
+    if hasattr(inputs, "__dict__"):
+        leaves, _ = _pytree_flatten(inputs)
+        return get_auto_dynamic_shapes(leaves)
     return None
 
 

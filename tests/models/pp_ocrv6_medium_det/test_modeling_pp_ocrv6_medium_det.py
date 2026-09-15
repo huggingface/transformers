@@ -254,7 +254,7 @@ class PPOCRV6MediumDetModelIntegrationTest(unittest.TestCase):
             PPOCRV5ServerDetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         )
         img_url = url_to_local_path(
-            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png"
         )
         self.image = load_image(img_url)
 
@@ -287,14 +287,13 @@ class PPOCRV6MediumDetModelIntegrationTest(unittest.TestCase):
 
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape_logits)
         torch.testing.assert_close(outputs.last_hidden_state[0, 0, :3, :3], expected_logits, rtol=2e-4, atol=2e-4)
-        expected_shape_boxes = torch.Size((5, 4, 2))
+        expected_shape_boxes = torch.Size((4, 4, 2))
         expected_boxes = torch.tensor(
             [
-                [[76, 551], [397, 541], [398, 575], [78, 586]],
-                [[15, 505], [517, 486], [519, 533], [16, 552]],
-                [[525, 480], [560, 478], [561, 485], [525, 487]],
-                [[193, 454], [400, 445], [402, 482], [195, 491]],
-                [[32, 409], [487, 388], [489, 433], [35, 455]],
+                [[88, 364], [304, 364], [304, 405], [88, 405]],
+                [[89, 267], [260, 267], [260, 316], [89, 316]],
+                [[87, 175], [269, 175], [269, 225], [87, 225]],
+                [[89, 88], [572, 88], [572, 145], [89, 145]],
             ],
             dtype=torch.short,
             device=torch_device,
@@ -303,9 +302,9 @@ class PPOCRV6MediumDetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(results[0]["boxes"].shape, expected_shape_boxes)
         torch.testing.assert_close(results[0]["boxes"], expected_boxes, rtol=2e-2, atol=2e-2)
 
-        expected_scores = torch.tensor([0.8665, 0.8453, 0.4558, 0.8601, 0.8996], device=torch_device)
-        self.assertEqual(results[0]["scores"].shape, (5,))
+        expected_scores = torch.tensor([0.9016, 0.9150, 0.9287, 0.8561], device=torch_device)
+        self.assertEqual(results[0]["scores"].shape, (4,))
         torch.testing.assert_close(results[0]["scores"], expected_scores, rtol=2e-2, atol=2e-2)
 
-        self.assertEqual(results[0]["labels"].shape, (5,))
+        self.assertEqual(results[0]["labels"].shape, (4,))
         self.assertTrue((results[0]["labels"] == 0).all())  # Single class: text
