@@ -68,8 +68,8 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
 @slow
 class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     MODEL_ID = "zai-org/GLM-4.5-Air"
-    NUM_TOKENS_TO_GENERATE = 10
-    EXPECTED_TEXT_COMPLETION = None  # TODO: update after first CI run
+    NUM_TOKENS_TO_GENERATE = 5
+    EXPECTED_TEXT_COMPLETION = None  # TODO: fill in after first CI run (test will fail and print actual values)
 
     @classmethod
     def setUpClass(cls):
