@@ -280,7 +280,7 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @require_vision
     @require_torch
     def test_backends_equivalence(self):
-        """Override to also compare pixel_attention_mask, rows, and cols (return_row_col_info=True)."""
+        """Override to use BICUBIC resampling and return rows and cols (return_row_col_info=True)."""
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
@@ -298,18 +298,15 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         backend_names = list(encodings.keys())
         reference_backend = backend_names[0]
-        reference = encodings[reference_backend]
         for backend_name in backend_names[1:]:
-            encoding = encodings[backend_name]
-            self._assert_tensors_equivalence(reference.pixel_values, encoding.pixel_values)
-            self._assert_masks_equivalence(reference.pixel_attention_mask, encoding.pixel_attention_mask)
-            self.assertEqual(reference.rows, encoding.rows)
-            self.assertEqual(reference.cols, encoding.cols)
+            self._assert_encodings_equivalence(
+                encodings[reference_backend], encodings[backend_name], reference_backend, backend_name
+            )
 
     @require_vision
     @require_torch
     def test_backends_equivalence_batched(self):
-        """Override to also compare pixel_attention_mask, rows, and cols (return_row_col_info=True)."""
+        """Override to use BICUBIC resampling and return rows and cols (return_row_col_info=True)."""
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
@@ -334,13 +331,10 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         backend_names = list(encodings.keys())
         reference_backend = backend_names[0]
-        reference = encodings[reference_backend]
         for backend_name in backend_names[1:]:
-            encoding = encodings[backend_name]
-            self._assert_tensors_equivalence(reference.pixel_values, encoding.pixel_values, atol=3e-1)
-            self._assert_masks_equivalence(reference.pixel_attention_mask, encoding.pixel_attention_mask)
-            self.assertEqual(reference.rows, encoding.rows)
-            self.assertEqual(reference.cols, encoding.cols)
+            self._assert_encodings_equivalence(
+                encodings[reference_backend], encodings[backend_name], reference_backend, backend_name, atol=3e-1
+            )
 
     def test_get_num_patches_without_images(self):
         for image_processing_class in self.image_processing_classes.values():

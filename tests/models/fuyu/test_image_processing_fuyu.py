@@ -184,10 +184,7 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
 
         backend_names = list(encodings.keys())
         reference_backend = backend_names[0]
-        reference_encoding = encodings[reference_backend].images[0][0]
         for backend_name in backend_names[1:]:
-            self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].images[0][0])
-            # `images` is a nested list, the remaining keys are tensors and must match too
             self._assert_encodings_equivalence(
                 encodings[reference_backend], encodings[backend_name], reference_backend, backend_name
             )
