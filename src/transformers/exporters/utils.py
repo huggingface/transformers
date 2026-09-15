@@ -75,8 +75,8 @@ if is_torch_available():
 # as dotted paths). The export pipeline drives them via the backend-keyed helpers below.
 
 _PATCHES: dict[str, list[tuple[Any, str, callable]]] = {}
-_FX_NODE_FIXES: dict[str, list[callable]] = {}
 _FX_PROGRAM_FIXES: dict[str, list[callable]] = {}
+_FX_NODE_FIXES: dict[str, list[callable]] = {}
 
 
 @contextlib.contextmanager
@@ -310,7 +310,7 @@ def cast_leaf_tensors(obj: Any, dtype: torch.dtype, device: torch.device) -> Any
     """Recursively cast all floating-point tensors to the given dtype and device."""
 
     def _cast(tensor: torch.Tensor) -> torch.Tensor:
-        return tensor.to(dtype=dtype, device=device) if tensor.is_floating_point() else tensor.to(device=device)
+        return tensor.to(dtype=dtype if tensor.is_floating_point() else None, device=device)
 
     return _map_leaf_tensors(obj, _cast)
 
@@ -386,12 +386,14 @@ def prepare_for_export(
     with torch.no_grad():
         precompute_export_inputs(model, inputs)
 
-    # Cast all input tensors to match the model's dtype and device (e.g. cache objects
-    # created before the model was moved to bfloat16/CUDA by a backend preparation step).
-    dtype = module_dtype(model)
+    # Move input tensors onto the model's device (e.g. a cache built on CPU before a backend moved the
+    # model). Dtypes are left as-is on purpose: inputs already carry the caller's/model's dtype, and cache
+    # entries keep the dtype the model allocated them at — notably SSM/recurrent states the mixer holds in
+    # fp32 for scan stability even in a bf16 model — which a blanket downcast would corrupt, making an
+    # exported decode step diverge from eager.
     device = module_device(model)
-    if dtype is not None or device is not None:
-        inputs = cast_leaf_tensors(inputs, dtype=dtype, device=device)
+    if device is not None:
+        inputs = cast_leaf_tensors(inputs, dtype=None, device=device)
 
     return model, inputs, output_flags
 
