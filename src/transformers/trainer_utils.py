@@ -1060,9 +1060,6 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     [`torch.nn.Module.load_state_dict`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html?highlight=load_state_dict#torch.nn.Module.load_state_dict)
     but for a sharded checkpoint.
 
-    This load is performed efficiently: each checkpoint shard is loaded one by one in RAM and deleted after being
-    loaded in the model.
-
     Args:
         model (`torch.nn.Module`): The model in which to load the checkpoint.
         folder (`str` or `os.PathLike`): A path to a folder containing the sharded checkpoint.
@@ -1077,6 +1074,9 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
             - `missing_keys` is a list of str containing the missing keys
             - `unexpected_keys` is a list of str containing the unexpected keys
     """
+    from .core_model_loading import apply_weight_conversion
+    from .modeling_utils import PreTrainedModel
+
     # Load the index
     index_file = os.path.join(folder, WEIGHTS_INDEX_NAME)
     safe_index_file = os.path.join(folder, SAFE_WEIGHTS_INDEX_NAME)
@@ -1096,9 +1096,20 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
 
     shard_files = list(set(index["weight_map"].values()))
 
-    # If strict=True, error before loading any of the state dicts.
-    # TODO: Here, update the weight map with the config.dynamic_weight_conversion
-    loaded_keys = index["weight_map"].keys()
+    if load_safe:
+        loader = safe_load_file
+    else:
+        check_torch_load_is_safe()
+        loader = partial(torch.load, map_location="cpu", weights_only=True)
+
+    state_dict = {}
+    for shard_file in shard_files:
+        state_dict.update(loader(os.path.join(folder, shard_file)))
+    if isinstance(model, PreTrainedModel):
+        state_dict = apply_weight_conversion(model, state_dict)
+
+    # If strict=True, error before loading the state dict.
+    loaded_keys = state_dict.keys()
     model_keys = model.state_dict().keys()
     missing_keys = [key for key in model_keys if key not in loaded_keys]
     unexpected_keys = [key for key in loaded_keys if key not in model_keys]
@@ -1112,19 +1123,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
             error_message += f"\nUnexpected key(s): {str_unexpected_keys}."
         raise RuntimeError(error_message)
 
-    if load_safe:
-        loader = safe_load_file
-    else:
-        check_torch_load_is_safe()
-        loader = partial(torch.load, map_location="cpu", weights_only=True)
-
-    for shard_file in shard_files:
-        state_dict = loader(os.path.join(folder, shard_file))
-        model.load_state_dict(state_dict, strict=False)
-
-        # Make sure memory is freed before we load the next state dict.
-        del state_dict
-        gc.collect()
+    model.load_state_dict(state_dict, strict=False)
 
     # Return the same thing as PyTorch load_state_dict function.
     return torch.nn.modules.module._IncompatibleKeys(missing_keys, unexpected_keys)
