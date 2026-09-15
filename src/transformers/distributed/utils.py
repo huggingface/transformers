@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import warnings
+from collections import defaultdict
 from datetime import timedelta
 from typing import TYPE_CHECKING, TypeGuard
 
@@ -290,15 +291,109 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
     return {}
 
 
-def save_model_checkpoint_distributed(model, checkpoint_dir: str) -> None:
-    """Save model parameters as standard HF-format sharded safetensors using
-    DCP + HuggingFaceStorageWriter with consolidation enabled.
+def _prepare_state_dict_for_dcp(state_dict):
+    """Replace disjoint DTensor shards with contiguous shards in the checkpoint view."""
+    from torch.distributed.tensor import Shard
+    from torch.distributed.tensor.placement_types import _StridedShard
+    from torch.utils._pytree import tree_map
 
-    Every rank first writes its own shard in parallel under
-    `<checkpoint_dir>/sharded/`, then a consolidation pass reads those shards
-    and emits HF-compatible `model-*-of-N.safetensors` (+ index) at
-    `<checkpoint_dir>/`. The result is a directory `from_pretrained` reads
-    through its normal path — no special flag needed at load time.
+    def prepare(value):
+        if is_dtensor(value) and any(isinstance(p, _StridedShard) for p in value.placements):
+            placements = tuple(Shard(p.dim) if isinstance(p, _StridedShard) else p for p in value.placements)
+            return value.redistribute(placements=placements)
+        return value
+
+    return tree_map(prepare, state_dict)
+
+
+def save_model_checkpoint_distributed(
+    model, checkpoint_dir: str, *, checkpoint_format: str = "safetensors", consolidate: bool = True
+) -> None:
+    """Save rank-local model shards with DCP, optionally consolidating them.
+
+        - `checkpoint_format` selects safetensors or native Torch DCP storage.
+        - With `consolidate=True`, rank-local files are kept in `sharded/` and complete
+          weights are written at the root.
+
+    Torch consolidation materializes the full state dict in rank 0's CPU memory.
+    Without consolidation, load the root directory with DCP and the matching
+    storage reader, these rank-local files are not `from_pretrained` checkpoints.
+    """
+    if checkpoint_format not in ("safetensors", "torch"):
+        raise ValueError("`checkpoint_format` must be 'safetensors' or 'torch'.")
+    if not is_torch_greater_or_equal("2.7"):
+        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
+
+    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
+    # being emitted if the function is not used
+    import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.state_dict import get_model_state_dict
+
+    # DCP describes each DTensor as one rectangular chunk, which cannot represent packed shards.
+    # We redistribute any strided shards to contiguous shards so DCP can write them out.
+    # Sub-optimal compared to a future DCP that can write strided shards directly, but works for now.
+    state_dict = _prepare_state_dict_for_dcp(get_model_state_dict(model))
+    if checkpoint_format == "safetensors":
+        from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
+
+        writer = HuggingFaceStorageWriter(
+            path=checkpoint_dir,
+            save_distributed=True,
+            enable_consolidation=consolidate,
+        )
+    else:
+        shard_dir = os.path.join(checkpoint_dir, "sharded") if consolidate else checkpoint_dir
+        writer = dcp.FileSystemWriter(shard_dir)
+
+    dcp.save(state_dict, storage_writer=writer)
+
+    if checkpoint_format == "torch" and consolidate and _get_torch_distributed_rank() == 0:
+        from torch.distributed.checkpoint.format_utils import dcp_to_torch_save
+
+        from ..utils import WEIGHTS_NAME
+
+        dcp_to_torch_save(shard_dir, os.path.join(checkpoint_dir, WEIGHTS_NAME))
+    # All ranks wait until consolidated weights are ready for loading.
+    _distributed_barrier()
+
+
+def load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike) -> None:
+    """Load local DCP weights into an initialized model, preserving its current mesh and placements."""
+    if not is_torch_greater_or_equal("2.7"):
+        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
+
+    import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.state_dict import get_model_state_dict, set_model_state_dict
+
+    has_torch_metadata = os.path.isfile(os.path.join(checkpoint_dir, ".metadata"))
+    has_safetensors = any(name.endswith(".safetensors") for name in os.listdir(checkpoint_dir))
+    if has_torch_metadata and has_safetensors:
+        raise ValueError("Checkpoint directory contains both Torch DCP metadata and safetensors files.")
+    if has_torch_metadata:
+        reader = dcp.FileSystemReader(checkpoint_dir)
+    elif has_safetensors:
+        from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageReader
+
+        reader = HuggingFaceStorageReader(checkpoint_dir)
+    else:
+        raise ValueError(f"No Torch DCP metadata or safetensors files found in {checkpoint_dir}.")
+
+    original_state = get_model_state_dict(model)
+    if any(value.is_meta for value in original_state.values() if isinstance(value, torch.Tensor)):
+        raise ValueError("Materialize the model's tensors before loading a distributed checkpoint.")
+    state = _prepare_state_dict_for_dcp(original_state)
+    dcp.load(state, storage_reader=reader)
+    for name, value in state.items():
+        if is_dtensor(value) and value.placements != original_state[name].placements:
+            state[name] = value.redistribute(placements=original_state[name].placements)
+    set_model_state_dict(model, state)
+
+
+def save_optimizer_distributed(model, optimizer, checkpoint_dir: str, *, consolidate: bool = False) -> None:
+    """Save optimizer state via DCP, optionally also writing `optimizer.pt`.
+
+    Native DCP files are retained in `checkpoint_dir` in both cases. Consolidation
+    materializes the full optimizer state in rank 0's CPU memory. All ranks must call.
     """
     if not is_torch_greater_or_equal("2.7"):
         raise OSError("Distributed checkpointing requires `torch>=2.7`.")
@@ -306,47 +401,114 @@ def save_model_checkpoint_distributed(model, checkpoint_dir: str) -> None:
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
     import torch.distributed.checkpoint as dcp
-    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
-    from torch.distributed.checkpoint.state_dict import get_model_state_dict
+    from torch.distributed.checkpoint.state_dict import StateDictOptions, get_optimizer_state_dict
 
-    state_dict = get_model_state_dict(model)
-    dcp.save(
-        state_dict,
-        storage_writer=HuggingFaceStorageWriter(
-            path=checkpoint_dir,
-            save_distributed=True,
-            enable_consolidation=True,
-        ),
-    )
-    # Wait for rank 0 to finish writing the HF safetensors so other
-    # ranks don't return (and hit `from_pretrained`) before the files exist.
-    _distributed_barrier()
-
-
-def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
-    """Save optimizer state via DCP."""
-    if not is_torch_greater_or_equal("2.7"):
-        raise OSError("Distributed checkpointing requires `torch>=2.7`.")
-
-    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
-    # being emitted if the function is not used
-    import torch.distributed.checkpoint as dcp
-    from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict
-
-    optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
+    # Key group options by parameter name so regrouping after a mesh change remains loadable.
+    options = StateDictOptions(flatten_optimizer_state_dict=True)
+    optimizer_state_dict = _prepare_state_dict_for_dcp(get_optimizer_state_dict(model, optimizer, options=options))
     dcp.save({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
+    if consolidate:
+        if _get_torch_distributed_rank() == 0:
+            from torch.distributed.checkpoint.format_utils import dcp_to_torch_save
+
+            dcp_to_torch_save(checkpoint_dir, os.path.join(checkpoint_dir, "optimizer.pt"))
+        _distributed_barrier()
 
 
 def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
-    """Load optimizer state via DCP."""
+    """Load optimizer state from a DCP directory or a consolidated `optimizer.pt` file.
+
+    Passing a directory uses the retained DCP shards. Passing the file loads the
+    full optimizer state on each rank's CPU before distributing it into the current
+    layout. Prefer the directory when memory is limited. All ranks must call.
+    """
     if not is_torch_greater_or_equal("2.7"):
         raise OSError("Distributed checkpointing requires `torch>=2.7`.")
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
     import torch.distributed.checkpoint as dcp
-    from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict, set_optimizer_state_dict
+    from torch.distributed.checkpoint.state_dict import (
+        StateDictOptions,
+        get_optimizer_state_dict,
+        set_optimizer_state_dict,
+    )
+    from torch.utils._pytree import tree_map
 
-    optimizer_state_dict = get_optimizer_state_dict(model, optimizer)
-    dcp.load({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
+    options = StateDictOptions(flatten_optimizer_state_dict=True)
+    optimizer_state_dict = get_optimizer_state_dict(model, optimizer, options=options)
+    checkpoint_state_dict = _prepare_state_dict_for_dcp(optimizer_state_dict)
+    if os.path.isfile(checkpoint_dir):
+        from torch.distributed.tensor import distribute_tensor
+
+        loaded_state = torch.load(checkpoint_dir, map_location="cpu", weights_only=True)["optimizer"]
+        missing_keys = checkpoint_state_dict.keys() - loaded_state.keys()
+        if missing_keys:
+            raise ValueError(f"Missing keys in optimizer checkpoint: {sorted(missing_keys)}")
+        for key, target in checkpoint_state_dict.items():
+            value = loaded_state[key]
+            if isinstance(target, torch.Tensor) and (
+                not isinstance(value, torch.Tensor) or value.shape != target.shape
+            ):
+                raise ValueError(f"Optimizer checkpoint tensor {key!r} must have shape {tuple(target.shape)}.")
+        for key, target in checkpoint_state_dict.items():
+            value = loaded_state[key]
+            if is_dtensor(target):
+                value = distribute_tensor(value.to(target.device), target.device_mesh, target.placements)
+            elif isinstance(target, torch.Tensor):
+                value = value.to(target.device)
+            checkpoint_state_dict[key] = value
+    else:
+        dcp.load({"optimizer": checkpoint_state_dict}, checkpoint_id=checkpoint_dir)
+    optimizer_state_dict = tree_map(
+        lambda loaded, original: loaded.redistribute(placements=original.placements)
+        if is_dtensor(original) and loaded.placements != original.placements
+        else loaded,
+        checkpoint_state_dict,
+        optimizer_state_dict,
+    )
     set_optimizer_state_dict(model, optimizer, optimizer_state_dict)
+
+
+def clip_grad_norm_(parameters, max_norm, norm_type=2.0, error_if_nonfinite=False, foreach=None):
+    """
+    Equivalent to torch.nn.utils.clip_grad_norm_ but supports a mixture of ordinary and DTensors parameters.
+    """
+    from torch.nn.utils import clip_grads_with_norm_, get_total_norm
+
+    parameters = [parameters] if isinstance(parameters, torch.Tensor) else list(parameters)
+    norm_type = float(norm_type)
+    max_norm = float(max_norm)
+    params_by_mesh = defaultdict(list)
+    for param in parameters:
+        if param.grad is not None:
+            params_by_mesh[param.grad.device_mesh if is_dtensor(param.grad) else None].append(param)
+
+    if len(params_by_mesh) <= 1 and max_norm != float("inf"):
+        total_norm = torch.nn.utils.clip_grad_norm_(parameters, max_norm, norm_type, error_if_nonfinite, foreach)
+        return total_norm.full_tensor() if is_dtensor(total_norm) else total_norm
+
+    if not params_by_mesh:
+        return torch.tensor(0.0)
+
+    norms = []
+    for params in params_by_mesh.values():
+        norm = get_total_norm([param.grad for param in params], norm_type, foreach=foreach)
+        norms.append(norm.full_tensor() if is_dtensor(norm) else norm)
+    stacked_norms = torch.stack([norm.to(norms[0].device) for norm in norms])
+
+    # For order zero, each group norm counts nonzero tensor norms, combine those counts by summing.
+    total_norm = stacked_norms.sum() if norm_type == 0 else torch.linalg.vector_norm(stacked_norms, norm_type)
+
+    if error_if_nonfinite and torch.logical_or(total_norm.isnan(), total_norm.isinf()):
+        raise RuntimeError(
+            f"The total norm of order {norm_type} for gradients from "
+            "`parameters` is non-finite, so it cannot be clipped. To disable "
+            "this error and scale the gradients by the non-finite norm anyway, "
+            "set `error_if_nonfinite=False`"
+        )
+
+    if max_norm != float("inf"):
+        for params in params_by_mesh.values():
+            clip_grads_with_norm_(params, max_norm, total_norm, foreach)
+    return total_norm
