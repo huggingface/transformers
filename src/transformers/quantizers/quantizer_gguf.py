@@ -14,6 +14,7 @@
 """Keeping GGUF weights in their blocks instead of unpacking them at load time."""
 
 from ..utils import is_torch_available, is_torch_mps_available, logging
+from ..utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION, is_kernels_available
 from ..utils.quantization_config import GgufConfig
 from .base import HfQuantizer
 
@@ -68,7 +69,16 @@ class GgufHfQuantizer(HfQuantizer):
         self.kernel = get_gguf_kernel()
         if not self.kernel:
             self.quantization_config.dequantize = True
-            logger.warning("No GGUF matmul kernel is available for this device. We will dequantize the entire model.")
+            reason = (
+                f"`kernels` is not installed, or not in [{KERNELS_MIN_VERSION}, {KERNELS_MAX_VERSION}) -- install "
+                f"it with `pip install 'kernels>={KERNELS_MIN_VERSION},<{KERNELS_MAX_VERSION}'`"
+                if not is_kernels_available()
+                else "no GGUF matmul kernel is published for this device"
+            )
+            logger.warning(
+                f"Dequantizing the whole model, because {reason}. It will need several times the memory the "
+                f"file does, and load more slowly."
+            )
             return
 
     def update_device_map(self, device_map):
