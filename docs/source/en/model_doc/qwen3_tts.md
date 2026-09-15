@@ -189,6 +189,37 @@ audio = processor.decode(codes)
 processor.save_audio(audio, "output_cloned.wav")
 ```
 
+### Torch compile
+
+Generation is driven by two autoregressive transformers — the talker (`model.model`) and the code
+predictor (`model.code_predictor.model`). Both can be compiled with `torch.compile` for faster inference;
+`generate` is then called as usual and transparently uses the compiled graphs. The first call pays a
+one-time compilation cost, so run a short warmup before timing (speed-ups are seen on GPU).
+
+```python
+import torch
+from transformers import AutoProcessor, AutoModelForTextToWaveform
+
+model_id = "shahvandit/qwen3-tts-base-hf"
+
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
+
+# compile the two decoder sub-models the generation loop drives
+model.model = torch.compile(model.model)
+model.code_predictor.model = torch.compile(model.code_predictor.model)
+
+conversation = [
+    {"role": "user", "content": [{"type": "text", "text": "Hello, how are you doing today?"}]},
+]
+inputs = processor.apply_chat_template(conversation)
+
+# the first generate() call triggers compilation (slow); later calls reuse the compiled graphs
+codes, _ = model.generate(**inputs)
+audio = processor.decode(codes)
+processor.save_audio(audio, "output.wav")
+```
+
 ## Qwen3TTSConfig
 
 [[autodoc]] Qwen3TTSConfig
