@@ -131,6 +131,9 @@ class PhimoeIntegrationTest(unittest.TestCase):
                 per_device = int(
                     min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3
                 )
+                # A 70% per-GPU max_memory cap, mostly for A10 multi-GPU runner issue, will cause some weights
+                # to be offloaded to disk on A10 single-GPU runner, which achieves the same effect of #46539
+                # and #48290. (fewer GPU + full CPU vs. full GPU + fewer CPU)
                 max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
                 max_memory["cpu"] = f"{int(get_cpu_ram_total_gib())}GiB"
             else:
