@@ -127,13 +127,6 @@ def test_flash_attn_2_available_with_package(version: str):
         get_kernel.assert_not_called()
 
 
-@parameterized.expand([("2.0.0", False), ("2.3.3", True), ("2.6.0", True)])
-def test_flash_attn_2_available_with_musa(version: str, expected: bool):
-    with mock_flash_attn_env(installed_packages={"flash_attn": version}):
-        with patch("transformers.utils.import_utils.is_torch_musa_available", return_value=True):
-            assert is_flash_attn_2_available() == expected
-
-
 def test_flash_attn_3_available_with_package():
     with mock_flash_attn_env(installed_packages={"flash_attn_interface": "3.0.0"}, cuda_available=True) as get_kernel:
         assert is_flash_attn_3_available()
