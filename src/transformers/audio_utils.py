@@ -445,18 +445,21 @@ def make_list_of_audio_chat_template(
     return make_list_of_audio(audio)
 
 
-def make_audio_chat_content(audio_item: "str | np.ndarray", prompt: str | None = None) -> list[dict]:
+def make_audio_chat_template_content(audio_item: "str | np.ndarray", prompt: str | None = None) -> list[dict]:
     """
-    Build the chat-template `content` list.
+    Build the chat-template `content` list for a single audio item, optionally followed by a text item.
 
     Args:
-        audio_item (`str` or `np.ndarray`):
-            A single audio item as accepted by chat templates: a local path/URL/array.
+        audio_item (`str` or array-like):
+            A single audio item as accepted by chat templates. Strings are treated as local paths or URLs; other
+            values (numpy/torch arrays) are forwarded directly.
         prompt (`str`, *optional*):
-            Text to include alongside the audio.
+            Text to include alongside the audio, appended as a separate `{"type": "text", "text": prompt}` item.
 
     Returns:
-        `list[dict]`: A chat-template content list, ready to be wrapped in a `{"role": ..., "content": ...}` message.
+        `list[dict]`: A chat-template content list, e.g. `[{"type": "audio", "path": ...}]`, optionally followed
+        by `{"type": "text", "text": prompt}`. Ready to be wrapped in a `{"role": ..., "content": ...}` message, or
+        extended with further content items.
     """
     content = (
         [{"type": "audio", "path": audio_item}]
@@ -466,24 +469,6 @@ def make_audio_chat_content(audio_item: "str | np.ndarray", prompt: str | None =
     if prompt is not None:
         content.append({"type": "text", "text": prompt})
     return content
-
-
-def make_audio_chat_template_content(audio_item) -> dict:
-    """
-    Build a chat-template content dict for a single audio item.
-
-    Args:
-        audio_item (`str` or array-like):
-            A single audio item. Strings are treated as local paths or URLs; other values (numpy/torch arrays) are
-            forwarded directly.
-
-    Returns:
-        `dict`: A chat-template content dict, e.g. `{"type": "audio", "path": ...}` for strings or
-        `{"type": "audio", "audio": ...}` otherwise.
-    """
-    if isinstance(audio_item, str):
-        return {"type": "audio", "path": audio_item}
-    return {"type": "audio", "audio": audio_item}
 
 
 def resolve_language(language: str | None, code_to_name: dict[str, str], return_code: bool = True) -> str | None:
