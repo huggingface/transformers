@@ -33,7 +33,7 @@ from ...file_utils import ModelOutput, is_scipy_available, requires_backends
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, is_accelerate_available
+from ...utils import TransformersKwargs, auto_docstring, is_accelerate_available, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_eomt import EomtConfig
@@ -45,6 +45,8 @@ if is_scipy_available():
 if is_accelerate_available():
     from accelerate import PartialState
     from accelerate.utils import reduce
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(
@@ -263,10 +265,16 @@ class EomtHungarianMatcher(nn.Module):
             cost_dice = pair_wise_dice_loss(pred_mask, target_mask)
             # final cost matrix
             cost_matrix = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
-            # eliminate infinite values in cost_matrix to avoid the error ``ValueError: cost matrix is infeasible``
-            cost_matrix = torch.minimum(cost_matrix, torch.tensor(1e10))
-            cost_matrix = torch.maximum(cost_matrix, torch.tensor(-1e10))
-            cost_matrix = torch.nan_to_num(cost_matrix, 0)
+            if not torch.isfinite(cost_matrix).any(-1).all():
+                # At least one row contains only NaN/inf
+                logger.warning_once(
+                    "Some predictions have NaN or inf cost for all targets. If the loss "
+                    "doesn't improve over the next steps the model has likely diverged."
+                )
+            # Replace NaN and inf values with max value to avoid linear_sum_assignment errors. Max value is used to match
+            # these predictions only if there are no other valid predictions.
+            max_value = torch.finfo(cost_matrix.dtype).max
+            cost_matrix = torch.nan_to_num(cost_matrix, nan=max_value, posinf=max_value, neginf=max_value)
             # do the assignment using the hungarian algorithm in scipy
             assigned_indices: tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
             indices.append(assigned_indices)

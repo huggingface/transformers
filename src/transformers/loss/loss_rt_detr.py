@@ -16,7 +16,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..utils import is_scipy_available, is_vision_available, requires_backends
+from ..utils import is_scipy_available, is_vision_available, logging, requires_backends
 from .loss_for_object_detection import (
     box_iou,
     dice_loss,
@@ -32,6 +32,9 @@ if is_scipy_available():
 
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
+
+
+logger = logging.get_logger(__name__)
 
 
 # different for RT-DETR: not slicing the last element like in DETR one
@@ -112,6 +115,16 @@ class RTDetrHungarianMatcher(nn.Module):
         giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
         # Compute the final cost matrix
         cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
+        if not torch.isfinite(cost_matrix).any(-1).all():
+            # At least one row contains only NaN/inf
+            logger.warning_once(
+                "Some predictions have NaN or inf cost for all targets. If the loss "
+                "doesn't improve over the next steps the model has likely diverged."
+            )
+        # Replace NaN and inf values with max value to avoid linear_sum_assignment errors. Max value is used to match
+        # these predictions only if there are no other valid predictions.
+        max_value = torch.finfo(cost_matrix.dtype).max
+        cost_matrix = torch.nan_to_num(cost_matrix, nan=max_value, posinf=max_value, neginf=max_value)
         cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
