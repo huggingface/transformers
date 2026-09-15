@@ -179,7 +179,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"model\.llm\.layers", target_patterns=r"model.language_model.layers"),
             WeightRenaming(
                 source_patterns=r"model\.llm\.embed_norm\.weight",
-                target_patterns=r"model.language_model.embed_norm.weight",
+                target_patterns=r"model.language_model.embed_tokens.embed_norm.weight",
             ),
             WeightRenaming(
                 source_patterns=r"model\.llm\.embed\.weight",
