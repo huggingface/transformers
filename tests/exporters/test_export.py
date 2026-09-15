@@ -825,8 +825,10 @@ class ExportTesterMixin:
         attend to -- so each runtime fills it differently and no caller reads it; comparing those
         positions measures nothing.
         """
+        # a model with per-layer masks passes a `dict` here, and a flex-attention one a `BlockMask`;
+        # only a plain 2D `(batch, seq)` tensor maps onto output positions
         attention_mask = (inputs or {}).get("attention_mask")
-        if attention_mask is not None and attention_mask.dim() == 2:
+        if torch.is_tensor(attention_mask) and attention_mask.dim() == 2:
             actual = _zero_padded_positions(actual, attention_mask)
             expected = _zero_padded_positions(expected, attention_mask)
         try:
