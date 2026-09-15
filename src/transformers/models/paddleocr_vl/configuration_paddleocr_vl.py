@@ -67,6 +67,8 @@ class PaddleOCRVisionConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     default_rope_type = "axial"
     spatial_merge_size: int = 2
+    interpolation_mode: str = "bilinear"
+    interpolation_align_corners: bool = True
     rope_parameters: dict | None = None
 
 

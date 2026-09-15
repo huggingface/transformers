@@ -18,7 +18,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import itertools
 import math
+from collections import defaultdict
 from collections.abc import Callable
 from typing import Any
 
@@ -41,6 +43,7 @@ from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultiModalGenerationMixin, MultiModalPreTrainedModelMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -1514,6 +1517,89 @@ class Glm5NextVisionMLP(nn.Module):
         return self.down_proj(self.act_fn(gate) * up)
 
 
+def get_mrope_position_ids(
+    config,
+    input_ids: torch.LongTensor,
+    mm_token_type_ids: torch.IntTensor,
+    attention_mask: torch.Tensor | None = None,
+    image_grid_thw: torch.LongTensor | None = None,
+    video_grid_thw: torch.LongTensor | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """M-RoPE decoder positions for a sequence of interleaved text and vision runs.
+
+    This family's processor separates video frames with timestamp text, so each frame is its own visual
+    span: the video grids are expanded to one `T=1` row per frame first.
+
+    Args:
+        config ([`PreTrainedConfig`]):
+            The model's configuration, read for this family's spatial-merge and clock settings.
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+        mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
+            Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+    Returns:
+        position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
+        mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
+    """
+    vision_config = config.vision_config
+    spatial_merge_size = vision_config.spatial_merge_size
+    if video_grid_thw is not None:
+        video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
+        video_grid_thw[:, 0] = 1
+    grids = {1: image_grid_thw, 2: video_grid_thw}
+
+    position_ids = torch.full(
+        (3, input_ids.shape[0], input_ids.shape[1]), 0, dtype=input_ids.dtype, device=input_ids.device
+    )
+    rope_deltas = []
+    for batch_idx, token_ids in enumerate(input_ids):
+        input_token_type = mm_token_type_ids[batch_idx]
+        valid_tokens = None
+        if attention_mask is not None:
+            valid_tokens = attention_mask[batch_idx].bool()
+            token_ids, input_token_type = token_ids[valid_tokens], input_token_type[valid_tokens]
+
+        counter, current_position, blocks = defaultdict(int), 0, []
+        for modality_type, group in itertools.groupby(enumerate(input_token_type.tolist()), lambda x: x[1]):
+            length = len(list(group))
+            # 0 is a text run; 1 and 2 are image and video spans.
+            if modality_type == 0:
+                positions = torch.arange(current_position, current_position + length, device=token_ids.device)
+                blocks.append(positions.expand(3, length))
+                current_position += length
+                continue
+
+            grid_thw = grids[modality_type][counter[modality_type]]
+            counter[modality_type] += 1
+            grid_t = grid_thw[0].item()
+            grid_h, grid_w = grid_thw[1].item() // spatial_merge_size, grid_thw[2].item() // spatial_merge_size
+            temporal = torch.arange(grid_t, device=token_ids.device) + current_position
+            height = torch.arange(grid_h, device=token_ids.device) + current_position
+            width = torch.arange(grid_w, device=token_ids.device) + current_position
+            axes = torch.meshgrid(temporal, height, width, indexing="ij")
+            blocks.append(torch.stack(axes, dim=0).reshape(3, -1))
+            current_position += int(max(grid_thw[1], grid_thw[2])) // spatial_merge_size
+
+        positions = torch.cat(blocks, dim=1).to(device=position_ids.device, dtype=position_ids.dtype)
+        if valid_tokens is not None:
+            position_ids[:, batch_idx, valid_tokens] = positions
+        else:
+            position_ids[:, batch_idx] = positions
+        rope_deltas.append(positions.max() + 1 - len(token_ids))
+    return position_ids, torch.tensor(rope_deltas, device=input_ids.device).unsqueeze(1)
+
+
 class Glm5NextVisionPatchMerger(nn.Module):
     def __init__(self, dim: int, context_dim: int, hidden_act: str, swiglu_limit: float, bias: bool = False) -> None:
         super().__init__()
@@ -1525,6 +1611,24 @@ class Glm5NextVisionPatchMerger(nn.Module):
         self.act1 = nn.GELU()
         self.act_fn = ACT2FN[hidden_act]
         self.swiglu_limit = swiglu_limit
+
+    def get_rope_index(
+        self,
+        input_ids: torch.LongTensor,
+        mm_token_type_ids: torch.IntTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
+    ):
+        return get_mrope_position_ids(
+            self.config,
+            input_ids,
+            mm_token_type_ids,
+            attention_mask=attention_mask,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+        )
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         hidden_state = self.proj(hidden_state)
@@ -1866,7 +1970,7 @@ class Glm5NextVisionModel(Glm5NextPreTrainedModel):
 
 
 @auto_docstring
-class Glm5NextModel(Glm5NextPreTrainedModel):
+class Glm5NextModel(Glm5NextPreTrainedModel, MultiModalPreTrainedModelMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -2101,7 +2205,7 @@ def load_balancing_loss_func(
 
 
 @auto_docstring
-class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin):
+class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, MultiModalGenerationMixin, GenerationMixin):
     """
     Main Glm5Next conditional generation class.
     """
