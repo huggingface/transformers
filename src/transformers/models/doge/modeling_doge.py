@@ -576,6 +576,9 @@ class DogeModel(DogePreTrainedModel):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             position_ids=position_ids,
+            # Always materialize the mask: DogeAttention builds its dynamic sparse mask on top of the
+            # materialized causal mask and cannot rely on sdpa's `is_causal` fast-path (which returns None).
+            allow_is_causal_skip=False,
         )
 
         hidden_states = inputs_embeds

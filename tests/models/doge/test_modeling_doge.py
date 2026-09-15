@@ -292,6 +292,26 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @require_torch
+    def test_causal_lm_no_future_leak(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/48748: DogeAttention
+        # builds its dynamic mask on top of the materialized causal mask, so the mask must always be
+        # materialized (the sdpa `is_causal` fast-path returns None and would drop causality).
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = input_dict["input_ids"]
+        altered_ids = input_ids.clone()
+        altered_ids[:, -1] = (altered_ids[:, -1] + 1) % self.model_tester.vocab_size
+        for attn_implementation in ("eager", "sdpa"):
+            set_seed(0)
+            config._attn_implementation = attn_implementation
+            model = DogeForCausalLM(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                base_logits = model(input_ids).logits
+                altered_logits = model(altered_ids).logits
+            self.assertTrue(torch.equal(base_logits[:, :-1], altered_logits[:, :-1]))
+
     def test_doge_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
