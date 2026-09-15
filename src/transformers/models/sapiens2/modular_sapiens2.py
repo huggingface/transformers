@@ -1513,11 +1513,11 @@ class Sapiens2Backbone(DINOv3ViTBackbone):
         ```
         """
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
-        hidden_state = self.embeddings(pixel_values)
+        hidden_states = self.embeddings(pixel_values)
         position_embeddings = self.rope_embeddings(pixel_values)
 
         kwargs["output_hidden_states"] = True  # required to extract per-stage feature maps from hidden_states
-        output: BaseModelOutput = self.model(hidden_state, position_embeddings, **kwargs)
+        output: BaseModelOutput = self.model(hidden_states, position_embeddings, **kwargs)
         stage_hidden_states = output.hidden_states
 
         batch_size, _, image_height, image_width = pixel_values.shape

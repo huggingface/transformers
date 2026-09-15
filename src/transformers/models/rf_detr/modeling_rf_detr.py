@@ -438,6 +438,10 @@ class RfDetrDinov2PreTrainedModel(PreTrainedModel):
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             if module.mask_token is not None:
                 init.zeros_(module.mask_token)
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
         if isinstance(module, RfDetrDinov2LayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
 

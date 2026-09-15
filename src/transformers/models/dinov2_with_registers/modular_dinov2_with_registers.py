@@ -14,8 +14,6 @@
 # limitations under the License.
 
 
-from collections.abc import Iterable
-
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
@@ -25,6 +23,7 @@ from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, ImageClassifierOutput
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
 from ..dinov2.modeling_dinov2 import (
@@ -32,6 +31,7 @@ from ..dinov2.modeling_dinov2 import (
     Dinov2Embeddings,
     Dinov2Encoder,
     Dinov2ForImageClassification,
+    Dinov2LayerScale,
     Dinov2Model,
     Dinov2PatchEmbeddings,
     Dinov2PreTrainedModel,
@@ -129,13 +129,9 @@ class Dinov2WithRegistersEmbeddings(Dinov2Embeddings):
         patch_pos_embed = self.position_embeddings[:, 1:]
         dim = embeddings.shape[-1]
 
-        patch_size = (
-            self.config.patch_size
-            if isinstance(self.config.patch_size, Iterable)
-            else (self.config.patch_size, self.config.patch_size)
-        )
-        height = height // patch_size[0]
-        width = width // patch_size[1]
+        patch_height, patch_width = self.patch_embeddings.patch_size
+        height = height // patch_height
+        width = width // patch_width
 
         sqrt_num_positions = torch_int(num_positions**0.5)
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
@@ -180,14 +176,27 @@ class Dinov2WithRegistersEmbeddings(Dinov2Embeddings):
         return embeddings
 
 
+class Dinov2WithRegistersLayerScale(Dinov2LayerScale):
+    pass
+
+
 class Dinov2WithRegistersPreTrainedModel(Dinov2PreTrainedModel):
     base_model_prefix = "dinov2_with_registers"
 
     @torch.no_grad()
     def _init_weights(self, module) -> None:
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
         if isinstance(module, Dinov2WithRegistersEmbeddings):
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.mask_token)
             init.zeros_(module.register_tokens)
+        if isinstance(module, Dinov2WithRegistersLayerScale):
+            init.constant_(module.lambda1, self.config.layerscale_value)
 
 
 class Dinov2WithRegistersEncoder(Dinov2Encoder):
@@ -229,7 +238,7 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -267,14 +276,8 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
                     # this was actually a bug in the original implementation that we copied here,
                     # cause normally the order is height, width
                     batch_size, _, height, width = pixel_values.shape
-                    patch_size = (
-                        self.config.patch_size
-                        if isinstance(self.config.patch_size, Iterable)
-                        else (self.config.patch_size, self.config.patch_size)
-                    )
-                    hidden_state = hidden_state.reshape(
-                        batch_size, height // patch_size[0], width // patch_size[1], -1
-                    )
+                    patch_height, patch_width = self.embeddings.patch_embeddings.patch_size
+                    hidden_state = hidden_state.reshape(batch_size, height // patch_height, width // patch_width, -1)
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
                 feature_maps += (hidden_state,)
 

@@ -13,8 +13,6 @@
 # limitations under the License.
 """PyTorch DINOv2 model."""
 
-from collections.abc import Iterable
-
 import torch
 from torch import nn
 
@@ -86,9 +84,9 @@ class Dinov2Embeddings(BeitEmbeddings):
         class_pos_embed = self.position_embeddings[:, :1]
         patch_pos_embed = self.position_embeddings[:, 1:]
         dim = embeddings.shape[-1]
-        patch_size = self.patch_size if isinstance(self.patch_size, Iterable) else (self.patch_size, self.patch_size)
-        new_height = height // patch_size[0]
-        new_width = width // patch_size[1]
+        patch_height, patch_width = self.patch_embeddings.patch_size
+        new_height = height // patch_height
+        new_width = width // patch_width
 
         sqrt_num_positions = torch_int(num_positions**0.5)
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
@@ -184,6 +182,10 @@ class Dinov2PreTrainedModel(ViTPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module) -> None:
         super()._init_weights(module)
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
         if isinstance(module, Dinov2LayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
 
@@ -328,7 +330,7 @@ class Dinov2Backbone(BackboneMixin, Dinov2PreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -366,14 +368,8 @@ class Dinov2Backbone(BackboneMixin, Dinov2PreTrainedModel):
                     # this was actually a bug in the original implementation that we copied here,
                     # cause normally the order is height, width
                     batch_size, _, height, width = pixel_values.shape
-                    patch_size = (
-                        self.config.patch_size
-                        if isinstance(self.config.patch_size, Iterable)
-                        else (self.config.patch_size, self.config.patch_size)
-                    )
-                    hidden_state = hidden_state.reshape(
-                        batch_size, height // patch_size[0], width // patch_size[1], -1
-                    )
+                    patch_height, patch_width = self.embeddings.patch_embeddings.patch_size
+                    hidden_state = hidden_state.reshape(batch_size, height // patch_height, width // patch_width, -1)
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
                 feature_maps += (hidden_state,)
 

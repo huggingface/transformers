@@ -200,6 +200,15 @@ class Tipsv2VisionEmbeddings(nn.Module):
         return embeddings
 
 
+class Tipsv2VisionLayerScale(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.lambda1 = nn.Parameter(config.layerscale_value * torch.ones(config.hidden_size))
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        return hidden_state * self.lambda1
+
+
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -275,15 +284,6 @@ class Tipsv2VisionAttention(nn.Module):
         attn_output = self.o_proj(attn_output)
 
         return attn_output, attn_weights
-
-
-class Tipsv2VisionLayerScale(nn.Module):
-    def __init__(self, config) -> None:
-        super().__init__()
-        self.lambda1 = nn.Parameter(config.layerscale_value * torch.ones(config.hidden_size))
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        return hidden_state * self.lambda1
 
 
 class Tipsv2VisionMLP(nn.Module):
@@ -402,16 +402,17 @@ class Tipsv2VisionPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module) -> None:
         """Initialize the weights"""
         super()._init_weights(module)
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
         if isinstance(module, Tipsv2VisionEmbeddings):
-            if module.position_embeddings is not None:
-                init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
-            if module.mask_token is not None:
-                init.zeros_(module.mask_token)
+            init.zeros_(module.mask_token)
+            init.zeros_(module.register_tokens)
         if isinstance(module, Tipsv2VisionLayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
-        if isinstance(module, Tipsv2VisionEmbeddings):
-            init.zeros_(module.register_tokens)
 
 
 class Tipsv2VisionEncoder(Tipsv2VisionPreTrainedModel):
@@ -566,14 +567,8 @@ class Tipsv2VisionBackbone(BackboneMixin, Tipsv2VisionPreTrainedModel):
                     # this was actually a bug in the original implementation that we copied here,
                     # cause normally the order is height, width
                     batch_size, _, height, width = pixel_values.shape
-                    patch_size = (
-                        self.config.patch_size
-                        if isinstance(self.config.patch_size, Iterable)
-                        else (self.config.patch_size, self.config.patch_size)
-                    )
-                    hidden_state = hidden_state.reshape(
-                        batch_size, height // patch_size[0], width // patch_size[1], -1
-                    )
+                    patch_height, patch_width = self.embeddings.patch_embeddings.patch_size
+                    hidden_state = hidden_state.reshape(batch_size, height // patch_height, width // patch_width, -1)
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
                 feature_maps += (hidden_state,)
 
