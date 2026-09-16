@@ -130,7 +130,7 @@ class HuggingFaceStorageWriter(TorchHuggingFaceStorageWriter):
 
 
 class HuggingFaceStorageReader(TorchHuggingFaceStorageReader):
-    """Read chunk-key files, legacy PyTorch DCP safetensors, and ordinary safetensors."""
+    """Read chunk-key safetensors, PyTorch HF-writer safetensors, and ordinary safetensors."""
 
     def read_metadata(self):
         tensors, storage = {}, {}
