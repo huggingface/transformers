@@ -14,10 +14,10 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto.configuration_auto import AutoConfig
 from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLConfig
 from ..qwen3_vl.modeling_qwen3_vl import Qwen3VLForConditionalGeneration, Qwen3VLPreTrainedModel
 
@@ -45,24 +45,15 @@ class Cosmos3OmniConfig(Qwen3VLConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "cosmos3_omni"
-    sub_configs = {"vision_config": AutoConfig, "text_config": AutoConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_vl_vision"),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_vl_text"),
+    }
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            model_type = self.vision_config.pop("model_type", "qwen3_vl_vision")
-            if model_type == "qwen3_vl":
-                model_type = "qwen3_vl_vision"
-            self.vision_config = CONFIG_MAPPING[model_type](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["qwen3_vl_vision"]()
-
-        if isinstance(self.text_config, dict):
-            model_type = self.text_config.get("model_type", "qwen3_vl_text")
-            self.text_config = CONFIG_MAPPING[model_type](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen3_vl_text"]()
-
+        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") == "qwen3_vl_vision":
+            # old ckpt with incorrect model type -> override manually
+            self.vision_config["model_type"] = "qwen3_vl_vision"
         PreTrainedConfig.__post_init__(**kwargs)
 
 

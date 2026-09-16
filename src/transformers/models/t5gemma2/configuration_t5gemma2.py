@@ -22,12 +22,9 @@ from typing import Any
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-from ..siglip import SiglipVisionConfig
-
-
-logger = logging.get_logger(__name__)
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...utils import auto_docstring
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
@@ -183,35 +180,19 @@ class T5Gemma2EncoderConfig(PreTrainedConfig):
         "boi_token_id": "boi_token_index",
         "eoi_token_id": "eoi_token_index",
     }
-
-    sub_configs = {
-        "text_config": T5Gemma2TextConfig,
-        "vision_config": SiglipVisionConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=T5Gemma2TextConfig),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="siglip_vision_model"),
     }
 
-    text_config: T5Gemma2TextConfig | dict[str, Any] | None = None
-    vision_config: SiglipVisionConfig | dict[str, Any] | None = None
+    text_config: PreTrainedConfig | dict[str, Any] | None = None
+    vision_config: PreTrainedConfig | dict[str, Any] | None = None
     mm_tokens_per_image: int | None = 256
     boi_token_index: int | None = 255_999
     eoi_token_index: int | None = 256_000
     image_token_index: int | None = 262_144
     initializer_range: float | None = 0.02
     tie_word_embeddings: bool | None = True
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = T5Gemma2TextConfig()
-            logger.info("text_config is None, using default T5Gemma2EncoderTextConfig text config.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = T5Gemma2TextConfig(**self.text_config)
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = SiglipVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = SiglipVisionConfig()
-            logger.info("vision_config is None, using default SiglipVisionConfig vision config.")
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
@@ -350,10 +331,9 @@ class T5Gemma2Config(PreTrainedConfig):
 
     model_type = "t5gemma2"
     keys_to_ignore_at_inference = ["past_key_values"]
-
-    sub_configs = {
-        "encoder": T5Gemma2EncoderConfig,
-        "decoder": T5Gemma2DecoderConfig,
+    sub_configs_defaults = {
+        "encoder": SubConfigSpec(config_class=T5Gemma2EncoderConfig),
+        "decoder": SubConfigSpec(config_class=T5Gemma2DecoderConfig),
     }
 
     attribute_map = {
@@ -373,18 +353,7 @@ class T5Gemma2Config(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.encoder, dict):
-            self.encoder = T5Gemma2EncoderConfig(**self.encoder)
-        elif self.encoder is None:
-            self.encoder = T5Gemma2EncoderConfig()
-            logger.info("encoder is None, using default T5Gemma2EncoderConfig encoder config.")
-
-        if isinstance(self.decoder, dict):
-            self.decoder = T5Gemma2DecoderConfig(**self.decoder)
-        elif self.decoder is None:
-            self.decoder = T5Gemma2DecoderConfig()
-            logger.info("decoder is None, using default T5Gemma2DecoderConfig decoder config.")
-
+        super().__post_init__(**kwargs)
         self.encoder.text_config.dropout_rate = self.dropout_rate
         self.encoder.text_config.attention_dropout = self.attention_dropout
         self.encoder.vision_config.attention_dropout = self.attention_dropout
@@ -396,9 +365,7 @@ class T5Gemma2Config(PreTrainedConfig):
 
         for special_token_key in ["bos_token_id", "pad_token_id", "eos_token_id", "vocab_size"]:
             if special_token_key not in kwargs:
-                kwargs[special_token_key] = getattr(self.decoder, special_token_key)
-
-        super().__post_init__(**kwargs)
+                setattr(self, special_token_key, getattr(self.decoder, special_token_key))
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""

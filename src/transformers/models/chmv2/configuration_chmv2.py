@@ -22,8 +22,7 @@ from typing import Literal
 
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto import AutoConfig
 
@@ -67,7 +66,26 @@ class CHMv2Config(PreTrainedConfig):
     """
 
     model_type = "chmv2"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="dinov3_vit",
+            init_kwargs={
+                "image_size": 416,
+                "hidden_size": 1024,
+                "intermediate_size": 4096,
+                "num_attention_heads": 16,
+                "num_hidden_layers": 24,
+                "num_register_tokens": 4,
+                "key_bias": True,
+                "out_indices": [6, 12, 18, 24],
+                "reshape_hidden_states": True,
+                "apply_layernorm": True,
+                "layer_norm_eps": 1e-6,
+                "return_class_token": True,
+            },
+        ),
+    }
 
     backbone_config: dict | PreTrainedConfig | None = None
     patch_size: int = 16
@@ -84,34 +102,11 @@ class CHMv2Config(PreTrainedConfig):
     norm_strategy: Literal["linear", "softmax", "sigmoid", "chmv2_mixlog"] = "chmv2_mixlog"
 
     def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
         if self.reassemble_factors is None:
             self.reassemble_factors = [4, 2, 1, 0.5]
         if self.post_process_channels is None:
             self.post_process_channels = [128, 256, 512, 1024]
-
-        default_config_kwargs = {
-            "image_size": 416,
-            "hidden_size": 1024,
-            "intermediate_size": 4096,
-            "num_attention_heads": 16,
-            "num_hidden_layers": 24,
-            "num_register_tokens": 4,
-            "key_bias": True,
-            "out_indices": [6, 12, 18, 24],
-            "reshape_hidden_states": True,
-            "apply_layernorm": True,
-            "layer_norm_eps": 1e-6,
-            "return_class_token": True,
-        }
-
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="dinov3_vit",
-            default_config_kwargs=default_config_kwargs,
-            **kwargs,
-        )
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["CHMv2Config"]

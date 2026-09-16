@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -225,14 +225,26 @@ class Sam3Config(PreTrainedConfig):
     """
 
     model_type = "sam3"
-    is_composition = True
-    sub_configs = {
-        "vision_config": Sam3VisionConfig,
-        "text_config": AutoConfig,
-        "geometry_encoder_config": Sam3GeometryEncoderConfig,
-        "detr_encoder_config": Sam3DETREncoderConfig,
-        "detr_decoder_config": Sam3DETRDecoderConfig,
-        "mask_decoder_config": Sam3MaskDecoderConfig,
+    sub_configs_defaults = {
+        "geometry_encoder_config": SubConfigSpec(config_class=Sam3GeometryEncoderConfig),
+        "detr_encoder_config": SubConfigSpec(config_class=Sam3DETREncoderConfig),
+        "detr_decoder_config": SubConfigSpec(config_class=Sam3DETRDecoderConfig),
+        "mask_decoder_config": SubConfigSpec(config_class=Sam3MaskDecoderConfig),
+        "vision_config": SubConfigSpec(config_class=Sam3VisionConfig),
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="clip_text_model",
+            init_kwargs={
+                "vocab_size": 49408,
+                "hidden_size": 1024,
+                "intermediate_size": 4096,  # hidden_size * mlp_ratio (1024 * 4)
+                "projection_dim": 512,  # CLIP's internal projection dimension
+                "num_hidden_layers": 24,
+                "num_attention_heads": 16,
+                "max_position_embeddings": 32,
+                "hidden_act": "gelu",
+            },
+        ),
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -242,52 +254,6 @@ class Sam3Config(PreTrainedConfig):
     detr_decoder_config: dict | PreTrainedConfig | None = None
     mask_decoder_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
-
-    def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = Sam3VisionConfig()
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Sam3VisionConfig(**self.vision_config)
-
-        if self.text_config is None:
-            self.text_config = CONFIG_MAPPING["clip_text_model"](
-                **{
-                    "vocab_size": 49408,
-                    "hidden_size": 1024,
-                    "intermediate_size": 4096,  # hidden_size * mlp_ratio (1024 * 4)
-                    "projection_dim": 512,  # CLIP's internal projection dimension
-                    "num_hidden_layers": 24,
-                    "num_attention_heads": 16,
-                    "max_position_embeddings": 32,
-                    "hidden_act": "gelu",
-                }
-            )
-        if isinstance(self.text_config, dict):
-            self.text_config = CONFIG_MAPPING[self.text_config.get("model_type", "clip_text_model")](
-                **self.text_config
-            )
-
-        if self.geometry_encoder_config is None:
-            self.geometry_encoder_config = Sam3GeometryEncoderConfig()
-        if isinstance(self.geometry_encoder_config, dict):
-            self.geometry_encoder_config = Sam3GeometryEncoderConfig(**self.geometry_encoder_config)
-
-        if self.detr_encoder_config is None:
-            self.detr_encoder_config = Sam3DETREncoderConfig()
-        if isinstance(self.detr_encoder_config, dict):
-            self.detr_encoder_config = Sam3DETREncoderConfig(**self.detr_encoder_config)
-
-        if self.detr_decoder_config is None:
-            self.detr_decoder_config = Sam3DETRDecoderConfig()
-        if isinstance(self.detr_decoder_config, dict):
-            self.detr_decoder_config = Sam3DETRDecoderConfig(**self.detr_decoder_config)
-
-        if self.mask_decoder_config is None:
-            self.mask_decoder_config = Sam3MaskDecoderConfig()
-        if isinstance(self.mask_decoder_config, dict):
-            self.mask_decoder_config = Sam3MaskDecoderConfig(**self.mask_decoder_config)
-
-        super().__post_init__(**kwargs)
 
     @property
     def image_size(self):

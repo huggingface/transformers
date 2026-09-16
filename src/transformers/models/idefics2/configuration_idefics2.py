@@ -14,9 +14,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -113,10 +113,19 @@ class Idefics2Config(PreTrainedConfig):
     ```"""
 
     model_type = "idefics2"
-    sub_configs = {
-        "text_config": AutoConfig,
-        "perceiver_config": Idefics2PerceiverConfig,
-        "vision_config": Idefics2VisionConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="mistral",
+            init_kwargs={
+                "max_position_embeddings": 4096 * 8,
+                "rms_norm_eps": 1e-5,
+                # None in the original configuration_mistral, we set it to the unk_token_id
+                "pad_token_id": 0,
+            },
+        ),
+        "vision_config": SubConfigSpec(config_class=Idefics2VisionConfig),
+        "perceiver_config": SubConfigSpec(config_class=Idefics2PerceiverConfig),
     }
 
     use_cache: bool = True
@@ -127,30 +136,7 @@ class Idefics2Config(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
-        if self.perceiver_config is None:
-            self.perceiver_config = Idefics2PerceiverConfig()
-            logger.info("perciver_config is None, using default perceiver config")
-        elif isinstance(self.perceiver_config, dict):
-            self.perceiver_config = Idefics2PerceiverConfig(**self.perceiver_config)
-
-        if self.vision_config is None:
-            self.vision_config = Idefics2VisionConfig()
-            logger.info("vision_config is None, using default vision config")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = Idefics2VisionConfig(**self.vision_config)
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "mistral")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            logger.info("text_config is None, using default text config")
-            self.text_config = CONFIG_MAPPING["mistral"](
-                max_position_embeddings=4096 * 8,
-                rms_norm_eps=1e-5,
-                # None in the original configuration_mistral, we set it to the unk_token_id
-                pad_token_id=0,
-            )
-
+        super().__post_init__(**kwargs)
         if self.text_config.hidden_size != self.perceiver_config.hidden_size:
             self.perceiver_config.hidden_size = self.text_config.hidden_size
             self.perceiver_config.rms_norm_eps = self.text_config.rms_norm_eps
@@ -158,8 +144,6 @@ class Idefics2Config(PreTrainedConfig):
                 "Perceiver config has a different `hidden_size` than text config, which means default values were used. "
                 "In your model's config on the hub, add `hidden_size` and `rms_norm_eps` keys under the `perceiver_config` dict. "
             )
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Idefics2Config", "Idefics2PerceiverConfig", "Idefics2VisionConfig"]

@@ -32,7 +32,17 @@ sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 
 from test_module.custom_configuration import CustomConfig  # noqa E402
 
-
+classvar_fields = {
+    "base_config_key",
+    "sub_configs",
+    "keys_to_ignore_at_inference",
+    "attribute_map",
+    "base_model_tp_plan",
+    "base_model_fsdp_plan",
+    "base_model_pp_plan",
+    "base_model_ep_plan",
+    "_auto_class",
+}
 config_common_kwargs = {
     "return_dict": False,
     "output_hidden_states": True,
@@ -174,6 +184,86 @@ class ConfigTestUtils(unittest.TestCase):
 
         config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert-subfolder", subfolder="bert")
         self.assertIsNotNone(config)
+
+    def test_saving_with_custom_fields(self):
+        config = BertConfig(foo=-1)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            loaded_config = BertConfig.from_pretrained(tmp_dir)
+            self.assertTrue(loaded_config.foo, -1)
+
+            # Base fields are not serialized in config unless it has a non-default value
+            json_dict = PreTrainedConfig._dict_from_json_file(f"{tmp_dir}/config.json")
+            for key in config_common_kwargs:
+                self.assertFalse(key in json_dict)
+
+            # ClassVar fields are never saved as they're NOT supposed to be updated dynamically
+            # These field values are static per each model file (eg. TP/EP/PP plan, sub_configs, etc)
+            for key in classvar_fields:
+                self.assertFalse(key in json_dict)
+
+            # It has to always be saved so we can auto-map when loading
+            self.assertTrue("model_type" in json_dict)
+
+        # Change the default value for some common fields and save again
+        config = BertConfig(output_hidden_states=True, output_attentions=True, is_encoder_decoder=True)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            loaded_config = BertConfig.from_pretrained(tmp_dir)
+            self.assertEqual(loaded_config.output_hidden_states, True)
+            self.assertEqual(loaded_config.output_attentions, True)
+            self.assertEqual(loaded_config.is_encoder_decoder, True)
+
+            # Base fields with non-default value should be in JSON file
+            json_dict = PreTrainedConfig._dict_from_json_file(f"{tmp_dir}/config.json")
+            self.assertEqual(json_dict["output_hidden_states"], True)
+            self.assertEqual(json_dict["output_attentions"], True)
+            self.assertEqual(json_dict["is_encoder_decoder"], True)
+
+        # For nested configs we follow the same rules per each sub-config
+        config = Florence2Config()
+        config.text_config.foo = -1
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            loaded_config = Florence2Config.from_pretrained(tmp_dir)
+            self.assertTrue(loaded_config.text_config.foo, -1)
+
+            # Base fields are not serialized in config unless it has a non-default value
+            json_dict = PreTrainedConfig._dict_from_json_file(f"{tmp_dir}/config.json")
+            for key in config_common_kwargs:
+                self.assertFalse(key in json_dict)
+                self.assertFalse(key in json_dict["text_config"])
+                self.assertFalse(key in json_dict["vision_config"])
+
+            # ClassVar fields are never saved as they're NOT supposed to be updated dynamically
+            # These field values are static per each model file (eg. TP/EP/PP plan, sub_configs, etc)
+            for key in classvar_fields:
+                self.assertFalse(key in json_dict)
+                self.assertFalse(key in json_dict["text_config"])
+                self.assertFalse(key in json_dict["vision_config"])
+
+            # It has to always be saved so we can auto-map when loading
+            self.assertTrue("model_type" in json_dict)
+            self.assertTrue("model_type" in json_dict["text_config"])
+            self.assertTrue("model_type" in json_dict["vision_config"])
+
+        # Change the default value for some common fields and save again
+        text_config = BertConfig(output_hidden_states=True, output_attentions=True, is_encoder_decoder=True)
+        config = Florence2Config(text_config=text_config, is_encoder_decoder=True)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            loaded_config = Florence2Config.from_pretrained(tmp_dir)
+            self.assertEqual(loaded_config.text_config.output_hidden_states, True)
+            self.assertEqual(loaded_config.text_config.output_attentions, True)
+            self.assertEqual(loaded_config.text_config.is_encoder_decoder, True)
+            self.assertEqual(loaded_config.is_encoder_decoder, True)
+
+            # Base fields with non-default value should be in JSON file
+            json_dict = PreTrainedConfig._dict_from_json_file(f"{tmp_dir}/config.json")
+            self.assertEqual(json_dict["text_config"]["output_hidden_states"], True)
+            self.assertEqual(json_dict["text_config"]["output_attentions"], True)
+            self.assertEqual(json_dict["text_config"]["is_encoder_decoder"], True)
+            self.assertEqual(json_dict["is_encoder_decoder"], True)
 
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down

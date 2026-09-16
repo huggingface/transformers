@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 
@@ -206,11 +206,11 @@ class BltConfig(PreTrainedConfig):
     model_type = "blt"
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 500000.0
-    sub_configs = {
-        "patcher_config": BltPatcherConfig,
-        "encoder_config": BltLocalEncoderConfig,
-        "decoder_config": BltLocalDecoderConfig,
-        "global_config": BltGlobalTransformerConfig,
+    sub_configs_defaults = {
+        "patcher_config": SubConfigSpec(config_class=BltPatcherConfig),
+        "encoder_config": SubConfigSpec(config_class=BltLocalEncoderConfig),
+        "decoder_config": SubConfigSpec(config_class=BltLocalDecoderConfig),
+        "global_config": SubConfigSpec(config_class=BltGlobalTransformerConfig),
     }
 
     vocab_size: int = 260
@@ -238,44 +238,14 @@ class BltConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
 
     def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
         self.encoder_hash_byte_group_size = self.encoder_hash_byte_group_size or [3, 4, 5, 6, 7, 8]
-
-        # Initialize component configurations
-        if self.patcher_config is None:
-            self.patcher_config = BltPatcherConfig(initializer_range=self.initializer_range)
-            logger.info("patcher_config is None, using default Blt patcher config")
-        elif isinstance(self.patcher_config, dict):
-            self.patcher_config.setdefault("initializer_range", self.initializer_range)
-            self.patcher_config = BltPatcherConfig(**self.patcher_config)
-
-        if self.encoder_config is None:
-            self.encoder_config = BltLocalEncoderConfig(initializer_range=self.initializer_range)
-            logger.info("encoder_config is None, using default Blt encoder config")
-        elif isinstance(self.encoder_config, dict):
-            self.encoder_config.setdefault("initializer_range", self.initializer_range)
-            self.encoder_config = BltLocalEncoderConfig(**self.encoder_config)
-
-        if self.decoder_config is None:
-            self.decoder_config = BltLocalDecoderConfig(initializer_range=self.initializer_range)
-            logger.info("decoder_config is None, using default Blt decoder config")
-        elif isinstance(self.decoder_config, dict):
-            self.decoder_config.setdefault("initializer_range", self.initializer_range)
-            self.decoder_config = BltLocalDecoderConfig(**self.decoder_config)
-
-        if self.global_config is None:
-            self.global_config = BltGlobalTransformerConfig(initializer_range=self.initializer_range)
-            logger.info("global_config is None, using default Blt global config")
-        elif isinstance(self.global_config, dict):
-            self.global_config.setdefault("initializer_range", self.initializer_range)
-            self.global_config = BltGlobalTransformerConfig(**self.global_config)
 
         # Determine if token embedding projection is needed based on dimension mismatch (7b)
         encoder_cross_output_size = self.encoder_config.hidden_size * self.cross_attn_k
         self.global_config.encoder_cross_output_size = (
             encoder_cross_output_size if encoder_cross_output_size != self.global_config.hidden_size else None
         )
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = [

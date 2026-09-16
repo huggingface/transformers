@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
 
 
@@ -128,7 +128,10 @@ class BridgeTowerConfig(PreTrainedConfig):
     ```"""
 
     model_type = "bridgetower"
-    sub_configs = {"text_config": BridgeTowerTextConfig, "vision_config": BridgeTowerVisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=BridgeTowerTextConfig),
+        "vision_config": SubConfigSpec(config_class=BridgeTowerVisionConfig),
+    }
 
     share_cross_modal_transformer_layers: bool = True
     hidden_act: str = "gelu"
@@ -148,19 +151,6 @@ class BridgeTowerConfig(PreTrainedConfig):
         # TODO: remove this once the Hub files are updated.
         _ = kwargs.pop("text_config_dict", None)
         _ = kwargs.pop("vision_config_dict", None)
-
-        if self.text_config is None:
-            self.text_config = BridgeTowerTextConfig()
-            logger.info("`text_config` is `None`. initializing the `BridgeTowerTextConfig` with default values.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = BridgeTowerTextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            self.vision_config = BridgeTowerVisionConfig()
-            logger.info("`vision_config` is `None`. initializing the `BridgeTowerVisionConfig` with default values.")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = BridgeTowerVisionConfig(**self.vision_config)
-
         super().__post_init__(**kwargs)
 
 
