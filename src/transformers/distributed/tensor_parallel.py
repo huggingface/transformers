@@ -864,7 +864,6 @@ def resolve_parallel_plans(
 
 
 def apply_tensor_parallelism(model: nn.Module, tp_mesh: DeviceMesh, plan: dict[str, str] | None = None):
-    """DTensor backend: shard params as placeholders and install TP forward hooks. Defaults to `model.tp_plan`."""
     plan = model.tp_plan if plan is None else plan
     _validate_parallel_plan_styles(plan)
 
