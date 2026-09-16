@@ -14,6 +14,7 @@ import os
 import socket
 import tempfile
 from abc import ABC, abstractmethod
+from itertools import product
 
 from parameterized import parameterized
 
@@ -404,7 +405,7 @@ def _load_ep_and_reference_models(model_path, model_class):
     return model_ep, model_ref, device
 
 
-def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol):
+def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol, experts_implementation):
     """Implementation for comparing EP and non-EP model outputs."""
     set_seed(0)
 
@@ -412,6 +413,9 @@ def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol):
 
     model_ep.eval()
     model_ref.eval()
+
+    model_ep.set_experts_implementation(experts_implementation)
+    model_ref.set_experts_implementation(experts_implementation)
 
     vocab_size = model_ref.config.vocab_size
     input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
@@ -428,13 +432,16 @@ def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol):
     dist.barrier()
 
 
-def _test_ep_backward_impl(_rank, model_path, model_class, atol, rtol):
+def _test_ep_backward_impl(_rank, model_path, model_class, atol, rtol, experts_implementation):
     """Implementation for comparing EP and non-EP model backward passes."""
     set_seed(0)
 
     model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class)
     model_ep.train()
     model_ref.train()
+
+    model_ep.set_experts_implementation(experts_implementation)
+    model_ref.set_experts_implementation(experts_implementation)
 
     vocab_size = model_ref.config.vocab_size
     input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
@@ -639,9 +646,16 @@ class TensorParallelTesterMixin(ABC):
                 tmp_dir, model_class, max_new_tokens
             )
 
-    @parameterized.expand([(False,), (True,)])
+    @parameterized.expand(
+        list(
+            product(
+                [False, True],  # tie_word_embeddings
+                ["eager", "grouped_mm", "batched_mm"],  # experts_implementation
+            )
+        )
+    )
     @is_tensor_parallel_test
-    def test_ep_forward(self, tie_word_embeddings):
+    def test_ep_forward(self, tie_word_embeddings, experts_implementation):
         self._skip_if_not_supported(expert_parallel=True)
 
         config = self._get_tp_config(tie_word_embeddings=tie_word_embeddings)
@@ -654,10 +668,13 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_forward_impl)(tmp_dir, model_class, atol, rtol)
+            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_forward_impl)(
+                tmp_dir, model_class, atol, rtol, experts_implementation
+            )
 
+    @parameterized.expand([("eager",), ("grouped_mm",), ("batched_mm",)])
     @is_tensor_parallel_test
-    def test_ep_backward(self):
+    def test_ep_backward(self, experts_implementation):
         self._skip_if_not_supported(expert_parallel=True)
 
         config = self._get_tp_config()
@@ -670,4 +687,6 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_backward_impl)(tmp_dir, model_class, atol, rtol)
+            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_backward_impl)(
+                tmp_dir, model_class, atol, rtol, experts_implementation
+            )
