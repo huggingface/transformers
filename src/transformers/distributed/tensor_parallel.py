@@ -1026,8 +1026,8 @@ def apply_tensor_parallelism(
             style_name = _get_parameter_plan(parameter_name=full, plan=plan, is_weight=True)
             if style_name is not None and style_name in ALL_PARALLEL_STYLES:
                 style = ALL_PARALLEL_STYLES[style_name]
-                style.validate_param(module, p_name, tp_mesh, parameter_name=full)
-                style.shard_param(module, p_name, tp_mesh)
+                style.validate_param(module, p_name, mesh, parameter_name=full)
+                style.shard_param(module, p_name, mesh)
 
         # Install the input/output transforms required by this module's style.
         style_name = _get_parameter_plan(parameter_name=name, plan=plan, is_weight=False)
