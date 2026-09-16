@@ -1185,9 +1185,6 @@ def align_special_tokens(model, processing_class):
         tokenizer: PreTrainedTokenizerBase = processing_class.tokenizer
     else:
         tokenizer = processing_class
-    # On a composite model the special tokens live on the text sub-config, and the top-level config does not
-    # forward attribute lookups to it. Reading the top-level config there finds nothing and every run reports a
-    # mismatch. `get_text_config()` returns the config itself for a text-only model.
     config = model.config.get_text_config()
     model_has_generation_config = hasattr(model, "generation_config") and model.generation_config is not None
     updated_tokens = {}
