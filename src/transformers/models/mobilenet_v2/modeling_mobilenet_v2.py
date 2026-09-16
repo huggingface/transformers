@@ -331,7 +331,6 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
