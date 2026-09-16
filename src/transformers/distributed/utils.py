@@ -239,12 +239,7 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
 def initialize_distributed_mesh(
     distributed_config: DistributedConfig,
 ) -> tuple[torch.device | None, MeshManager | None]:
-    """Build named dense and expert views, independently of the expert dispatcher.
-
-    Both views include singleton dimensions so callers can always select their axes by name.
-    Each parameter's FSDP and TP/EP axes come from the same view. Separate roots avoid requiring
-    the newer `DeviceMesh._unflatten` API; the expert view is unused when EP is disabled.
-    """
+    """Create a device mesh containing every configured parallel dimension."""
     mesh_shape = (distributed_config.pp_size, distributed_config.fsdp_size, distributed_config.tp_size)
     if mesh_shape == (1, 1, 1):
         return None, None
