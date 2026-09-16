@@ -79,6 +79,20 @@ The table below compares EP-only training with 2D EP+FSDP2 on 8xH100 GPUs. The w
 > [!WARNING]
 > Resuming from a checkpoint is not supported yet for models sharded at load time, so the [`Trainer`] only accepts `save_only_model=True` or `save_strategy="no"` for them.
 
+## Mesh views
+
+`DistributedConfig` also accepts an explicit `ep_size`. For the current all-reduce implementation,
+set `ep_size=tp_size`; `DistributedConfig(tp_size=4, ep_size=4)` is equivalent to
+`DistributedConfig(tp_size=4, enable_expert_parallel=True)`. An explicit `ep_size=1` disables EP.
+
+Internally, a mesh manager provides two views of the same ranks: `(pp, fsdp, tp)` for dense layers
+and `(pp, efsdp, ep)` for experts, where `efsdp_size = fsdp_size * tp_size // ep_size`.
+Both retain size-one axes, so callers can select dimensions by name. The mesh builder supports
+`ep_size` values that are multiples of `tp_size` and divide `fsdp_size * tp_size`.
+Model loading currently rejects enabled EP layouts with `ep_size != tp_size` because all-reduce
+requires identical tokens within each expert group. Expert sharding and FSDP continue to use the
+`tp` and `fsdp` axes of the dense view.
+
 ## API reference
 
 [[autodoc]] DistributedConfig
