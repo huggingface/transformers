@@ -1,10 +1,3 @@
-# Syntax notes (see https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners):
-#   - Owners must have write access to the repository.
-#   - Several owners for one pattern must be on the SAME line; any one of them
-#     approving satisfies the requirement.
-#   - The LAST matching pattern wins. The blocks below cover disjoint paths, so
-#     precedence does not currently matter, but keep it in mind when adding rules.
-#   - `!` negation is not supported, and paths are case sensitive.
 
 # Loading, modeling internals and the modular converter.
 # Review from any one of Arthur, Cyril or Anton.
