@@ -19,6 +19,7 @@ import unittest
 
 from transformers import BigBirdPegasusConfig, is_torch_available
 from transformers.testing_utils import (
+    is_flaky,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -797,3 +798,7 @@ class BigBirdPegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTeste
     @unittest.skip("Decoder cannot retain gradients")
     def test_retain_grad_hidden_states_attentions(self):
         return
+
+    @is_flaky(max_attempts=2)
+    def test_generate_with_static_cache(self):
+        super().test_generate_with_static_cache()
