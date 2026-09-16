@@ -1531,35 +1531,19 @@ class ProcessorTesterMixin:
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
+        # The second conversation is shorter, so it gets padded when the two are batched together
         messages = [
             [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "What is the capital of France?"},
-                    ],
-                },
-                {
-                    "role": "assistant",
-                    "content": [
-                        {"type": "text", "text": "The capital of France is Paris."},
-                    ],
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "What about Italy?"},
-                    ],
-                },
-                {
-                    "role": "assistant",
-                    "content": [
-                        {"type": "text", "text": "The capital of Italy is Rome."},
-                    ],
-                },
-            ]
+                {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "The capital of France is Paris."}]},
+                {"role": "user", "content": [{"type": "text", "text": "What about Italy?"}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "The capital of Italy is Rome."}]},
+            ],
+            [
+                {"role": "user", "content": [{"type": "text", "text": "What is the capital of Spain?"}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "The capital of Spain is Madrid."}]},
+            ],
         ]
-
         dummy_template = (
             "{% for message in messages %}"
             "{% if (message['role'] != 'assistant') %}"
@@ -1578,37 +1562,45 @@ class ProcessorTesterMixin:
             "{% endfor %}"
         )
 
-        # The tokenizer's own implementation on the text-only conversation is the reference for the assistant ids. Note
+        # The tokenizer's own implementation on the text-only conversations is the reference for the assistant ids. Note
         # that the generation span ends on a non-whitespace char above: `char_to_token` has no token for stripped whitespace
         reference = processor.tokenizer.apply_chat_template(
             messages, tokenize=True, return_dict=True, return_assistant_tokens_mask=True, chat_template=dummy_template
         )
         expected_ids = [
-            token_id
-            for token_id, is_assistant in zip(reference["input_ids"][0], reference["assistant_masks"][0])
-            if is_assistant
+            [token_id for token_id, is_assistant in zip(input_ids, assistant_mask) if is_assistant]
+            for input_ids, assistant_mask in zip(reference["input_ids"], reference["assistant_masks"])
         ]
 
-        # Regression test for #44521: expanding the placeholder into N image tokens must not shift the assistant spans
+        # Regression test for #44521: expanding each placeholder into N image tokens must not shift the assistant spans.
+        # Use several images in one turn and images in several turns, since every expansion shifts the spans after it
         image_token = getattr(self, "image_token", None)
         if image_token and self.does_processor_return_mm_offsets(processor.__class__, "replace_image_token"):
-            messages[0][0]["content"].insert(0, {"type": "image", "image": self.prepare_images_inputs()})
+            for turn, num_images in ((0, 2), (2, 1)):
+                for _ in range(num_images):
+                    messages[0][turn]["content"].insert(0, {"type": "image", "image": self.prepare_images_inputs()})
 
-        inputs = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=False,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            return_assistant_tokens_mask=True,
-            chat_template=dummy_template,
-            image_token=image_token,
-        )
-        self.assertTrue("assistant_masks" in inputs)
-        self.assertEqual(len(inputs["assistant_masks"]), len(inputs["input_ids"]))
+        # A single conversation first, then a batch mixing it with the text-only one. Padding tokens have `(0, 0)`
+        # offsets, so the spans must be mapped correctly whichever side the padding is on
+        for batch, padding_side in ((messages[:1], None), (messages, "right"), (messages, "left")):
+            inputs = processor.apply_chat_template(
+                batch,
+                add_generation_prompt=False,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+                return_assistant_tokens_mask=True,
+                chat_template=dummy_template,
+                image_token=image_token,
+                padding=True,
+                padding_side=padding_side,
+            )
+            self.assertIn("assistant_masks", inputs)
+            self.assertEqual(len(inputs["assistant_masks"]), len(inputs["input_ids"]))
 
-        mask = inputs["assistant_masks"].bool()
-        self.assertEqual(inputs["input_ids"][mask].tolist(), expected_ids)
+            masks = inputs["assistant_masks"].bool()
+            for input_ids, mask, expected in zip(inputs["input_ids"], masks, expected_ids):
+                self.assertEqual(input_ids[mask].tolist(), expected)
 
     def test_apply_chat_template_tool_calls_no_content(self):
         processor = self.get_processor()
