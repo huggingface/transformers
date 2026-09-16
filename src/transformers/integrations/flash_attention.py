@@ -34,7 +34,7 @@ def flash_attention_forward(
     sliding_window: int | None = None,
     softcap: float | None = None,
     is_causal: bool | None = None,
-    s_aux: torch.Tensor | None = None,  # alias: learnable attention sin
+    s_aux: torch.Tensor | None = None,  # alias: learnable attention sink
     # MLA based latents along the main input
     query_latent_states: torch.Tensor | None = None,
     key_latent_states: torch.Tensor | None = None,
