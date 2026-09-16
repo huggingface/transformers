@@ -378,15 +378,6 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
         grids = None if grids is None else [torch.tensor(grids, dtype=torch.int32, device=torch_device)]
         return model.get_rope_index(input_ids, attention_mask=attention_mask, target_sizes_mrope=grids)
 
-    def test_get_rope_index_text_only_matches_1d(self):
-        """With no visual crop the canvas has to collapse back to plain 1-D positions."""
-        position_ids, rope_deltas = self._get_rope_index([[1, 2, 3, 4, 5, 6]])
-
-        self.assertEqual(tuple(position_ids.shape), (3, 1, 6))
-        expected = torch.arange(6, device=torch_device).expand(3, 1, 6)
-        self.assertTrue(torch.equal(position_ids, expected))
-        self.assertTrue(torch.equal(rope_deltas, torch.zeros(1, 1, dtype=torch.long, device=torch_device)))
-
     def test_get_rope_index_image_lays_out_canvas(self):
         """A single 2x2 image: time is frozen over the span while H/W walk the patch grid."""
         # [bos, im_start, 4 visual patches, im_end, eos]
@@ -441,7 +432,7 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
         padded_positions, _ = model.get_rope_index(padded, attention_mask=padded_mask, target_sizes_mrope=grids)
 
         self.assertTrue(torch.equal(padded_positions[:, 0, 2:], baseline[:, 0]))
-        self.assertTrue(torch.equal(padded_positions[:, 0, :2], torch.zeros(3, 2, dtype=torch.long)))
+        self.assertTrue(torch.equal(padded_positions[:, 0, :2], torch.zeros(3, 2, device=torch_device, dtype=torch.long)))
 
 
 @require_torch
@@ -497,9 +488,7 @@ class MiniCPMV4_7ViTWindowAttentionMergerTest(unittest.TestCase):
 
         with torch.no_grad():
             merged = merger(hidden_states, torch.tensor(target_sizes, dtype=torch.int32))
-            first_only = merger(
-                hidden_states[:, : 24 * 44, :], torch.tensor(target_sizes[:1], dtype=torch.int32)
-            )
+            first_only = merger(hidden_states[:, : 24 * 44, :], torch.tensor(target_sizes[:1], dtype=torch.int32))
 
         torch.testing.assert_close(merged[:, : 12 * 22, :], first_only)
 

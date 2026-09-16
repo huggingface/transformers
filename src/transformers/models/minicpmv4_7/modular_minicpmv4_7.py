@@ -30,7 +30,6 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
 from ...video_utils import VideoInput, make_batched_videos
-
 from ..auto import AutoConfig
 from ..minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6Config, MiniCPMV4_6VisionConfig
 from ..minicpmv4_6.image_processing_minicpmv4_6 import MiniCPMV4_6ImageProcessor, MiniCPMV4_6ImageProcessorKwargs
@@ -47,33 +46,21 @@ from ..minicpmv4_6.video_processing_minicpmv4_6 import MiniCPMV4_6VideoProcessor
 
 logger = logging.get_logger(__name__)
 
-# ---------------------------------------------------------------------------
-# Canvas M-RoPE helpers
-# ---------------------------------------------------------------------------
-
-
+# This is same as `target_sizes // image_token_divisor` aka `image_grid_thw // (merge_size ** 2)`!
+# Should be doable via `config.downsample_mode` in that case -  i deleted dead code which won't happpen in real life
 def _compute_llm_grid(num_tokens: int, vision_grid_height: int, vision_grid_width: int) -> tuple[int, int]:
     """Infer the (height, width) LLM-token grid for a visual patch of ``num_tokens`` tokens."""
-    if num_tokens <= 0 or vision_grid_height <= 0 or vision_grid_width <= 0:
-        return 0, 0
     vit_total = vision_grid_height * vision_grid_width
-    if vit_total == num_tokens:
-        return vision_grid_height, vision_grid_width
-    if vit_total < num_tokens:
-        return 0, 0
     factor = int(round(math.sqrt(vit_total / num_tokens)))
-    if factor > 0 and vision_grid_height % factor == 0 and vision_grid_width % factor == 0:
-        height, width = vision_grid_height // factor, vision_grid_width // factor
-        if height * width == num_tokens:
-            return height, width
-    ratio = vision_grid_height / vision_grid_width
-    width = max(1, int(round(math.sqrt(num_tokens / ratio))))
-    height = num_tokens // width
-    if height * width == num_tokens and height > 0:
-        return height, width
-    return 0, 0
+    height, width = vision_grid_height // factor, vision_grid_width // factor
+    print(num_tokens, vit_total, factor, height, width)
+    return height, width
 
 
+# FIXME: seem like duploicating what `mm_token_type_ids` is doing;, for ref see qwen-vl
+# `itertools.groupby(enumerate(mm_token_type_ids[batch_idx].tolist()), lambda x: x[1])`
+# We need to keep API uniform otherwise the maintenance costs skyrocket, hidden bugs crawl in and it's hard
+# to integarte with 3rd party libs for collabs. Please, let's use `mm_token_type_ids.groupby()` here
 def _build_image_bounds(input_ids: torch.LongTensor, special_token_ids: dict) -> torch.LongTensor:
     """Locate ``(start, end)`` visual-token spans (thumbnail + slices) in a 1-D sequence.
 
@@ -134,6 +121,10 @@ def _group_sequence_images(
         return min(group_end, sequence_end)
 
     def _is_tight_gap(previous_group, next_group):
+        # We do know how images/videos are formatted in processor
+        # AND we do use `video_token` as a searate token ID, so `mm_token_type` will
+        # tell us if that is an image/video group. Again, to remove in favor of `mm_token_types.groupby()`
+        # We can still keep some parts if needed but no assumptions about "maybe ill-formed" inputs
         group_end = _group_end_position(previous_group)
         next_group_marker = next_group["thumbnail"][0] - 1  # image_start of next group
         for position in range(group_end, next_group_marker):
@@ -208,6 +199,7 @@ def _compute_canvas(
         pos = 0
         cursor = seq_start
 
+        # FIXME: Video is similar to one-frame image - group put similarities instead of two long code blocks 
         for group in groups:
             is_video_group = "video_frames" in group
 
@@ -529,129 +521,6 @@ def _compute_canvas(
     return position_ids_3d
 
 
-def _compute_canvas_single(input_ids, position_ids_2d, image_bound, target_sizes, special_token_ids):
-    """Canvas positions for a single (unpacked, unpadded) sequence; returns ``(3, seq_len)``."""
-    seq_len = input_ids.shape[0]
-    cu_seqlens = torch.tensor([0, seq_len], device=input_ids.device, dtype=torch.long)
-    return _compute_canvas(
-        position_ids_2d.unsqueeze(0),
-        cu_seqlens,
-        image_bound,
-        target_sizes,
-        input_ids.unsqueeze(0),
-        special_token_ids,
-    )[:, 0, :]
-
-
-def _normalize_target_sizes(target_sizes_mrope, batch_size: int, device: torch.device) -> list[torch.Tensor]:
-    """Coerce processor-provided per-sample grids into a list of ``(num_visuals, 2)`` long tensors."""
-    empty = torch.zeros(0, 2, dtype=torch.long, device=device)
-    if target_sizes_mrope is None:
-        return [empty for _ in range(batch_size)]
-    if isinstance(target_sizes_mrope, torch.Tensor) and target_sizes_mrope.ndim == 2:
-        target_sizes_mrope = [target_sizes_mrope for _ in range(batch_size)]
-    result = []
-    for batch_idx in range(batch_size):
-        item = target_sizes_mrope[batch_idx] if batch_idx < len(target_sizes_mrope) else None
-        if item is None:
-            result.append(empty)
-            continue
-        tensor = item if isinstance(item, torch.Tensor) else torch.as_tensor(item)
-        if tensor.numel() == 0:
-            result.append(empty)
-        else:
-            result.append(tensor.to(device=device, dtype=torch.long).reshape(-1, 2))
-    return result
-
-
-def _has_visual_grids(target_sizes_mrope) -> bool:
-    """Whether the processor actually reported at least one visual crop."""
-    if target_sizes_mrope is None:
-        return False
-    if isinstance(target_sizes_mrope, torch.Tensor):
-        return target_sizes_mrope.numel() > 0
-    for item in target_sizes_mrope:
-        if item is None:
-            continue
-        tensor = item if isinstance(item, torch.Tensor) else torch.as_tensor(item)
-        if tensor.numel() > 0:
-            return True
-    return False
-
-
-def expand_1d_position_ids_to_3d(
-    input_ids: torch.LongTensor,
-    attention_mask: torch.Tensor | None = None,
-) -> torch.Tensor:
-    """Expand sequential 1-D positions to ``(3, batch, seq)`` for the Qwen3.5 text backbone."""
-    if attention_mask is not None:
-        return attention_mask.long().cumsum(-1).sub(1).clamp(min=0).unsqueeze(0).expand(3, -1, -1)
-
-    if input_ids.ndim == 1:
-        pos = torch.arange(input_ids.shape[0], device=input_ids.device, dtype=torch.long)
-        return pos.unsqueeze(0).unsqueeze(0).expand(3, 1, -1)
-
-    batch_size, seq_len = input_ids.shape
-    pos = torch.arange(seq_len, device=input_ids.device, dtype=torch.long)
-    return pos.view(1, 1, -1).expand(3, batch_size, -1)
-
-
-def compute_canvas_position_ids(input_ids, attention_mask, target_sizes_mrope, special_token_ids):
-    """Build canvas ``(3, B, S)`` position ids with left-padding-safe mask compaction.
-
-    Each batch row is compacted to valid tokens (Qwen-style), bounds are recomputed on the
-    compact ids via ``_build_image_bounds``, then results are scattered back. This keeps the
-    default processor ``padding_side="left"`` correct for ``batch > 1``.
-    """
-    if input_ids.ndim == 1:
-        input_ids = input_ids.unsqueeze(0)
-    batch_size, seq_len = input_ids.shape
-    if any(token_id is None for token_id in special_token_ids.values()):
-        return expand_1d_position_ids_to_3d(input_ids, attention_mask)
-    out = torch.zeros(3, batch_size, seq_len, dtype=torch.long, device=input_ids.device)
-    target_sizes_list = _normalize_target_sizes(target_sizes_mrope, batch_size, input_ids.device)
-
-    for batch_idx in range(batch_size):
-        if attention_mask is not None:
-            valid_mask = attention_mask[batch_idx].bool()
-        else:
-            valid_mask = torch.ones(seq_len, dtype=torch.bool, device=input_ids.device)
-
-        compact_ids = input_ids[batch_idx][valid_mask]
-        compact_len = int(compact_ids.shape[0])
-        compact_pos2d = torch.arange(compact_len, device=input_ids.device, dtype=torch.long)
-        grids = target_sizes_list[batch_idx]
-
-        if grids.numel() == 0:
-            compact_pos3d = compact_pos2d.unsqueeze(0).expand(3, -1)
-        else:
-            bounds = _build_image_bounds(compact_ids, special_token_ids)
-            compact_pos3d = _compute_canvas_single(compact_ids, compact_pos2d, bounds, grids, special_token_ids)
-
-        out[:, batch_idx, valid_mask] = compact_pos3d
-    return out
-
-
-def compute_canvas_rope_index(
-    input_ids,
-    attention_mask,
-    target_sizes_mrope,
-    special_token_ids,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Build canvas ``(3, batch, seq)`` position ids and decode ``rope_deltas``.
-
-    ``rope_deltas`` uses ``amax + 1 - seq_len`` (Qwen convention) so continuing generation with
-    an existing cache does not collide with the last prefill spatial position.
-    """
-    position_ids = compute_canvas_position_ids(input_ids, attention_mask, target_sizes_mrope, special_token_ids)
-    if attention_mask is not None:
-        seq_lens = attention_mask.sum(-1)
-    else:
-        seq_lens = torch.full((input_ids.shape[0],), input_ids.shape[1], device=input_ids.device, dtype=torch.long)
-    deltas = position_ids.amax(dim=(0, 2)).unsqueeze(1) + 1 - seq_lens.unsqueeze(1)
-    return position_ids, deltas.long()
-
-
 @auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7")
 @strict
 class MiniCPMV4_7VisionConfig(MiniCPMV4_6VisionConfig):
@@ -783,7 +652,6 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
         input_ids: torch.LongTensor,
         attention_mask: torch.Tensor | None = None,
         target_sizes_mrope: list[torch.Tensor] | None = None,
-        special_token_ids: dict | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -795,21 +663,47 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
         unpadded tokens.
         """
         del mm_token_type_ids, kwargs  # API compat; the scan below is the single source of truth
-        token_ids = special_token_ids if special_token_ids is not None else self.config.get_mrope_special_token_ids()
-        if _has_visual_grids(target_sizes_mrope) and any(v is None for v in token_ids.values()):
-            raise ValueError(
-                "Canvas M-RoPE needs the structural token ids but some are missing. Populate "
-                "`image_start_id` / `image_end_id` / `slice_start_id` / `slice_end_id` / `newline_id` "
-                "on the model config (the conversion script resolves them from the tokenizer), or pass "
-                "`special_token_ids=` explicitly. Continuing would silently fall back to 1-D positions "
-                "and degrade the model on every image and video input."
-            )
-        return compute_canvas_rope_index(
-            input_ids,
-            attention_mask,
-            target_sizes_mrope=target_sizes_mrope if target_sizes_mrope is not None else [],
-            special_token_ids=token_ids,
-        )
+        special_token_ids = self.config.get_mrope_special_token_ids()
+
+        # NOTE deleted: `target_sizes_mrope` cannot be `None` if model entered this path
+        # The method is called from model only when there are image/video inputs, we assume all inputs are provided
+        # See the check `if target_sizes_mrope is None` in `self.compute_3d_position_ids`
+        batch_size, seq_len = input_ids.shape
+        position_ids = torch.zeros(3, batch_size, seq_len, dtype=torch.long, device=input_ids.device)
+
+        for batch_idx in range(batch_size):
+            if attention_mask is not None:
+                valid_mask = attention_mask[batch_idx].bool()
+            else:
+                valid_mask = torch.ones(seq_len, dtype=torch.bool, device=input_ids.device)
+
+            compact_ids = input_ids[batch_idx][valid_mask]
+            compact_len = int(compact_ids.shape[0])
+            compact_pos2d = torch.arange(compact_len, device=input_ids.device, dtype=torch.long)
+            grids = target_sizes_mrope[batch_idx]
+
+            # when can we get valid tensor which is empty? Processor always returns `sizes` with values
+            # Deleted the check on `if grids.numel() == 0`
+            bounds = _build_image_bounds(compact_ids, special_token_ids)
+
+            cu_seqlens = torch.tensor([0, compact_ids.shape[0]], device=input_ids.device, dtype=torch.long)
+            compact_pos3d = _compute_canvas(
+                # why unsqueeze a dummy batch dim, can just expect a single item in the first place
+                compact_pos2d.unsqueeze(0),
+                cu_seqlens,
+                bounds,
+                grids,
+                compact_ids.unsqueeze(0),
+                special_token_ids,
+            )[:, 0, :]
+            position_ids[:, batch_idx, valid_mask] = compact_pos3d
+
+        if attention_mask is not None:
+            seq_lens = attention_mask.sum(-1)
+        else:
+            seq_lens = torch.full((input_ids.shape[0],), input_ids.shape[1], device=input_ids.device, dtype=torch.long)
+        deltas = position_ids.amax(dim=(0, 2)).unsqueeze(1) + 1 - seq_lens.unsqueeze(1)
+        return position_ids, deltas.long()
 
     def compute_3d_position_ids(
         self,
@@ -823,11 +717,12 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
     ) -> torch.Tensor | None:
         """Return 4D position ids ``[text, T, H, W]`` for canvas M-RoPE (Qwen-style entrypoint)."""
         past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
-        # Only the spatial grids can actually produce canvas positions; the other two are
-        # accepted for API compatibility and are ignored by `get_rope_index`.
-        has_multimodal = target_sizes_mrope is not None
 
-        if input_ids is not None and has_multimodal and (self.rope_deltas is None or past_key_values_length == 0):
+        if (
+            input_ids is not None
+            and target_sizes_mrope is not None
+            and (self.rope_deltas is None or past_key_values_length == 0)
+        ):
             mrope_position_ids, rope_deltas = self.get_rope_index(
                 input_ids,
                 attention_mask=attention_mask,
@@ -836,53 +731,29 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
                 mm_token_type_ids=mm_token_type_ids,
             )
             self.rope_deltas = rope_deltas
-            text_position_ids = self._text_position_ids(input_ids, attention_mask, past_key_values_length)
-            return torch.cat([text_position_ids.unsqueeze(0), mrope_position_ids], dim=0)
-
-        if self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
-            if input_ids is None:
-                if inputs_embeds is None:
-                    return None
-                batch_size, seq_length = inputs_embeds.shape[:2]
-                device = inputs_embeds.device
-                text_position_ids = (
-                    torch.arange(past_key_values_length, past_key_values_length + seq_length, device=device)
-                    .unsqueeze(0)
-                    .expand(batch_size, -1)
-                )
+            return mrope_position_ids
+        elif self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
+            batch_size, seq_length, _ = inputs_embeds.shape
+            if attention_mask is not None:
+                position_ids = attention_mask.long().cumsum(-1) - 1
+                position_ids = position_ids.masked_fill(attention_mask == 0, 0)
+                position_ids = position_ids.view(1, batch_size, -1).repeat(3, 1, 1).to(inputs_embeds.device)
             else:
-                batch_size = input_ids.shape[0]
-                text_position_ids = self._text_position_ids(input_ids, attention_mask, past_key_values_length)
-            mrope_position_ids = text_position_ids.unsqueeze(0).expand(3, -1, -1)
+                position_ids = torch.arange(past_key_values_length, past_key_values_length + seq_length)
+                position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1).to(inputs_embeds.device)
             delta = self.rope_deltas.repeat_interleave(batch_size // self.rope_deltas.shape[0], dim=0)
-            mrope_position_ids = mrope_position_ids + delta.to(device=mrope_position_ids.device)
-            return torch.cat([text_position_ids.unsqueeze(0), mrope_position_ids], dim=0)
-
-        if input_ids is not None:
-            return expand_1d_position_ids_to_3d(input_ids, attention_mask)
-
-        if has_multimodal:
-            logger.warning_once(
-                "Canvas M-RoPE needs `input_ids` to locate the visual spans, but only `inputs_embeds` was "
-                "given and no cached `rope_deltas` are available. Falling back to 1-D positions, which "
-                "degrades multimodal quality. Pass `input_ids` for the first forward pass."
-            )
+            position_ids = position_ids + delta.to(device=inputs_embeds.device)
+        else:
+            # Can't build correct 3D positions. Let the model infer it as 1D
+            if target_sizes_mrope is not None:
+                logger.warning_once(
+                    "Canvas M-RoPE needs `input_ids` to locate the visual spans, but only `inputs_embeds` was "
+                    "given and no cached `rope_deltas` are available. Falling back to 1-D positions, which "
+                    "degrades multimodal quality. Pass `input_ids` for the first forward pass."
+                )
+            position_ids = None
         return None
 
-    def _text_position_ids(self, input_ids, attention_mask, past_key_values_length=0):
-        """Standard 1-D text position ids of shape ``(batch, seq)``."""
-        if attention_mask is not None:
-            text_positions = attention_mask.long().cumsum(-1) - 1
-            return text_positions.masked_fill(attention_mask == 0, 0)
-        batch_size, seq_length = input_ids.shape
-        return (
-            torch.arange(past_key_values_length, past_key_values_length + seq_length, device=input_ids.device)
-            .unsqueeze(0)
-            .expand(batch_size, -1)
-        )
-
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -897,7 +768,6 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
         target_sizes_mrope: list[torch.Tensor] | None = None,
-        special_token_ids: dict | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
@@ -914,8 +784,6 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
             `"4x"` keeps 4x more visual tokens; default `"16x"` applies full merge.
         target_sizes_mrope (`list[torch.Tensor]`, *optional*):
             Spatial grid sizes (height, width in patches) per visual crop for canvas M-RoPE.
-        special_token_ids (`dict`, *optional*):
-            Override for canvas structural token ids; defaults to values on `config`.
         mm_token_type_ids (`torch.IntTensor`, *optional*):
             Modality type ids (text/image/video), matching the Qwen processor contract.
         """
@@ -953,7 +821,6 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
                 target_sizes_mrope=target_sizes_mrope,
-                special_token_ids=special_token_ids,
                 mm_token_type_ids=mm_token_type_ids,
             )
 
@@ -994,7 +861,6 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
         target_sizes_mrope: list[torch.Tensor] | None = None,
-        special_token_ids: dict | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
@@ -1011,8 +877,6 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
             `"4x"` keeps 4x more visual tokens; default `"16x"` applies full merge.
         target_sizes_mrope (`list[torch.Tensor]`, *optional*):
             Spatial grid sizes per visual crop for canvas M-RoPE.
-        special_token_ids (`dict`, *optional*):
-            Override for canvas structural token ids.
         mm_token_type_ids (`torch.IntTensor`, *optional*):
             Modality type ids from the processor (Qwen-compatible).
         """
@@ -1029,7 +893,6 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
             use_cache=use_cache,
             downsample_mode=downsample_mode,
             target_sizes_mrope=target_sizes_mrope,
-            special_token_ids=special_token_ids,
             mm_token_type_ids=mm_token_type_ids,
             **kwargs,
         )
@@ -1048,46 +911,6 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        target_sizes=None,
-        pixel_values_videos=None,
-        target_sizes_videos=None,
-        downsample_mode=None,
-        target_sizes_mrope=None,
-        special_token_ids=None,
-        mm_token_type_ids=None,
-        position_ids=None,
-        use_cache=True,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            downsample_mode=downsample_mode,
-            **kwargs,
-        )
-        if is_first_iteration or not use_cache:
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["target_sizes"] = target_sizes
-            model_inputs["pixel_values_videos"] = pixel_values_videos
-            model_inputs["target_sizes_videos"] = target_sizes_videos
-            model_inputs["target_sizes_mrope"] = target_sizes_mrope
-            model_inputs["special_token_ids"] = special_token_ids
-            model_inputs["mm_token_type_ids"] = mm_token_type_ids
-        return model_inputs
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # Overwritten -- canvas M-RoPE needs 4D position ids [text, T, H, W].
@@ -1110,7 +933,6 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
                 input_ids,
                 attention_mask=model_kwargs.get("attention_mask"),
                 target_sizes_mrope=model_kwargs.get("target_sizes_mrope"),
-                special_token_ids=model_kwargs.get("special_token_ids"),
                 mm_token_type_ids=model_kwargs.get("mm_token_type_ids"),
             )
             return torch.cat([text_positions.unsqueeze(0), mrope_positions], dim=0)
@@ -1125,7 +947,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
         **model_kwargs,
     ) -> tuple[torch.LongTensor, dict[str, Any]]:
         ts_keys = ("target_sizes", "target_sizes_videos")
-        mrope_keys = ("target_sizes_mrope", "special_token_ids", "mm_token_type_ids")
+        mrope_keys = ("target_sizes_mrope", "mm_token_type_ids")
         saved = {k: model_kwargs.pop(k) for k in (*ts_keys, *mrope_keys) if model_kwargs.get(k) is not None}
 
         expanded_position_ids = None

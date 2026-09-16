@@ -163,6 +163,7 @@ MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL = (
     "pixel_attention_mask",
     "pixel_values_images",
     "num_local_patches",
+    "target_sizes_mrope",  # FIXME: clean-up and delete this line
 )
 
 
