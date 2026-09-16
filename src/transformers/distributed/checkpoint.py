@@ -86,6 +86,8 @@ class _CheckpointView:
         coordinate = tensor.device_mesh.get_coordinate()
         if coordinate is None:
             return
+        # Compute the global regions of the tensor that are stored in the local storage.
+        # The regions are represented as a list of (global offset, length) intervals for each dimension.
         regions = [[(0, size)] for size in tensor.shape]
         for axis, placement in enumerate(tensor.placements):
             if placement.is_partial():
