@@ -268,7 +268,10 @@ class UnitColwiseParallel(TensorParallelLayer):
         if meta is None:
             return
         placements = [Shard(meta.ndim - 2), Replicate()]
-        remainder = mesh._layout.numel() % meta.shape[meta.ndim - 2]
+        unit_number = meta.shape[meta.ndim - 2] // module.unit_dim
+
+        remainder = mesh._layout.numel() % unit_number
+        # if the remainder is 0, there is nothing to do.
         split = mesh._layout.numel() // remainder
         # We need to create a device mesh anew
         new_mesh = mesh.mesh.reshape(remainder, split)
