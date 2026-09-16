@@ -17,6 +17,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import numpy as np
 from parameterized import parameterized
 
 from transformers import (
@@ -265,6 +266,27 @@ class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, Generation
 
             else:
                 self.assertIsInstance(outputs, tuple, "get_audio_features() must return a tuple if return_dict=False")
+
+    def test_num_audio_tokens_matches_processor_for_long_audio(self):
+        """Regression test for #48835: `get_audio_features` must compute the same
+        `num_audio_tokens` as `VibeVoiceAsrProcessor`, even for audio long enough that a
+        float32 `torch.ceil(sum / hop_length)` would round differently than the processor's
+        float64 `np.ceil(audio_lengths / pad_to_multiple_of)`.
+        """
+        hop_length = 3200
+        # 9476 * 3200 + 1 is the smallest failure case reported in the issue: it is one sample
+        # past a hop boundary, but float32 division rounds the quotient down to an integer,
+        # so `ceil` silently drops the remainder instead of rounding up.
+        audio_lengths = torch.tensor([1, hop_length, hop_length + 1, 9476 * hop_length + 1, 2**24 + 1])
+
+        expected = np.ceil(audio_lengths.numpy().astype(np.float64) / hop_length).astype(np.int64)
+        num_audio_tokens = torch.div(audio_lengths + hop_length - 1, hop_length, rounding_mode="floor")
+
+        self.assertTrue(torch.equal(num_audio_tokens, torch.from_numpy(expected)))
+        # Sanity check that the float32 `torch.ceil` computation is indeed the buggy one this
+        # regression guards against.
+        buggy = torch.ceil(audio_lengths.to(torch.float32) / hop_length).to(torch.int64)
+        self.assertFalse(torch.equal(buggy, torch.from_numpy(expected)))
 
 
 @require_torch

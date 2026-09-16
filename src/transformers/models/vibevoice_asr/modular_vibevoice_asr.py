@@ -317,9 +317,13 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
 
         combined_features = self.multi_modal_projector(acoustic_latents, semantic_latents)
         if padding_mask is not None:
-            num_audio_tokens = torch.ceil(
-                padding_mask.sum(dim=-1) / self.config.acoustic_tokenizer_encoder_config.hop_length
-            ).to(torch.int64)
+            hop_length = self.config.acoustic_tokenizer_encoder_config.hop_length
+            # Use integer arithmetic instead of `torch.ceil` on a float32 division: for long audio the
+            # number of samples can exceed float32's 24-bit mantissa, causing the division result to be
+            # rounded down and `ceil` to under-count `num_audio_tokens` (mismatching the processor, which
+            # computes this value in float64). See https://github.com/huggingface/transformers/issues/48835.
+            audio_lengths = padding_mask.sum(dim=-1)
+            num_audio_tokens = torch.div(audio_lengths + hop_length - 1, hop_length, rounding_mode="floor")
             padding_mask = torch.arange(num_audio_tokens.max(), device=combined_features.device) < num_audio_tokens[
                 :, None
             ].to(combined_features.device)
