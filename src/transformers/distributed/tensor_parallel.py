@@ -278,12 +278,16 @@ class UnitColwiseParallel(ColwiseParallel):
     We need to have [Shard(0), Replicate()] .
     """
 
+    needs_config = True
+
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
         if meta is None:
             return
         weight = module._parameters["weight"]
-        unit = weight.shape[0] // module.unit_dim
+        config = module.config
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        unit = weight.shape[0] // head_dim
         unit_mesh = _unit_mesh(mesh, unit)
         module._unit_mesh = unit_mesh
         module._parameters[param] = torch.nn.Parameter(
@@ -403,12 +407,16 @@ class RowwiseParallel(TensorParallelLayer):
 
 
 class UnitRowwiseParallel(RowwiseParallel):
+    needs_config = True
+
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
         if meta is None:
             return
         weight = module._parameters["weight"]
-        unit = weight.shape[-1] // module.unit_dim
+        config = module.config
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        unit = weight.shape[-1] // head_dim
         module._unit_mesh = _unit_mesh(mesh, unit)
         # bias is added once after the reduce, so it stays replicated
         placements = [Replicate(), Replicate()] if param == "bias" else [Shard(meta.ndim - 1), Replicate()]
@@ -922,6 +930,9 @@ def apply_tensor_parallelism(model, tp_mesh):
             style_name = _get_parameter_tp_plan(parameter_name=full, tp_plan=model.tp_plan, is_weight=True)
             if style_name is not None and style_name in ALL_PARALLEL_STYLES:
                 style = ALL_PARALLEL_STYLES[style_name]
+                if getattr(style, "needs_config", False):
+                    # Head-aware styles need the head size before they can size the shard.
+                    module.config = model.config.get_text_config()
                 style.validate_param(module, p_name, tp_mesh, parameter_name=full)
                 style.shard_param(module, p_name, tp_mesh)
 
