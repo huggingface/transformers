@@ -50,9 +50,7 @@ class SdpaNpuAttentionMaskTest(unittest.TestCase):
 
         with patch.object(sdpa_attention, "_is_torch_npu_available", True):
             with patch.object(torch.nn.functional, "scaled_dot_product_attention", _capture):
-                sdpa_attention_forward(
-                    torch.nn.Module(), query, key, value, attention_mask, is_causal=False
-                )
+                sdpa_attention_forward(torch.nn.Module(), query, key, value, attention_mask, is_causal=False)
         return captured["attn_mask"]
 
     def test_additive_bias_mask_is_left_unchanged(self):
