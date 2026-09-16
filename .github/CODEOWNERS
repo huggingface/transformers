@@ -12,10 +12,6 @@
 /src/transformers/modeling_utils.py       @ArthurZucker @Cyrilvallez @vasqu
 /utils/modular_model_converter.py         @ArthurZucker @Cyrilvallez @vasqu
 
-# Generation, cache and masking internals.
-# Cyril is the primary owner here and is always auto-requested. Arthur and Anton
-# are listed as fallbacks because GitHub does not let an author approve their own
-# pull request, so a Cyril-only rule would permanently block Cyril's own changes.
 /src/transformers/generation/utils.py     @Cyrilvallez @ArthurZucker @vasqu
 /src/transformers/cache_utils.py          @Cyrilvallez @ArthurZucker @vasqu
 /src/transformers/masking_utils.py        @Cyrilvallez @ArthurZucker @vasqu
