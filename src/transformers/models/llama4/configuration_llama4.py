@@ -42,10 +42,10 @@ class Llama4VisionConfig(PreTrainedConfig):
     """
 
     base_model_tp_plan = {
-        "model.layers.*.self_attn.q_proj": "colwise",
-        "model.layers.*.self_attn.k_proj": "colwise",
-        "model.layers.*.self_attn.v_proj": "colwise",
-        "model.layers.*.self_attn.o_proj": "rowwise",
+        "model.layers.*.self_attn.q_proj": "unit_colwise",
+        "model.layers.*.self_attn.k_proj": "unit_colwise",
+        "model.layers.*.self_attn.v_proj": "unit_colwise",
+        "model.layers.*.self_attn.o_proj": "unit_rowwise",
         "vision_adapter.mlp.fc1": "colwise",
         "vision_adapter.mlp.fc2": "rowwise",
         "patch_embedding.linear": "colwise_gather_output",
@@ -110,10 +110,10 @@ class Llama4TextConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 500000.0
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.q_proj": "unit_colwise",
+        "layers.*.self_attn.k_proj": "unit_colwise",
+        "layers.*.self_attn.v_proj": "unit_colwise",
+        "layers.*.self_attn.o_proj": "unit_rowwise",
         "layers.*.feed_forward.shared_expert.gate_proj": "colwise",
         "layers.*.feed_forward.shared_expert.up_proj": "colwise",
         "layers.*.feed_forward.shared_expert.down_proj": "rowwise",
@@ -125,10 +125,10 @@ class Llama4TextConfig(PreTrainedConfig):
         "layers.*.feed_forward.down_proj": "rowwise",
     }
     base_model_ep_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.q_proj": "unit_colwise",
+        "layers.*.self_attn.k_proj": "unit_colwise",
+        "layers.*.self_attn.v_proj": "unit_colwise",
+        "layers.*.self_attn.o_proj": "unit_rowwise",
         "layers.*.feed_forward.experts.gate_up_proj": "grouped_gemm",  # row because not linear
         "layers.*.feed_forward.experts.down_proj": "grouped_gemm",  # col because not linear
         "layers.*.feed_forward.gate_proj": "colwise",
