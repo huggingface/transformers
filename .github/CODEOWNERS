@@ -1,0 +1,29 @@
+# Code owners for the files that everything else is built on.
+#
+# Listing an owner here makes GitHub request their review automatically. On its own
+# this file does NOT block a merge: it only becomes a merge requirement once
+# "Require a pull request before merging" + "Require review from Code Owners" are
+# enabled for `main` in branch protection or a repository ruleset. That is a
+# repository setting and cannot be changed from a pull request.
+#
+# Syntax notes (see https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners):
+#   - Owners must have write access to the repository.
+#   - Several owners for one pattern must be on the SAME line; any one of them
+#     approving satisfies the requirement.
+#   - The LAST matching pattern wins. The blocks below cover disjoint paths, so
+#     precedence does not currently matter, but keep it in mind when adding rules.
+#   - `!` negation is not supported, and paths are case sensitive.
+
+# Loading, modeling internals and the modular converter.
+# Review from any one of Arthur, Cyril or Anton.
+/src/transformers/core_model_loading.py   @ArthurZucker @Cyrilvallez @vasqu
+/src/transformers/modeling_utils.py       @ArthurZucker @Cyrilvallez @vasqu
+/utils/modular_model_converter.py         @ArthurZucker @Cyrilvallez @vasqu
+
+# Generation, cache and masking internals.
+# Cyril is the primary owner here and is always auto-requested. Arthur and Anton
+# are listed as fallbacks because GitHub does not let an author approve their own
+# pull request, so a Cyril-only rule would permanently block Cyril's own changes.
+/src/transformers/generation/utils.py     @Cyrilvallez @ArthurZucker @vasqu
+/src/transformers/cache_utils.py          @Cyrilvallez @ArthurZucker @vasqu
+/src/transformers/masking_utils.py        @Cyrilvallez @ArthurZucker @vasqu
