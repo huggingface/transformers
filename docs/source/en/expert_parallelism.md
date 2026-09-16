@@ -81,9 +81,9 @@ The table below compares EP-only training with 2D EP+FSDP2 on 8xH100 GPUs. The w
 
 ## Mesh views
 
-`DistributedConfig` also accepts an explicit `ep_size`. For the current all-reduce implementation,
-set `ep_size=tp_size`; `DistributedConfig(tp_size=4, ep_size=4)` is equivalent to
-`DistributedConfig(tp_size=4, enable_expert_parallel=True)`. An explicit `ep_size=1` disables EP.
+The legacy `enable_expert_parallel=True` flag is a deprecated alias for `ep_size=tp_size` when `ep_size`
+is omitted, and will be removed in v5.20. It emits a `FutureWarning` and leaves `tp_size` and `fsdp_size`
+unchanged. An explicit `ep_size` takes precedence over the flag, and `ep_size=1` disables EP.
 
 Internally, a mesh manager provides two views of the same ranks: `(pp, fsdp, tp)` for dense layers
 and `(pp, efsdp, ep)` for experts, where `efsdp_size = fsdp_size * tp_size // ep_size`.
