@@ -18,6 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -52,42 +54,27 @@ class DeepseekV41RMSNorm(nn.Module):
 
 
 class DeepseekV41RotaryEmbedding(nn.Module):
-    """
-    Multi-layer-type rotary embedding (Laguna pattern: partial rotary on top of
-    Gemma3's per-layer-type buffers), specialised for V4's *interleaved* RoPE.
-    Interleaved RoPE: one `θ_i` per pair (`rope_head_dim // 2` entries),
-    DIFF no end-to-end duplication. Same shape as `inv_freq @ position_ids`.
-
-    V4 deliberately decouples its architecture `layer_types`
-    (`sliding_attention` / `compressed_sparse_attention` /
-    `heavily_compressed_attention`) from its rope-type labels (`main` /
-    `compress`) — the latter live as keys in `config.rope_parameters` and
-    only differ in their `rope_theta` base. So this override replaces
-    Laguna's `set(config.layer_types)` iteration with `rope_parameters.keys()`
-    when building the per-type inv_freq buffers.
-    """
-
     @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: DeepseekV41Config, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
         self.config = config
-        # Only the nested per-rope-type sub-dicts are real layer types — the top-level
-        # `rope_type` key that ``convert_rope_params_to_dict`` may leave on
-        # ``config.rope_parameters`` is a flat-shape leftover, not a layer.
-        self.layer_types = [k for k, v in config.rope_parameters.items() if isinstance(v, dict)]
+        self.layer_types = sorted(set(config.layer_types))
         self.rope_type = {}
         for layer_type in self.layer_types:
-            rope_params = config.rope_parameters[layer_type]
+            rope_params = self.config.rope_parameters[layer_type]
+            if rope_params is None:
+                continue
+
             self.rope_type[layer_type] = rope_params["rope_type"]
-            rope_init_fn = self.compute_default_rope_parameters
+            rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            inv_freq, attention_scaling = rope_init_fn(config, device, layer_type=layer_type)
-            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(inv_freq, persistent=False))
-            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(inv_freq.clone(), persistent=False))
-            setattr(self, f"{layer_type}_attention_scaling", attention_scaling)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
+            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
+            setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
     @deprecate_kwarg("device", version="5.18")
@@ -120,21 +107,23 @@ class DeepseekV41RotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids, layer_type=None):
-        # Key difference vs Laguna's forward: no `torch.cat([freqs, freqs], dim=-1)`
-        # duplication. V4's interleaved RoPE pairs consecutive channels, so we only need
-        # `rope_head_dim // 2` unique θ entries — the `apply_rotary_pos_emb` helper does
-        # the `repeat_interleave(2)` next to the rotation math, where the link between
-        # the doubled dim and `rotate_half` is local and obvious.
+    def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
-        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+
+        inv_freq_expanded = (
+            inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
+        )
         position_ids_expanded = position_ids[:, None, :].float()
+
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        # Disable any outside autocast context if any, to really force fp32
         with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            cos = freqs.cos() * attention_scaling
-            sin = freqs.sin() * attention_scaling
+            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * attention_scaling
+            sin = emb.sin() * attention_scaling
+
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -177,6 +166,8 @@ class DeepseekV41Experts(nn.Module):
 
 
 class DeepseekV41TopkRouter(nn.Module):
+    """Deepseek V4 router with a different router bias for image tokens."""
+
     def __init__(self, config: DeepseekV41Config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -186,12 +177,21 @@ class DeepseekV41TopkRouter(nn.Module):
         self.score_fn = ACT2FN[config.scoring_func]
         self.routed_scaling_factor = config.routed_scaling_factor
         self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.e_score_correction_bias_vl = nn.Buffer(torch.zeros(self.num_experts))
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(
+        self, hidden_states: torch.Tensor, image_mask: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Routs tokens to experts, with different bias for text and image tokens.
+        Args:
+            - hidden_states: tensor with shape [batch_size, seq_len, hidden_dim]
+            - image_mask: a boolean tensor indicating if the token is a image token with shape [batch_size, seq_len]
+        """
         flat = hidden_states.reshape(-1, self.hidden_dim)
         logits = F.linear(flat, self.weight)
         scores = self.score_fn(logits)
-        indices = torch.topk(scores + self.e_score_correction_bias, self.top_k, dim=-1, sorted=False).indices
+        bias = torch.where(image_mask.unsqueeze(-1), self.e_score_correction_bias_vl, self.e_score_correction_bias)
+        indices = torch.topk(scores + bias, self.top_k, dim=-1, sorted=False).indices
         weights = scores.gather(1, indices)
         weights = weights / (weights.sum(dim=-1, keepdim=True) + 1e-20)
         return logits, weights * self.routed_scaling_factor, indices
