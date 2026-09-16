@@ -68,8 +68,8 @@ The model composes three parts:
 > (`prefix_allowed_tokens_fn`, `force_words_ids`, forced tokens) are unsupported and
 > silently emit ids the head has no learned distribution for. DoLa decoding (`dola_layers`) is also unsupported:
 > it applies the physical LM head directly to intermediate hidden states, whose logits do not have the padded
-> logical vocabulary width. Label positions holding input-only ids must be masked with `-100` (the model raises
-> an explicit error otherwise), and `Trainer`'s `label_smoothing_factor` is unsupported (its loss diverges over
+> logical vocabulary width. Label positions holding input-only ids must be masked with `-100`, and
+> `Trainer`'s `label_smoothing_factor` is unsupported (its loss diverges over
 > the tail). Released checkpoints keep `tie_word_embeddings=False` in both the text and composite configs.
 > Generic embedding resizing or explicitly enabling weight tying does not preserve the pruned-head layout.
 
