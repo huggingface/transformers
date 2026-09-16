@@ -283,7 +283,7 @@ class UnitColwiseParallel(ColwiseParallel):
         if meta is None:
             return
         weight = module._parameters["weight"]
-        unit = weight.shape[-1] // module.unit_dim
+        unit = weight.shape[0] // module.unit_dim
         unit_mesh = _unit_mesh(mesh, unit)
         module._unit_mesh = unit_mesh
         module._parameters[param] = torch.nn.Parameter(
@@ -294,6 +294,7 @@ class UnitColwiseParallel(ColwiseParallel):
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         # The inputs are on a different mesh. We HAVE to swap the meshs as cross mesh coms
         # do not work.
+        # Swapping meshes is metadata only while the tensor is replicated, so gather first.
         x = args[0]
         if isinstance(x, DTensor):
             replicated = [Replicate()] * x.device_mesh.ndim
