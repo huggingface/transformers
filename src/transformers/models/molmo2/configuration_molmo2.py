@@ -38,7 +38,7 @@ class Molmo2VisionConfig(PreTrainedConfig):
 
     model_type = "molmo2"
     base_config_key = "vision_config"
-    # The names stored in the released checkpoints, also read by vLLM's native Molmo2 port.
+    # Keys of the released checkpoints' `config.json`.
     attribute_map = {
         "image_default_input_size": "image_size",
         "image_patch_size": "patch_size",
@@ -49,8 +49,8 @@ class Molmo2VisionConfig(PreTrainedConfig):
     intermediate_size: int = 4304
     num_hidden_layers: int = 27
     num_attention_heads: int = 16
-    num_key_value_heads: int | None = None
-    head_dim: int | None = None
+    num_key_value_heads: int = 16
+    head_dim: int = 72
     hidden_act: str = "gelu_pytorch_tanh"
     layer_norm_eps: float = 1e-6
     image_size: list[int] | None = None
@@ -62,10 +62,6 @@ class Molmo2VisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
-        if self.num_key_value_heads is None:
-            self.num_key_value_heads = self.num_attention_heads
-        if self.head_dim is None:
-            self.head_dim = self.hidden_size // self.num_attention_heads
         if self.image_size is None:
             self.image_size = [378, 378]
         if self.num_position_embeddings is None:
@@ -79,8 +75,8 @@ class Molmo2VisionConfig(PreTrainedConfig):
 @strict
 class Molmo2AdapterConfig(PreTrainedConfig):
     r"""
-    vit_layers (`list[int]`, *optional*):
-        Indices of ViT layers to extract features from, `[-3, -9]` when not provided.
+    vision_feature_layer (`list[int]`, *optional*):
+        Indices of the ViT layers whose outputs are concatenated and pooled, `[-3, -9]` when not provided.
     text_hidden_size (`int`, *optional*, defaults to 3584):
         Hidden size of the text model (used for projection).
     image_feature_dropout (`float`, *optional*, defaults to 0.0):
@@ -89,12 +85,13 @@ class Molmo2AdapterConfig(PreTrainedConfig):
 
     model_type = "molmo2"
     base_config_key = "adapter_config"
+    attribute_map = {"vit_layers": "vision_feature_layer"}
 
-    vit_layers: list[int] | None = None
+    vision_feature_layer: list[int] | None = None
     hidden_size: int = 1152
     num_attention_heads: int = 16
-    num_key_value_heads: int | None = None
-    head_dim: int | None = None
+    num_key_value_heads: int = 16
+    head_dim: int = 72
     attention_dropout: float = 0.0
     residual_dropout: float = 0.0
     hidden_act: str = "silu"
@@ -104,12 +101,8 @@ class Molmo2AdapterConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
-        if self.vit_layers is None:
-            self.vit_layers = [-3, -9]
-        if self.num_key_value_heads is None:
-            self.num_key_value_heads = self.num_attention_heads
-        if self.head_dim is None:
-            self.head_dim = self.hidden_size // self.num_attention_heads
+        if self.vision_feature_layer is None:
+            self.vision_feature_layer = [-3, -9]
         super().__post_init__(**kwargs)
 
 
@@ -119,8 +112,6 @@ class Molmo2TextConfig(PreTrainedConfig):
     r"""
     additional_vocab_size (`int`, *optional*, defaults to 128):
         Number of additional vocabulary tokens beyond the base vocabulary.
-    qkv_bias (`bool`, *optional*, defaults to `True`):
-        Whether to use bias in query, key, and value projections.
     qk_norm_type (`str`, *optional*, defaults to `"qwen3"`):
         Query/key normalization layout used by the checkpoint. `"qwen3"` normalizes per head; `"olmo"` normalizes the
         full projected query/key tensors.
@@ -130,8 +121,6 @@ class Molmo2TextConfig(PreTrainedConfig):
         The dropout ratio applied after residual connections.
     rope_parameters (`RopeParameters`, *optional*):
         RoPE parameters for the model.
-    layer_types (`list[str]`, *optional*):
-        List of layer types to use for the model, `"full_attention"` for every layer when not provided.
     rope_scaling_layers (`list[int]`, *optional*):
         Indices of the layers that apply the scaled RoPE described by `rope_parameters`. The remaining layers use an
         unscaled RoPE with the same theta. All layers are scaled when not provided.
@@ -142,9 +131,10 @@ class Molmo2TextConfig(PreTrainedConfig):
     model_type = "molmo2_text"
     base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"qkv_bias": "attention_bias", "layer_norm_eps": "rms_norm_eps"}
     base_model_tp_plan = {
-        "layers.*.self_attn.qkv_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.qkv_proj": "colwise_gather_output",
+        "layers.*.self_attn.o_proj": "rowwise_split_input",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -155,35 +145,32 @@ class Molmo2TextConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    hidden_size: int = 3584
-    num_attention_heads: int = 28
-    num_key_value_heads: int | None = 4
+    hidden_size: int = 4096
+    num_attention_heads: int = 32
+    num_key_value_heads: int = 8
     head_dim: int = 128
-    vocab_size: int = 152064
+    vocab_size: int = 151936
     additional_vocab_size: int = 128
-    qkv_bias: bool = True
+    attention_bias: bool = False
     qk_norm_type: str = "qwen3"
-    num_hidden_layers: int = 48
-    intermediate_size: int = 18944
+    num_hidden_layers: int = 36
+    intermediate_size: int = 12288
     hidden_act: str = "silu"
     embedding_dropout: float = 0.0
     attention_dropout: float = 0.0
     residual_dropout: float = 0.0
-    max_position_embeddings: int = 4096
+    max_position_embeddings: int = 36864
     rope_parameters: RopeParameters | dict | None = None
-    layer_types: list[str] | None = None
     rope_scaling_layers: list[int] | None = None
-    layer_norm_eps: float = 1e-6
+    rms_norm_eps: float = 1e-6
     norm_after: bool = False
     initializer_range: float = 0.02
     use_cache: bool = True
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if self.num_key_value_heads is None:
-            self.num_key_value_heads = self.num_attention_heads
-        if self.layer_types is None:
-            self.layer_types = ["full_attention"] * self.num_hidden_layers
+        if self.rope_scaling_layers is None:
+            self.rope_scaling_layers = list(range(self.num_hidden_layers))
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
@@ -200,21 +187,17 @@ class Molmo2Config(PreTrainedConfig):
         Configuration for the vision transformer backbone.
     adapter_config (`Molmo2AdapterConfig`, *optional*):
         Configuration for the vision-to-language adapter.
-    image_start_token_id (`int`, *optional*):
+    image_start_token_id (`int`, *optional*, defaults to 151936):
         Token ID marking the start of an image region.
-    low_res_image_start_token_id (`int`, *optional*):
+    low_res_image_start_token_id (`int`, *optional*, defaults to 151940):
         Token ID marking the start of a low-resolution image crop.
-    image_end_token_id (`int`, *optional*):
+    image_end_token_id (`int`, *optional*, defaults to 151937):
         Token ID marking the end of an image region.
-    image_low_res_id (`int`, *optional*):
-        Token ID for low-resolution image patches.
-    image_patch_id (`int`, *optional*):
+    image_patch_id (`int`, *optional*, defaults to 151938):
         Token ID for image patches.
-    image_col_id (`int`, *optional*):
-        Token ID for column separators in image patch sequences.
-    frame_start_token_id (`int`, *optional*):
+    frame_start_token_id (`int`, *optional*, defaults to 151943):
         Token ID marking the start of a video frame.
-    frame_end_token_id (`int`, *optional*):
+    frame_end_token_id (`int`, *optional*, defaults to 151944):
         Token ID marking the end of a video frame.
     tie_word_embeddings (`bool`, *optional*, defaults to `False`):
         Whether the model's input and output word embeddings should be tied.
@@ -231,14 +214,12 @@ class Molmo2Config(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     adapter_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
-    image_start_token_id: int | None = None
-    low_res_image_start_token_id: int | None = None
-    image_end_token_id: int | None = None
-    image_low_res_id: int | None = None
-    image_patch_id: int | None = None
-    image_col_id: int | None = None
-    frame_start_token_id: int | None = None
-    frame_end_token_id: int | None = None
+    image_start_token_id: int = 151936
+    low_res_image_start_token_id: int = 151940
+    image_end_token_id: int = 151937
+    image_patch_id: int = 151938
+    frame_start_token_id: int = 151943
+    frame_end_token_id: int = 151944
     initializer_range: float = 0.02
     tie_word_embeddings: bool = False
 
@@ -263,12 +244,12 @@ class Molmo2Config(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"]()
 
-        # Normalize negative `vit_layers` indices and trim the ViT to the deepest layer the adapter actually reads.
+        # Normalize negative `vision_feature_layer` indices and trim the ViT to the deepest layer the adapter reads.
         num_vit_layers = self.vision_config.num_hidden_layers
-        self.adapter_config.vit_layers = [
-            layer if layer >= 0 else layer + num_vit_layers for layer in self.adapter_config.vit_layers
+        self.adapter_config.vision_feature_layer = [
+            layer if layer >= 0 else layer + num_vit_layers for layer in self.adapter_config.vision_feature_layer
         ]
-        last_layer_needed = max(self.adapter_config.vit_layers) + 1
+        last_layer_needed = max(self.adapter_config.vision_feature_layer) + 1
         if last_layer_needed < num_vit_layers:
             self.vision_config.num_hidden_layers = last_layer_needed
 

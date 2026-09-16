@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">    </div>
 </div>
@@ -48,7 +47,6 @@ pipeline = pipeline(
     task="image-text-to-text",
     model="allenai/Molmo2-8B",
     device_map="auto",
-    torch_dtype="auto",
 )
 
 messages = [
@@ -121,7 +119,6 @@ video_url = "https://storage.googleapis.com/oe-training-public/demo_videos/many_
 
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForImageTextToText.from_pretrained(model_id, device_map="auto")
-model.eval()
 
 messages = [
     {
@@ -140,8 +137,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
 ).to(model.device)
 
-with torch.no_grad():
-    generated_ids = model.generate(**inputs, max_new_tokens=1024, do_sample=False)
+generated_ids = model.generate(**inputs, max_new_tokens=128, do_sample=False)
 
 input_len = inputs["input_ids"].shape[1]
 generated_text = processor.decode(generated_ids[0][input_len:], skip_special_tokens=True)

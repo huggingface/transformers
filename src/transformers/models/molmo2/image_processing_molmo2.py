@@ -19,6 +19,7 @@
 # limitations under the License.
 
 
+import itertools
 import math
 
 import torch
@@ -34,12 +35,13 @@ from .processing_molmo2 import Molmo2ImagesKwargs
 
 
 def select_tiling(height: int, width: int, patch_size: int, max_num_crops: int) -> tuple[int, int]:
-    """Select the image tiling in the same height/width order as the original Molmo2 processor."""
-    tilings = []
-    for tile_height in range(1, max_num_crops + 1):
-        for tile_width in range(1, max_num_crops + 1):
-            if tile_height * tile_width <= max_num_crops:
-                tilings.append((tile_height, tile_width))
+    """Same as `get_optimal_tiled_canvas` in cohere2_vision, with the candidates in (height, width) order and ties
+    broken on height, as in the original Molmo2 processor."""
+    tilings = [
+        (tile_height, tile_width)
+        for tile_height, tile_width in itertools.product(range(1, max_num_crops + 1), repeat=2)
+        if tile_height * tile_width <= max_num_crops
+    ]
     tilings.sort(key=lambda x: (x[0] * x[1], x[0]))
 
     candidate_resolutions = torch.tensor(tilings, dtype=torch.int32) * patch_size
@@ -81,7 +83,7 @@ def batch_pixels_to_patches(images: torch.Tensor, patch_size: int) -> torch.Tens
     num_patches_height = height // patch_size
     num_patches_width = width // patch_size
     images = images.reshape(num_crops, num_patches_height, patch_size, num_patches_width, patch_size, channels)
-    images = images.permute(0, 1, 3, 2, 4, 5)
+    images = images.transpose(2, 3)
     images = images.reshape(num_crops, num_patches_height * num_patches_width, patch_size * patch_size * channels)
     return images
 

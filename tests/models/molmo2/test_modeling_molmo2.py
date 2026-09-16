@@ -81,7 +81,6 @@ class Molmo2VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("image_start_token_id", 3)
         kwargs.setdefault("image_end_token_id", 4)
         kwargs.setdefault("image_patch_id", 5)
-        kwargs.setdefault("image_col_id", 6)
         # Alias so base helpers (special-token clearing, mismatch tests) protect image patch tokens.
         kwargs.setdefault("image_token_id", kwargs["image_patch_id"])
         super().__init__(parent, **kwargs)
@@ -143,7 +142,7 @@ class Molmo2VisionText2TextModelTester(VLMModelTester):
             num_key_value_heads=self.num_key_value_heads,
             rope_theta=10000.0,
             tie_word_embeddings=self.tie_word_embeddings,
-            layer_norm_eps=1e-6,
+            rms_norm_eps=1e-6,
         )
         vision_config = Molmo2VisionConfig(
             hidden_size=32,
@@ -160,7 +159,7 @@ class Molmo2VisionText2TextModelTester(VLMModelTester):
             residual_dropout=0.0,
         )
         adapter_config = Molmo2AdapterConfig(
-            vit_layers=[-1],
+            vision_feature_layer=[-1],
             hidden_size=32,
             num_attention_heads=4,
             num_key_value_heads=4,
@@ -176,7 +175,6 @@ class Molmo2VisionText2TextModelTester(VLMModelTester):
             image_start_token_id=self.image_start_token_id,
             image_end_token_id=self.image_end_token_id,
             image_patch_id=self.image_patch_id,
-            image_col_id=self.image_col_id,
             tie_word_embeddings=self.tie_word_embeddings,
         )
 

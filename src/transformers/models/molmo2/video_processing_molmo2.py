@@ -41,7 +41,7 @@ def batch_pixels_to_patches(images: torch.Tensor, patch_size: int) -> torch.Tens
     num_patches_height = height // patch_size
     num_patches_width = width // patch_size
     images = images.reshape(num_crops, num_patches_height, patch_size, num_patches_width, patch_size, channels)
-    images = images.permute(0, 1, 3, 2, 4, 5)
+    images = images.transpose(2, 3)
     images = images.reshape(num_crops, num_patches_height * num_patches_width, patch_size * patch_size * channels)
     return images
 

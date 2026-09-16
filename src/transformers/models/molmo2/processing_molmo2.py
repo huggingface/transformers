@@ -80,32 +80,10 @@ class Molmo2Processor(ProcessorMixin):
     valid_processor_kwargs = Molmo2ProcessorKwargs
     image_token = "<|image|>"
     video_token = "<|video|>"
-    image_patch_tokens = (
-        "<im_patch>",
-        "<im_col>",
-        "<im_start>",
-        "<low_res_im_start>",
-        "<frame_start>",
-        "<im_end>",
-        "<frame_end>",
-        "<im_low>",
-    )
 
     @property
     def model_input_names(self):
         return super().model_input_names + ["mm_token_type_ids"]
-
-    @property
-    def image_token_id(self) -> int:
-        return self.tokenizer.convert_tokens_to_ids(self.image_token)
-
-    @property
-    def video_token_id(self) -> int:
-        return self.tokenizer.convert_tokens_to_ids(self.video_token)
-
-    @property
-    def image_token_ids(self) -> list[int]:
-        return [self.tokenizer.convert_tokens_to_ids(token) for token in self.image_patch_tokens]
 
     def __init__(
         self,
@@ -143,6 +121,20 @@ class Molmo2Processor(ProcessorMixin):
         self.use_frame_special_tokens = use_frame_special_tokens
         self.image_token = getattr(tokenizer, "image_token", self.image_token)
         self.video_token = getattr(tokenizer, "video_token", self.video_token)
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
+        self.image_token_ids = tokenizer.convert_tokens_to_ids(
+            [
+                "<im_patch>",
+                "<im_col>",
+                "<im_start>",
+                "<low_res_im_start>",
+                "<frame_start>",
+                "<im_end>",
+                "<frame_end>",
+                "<im_low>",
+            ]
+        )
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template)
 
     @auto_docstring
