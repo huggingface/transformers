@@ -83,81 +83,71 @@ DEFAULT_PRESSURE_LEVELS = (50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850,
 @strict
 class WeatherNext2Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`WeatherNext2Model`]. It is used to instantiate a
-    WeatherNext 2 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a configuration similar to the 0.25 degree
-    [kashif/weathernext2](https://huggingface.co/kashif/weathernext2) architecture.
-
-    WeatherNext 2 is a Functional Generative Network (FGN, https://huggingface.co/papers/2506.10772): an encode-process-decode graph network over an icosahedral
-    mesh, made probabilistic by a single global noise vector that modulates every normalization layer. One forward pass
-    advances the global atmospheric state by `time_step`; ensembles are produced by drawing several noise vectors.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Latent width of the grid points, the mesh nodes and the transformer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Width of the feed-forward layer inside each mesh transformer block.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
-            Number of mesh transformer blocks.
-        num_attention_heads (`int`, *optional*, defaults to 6):
-            Number of attention heads in the mesh transformer.
-        edge_hidden_size (`int`, *optional*, defaults to 32):
-            Latent width of the grid/mesh graph edges.
-        noise_channels (`int`, *optional*, defaults to 32):
-            Dimension of the global noise vector, and of the conditioning vector it is projected to.
-        hidden_act (`str`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            Activation of the mesh transformer feed-forward layer. The original implementation calls `jax.nn.gelu`,
-            which defaults to the tanh approximation.
-        mlp_act (`str`, *optional*, defaults to `"silu"`):
-            Activation of every other multi-layer perceptron (encoders, graph network, decoder).
-        mesh_splits (`int`, *optional*, defaults to 6):
-            Number of times the base icosahedron is subdivided. `n` splits give `10 * 4**n + 2` mesh nodes, so 5 gives
-            10242 nodes and 6 gives 40962.
-        attention_k_hop (`int`, *optional*, defaults to 32):
-            Radius, in mesh edges, of the local attention neighbourhood. Each mesh node attends to every node reachable
-            within this many hops.
-        num_grid_to_mesh_edges (`int`, *optional*, defaults to 1618824):
-            Number of grid-to-mesh edges the ball query produces. Follows from the mesh and the grid, but cannot be
-            derived in closed form, so checkpoints record it: it is the shape the geometry buffers are allocated with
-            before they are loaded.
-        attention_bandwidth (`int`, *optional*, defaults to 10273):
-            Width of the banded mesh adjacency after the reverse Cuthill-McKee ordering, recorded for the same reason.
-        ball_query_radius_fraction (`float`, *optional*, defaults to 0.6):
-            Radius used to connect grid points to mesh nodes, as a fraction of the longest mesh edge.
-        aggregate_normalization (`float`, *optional*):
-            Constant the summed grid-to-mesh messages are divided by. Used by the 0.25 degree checkpoints to keep
-            activations stable across grid resolutions; `None` disables it.
-        grid_latitudes (`int`, *optional*, defaults to 721):
-            Number of latitudes, from -90 to 90 inclusive.
-        grid_longitudes (`int`, *optional*, defaults to 1440):
-            Number of longitudes, from 0 eastwards.
-        input_variables (`tuple(str)`, *optional*):
-            Variables fed to the model, in the channel order the model expects.
-        target_variables (`tuple(str)`, *optional*):
-            Variables the model predicts, in the channel order it produces.
-        forcing_variables (`tuple(str)`, *optional*):
-            Variables known ahead of time and supplied for the *predicted* time step.
-        atmospheric_variables (`tuple(str)`, *optional*):
-            Subset of the variables that has a pressure-level dimension.
-        static_variables (`tuple(str)`, *optional*):
-            Subset of the input variables that is constant in time.
-        global_variables (`tuple(str)`, *optional*):
-            Subset of the variables that has neither a latitude nor a longitude dimension. These are broadcast over the
-            grid and additionally fed to the mesh encoder.
-        pressure_levels (`tuple(int)`, *optional*):
-            Pressure levels in hPa, ascending.
-        num_input_timesteps (`int`, *optional*, defaults to 2):
-            Number of past states the model conditions on.
-        time_step_hours (`int`, *optional*, defaults to 6):
-            Hours advanced by one forward pass.
-        sigmoid_shifted_outputs (`dict[str, float]`, *optional*):
-            Target variables that get `sigmoid(x - shift)` applied after decoding, mapped to their shift.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            Standard deviation of the truncated normal initializer for all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            Epsilon of every layer normalization.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout ratio of the attention probabilities.
+    hidden_size (`int`, *optional*, defaults to 768):
+        Latent width of the grid points, the mesh nodes and the transformer.
+    intermediate_size (`int`, *optional*, defaults to 3072):
+        Width of the feed-forward layer inside each mesh transformer block.
+    num_hidden_layers (`int`, *optional*, defaults to 24):
+        Number of mesh transformer blocks.
+    num_attention_heads (`int`, *optional*, defaults to 6):
+        Number of attention heads in the mesh transformer.
+    edge_hidden_size (`int`, *optional*, defaults to 32):
+        Latent width of the grid/mesh graph edges.
+    noise_channels (`int`, *optional*, defaults to 32):
+        Dimension of the global noise vector, and of the conditioning vector it is projected to.
+    hidden_act (`str`, *optional*, defaults to `"gelu_pytorch_tanh"`):
+        Activation of the mesh transformer feed-forward layer. The original implementation calls `jax.nn.gelu`,
+        which defaults to the tanh approximation.
+    mlp_act (`str`, *optional*, defaults to `"silu"`):
+        Activation of every other multi-layer perceptron (encoders, graph network, decoder).
+    mesh_splits (`int`, *optional*, defaults to 6):
+        Number of times the base icosahedron is subdivided. `n` splits give `10 * 4**n + 2` mesh nodes, so 5 gives
+        10242 nodes and 6 gives 40962.
+    attention_k_hop (`int`, *optional*, defaults to 32):
+        Radius, in mesh edges, of the local attention neighbourhood. Each mesh node attends to every node reachable
+        within this many hops.
+    ball_query_radius_fraction (`float`, *optional*, defaults to 0.6):
+        Radius used to connect grid points to mesh nodes, as a fraction of the longest mesh edge.
+    num_grid_to_mesh_edges (`int`, *optional*, defaults to 1618824):
+        Number of grid-to-mesh edges the ball query produces. Follows from the mesh and the grid, but cannot be
+        derived in closed form, so checkpoints record it: it is the shape the geometry buffers are allocated with
+        before they are loaded.
+    attention_bandwidth (`int`, *optional*, defaults to 10273):
+        Width of the banded mesh adjacency after the reverse Cuthill-McKee ordering, recorded for the same reason.
+    aggregate_normalization (`float`, *optional*):
+        Constant the summed grid-to-mesh messages are divided by. Used by the 0.25 degree checkpoints to keep
+        activations stable across grid resolutions; `None` disables it.
+    grid_latitudes (`int`, *optional*, defaults to 721):
+        Number of latitudes, from -90 to 90 inclusive.
+    grid_longitudes (`int`, *optional*, defaults to 1440):
+        Number of longitudes, from 0 eastwards.
+    input_variables (`tuple(str)`, *optional*):
+        Variables fed to the model, in the channel order the model expects.
+    target_variables (`tuple(str)`, *optional*):
+        Variables the model predicts, in the channel order it produces.
+    forcing_variables (`tuple(str)`, *optional*):
+        Variables known ahead of time and supplied for the *predicted* time step.
+    atmospheric_variables (`tuple(str)`, *optional*):
+        Subset of the variables that has a pressure-level dimension.
+    static_variables (`tuple(str)`, *optional*):
+        Subset of the input variables that is constant in time.
+    global_variables (`tuple(str)`, *optional*):
+        Subset of the variables that has neither a latitude nor a longitude dimension. These are broadcast over the
+        grid and additionally fed to the mesh encoder.
+    pressure_levels (`tuple(int)`, *optional*):
+        Pressure levels in hPa, ascending.
+    num_input_timesteps (`int`, *optional*, defaults to 2):
+        Number of past states the model conditions on.
+    time_step_hours (`int`, *optional*, defaults to 6):
+        Hours advanced by one forward pass.
+    sigmoid_shifted_outputs (`dict[str, float]`, *optional*):
+        Target variables that get `sigmoid(x - shift)` applied after decoding, mapped to their shift.
+    initializer_range (`float`, *optional*, defaults to 0.02):
+        Standard deviation of the truncated normal initializer for all weight matrices.
+    layer_norm_eps (`float`, *optional*, defaults to 1e-05):
+        Epsilon of every layer normalization.
+    attention_dropout (`float`, *optional*, defaults to 0.0):
+        Dropout ratio of the attention probabilities.
 
     ```python
     >>> from transformers import WeatherNext2Config, WeatherNext2Model

@@ -614,7 +614,7 @@ class WeatherNext2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_shapes_and_determinism(self):
         model = WeatherNext2ForWeatherForecasting.from_pretrained(self.checkpoint).to(torch_device).eval()
-        processor = WeatherNext2FeatureExtractor.from_pretrained(self.checkpoint)
+        feature_extractor = WeatherNext2FeatureExtractor.from_pretrained(self.checkpoint)
         config = model.config
 
         grid_features = torch.zeros(
@@ -629,19 +629,22 @@ class WeatherNext2ModelIntegrationTest(unittest.TestCase):
 
         # The graph aggregation is an `index_add`, whose CUDA kernel accumulates with atomics, so
         # repeating a forward pass reorders the additions unless deterministic algorithms are on.
-        previous = torch.are_deterministic_algorithms_enabled()
+        previous = (
+            torch.are_deterministic_algorithms_enabled(),
+            torch.is_deterministic_algorithms_warn_only_enabled(),
+        )
         try:
             torch.use_deterministic_algorithms(True, warn_only=True)
             with torch.no_grad():
                 first = model(grid_features=grid_features, global_features=global_features, noise=noise).prediction
                 second = model(grid_features=grid_features, global_features=global_features, noise=noise).prediction
         finally:
-            torch.use_deterministic_algorithms(previous, warn_only=True)
+            torch.use_deterministic_algorithms(previous[0], warn_only=previous[1])
 
         self.assertEqual(first.shape, (1, config.num_output_channels, config.grid_latitudes, config.grid_longitudes))
         self.assertTrue(torch.isfinite(first).all())
         torch.testing.assert_close(first, second)
-        self.assertEqual(len(processor.target_variables), len(config.target_variables))
+        self.assertEqual(len(feature_extractor.target_variables), len(config.target_variables))
 
     def test_inference_expected_values(self):
         """Pins the forward pass, so that a change to it has to be a deliberate one.
