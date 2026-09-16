@@ -931,13 +931,37 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
     present in the chain, and expert parallelism selects experts by that index. Without it every
     rank collects all E globals and the forward asserts on the per-expert count."""
 
-    def _modelopt_conversions(self):
+    def _modelopt_conversions(self, **cfg_kwargs):
         from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
         from transformers.utils.quantization_config import FineGrainedConfig
 
-        cfg = FineGrainedConfig(quant_method="modelopt", quant_algo="NVFP4")
+        cfg = FineGrainedConfig(quant_method="modelopt", quant_algo="NVFP4", **cfg_kwargs)
         quantizer = FineGrainedHfQuantizer(cfg)
         return quantizer.get_weight_conversions()
+
+    def test_every_declared_target_is_a_slot_the_module_holds(self):
+        """A converter target that no module holds is a load failure, and the activation global is
+        exactly such a target under a weight-only run: the experts allocate one only when they
+        quantize activations. Both runs are checked against a real module's parameter names, since
+        the declarations are the only thing standing between the two."""
+        cfg = _Cfg()
+        for activation_format, holds_global in ((None, True), ("bf16", False)):
+            experts = FineGrainedExperts(
+                cfg, block_size=(4, 4), weight_format="nvfp4", activation_format=activation_format
+            )
+            slots = {name for name, _ in experts.named_parameters()} | set(experts._buffers)
+            self.assertEqual(
+                any("input_global_scale" in slot for slot in slots),
+                holds_global,
+                f"module with activation_format={activation_format!r} disagrees about the slot",
+            )
+            targets = {
+                t.split("experts.")[-1].rstrip("$")
+                for c in self._modelopt_conversions(activation_format=activation_format)
+                for t in _targets(c)
+            }
+            for target in targets:
+                self.assertIn(target, slots, f"activation_format={activation_format!r} converts onto a missing slot")
 
     def test_global_scale_converters_carry_an_expert_index(self):
         from transformers.core_model_loading import MergeModulelist

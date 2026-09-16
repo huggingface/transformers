@@ -1284,8 +1284,9 @@ class FineGrainedWeightGlobals(ConversionOps):
         """A gate|up bias is added AFTER the global, so merging the halves would have to divide
         its up rows by the same ratio — in the bias converter, which the layout ops own. No
         checkpoint pairs the two, so refuse rather than carry a silent half-correction."""
-        experts = next((m for m in model.modules() if isinstance(m, FineGrainedExperts)), None) if model else None
-        if experts is not None and experts.has_bias:
+        if model is not None and any(
+            isinstance(module, FineGrainedExperts) and module.has_bias for module in model.modules()
+        ):
             raise NotImplementedError(
                 "this checkpoint calibrates the gate|up halves separately AND carries an expert "
                 "bias; the up half's bias would have to be folded with the globals."
