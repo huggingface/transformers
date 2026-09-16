@@ -145,8 +145,15 @@ def is_sm100() -> bool:
     `torch.cuda.get_device_capability()` pybind out of the graph — so the branches on it (SF layout, cast
     kwargs, psum layout, and the arch guards) stay compile-safe. Re-queries each eager call, so a faked
     capability in tests is honoured.
+
+    False rather than raising where there is no device to ask: `get_device_capability()` asserts on a
+    CPU-only build. Caught rather than gated on `is_available()` so that a test faking the capability
+    alone still answers — which is the convention the callers' tests are written to.
     """
-    return torch.cuda.get_device_capability()[0] >= 10
+    try:
+        return torch.cuda.get_device_capability()[0] >= 10
+    except (AssertionError, RuntimeError):
+        return False
 
 
 @torch._dynamo.assume_constant_result
@@ -772,7 +779,7 @@ def _assert_stacked_gate_up(module: torch.nn.Module) -> None:
     """Mega MoE's ``transform_weights_for_mega_moe`` does its own gate/up interleave, so it takes the
     stacked ``[gate; up]`` rows. A module loaded for a triton backend holds them interleaved; switched
     to this backend after load, silently re-permuting would be a wrong answer rather than a failure."""
-    if module.has_gate and getattr(module, "holds_interleaved_gate_up", False):
+    if getattr(module, "has_gate", True) and getattr(module, "holds_interleaved_gate_up", False):
         raise RuntimeError(
             "Mega MoE needs gate|up stacked, but this module was loaded interleaved for the triton "
             "experts backend. Switching to 'deepgemm_megamoe' after load is not supported — pass "

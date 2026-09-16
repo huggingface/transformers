@@ -164,8 +164,10 @@ def batched_mm_experts_forward(
         proj_out, selected_weights, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
-    # Normalize each expert application, where such a norm is defined, before it is weighted
-    if self.post_expert_norm_name is not None:
+    # Normalize each expert application, where such a norm is defined, before it is weighted.
+    # `getattr`: an experts module built without the decorator (or predating the norm) has no such
+    # attribute, and this forward is the shared one every backend adapts onto.
+    if getattr(self, "post_expert_norm_name", None) is not None:
         proj_out = self._apply_post_norm(proj_out)  # (S, hidden_dim)
 
     # Apply routing weights
@@ -479,8 +481,10 @@ def grouped_mm_experts_forward(
     if sentinel_mask is not None:
         proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
 
-    # Normalize each expert application, where such a norm is defined, before it is weighted
-    if self.post_expert_norm_name is not None:
+    # Normalize each expert application, where such a norm is defined, before it is weighted.
+    # `getattr`: an experts module built without the decorator (or predating the norm) has no such
+    # attribute, and this forward is the shared one every backend adapts onto.
+    if getattr(self, "post_expert_norm_name", None) is not None:
         proj_out = self._apply_post_norm(proj_out)  # (S, hidden_dim)
 
     # Apply routing weights
