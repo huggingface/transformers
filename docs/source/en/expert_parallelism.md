@@ -66,8 +66,6 @@ distributed_config = DistributedConfig(
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B", distributed_config=distributed_config)
 ```
 
-The model is loaded on a `(pp, fsdp, tp)` device mesh with `pp_size=1`, and `tp_size * fsdp_size` must equal the number of processes. The expert parallel plan shards the experts across `tp`, then FSDP2 shards every parameter, experts included, across `fsdp` and owns their gradient reduction. Each `fsdp` rank trains on its own part of the batch.
-
 Load the model as usual, then train with [`Trainer`]. It takes the gradient norm across both meshes and gives each mesh its own optimizer param group. [`~Trainer.save_model`] gathers sharded weights into a regular checkpoint. This requires `accelerate>=1.12` so the `Trainer` can mirror `tp_size` and `fsdp_size` into [`~Accelerate.ParallelismConfig`].
 
 The table below compares EP-only training with 2D EP+FSDP2 on 8xH100 GPUs. The workload is full fine-tuning of Qwen3-30B-A3B in bf16 at sequence length 2048. More FSDP shards cut peak memory, and tokens/s drop some because FSDP2 all-gathers and reduce-scatters the experts across `fsdp`.
@@ -80,20 +78,6 @@ The table below compares EP-only training with 2D EP+FSDP2 on 8xH100 GPUs. The w
 
 > [!WARNING]
 > Resuming from a checkpoint is not supported yet for models sharded at load time, so the [`Trainer`] only accepts `save_only_model=True` or `save_strategy="no"` for them.
-
-## Mesh views
-
-The legacy `enable_expert_parallel=True` flag is a deprecated alias for `ep_size=tp_size` when `ep_size`
-is omitted, and will be removed in v5.20. It emits a `FutureWarning` and leaves `tp_size` and `fsdp_size`
-unchanged. An explicit `ep_size` takes precedence over the flag, and `ep_size=1` disables EP.
-
-Internally, a mesh manager provides two views of the same ranks: `(pp, fsdp, tp)` for dense layers
-and `(pp, efsdp, ep)` for experts, where `efsdp_size = fsdp_size * tp_size // ep_size`.
-Both retain size-one axes, so callers can select dimensions by name. The mesh builder supports
-`ep_size` values that are multiples of `tp_size` and divide `fsdp_size * tp_size`.
-Model loading currently rejects enabled EP layouts with `ep_size != tp_size` because all-reduce
-requires identical tokens within each expert group. Expert sharding and FSDP continue to use the
-`tp` and `fsdp` axes of the dense view.
 
 ## API reference
 
