@@ -91,10 +91,10 @@ class Qwen3_5MoeTextConfig(Qwen3NextConfig):
     base_config_key = "text_config"
 
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.q_proj": "unit_colwise",
+        "layers.*.self_attn.k_proj": "unit_colwise",
+        "layers.*.self_attn.v_proj": "unit_colwise",
+        "layers.*.self_attn.o_proj": "unit_rowwise",
         "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",

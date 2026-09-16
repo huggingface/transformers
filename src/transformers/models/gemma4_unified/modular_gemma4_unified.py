@@ -440,12 +440,12 @@ class Gemma4UnifiedTextConfig(Gemma4TextConfig):
 
     model_type = "gemma4_unified_text"
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.q_proj": "unit_colwise",
+        "layers.*.self_attn.k_proj": "unit_colwise",
+        "layers.*.self_attn.v_proj": "unit_colwise",
         "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.o_proj": "unit_rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",

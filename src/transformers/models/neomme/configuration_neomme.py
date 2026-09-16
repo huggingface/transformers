@@ -59,11 +59,11 @@ class NeoMMEConfig(PreTrainedConfig):
 
     model_type = "neomme"
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.q_proj": "unit_colwise",
+        "layers.*.self_attn.k_proj": "unit_colwise",
+        "layers.*.self_attn.v_proj": "unit_colwise",
         "layers.*.self_attn.output_projection.gate_proj": "colwise",
-        "layers.*.self_attn.output_projection.o_proj": "rowwise",
+        "layers.*.self_attn.output_projection.o_proj": "unit_rowwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }

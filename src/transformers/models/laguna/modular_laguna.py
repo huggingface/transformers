@@ -79,11 +79,11 @@ class LagunaConfig(Qwen2MoeConfig):
 
     model_type = "laguna"
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.q_proj": "unit_colwise",
+        "layers.*.self_attn.k_proj": "unit_colwise",
+        "layers.*.self_attn.v_proj": "unit_colwise",
         "layers.*.self_attn.g_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.o_proj": "unit_rowwise",
         "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
         "layers.*.mlp.gate_proj": "colwise",

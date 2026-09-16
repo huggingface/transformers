@@ -137,10 +137,10 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
 
     # Default tensor parallel plan for base model `Qwen3OmniMoeText`
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.q_proj": "unit_colwise",
+        "layers.*.self_attn.k_proj": "unit_colwise",
+        "layers.*.self_attn.v_proj": "unit_colwise",
+        "layers.*.self_attn.o_proj": "unit_rowwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
@@ -267,12 +267,12 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
 
     # Default tensor parallel plan for base model `Qwen3OmniMoeTalkerCodePredictor`
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.q_proj": "unit_colwise",
+        "layers.*.self_attn.k_proj": "unit_colwise",
+        "layers.*.self_attn.v_proj": "unit_colwise",
         "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.o_proj": "unit_rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -356,12 +356,12 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
 
     # Default tensor parallel plan for base model `Qwen3OmniMoeTalkerText`
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.q_proj": "unit_colwise",
+        "layers.*.self_attn.k_proj": "unit_colwise",
+        "layers.*.self_attn.v_proj": "unit_colwise",
         "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.o_proj": "unit_rowwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",

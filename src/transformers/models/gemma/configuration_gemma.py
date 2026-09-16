@@ -47,10 +47,10 @@ class GemmaConfig(PreTrainedConfig):
     model_type = "gemma"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.q_proj": "unit_colwise",
+        "layers.*.self_attn.k_proj": "unit_colwise",
+        "layers.*.self_attn.v_proj": "unit_colwise",
+        "layers.*.self_attn.o_proj": "unit_rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",

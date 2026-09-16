@@ -43,10 +43,10 @@ class MixtralConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 1000000.0
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.q_proj": "unit_colwise",
+        "layers.*.self_attn.k_proj": "unit_colwise",
+        "layers.*.self_attn.v_proj": "unit_colwise",
+        "layers.*.self_attn.o_proj": "unit_rowwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
