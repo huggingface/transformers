@@ -40,6 +40,16 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         Number of heads for the indexer projections (DSA).
     first_k_dense_replace (`int`, *optional*, defaults to 3):
         Number of leading layers that use a dense MLP; the rest use the MoE block.
+    output_indexer_scores (`bool`, *optional*, defaults to `False`):
+        Whether or not to return the DSA indexer scores of every layer, used by the indexer distillation loss of
+        DeepSeek-V3.2 (`indexer_kl_loss_func`). Inherited from [`DeepseekV32Config`]: the indexer of this model does
+        not return its scores yet, so enabling it raises an error.
+    indexer_loss_coef (`float`, *optional*, defaults to 1.0):
+        Coefficient of the indexer distillation loss added to the language modeling loss when
+        `output_indexer_scores=True`. Inherited from [`DeepseekV32Config`].
+    indexer_dense_warmup (`bool`, *optional*, defaults to `False`):
+        Whether to run dense attention while still computing indexer scores over every visible key (the DSA dense
+        warm-up stage). Inherited from [`DeepseekV32Config`]: not applied by the attention of this model yet.
     indexer_types (`list[str]`, *optional*):
         Per-layer indexer mode (`"full"` runs the indexer, `"shared"` reuses the previous full
         layer's top-k). Defaults to the pattern derived from `index_topk_freq` /
@@ -128,6 +138,9 @@ class GlmMoeDsaConfig(PreTrainedConfig):
     mlp_bias: bool = False
     head_dim: int = 64
     first_k_dense_replace: int = 3
+    output_indexer_scores: bool = False
+    indexer_loss_coef: float = 1.0
+    indexer_dense_warmup: bool = False
     layer_types: list[str] | None = None
     # `"full"` runs the indexer, `"shared"` reuses the previous full layer's index mask.
     indexer_types: list[str] | None = None

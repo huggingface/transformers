@@ -39,6 +39,18 @@ class DeepseekV32Config(PreTrainedConfig):
         Number of heads for the indexer projections (DSA).
     first_k_dense_replace (`int`, *optional*, defaults to 3):
         Number of leading layers that use a dense MLP; the rest use the MoE block.
+    output_indexer_scores (`bool`, *optional*, defaults to `False`):
+        Whether or not to return the DSA indexer scores of every layer. This is required to compute the indexer
+        distillation loss (see `indexer_kl_loss_func`) and is the only case in which the indexer builds an autograd
+        graph: top-k selection has no gradient, so the indexer is never trained through the attention output.
+    indexer_loss_coef (`float`, *optional*, defaults to 1.0):
+        Coefficient of the indexer distillation loss added to the language modeling loss when
+        `output_indexer_scores=True`. The indexer parameters receive gradients only from this loss and the rest of the
+        model only from the language modeling loss, so it acts as a learning-rate multiplier for the indexer.
+    indexer_dense_warmup (`bool`, *optional*, defaults to `False`):
+        Whether to run dense attention (the indexer's top-k selection is not applied) while still computing indexer
+        scores over every visible key. This is the DSA "dense warm-up" stage, in which the indexer is distilled from
+        full attention before switching to sparse attention.
 
     ```python
     >>> from transformers import DeepseekV32Config, DeepseekV32Model
@@ -123,6 +135,9 @@ class DeepseekV32Config(PreTrainedConfig):
     mlp_bias: bool = False
     head_dim: int = 64
     first_k_dense_replace: int = 3
+    output_indexer_scores: bool = False
+    indexer_loss_coef: float = 1.0
+    indexer_dense_warmup: bool = False
     layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):

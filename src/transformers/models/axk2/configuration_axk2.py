@@ -41,6 +41,16 @@ class AXK2Config(PreTrainedConfig):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int`, *optional*, defaults to 16):
         Number of heads for the indexer projections (DSA).
+    output_indexer_scores (`bool`, *optional*, defaults to `False`):
+        Whether or not to return the DSA indexer scores of every layer, used by the indexer distillation loss of
+        DeepSeek-V3.2 (`indexer_kl_loss_func`). Inherited from [`DeepseekV32Config`]: the indexer of this model does
+        not return its scores yet, so enabling it raises an error.
+    indexer_loss_coef (`float`, *optional*, defaults to 1.0):
+        Coefficient of the indexer distillation loss added to the language modeling loss when
+        `output_indexer_scores=True`. Inherited from [`DeepseekV32Config`].
+    indexer_dense_warmup (`bool`, *optional*, defaults to `False`):
+        Whether to run dense attention while still computing indexer scores over every visible key (the DSA dense
+        warm-up stage). Inherited from [`DeepseekV32Config`]: not applied by the attention of this model yet.
     gated_norm_rank (`int`, *optional*, defaults to 16):
         Bottleneck rank for the low-rank input-dependent gate used by `AXK2GatedRMSNorm`. The gate wraps
         `input_layernorm` on every layer and `post_attention_layernorm` on MoE layers.
@@ -128,6 +138,9 @@ class AXK2Config(PreTrainedConfig):
     index_head_dim: int = 128
     index_n_heads: int = 16
     head_dim: int = 64
+    output_indexer_scores: bool = False
+    indexer_loss_coef: float = 1.0
+    indexer_dense_warmup: bool = False
     layer_types: list[str] | None = None
     gated_norm_rank: int = 16
 

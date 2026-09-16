@@ -19,7 +19,7 @@ import pytest
 from parameterized import parameterized
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import (
@@ -157,6 +157,61 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("DeepseekV32 applies RoPE to qk_rope_head_dim; generic rope scaling tests assume config.head_dim")
     def test_model_rope_scaling_frequencies(self):
         pass
+
+    def test_indexer_loss(self):
+        r"""
+        Top-k selection has no gradient, so the DSA indexer never learns from the language modeling loss: it is trained
+        with its own distillation loss. Check that the loss is computed, that it only reaches the indexer, and that the
+        language modeling loss never does.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config._attn_implementation = "eager"  # the loss needs the attention probabilities
+        config.output_indexer_scores = True
+        config.index_topk = 2  # make the selection actually sparse
+        input_ids, attention_mask = inputs_dict["input_ids"], inputs_dict["attention_mask"]
+        batch_size, seq_length = input_ids.shape
+
+        model = DeepseekV32ForCausalLM(config).to(torch_device).train()
+        indexer_params = [p for n, p in model.named_parameters() if ".indexer." in n]
+        other_params = [p for n, p in model.named_parameters() if ".indexer." not in n]
+        self.assertGreater(len(indexer_params), 0)
+
+        outputs = model(input_ids, attention_mask=attention_mask, labels=input_ids)
+        self.assertEqual(len(outputs.indexer_scores), config.num_hidden_layers)
+        self.assertEqual(outputs.indexer_scores[0].shape, (batch_size, seq_length, seq_length))
+        # Sparse training stage: the indexer distribution is restricted to the `index_topk` selected keys of each query
+        self.assertTrue((torch.isfinite(outputs.indexer_scores[0]).sum(-1) == config.index_topk).all())
+        self.assertTrue(torch.isfinite(outputs.indexer_loss))
+        self.assertGreaterEqual(outputs.indexer_loss.item(), 0.0)
+        # The attention probabilities are only recorded for the loss, not returned unless asked for
+        self.assertIsNone(outputs.attentions)
+        lm_loss = model.loss_function(logits=outputs.logits, labels=input_ids, vocab_size=config.vocab_size)
+        torch.testing.assert_close(outputs.loss, lm_loss + config.indexer_loss_coef * outputs.indexer_loss)
+
+        # The indexer loss only reaches the indexer
+        outputs.indexer_loss.backward(retain_graph=True)
+        self.assertTrue(all(p.grad is not None for p in indexer_params))
+        self.assertTrue(any(p.grad.abs().sum() > 0 for p in indexer_params))
+        self.assertTrue(all(p.grad is None for p in other_params))
+        model.zero_grad(set_to_none=True)
+
+        # The language modeling loss never reaches the indexer
+        lm_loss.backward()
+        self.assertTrue(all(p.grad is None for p in indexer_params))
+        self.assertTrue(any(p.grad is not None for p in other_params))
+        model.zero_grad(set_to_none=True)
+
+        # Dense warm-up stage: the indexer scores every visible key (eager masks are additive, so masked keys stay finite)
+        config.indexer_dense_warmup = True
+        outputs = model(input_ids, attention_mask=attention_mask, labels=input_ids)
+        self.assertTrue((torch.isfinite(outputs.indexer_scores[0]).sum(-1) == seq_length).all())
+        self.assertTrue(torch.isfinite(outputs.indexer_loss))
+
+        # Nothing is computed or returned without the flag
+        config.output_indexer_scores = False
+        outputs = model(input_ids, attention_mask=attention_mask, labels=input_ids)
+        self.assertIsNone(outputs.indexer_loss)
+        self.assertIsNone(outputs.indexer_scores)
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     @unittest.skip("DeepseekV32 applies RoPE to qk_rope_head_dim; generic rope scaling tests assume config.head_dim")
