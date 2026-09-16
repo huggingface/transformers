@@ -1800,9 +1800,9 @@ def convert_and_load_state_dict_in_model(
     return loading_info, disk_offload_index
 
 
-def _get_weight_conversions(model: PreTrainedModel) -> list[WeightTransform] | None:
+def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch.Tensor]):
     """
-    Return the conversion mapping that was used to load the model with `from_pretrained`, or the default one
+    Revert the conversion mapping that was used to load the model with `from_pretrained`, or the default one
     if the model was created in another way and is part of the default mappings.
     """
     weight_conversions = getattr(model, "_weight_conversions", None)
@@ -1820,15 +1820,6 @@ def _get_weight_conversions(model: PreTrainedModel) -> list[WeightTransform] | N
         weight_conversions = [x for x in weight_conversions if not isinstance(x, PrefixChange)]
         weight_conversions = weight_conversions if len(weight_conversions) > 0 else None
 
-    return weight_conversions
-
-
-def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch.Tensor]):
-    """
-    Revert the conversion mapping that was used to load the model with `from_pretrained`, or the default one
-    if the model was created in another way and is part of the default mappings.
-    """
-    weight_conversions = _get_weight_conversions(model)
     # We did not find any operations to perform -> quick escape
     if weight_conversions is None:
         return state_dict
@@ -1837,28 +1828,15 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     weight_conversions = weight_conversions[::-1]
     # Reverse all Transforms
     reverse_weight_conversions = [conversion.reverse_transform() for conversion in weight_conversions]
-    return _convert_state_dict(model, state_dict, reverse_weight_conversions, reverse=True)
-
-
-def _convert_state_dict(
-    model: PreTrainedModel,
-    state_dict: dict[str, torch.Tensor],
-    weight_conversions: list[WeightTransform],
-    reverse: bool = False,
-) -> dict[str, torch.Tensor]:
-    renamings = [entry for entry in weight_conversions if isinstance(entry, WeightRenaming)]
-    converters = [entry for entry in weight_conversions if isinstance(entry, WeightConverter)]
+    renamings = [entry for entry in reverse_weight_conversions if isinstance(entry, WeightRenaming)]
+    converters = [entry for entry in reverse_weight_conversions if isinstance(entry, WeightConverter)]
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
-    model_keys = set() if reverse else model.state_dict().keys()
 
     conversion_mapping: dict[str, WeightTransform] = {}
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
         # Rename the key according to all renaming pattern and optional weight converter patterns
-        renamed_key, source_pattern = rename_source_key(original_key, renamings, converters, reverse=reverse)
-        if renamed_key not in model_keys and original_key in model_keys:
-            # Key should probably not have been renamed
-            renamed_key, source_pattern = original_key, None
+        renamed_key, source_pattern = rename_source_key(original_key, renamings, converters, reverse=True)
         if source_pattern is not None:
             new_converter = deepcopy(pattern_to_converter[source_pattern])
             # each target key gets its own converter instance
@@ -1870,24 +1848,11 @@ def _convert_state_dict(
         mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
 
     new_state_dict = {}
-    for first_param_name, converter in conversion_mapping.items():
-        realized_value = converter.convert(first_param_name, model=model, config=model.config)
+    for first_param_name, reversed_converter in conversion_mapping.items():
+        # Apply the reverse converter
+        realized_value = reversed_converter.convert(first_param_name, model=model, config=model.config)
         for target_name, param in realized_value.items():
             param = param[0] if isinstance(param, list) else param
             new_state_dict[target_name] = param
 
     return new_state_dict
-
-
-def apply_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch.Tensor]):
-    """
-    Apply the conversion mapping that was used to load the model with `from_pretrained`, or the default one
-    if the model was created in another way and is part of the default mappings, to a `state_dict` saved in the
-    original format (i.e. with `save_pretrained`), without loading it into the model.
-    """
-    weight_conversions = _get_weight_conversions(model)
-    # We did not find any operations to perform -> quick escape
-    if weight_conversions is None:
-        return state_dict
-
-    return _convert_state_dict(model, state_dict, weight_conversions)

@@ -54,7 +54,6 @@ from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler
 
 from . import __version__
 from .configuration_utils import PreTrainedConfig
-from .core_model_loading import apply_weight_conversion
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .distributed.fsdp import get_fsdp_ckpt_kwargs, update_fsdp_plugin_peft
@@ -133,6 +132,7 @@ from .trainer_utils import (
     TrainOutput,
     _is_peft_model,
     align_special_tokens,
+    apply_weight_conversion,
     compare_trainer_and_checkpoint_args,
     default_compute_objective,
     denumpify_detensorize,
