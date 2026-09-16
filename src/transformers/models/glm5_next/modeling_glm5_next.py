@@ -1158,11 +1158,11 @@ class Glm5NextTextAttention(nn.Module):
         k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
-        key_states, value_states = self.expand_kv(k_pass, k_rot)
-
-        # Cache update
+        # Cache read / write is performed while latent KV is still compressed
         if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+
+        key_states, value_states = self.expand_kv(k_pass, k_rot)
 
         if self.indexer is not None:
             topk_indices = self.indexer(
