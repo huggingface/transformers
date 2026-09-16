@@ -1188,52 +1188,60 @@ def align_special_tokens(model, processing_class):
     model_has_generation_config = hasattr(model, "generation_config") and model.generation_config is not None
     updated_tokens = {}
 
+    # A token the tokenizer does not define is not a statement that the model should drop the value its config
+    # declares: `_special_tokens_map` is initialized with `None` for every special token, so an absent attribute and
+    # a deliberately cleared one are indistinguishable. Only values the tokenizer actually defines are propagated;
+    # removing a token stays an explicit action on the config.
+
     # 1 - Align EOS token. EOS is more complex than the others, as `generation_config` may hold more than one EOS
     # token.
-    tokenizer_has_new_eos = tokenizer.eos_token_id != getattr(model.config, "eos_token_id", None)
-    if model_has_generation_config:
-        # `generation_config.eos_token_id` is None: direct comparison
-        if model.generation_config.eos_token_id is None:
-            tokenizer_has_new_eos |= tokenizer.eos_token_id != model.generation_config.eos_token_id
-        else:
-            # `generation_config.eos_token_id` is an `int`: convert it to list (and continue below)
-            if isinstance(model.generation_config.eos_token_id, int):
-                model.generation_config.eos_token_id = [model.generation_config.eos_token_id]
-            # `generation_config.eos_token_id` is a `list`: check if the tokenizer's EOS token is in the list
-            tokenizer_has_new_eos |= tokenizer.eos_token_id not in model.generation_config.eos_token_id
-
-    if tokenizer_has_new_eos:
-        updated_tokens["eos_token_id"] = tokenizer.eos_token_id
-        model.config.eos_token_id = tokenizer.eos_token_id
-        # The generation config may hold more than one EOS token. We preserve the original EOS tokens: any of the
-        # EOS tokens defined here will halt generation.
+    if tokenizer.eos_token_id is not None:
+        tokenizer_has_new_eos = tokenizer.eos_token_id != getattr(model.config, "eos_token_id", None)
         if model_has_generation_config:
-            all_eos_tokens = [tokenizer.eos_token_id]
-            if model.generation_config.eos_token_id is not None:
-                all_eos_tokens += list(model.generation_config.eos_token_id)
-            model.generation_config.eos_token_id = [token for token in all_eos_tokens if token is not None]
+            # `generation_config.eos_token_id` is None: direct comparison
+            if model.generation_config.eos_token_id is None:
+                tokenizer_has_new_eos |= tokenizer.eos_token_id != model.generation_config.eos_token_id
+            else:
+                # `generation_config.eos_token_id` is an `int`: convert it to list (and continue below)
+                if isinstance(model.generation_config.eos_token_id, int):
+                    model.generation_config.eos_token_id = [model.generation_config.eos_token_id]
+                # `generation_config.eos_token_id` is a `list`: check if the tokenizer's EOS token is in the list
+                tokenizer_has_new_eos |= tokenizer.eos_token_id not in model.generation_config.eos_token_id
+
+        if tokenizer_has_new_eos:
+            updated_tokens["eos_token_id"] = tokenizer.eos_token_id
+            model.config.eos_token_id = tokenizer.eos_token_id
+            # The generation config may hold more than one EOS token. We preserve the original EOS tokens: any of
+            # the EOS tokens defined here will halt generation.
+            if model_has_generation_config:
+                all_eos_tokens = [tokenizer.eos_token_id]
+                if model.generation_config.eos_token_id is not None:
+                    all_eos_tokens += list(model.generation_config.eos_token_id)
+                model.generation_config.eos_token_id = [token for token in all_eos_tokens if token is not None]
 
     # 2 - Align BOS
-    tokenizer_has_new_bos = tokenizer.bos_token_id != getattr(model.config, "bos_token_id", None)
-    if model_has_generation_config:
-        tokenizer_has_new_bos |= tokenizer.bos_token_id != model.generation_config.bos_token_id
-
-    if tokenizer_has_new_bos:
-        updated_tokens["bos_token_id"] = tokenizer.bos_token_id
-        model.config.bos_token_id = tokenizer.bos_token_id
+    if tokenizer.bos_token_id is not None:
+        tokenizer_has_new_bos = tokenizer.bos_token_id != getattr(model.config, "bos_token_id", None)
         if model_has_generation_config:
-            model.generation_config.bos_token_id = tokenizer.bos_token_id
+            tokenizer_has_new_bos |= tokenizer.bos_token_id != model.generation_config.bos_token_id
+
+        if tokenizer_has_new_bos:
+            updated_tokens["bos_token_id"] = tokenizer.bos_token_id
+            model.config.bos_token_id = tokenizer.bos_token_id
+            if model_has_generation_config:
+                model.generation_config.bos_token_id = tokenizer.bos_token_id
 
     # 3 - Align PAD
-    tokenizer_has_new_pad = tokenizer.pad_token_id != getattr(model.config, "pad_token_id", None)
-    if model_has_generation_config:
-        tokenizer_has_new_pad |= tokenizer.pad_token_id != model.generation_config.pad_token_id
-
-    if tokenizer_has_new_pad:
-        updated_tokens["pad_token_id"] = tokenizer.pad_token_id
-        model.config.pad_token_id = tokenizer.pad_token_id
+    if tokenizer.pad_token_id is not None:
+        tokenizer_has_new_pad = tokenizer.pad_token_id != getattr(model.config, "pad_token_id", None)
         if model_has_generation_config:
-            model.generation_config.pad_token_id = tokenizer.pad_token_id
+            tokenizer_has_new_pad |= tokenizer.pad_token_id != model.generation_config.pad_token_id
+
+        if tokenizer_has_new_pad:
+            updated_tokens["pad_token_id"] = tokenizer.pad_token_id
+            model.config.pad_token_id = tokenizer.pad_token_id
+            if model_has_generation_config:
+                model.generation_config.pad_token_id = tokenizer.pad_token_id
 
     # 4 - Warn users about the changes
     if len(updated_tokens) > 0:
