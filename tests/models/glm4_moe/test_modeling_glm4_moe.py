@@ -113,8 +113,6 @@ class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             cls.offload_dir.cleanup()
         super().tearDownClass()
 
-    @slow
-    @require_torch_accelerator
     def test_1_dynamic_cache(self):
         model, tokenizer = self.get_model()
         prompts = ["[gMASK]<sop>hello", "[gMASK]<sop>tell me"]
@@ -124,8 +122,6 @@ class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(self.EXPECTED_TEXT_COMPLETION, dynamic_text)
 
-    @slow
-    @require_torch_accelerator
     def test_2_static_cache(self):
         model, tokenizer = self.get_model()
         prompts = ["[gMASK]<sop>hello", "[gMASK]<sop>tell me"]
@@ -141,8 +137,6 @@ class Glm4MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         model._cache = None
 
     @unittest.skip("Offloaded models cannot be compiled with torch.compile")
-    @slow
-    @require_torch_accelerator
     @pytest.mark.torch_compile_test
     def test_3_compile_static_cache(self):
         model, tokenizer = self.get_model()
