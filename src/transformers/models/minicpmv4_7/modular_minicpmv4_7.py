@@ -638,6 +638,7 @@ class MiniCPMV4_7Config(MiniCPMV4_6Config):
         }
 
 
+@auto_docstring
 class MiniCPMV4_7PreTrainedModel(MiniCPMV4_6PreTrainedModel):
     config_class = MiniCPMV4_7Config
 
@@ -790,7 +791,7 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None and self.config.image_token_id is not None:
+        if pixel_values is not None:
             num_beams = pixel_values.shape[0]
             vision_output = self.get_image_features(pixel_values[:1], target_sizes, downsample_mode=downsample_mode)
             image_features = (
@@ -801,7 +802,7 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features, self.config.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, image_features)
 
-        if pixel_values_videos is not None and self.config.video_token_id is not None:
+        if pixel_values_videos is not None:
             num_beams = pixel_values_videos.shape[0]
             vision_output = self.get_video_features(
                 pixel_values_videos[:1], target_sizes_videos, downsample_mode=downsample_mode
@@ -835,6 +836,7 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
         return output
 
 
+@auto_docstring
 class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
     def __init__(self, config: MiniCPMV4_7Config):
         # Parent would build a MiniCPMV4_6Model; bypass it to build the 4.7 model instead.

@@ -282,6 +282,7 @@ class MiniCPMV4_7ViTWindowAttentionMerger(nn.Module):
         return torch.concat(all_patches, dim=0).unsqueeze(0)
 
 
+@auto_docstring
 class MiniCPMV4_7PreTrainedModel(PreTrainedModel):
     config_class = MiniCPMV4_7Config
     base_model_prefix = "model"
@@ -1183,7 +1184,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None and self.config.image_token_id is not None:
+        if pixel_values is not None:
             num_beams = pixel_values.shape[0]
             vision_output = self.get_image_features(pixel_values[:1], target_sizes, downsample_mode=downsample_mode)
             image_features = (
@@ -1194,7 +1195,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features, self.config.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, image_features)
 
-        if pixel_values_videos is not None and self.config.video_token_id is not None:
+        if pixel_values_videos is not None:
             num_beams = pixel_values_videos.shape[0]
             vision_output = self.get_video_features(
                 pixel_values_videos[:1], target_sizes_videos, downsample_mode=downsample_mode
@@ -1363,6 +1364,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         return None
 
 
+@auto_docstring
 class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
