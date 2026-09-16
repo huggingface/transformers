@@ -204,10 +204,10 @@ class KyutaiSpeechToTextModelTester:
         config = self.get_config()
 
         input_ids = torch.ones([self.batch_size, 1], dtype=torch.long, device=torch_device)
-        input_values = floats_tensor([self.batch_size, 1, self.input_values_length])
-        padding_mask = torch.ones_like(input_values, dtype=torch.int32, device=torch_device)
+        audio_values = floats_tensor([self.batch_size, 1, self.input_values_length])
+        padding_mask = torch.ones_like(audio_values, dtype=torch.int32, device=torch_device)
 
-        return config, input_ids, input_values, padding_mask
+        return config, input_ids, audio_values, padding_mask
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -224,12 +224,12 @@ class KyutaiSpeechToTextModelTester:
         (
             config,
             input_ids,
-            input_values,
+            audio_values,
             padding_mask,
         ) = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
-            "input_values": input_values,
+            "audio_values": audio_values,
             "padding_mask": padding_mask,
         }
         return config, inputs_dict
@@ -308,7 +308,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     def test_tied_weights_keys(self):
         pass
 
-    @pytest.mark.skip(reason="Does not apply to Moshi ASR that requires input_values.")
+    @pytest.mark.skip(reason="Does not apply to Moshi ASR that requires audio_values.")
     def test_generate_without_input_ids(self):
         pass
 
@@ -439,8 +439,8 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
         super().flash_attn_inference_equivalence(attn_implementation, padding_side, atol, rtol)
 
-    # needs to be overridden to avoid to avoid casting of input_values to float16
-    # indeed, the codec model is kept in fp32, so we need to avoid casting input_values to float16
+    # needs to be overridden to avoid to avoid casting of audio_values to float16
+    # indeed, the codec model is kept in fp32, so we need to avoid casting audio_values to float16
     def _test_attention_implementation(self, attn_implementation):
         """
         Compares the output of generate with the eager attention implementation against other implementations.
@@ -469,7 +469,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
                 if (
                     isinstance(input_data, torch.Tensor)
                     and input_data.dtype in [torch.float32, torch.bfloat16]
-                    and input_name != "input_values"
+                    and input_name != "audio_values"
                 ):
                     inputs_dict[input_name] = input_data.to(torch.float16)
                 else:

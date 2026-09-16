@@ -14,18 +14,16 @@
 
 import types
 
-import numpy as np
 import torch
 import torch.nn as nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationConfig, GenerationMixin
 from ...modeling_utils import PreTrainedModel
-from ...utils import PaddingStrategy, TensorType, logging
+from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
-from ..encodec.audio_processing_encodec import EncodecAudioProcessor
 from ..llama.modeling_llama import LlamaForCausalLM
 from ..mimi.modeling_mimi import MimiConv1dPaddingCache
 from ..moshi.modeling_moshi import MoshiModel, MoshiPreTrainedModel
@@ -151,7 +149,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
         audio_window_size = model_kwargs.get("audio_window_size", None)
         if audio_window_size is None:
-            audio_window_size = self.codec_model.get_encoded_length(model_kwargs["input_values"].shape[-1]).item()
+            audio_window_size = self.codec_model.get_encoded_length(model_kwargs["audio_values"].shape[-1]).item()
             model_kwargs["audio_window_size"] = audio_window_size
 
         batch_size = inputs.shape[0]
@@ -216,11 +214,12 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
         return inputs, input_name, model_kwargs
 
+    @deprecate_kwarg("input_values", new_name="audio_values", version="5.5", warn_if_greater_or_equal_version=True)
     def prepare_inputs_for_generation(
         self,
         *args,
         audio_tokens: torch.LongTensor | None = None,
-        input_values: torch.FloatTensor | None = None,
+        audio_values: torch.FloatTensor | None = None,
         padding_mask: torch.Tensor | None = None,
         audio_window_size: int | None = None,
         current_window: tuple[int, int] | None = None,
@@ -230,7 +229,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
     ):
         model_inputs = GenerationMixin.prepare_inputs_for_generation(self, *args, **kwargs)
 
-        if input_values is not None:
+        if audio_values is not None:
             seqlen, device = model_inputs["position_ids"].shape[-1], model_inputs["position_ids"].device
             cache = model_inputs.get("past_key_values")
             past_seen_tokens = cache.get_seq_length() if cache is not None else 0
@@ -241,11 +240,13 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
             if positions[-1] - 1 >= end:
                 # we need to encode the new audio tokens
                 with torch.no_grad():
-                    input_values_start_idx = start * self.config.frame_size
-                    input_values_end_idx = (start + audio_window_size) * self.config.frame_size
-                    current_input_values = input_values[..., input_values_start_idx:input_values_end_idx]
+                    audio_values_start_idx = start * self.config.frame_size
+                    audio_values_end_idx = (start + audio_window_size) * self.config.frame_size
+                    current_audio_values = audio_values[..., audio_values_start_idx:audio_values_end_idx]
+                    if current_audio_values.ndim == 2:
+                        current_audio_values = current_audio_values.unsqueeze(1)
                     codec_model_output = self.codec_model.encode(
-                        current_input_values,
+                        current_audio_values,
                         encoder_past_key_values=encoder_past_key_values,
                         padding_cache=padding_cache,
                     )
@@ -314,16 +315,17 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
         PreTrainedModel.save_pretrained(self, *args, **kwargs)
 
+    @deprecate_kwarg("input_values", new_name="audio_values", version="5.5", warn_if_greater_or_equal_version=True)
     def generate(self, *args, **kwargs):
         r"""
         This method forwards all its arguments to GenerationMixin's [`~GenerationMixin.generate`]. Please refer to the docstring of this method for more information.
         """
         max_new_tokens = kwargs.pop("max_new_tokens", None)
-        input_values = kwargs.get("input_values")
+        audio_values = kwargs.get("audio_values")
 
         # TODO: @eustlb, we should have per-batch-idx values
         # here we do not use padding_mask to be aligned to what's done in the original codebase
-        max_audio_frames = input_values.shape[-1] // self.config.codec_config.frame_size
+        max_audio_frames = audio_values.shape[-1] // self.config.codec_config.frame_size
 
         if max_new_tokens is None or max_new_tokens > max_audio_frames:
             if max_new_tokens is not None:

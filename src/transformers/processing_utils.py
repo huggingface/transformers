@@ -427,23 +427,21 @@ class AudioKwargs(TypedDict, total=False):
         do_batch_spectrogram (`bool`, *optional*):
             Whether to extract the spectrogram on the padded batch at once (`True`) or per waveform with
             feature-level padding (`False`).
-        add_channel_dim (`bool`, *optional*):
-            Whether to insert a channel axis into the batched waveform, giving `(batch, channels, samples)`.
         padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*):
-            Select a strategy to pad the returned sequences (according to the model's padding side and padding
-            index) among:
+            Select a strategy to pad the returned sequences. Prefer the named string strategies in new code; the
+            boolean forms remain compatibility aliases:
 
-            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                sequence if provided).
-            - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                acceptable input length for the model if that argument is not provided.
-            - `False` or `'do_not_pad'`
+            - `True` or `'longest'`: Pad to the longest sequence in the batch (or add no padding if only one
+                sequence is provided).
+            - `'max_length'`: Pad shorter sequences to the length specified by `max_length`.
+            - `False` or `'do_not_pad'`: Do not pad. Items must still have compatible shapes to form a dense batch.
         max_length (`int`, *optional*):
-            Maximum length of the returned list and optionally padding length (see above).
+            Boundary used by `padding='max_length'` and `truncation=True`.
         truncation (`bool`, *optional*):
-            Activates truncation to cut input sequences longer than *max_length* to *max_length*.
+            Cut input sequences longer than `max_length`. Truncation runs before padding and requires
+            `max_length`.
         pad_to_multiple_of (`int`, *optional*):
-            If set, will pad the sequence to a multiple of the provided value.
+            Round the padding or truncation boundary up to a multiple of the provided value.
         padding_side (`str`, *optional*):
             Side the padding is added on, `"left"` or `"right"`.
         padding_value (`float`, *optional*):
@@ -469,10 +467,6 @@ class AudioKwargs(TypedDict, total=False):
     spectrogram_config: dict | SpectrogramConfig | None
     do_extract_spectrogram: bool | None
     do_batch_spectrogram: bool | None
-    # TODO: remove `add_channel_dim` once the six codec models that set it (dia, dac, encodec, xcodec2,
-    # vibevoice_acoustic_tokenizer, kyutai_speech_to_text) align their modeling with the library's
-    # batch layout.
-    add_channel_dim: bool | None
     padding: Annotated[bool | str | PaddingStrategy | None, padding_validator]
     max_length: Annotated[int | None, positive_int]
     truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator]

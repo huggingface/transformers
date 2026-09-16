@@ -43,7 +43,6 @@ logger = logging.get_logger(__name__)
 
 class BaseAudioProcessor(AudioProcessingMixin):
     valid_kwargs = AudioKwargs
-    add_channel_dim: bool = False
     padding = True
     padding_side = "right"
     padding_value = 0.0
@@ -124,7 +123,53 @@ class BaseAudioProcessor(AudioProcessingMixin):
             return value.to_dict()
         return value
 
-    def __call__(self, audio: AudioInput, *args, **kwargs: Unpack[AudioKwargs]) -> BatchFeature:
+    def __call__(self, audio: str | list[str] | AudioInput, *args, **kwargs: Unpack[AudioKwargs]) -> BatchFeature:
+        """Prepare one audio waveform or a batch of waveforms for the model.
+
+        Args:
+            audio (`str`, `numpy.ndarray`, `torch.Tensor`, or a list of any one of these types):
+                A single mono waveform with shape `(num_samples,)`, a single multichannel waveform with
+                channel-first shape `(num_channels, num_samples)`, or a list of such waveforms representing a
+                batch. A string may be a local file path or an HTTP(S) URL. Referenced audio is decoded at the
+                processor's native sampling rate. Multichannel arrays are downmixed to mono before further
+                processing.
+
+                Use a list to express a batch. A bare two-dimensional array is interpreted as one multichannel
+                waveform, not as a mono batch with shape `(batch_size, num_samples)`.
+            sampling_rate (`int`, *optional*):
+                Sampling rate of the provided arrays, in Hz. The processor compares it with the rate expected by
+                the model and, by default, resamples to the processor's native rate when they differ. Users are
+                expected to pass this argument with array input. If omitted, the processor warns and assumes that
+                the arrays already use its native `sampling_rate`. Paths and URLs are decoded at the native rate,
+                so this argument does not describe referenced audio.
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*):
+                Controls padding. `True` or `"longest"` pads to the longest sequence in the batch, `False` or
+                `"do_not_pad"` disables padding, and `"max_length"` pads to `max_length`. When omitted, the
+                processor's configured `padding` value is used; the base default is `True`. Prefer the named string
+                strategies in new code; the boolean forms remain supported for compatibility.
+            max_length (`int`, *optional*):
+                Target length in samples when `padding="max_length"`, and the truncation limit when
+                `truncation=True`. Required when `padding="max_length"`.
+            truncation (`bool`, `str` or [`~tokenization_utils_base.TruncationStrategy`], *optional*):
+                Whether to shorten waveforms longer than `max_length`. Truncation runs before padding and requires
+                `max_length`. Use it together with `padding="max_length"` to produce waveforms that all have
+                exactly `max_length` samples.
+            pad_to_multiple_of (`int`, *optional*):
+                Round the padding or truncation target up to a multiple of this value. Useful for producing tensor
+                lengths that are efficient on particular hardware.
+
+        Returns:
+            [`BatchFeature`]: The model inputs produced from the waveform or batch.
+        """
+        is_audio_reference = isinstance(audio, str) or (
+            isinstance(audio, (list, tuple)) and all(isinstance(audio_el, str) for audio_el in audio)
+        )
+        if not is_audio_reference and kwargs.get("sampling_rate") is None:
+            logger.warning_once(
+                f"`sampling_rate` was not provided. The audio arrays will be assumed to be sampled at "
+                f"{self.sampling_rate} Hz, which can produce incorrect results if that assumption is wrong."
+            )
+
         # `return_attention_mask` was the legacy spelling of `return_padding_mask`. Alias it rather than
         # letting it fall through to `**kwargs` unread — a silently ignored mask request is the exact
         # failure this contract removes. Removal target: v5.15, alongside the other legacy aliases.
@@ -205,7 +250,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
         padding_side: str,
         padding_value: float,
         return_padding_mask: bool,
-        add_channel_dim: bool,
         **kwargs: Any,
     ) -> BatchFeature:
         # Path 1: per-waveform spectrogram extraction, padded at the feature level.
@@ -230,7 +274,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
                 padding_value=padding_value,
                 **kwargs,
             )
-            output = {"audio_features": self._stack_features(features)}
+            output = {"audio_features": self._stack_features(features, padding=padding)}
             if return_padding_mask:
                 output["audio_features_mask"] = self._get_mask(feature_ranges, features[0].shape[0])
             output = self._finalize_output(
@@ -244,7 +288,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
                 padding_side=padding_side,
                 padding_value=padding_value,
                 return_padding_mask=return_padding_mask,
-                add_channel_dim=add_channel_dim,
                 **kwargs,
             )
             return BatchFeature(
@@ -263,7 +306,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
             **kwargs,
         )
         padded_length = audio[0].shape[-1]
-        batched = self._stack_waveforms(audio, add_channel_dim=add_channel_dim)
+        batched = self._stack_waveforms(audio, padding=padding)
 
         if do_extract_spectrogram:
             output = {
@@ -306,7 +349,6 @@ class BaseAudioProcessor(AudioProcessingMixin):
             padding_side=padding_side,
             padding_value=padding_value,
             return_padding_mask=return_padding_mask,
-            add_channel_dim=add_channel_dim,
             **kwargs,
         )
         return BatchFeature(
@@ -462,11 +504,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """
         return audio_el
 
-    def _stack_waveforms(self, audio, *, add_channel_dim):
-        batch = self._stack(audio)
-        if add_channel_dim:
-            batch = self._insert_channel_dim(batch)
-        return batch
+    def _stack_waveforms(self, audio, *, padding=None):
+        self._validate_stackable(audio, padding=padding, item_name="waveforms")
+        return self._stack(audio)
 
     def _pad_waveform(
         self, audio, max_length: int, *, padding_side: str, padding_value: float, **kwargs
@@ -483,8 +523,26 @@ class BaseAudioProcessor(AudioProcessingMixin):
             raise ValueError(f"Invalid padding side: {padding_side}")
         return self._pad_axis(audio, left, right, axis=-1, value=padding_value)
 
-    def _stack_features(self, features):
+    def _stack_features(self, features, *, padding=None):
+        self._validate_stackable(features, padding=padding, item_name="features")
         return self._stack(features)
+
+    def _validate_stackable(self, items, *, padding, item_name):
+        shapes = [tuple(item.shape) for item in items]
+        if not shapes or all(shape == shapes[0] for shape in shapes[1:]):
+            return
+
+        if padding is False or padding == PaddingStrategy.DO_NOT_PAD:
+            raise ValueError(
+                f"Cannot create a batch from {item_name} with different shapes {shapes} when padding is disabled. "
+                'Pass `padding="longest"`, use `padding="max_length"` with `truncation=True`, or provide a list '
+                f"of {item_name} that already have the same shape."
+            )
+        raise ValueError(
+            f"Cannot create a batch from {item_name} with different shapes {shapes}. "
+            'Pass `padding="longest"`, use `padding="max_length"` with `truncation=True`, or provide inputs '
+            "that produce the same shape."
+        )
 
     def _get_mask(self, ranges, padded_length):
         mask = self._zeros_int32((len(ranges), padded_length))

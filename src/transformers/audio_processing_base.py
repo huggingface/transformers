@@ -133,45 +133,19 @@ class AudioProcessingMixin(PreprocessingMixin):
     _nested_config_keys = ["audio_processor", "feature_extractor"]
     _auto_class_default = "AutoAudioProcessor"
     _file_type_label = "audio processor"
-    # `_cached_stft_window` holds a `(window, frame_length)` array/tensor pair populated on the first call;
-    # without excluding it, `save_pretrained` after any call hands a tensor to the JSON writer.
     _excluded_dict_keys = {"mel_filters", "window", "_cached_stft_window"}
     _extra_init_pops = ["feature_extractor_type"]
     _config_filename_kwarg = "audio_processor_filename"
     _subfolder_default = ""
 
-    # Legacy hub-config translation. Hub `preprocessor_config.json` files written by the
-    # old `XxxFeatureExtractor` classes use a flat key schema that doesn't match the new
-    # nested `SpectrogramConfig` API. `from_dict` applies `_legacy_field_mapping_base`
-    # first, then any per-model `legacy_field_mapping` last (highest priority). Values:
-    #
-    #   - str:       dot-path to the nested target (e.g. ``"spectrogram_config.stft_config.hop_length"``)
-    #                — `from_dict` walks/creates intermediate dicts and writes the value.
-    #   - callable:  invoked as ``f(value, config_dict)`` and expected to mutate
-    #                ``config_dict`` in place. For non-1:1 mappings, where one legacy key has to be
-    #                spread across several modern ones. Note the callable *consumes* the legacy key:
-    #                if the modern API keeps a field of the same name, leave it out of the mapping
-    #                entirely so it passes through untranslated (see `sampling_rate` below).
-    #   - None:      drop the legacy key with no translation.
-    #
-    # The base mapping covers both universal keys (`return_attention_mask`, `feature_extractor_type`,
-    # …) and spectrogram-domain keys (`n_fft`, `hop_length`, …). For non-spectrogram models
-    # the spectrogram keys are simply absent from the hub config — translation is a no-op.
-    # See docs/adr/0002-legacy-field-mapping.md.
     _legacy_field_mapping_base: dict = {  # noqa: RUF012
-        # Universal keys (apply to every audio processor).
-        # NOTE: `sampling_rate` is intentionally not listed — the hub key matches the modern
-        # instance attribute `sampling_rate` verbatim, so it passes through `from_dict` untranslated.
         "feature_extractor_type": None,
         "audio_processor_type": None,
         "processor_class": None,
         "return_attention_mask": "return_padding_mask",
-        # Length keys, in samples.
         "n_samples": "max_length",
         "nb_max_samples": "max_length",
         "chunk_length": _max_length_from_chunk_length,
-        # Spectrogram-domain keys, skipped for models that declare no `spectrogram_config`
-        # (see `_legacy_target_exists`). Several appear under more than one legacy spelling.
         "hop_length": "spectrogram_config.stft_config.hop_length",
         "n_fft": "spectrogram_config.stft_config.n_fft",
         "fft_length": "spectrogram_config.stft_config.n_fft",
@@ -183,13 +157,6 @@ class AudioProcessingMixin(PreprocessingMixin):
         "power": "spectrogram_config.stft_config.power",
         "center": "spectrogram_config.stft_config.center",
         "pad_mode": "spectrogram_config.stft_config.pad_mode",
-        # Both legacy spellings carry the mel count, and a config often has *both*. Mapping is
-        # first-writer-wins, so the order here decides which one lands: `num_mel_bins` is the
-        # unambiguous name and goes first. `feature_size` is the fallback, and is ambiguous — for
-        # raw-audio models it is always `1` (the guard skips those, since they declare no
-        # `spectrogram_config`), and for a model that post-processes its mels it is the *output*
-        # width rather than the filter count. Ordering it second means a config carrying both is
-        # read correctly without every such model needing its own `"feature_size": None`.
         "num_mel_bins": "spectrogram_config.mel_scale_config.n_mels",
         "feature_size": "spectrogram_config.mel_scale_config.n_mels",
         "f_min": "spectrogram_config.mel_scale_config.f_min",
@@ -202,8 +169,6 @@ class AudioProcessingMixin(PreprocessingMixin):
         "frequency_max": "spectrogram_config.mel_scale_config.f_max",
         "preemphasis": "spectrogram_config.preemphasis",
         "mel_floor": "spectrogram_config.mel_floor",
-        # Derived from the keys above; the modern pipeline recomputes them. `max_length_s` is
-        # deliberately absent: UnivNet still reads it off the instance.
         "nb_max_frames": None,
         "nb_frequency_bins": None,
     }

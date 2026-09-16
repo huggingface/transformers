@@ -16,7 +16,6 @@ from ...audio_processing_backends import TorchAudioBackend
 
 
 class EncodecAudioProcessorMixin:
-    add_channel_dim = True
     sampling_rate = 24000
 
 

@@ -147,14 +147,14 @@ class NeuCodecAudioProcessorMixin:
             padding_side=padding_side,
             padding_value=padding_value,
         )
-        audio_values = self._stack_waveforms(padded, add_channel_dim=True)
+        audio_values = self._stack_waveforms(padded)
         output = {"audio_values": audio_values}
         if return_padding_mask:
             output["audio_values_mask"] = self._get_mask(audio_ranges, audio_values.shape[-1])
 
         features = []
         for i, (start, end) in enumerate(audio_ranges):
-            waveform = self._select_semantic_waveform(audio[i], audio_values[i, 0], start, end, hop_length=hop_length)
+            waveform = self._select_semantic_waveform(audio[i], audio_values[i], start, end, hop_length=hop_length)
             waveform = self._pad_semantic_waveform(waveform, hop_length=hop_length)
             features.append(
                 self._standardize_frames(

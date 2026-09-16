@@ -104,7 +104,7 @@ class DiaProcessor(ProcessorMixin):
         input_audios = self.audio_processor(audio, **kwargs)
 
         compression_rate = math.prod(self.audio_tokenizer.config.downsampling_ratios)
-        max_encoded_sequence_len = input_audios["padding_mask"][0].shape[-1] // compression_rate
+        max_encoded_sequence_len = input_audios["audio_values_mask"][0].shape[-1] // compression_rate
         max_delay = max(delay_pattern)
 
         decoder_input_ids_list = []
@@ -112,7 +112,7 @@ class DiaProcessor(ProcessorMixin):
 
         # TODO: dac with batching is currently broken, but non-batch is working
         # refer to https://gist.github.com/vasqu/643a45b680cf39fd7467271ee2eb6f80 for a validation script
-        for padding_mask, audio_sample in zip(input_audios["padding_mask"], input_audios["input_values"]):
+        for padding_mask, audio_sample in zip(input_audios["audio_values_mask"], input_audios["audio_values"]):
             base_pad_len = self.audio_processor.hop_length
             current_audio_len = math.ceil(padding_mask.sum(dim=-1) / base_pad_len) * base_pad_len
             encoded_sequence_len = current_audio_len // compression_rate

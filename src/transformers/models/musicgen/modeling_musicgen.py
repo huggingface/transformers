@@ -1537,7 +1537,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
 
         elif decoder_input_ids is None and decoder_inputs_embeds is None:
             audio_encoder_outputs = self.audio_encoder(
-                input_values=input_values,
+                audio_values=input_values,
                 padding_mask=padding_mask,
                 **kwargs_audio_encoder,
             )

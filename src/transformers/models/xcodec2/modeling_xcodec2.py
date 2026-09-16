@@ -923,7 +923,7 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_attention_backend = True
     _can_compile_fullgraph = True
-    main_input_name = "input_values"
+    main_input_name = "audio_values"
     _can_record_outputs = {
         "hidden_states": Xcodec2DecoderLayer,
         "attentions": Xcodec2DecoderLayer,
@@ -972,9 +972,10 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
 
     @auto_docstring
     @can_return_tuple
+    @deprecate_kwarg("input_values", new_name="audio_values", version="5.5", warn_if_greater_or_equal_version=True)
     def encode(
         self,
-        input_values: torch.Tensor,
+        audio_values: torch.Tensor,
         input_features: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
@@ -982,12 +983,12 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Xcodec2EncoderOutput:
         r"""
-        input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
+        audio_values (`torch.Tensor` of shape `(batch_size, sequence_length)` or `(batch_size, 1, sequence_length)`):
             Input audio waveform.
         input_features (`torch.Tensor` of shape `(batch_size, mel_bins, time_steps)`):
             Input audio mel spectrogram for semantic encoding.
         padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
-            Padding mask used to pad `input_values`.
+            Padding mask used to pad `audio_values`.
         input_features_mask (`torch.Tensor` of shape `(batch_size, time_steps)`, *optional*):
             Attention mask for the spectrogram input to the semantic encoder. `1` for valid frames, `0` for padding.
         output_latents (`bool`, *optional*, defaults to `False`):
@@ -1001,7 +1002,10 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         semantic_hidden_states = self.semantic_adapter(semantic_hidden_states)
 
         # Acoustic embedding and concatenate
-        acoustic_hidden_states = self.acoustic_encoder(input_values)
+        if audio_values.ndim == 2:
+            audio_values = audio_values.unsqueeze(1)
+
+        acoustic_hidden_states = self.acoustic_encoder(audio_values)
         hidden_states = torch.cat([semantic_hidden_states, acoustic_hidden_states], dim=1)
         hidden_states = self.fc_encoder(hidden_states.transpose(1, 2))
 
@@ -1051,9 +1055,10 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
 
     @auto_docstring
     @can_return_tuple
+    @deprecate_kwarg("input_values", new_name="audio_values", version="5.5", warn_if_greater_or_equal_version=True)
     def forward(
         self,
-        input_values: torch.Tensor,
+        audio_values: torch.Tensor,
         input_features: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
@@ -1061,12 +1066,12 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Xcodec2Output:
         r"""
-        input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
+        audio_values (`torch.Tensor` of shape `(batch_size, sequence_length)` or `(batch_size, 1, sequence_length)`):
             Input audio waveform.
         input_features (`torch.Tensor` of shape `(batch_size, mel_bins, time_steps)`):
             Input audio mel spectrogram for semantic encoding.
         padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
-            Padding mask used to pad `input_values`.
+            Padding mask used to pad `audio_values`.
         input_features_mask (`torch.Tensor` of shape `(batch_size, time_steps)`, *optional*):
             Attention mask for the spectrogram input to the semantic encoder. `1` for valid frames, `0` for padding.
         output_latents (`bool`, *optional*, defaults to `False`):
@@ -1092,20 +1097,22 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         >>> audio_values = outputs.audio_values
         ```"""
         # for truncating output audio to original length
-        length = input_values.shape[-1]
+        length = audio_values.shape[-1]
 
         encoder_outputs = self.encode(
-            input_values,
+            audio_values,
             input_features=input_features,
             padding_mask=padding_mask,
             input_features_mask=input_features_mask,
             output_latents=True,
             return_dict=True,
         )
-        audio_values = self.decode(latents=encoder_outputs.latents, return_dict=True, **kwargs)[0][..., :length]
+        reconstructed_audio_values = self.decode(latents=encoder_outputs.latents, return_dict=True, **kwargs)[0][
+            ..., :length
+        ]
 
         return Xcodec2Output(
-            audio_values=audio_values,
+            audio_values=reconstructed_audio_values,
             audio_codes=encoder_outputs.audio_codes,
             latents=encoder_outputs.latents if output_latents else None,
             audio_codes_mask=encoder_outputs.audio_codes_mask,

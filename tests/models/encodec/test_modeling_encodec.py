@@ -45,7 +45,7 @@ if is_torch_available():
 def prepare_inputs_dict(
     config,
     input_ids=None,
-    input_values=None,
+    audio_values=None,
     decoder_input_ids=None,
     attention_mask=None,
     decoder_attention_mask=None,
@@ -53,7 +53,7 @@ def prepare_inputs_dict(
     if input_ids is not None:
         encoder_dict = {"input_ids": input_ids}
     else:
-        encoder_dict = {"input_values": input_values}
+        encoder_dict = {"audio_values": audio_values}
 
     decoder_dict = {"decoder_input_ids": decoder_input_ids} if decoder_input_ids is not None else {}
 
@@ -90,9 +90,9 @@ class EncodecModelTester:
         self.codebook_size = codebook_size
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
+        audio_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
         config = self.get_config()
-        inputs_dict = {"input_values": input_values}
+        inputs_dict = {"audio_values": audio_values}
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
@@ -109,14 +109,14 @@ class EncodecModelTester:
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_normalization(self):
-        input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
+        audio_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
         config = self.get_config()
         config.normalize = True
 
         processor = EncodecFeatureExtractor(feature_size=config.audio_channels, sampling_rate=config.sampling_rate)
-        input_values = input_values.tolist()
+        audio_values = audio_values.tolist()
         inputs_dict = processor(
-            input_values, sampling_rate=config.sampling_rate, padding=True, return_tensors="pt"
+            audio_values, sampling_rate=config.sampling_rate, padding=True, return_tensors="pt"
         ).to(torch_device)
 
         return config, inputs_dict
@@ -181,7 +181,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["input_values", "padding_mask", "bandwidth"]
+            expected_arg_names = ["audio_values", "padding_mask", "bandwidth"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     @unittest.skip(reason="The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics")
@@ -218,7 +218,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model.to(torch_device)
             model.eval()
             inputs = self._prepare_for_class(inputs_dict, model_class)
-            inputs["input_values"] = inputs["input_values"].repeat(1, 1, 10)
+            inputs["audio_values"] = inputs["audio_values"].repeat(1, 1, 10)
 
             hidden_states_no_chunk = model(**inputs)[1]
 
@@ -1111,7 +1111,7 @@ class EncodecIntegrationTest(unittest.TestCase):
         model = model.eval()
         with torch.no_grad():
             # Compare encoder outputs with expected values
-            encoded_frames = model.encode(inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth))
+            encoded_frames = model.encode(inputs["audio_values"], inputs["padding_mask"], bandwidth=float(bandwidth))
             codes = torch.cat([encoded[0] for encoded in encoded_frames["audio_codes"]], dim=-1).unsqueeze(0)
             torch.testing.assert_close(
                 codes[..., : EXPECTED_ENCODER_CODES[model_id][bandwidth].shape[-1]],
@@ -1138,11 +1138,11 @@ class EncodecIntegrationTest(unittest.TestCase):
             )
 
             # Compare codec error with expected values
-            codec_error = compute_rmse(decoded_frames["audio_values"], inputs["input_values"])
+            codec_error = compute_rmse(decoded_frames["audio_values"], inputs["audio_values"])
             torch.testing.assert_close(codec_error, EXPECTED_CODEC_ERROR[model_id][bandwidth], rtol=1e-4, atol=1e-4)
 
             # make sure forward and enc-dec give same result
-            full_enc = model(inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth))
+            full_enc = model(inputs["audio_values"], inputs["padding_mask"], bandwidth=float(bandwidth))
             torch.testing.assert_close(
                 full_enc["audio_values"],
                 decoded_frames["audio_values"],
@@ -1185,7 +1185,7 @@ class EncodecIntegrationTest(unittest.TestCase):
         model = model.eval()
         with torch.no_grad():
             # Compare encoder outputs with expected values
-            encoded_frames = model.encode(inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth))
+            encoded_frames = model.encode(inputs["audio_values"], inputs["padding_mask"], bandwidth=float(bandwidth))
             codes = encoded_frames["audio_codes"].permute(1, 2, 0, 3)
             codes = codes.reshape(codes.size(0), codes.size(1), -1)
             torch.testing.assert_close(
@@ -1215,13 +1215,13 @@ class EncodecIntegrationTest(unittest.TestCase):
             )
 
             # Compare codec error with expected values
-            codec_error = compute_rmse(decoded_frames["audio_values"], inputs["input_values"])
+            codec_error = compute_rmse(decoded_frames["audio_values"], inputs["audio_values"])
             torch.testing.assert_close(
                 codec_error, EXPECTED_CODEC_ERROR_BATCH[model_id][bandwidth], rtol=1e-4, atol=1e-4
             )
 
             # make sure forward and enc-dec give same result
-            input_values_dec = model(inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth))
+            input_values_dec = model(inputs["audio_values"], inputs["padding_mask"], bandwidth=float(bandwidth))
             torch.testing.assert_close(
                 input_values_dec["audio_values"], decoded_frames["audio_values"], rtol=1e-4, atol=1e-4
             )

@@ -25,6 +25,7 @@ from ... import initialization as init
 from ...integrations.accelerate import force_accelerate_hooks
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import ModelOutput, auto_docstring
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_dac import DacConfig
 
 
@@ -477,7 +478,7 @@ class DacEncoder(nn.Module):
 class DacPreTrainedModel(PreTrainedAudioTokenizerBase):
     config: DacConfig
     base_model_prefix = "dac"
-    main_input_name = "input_values"
+    main_input_name = "audio_values"
     _no_split_modules = ["DacResidualUnit"]
 
     @torch.no_grad()
@@ -580,21 +581,25 @@ class DacModel(DacPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @deprecate_kwarg("input_values", new_name="audio_values", version="5.5", warn_if_greater_or_equal_version=True)
     def encode(
         self,
-        input_values: torch.Tensor,
+        audio_values: torch.Tensor,
         n_quantizers: int | None = None,
         return_dict: bool | None = None,
     ) -> tuple | DacEncoderOutput:
         r"""
-        input_values (`torch.Tensor of shape `(batch_size, 1, time_steps)`):
+        audio_values (`torch.Tensor` of shape `(batch_size, time_steps)` or `(batch_size, 1, time_steps)`):
             Input audio data to encode,
         n_quantizers (int, *optional*):
             Number of quantizers to use. If None, all quantizers are used. Default is None.
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        quantized_representation = self.encoder(input_values)
+        if audio_values.ndim == 2:
+            audio_values = audio_values.unsqueeze(1)
+
+        quantized_representation = self.encoder(audio_values)
         quantized_representation, audio_codes, projected_latents, commitment_loss, codebook_loss = self.quantizer(
             quantized_representation, n_quantizers
         )
@@ -640,14 +645,15 @@ class DacModel(DacPreTrainedModel):
         return DacDecoderOutput(audio_values)
 
     @auto_docstring
+    @deprecate_kwarg("input_values", new_name="audio_values", version="5.5", warn_if_greater_or_equal_version=True)
     def forward(
         self,
-        input_values: torch.Tensor,
+        audio_values: torch.Tensor,
         n_quantizers: int | None = None,
         return_dict: bool | None = None,
     ) -> tuple | DacOutput:
         r"""
-        input_values (`torch.Tensor` of shape `(batch_size, 1, time_steps)`):
+        audio_values (`torch.Tensor` of shape `(batch_size, time_steps)` or `(batch_size, 1, time_steps)`):
             Audio data to encode.
         n_quantizers (`int`, *optional*):
             Number of quantizers to use. If `None`, all quantizers are used. Default is `None`.
@@ -665,27 +671,27 @@ class DacModel(DacPreTrainedModel):
         >>> audio_sample = librispeech_dummy[-1]["audio"]["array"]
         >>> inputs = processor(raw_audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt")
 
-        >>> encoder_outputs = model.encode(inputs["input_values"])
+        >>> encoder_outputs = model.encode(inputs["audio_values"])
         >>> # Get the intermediate audio codes
         >>> audio_codes = encoder_outputs.audio_codes
         >>> # Reconstruct the audio from its quantized representation
         >>> audio_values = model.decode(encoder_outputs.quantized_representation)
         >>> # or the equivalent with a forward pass
-        >>> audio_values = model(inputs["input_values"]).audio_values
+        >>> audio_values = model(inputs["audio_values"]).audio_values
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.return_dict
-        length = input_values.shape[-1]
+        length = audio_values.shape[-1]
 
         loss, quantized_representation, audio_codes, projected_latents = self.encode(
-            input_values, n_quantizers, return_dict=False
+            audio_values, n_quantizers, return_dict=False
         )
-        audio_values = self.decode(quantized_representation, return_dict=False)[0][..., :length]
+        reconstructed_audio_values = self.decode(quantized_representation, return_dict=False)[0][..., :length]
 
         if not return_dict:
-            return (loss, audio_values, quantized_representation, audio_codes, projected_latents)
+            return (loss, reconstructed_audio_values, quantized_representation, audio_codes, projected_latents)
 
-        return DacOutput(loss, audio_values, quantized_representation, audio_codes, projected_latents)
+        return DacOutput(loss, reconstructed_audio_values, quantized_representation, audio_codes, projected_latents)
 
 
 __all__ = ["DacModel", "DacPreTrainedModel"]

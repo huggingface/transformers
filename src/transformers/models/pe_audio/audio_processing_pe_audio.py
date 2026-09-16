@@ -17,7 +17,6 @@ from ...audio_processing_backends import TorchAudioBackend
 
 class PeAudioAudioProcessorMixin:
     sampling_rate = 48000
-    add_channel_dim = True
 
 
 class PeAudioAudioProcessor(PeAudioAudioProcessorMixin, TorchAudioBackend):

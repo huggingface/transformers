@@ -100,32 +100,32 @@ class PeAudioEncoderTester:
         return self.audio_seq_length // config.dac_config.hop_length + 1
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.num_channels, self.audio_seq_length])
+        audio_values = floats_tensor([self.batch_size, self.num_channels, self.audio_seq_length])
         # Generate valid_lengths in range [1, self.audio_seq_length] to ensure at least one valid frame
         valid_lengths = ids_tensor([self.batch_size], self.audio_seq_length - 1) + 1
         padding_mask = torch.arange(self.audio_seq_length, device=torch_device)[None, :] < valid_lengths[:, None]
         padding_mask = padding_mask.int()
         config = self.get_config()
 
-        return config, input_values, padding_mask
+        return config, audio_values, padding_mask
 
     def get_config(self):
         if not hasattr(self, "_config"):
             self._config = PeAudioEncoderConfig(**self.config_kwargs)
         return self._config
 
-    def create_and_check_model(self, config, input_values, padding_mask):
+    def create_and_check_model(self, config, audio_values, padding_mask):
         model = PeAudioEncoder(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(input_values, padding_mask=padding_mask)
+            result = model(audio_values, padding_mask=padding_mask)
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_values, padding_mask = config_and_inputs
-        inputs_dict = {"input_values": input_values, "padding_mask": padding_mask}
+        config, audio_values, padding_mask = config_and_inputs
+        inputs_dict = {"audio_values": audio_values, "padding_mask": padding_mask}
         return config, inputs_dict
 
 
@@ -240,11 +240,11 @@ class PeAudioModelTester:
 
     def prepare_config_and_inputs(self):
         _, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        _, input_values, padding_mask = self.audio_model_tester.prepare_config_and_inputs()
+        _, audio_values, padding_mask = self.audio_model_tester.prepare_config_and_inputs()
 
         config = self.get_config()
 
-        return config, input_ids, attention_mask, input_values, padding_mask
+        return config, input_ids, attention_mask, audio_values, padding_mask
 
     def get_config(self):
         text_config = self.text_model_tester.get_config()
@@ -255,10 +255,10 @@ class PeAudioModelTester:
             projection_dim=32,
         )
 
-    def create_and_check_model(self, config, input_ids, attention_mask, input_values, padding_mask):
+    def create_and_check_model(self, config, input_ids, attention_mask, audio_values, padding_mask):
         model = PeAudioModel(config).to(torch_device).eval()
         with torch.no_grad():
-            _ = model(input_ids, input_values, attention_mask, padding_mask)
+            _ = model(input_ids, audio_values, attention_mask, padding_mask)
 
         # TODO: there is no logits per audio for now
         # self.parent.assertEqual(result.logits_per_audio.shape, (self.audio_model_tester.batch_size, self.text_model_tester.batch_size))
@@ -266,11 +266,11 @@ class PeAudioModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_ids, attention_mask, input_values, padding_mask = config_and_inputs
+        config, input_ids, attention_mask, audio_values, padding_mask = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "input_values": input_values,
+            "audio_values": audio_values,
             "padding_mask": padding_mask,
         }
         return config, inputs_dict
@@ -280,7 +280,7 @@ class PeAudioModelTester:
 class PeAudioModelTest(ModelTesterMixin, unittest.TestCase):
     # TODO: add PipelineTesterMixin
     all_model_classes = (PeAudioModel,)
-    additional_model_inputs = ["input_values", "padding_mask"]
+    additional_model_inputs = ["audio_values", "padding_mask"]
     test_resize_embeddings = False
     has_attentions = False
     _is_composite = True
