@@ -1141,7 +1141,7 @@ class Qwen3VLVideoProcessor(Qwen2VLVideoProcessor):
             resample=resample,
         )
 
-    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
+    def get_number_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
         """
         A utility that returns number of video patches a given video size.
 

@@ -340,7 +340,7 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
             tensor_type=return_tensors,
         )
 
-    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
+    def get_number_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
         """
         A utility that returns number of video patches a given video size.
 

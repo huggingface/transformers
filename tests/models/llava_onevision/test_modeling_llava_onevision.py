@@ -389,6 +389,22 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    def test_video_features_cover_video_placeholders(self):
+        model = LlavaOnevisionForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
+            dtype="float16",
+            device_map=torch_device,
+        )
+
+        inputs = self.processor(
+            text=self.prompt_video, videos=self.video, return_mm_token_type_ids=True, return_tensors="pt"
+        ).to(torch_device, torch.float16)
+
+        video_features = model.get_video_features(inputs.pixel_values_videos).pooler_output
+
+        self.assertEqual(video_features.shape[1], (inputs.mm_token_type_ids == 2).sum().item())
+
+    @slow
     @require_bitsandbytes
     def test_small_model_integration_test_video(self):
         # related to (#29835)
