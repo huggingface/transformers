@@ -201,10 +201,10 @@ class DistributedMixin:
         return save_on_this_rank
 
     def load_distributed_checkpoint(self, checkpoint_dir: str | os.PathLike) -> None:
-        """Load model weights from a local distributed checkpoint into this initialized model.
+        """Load model weights from a local safetensors checkpoint into this initialized model.
 
-        The storage format (Torch DCP or safetensors) is detected automatically. Pass the directory
-        containing the rank-local files, or the retained `sharded/` directory after consolidation.
+        Pass the directory containing the rank-local safetensors files, or the retained `sharded/`
+        directory after consolidation.
         All ranks must call this method when using a distributed model. The destination may use the
         original mesh, a different mesh, or ordinary tensors without a process group.
 
@@ -227,7 +227,7 @@ class DistributedMixin:
         token: str | bool | None = None,
         create_pr: bool = False,
     ) -> None:
-        """Save an FSDP-wrapped model via DCP and optionally push to the Hub."""
+        """Save an FSDP-wrapped model as safetensors via DCP and optionally push to the Hub."""
         if not is_torch_greater_or_equal("2.7"):
             raise OSError("save_pretrained(..., distributed_checkpoint=True) requires torch>=2.7.")
         if not is_fsdp_managed_module(model_to_save):

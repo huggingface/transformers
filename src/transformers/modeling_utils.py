@@ -3294,14 +3294,14 @@ class PreTrainedModel(
                 its reverse mapping. The reverse mapping needs to exists even if the model was loaded from a None legacy
                 checkpoint.
             distributed_checkpoint (`bool`, *optional*, defaults to `False`):
-                When saving an FSDP-wrapped model, use the distributed checkpoint (DCP) path instead of gathering weights
-                to CPU first. Every rank must call this method.
+                When saving an FSDP-wrapped model, write safetensors with distributed checkpointing (DCP) instead of
+                gathering weights to CPU first. Every rank must call this method.
                 When `False`, FSDP weights are gathered to CPU on rank 0 via `gather_full_state_dict` before writing.
                 Native FSDP requires `torch>=2.7`.
             consolidate_distributed_checkpoint (`bool`, *optional*, defaults to `True`):
-                Consolidate rank-local files into complete model weights after distributed saving. Intermediate files
-                are retained under `sharded/`. When `False`, only rank-local files are written in `save_directory`.
-                Load these with DCP, using `HuggingFaceStorageReader` for safetensors, rather than `from_pretrained()`.
+                Consolidate rank-local safetensors files into complete model weights loadable with `from_pretrained()`.
+                Intermediate files are retained under `sharded/`. When `False`, only rank-local safetensors files are
+                written in `save_directory`; load these with `load_distributed_checkpoint()`.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
