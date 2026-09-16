@@ -126,11 +126,17 @@ TrainingArguments(
 
 ## Evaluate with context parallelism
 
-Context parallelism (CP) with FSDP2 is set through Accelerate [`~accelerate.ParallelismConfig`] `cp_size` (or `--parallelism_config_cp_size` at launch). Under FSDP2, CP shards the sequence across ranks so each GPU holds a slice of the context (`allgather` or `alltoall`). That differs from [Ulysses sequence parallelism](./deepspeed_alst), which runs through DeepSpeed ALST and uses `sp_size` on the same config. Pick CP or Ulysses SP. Do not set both `cp_size` and `sp_size` above 1.
+Context parallelism (CP) with FSDP2 is set through Accelerate [`~accelerate.ParallelismConfig`] `cp_size`. At launch, pass both `--use_parallelism_config` and `--parallelism_config_cp_size`. A non-empty `parallelism_config` in the Accelerate YAML also turns `use_parallelism_config` on. A lone `--parallelism_config_cp_size` is ignored and keeps `cp_size=1`.
 
-[`~Trainer.evaluate`] and [`~Trainer.predict`] use the same context-parallel context as [`~Trainer.train`]. Both go through [`~Trainer.prediction_step`]. Each rank runs its sequence shard while that context is active, and `eval_loss` is the correct loss (not multiplied by `cp_size`). Early stopping and `load_best_model_at_end` see that metric.
+Under FSDP2, CP shards the sequence across ranks so each GPU holds a slice of the context (`allgather` or `alltoall`). That differs from [Ulysses sequence parallelism](./deepspeed_alst), which runs through DeepSpeed ALST and uses `sp_size` on the same config. Pick CP or Ulysses SP. Do not set both `cp_size` and `sp_size` above 1.
 
-Reuse your existing FSDP2 + `cp_size` launch, and set `eval_strategy` or call `evaluate`/`predict` as usual.
+[`~Trainer.evaluate`] uses the same context-parallel context as [`~Trainer.train`] through [`~Trainer.prediction_step`]. Each rank runs its sequence shard while that context is active. `eval_loss` is the correct loss (not multiplied by `cp_size`).
+
+Early stopping and `load_best_model_at_end` use that metric.
+
+Logits stay sharded along the sequence, and nothing reassembles them into full-length predictions. Predictions and `compute_metrics` over logits aren't supported under CP.
+
+Reuse your existing FSDP2 + `cp_size` launch, and set `eval_strategy` or call `evaluate` as usual when you need `eval_loss`.
 
 If you subclass [`~Trainer.prediction_step`] and count tokens yourself, count `num_items_in_batch` before entering the context-parallel context. While that context is active, sequence buffers are sharded in place across ranks. Counting afterward undercounts the batch. The default [`Trainer`] already counts first, and you only need this if you override `prediction_step`.
 
