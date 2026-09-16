@@ -268,15 +268,15 @@ class UnitColwiseParallel(TensorParallelLayer):
         if meta is None:
             return
         placements = [Shard(meta.ndim - 2), Replicate()]
-        remainder = meta.shape[meta.ndim - 2] % mesh.world_size
-        split = meta.shape[meta.ndim - 2] // remainder
+        remainder = mesh._layout.numel() % meta.shape[meta.ndim - 2]
+        split = mesh._layout.numel() // remainder
         # We need to create a device mesh anew
         new_mesh = mesh.mesh.reshape(remainder, split)
-        new_device_mesh = DeviceMesh.from_group(
-            mesh.get_group(),
+        new_device_mesh = DeviceMesh(
             device_type=mesh.device_type,
             mesh=new_mesh,
             mesh_dim_names=[mesh.mesh_dim_names[0], "unit_replicate"],
+            _init_backend=False,
         )
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, new_device_mesh, placements, src_data_rank=None),
