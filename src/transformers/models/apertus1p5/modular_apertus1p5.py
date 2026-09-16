@@ -63,17 +63,6 @@ def _pad_logits_to_vocab_size(logits: torch.Tensor, vocab_size: int) -> torch.Te
     return F.pad(logits, (0, padding), value=torch.finfo(logits.dtype).min)
 
 
-def _check_pruned_head_labels(labels: torch.Tensor, out_vocab_size: int, vocab_size: int) -> None:
-    """Reject labels outside a pruned head's valid range before cross entropy."""
-    if out_vocab_size < vocab_size:
-        valid_labels = (labels == -100) | ((labels >= 0) & (labels < out_vocab_size))
-        torch_compilable_check(
-            valid_labels.all(),
-            f"`labels` must be -100 or in `[0, output_vocab_size)` (output_vocab_size is {out_vocab_size}); "
-            "with a pruned LM head, positions holding multimodal or other input-only ids must be masked with -100.",
-        )
-
-
 @auto_docstring(checkpoint="swiss-ai/Apertus-v1.5-8B")
 @strict
 class Apertus1p5VisionTokenizerConfig(PreTrainedConfig):
@@ -569,7 +558,6 @@ class Apertus1p5TextForCausalLM(ApertusForCausalLM):
 
         loss = None
         if labels is not None:
-            _check_pruned_head_labels(labels, self.lm_head.out_features, self.config.vocab_size)
             # Compute loss on the physical text-only projection. The logical input-only tail would contribute zero
             # probability and needlessly increase loss memory.
             loss = self.loss_function(
@@ -911,7 +899,6 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
 
         loss = None
         if labels is not None:
-            _check_pruned_head_labels(labels, self.lm_head.out_features, self.config.text_config.vocab_size)
             # Compute loss on the physical text-only projection. The logical input-only tail would contribute zero
             # probability and needlessly increase loss memory.
             loss = self.loss_function(
