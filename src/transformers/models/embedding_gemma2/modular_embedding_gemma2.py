@@ -111,7 +111,7 @@ class EmbeddingGemma2TextConfig(Gemma4TextConfig):
     num_attention_heads: int = 4
     num_key_value_heads: int = 2
     head_dim: int = 256
-    max_position_embeddings: int = 1024
+    max_position_embeddings: int = 262_144
     sliding_window: int = 1024
     hidden_size_per_layer_input: int = 512
     use_bidirectional_attention: Literal["all", "vision"] | None = "all"

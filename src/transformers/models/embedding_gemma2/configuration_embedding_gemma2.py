@@ -105,7 +105,7 @@ class EmbeddingGemma2TextConfig(PreTrainedConfig):
     num_key_value_heads: int = 2
     head_dim: int = 256
     hidden_activation: str = "gelu_pytorch_tanh"
-    max_position_embeddings: int = 1024
+    max_position_embeddings: int = 262_144
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-6
     use_cache: bool = True
