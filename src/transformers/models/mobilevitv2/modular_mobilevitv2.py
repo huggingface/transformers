@@ -18,6 +18,7 @@
 import torch
 from torch import nn
 
+from ...backbone_utils import filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndNoAttention,
@@ -459,7 +460,6 @@ class MobileViTV2Model(MobileViTV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
@@ -514,6 +514,7 @@ class MobileViTV2ForImageClassification(MobileViTV2PreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
