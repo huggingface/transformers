@@ -39,35 +39,36 @@ This model was contributed by [Vandit Shah](https://huggingface.co/shahvandit).
 
 ## Usage
 
-This model takes raw waveforms directly and has no feature extractor. Pass a float tensor of shape
-`(batch_size, num_samples)` to [`~Qwen3TTSTokenizerMultiCodebookModel.encode`], and the resulting codes to
-[`~Qwen3TTSTokenizerMultiCodebookModel.decode`]:
+The [`Qwen3TTSTokenizerMultiCodebookFeatureExtractor`] turns raw waveforms into the `(batch_size, num_samples)`
+float tensor and `padding_mask` expected by [`~Qwen3TTSTokenizerMultiCodebookModel.encode`], whose codes are then
+reconstructed with [`~Qwen3TTSTokenizerMultiCodebookModel.decode`]:
 
 ```python
 import torch
 from scipy.io import wavfile
 
-from transformers import AutoModel
+from transformers import AutoFeatureExtractor, AutoModel
 from transformers.audio_utils import load_audio_librosa
 
 
 model_id = "shahvandit/qwen3-tts-tokenizer-multi-codebook-hf"
 
-# load model
+# load model and feature extractor
 model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
+feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
 # load audio at the sample rate the tokenizer expects
 audio = load_audio_librosa(
     "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
     sampling_rate=model.config.input_sample_rate,
 )
-input_values = torch.tensor(audio, dtype=model.dtype, device=model.device).unsqueeze(0)
-print("Input audio shape:", input_values.shape)
+inputs = feature_extractor(audio, sampling_rate=model.config.input_sample_rate).to(model.device, model.dtype)
+print("Input audio shape:", inputs["input_values"].shape)
 # Input audio shape: torch.Size([1, 222480])
 
 with torch.no_grad():
     # encode: one frame per 1920 input samples, 16 codes per frame
-    codes = model.encode(input_values).audio_codes[0]
+    codes = model.encode(inputs["input_values"], padding_mask=inputs["padding_mask"]).audio_codes[0]
     print("Codes shape:", codes.shape)
     # Codes shape: torch.Size([116, 16])
 
@@ -87,19 +88,20 @@ The reconstruction is padded up to a whole number of frames, so it can be slight
 
 ## Batched inputs
 
-Waveforms of different lengths have to be padded to a common length, with a `padding_mask` marking the real samples so
-that the trailing padding is not encoded. [`~Qwen3TTSTokenizerMultiCodebookModel.encode`] then returns a *list* of
-code tensors, one per utterance, each already trimmed to its own length:
+The feature extractor pads waveforms of different lengths to a common length and builds the `padding_mask` marking the
+real samples, so trailing padding is not encoded. [`~Qwen3TTSTokenizerMultiCodebookModel.encode`] then returns a *list*
+of code tensors, one per utterance, each already trimmed to its own length:
 
 ```python
 import torch
 
-from transformers import AutoModel
+from transformers import AutoFeatureExtractor, AutoModel
 from transformers.audio_utils import load_audio_librosa
 
 
 model_id = "shahvandit/qwen3-tts-tokenizer-multi-codebook-hf"
 model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
+feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
 audios = [
     load_audio_librosa(url, sampling_rate=model.config.input_sample_rate)
@@ -109,16 +111,12 @@ audios = [
     ]
 ]
 
-max_length = max(len(audio) for audio in audios)
-input_values = torch.stack(
-    [torch.nn.functional.pad(torch.tensor(audio), (0, max_length - len(audio))) for audio in audios]
-).to(model.device, model.dtype)
-padding_mask = torch.stack([torch.arange(max_length) < len(audio) for audio in audios]).to(model.device)
-print("Input audio shape:", input_values.shape)
+inputs = feature_extractor(audios, sampling_rate=model.config.input_sample_rate).to(model.device, model.dtype)
+print("Input audio shape:", inputs["input_values"].shape)
 # Input audio shape: torch.Size([2, 665600])
 
 with torch.no_grad():
-    codes_list = model.encode(input_values, padding_mask=padding_mask).audio_codes
+    codes_list = model.encode(inputs["input_values"], padding_mask=inputs["padding_mask"]).audio_codes
     print("Codes shapes:", [tuple(codes.shape) for codes in codes_list])
     # Codes shapes: [(116, 16), (347, 16)]
 
@@ -136,6 +134,10 @@ with torch.no_grad():
 ## Qwen3TTSTokenizerMultiCodebookCode2WavConfig
 
 [[autodoc]] Qwen3TTSTokenizerMultiCodebookCode2WavConfig
+
+## Qwen3TTSTokenizerMultiCodebookFeatureExtractor
+
+[[autodoc]] Qwen3TTSTokenizerMultiCodebookFeatureExtractor
 
 ## Qwen3TTSTokenizerMultiCodebookModel
 
