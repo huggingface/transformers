@@ -1,0 +1,10 @@
+
+# Loading, modeling internals and the modular converter.
+# Review from any one of Arthur, Cyril or Anton.
+/src/transformers/core_model_loading.py   @ArthurZucker @Cyrilvallez @vasqu
+/src/transformers/modeling_utils.py       @ArthurZucker @Cyrilvallez @vasqu
+/utils/modular_model_converter.py         @ArthurZucker @Cyrilvallez @vasqu
+
+/src/transformers/generation/utils.py     @Cyrilvallez @ArthurZucker @vasqu
+/src/transformers/cache_utils.py          @Cyrilvallez @ArthurZucker @vasqu
+/src/transformers/masking_utils.py        @Cyrilvallez @ArthurZucker @vasqu
