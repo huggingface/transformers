@@ -14,8 +14,10 @@
 
 import copy
 import json
+import random
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -73,6 +75,25 @@ class DummyNoiseScheduler:
         self.num_inference_steps = num_inference_steps
         # Create timesteps as torch tensors going from high to low (typical for diffusion)
         self.timesteps = torch.linspace(1000, 1, num_inference_steps).long()
+
+
+class ConditionedNoiseScheduler(DummyNoiseScheduler):
+    """A deterministic scheduler whose denoised latent depends on the diffusion head's estimate.
+
+    `DummyNoiseScheduler` returns the same constant for every row, so every sequence in a batch
+    decodes to the same near-silent waveform. That is fine for tests that compare two runs of the
+    same batch, but it makes it impossible to tell whose audio is whose. Deriving the latent from
+    `eps` instead makes each row's audio a function of that row's own hidden state, so a test can
+    detect audio being attributed to the wrong sequence. It stays deterministic as long as the
+    initial latent is -- see the `torch.randn` patch in `test_generate_batched_matches_single`.
+    """
+
+    def step(self, eps, timestep, sample):
+        class StepOutput:
+            def __init__(self, prev_sample):
+                self.prev_sample = prev_sample
+
+        return StepOutput(sample - 0.1 * eps)
 
 
 class VibeVoiceModelTester:
@@ -301,6 +322,101 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         )
         self.assertIsNotNone(output.audio)
         self.assertEqual(len(output.audio), self.model_tester.batch_size)
+
+    @pytest.mark.generate
+    def test_generate_batched_matches_single(self):
+        """Every sequence in a batch must receive its own audio, not a neighbour's.
+
+        `_decode_audio_latent` scatters the diffusing rows back into a full-batch tensor, because
+        the acoustic tokenizer's streaming `padding_cache` is indexed by batch row, so its output
+        has to be read back by batch position too. Reading it by position among the diffusing rows
+        instead agrees only while every row emits an audio token on the same step, and silently
+        hands a sequence its neighbour's audio from the first step where they diverge.
+
+        Three things have to hold for this to test anything, and each is easy to lose by accident:
+          * the rows must stop emitting audio tokens at different steps (asserted below), otherwise
+            the two indexings coincide;
+          * the rows must decode to *different* waveforms, or swapping them is invisible. The
+            tokenizer defaults used elsewhere in this file (`layer_scale_init_value=1e-6`) decode
+            everything to ~1e-7, below `assert_close`'s tolerance, hence the config here;
+          * the inputs must be fixed. `ids_tensor`'s default RNG is module-level and is NOT seeded
+            by `set_seed`, so it is given an explicit one.
+        """
+        seed = 7
+        model_tester = VibeVoiceModelTester(
+            self,
+            batch_size=4,
+            seq_length=4,
+            audio_config={
+                "model_type": "vibevoice_acoustic_tokenizer",
+                "hidden_size": 16,
+                "kernel_size": 3,
+                "num_filters": 4,
+                "downsampling_ratios": [2],
+                "depths": [1, 1],
+                # See the docstring: the defaults decode every row to ~0, making rows
+                # indistinguishable and the comparison below vacuous.
+                "layer_scale_init_value": 0.1,
+                "initializer_range": 0.5,
+                "weight_init_value": 0.5,
+            },
+        )
+        config = model_tester.get_config()
+        input_ids = ids_tensor(
+            [model_tester.batch_size, model_tester.seq_length], model_tester.vocab_size, rng=random.Random(seed)
+        )
+        attention_mask = torch.ones_like(input_ids)
+
+        set_seed(seed)
+        model = VibeVoiceForConditionalGeneration(config=config).to(torch_device).eval()
+
+        # No `min_new_tokens`: the rows have to be free to stop at different steps.
+        generate_kwargs = {
+            "noise_scheduler": ConditionedNoiseScheduler(),
+            "max_new_tokens": 20,
+            "do_sample": False,
+            "return_dict_in_generate": True,
+            "guidance_scale": 1.3,
+            "num_diffusion_steps": 10,
+        }
+
+        # The initial diffusion latent is the only randomness in the loop, and it is drawn with a
+        # shape that depends on how many rows are diffusing -- so batched and single-sample runs
+        # would otherwise start from different noise and be incomparable. Zero it.
+        zeros_instead_of_randn = lambda *args, **kwargs: torch.zeros(*args, **kwargs)  # noqa: E731
+        with torch.no_grad(), patch("torch.randn", zeros_instead_of_randn):
+            batched = model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
+            per_sample = [
+                model.generate(
+                    input_ids=input_ids[i : i + 1],
+                    attention_mask=attention_mask[i : i + 1],
+                    **generate_kwargs,
+                )
+                for i in range(input_ids.shape[0])
+            ]
+
+        # Guard against the test quietly becoming vacuous (see the docstring).
+        generated_lengths = {audio.shape[-1] for audio in batched.audio if audio is not None}
+        self.assertGreater(
+            len(generated_lengths),
+            1,
+            "This test only exercises the batched audio path if the sequences generate differing "
+            "amounts of audio; adjust the inputs until they do.",
+        )
+
+        self.assertEqual(len(batched.audio), input_ids.shape[0])
+        for i, single in enumerate(per_sample):
+            self.assertEqual(
+                batched.audio[i] is None,
+                single.audio[0] is None,
+                msg=f"Sequence {i}: batched and single-sample generation disagree on whether audio was produced",
+            )
+            if batched.audio[i] is not None:
+                torch.testing.assert_close(
+                    batched.audio[i],
+                    single.audio[0],
+                    msg=lambda m, i=i: f"Sequence {i} differs between batched and single-sample generation:\n{m}",
+                )
 
     @unittest.skip(reason="Vibevoice has a special cache format so skipping for now")
     def test_cached_decode_matches_cacheless(self):
