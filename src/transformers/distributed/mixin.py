@@ -24,9 +24,11 @@ from .configuration_utils import DistributedConfig
 from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
-    _validate_tp_plan_styles,
+    _validate_parallel_plan_styles,
+    apply_masked_expert_parallelism,
     apply_tensor_parallelism,
     gather_state_dict_for_save,
+    resolve_parallel_plans,
 )
 from .utils import (
     MeshManager,
@@ -84,16 +86,13 @@ class DistributedMixin:
 
     @property
     def tp_plan(self) -> dict[str, str]:
-        """The full tp plan for the model's modules."""
-        if hasattr(self.config, "distributed_config") and self.config.distributed_config.enable_expert_parallel:
-            if not self._ep_plan:
-                raise ValueError(
-                    f"Expert parallelism was requested (`ep_size > 1`), but "
-                    f"`{self.__class__.__name__}` does not define an expert-parallel plan. Add a "
-                    f"`base_model_ep_plan` to its config, or disable expert parallelism."
-                )
-            return self._ep_plan
-        return self._tp_plan
+        """The full tensor parallel plan for the model's modules."""
+        return self._tp_plan if self._tp_plan is not None else {}
+
+    @property
+    def ep_plan(self) -> dict[str, str]:
+        """The full expert parallel plan for the model's modules, kept separate from `tp_plan`."""
+        return self._ep_plan if self._ep_plan is not None else {}
 
     @property
     def fsdp_plan(self) -> dict[str, str]:
@@ -111,7 +110,7 @@ class DistributedMixin:
         if not isinstance(plan, dict):
             raise ValueError("Can only set a dictionary as `tp_plan`")
 
-        _validate_tp_plan_styles(plan)
+        _validate_parallel_plan_styles(plan)
 
         model_param_names = [name for name, _ in self.named_parameters()]
         for layer_pattern in plan.keys():
@@ -128,6 +127,17 @@ class DistributedMixin:
                 )
 
         self._tp_plan = plan
+
+    @ep_plan.setter
+    def ep_plan(self, plan: dict[str, str] | None):
+        if plan is None:
+            self._ep_plan = {}
+            return
+        if not isinstance(plan, dict):
+            raise ValueError("Can only set a dictionary as `ep_plan`")
+
+        _validate_parallel_plan_styles(plan)
+        self._ep_plan = plan
 
     @pp_plan.setter
     def pp_plan(self, plan: dict[str, tuple[str, str]] | None):
@@ -175,29 +185,37 @@ class DistributedMixin:
         distributed_config: DistributedConfig | None,
         mesh_manager: MeshManager | None,
     ):
-        """Apply TP or FSDP2 after model init, before weight loading."""
-        if mesh_manager is not None:
-            model.config.distributed_config = distributed_config
-            model._mesh_manager = mesh_manager
-            model._device_mesh = mesh_manager.get_mesh(("pp", "fsdp", "tp"))
-            model._tp_size = distributed_config.tp_size
-            model._fsdp_size = distributed_config.fsdp_size
+        """Apply pipeline, tensor and expert parallelism, then FSDP2, after model init and before weight loading."""
+        if mesh_manager is None:
+            return model
 
-            if distributed_config.pp_size > 1:
-                pp_mesh = mesh_manager.get_mesh("pp")
-                model = apply_pipeline_parallelism(model, pp_mesh)
+        model.config.distributed_config = distributed_config
+        model._mesh_manager = mesh_manager
+        model._device_mesh = mesh_manager.get_mesh(("pp", "fsdp", "tp"))
+        model._tp_size = distributed_config.tp_size
+        model._fsdp_size = distributed_config.fsdp_size
 
-            # Both may apply: the tensor/expert parallel plan shards across `tp` first, then FSDP2
-            # shards every parameter (the `tp`-sharded ones included) across `fsdp`.
-            if distributed_config.tp_size > 1:
-                tp_mesh = mesh_manager.get_mesh("tp")
-                if isinstance(distributed_config.tp_plan, dict):
-                    model.tp_plan = distributed_config.tp_plan
-                model = apply_tensor_parallelism(model, tp_mesh)
+        # Resolve both plans before sharding anything: overrides are merged into `model.tp_plan` / `model.ep_plan`,
+        # and the experts named by the EP plan are removed from the TP plan so they are sharded once.
+        tp_plan, ep_plan = resolve_parallel_plans(model, distributed_config)
 
-            if distributed_config.fsdp_size > 1:
-                fsdp_mesh = mesh_manager.get_mesh("fsdp")
-                model = apply_fully_sharded_data_parallelism(model, fsdp_mesh)
+        if distributed_config.pp_size > 1:
+            model = apply_pipeline_parallelism(model, mesh_manager.get_mesh("pp"))
+
+        # The TP plan shards the dense modules and the EP plan the experts, both across `tp` (all-reduce EP needs
+        # identical tokens in each expert group, hence `ep_size == tp_size`), then FSDP2 shards every parameter
+        # (the `tp`-sharded ones included) across `fsdp`.
+        if tp_plan:
+            model = apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), tp_plan)
+        if ep_plan:
+            # `ep_size == tp_size`, so the `ep` and `tp` groups hold the same ranks. Shard the experts on `tp`
+            # anyway: FSDP2 wraps them on `fsdp` below, and a DTensor's mesh must share its root mesh with the
+            # FSDP mesh (`DeviceMesh._concatenate` rejects mixed roots). `tp` and `fsdp` are both in the dense
+            # view; `ep` lives in the expert view, whose FSDP axis is `efsdp` (used by the dispatch path).
+            model = apply_masked_expert_parallelism(model, mesh_manager.get_mesh("tp"), ep_plan)
+
+        if distributed_config.fsdp_size > 1:
+            model = apply_fully_sharded_data_parallelism(model, mesh_manager.get_mesh("fsdp"))
         return model
 
     def should_save_on_this_rank(self, is_main_process: bool) -> bool:
