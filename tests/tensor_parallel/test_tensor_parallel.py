@@ -237,7 +237,7 @@ class TestParallelPlanResolution(TestCasePlus):
 
     def test_resolution_does_not_apply_sharding(self):
         with (
-            patch.object(tensor_parallel, "_apply_parallel_plan") as apply,
+            patch.object(tensor_parallel, "apply_tensor_parallelism") as apply,
             patch.object(ALL_PARALLEL_STYLES["grouped_gemm"], "shard_param") as shard,
         ):
             tensor_parallel.resolve_parallel_plans(self.model, DistributedConfig(tp_size=4, ep_size=4))

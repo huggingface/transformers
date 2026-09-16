@@ -202,16 +202,12 @@ class DistributedMixin:
         if distributed_config.pp_size > 1:
             model = apply_pipeline_parallelism(model, mesh_manager.get_mesh("pp"))
 
-        # The TP plan shards the dense modules and the EP plan the experts, both across `tp` (all-reduce EP needs
-        # identical tokens in each expert group, hence `ep_size == tp_size`), then FSDP2 shards every parameter
-        # (the `tp`-sharded ones included) across `fsdp`.
         if tp_plan:
             model = apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), tp_plan)
         if ep_plan:
-            # `ep_size == tp_size`, so the `ep` and `tp` groups hold the same ranks. Shard the experts on `tp`
-            # anyway: FSDP2 wraps them on `fsdp` below, and a DTensor's mesh must share its root mesh with the
-            # FSDP mesh (`DeviceMesh._concatenate` rejects mixed roots). `tp` and `fsdp` are both in the dense
-            # view; `ep` lives in the expert view, whose FSDP axis is `efsdp` (used by the dispatch path).
+            # Because we do masked all-reduce EP, we need to shard the experts on TP mesh (tp_size = ep_size).
+            # We can't use ep mesh because it belongs to the expert view expert mesh (efsdp for dispatch path)
+            # which is different from the dense view mesh (fsdp).
             model = apply_masked_expert_parallelism(model, mesh_manager.get_mesh("tp"), ep_plan)
 
         if distributed_config.fsdp_size > 1:

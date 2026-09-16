@@ -858,8 +858,9 @@ def resolve_parallel_plans(
     return tp_plan, ep_plan
 
 
-def _apply_parallel_plan(model: nn.Module, mesh: DeviceMesh, plan: dict[str, str]) -> nn.Module:
-    """Shard the parameters named by `plan` as DTensor placeholders and install the styles' forward hooks."""
+def apply_tensor_parallelism(model: nn.Module, tp_mesh: DeviceMesh, plan: dict[str, str] | None = None):
+    """DTensor backend: shard params as placeholders and install TP forward hooks. Defaults to `model.tp_plan`."""
+    plan = model.tp_plan if plan is None else plan
     _validate_parallel_plan_styles(plan)
 
     for name, module in model.named_modules():
@@ -869,8 +870,8 @@ def _apply_parallel_plan(model: nn.Module, mesh: DeviceMesh, plan: dict[str, str
             style_name = _get_parameter_plan(parameter_name=full, plan=plan, is_weight=True)
             if style_name is not None and style_name in ALL_PARALLEL_STYLES:
                 style = ALL_PARALLEL_STYLES[style_name]
-                style.validate_param(module, p_name, mesh, parameter_name=full)
-                style.shard_param(module, p_name, mesh)
+                style.validate_param(module, p_name, tp_mesh, parameter_name=full)
+                style.shard_param(module, p_name, tp_mesh)
 
         # Install the input/output transforms required by this module's style.
         style_name = _get_parameter_plan(parameter_name=name, plan=plan, is_weight=False)
@@ -879,15 +880,10 @@ def _apply_parallel_plan(model: nn.Module, mesh: DeviceMesh, plan: dict[str, str
                 # MLA needs to know the qk_rope_head_dim to split the projection output into KV and RoPE parts.
                 # TODO: Store qk_rope_head_dim on MLA projection modules when the models initialize them.
                 module.config = model.config.get_text_config()
-            ALL_PARALLEL_STYLES[style_name].install_forward(module, mesh)
+            ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
         module._is_hooked = True
 
     return model
-
-
-def apply_tensor_parallelism(model: nn.Module, tp_mesh: DeviceMesh, tp_plan: dict[str, str] | None = None):
-    """DTensor backend: shard params as placeholders and install TP forward hooks. Defaults to `model.tp_plan`."""
-    return _apply_parallel_plan(model, tp_mesh, model.tp_plan if tp_plan is None else tp_plan)
 
 
 def apply_masked_expert_parallelism(model: nn.Module, tp_mesh: DeviceMesh, ep_plan: dict[str, str]):
@@ -896,7 +892,7 @@ def apply_masked_expert_parallelism(model: nn.Module, tp_mesh: DeviceMesh, ep_pl
     Every rank of the mesh sees the same tokens, runs its local experts on them and all-reduces the outputs, so
     this path requires `ep_size == tp_size`.
     """
-    return _apply_parallel_plan(model, tp_mesh, ep_plan)
+    return apply_tensor_parallelism(model, tp_mesh, ep_plan)
 
 
 def gather_state_dict_for_save(
