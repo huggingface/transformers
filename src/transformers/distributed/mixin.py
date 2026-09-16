@@ -218,7 +218,6 @@ class DistributedMixin:
         model_to_save,
         save_directory: str | os.PathLike,
         *,
-        checkpoint_format: str = "safetensors",
         consolidate: bool = True,
         push_to_hub: bool = False,
         save_on_this_rank: bool = True,
@@ -240,9 +239,7 @@ class DistributedMixin:
                 "save_pretrained(..., distributed_checkpoint=True) requires the model to have been "
                 "initialized with a distributed_config (_device_mesh is None)."
             )
-        save_model_checkpoint_distributed(
-            model_to_save, save_directory, checkpoint_format=checkpoint_format, consolidate=consolidate
-        )
+        save_model_checkpoint_distributed(model_to_save, save_directory, consolidate=consolidate)
 
         if push_to_hub and save_on_this_rank:
             model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)

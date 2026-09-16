@@ -96,7 +96,7 @@ def _load_model(directory, consolidate, config=None):
 
 
 # Workers stay at module scope so multiprocessing.spawn can pickle them.
-def _model_checkpoint_worker(rank, directory, consolidate, checkpoint_format):
+def _model_checkpoint_worker(rank, directory, consolidate):
     with _distributed_context(rank, directory):
         reference = LlamaForCausalLM.from_pretrained(f"{directory}/seed")
         model = LlamaForCausalLM.from_pretrained(
@@ -106,7 +106,6 @@ def _model_checkpoint_worker(rank, directory, consolidate, checkpoint_format):
             f"{directory}/saved",
             distributed_checkpoint=True,
             consolidate_distributed_checkpoint=consolidate,
-            distributed_checkpoint_format=checkpoint_format,
         )
         for config in (DistributedConfig(tp_size=2, fsdp_size=2), DistributedConfig(tp_size=4)):
             restored = _load_model(directory, consolidate, config)
@@ -171,23 +170,22 @@ class DistributedUtilsTest(unittest.TestCase):
         )
 
     def test_model_checkpoint(self):
-        for checkpoint_format in ("safetensors", "torch"):
-            for consolidate in (False, True):
-                with self.subTest(checkpoint_format=checkpoint_format, consolidate=consolidate):
-                    with tempfile.TemporaryDirectory() as directory:
-                        reference = LlamaForCausalLM(self.config)
-                        reference.save_pretrained(f"{directory}/seed")
-                        mp.spawn(
-                            _model_checkpoint_worker,
-                            args=(directory, consolidate, checkpoint_format),
-                            nprocs=4,
-                            join=True,
-                        )
+        for consolidate in (False, True):
+            with self.subTest(consolidate=consolidate):
+                with tempfile.TemporaryDirectory() as directory:
+                    reference = LlamaForCausalLM(self.config)
+                    reference.save_pretrained(f"{directory}/seed")
+                    mp.spawn(
+                        _model_checkpoint_worker,
+                        args=(directory, consolidate),
+                        nprocs=4,
+                        join=True,
+                    )
 
-                        # Reload without a process group or distributed configuration.
-                        restored = _load_model(directory, consolidate)
-                        for name, parameter in restored.state_dict().items():
-                            torch.testing.assert_close(parameter, reference.state_dict()[name])
+                    # Reload without a process group or distributed configuration.
+                    restored = _load_model(directory, consolidate)
+                    for name, parameter in restored.state_dict().items():
+                        torch.testing.assert_close(parameter, reference.state_dict()[name])
 
     def test_optimizer_checkpoint(self):
         for consolidate in (False, True):
