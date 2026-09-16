@@ -55,11 +55,14 @@ class NumpyAudioBackend(BaseAudioProcessor):
             return x.max(axis=tuple(range(1, x.ndim)), keepdims=True)
         return x.max()
 
-    def _zeros_int32(self, shape):
+    def _zeros_int32(self, shape, *, like=None):
         return np.zeros(shape, dtype=np.int32)
 
-    def _as_backend_array(self, x):
+    def _as_backend_array(self, x, *, like=None):
         return x if isinstance(x, np.ndarray) else np.asarray(x)
+
+    def _arange(self, stop, *, like=None):
+        return np.arange(stop)
 
     def _mean_axis0(self, x):
         return x.mean(axis=0)
@@ -107,6 +110,16 @@ class NumpyAudioBackend(BaseAudioProcessor):
             # `hann_window_f32`, which evaluates the cosine itself in float32; the two differ
             # by ~2.4e-07 and that is enough to break bit-exact parity.
             return np.hanning(win_length + 1)[:-1].astype(np.float32)
+        wkwargs = dict(stft_cfg.wkwargs or {})
+        unsupported = set(wkwargs) - {"requires_grad"}
+        if unsupported:
+            raise ValueError(
+                f"Unsupported window kwargs for the NumPy backend: {sorted(unsupported)}. "
+                "Use the dedicated periodic and window_dtype fields for portable configuration."
+            )
+        if wkwargs.get("requires_grad"):
+            raise ValueError("requires_grad=True is only meaningful for the Torch backend.")
+
         N = win_length + 1 if stft_cfg.periodic else win_length
         fac = np.linspace(-np.pi, np.pi, N)
         name = stft_cfg.window_fn
@@ -118,6 +131,11 @@ class NumpyAudioBackend(BaseAudioProcessor):
             w = np.ones(N)
         elif name == "povey":
             w = (0.5 + 0.5 * np.cos(fac)) ** 0.85
+        elif name in ("blackman", "blackman_window"):
+            coeff = stft_cfg.blackman_coeff
+            indices = np.arange(N)
+            angle = 2 * np.pi / (N - 1)
+            w = coeff - 0.5 * np.cos(angle * indices) + (0.5 - coeff) * np.cos(2 * angle * indices)
         else:
             raise ValueError(f"Unknown window function '{name}'")
         w = w[:win_length] if stft_cfg.periodic else w
@@ -165,12 +183,17 @@ class NumpyAudioBackend(BaseAudioProcessor):
 
     def _stft_framed(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
         frames = frames * window
-        spec = np.fft.rfft(frames, n=n_fft, axis=-1)
+        fft = np.fft.rfft if stft_cfg.onesided else np.fft.fft
+        spec = fft(frames, n=n_fft, axis=-1)
         if stft_cfg.fft_dtype in (None, "complex64"):
             # librosa contract: FFT output rounded through complex64
             spec = spec.astype(np.complex64)
-        if stft_cfg.normalized:
+        if stft_cfg.normalized in (True, "window"):
             spec = spec / np.sqrt(np.sum(window**2)).astype(spec.real.dtype)
+        elif stft_cfg.normalized == "frame_length":
+            spec = spec / np.sqrt(n_fft).astype(spec.real.dtype)
+        elif stft_cfg.normalized is not False:
+            raise ValueError(f"Invalid normalized value: {stft_cfg.normalized!r}")
         return np.moveaxis(spec, -1, -2)
 
     def _stft_native(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
@@ -186,8 +209,18 @@ class NumpyAudioBackend(BaseAudioProcessor):
         # torch leaf and in the mel-filter leaves below. It was previously read as a flag -- any
         # truthy value meant float64 -- so a config asking for float32 silently got float64 here
         # while torch honoured it, one field with two meanings.
-        if spectrogram_config and spectrogram_config.computation_dtype:
-            return np.abs(stft_out, dtype=np.dtype(spectrogram_config.computation_dtype)) ** power
+        dtype = (
+            np.dtype(spectrogram_config.computation_dtype)
+            if spectrogram_config and spectrogram_config.computation_dtype
+            else None
+        )
+        if spectrogram_config and spectrogram_config.stft_config.magnitude_mode == "sqrt_sum_squares":
+            real = np.real(stft_out).astype(dtype, copy=False) if dtype else np.real(stft_out)
+            imag = np.imag(stft_out).astype(dtype, copy=False) if dtype else np.imag(stft_out)
+            magnitudes = np.sqrt(real**2 + imag**2)
+            return magnitudes**power if power != 1.0 else magnitudes
+        if dtype:
+            return np.abs(stft_out, dtype=dtype) ** power
         return np.abs(stft_out) ** power
 
     # ── Mel scale & normalization ─────────────────────────────────────────
@@ -363,17 +396,24 @@ class TorchAudioBackend(BaseAudioProcessor):
     def _amax_over_features(self, x):
         return x.amax(dim=(-2, -1), keepdim=True)
 
-    def _zeros_int32(self, shape):
-        return torch.zeros(shape, dtype=torch.int32)
+    def _zeros_int32(self, shape, *, like=None):
+        device = like.device if isinstance(like, torch.Tensor) else None
+        return torch.zeros(shape, dtype=torch.int32, device=device)
 
-    def _as_backend_array(self, x):
+    def _as_backend_array(self, x, *, like=None):
         if isinstance(x, np.ndarray):
-            return torch.from_numpy(x)
-        if isinstance(x, torch.Tensor):
-            return x
-        # Sequences (e.g. `list[list[float]]`) are a documented input type; convert through numpy
-        # so the torch backend accepts everything the numpy one does.
-        return torch.from_numpy(np.asarray(x))
+            result = torch.from_numpy(x)
+        elif isinstance(x, torch.Tensor):
+            result = x
+        else:
+            # Sequences (e.g. `list[list[float]]`) are a documented input type; convert through numpy
+            # so the torch backend accepts everything the numpy one does.
+            result = torch.from_numpy(np.asarray(x))
+        return result.to(device=like.device) if isinstance(like, torch.Tensor) else result
+
+    def _arange(self, stop, *, like=None):
+        device = like.device if isinstance(like, torch.Tensor) else None
+        return torch.arange(stop, device=device)
 
     def _mean_axis0(self, x):
         return x.mean(dim=0)
@@ -408,7 +448,14 @@ class TorchAudioBackend(BaseAudioProcessor):
 
     def _create_stft_window(self, win_length, stft_cfg, audio):
         dtype = getattr(torch, stft_cfg.window_dtype) if stft_cfg.window_dtype else audio.dtype
-        wkwargs = {**(stft_cfg.wkwargs or {}), "dtype": dtype}
+        raw_wkwargs = dict(stft_cfg.wkwargs or {})
+        unsupported = set(raw_wkwargs) - {"requires_grad"}
+        if unsupported:
+            raise ValueError(
+                f"Unsupported window kwargs: {sorted(unsupported)}. "
+                "Use the dedicated periodic and window_dtype fields for portable configuration."
+            )
+        wkwargs = {**raw_wkwargs, "dtype": dtype}
         name = stft_cfg.window_fn
         if name == "hann_window_f32":
             # numpy build + convert, so both backends' windows are bit-identical;
@@ -430,6 +477,12 @@ class TorchAudioBackend(BaseAudioProcessor):
             window = torch.ones(win_length, dtype=dtype)
         elif name == "povey":
             window = torch.hann_window(win_length, periodic=stft_cfg.periodic, **wkwargs).pow(0.85)
+        elif name in ("blackman", "blackman_window"):
+            denominator = win_length if stft_cfg.periodic else win_length - 1
+            angle = 2 * math.pi / denominator
+            indices = torch.arange(win_length, **wkwargs)
+            coeff = stft_cfg.blackman_coeff
+            window = coeff - 0.5 * torch.cos(angle * indices) + (0.5 - coeff) * torch.cos(2 * angle * indices)
         else:
             raise ValueError(f"Unknown window function '{name}'")
         return window.to(device=audio.device)
@@ -460,9 +513,14 @@ class TorchAudioBackend(BaseAudioProcessor):
             frames = frames.to(torch.float64)  # mirrors numpy's rfft float64 promotion
         if frame_length < n_fft:
             frames = torch.nn.functional.pad(frames, (0, n_fft - frame_length))
-        spec = self._round_through_complex64(torch.fft.rfft(frames, n=n_fft), stft_cfg)
-        if stft_cfg.normalized:
+        fft = torch.fft.rfft if stft_cfg.onesided else torch.fft.fft
+        spec = self._round_through_complex64(fft(frames, n=n_fft), stft_cfg)
+        if stft_cfg.normalized in (True, "window"):
             spec = spec / window.pow(2.0).sum().sqrt()
+        elif stft_cfg.normalized == "frame_length":
+            spec = spec / math.sqrt(n_fft)
+        elif stft_cfg.normalized is not False:
+            raise ValueError(f"Invalid normalized value: {stft_cfg.normalized!r}")
         return spec.transpose(-2, -1)
 
     def _stft_native(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
@@ -474,12 +532,15 @@ class TorchAudioBackend(BaseAudioProcessor):
             window=window,
             center=stft_cfg.center,
             pad_mode=stft_cfg.pad_mode,
-            normalized=False,
+            normalized=stft_cfg.normalized == "frame_length",
+            onesided=stft_cfg.onesided,
             return_complex=True,
         )
         stft_out = self._round_through_complex64(stft_out, stft_cfg)
-        if stft_cfg.normalized:
+        if stft_cfg.normalized in (True, "window"):
             stft_out = stft_out / window.pow(2.0).sum().sqrt()
+        elif stft_cfg.normalized not in (False, "frame_length"):
+            raise ValueError(f"Invalid normalized value: {stft_cfg.normalized!r}")
         return stft_out
 
     @staticmethod
@@ -668,4 +729,9 @@ class TorchAudioBackend(BaseAudioProcessor):
         else:
             # F.linear matches torchaudio's MelScale implementation exactly
             mel_spec = torch.nn.functional.linear(features.transpose(-2, -1), mel_filters.T).transpose(-2, -1)
-        return torch.clamp(mel_spec, min=spectrogram_config.mel_floor)
+        # Power/magnitude spectra and mel filters are non-negative, so a zero floor is
+        # already guaranteed. Avoid dispatching a redundant pointwise CUDA kernel in the
+        # common raw-mel path; nonzero floors retain their explicit clamp semantics.
+        if spectrogram_config.mel_floor != 0.0:
+            mel_spec = torch.clamp(mel_spec, min=spectrogram_config.mel_floor)
+        return mel_spec

@@ -75,10 +75,13 @@ class StftConfig(DataclassDict):
     window_fn: str = "hann_window"
     wkwargs: dict | None = None
     power: float = 2.0
+    pad: int = 0
     center: bool | str = True
     pad_mode: str = "reflect"
-    normalized: bool = False
+    normalized: bool | str = False
+    onesided: bool = True
     periodic: bool = True
+    blackman_coeff: float = 0.42
     left_align_fft: bool = False
     window_dtype: str | None = None
     extra_samples_per_frame: int = 0
@@ -130,6 +133,7 @@ class SpectrogramConfig(DataclassDict):
     floor_below_peak: float | None = None
     log_shift: float | None = None
     log_scale: float | None = None
+    subtract_mean: bool = False
 
 
 @retry(exceptions=(httpx.HTTPError,))

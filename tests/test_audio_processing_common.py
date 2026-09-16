@@ -19,6 +19,7 @@ import pathlib
 import sys
 import unittest
 from functools import partial
+from unittest.mock import patch
 
 import numpy as np
 
@@ -416,3 +417,40 @@ class AudioWorkflowContractTest(unittest.TestCase):
                 np.testing.assert_array_equal(restored(waveform, return_tensors="np")["audio_values"], waveform[None])
                 self.assertNotIn("spectrogram_config", processor.to_dict())
                 self.assertEqual(restored.to_dict(), processor.to_dict())
+
+
+@require_torch
+class AudioBackendOptimizationTest(unittest.TestCase):
+    def _make_torch_processor(self, mel_floor):
+        from transformers.audio_processing_backends import TorchAudioBackend
+        from transformers.audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+
+        class Processor(TorchAudioBackend):
+            sampling_rate = 16_000
+
+        return Processor(
+            spectrogram_config=SpectrogramConfig(
+                stft_config=StftConfig(n_fft=8),
+                mel_scale_config=MelScaleConfig(n_mels=2),
+                mel_floor=mel_floor,
+            )
+        )
+
+    def test_zero_mel_floor_does_not_dispatch_clamp(self):
+        processor = self._make_torch_processor(mel_floor=0.0)
+        features = torch.ones((1, 5, 3))
+
+        with patch("torch.clamp", wraps=torch.clamp) as clamp:
+            processor._project_to_mel(features, spectrogram_config=processor.spectrogram_config)
+
+        clamp.assert_not_called()
+
+    def test_positive_mel_floor_still_clamps(self):
+        processor = self._make_torch_processor(mel_floor=1e-4)
+        features = torch.zeros((1, 5, 3))
+
+        with patch("torch.clamp", wraps=torch.clamp) as clamp:
+            output = processor._project_to_mel(features, spectrogram_config=processor.spectrogram_config)
+
+        clamp.assert_called_once()
+        torch.testing.assert_close(output, torch.full_like(output, 1e-4))

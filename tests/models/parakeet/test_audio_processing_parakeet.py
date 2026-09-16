@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import unittest
 
+import torch
+
 from transformers.models.auto.feature_extraction_auto import (
     FEATURE_EXTRACTOR_MAPPING_NAMES,
     feature_extractor_class_from_name,
 )
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_torch, require_torch_gpu, torch_device
 
 from ...test_audio_processing_common import AudioProcessingTestMixin
 
@@ -51,3 +53,24 @@ class ParakeetAudioProcessingTest(AudioProcessingTestMixin, unittest.TestCase):
             if class_name not in self.test_classes_to_skip
         }
         self.audio_processing_classes = {b: c for b, c in self.audio_processing_classes.items() if c is not None}
+
+    @require_torch_gpu
+    def test_ragged_batch_on_cuda_stays_on_cuda(self):
+        processor = self.audio_processing_classes["torch"]()
+        audio = [
+            torch.randn(16_000, device=torch_device),
+            torch.randn(12_000, device=torch_device),
+        ]
+
+        output = processor(audio, sampling_rate=16_000, padding=True, return_tensors="pt")
+        cpu_output = processor(
+            [waveform.cpu() for waveform in audio],
+            sampling_rate=16_000,
+            padding=True,
+            return_tensors="pt",
+        )
+
+        self.assertEqual(output.audio_features.device.type, "cuda")
+        self.assertEqual(output.audio_features_mask.device.type, "cuda")
+        torch.testing.assert_close(output.audio_features.cpu(), cpu_output.audio_features, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(output.audio_features_mask.cpu(), cpu_output.audio_features_mask)
