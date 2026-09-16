@@ -59,10 +59,6 @@ jobs:
     timeout-minutes: 240
     strategy:
       fail-fast: false
-      # Throttle dispatch: the pool serves ~7 concurrently. Without this, all 256
-      # jobs hit the runner queue at once; a previous run drained ~78 then stalled
-      # with 178 stuck queued. max-parallel keeps only ~7 in flight at a time.
-      max-parallel: 7
       matrix: ${{ fromJson(needs.models-setup.outputs.matrix) }}
     container:
       image: ghcr.io/huggingface/transformers-pytorch-amd-gpu-gfx1151:latest
