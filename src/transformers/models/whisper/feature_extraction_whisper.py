@@ -293,6 +293,9 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         if not is_batched:
             raw_speech = [np.asarray([raw_speech]).T]
 
+        if any(not np.isfinite(speech).all() for speech in raw_speech):
+            raise ValueError("WhisperFeatureExtractor input contains non-finite samples (NaN or infinity).")
+
         batched_speech = BatchFeature({"input_features": raw_speech})
 
         # convert into correct format for padding

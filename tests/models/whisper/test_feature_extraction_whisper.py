@@ -307,6 +307,14 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             mel_filters.T @ magnitudes_contiguous,
         )
 
+    def test_rejects_non_finite_samples(self):
+        feature_extractor = WhisperFeatureExtractor()
+        audio = np.zeros(feature_extractor.n_samples, dtype=np.float32)
+        audio[0] = np.nan
+
+        with self.assertRaisesRegex(ValueError, "non-finite"):
+            feature_extractor(audio, sampling_rate=feature_extractor.sampling_rate)
+
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
