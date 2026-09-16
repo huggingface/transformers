@@ -33,7 +33,8 @@ class DistributedConfig:
         enable_sequence_parallel (`bool`, *optional*, defaults to `False`):
             Reserved for sequence parallelism. Not wired up yet.
         enable_expert_parallel (`bool`, *optional*, defaults to `False`):
-            Route MoE models through the expert-parallel path (``base_model_ep_plan``).
+            Route MoE models through the expert-parallel path (``base_model_ep_plan``). When `ep_size` is
+            omitted, sets it to `tp_size`. An explicit `ep_size` takes precedence.
         fsdp_size (`int`, *optional*):
             Number of devices for FSDP (data parallelism). If `None` and `tp_size` is set, defaults to 1.
         fsdp_cpu_offload (`bool`, *optional*, defaults to `False`):
@@ -42,6 +43,9 @@ class DistributedConfig:
             Whether to enable mixed precision for FSDP2.
         pp_size (`int`, *optional*):
             Number of devices for pipeline parallelism. If `None` and another parallel mode is set, defaults to 1.
+        ep_size (`int`, *optional*):
+            Number of devices owning distinct expert shards. Defaults to 1, or to `tp_size` when
+            `enable_expert_parallel=True`. Model execution currently requires `ep_size=tp_size` when EP is enabled.
     """
 
     tp_size: int | None = None
@@ -52,10 +56,17 @@ class DistributedConfig:
     fsdp_cpu_offload: bool = False
     fsdp_mixed_precision: bool = False
     pp_size: int | None = None
+    ep_size: int | None = None
+
+    @property
+    def efsdp_size(self) -> int:
+        """Size of the expert FSDP axis in the expert mesh view."""
+        return self.fsdp_size * self.tp_size // self.ep_size
 
     def __post_init__(self):
-        if self.tp_plan is None and self.tp_size is None and self.fsdp_size is None and self.pp_size is None:
-            return
+        for value in (self.tp_size, self.fsdp_size, self.pp_size, self.ep_size):
+            if value is not None and value < 1:
+                raise ValueError(f"Parallelism sizes must be >= 1, got {value}.")
 
         if self.fsdp_size is None:
             self.fsdp_size = 1
@@ -72,6 +83,16 @@ class DistributedConfig:
             self.tp_size = world_size // other_parallel_size
         elif self.tp_size is None:
             self.tp_size = 1
+
+        if self.ep_size is None:
+            self.ep_size = self.tp_size if self.enable_expert_parallel else 1
+        self.enable_expert_parallel = self.ep_size > 1
+
+        if self.ep_size > 1:
+            if self.ep_size % self.tp_size:
+                raise ValueError("`ep_size` must be a multiple of `tp_size`.")
+            if (self.fsdp_size * self.tp_size) % self.ep_size:
+                raise ValueError("`ep_size` must divide `fsdp_size * tp_size`.")
 
         if self.fsdp_size > 1 and self.pp_size > 1:
             raise ValueError(
