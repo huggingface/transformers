@@ -40,7 +40,6 @@ from .deepgemm import (
 )
 from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
 from .moe import ExpertsInterface, use_experts_implementation
-from .tensor_parallel import to_local
 
 
 logger = logging.get_logger(__name__)
@@ -425,13 +424,6 @@ class _FineGrainedModule:
     # kernels corrupt across devices); removable once the kernel ships a context-free loader.
     _deepgemm_disabled = False
 
-    def local(self, name: str) -> torch.Tensor | None:
-        """One of this module's parameters as the kernels take it: the local shard of whatever
-        FSDP2/EP wrapped it in, and ``None`` for a slot this module does not hold. Every operand
-        goes through here so no forward hands a `DTensor` to a kernel."""
-        tensor = getattr(self, name, None)
-        return to_local(tensor) if tensor is not None else None
-
 
 class FineGrainedLinear(_FineGrainedModule, nn.Linear):
     def __init__(
@@ -489,13 +481,13 @@ class FineGrainedLinear(_FineGrainedModule, nn.Linear):
 
         return finegrained_linear(
             input,
-            self.local("weight"),
-            self.local("weight_scale_inv"),
+            self.weight,
+            self.weight_scale_inv,
             block_size=self.block_size,
             activation_scale=self.activation_scale,
             bias=self.bias,
             allow_deepgemm=not self._deepgemm_disabled,
-            weight_global_scale=self.local("weight_global_scale"),
+            weight_global_scale=self.weight_global_scale,
             activation_format=self.activation_format,
         )
 
@@ -562,8 +554,8 @@ class FineGrainedGroupedLinear(FineGrainedLinear):
                 y.add_(self.bias.view(self.n_groups, -1))
             return y
 
-        w = self.local("weight").view(self.n_groups, -1, hidden_dim)
-        scale_inv = self.local("weight_scale_inv")
+        w = self.weight.view(self.n_groups, -1, hidden_dim)
+        scale_inv = self.weight_scale_inv
         x = x.movedim(-2, 0).reshape(-1, hidden_dim)
         scale_inv = scale_inv.view(self.n_groups, scale_inv.size(0) // self.n_groups, scale_inv.size(1))
 
@@ -579,7 +571,7 @@ class FineGrainedGroupedLinear(FineGrainedLinear):
             scale_inv,
             expert_start=expert_start,
             activation_format=self.activation_format,
-            b_global_scale=self.local("weight_global_scale"),
+            b_global_scale=self.weight_global_scale,
         )
         y = y.reshape(self.n_groups, *input_shape, -1).movedim(0, -2)
         if self.has_bias:
@@ -620,21 +612,20 @@ def _moe_operands(kernel, module) -> dict:
     else:
         post_expert_norm = module._apply_post_norm
 
-    def both(suffix: str) -> dict:
-        """One kernel argument per projection. The kernels always say ``gate_up_proj``; the module
-        names that weight ``up_proj`` when the model has no gate. A tensor the module does not
-        hold passes as ``None``, which is the argument the kernels take for it."""
-        return {
-            f"gate_up_proj{suffix}": module.local(f"{up}{suffix}"),
-            f"down_proj{suffix}": module.local(f"down_proj{suffix}"),
-        }
-
+    # The kernels always say `gate_up_proj`; the module names that weight `up_proj` when the model
+    # has no gate, which is the only reason these are not plain attribute reads. A slot the module
+    # does not hold reads back as None — the argument the kernels take for an absent one.
     return {
-        **both(""),
-        **both("_scale_inv"),
-        **both("_weight_global_scale"),
-        **both("_input_global_scale"),
-        **both("_bias"),
+        "gate_up_proj": getattr(module, up),
+        "gate_up_proj_scale_inv": getattr(module, f"{up}_scale_inv"),
+        "gate_up_proj_weight_global_scale": getattr(module, f"{up}_weight_global_scale"),
+        "gate_up_proj_input_global_scale": getattr(module, f"{up}_input_global_scale"),
+        "gate_up_proj_bias": getattr(module, f"{up}_bias"),
+        "down_proj": module.down_proj,
+        "down_proj_scale_inv": module.down_proj_scale_inv,
+        "down_proj_weight_global_scale": module.down_proj_weight_global_scale,
+        "down_proj_input_global_scale": module.down_proj_input_global_scale,
+        "down_proj_bias": module.down_proj_bias,
         # a supported activation NAME is fused into the gate_up epilogue; any other callable
         # leaves that GEMM plain and runs on the host between the two
         "act_fn": act_fn,
