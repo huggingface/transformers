@@ -1,11 +1,3 @@
-# Code owners for the files that everything else is built on.
-#
-# Listing an owner here makes GitHub request their review automatically. On its own
-# this file does NOT block a merge: it only becomes a merge requirement once
-# "Require a pull request before merging" + "Require review from Code Owners" are
-# enabled for `main` in branch protection or a repository ruleset. That is a
-# repository setting and cannot be changed from a pull request.
-#
 # Syntax notes (see https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners):
 #   - Owners must have write access to the repository.
 #   - Several owners for one pattern must be on the SAME line; any one of them
