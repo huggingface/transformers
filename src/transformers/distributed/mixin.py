@@ -206,8 +206,8 @@ class DistributedMixin:
             model = apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), tp_plan)
         if ep_plan:
             # Because we do masked all-reduce EP, we need to shard the experts on TP mesh (tp_size = ep_size).
-            # We can't use ep mesh because it belongs to the expert view expert mesh (efsdp for dispatch path)
-            # which is different from the dense view mesh (fsdp).
+            # We can't use ep mesh because it belongs to the expert mesh (efsdp for dispatch path)
+            # which is different from the dense mesh (fsdp).
             model = apply_masked_expert_parallelism(model, mesh_manager.get_mesh("tp"), ep_plan)
 
         if distributed_config.fsdp_size > 1:
