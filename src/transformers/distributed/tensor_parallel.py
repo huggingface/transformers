@@ -250,11 +250,10 @@ class UnitColwiseParallel(TensorParallelLayer):
     - Less heads than world size: 2 heads, 4 process -> we replicate the heads.
           Rank: | 0 |  1 |  2 | 3 |
     This gives: |h0 | h0 | h1 | h1|
-    And we normalize the contributions from rank 0,1 and from 2,3.
-    - More heads than world size: 6 heads, 4 process -> we also replicate the heads.
-          Rank: |  0 |  1 |  2 |  3 |
-    This gives: |h0h1|h2h3|h4h5|h4h5|
-    And we "ignore" the results from rank 2,3.
+
+    - More heads than world size: 6 heads, 8 process -> we also replicate the heads.
+          Rank: |   0  |   1  |   2  |   3  |
+    This gives: |h0h1h2|h0h1h2|h3h4h5|h3h4h5|
 
     1. Update the rank's expected shape.
     2. Prepare the slices appropriately when sharding the param.
