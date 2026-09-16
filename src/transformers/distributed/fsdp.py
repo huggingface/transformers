@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     import torch.nn as nn
 
     from .configuration_utils import DistributedConfig
+    from .utils import MeshManager
 
 if is_torch_available():
     import torch
@@ -184,15 +185,18 @@ def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) 
         logger.warning(f"The following FSDP rules were not applied to any module: {unused_rules}")
 
 
-def apply_fully_sharded_data_parallelism(
-    model: nn.Module, fsdp_mesh: torch.distributed.device_mesh.DeviceMesh
-) -> nn.Module:
+def apply_fully_sharded_data_parallelism(model: nn.Module, mesh_manager: MeshManager) -> nn.Module:
     """
-    Apply FSDP2 (fully_shard) to a model.
+    Apply FSDP2 (fully_shard) to a model: the trunk on the `fsdp` axis, dispatched experts on `efsdp`.
 
     Torch availability, distributed initialization and the version requirement
     are asserted upstream by `initialize_distributed_mesh`.
+
+    With token dispatch, the routed experts are wrapped separately on `efsdp`, even when its size is one, so the
+    surrounding model's `fsdp` wrapper excludes them: their DTensors live on the expert view, and FSDP2 requires a
+    parameter's mesh and its FSDP mesh to share a root.
     """
+    fsdp_mesh = mesh_manager.get_mesh("fsdp")
     fsdp_plan = dict(getattr(model, "_fsdp_plan", None) or {})
     if not fsdp_plan:
         raise ValueError(
@@ -205,6 +209,16 @@ def apply_fully_sharded_data_parallelism(
 
     adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, model)
     reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
+
+    if (
+        distributed_config is not None
+        and distributed_config.ep_size > 1
+        and "ep_dispatch_experts" in getattr(model, "ep_plan", {}).values()
+    ):
+        expert_mesh = mesh_manager.get_mesh("efsdp")
+        for module in model.modules():
+            if getattr(module, "_is_expert_parallel", False):
+                fully_shard(module, mesh=expert_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
 
     for module_name, module in reshard_targets:
         fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
