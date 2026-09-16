@@ -127,6 +127,42 @@ with torch.no_grad():
     # Reconstructed shapes: [(222720,), (666240,)]
 ```
 
+### Speed-up with `torch.compile`
+
+You can speed up inference with [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html). The first
+few calls are slower due to compilation overhead, but subsequent calls with the same input shape are faster. Because the
+model exposes `encode` and `decode` rather than a single forward, compile each of them.
+
+```python
+import torch
+from transformers import AutoFeatureExtractor, AutoModel
+from transformers.audio_utils import load_audio_librosa
+
+model_id = "shahvandit/qwen3-tts-tokenizer-multi-codebook-hf"
+model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
+feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+
+audio = load_audio_librosa(
+    "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
+    sampling_rate=model.config.input_sample_rate,
+)
+inputs = feature_extractor(audio, sampling_rate=model.config.input_sample_rate).to(model.device, model.dtype)
+
+model.encode = torch.compile(model.encode)
+model.decode = torch.compile(model.decode)
+
+# warmup (the first calls include compilation)
+for _ in range(3):
+    with torch.inference_mode():
+        codes = model.encode(inputs["input_values"], padding_mask=inputs["padding_mask"]).audio_codes[0]
+        _ = model.decode(codes.unsqueeze(0)).audio_values[0]
+
+with torch.inference_mode():
+    codes = model.encode(inputs["input_values"], padding_mask=inputs["padding_mask"]).audio_codes[0]
+    audio_values = model.decode(codes.unsqueeze(0)).audio_values[0]
+print("Reconstructed audio shape:", audio_values.shape)
+```
+
 ## Qwen3TTSTokenizerMultiCodebookConfig
 
 [[autodoc]] Qwen3TTSTokenizerMultiCodebookConfig
