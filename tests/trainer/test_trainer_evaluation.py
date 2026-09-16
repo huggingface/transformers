@@ -19,6 +19,8 @@ iterable datasets, early stopping, FP16/BF16 full eval memory, torch.compile, an
 
 import gc
 import tempfile
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import numpy as np
 
@@ -117,6 +119,26 @@ class TrainerEvaluationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertAlmostEqual(results["eval_loss"], expected_loss, places=5)
             expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
+
+    def test_evaluate_before_training_with_fsdp2(self):
+        """FSDP2 evaluation must not require an optimizer to prepare the model."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(output_dir=tmp_dir)
+            trainer.is_fsdp_enabled = True
+            trainer.accelerator.state.fsdp_plugin = SimpleNamespace(fsdp_version=2)
+            trainer.accelerator._models = []
+
+            def reject_model_prepare(*args):
+                if any(isinstance(arg, torch.nn.Module) for arg in args):
+                    raise AssertionError("FSDP2 evaluation should not prepare an optimizer")
+                return args[0] if len(args) == 1 else args
+
+            trainer.accelerator.prepare = Mock(side_effect=reject_model_prepare)
+            trainer.accelerator.prepare_model = Mock(side_effect=lambda model, evaluation_mode=False: model)
+
+            trainer.evaluate()
+
+            trainer.accelerator.prepare_model.assert_called_once_with(trainer.model, evaluation_mode=True)
 
     def test_predict(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
