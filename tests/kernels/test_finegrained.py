@@ -87,6 +87,7 @@ class _Cfg:
     num_local_experts = 4
     intermediate_size = 32
     hidden_act = "silu"
+    _experts_implementation = None
 
 
 def _loaded(kernel):
