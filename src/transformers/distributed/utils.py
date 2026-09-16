@@ -291,21 +291,13 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
     return {}
 
 
-def save_model_checkpoint_distributed(
-    model, checkpoint_dir: str, *, checkpoint_format: str = "safetensors", consolidate: bool = True
-) -> None:
-    """Save rank-local model shards with DCP, optionally consolidating them.
+def save_model_checkpoint_distributed(model, checkpoint_dir: str, *, consolidate: bool = True) -> None:
+    """Save rank-local model shards as safetensors with DCP, optionally consolidating them.
 
-        - `checkpoint_format` selects safetensors or native Torch DCP storage.
-        - With `consolidate=True`, rank-local files are kept in `sharded/` and complete
-          weights are written at the root.
-
-    Torch consolidation materializes the full state dict in rank 0's CPU memory.
-    Without consolidation, load the root directory with DCP and the matching
-    storage reader, these rank-local files are not `from_pretrained` checkpoints.
+    With `consolidate=True`, rank-local files are kept in `sharded/` and complete weights
+    are written at the root. Otherwise, load the rank-local files with
+    `load_distributed_checkpoint`; they are not `from_pretrained` checkpoints.
     """
-    if checkpoint_format not in ("safetensors", "torch"):
-        raise ValueError("`checkpoint_format` must be 'safetensors' or 'torch'.")
     if not is_torch_greater_or_equal("2.7"):
         raise OSError("Distributed checkpointing requires `torch>=2.7`.")
 
@@ -315,29 +307,16 @@ def save_model_checkpoint_distributed(
     from torch.distributed.checkpoint.state_dict import get_model_state_dict
 
     from .checkpoint import HuggingFaceSavePlanner
+    from .hf_storage import HuggingFaceStorageWriter
 
     state_dict = get_model_state_dict(model)
-    planner = HuggingFaceSavePlanner()
-    if checkpoint_format == "safetensors":
-        from .hf_storage import HuggingFaceStorageWriter
+    writer = HuggingFaceStorageWriter(
+        path=checkpoint_dir,
+        save_distributed=True,
+        enable_consolidation=consolidate,
+    )
+    dcp.save(state_dict, storage_writer=writer, planner=HuggingFaceSavePlanner())
 
-        writer = HuggingFaceStorageWriter(
-            path=checkpoint_dir,
-            save_distributed=True,
-            enable_consolidation=consolidate,
-        )
-    else:
-        shard_dir = os.path.join(checkpoint_dir, "sharded") if consolidate else checkpoint_dir
-        writer = dcp.FileSystemWriter(shard_dir)
-
-    dcp.save(state_dict, storage_writer=writer, planner=planner)
-
-    if checkpoint_format == "torch" and consolidate and _get_torch_distributed_rank() == 0:
-        from torch.distributed.checkpoint.format_utils import dcp_to_torch_save
-
-        from ..utils import WEIGHTS_NAME
-
-        dcp_to_torch_save(shard_dir, os.path.join(checkpoint_dir, WEIGHTS_NAME))
     # All ranks wait until consolidated weights are ready for loading.
     _distributed_barrier()
 

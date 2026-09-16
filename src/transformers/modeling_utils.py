@@ -3247,7 +3247,6 @@ class PreTrainedModel(
         save_peft_format: bool = True,
         save_original_format: bool = True,
         distributed_checkpoint: bool = False,
-        distributed_checkpoint_format: str = "safetensors",
         consolidate_distributed_checkpoint: bool = True,
         **kwargs,
     ):
@@ -3299,22 +3298,14 @@ class PreTrainedModel(
                 to CPU first. Every rank must call this method.
                 When `False`, FSDP weights are gathered to CPU on rank 0 via `gather_full_state_dict` before writing.
                 Native FSDP requires `torch>=2.7`.
-            distributed_checkpoint_format (`str`, *optional*, defaults to `"safetensors"`):
-                Storage format for distributed checkpoints: `"safetensors"` or `"torch"`. Torch format uses native
-                DCP files; when consolidated, it also produces `pytorch_model.bin`.
             consolidate_distributed_checkpoint (`bool`, *optional*, defaults to `True`):
                 Consolidate rank-local files into complete model weights after distributed saving. Intermediate files
                 are retained under `sharded/`. When `False`, only rank-local files are written in `save_directory`.
                 Load these with DCP, using `HuggingFaceStorageReader` for safetensors, rather than `from_pretrained()`.
-                Torch consolidation requires enough CPU memory for the full state dict on rank 0.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
-        if distributed_checkpoint_format not in ("safetensors", "torch"):
-            raise ValueError("`distributed_checkpoint_format` must be 'safetensors' or 'torch'.")
-        if not distributed_checkpoint and (
-            distributed_checkpoint_format != "safetensors" or not consolidate_distributed_checkpoint
-        ):
+        if not distributed_checkpoint and not consolidate_distributed_checkpoint:
             raise ValueError("Distributed checkpoint options require `distributed_checkpoint=True`.")
 
         if token is not None:
@@ -3423,7 +3414,6 @@ class PreTrainedModel(
             self.save_distributed_checkpoint(
                 model_to_save,
                 save_directory,
-                checkpoint_format=distributed_checkpoint_format,
                 consolidate=consolidate_distributed_checkpoint,
                 push_to_hub=push_to_hub,
                 save_on_this_rank=save_on_this_rank,
