@@ -135,6 +135,10 @@ class MeshManager:
     """Named access to dense and expert parallel axes without exposing their view selection."""
 
     def __init__(self, dense_mesh: DeviceMesh, expert_mesh: DeviceMesh):
+        """
+        dense_mesh: (pp, fsdp, tp) -> attention, dense MLPs, embeddings, lm_heads
+        expert_mesh: (pp, efsdp, ep) -> experts
+        """
         self._dense_mesh = dense_mesh
         self._expert_mesh = expert_mesh
 
