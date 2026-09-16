@@ -25,6 +25,7 @@ from .fsdp import apply_fully_sharded_data_parallelism, is_fsdp_managed_module
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
     _validate_parallel_plan_styles,
+    apply_dispatch_expert_parallelism,
     apply_masked_expert_parallelism,
     apply_tensor_parallelism,
     gather_state_dict_for_save,
@@ -161,11 +162,6 @@ class DistributedMixin:
         if isinstance(distributed_config, dict):
             distributed_config = DistributedConfig.from_dict(distributed_config)
 
-        if distributed_config.ep_size > 1 and distributed_config.ep_size != distributed_config.tp_size:
-            raise ValueError(
-                "All-reduce expert parallelism requires `ep_size=tp_size` and identical tokens per EP group."
-            )
-
         if distributed_config.tp_size == 1 and distributed_config.fsdp_size == 1 and distributed_config.pp_size == 1:
             return distributed_config, device_map, None
 
@@ -198,21 +194,38 @@ class DistributedMixin:
         # Resolve both plans before sharding anything: overrides are merged into `model.tp_plan` / `model.ep_plan`,
         # and the experts named by the EP plan are removed from the TP plan so they are sharded once.
         tp_plan, ep_plan = resolve_parallel_plans(model, distributed_config)
+        distributed_config._validate_resolved_ep_plan(ep_plan)
+        dispatch = "ep_dispatch_experts" in ep_plan.values()
 
         if distributed_config.pp_size > 1:
             model = apply_pipeline_parallelism(model, mesh_manager.get_mesh("pp"))
 
+        # The TP plan shards the dense modules across `tp`; the EP plan shards the experts on `ep` with token
+        # dispatch, or on `tp` with router masking (all-reduce EP needs identical tokens in each expert group,
+        # hence `ep_size == tp_size`). FSDP2 then shards every parameter across `fsdp`, or `efsdp` for
+        # dispatched experts.
         if tp_plan:
             model = apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), tp_plan)
-        if ep_plan:
+        if ep_plan and dispatch:
+            # Experts live in the expert view: sharded on `ep`, FSDP-wrapped on `efsdp` below. TP ranks share a
+            # batch, so the hook also takes `tp` to dispatch disjoint token slices and rebuild the full output.
+            model = apply_dispatch_expert_parallelism(
+                model, mesh_manager.get_mesh("ep"), mesh_manager.get_mesh("tp"), ep_plan
+            )
+        elif ep_plan:
             # Because we do masked all-reduce EP, we need to shard the experts on TP mesh (tp_size = ep_size).
             # We can't use ep mesh because it belongs to the expert mesh (efsdp for dispatch path)
             # which is different from the dense mesh (fsdp).
             model = apply_masked_expert_parallelism(model, mesh_manager.get_mesh("tp"), ep_plan)
 
-        if distributed_config.fsdp_size > 1:
-            model = apply_fully_sharded_data_parallelism(model, mesh_manager.get_mesh("fsdp"))
+        # Dispatched experts are always wrapped on `efsdp`, even at size one, so the trunk's `fsdp` wrapper
+        # excludes them and every parameter goes through the same FSDP save path.
+        if distributed_config.fsdp_size > 1 or dispatch:
+            model = apply_fully_sharded_data_parallelism(model, mesh_manager)
         return model
+
+    def _uses_expert_dispatch(self, distributed_config: DistributedConfig) -> bool:
+        return distributed_config.ep_size > 1 and "ep_dispatch_experts" in self.ep_plan.values()
 
     def should_save_on_this_rank(self, is_main_process: bool) -> bool:
         """Return whether this rank should write checkpoint files."""
@@ -272,9 +285,9 @@ class DistributedMixin:
         if distributed_config is None:
             return state_dict
 
-        if distributed_config.fsdp_size > 1:
-            # Also covers the 2-D (fsdp, tp) mesh: every parameter is FSDP-managed, and the full
-            # state dict is only materialized on rank 0.
+        if distributed_config.fsdp_size > 1 or self._uses_expert_dispatch(distributed_config):
+            # Also covers the 2-D (fsdp, tp) mesh and token dispatch: every parameter is FSDP-managed, and the
+            # full state dict is only materialized on rank 0.
             if not _is_torch_distributed_initialized():
                 raise ValueError(
                     "Saving an FSDP-wrapped model requires torch.distributed to be initialized. "
@@ -296,5 +309,5 @@ class DistributedMixin:
         """Barrier so non-writer ranks wait for rank 0 to finish gathered checkpoint writes."""
         if distributed_config is None:
             return
-        if distributed_config.tp_size > 1 or distributed_config.fsdp_size > 1:
+        if distributed_config.tp_size > 1 or distributed_config.fsdp_size > 1 or distributed_config.ep_size > 1:
             _distributed_barrier()

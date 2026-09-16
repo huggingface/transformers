@@ -509,11 +509,12 @@ def _grad_norm_across_meshes(model):
     return torch.linalg.vector_norm(torch.stack(norms))
 
 
-def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, dtype=None):
+def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, dtype=None, dispatch=False):
     """
-    DDP vs a 2-D (fsdp, tp) mesh with expert parallelism on `tp`. DDP sees the whole batch on every rank; each `fsdp`
-    rank of the 2-D run sees its own slice of it, so FSDP2's reduction over `fsdp` is exercised. Losses, gradient norms
-    and final weights have to match step by step.
+    DDP vs FSDP2 with expert parallelism, router masking with all-reduce or token dispatch. DDP sees the whole batch on
+    every rank. With masking, each TP/EP pair shares a slice of it and FSDP2 reduces over `fsdp`; with dispatch every
+    rank has its own slice and sends its tokens to the experts' owners. Losses, gradient norms and final weights have
+    to match step by step.
     """
     init_test_logger()
 
@@ -523,10 +524,27 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
     device = _get_rank_device(rank)
     config = config_class.from_dict(config_dict)
     world_size = dist.get_world_size()
-    dp = world_size // 2
+    with torch.device("meta"):
+        default_ep_plan = AutoModelForCausalLM.from_config(config).ep_plan
+    experts_paths = [
+        name for name, style in default_ep_plan.items() if style in ("moe_tp_experts", "ep_dispatch_experts")
+    ]
+    if dispatch:
+        # Token dispatch: no TP, one slice per rank, experts split across pairs of ranks and FSDP-sharded on `efsdp`.
+        ep_plan = dict.fromkeys(experts_paths, "ep_dispatch_experts")
+        distributed_config = DistributedConfig(tp_size=1, fsdp_size=world_size, ep_size=2, ep_plan=ep_plan)
+        num_slices = world_size
+    else:
+        # Masking with all-reduce: each TP/EP pair shares a slice. Keep the default weight rules, override the forward.
+        ep_plan = dict.fromkeys(experts_paths, "moe_tp_experts")
+        ep_plan.update({f"{name.rsplit('.', 1)[0]}.gate": "ep_router" for name in experts_paths})
+        distributed_config = DistributedConfig(tp_size=2, fsdp_size=world_size // 2, ep_size=2, ep_plan=ep_plan)
+        num_slices = world_size // 2
     generator = torch.Generator(device=device)
     generator.manual_seed(SEED)
-    input_ids = torch.randint(0, config.vocab_size, (dp * BATCH_SIZE, SEQ_LEN), device=device, generator=generator)
+    input_ids = torch.randint(
+        0, config.vocab_size, (num_slices * BATCH_SIZE, SEQ_LEN), device=device, generator=generator
+    )
     batches = [(input_ids, input_ids.clone())] * NUM_STEPS
 
     with _deterministic_init_model_dir(rank, config, dtype) as init_model_dir:
@@ -536,17 +554,20 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
         model = AutoModelForCausalLM.from_pretrained(
             init_model_dir,
             torch_dtype=dtype,
-            distributed_config=DistributedConfig(tp_size=2, fsdp_size=dp, ep_size=2),
+            distributed_config=distributed_config,
         )
-        assert model.tp_size == 2 and model.fsdp_size == dp
+        assert model.tp_size == distributed_config.tp_size and model.fsdp_size == distributed_config.fsdp_size
         assert model._device_mesh.mesh_dim_names == ("pp", "fsdp", "tp")
         model.train()
         optimizer = torch.optim.Adam(model.parameters(), lr=LR, foreach=False)
-        dp_rank = model._device_mesh["fsdp"].get_local_rank()
-        dp_group = model._device_mesh["fsdp"].get_group()
+        if dispatch:
+            slice_index, dp_group = rank, dist.group.WORLD
+        else:
+            slice_index = model._device_mesh["fsdp"].get_local_rank()
+            dp_group = model._device_mesh["fsdp"].get_group()
         losses, grad_norms = [], []
         for ids, labels in batches:
-            rows = slice(dp_rank * BATCH_SIZE, (dp_rank + 1) * BATCH_SIZE)
+            rows = slice(slice_index * BATCH_SIZE, (slice_index + 1) * BATCH_SIZE)
             optimizer.zero_grad()
             loss = model(input_ids=ids[rows], labels=labels[rows], use_cache=False).loss
             loss.backward()
@@ -554,7 +575,7 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
             optimizer.step()
             loss = loss.detach()
             dist.all_reduce(loss, group=dp_group)
-            losses.append(loss.item() / dp)
+            losses.append(loss.item() / num_slices)
         state_dict = gather_full_state_dict(model)
 
     for step in range(len(ddp_losses)):
@@ -573,14 +594,19 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
             msg=f"Grad norm mismatch at step {step}: DDP={ddp_grad_norms[step]}, FSDP2+EP={grad_norms[step]}",
         )
 
+    # Adam normalises each step to about `lr * sign(grad)`, so an element whose gradient is near zero turns a
+    # rounding-level difference into an `lr`-sized weight difference. Token dispatch reduces the gradients over
+    # every rank rather than over `fsdp`, which changes those last bits. Losses and gradient norms keep the tight
+    # tolerance, and they are what says the reduction is right.
+    weight_atol = 1e-4 if dispatch else DDP_FSDP_ATOL
     for key in ddp_state_dict:
         assert key in state_dict, f"Key {key} missing from FSDP2+EP state dict"
         torch.testing.assert_close(
             ddp_state_dict[key],
             state_dict[key],
             rtol=DDP_FSDP_RTOL,
-            atol=DDP_FSDP_ATOL,
-            msg=f"Weight mismatch for {key}: DDP vs FSDP2+EP",
+            atol=weight_atol,
+            msg=lambda msg: f"Weight mismatch for {key}: DDP vs FSDP2+EP\n{msg}",
         )
 
     if rank == 0:
@@ -731,15 +757,19 @@ class FSDPTesterMixin(ABC):
             label == "tied",
         )
 
+    @parameterized.expand([("masked", False), ("dispatch", True)])
     @is_fsdp_test
-    def test_fsdp2_expert_parallel_2d_vs_ddp(self):
+    def test_fsdp2_expert_parallel_2d_vs_ddp(self, label, dispatch):
         """
-        Training on a 2-D (fsdp, tp) mesh with expert parallelism, each fsdp rank on its own slice of the batch,
-        traces DDP on the whole batch step by step.
+        Training with expert parallelism and FSDP2, each `fsdp` rank (each rank with token dispatch) on its own slice
+        of the batch, traces DDP on the whole batch step by step.
         """
         config = self.model_tester.get_config()
         if getattr(config, "base_model_ep_plan", None) is None:
             self.skipTest("Model does not have an expert parallel plan (base_model_ep_plan)")
         self._run_fsdp2_distributed_test(
-            "fsdp2_expert_parallel_2d_vs_ddp", _test_fsdp2_expert_parallel_2d_vs_ddp_impl, world_size=4
+            "fsdp2_expert_parallel_2d_vs_ddp",
+            _test_fsdp2_expert_parallel_2d_vs_ddp_impl,
+            world_size=4,
+            dispatch=dispatch,
         )
