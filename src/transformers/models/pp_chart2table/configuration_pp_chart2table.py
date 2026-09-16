@@ -121,4 +121,4 @@ class PPChart2TableConfig(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
 
-__all__ = ["PPChart2TableConfig"]
+__all__ = ["PPChart2TableConfig", "PPChart2TableVisionConfig"]

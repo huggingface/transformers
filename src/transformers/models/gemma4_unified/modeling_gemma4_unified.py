@@ -892,9 +892,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
     def __init__(self, config: Gemma4UnifiedConfig):
         super().__init__(config)
         self.vocab_size = config.text_config.vocab_size
-
-        language_model = AutoModel.from_config(config=config.text_config)
-        self.language_model = language_model
+        self.language_model = AutoModel.from_config(config.text_config)
 
         self.embed_vision = (
             Gemma4UnifiedVisionEmbedder(config.vision_config, config.text_config)

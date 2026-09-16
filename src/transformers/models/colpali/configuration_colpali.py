@@ -40,11 +40,9 @@ class ColPaliConfig(PreTrainedConfig):
     model_type = "colpali"
     sub_configs_defaults = {
         "vlm_config": SubConfigSpec(config_class=AutoConfig, model_type="paligemma"),
-        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="gemma"),
     }
 
     vlm_config: dict | PreTrainedConfig | None = None
-    text_config: dict | PreTrainedConfig | None = None
     embedding_dim: int = 128
 
 

@@ -136,6 +136,12 @@ class Idefics2Config(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
+        # Force default model-type - hub has a remote-code format config
+        if isinstance(self.vision_config, dict):
+            self.vision_config.pop("model_type", None)
+        if isinstance(self.perceiver_config, dict):
+            self.perceiver_config.pop("model_type", None)
+
         super().__post_init__(**kwargs)
         if self.text_config.hidden_size != self.perceiver_config.hidden_size:
             self.perceiver_config.hidden_size = self.text_config.hidden_size

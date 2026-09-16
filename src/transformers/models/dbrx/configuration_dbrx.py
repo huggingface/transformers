@@ -81,21 +81,6 @@ class DbrxFFNConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if self.ffn_act_fn is None:
             self.ffn_act_fn = {"name": "silu"}
-
-        for k in [
-            "model_type",
-            "attn_implementation",
-            "experts_implementation",
-            "transformers_version",
-            "_commit_hash",
-            "torch_dtype",
-            "dtype",
-        ]:
-            if k in kwargs:
-                kwargs.pop(k)
-        if len(kwargs) != 0:
-            raise ValueError(f"Found unknown {kwargs=}")
-
         super().__post_init__(**kwargs)
 
 
@@ -165,7 +150,6 @@ class DbrxConfig(PreTrainedConfig):
 
         # The experts read/write hidden states, so `ffn_config.hidden_size` must mirror the model's `hidden_size`.
         self.ffn_config.hidden_size = self.d_model
-
         self.num_key_value_heads = self.attn_config.kv_n_heads
         super().__post_init__(**kwargs)
 
