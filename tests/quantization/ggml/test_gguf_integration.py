@@ -518,7 +518,7 @@ class T5GgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
 
 @slow
 class Gemma4GgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
-    """`tokenizer.ggml.model = "gemma4"`: a kind of its own, and a BPE carrying its own merges."""
+    """`tokenizer.ggml.model = "gemma4"`: a tokenizer type of its own, and a BPE carrying its own merges."""
 
     gguf_repo = "unsloth/gemma-4-E4B-it-GGUF"
     quantized_gguf_file = "gemma-4-E4B-it-Q4_K_M.gguf"
