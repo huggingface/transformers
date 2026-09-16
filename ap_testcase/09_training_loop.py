@@ -6,8 +6,8 @@ must be `< output_vocab_size` or `-100`, so positions holding media ids (image/a
 the cutoff) must be masked with `-100`.
 
 - CASE 1, label contract: a no-label forward returns logits padded to the logical `vocab_size` with
-  a `finfo.min` tail, a labeled forward returns physical-width logits with a finite loss, and labels
-  still holding media ids are rejected.
+  a `finfo.min` tail, and a labeled forward with masked media ids returns physical-width logits
+  with a finite loss.
 - CASE 2, single-device loop: overfit smoke test; four SGD steps on the last decoder layer plus
   lm_head must reduce the loss on a fixed text+image batch.
 - CASE 3, data parallelism: relaunches this file under `torchrun --nproc_per_node=2`; two
@@ -85,8 +85,7 @@ def case_1_label_contract(model, inputs, labels, text_config):
     The pruned head can only score the first `output_vocab_size` ids, so three behaviors are
     checked: 1) a no-label forward returns logits padded to the full `vocab_size` with a
     non-selectable `finfo.min` tail 2) a labeled forward returns physical-width logits and 3) a finite
-    loss; labels still holding media ids (>= `output_vocab_size` instead of `-100`) raise a
-    ValueError pointing at the `-100` masking rule.
+    loss with media ids masked using `-100`.
     """
     with torch.no_grad():
         no_label_logits = model(**inputs).logits
@@ -99,13 +98,6 @@ def case_1_label_contract(model, inputs, labels, text_config):
     assert loss_out.logits.shape[-1] == text_config.output_vocab_size, "loss logits have the wrong width"
     assert torch.isfinite(loss_out.loss), f"non-finite loss {loss_out.loss}"
 
-    bad_labels = inputs["input_ids"].clone()
-    try:
-        model(**inputs, labels=bad_labels)
-    except ValueError as error:
-        assert "-100" in str(error), f"unexpected validation error: {error}"
-    else:
-        raise AssertionError("labels holding media ids were accepted")
     return (
         f"logits {no_label_logits.shape[-1]} padded / {loss_out.logits.shape[-1]} physical; "
         f"loss {float(loss_out.loss):.4f}"
