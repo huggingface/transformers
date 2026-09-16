@@ -30,7 +30,8 @@ jobs:
       commit_sha: ${{ github.sha }}
       package: transformers
       notebook_folder: transformers_doc
-      languages: ar de es fr hi it ja ko pt ro tr zh
+      # Main's Japanese docs are published by build_translated_documentation.yml.
+      languages: ${{ github.ref == 'refs/heads/main' && 'ar de es fr hi it ko pt ro tr zh' || 'ar de es fr hi it ja ko pt ro tr zh' }}
     secrets:
       token: ${{ secrets.HUGGINGFACE_PUSH }}
       hf_token: ${{ secrets.HF_DOC_BUILD_PUSH }}
