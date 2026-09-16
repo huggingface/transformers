@@ -740,6 +740,15 @@ class RotaryEmbeddingConfigMixin:
     default_rope_type = "default"  # override only for axial models
     ignore_keys_at_rope_validation = set()
 
+    def nested_rope_parameter_keys(self, rope_parameters: dict) -> list[str]:
+        """
+        Return the keys `rope_parameters` is nested under, or an empty list if it is a flat dict. Only the layer
+        types the config declares count, so a config that declares none is never treated as nested.
+        """
+        # Deepseekv4 has `layer_types` which are different from `_rope_type_labels`
+        labels = getattr(self, "_rope_type_labels", None) or getattr(self, "layer_types", None) or ()
+        return [key for key in rope_parameters if key in labels]
+
     def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
@@ -751,11 +760,19 @@ class RotaryEmbeddingConfigMixin:
         # 3. Values in the config's attributes (i.e. it's in MyConfig.__init__'s args)
         # 4. Default values (i.e. not present at all but other RoPE parameters are present)
         rope_theta = kwargs.pop("rope_theta", getattr(self, "rope_theta", self.default_theta))
-        self.rope_parameters.setdefault("rope_theta", rope_theta)
-
         partial_rotary_factor = kwargs.pop("partial_rotary_factor", getattr(self, "partial_rotary_factor", None))
+
+        # When `rope_parameters` is nested, the defaults belong in each nested dict rather than next to them
+        nested_keys = self.nested_rope_parameter_keys(self.rope_parameters)
+        nested_parameters = [self.rope_parameters[key] for key in nested_keys] or [self.rope_parameters]
+        for rope_parameters in nested_parameters:
+            if rope_parameters is None:
+                continue
+            rope_parameters.setdefault("rope_theta", rope_theta)
+            if partial_rotary_factor is not None:
+                rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
+
         if partial_rotary_factor is not None:
-            self.rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
             self.ignore_keys_at_rope_validation = set(self.ignore_keys_at_rope_validation or []) | {
                 "partial_rotary_factor"
             }
@@ -773,20 +790,19 @@ class RotaryEmbeddingConfigMixin:
         partial_rotary_factor = getattr(self, "partial_rotary_factor", None)
         rope_parameters = getattr(self, "rope_parameters", None) or {}
 
-        # Deepseekv4 has `layer_types` which are different from `_rope_type_labels`
-        layer_types = getattr(self, "_rope_type_labels", getattr(self, "layer_types", None))
+        nested_keys = self.nested_rope_parameter_keys(rope_parameters)
 
         # Case 0: no RoPE params defined
         if not (rope_parameters or rope_theta):
             # partial_rotary_factor without rope_theta is invalid, so we don't check for it here
             logger.warning("`standardize_rope_params` was called but no RoPE parameters were found.")
             return
-        # Case 1: RoPE param keys do not intersect with possible `layer_types` -> one global dict
-        elif layer_types is None or rope_parameters == {} or set(rope_parameters.keys()).isdisjoint(layer_types):
+        # Case 1: RoPE params are not nested by layer type -> one global dict
+        elif not nested_keys:
             rope_parameters.setdefault("rope_type", rope_parameters.get("type", "default"))
             rope_parameters.setdefault("rope_theta", rope_theta)
             if partial_rotary_factor is not None:
-                rope_parameters["partial_rotary_factor"] = partial_rotary_factor
+                rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
 
             # Force set the default type to model's expected `default_rope`. For most models it's a no-op
             # used only to keep BC with old ckpt that require axial rope type
@@ -805,14 +821,14 @@ class RotaryEmbeddingConfigMixin:
 
         # Case 2: different RoPE for each layer -> several params as nested dict
         else:
-            for layer_type in set(layer_types):
+            for layer_type in nested_keys:
                 # skip if saved with `None` value
                 if rope_parameters[layer_type] is None:
                     continue
                 rope_parameters[layer_type].setdefault("rope_type", rope_parameters[layer_type].get("type", "default"))
                 rope_parameters[layer_type].setdefault("rope_theta", rope_theta)
                 if partial_rotary_factor is not None:
-                    rope_parameters[layer_type]["partial_rotary_factor"] = partial_rotary_factor
+                    rope_parameters[layer_type].setdefault("partial_rotary_factor", partial_rotary_factor)
 
                 if rope_parameters[layer_type]["rope_type"] in ["llama3", "yarn", "longrope"]:
                     self.rope_parameters[layer_type].setdefault(
@@ -836,10 +852,9 @@ class RotaryEmbeddingConfigMixin:
         if not rope_parameters_dict:
             return
 
-        if getattr(self, "layer_types", None) is not None and not set(rope_parameters_dict.keys()).isdisjoint(
-            self.layer_types
-        ):
-            pass
+        nested_keys = self.nested_rope_parameter_keys(rope_parameters_dict)
+        if nested_keys:
+            rope_parameters_dict = {key: rope_parameters_dict[key] for key in nested_keys}
         else:
             rope_parameters_dict = {"full_attention": rope_parameters_dict}
 

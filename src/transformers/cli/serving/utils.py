@@ -148,7 +148,7 @@ _RESPONSE_TEMPLATE_FALLBACKS = {
     # <function=NAME><parameter=KEY>VALUE</parameter></function> markup that holds the call data.
     # The chat template prefills the assistant turn with either "<think>\n" (thinking on) or
     # "<think>\n\n</think>\n\n" (default), which prefix-aware parsing picks up via start_anchor.
-    ("qwen3_5", "qwen3_5_moe"): {
+    ("qwen3_5", "qwen3_5_text", "qwen3_5_moe", "qwen3_5_moe_text"): {
         "defaults": {"role": "assistant"},
         "start_anchor": "<|im_start|>assistant\n",
         "fields": {
@@ -669,6 +669,10 @@ class InferenceThread:
                     loop.call_soon_threadsafe(future.set_exception, e)
                 else:
                     future.set_exception(e)
+            finally:
+                # Release closure references (e.g. model captured in generate fn)
+                # before blocking on the next queue.get(), so GPU memory can be freed.
+                fn = args = kwargs = None
 
     def submit(self, fn, *args, **kwargs) -> Future:
         """Submit a callable to the inference thread. Returns a blocking Future."""
