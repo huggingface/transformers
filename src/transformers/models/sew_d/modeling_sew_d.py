@@ -1128,7 +1128,7 @@ class SEWDEncoder(nn.Module):
 @auto_docstring
 class SEWDPreTrainedModel(PreTrainedModel):
     config: SEWDConfig
-    base_model_prefix = "sew-d"
+    base_model_prefix = "sew_d"
     main_input_name = "input_values"
     input_modalities = "audio"
     supports_gradient_checkpointing = True

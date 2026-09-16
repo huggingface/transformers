@@ -28,6 +28,7 @@ import sys
 import tempfile
 import time
 import warnings
+from collections import defaultdict
 from collections.abc import Callable, Iterator, Mapping
 from functools import partial
 from pathlib import Path
@@ -49,7 +50,6 @@ import torch.distributed as dist
 from huggingface_hub import CommitInfo, ModelCard
 from packaging import version
 from torch import nn
-from torch.distributed.tensor import DTensor
 from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
 
 from . import __version__
@@ -97,6 +97,7 @@ from .trainer_optimizer import (
     _OPTIMIZER_HANDLERS,
     OptimizerContext,
     _parse_optim_args,
+    has_mixed_dtensor,
     is_optimizer_factory,
 )
 from .trainer_pt_utils import (
@@ -474,6 +475,9 @@ class Trainer:
             or self.is_fsdp_xla_enabled
             or self.is_fsdp_enabled
             or is_sagemaker_mp_enabled()
+            # Sharded at load time (`DistributedConfig`): the model manages its own placement, and
+            # `.to()` on FSDP2-managed (possibly CPU-offloaded) parameters raises in `_apply`.
+            or getattr(model, "_device_mesh", None) is not None
         ):
             self.place_model_on_device = False
         else:
@@ -611,6 +615,17 @@ class Trainer:
         self._train_batch_size = args.train_batch_size
         # Guards one-time LR scheduler creation in create_optimizer_and_scheduler
         self._created_lr_scheduler = False
+        # Resolved lazily at the first gradient clip; see `_has_mixed_mesh_grads`.
+        self._mixed_mesh_grads: bool | None = None
+        if (
+            getattr(model, "_device_mesh", None) is not None
+            and args.save_strategy != SaveStrategy.NO
+            and not args.save_only_model
+        ):
+            raise ValueError(
+                "Resuming is not supported for models sharded at load time (`DistributedConfig`), so their "
+                "optimizer state cannot be checkpointed. Pass `save_only_model=True` or `save_strategy='no'`."
+            )
 
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
@@ -747,17 +762,20 @@ class Trainer:
                 )
             args["parallelism_config"] = self.args.parallelism_config
 
-        if getattr(self.model, "tp_size", None) is not None and self.model.tp_size > 1:
-            if self.args.parallelism_config is None:
-                if is_accelerate_available("1.12.0"):
-                    if self.args.parallelism_config is None:
-                        from accelerate import ParallelismConfig
+        model_tp_size = getattr(self.model, "tp_size", None) or 1
+        model_fsdp_size = getattr(self.model, "fsdp_size", None) or 1
+        if model_tp_size > 1:
+            # Sharded at load time (tensor/expert parallelism, optionally with FSDP2 on a second mesh
+            # dimension): accelerate has to know both sizes.
+            if not is_accelerate_available("1.12.0"):
+                raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
+            if args.get("parallelism_config") is None:
+                from accelerate import ParallelismConfig
 
-                        args["parallelism_config"] = ParallelismConfig(tp_size=self.model.tp_size)
-                else:
-                    raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
-            elif args["parallelism_config"].tp_size != self.model.tp_size:
-                args["parallelism_config"].tp_size = self.model.tp_size
+                args["parallelism_config"] = ParallelismConfig(tp_size=model_tp_size, dp_shard_size=model_fsdp_size)
+            else:
+                args["parallelism_config"].tp_size = model_tp_size
+                args["parallelism_config"].dp_shard_size = model_fsdp_size
 
         if is_accelerate_available("1.2.0"):
             # it we don't have the correct version, we will rely on env var instead that were set in TrainingArguments
@@ -1239,21 +1257,32 @@ class Trainer:
 
         if self.optimizer is None:
             decay_parameters = self.get_decay_parameter_names(opt_model)
-            optimizer_grouped_parameters = []
-            for in_decay, weight_decay in ((True, self.args.weight_decay), (False, 0.0)):
-                params = [
-                    p
-                    for n, p in opt_model.named_parameters()
-                    if p.requires_grad and (n in decay_parameters) == in_decay
-                ]
-                # Fused/foreach optimizers batch every param of a group into a single op call, which
-                # errors out if the group mixes DTensor and plain Tensor params.
-                # Split each group by type so every batched call stays homogeneous.
-                dtensor_params = [p for p in params if isinstance(p, DTensor)]
-                plain_params = [p for p in params if not isinstance(p, DTensor)]
-                for group_params in (dtensor_params, plain_params):
-                    if group_params:
-                        optimizer_grouped_parameters.append({"params": group_params, "weight_decay": weight_decay})
+            optimizer_grouped_parameters = [
+                {
+                    "params": [
+                        p for n, p in opt_model.named_parameters() if (n in decay_parameters and p.requires_grad)
+                    ],
+                    "weight_decay": self.args.weight_decay,
+                },
+                {
+                    "params": [
+                        p for n, p in opt_model.named_parameters() if (n not in decay_parameters and p.requires_grad)
+                    ],
+                    "weight_decay": 0.0,
+                },
+            ]
+            if has_mixed_dtensor(p for group in optimizer_grouped_parameters for p in group["params"]):
+                # Parameters on different device meshes (expert parallelism, alone or with FSDP2 on a 2-D
+                # mesh) cannot share one fused/foreach kernel call: give each mesh its own param group.
+                from torch.distributed.tensor import DTensor
+
+                split_groups = []
+                for group in optimizer_grouped_parameters:
+                    by_mesh = defaultdict(list)
+                    for p in group["params"]:
+                        by_mesh[p.device_mesh if isinstance(p, DTensor) else None].append(p)
+                    split_groups.extend({**group, "params": params} for params in by_mesh.values())
+                optimizer_grouped_parameters = split_groups
 
             if self.optimizer_cls_and_kwargs is not None:
                 optimizer_cls, optimizer_kwargs = self.optimizer_cls_and_kwargs
@@ -1678,11 +1707,9 @@ class Trainer:
         # wrapped (e.g. in DataParallel) on subsequent `train()` calls and avoid double wrapping.
         model = self._wrap_model(self.model_wrapped)
 
-        is_natively_fsdp_sharded = getattr(model, "_is_fsdp_managed_module", False)
-
         # If the model is wrapped, don't use `accelerator.prepare`
         # this is for unhandled cases in accelerate such as FSDP-XLA, SageMaker MP/DP, DataParallel
-        use_accelerator_prepare = model is self.model and not is_natively_fsdp_sharded
+        use_accelerator_prepare = model is self.model
 
         # prepare using `accelerator` prepare
         if use_accelerator_prepare:
@@ -2617,17 +2644,53 @@ class Trainer:
         input_tokens = torch.as_tensor(input_tokens, device=self.args.device, dtype=torch.int64)
         self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
 
+    def _mixed_mesh_grad_norm(self, model, max_norm):
+        """
+        Gradient norm (and clip) when the gradients live on different device meshes, which `clip_grad_norm_` cannot
+        span: one norm per mesh, each already reduced over its own mesh.
+        """
+        from torch.distributed.tensor import DTensor
+        from torch.nn.utils import clip_grads_with_norm_, get_total_norm
+
+        params_by_mesh = defaultdict(list)
+        for param in model.parameters():
+            if param.grad is not None:
+                params_by_mesh[param.grad.device_mesh if isinstance(param.grad, DTensor) else None].append(param)
+
+        norms = []
+        for params in params_by_mesh.values():
+            norm = get_total_norm([p.grad for p in params])
+            norms.append(norm.full_tensor() if isinstance(norm, DTensor) else norm)
+        total_norm = torch.linalg.vector_norm(torch.stack(norms))
+
+        if max_norm != float("inf"):
+            for params in params_by_mesh.values():
+                clip_grads_with_norm_(params, max_norm, total_norm)
+        return total_norm
+
+    def _has_mixed_mesh_grads(self, model) -> bool:
+        # Static for the life of the run (sharding never changes after setup), so scan the
+        # parameters only on the first call.
+        if self._mixed_mesh_grads is None:
+            self._mixed_mesh_grads = has_mixed_dtensor(p.grad for p in model.parameters() if p.grad is not None)
+        return self._mixed_mesh_grads
+
     def _clip_grad_norm(self, model):
         """Clip gradients to max_grad_norm. Returns the pre-clip gradient norm."""
         if is_sagemaker_mp_enabled() and self.args.fp16:
             return self.optimizer.clip_master_grads(self.args.max_grad_norm)
+        if self._has_mixed_mesh_grads(model):
+            return self._mixed_mesh_grad_norm(model, self.args.max_grad_norm)
         return self.accelerator.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
 
     def _get_grad_norm(self, model, grad_norm=None):
         """Return the gradient norm as a Python float."""
         if grad_norm is None:
             # Compute norm without clipping (inf means no actual clipping happens)
-            grad_norm = self.accelerator.clip_grad_norm_(model.parameters(), float("inf"))
+            if self._has_mixed_mesh_grads(model):
+                grad_norm = self._mixed_mesh_grad_norm(model, float("inf"))
+            else:
+                grad_norm = self.accelerator.clip_grad_norm_(model.parameters(), float("inf"))
 
         if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
             if hasattr(grad_norm, "item"):
@@ -3881,6 +3944,8 @@ class Trainer:
     def save_model(self, output_dir: str | None = None, _internal_call: bool = False) -> None:
         """
         Will save the model, so you can reload it using `from_pretrained()`.
+
+        Will only save from the main process.
         """
 
         if output_dir is None:
@@ -3894,12 +3959,14 @@ class Trainer:
             # Calling the state_dict needs to be done on the wrapped model and on all processes.
             os.makedirs(output_dir, exist_ok=True)
             state_dict = self.model_wrapped.state_dict()
-            self._save(output_dir, state_dict=state_dict)
+            if self.args.should_save:
+                self._save(output_dir, state_dict=state_dict)
             Path(os.path.join(output_dir, "user_content.pt")).touch()
         elif self.is_fsdp_enabled:
             if "FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type):
                 state_dict = self.accelerator.get_state_dict(self.model)
-                self._save(output_dir, state_dict=state_dict)
+                if self.args.should_save:
+                    self._save(output_dir, state_dict=state_dict)
         elif self.is_deepspeed_enabled:
             try:
                 accept_exclude_frozen_parameters = "exclude_frozen_parameters" in set(
@@ -3912,18 +3979,26 @@ class Trainer:
                     state_dict = self.deepspeed._zero3_consolidated_16bit_state_dict(exclude_frozen_parameters=True)
                 else:
                     state_dict = self.accelerator.get_state_dict(self.deepspeed)
-                self._save(output_dir, state_dict=state_dict)
+                if self.args.should_save:
+                    self._save(output_dir, state_dict=state_dict)
             except ValueError:
                 logger.warning(
                     " stage3_gather_16bit_weights_on_model_save=false. Saving the full checkpoint instead, use"
                     " zero_to_fp32.py to recover weights"
                 )
-                self._save(output_dir, state_dict={})
+                if self.args.should_save:
+                    self._save(output_dir, state_dict={})
                 # remove the dummy state_dict
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
 
-        else:
+        elif getattr(self.model, "_device_mesh", None) is not None and not _is_peft_model(self.model):
+            # Sharded at load time (`DistributedConfig`): gathering the weights inside `save_pretrained`
+            # is collective, so every rank saves; only the main process writes, the others leave at the
+            # closing barrier. (PEFT models fall through to the adapter-only save below.)
+            self._save(output_dir)
+
+        elif self.args.should_save:
             self._save(output_dir)
 
         # Push to the Hub when `save_model` is called by the user.
@@ -3931,50 +4006,47 @@ class Trainer:
             self.push_to_hub(commit_message="Model save", revision=self.args.hub_revision)
 
     def _save(self, output_dir: str | None = None, state_dict: dict | None = None) -> None:
-        """
-        Save model weights, configuration, and processing class to `output_dir`.
-        """
+        """Save model weights, configuration, and processing class to `output_dir`."""
         output_dir = output_dir if output_dir is not None else self.args.output_dir
+        os.makedirs(output_dir, exist_ok=True)
         if self.args.should_save:
-            os.makedirs(output_dir, exist_ok=True)
             logger.info(f"Saving model checkpoint to {output_dir}")
 
         supported_classes = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, supported_classes):
-            if self.args.should_save:
-                if state_dict is None:
-                    state_dict = self.model.state_dict()
+            if state_dict is None:
+                state_dict = self.model.state_dict()
 
-                if isinstance(self.accelerator.unwrap_model(self.model, keep_torch_compile=False), supported_classes):
-                    self.accelerator.unwrap_model(self.model, keep_torch_compile=False).save_pretrained(
-                        output_dir, state_dict=state_dict
-                    )
-                else:
-                    logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-                    safetensors.torch.save_file(
-                        state_dict, os.path.join(output_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"}
-                    )
+            if isinstance(self.accelerator.unwrap_model(self.model, keep_torch_compile=False), supported_classes):
+                self.accelerator.unwrap_model(self.model, keep_torch_compile=False).save_pretrained(
+                    output_dir, state_dict=state_dict
+                )
+            else:
+                logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
+                safetensors.torch.save_file(
+                    state_dict, os.path.join(output_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"}
+                )
         else:
-            # Distributed model needs to call `save_pretrained` from every rank to gather the weights.
-            # If the model is not distributed, we only save from the main process.
-            if self.args.should_save or getattr(self.model.config, "distributed_config", None) is not None:
-                self.model.save_pretrained(output_dir, state_dict=state_dict)
+            self.model.save_pretrained(output_dir, state_dict=state_dict)
 
-        if self.args.should_save:
-            if self.processing_class is not None:
-                self.processing_class.save_pretrained(output_dir)
-            elif (
-                self.data_collator is not None
-                and hasattr(self.data_collator, "tokenizer")
-                and self.data_collator.tokenizer is not None
-            ):
-                logger.info("Saving Trainer.data_collator.tokenizer by default as Trainer.processing_class is `None`")
-                self.data_collator.tokenizer.save_pretrained(output_dir)
+        # A non-writer rank of a model sharded at load time is only here for the collectives above.
+        if not self.args.should_save:
+            return
 
-            # Good practice: save your training arguments together with the trained model
-            torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
+        if self.processing_class is not None:
+            self.processing_class.save_pretrained(output_dir)
+        elif (
+            self.data_collator is not None
+            and hasattr(self.data_collator, "tokenizer")
+            and self.data_collator.tokenizer is not None
+        ):
+            logger.info("Saving Trainer.data_collator.tokenizer by default as Trainer.processing_class is `None`")
+            self.data_collator.tokenizer.save_pretrained(output_dir)
+
+        # Good practice: save your training arguments together with the trained model
+        torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
 
     # ---- Logging & Metrics ----
 

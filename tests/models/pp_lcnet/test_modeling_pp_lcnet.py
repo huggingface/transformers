@@ -281,7 +281,7 @@ class PPLCNetModelIntegrationTest(unittest.TestCase):
         self.model = PPLCNetForImageClassification.from_pretrained(model_path).to(torch_device)
         self.image_processor = PPLCNetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         img_url = url_to_local_path(
-            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_img_rot180_demo.jpg"
         )
         self.image = load_image(img_url)
 
@@ -292,12 +292,12 @@ class PPLCNetModelIntegrationTest(unittest.TestCase):
             outputs = self.model(**inputs)
 
         expected_shape_logits = torch.Size((1, 4))
-        expected_logits = torch.tensor([[-0.3655, -1.0573, 2.4883, -1.0640]]).to(torch_device)
+        expected_logits = torch.tensor([[2.7272, -0.9074, -0.8011, -0.983]]).to(torch_device)
 
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape_logits)
         torch.testing.assert_close(outputs.last_hidden_state, expected_logits, rtol=2e-2, atol=2e-2)
 
-        expected_labels = torch.tensor([2]).to(torch_device)
+        expected_labels = torch.tensor([0]).to(torch_device)
         predicted_label = outputs.last_hidden_state.argmax(-1).item()
 
         self.assertEqual(predicted_label, expected_labels)

@@ -245,6 +245,11 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
         self.idx_keys = idx_k if self.idx_keys is None else torch.cat([self.idx_keys, idx_k], dim=-2)
         return self.idx_keys
 
+    def reset(self) -> None:
+        super().reset()
+        # Dropped rather than zeroed, as `update_index` grows them by concatenation, like the main states
+        self.idx_keys = None
+
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         super().reorder_cache(beam_idx)
         if self.idx_keys is not None:
@@ -1132,7 +1137,9 @@ class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return MiniMaxM3VLCausalLMOutputWithPast(
             loss=loss,
