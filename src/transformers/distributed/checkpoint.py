@@ -37,10 +37,46 @@ def _slice_regions(regions, start, length):
 
 class _CheckpointView:
     """
-    Map the concatenated local intervals on each dimension to global checkpoint regions.
+    A checkpoint view of a DTensor for saving and loading that exposes its local storage as a set of disjoint global
+    regions when the DTensor is sharded with `_StridedShard` placements.
 
-    Placements are applied in mesh order. A strided placement splits each existing interval
-    sequence into `split_factor` pieces, shards each piece, then concatenates the selected parts.
+    Example:
+        Context:
+            - Global tensor: [10, 11, 12, 13, 14, 15, 16, 17]
+            - Placement: _StridedShard(dim=0, split_factor=2)
+            - Mesh size:    2
+            - Rank 0 local: [10, 11, 14, 15]
+
+        The DTensor hooks would normally expose the local storage as a single contiguous region, which would be saved
+        as a single chunk:
+        ```
+            __create_write_items__:
+                [WriteItem(name="weight", global_shape=[8], offset=[0], size=[4])]
+
+            __create_chunk_list__:
+                [ChunkStorageMetadata(offsets=[0], sizes=[4])]
+
+            __get_tensor_shard__(MetadataIndex("weight", offset=[0])):
+                [10, 11, 14, 15]
+        ```
+        While the data is correct, the chunk metadata is misleading because it implies that the local storage
+        corresponds to a single contiguous region of the global tensor, which is not the case.
+
+        The `_CheckpointView` exposes the local storage as two disjoint regions, which will be saved as two chunks:
+        ```
+            __create_write_items__:
+                [WriteItem(name="weight", global_shape=[8], offset=[0], size=[2]),
+                 WriteItem(name="weight", global_shape=[8], offset=[4], size=[2])]
+            __create_chunk_list__:
+                [ChunkStorageMetadata(offsets=[0], sizes=[2]),
+                 ChunkStorageMetadata(offsets=[4], sizes=[2])]
+            __get_tensor_shard__(MetadataIndex("weight", offset=[0])):
+                [10, 11]
+            __get_tensor_shard__(MetadataIndex("weight", offset=[4])):
+                [14, 15]
+        ```
+
+    The view preserves the tensor's placements and exposes slices of its existing local storage.
     """
 
     def __init__(self, tensor):
