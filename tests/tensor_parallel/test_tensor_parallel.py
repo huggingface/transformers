@@ -13,14 +13,12 @@
 # limitations under the License.
 import math
 import warnings
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
 from parameterized import parameterized
-from torch import nn
 
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, LlamaConfig, LlamaModel
 from transformers.distributed import tensor_parallel
 from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
@@ -372,26 +370,6 @@ class TestTensorParallelLayer(TestCasePlus):
                 self.assertFalse(hasattr(module, "num_experts"))
 
 
-class MockAttention(nn.Module):
-    """The four projections `unit_colwise`/`unit_rowwise` are meant to be used on."""
-
-    def __init__(self, num_heads, num_key_value_heads, head_dim, hidden_size):
-        super().__init__()
-        self.q_proj = nn.Linear(hidden_size, num_heads * head_dim, bias=False)
-        self.k_proj = nn.Linear(hidden_size, num_key_value_heads * head_dim, bias=False)
-        self.v_proj = nn.Linear(hidden_size, num_key_value_heads * head_dim, bias=False)
-        self.o_proj = nn.Linear(num_heads * head_dim, hidden_size, bias=False)
-        # `apply_tensor_parallelism` attaches this for styles that set `needs_config`.
-        config = SimpleNamespace(
-            head_dim=head_dim,
-            hidden_size=hidden_size,
-            num_attention_heads=num_heads,
-            num_key_value_heads=num_key_value_heads,
-        )
-        for proj in (self.q_proj, self.k_proj, self.v_proj, self.o_proj):
-            proj.config = config
-
-
 @is_tensor_parallel_test
 class TestUnitParallel(TestCasePlus):
     """`unit_colwise`/`unit_rowwise` must give every rank whole heads, and never split one."""
@@ -412,6 +390,22 @@ class TestUnitParallel(TestCasePlus):
 
         def get_local_rank(self):
             return self.rank
+
+    def _attention(self, num_heads, num_key_value_heads):
+        """A real attention layer from a one-layer Llama, with the config the styles read."""
+        config = LlamaConfig(
+            hidden_size=num_heads * self.HEAD_DIM,
+            intermediate_size=2 * num_heads * self.HEAD_DIM,
+            num_hidden_layers=1,
+            num_attention_heads=num_heads,
+            num_key_value_heads=num_key_value_heads,
+            head_dim=self.HEAD_DIM,
+            vocab_size=32,
+        )
+        attention = LlamaModel(config).layers[0].self_attn
+        for proj in (attention.q_proj, attention.k_proj, attention.v_proj, attention.o_proj):
+            proj.config = config  # `apply_tensor_parallelism` attaches this for `needs_config` styles
+        return attention
 
     def _shard(self, module, name, style, mesh):
         """Shard one projection, returning the placements it asked for."""
@@ -453,7 +447,7 @@ class TestUnitParallel(TestCasePlus):
 
     @parameterized.expand([(2, 2, 4), (6, 6, 4), (8, 8, 4), (32, 8, 8), (32, 8, 16), (8, 1, 4)])
     def test_projections_are_sharded_on_the_head_axis(self, num_heads, num_key_value_heads, world_size):
-        attention = MockAttention(num_heads, num_key_value_heads, self.HEAD_DIM, self.HIDDEN)
+        attention = self._attention(num_heads, num_key_value_heads)
         mesh = self.FakeMesh(torch.arange(world_size))
         colwise, rowwise = ALL_PARALLEL_STYLES["unit_colwise"], ALL_PARALLEL_STYLES["unit_rowwise"]
 
@@ -473,7 +467,7 @@ class TestUnitParallel(TestCasePlus):
     @parameterized.expand([(2, 4), (6, 4), (8, 4), (12, 8), (32, 16)])
     def test_colwise_and_rowwise_agree_on_the_mesh(self, num_heads, world_size):
         """o_proj consumes q_proj's output, so the two must land on the same unit mesh."""
-        attention = MockAttention(num_heads, num_heads, self.HEAD_DIM, self.HIDDEN)
+        attention = self._attention(num_heads, num_heads)
         mesh = self.FakeMesh(torch.arange(world_size))
         self._shard(attention.q_proj, "weight", ALL_PARALLEL_STYLES["unit_colwise"], mesh)
         self._shard(attention.o_proj, "weight", ALL_PARALLEL_STYLES["unit_rowwise"], mesh)
