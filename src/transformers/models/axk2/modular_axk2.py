@@ -122,8 +122,6 @@ class AXK2Config(DeepseekV32Config):
     topk_group: int | None = None
 
     output_indexer_loss = AttributeError()
-    indexer_loss_coef = AttributeError()
-    dense_indexer = AttributeError()
     keys_to_ignore_at_inference = ["past_key_values"]
     first_k_dense_replace = AttributeError()
     mlp_bias = AttributeError()

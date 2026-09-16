@@ -344,26 +344,25 @@ def indexer_kl_loss(
     attention_mask: torch.Tensor,
     query_mask: torch.Tensor,
     scaling: float,
-    candidates: torch.Tensor | None,
+    candidates: torch.Tensor,
 ) -> torch.Tensor:
-    """Sum per-query KL losses, distilling the mean attention distribution into the indexer.
+    """Sum per-query KL losses, distilling the mean attention distribution over the selected keys into the indexer.
 
-    In sparse training, both distributions cover only the selected keys. Dense warm-up covers all keys.
+    With `index_topk` at least the sequence length, every visible key is selected: the dense warm-up stage.
     Recompute the detached target in head chunks so the main attention can use SDPA and the loss can be checkpointed.
     """
-    if candidates is not None:
-        candidates = candidates.long()
-        scores = scores.gather(-1, candidates)
+    candidates = candidates.long()
+    scores = scores.gather(-1, candidates)
     with torch.no_grad():
         if attention_mask.dtype == torch.bool:
             attention_mask = torch.zeros_like(attention_mask, dtype=query_states.dtype).masked_fill(
                 ~attention_mask, torch.finfo(query_states.dtype).min
             )
+        candidates = candidates.unsqueeze(1)
         target = torch.zeros_like(scores, dtype=torch.float32)
         for query_chunk, key_chunk in zip(query_states.split(16, dim=1), key_states.split(16, dim=1)):
             logits = torch.matmul(query_chunk, key_chunk.transpose(-1, -2)) * scaling + attention_mask
-            if candidates is not None:
-                logits = logits.gather(-1, candidates.unsqueeze(1).expand(-1, logits.shape[1], -1, -1))
+            logits = logits.gather(-1, candidates.expand(-1, logits.shape[1], -1, -1))
             # All-masked padding queries must also have finite probabilities, even though their loss is excluded.
             logits = logits.clamp_min(torch.finfo(logits.dtype).min)
             target += F.softmax(logits, dim=-1, dtype=torch.float32).sum(dim=1)
@@ -491,13 +490,11 @@ class DeepseekV32Attention(nn.Module):
                 attention_mask,
                 indexer_query_mask,
                 self.scaling,
-                None if self.config.dense_indexer else topk_indices,
+                topk_indices,
             )
 
         sparse_indices = None
-        if self.config.dense_indexer:
-            pass  # Dense attention: every visible key is attended to, the indexer only runs to be distilled from it
-        elif self.config._attn_implementation in ("eager", "sdpa"):
+        if self.config._attn_implementation in ("eager", "sdpa"):
             # Boolean mask: `True` at keys *not* selected by the indexer (to be masked out).
             index_mask = (
                 topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
@@ -741,8 +738,8 @@ class DeepseekV32ModelOutputWithPast(BaseModelOutputWithPast):
 class DeepseekV32CausalLMOutputWithPast(CausalLMOutputWithPast):
     """
     indexer_loss (`torch.FloatTensor`, *optional*):
-        Indexer KL loss averaged over layers. With labels, it uses the same prediction-token denominator as the
-        language modeling loss; otherwise it is averaged over valid queries. Returned when `output_indexer_loss=True`.
+        Indexer KL loss averaged over layers and valid queries, or normalized by `num_items_in_batch` when supplied.
+        Returned when `output_indexer_loss=True`.
     """
 
     indexer_loss: torch.FloatTensor | None = None
@@ -903,20 +900,9 @@ class DeepseekV32ForCausalLM(DeepseekV32PreTrainedModel, GenerationMixin):
         ```
 
         To train the DSA indexer, pass `output_indexer_loss=True` (or set it in the config). Its loss is returned
-        as `indexer_loss` and added to `loss`, scaled by `config.indexer_loss_coef`, when labels are supplied.
-        Only the indexer receives gradients from this loss.
+        as `indexer_loss` and added to `loss` when labels are supplied. Only the indexer receives gradients from this
+        loss.
         """
-        output_indexer_loss = kwargs.get("output_indexer_loss")
-        if output_indexer_loss is None:
-            output_indexer_loss = self.config.output_indexer_loss
-        kwargs["output_indexer_loss"] = output_indexer_loss
-        if output_indexer_loss and labels is not None and kwargs.get("num_items_in_batch") is None:
-            # Use the LM denominator for both losses, including across Trainer's gradient accumulation batches.
-            prediction_targets = kwargs.get("shift_labels")
-            if prediction_targets is None:
-                prediction_targets = labels[..., 1:]
-            kwargs["num_items_in_batch"] = (prediction_targets != -100).sum()
-
         outputs: DeepseekV32ModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -938,7 +924,7 @@ class DeepseekV32ForCausalLM(DeepseekV32PreTrainedModel, GenerationMixin):
 
         indexer_loss = outputs.indexer_loss
         if indexer_loss is not None and loss is not None:
-            loss = loss + self.config.indexer_loss_coef * indexer_loss.to(loss.device)
+            loss = loss + indexer_loss.to(loss.device)
 
         return DeepseekV32CausalLMOutputWithPast(
             loss=loss,

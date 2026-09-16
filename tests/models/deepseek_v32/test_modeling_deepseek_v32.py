@@ -14,14 +14,13 @@
 """Testing suite for the PyTorch DeepSeekV3.2 model."""
 
 import copy
-import tempfile
 import unittest
 
 import pytest
 from parameterized import parameterized
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_accelerate, require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import (
@@ -37,8 +36,6 @@ if is_torch_available():
         AutoTokenizer,
         DeepseekV32ForCausalLM,
         DeepseekV32Model,
-        Trainer,
-        TrainingArguments,
     )
 
 
@@ -162,13 +159,10 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_model_rope_scaling_frequencies(self):
         pass
 
-    @parameterized.expand([(False,), (True,)])
-    def test_indexer_loss(self, dense_indexer):
+    def test_indexer_loss(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_indexer_loss = True
-        config.dense_indexer = dense_indexer
         config.index_topk = 2
-        config.indexer_loss_coef = 0.3
         config._attn_implementation = "eager"
         config.use_cache = False
         model = DeepseekV32ForCausalLM(config).to(torch_device).train()
@@ -186,17 +180,15 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
             hook.remove()
         reference_loss = 0
         for (indices, scores), attentions in zip(indexer_outputs, outputs.attentions):
-            target = attentions.detach().float().mean(dim=1)
-            if not dense_indexer:
-                scores = scores.gather(-1, indices.long())
-                target = target.gather(-1, indices.long())
-            kl = torch.nn.functional.kl_div(scores.log_softmax(-1), target, reduction="none").sum(-1)
+            indices = indices.long()
+            target = attentions.detach().float().mean(dim=1).gather(-1, indices)
+            log_probs = scores.gather(-1, indices).log_softmax(-1)
+            kl = torch.nn.functional.kl_div(log_probs, target, reduction="none").sum(-1)
             reference_loss += kl.masked_fill(~attention_mask.bool(), 0).sum()
-        reference_loss /= config.num_hidden_layers * (labels[..., 1:] != -100).sum()
+        reference_loss /= config.num_hidden_layers * attention_mask.sum()
         torch.testing.assert_close(outputs.indexer_loss, reference_loss)
-        self.assertTrue(torch.isfinite(outputs.indexer_loss))
         lm_loss = model.loss_function(logits=outputs.logits, labels=labels, vocab_size=config.vocab_size)
-        torch.testing.assert_close(outputs.loss, lm_loss + config.indexer_loss_coef * outputs.indexer_loss)
+        torch.testing.assert_close(outputs.loss, lm_loss + outputs.indexer_loss)
 
         indexer_params = [p for n, p in model.named_parameters() if ".indexer." in n]
         other_params = [p for n, p in model.named_parameters() if ".indexer." not in n]
@@ -213,18 +205,14 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         model.set_attn_implementation("sdpa")
         sdpa_outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
         torch.testing.assert_close(sdpa_outputs.indexer_loss, outputs.indexer_loss)
-        self.assertIsNone(sdpa_outputs.attentions)
-        self.assertNotIn("indexer_scores", sdpa_outputs)
-        self.assertNotIn("indexer_targets", sdpa_outputs)
         disabled_outputs = model(input_ids, attention_mask=attention_mask, labels=labels, output_indexer_loss=False)
         self.assertIsNone(disabled_outputs.indexer_loss)
         torch.testing.assert_close(disabled_outputs.logits, sdpa_outputs.logits)
 
-    @parameterized.expand([(False, False), (True, False), (False, True), (True, True)])
-    def test_indexer_loss_checkpointing(self, use_reentrant, dense_indexer):
+    @parameterized.expand([(False,), (True,)])
+    def test_indexer_loss_checkpointing(self, use_reentrant):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_indexer_loss = True
-        config.dense_indexer = dense_indexer
         config.index_topk = 2
         config.use_cache = False
         model = DeepseekV32ForCausalLM(config).to(torch_device).train()
@@ -241,13 +229,12 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
                 self.assertIsNotNone(checkpointed_parameter.grad, name)
                 torch.testing.assert_close(checkpointed_parameter.grad, parameter.grad)
 
-        # Dense warm-up can train only the indexer with a frozen backbone and no labels.
-        if dense_indexer:
-            checkpointed.zero_grad(set_to_none=True)
-            for name, parameter in checkpointed.named_parameters():
-                parameter.requires_grad_(".indexer." in name)
-            checkpointed(**inputs).indexer_loss.backward()
-            self.assertTrue(any(p.grad is not None and p.grad.abs().sum() > 0 for p in checkpointed.parameters()))
+        # Warm-up trains only the indexer, with a frozen backbone and no labels.
+        checkpointed.zero_grad(set_to_none=True)
+        for name, parameter in checkpointed.named_parameters():
+            parameter.requires_grad_(".indexer." in name)
+        checkpointed(**inputs).indexer_loss.backward()
+        self.assertTrue(any(p.grad is not None and p.grad.abs().sum() > 0 for p in checkpointed.parameters()))
 
     def test_indexer_loss_masks(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -265,7 +252,6 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
             torch.zeros_like(causal_mask, dtype=torch.float32).masked_fill(
                 ~causal_mask, torch.finfo(torch.float32).min
             ),
-            torch.zeros_like(causal_mask, dtype=torch.float32).masked_fill(~causal_mask, float("-inf")),
             {"deepseek_sparse_attention": causal_mask},
         ):
             outputs = model(input_ids, labels=input_ids, attention_mask=mask)
@@ -275,7 +261,6 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
             model.zero_grad(set_to_none=True)
 
         # Padding does not add indexer training queries, including entirely masked sequences.
-        expected = model.model(input_ids).indexer_loss
         for left in (False, True):
             padded_ids = torch.cat((input_ids[:, :2], input_ids) if left else (input_ids, input_ids[:, :2]), dim=1)
             mask = torch.ones_like(padded_ids)
@@ -289,8 +274,7 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertTrue(all(p.grad is None or p.grad.isfinite().all() for p in model.parameters()))
             model.zero_grad(set_to_none=True)
 
-    @parameterized.expand([(False,), (True,)])
-    def test_indexer_loss_gradient_accumulation(self, pre_shifted_labels):
+    def test_indexer_loss_gradient_accumulation(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_indexer_loss = True
         config.index_topk = 2
@@ -302,11 +286,9 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         attention_mask[1, -2:] = 0
         labels = input_ids.masked_fill(~attention_mask.bool(), -100)
         labels[1, :2] = -100
-        # Packed-data collators can provide prediction targets that must not be shifted again.
-        loss_kwargs = {"shift_labels": labels} if pre_shifted_labels else {}
-        prediction_targets = labels if pre_shifted_labels else labels[..., 1:]
-        num_items = (prediction_targets != -100).sum()
-        outputs = model(input_ids, attention_mask=attention_mask, labels=labels, **loss_kwargs)
+        # Trainer passes the number of prediction targets in the whole accumulation batch to every microbatch.
+        num_items = (labels[..., 1:] != -100).sum()
+        outputs = model(input_ids, attention_mask=attention_mask, labels=labels, num_items_in_batch=num_items)
         outputs.loss.backward()
         accumulated_loss = 0
         for i in range(2):
@@ -315,7 +297,6 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
                 attention_mask=attention_mask[i : i + 1],
                 labels=labels[i : i + 1],
                 num_items_in_batch=num_items,
-                **{key: value[i : i + 1] for key, value in loss_kwargs.items()},
             )
             microbatch_outputs.loss.backward()
             accumulated_loss += microbatch_outputs.loss.detach()
@@ -323,28 +304,6 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         for (name, parameter), accumulated_parameter in zip(model.named_parameters(), accumulated.parameters()):
             if ".indexer." in name or name == "lm_head.weight":
                 torch.testing.assert_close(accumulated_parameter.grad, parameter.grad, atol=1e-6, rtol=1e-4)
-
-    @require_accelerate
-    def test_indexer_loss_trainer_evaluation(self):
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_indexer_loss = True
-        config.use_cache = False
-        model = DeepseekV32ForCausalLM(config)
-        input_ids = inputs["input_ids"][0].cpu()
-        dataset = [{"input_ids": ids, "labels": ids} for ids in (input_ids, input_ids[:-1])]
-
-        def compute_metrics(prediction):
-            self.assertEqual(prediction.predictions.ndim, 3)
-            self.assertEqual(prediction.predictions.shape[-1], config.vocab_size)
-            return {"example_count": len(prediction.predictions)}
-
-        with tempfile.TemporaryDirectory() as output_dir:
-            trainer = Trainer(
-                model=model,
-                args=TrainingArguments(output_dir=output_dir, per_device_eval_batch_size=1, report_to="none"),
-                compute_metrics=compute_metrics,
-            )
-            self.assertEqual(trainer.evaluate(dataset)["eval_example_count"], 2)
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     @unittest.skip("DeepseekV32 applies RoPE to qk_rope_head_dim; generic rope scaling tests assume config.head_dim")

@@ -81,19 +81,19 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 ### Training the indexer
 
-Top-k selection has no gradient, so the indexer is trained with a separate KL distillation loss against the mean attention distribution, as described in [the technical report](https://arxiv.org/html/2512.02556v1#S2.SS1.SSS1). Pass `output_indexer_loss=True` (or set it in the config) to compute this loss within each layer. The detached target is recomputed from the attention queries and keys, so eager attention and SDPA are both supported. Only the indexer receives gradients from this loss.
+Top-k selection has no gradient, so the indexer is trained with a separate KL distillation loss against the mean attention distribution over its selected keys, as described in [the technical report](https://arxiv.org/html/2512.02556v1#S2.SS1.SSS1). Pass `output_indexer_loss=True` (or set it in the config) to compute this loss within each layer. The detached target is recomputed from the attention queries and keys, so eager attention and SDPA are both supported. Only the indexer receives gradients from this loss.
 
 ```python
 model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.bfloat16)
 model.train()
 model.gradient_checkpointing_enable()
 outputs = model(**inputs, labels=inputs["input_ids"], output_indexer_loss=True)
-outputs.loss.backward()  # LM loss + config.indexer_loss_coef * outputs.indexer_loss
+outputs.loss.backward()  # LM loss + outputs.indexer_loss
 ```
 
-`indexer_loss` is averaged over layers. With labels, both losses use the number of non-ignored prediction targets as their denominator, including the full accumulation batch when Trainer supplies `num_items_in_batch`. Without labels, the indexer loss is averaged over non-padding queries. Scores and targets stay inside each layer, allowing gradient checkpointing to recompute them during backward.
+`indexer_loss` is averaged over layers and non-padding queries, or divided by `num_items_in_batch` when it is supplied, as the language modeling loss is under Trainer's gradient accumulation. The indexer's parameters receive no gradient from the language modeling loss, so give them their own learning rate through an optimizer parameter group rather than scaling the loss. Scores and targets stay inside each layer, allowing gradient checkpointing to recompute them during backward.
 
-For dense warm-up, set `config.dense_indexer=True` and freeze all parameters except the indexer. Call `outputs.indexer_loss.backward()` to train from the full attention distribution. Sparse training uses only the indexer's selected keys. The eager indexer still computes a full score matrix, so long-context training benefits from gradient checkpointing.
+For the dense warm-up stage, load the model with `index_topk` at least the sequence length so that every visible key is selected, freeze all parameters except the indexer, and call `outputs.indexer_loss.backward()`. The indexer still computes a full score matrix, so long-context training benefits from gradient checkpointing.
 
 The original code can be found [here](https://github.com/deepseek-ai/DeepSeek-V3.2-Exp).
 

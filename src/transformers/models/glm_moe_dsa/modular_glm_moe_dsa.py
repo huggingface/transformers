@@ -80,8 +80,6 @@ class GlmMoeDsaConfig(DeepseekV32Config):
     ```"""
 
     output_indexer_loss = AttributeError()
-    indexer_loss_coef = AttributeError()
-    dense_indexer = AttributeError()
     keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 154880

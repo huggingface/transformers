@@ -42,11 +42,6 @@ class DeepseekV32Config(PreTrainedConfig):
     output_indexer_loss (`bool`, *optional*, defaults to `False`):
         Whether to compute the indexer's KL distillation loss. Only the indexer receives gradients from this loss;
         its inputs and the attention distribution used as its target are detached.
-    indexer_loss_coef (`float`, *optional*, defaults to 1.0):
-        Coefficient of the indexer loss added to the language modeling loss when `output_indexer_loss=True`.
-    dense_indexer (`bool`, *optional*, defaults to `False`):
-        Whether to ignore the indexer's top-k selection and run dense attention, as in the dense warm-up stage of DSA
-        training.
 
     ```python
     >>> from transformers import DeepseekV32Config, DeepseekV32Model
@@ -132,8 +127,6 @@ class DeepseekV32Config(PreTrainedConfig):
     head_dim: int = 64
     first_k_dense_replace: int = 3
     output_indexer_loss: bool = False
-    indexer_loss_coef: float = 1.0
-    dense_indexer: bool = False
     layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
