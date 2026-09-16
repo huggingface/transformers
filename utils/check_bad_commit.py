@@ -328,10 +328,6 @@ def get_commit_info(commit, pr_number=None, github_token=None):
 
 
 if __name__ == "__main__":
-    # Temporary: fail early to skip the find-bad-commit job on this branch.
-    import sys
-    sys.exit(1)
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--start_commit", type=str, required=True, help="The latest commit hash to check.")
     parser.add_argument("--end_commit", type=str, required=True, help="The earliest commit hash to check.")
