@@ -33,9 +33,7 @@ The decoder is the Code2Wav vocoder shared with [Qwen3-Omni-MoE](./qwen3_omni_mo
 followed by a causal-convolution upsampling stack.
 
 A model checkpoint is available at
-[shahvandit/qwen3-tts-tokenizer-multi-codebook-hf](https://huggingface.co/shahvandit/qwen3-tts-tokenizer-multi-codebook-hf),
-converted from the original weights at
-[Qwen/Qwen3-TTS-Tokenizer-12Hz](https://huggingface.co/Qwen/Qwen3-TTS-Tokenizer-12Hz).
+[shahvandit/qwen3-tts-tokenizer-multi-codebook-hf](https://huggingface.co/shahvandit/qwen3-tts-tokenizer-multi-codebook-hf).
 
 This model was contributed by [Vandit Shah](https://huggingface.co/shahvandit).
 
