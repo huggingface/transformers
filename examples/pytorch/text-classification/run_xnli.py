@@ -441,6 +441,8 @@ def main():
                     item = label_list[item]
                     writer.write(f"{index}\t{item}\n")
 
+    trainer.end()
+
 
 if __name__ == "__main__":
     main()
