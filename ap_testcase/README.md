@@ -110,7 +110,7 @@ setup or case failures produce a nonzero exit code.
 | `06_generation_raw_text.py` | Full generation from raw text with image and audio placeholders (base-model style), incl. a batch | yes |
 | `07_language_model_from_composite.py` | All text-only classes from the composite: `Apertus1p5TextConfig` extraction, `Apertus1p5TextForCausalLM` (pruned output layer, padded-logits contract with finite logits and a zero-probability tail, greedy + beam generation), bare `Apertus1p5TextModel` hidden states | yes |
 | `08_multi_device_inference.py` | Multi-device placement (needs >= 2 GPUs, else skips): `device_map="auto"` sharding (fp32-keep of media tokenizers, padded-logits contract, generation parity vs single device) and `DistributedConfig(tp_size=2)` tensor parallelism over the text backbone via torchrun | yes |
-| `09_training_loop.py` | Training smoke test (needs a GPU, else skips): pruned-head label contract (physical-width loss logits, `-100` masking enforced), an overfit loop on the last layer + lm_head, and a DDP variant via torchrun with >= 2 GPUs | yes |
+| `09_training_loop.py` | Training smoke test (needs a GPU, else skips): pruned-head label contract (physical-width loss logits, finite loss with input-only labels masked using `-100`), an overfit loop on the last layer + lm_head, and a DDP variant via torchrun with >= 2 GPUs | yes |
 
 The model-loading scripts 03-07 run on CPU and take a few minutes each (bf16 8B load is about
 1 minute); 08 and 09 need CUDA devices and skip themselves otherwise. The URL-fetching case in 01
