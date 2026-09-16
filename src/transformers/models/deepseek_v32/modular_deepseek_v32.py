@@ -104,8 +104,8 @@ class DeepseekV32Config(Glm4MoeLiteConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
-
     keys_to_ignore_at_inference = ["past_key_values", "indexer_loss"]
+
     attribute_map = {"num_local_experts": "n_routed_experts"}
 
     vocab_size: int = 129280

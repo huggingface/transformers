@@ -57,7 +57,6 @@ class DeepseekV32Config(PreTrainedConfig):
     ```"""
 
     model_type = "deepseek_v32"
-
     keys_to_ignore_at_inference = ["past_key_values", "indexer_loss"]
 
     base_model_tp_plan = {
@@ -86,6 +85,7 @@ class DeepseekV32Config(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
+
     attribute_map = {"num_local_experts": "n_routed_experts"}
 
     vocab_size: int = 129280
