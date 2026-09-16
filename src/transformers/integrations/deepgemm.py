@@ -654,26 +654,37 @@ def deepgemm_fp8_fp4_linear(
 
 
 def _assert_no_post_expert_norm(self: torch.nn.Module) -> None:
-    """DeepGEMM's experts chain ends at the routing-weighted reduce, with no slot for a model's
-    per-expert output norm — which it would drop silently, so refuse instead."""
+    """Mega MoE fuses the routing-weighted reduce into its kernel, so a model's per-expert output
+    norm has nowhere to go — it would be dropped silently, so refuse instead. The other DeepGEMM
+    arms reduce in `_combine_routed_output` and apply the norm on the rows just before it."""
     if getattr(self, "post_expert_norm", None) is not None:
         raise NotImplementedError(
-            "DeepGEMM experts dispatch cannot apply this model's per-expert output norm; use "
-            "`experts_implementation='grouped_mm'` (or 'batched_mm')."
+            "DeepGEMM Mega MoE cannot apply this model's per-expert output norm; use "
+            "`experts_implementation='deepgemm'`, 'grouped_mm' or 'batched_mm'."
         )
 
 
-def deepgemm_experts_guards(*, affine_scales: bool = False, sm100: bool = False):
+def _apply_post_expert_norm(self: torch.nn.Module, rows: torch.Tensor) -> torch.Tensor:
+    """The model's per-expert output norm, on the routed rows before the routing weights — the
+    same place the reference forwards apply it. A no-op for a model that names none."""
+    if getattr(self, "post_expert_norm_name", None) is None:
+        return rows
+    return self._apply_post_norm(rows)
+
+
+def deepgemm_experts_guards(*, affine_scales: bool = False, sm100: bool = False, post_expert_norm: bool = True):
     """State an experts forward's requirements on the module, checked before any kernel work.
 
-    Every arm refuses a per-expert output norm. ``affine_scales`` additionally refuses the
+    ``post_expert_norm=False`` refuses a model that names a per-expert output norm — Mega MoE
+    only, whose fused reduce has no seam for it. ``affine_scales`` additionally refuses the
     SWIZZLE_32_4_4 scales a module loaded for a triton backend holds, and ``sm100`` fails before
     the hub download + JIT when the device cannot serve these dtypes."""
 
     def decorate(forward):
         @functools.wraps(forward)
         def guarded(self, *args, **kwargs):
-            _assert_no_post_expert_norm(self)
+            if not post_expert_norm:
+                _assert_no_post_expert_norm(self)
             if affine_scales:
                 _assert_affine_scales(self)
             if sm100:
@@ -743,7 +754,7 @@ def deepgemm_bf16_experts_forward(
         out.index_add_(0, sorted_to_padded, down_bias[expert_ids_g])
 
     return _combine_routed_output(
-        out,
+        _apply_post_expert_norm(self, out),
         sorted_weights,
         sentinel_mask,
         perm,
@@ -865,7 +876,7 @@ def deepgemm_fp8_fp4_experts_forward(
     )
 
     return _combine_routed_output(
-        out,
+        _apply_post_expert_norm(self, out),
         sorted_weights,
         sentinel_mask,
         perm,
@@ -941,7 +952,7 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
     module.down_proj_scale_inv = torch.nn.Parameter(down_sf, requires_grad=False)
 
 
-@deepgemm_experts_guards(affine_scales=True, sm100=True)
+@deepgemm_experts_guards(affine_scales=True, sm100=True, post_expert_norm=False)
 def deepgemm_fp8_fp4_megamoe_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,

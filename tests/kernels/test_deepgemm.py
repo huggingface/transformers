@@ -375,6 +375,36 @@ class DeepGemmForwardTest(unittest.TestCase):
 
     # ── deepgemm_fp8_fp4_linear ────────────────────────────────────────────────
 
+    def test_post_expert_norm_runs_on_the_reducing_arms_and_is_refused_by_megamoe(self):
+        """Mega MoE fuses the routing-weighted reduce, so a per-expert output norm has nowhere to
+        go and is refused. The other arms reduce in `_combine_routed_output`, so the norm rides the
+        rows just before it — the same place the reference forwards apply it."""
+        import transformers.integrations.deepgemm as dg
+
+        applied = []
+
+        class _Experts(torch.nn.Module):
+            post_expert_norm_name = "input_scaled_rms_norm"
+            post_expert_norm = object()
+
+            def _apply_post_norm(self, rows):
+                applied.append(tuple(rows.shape))
+                return rows
+
+        module = _Experts()
+        rows = torch.randn(4, 8)
+        # the reducing arms: the norm is applied and the rows pass through
+        self.assertIs(dg._apply_post_expert_norm(module, rows), rows)
+        self.assertEqual(applied, [(4, 8)])
+
+        # a model naming no norm is untouched
+        plain = torch.nn.Module()
+        self.assertIs(dg._apply_post_expert_norm(plain, rows), rows)
+
+        # mega moe still refuses, and only mega moe
+        with self.assertRaises(NotImplementedError):
+            dg._assert_no_post_expert_norm(module)
+
     def test_linear_fp8_sm90_kernel_inputs(self):
         # FP8 weights + float32 block SF on SM90: recipe stays None, SFs are handed over row-major
         # float32 (SM90 dispatch transforms SFA itself and only checks SFB — see `_coerce_sf_for_kernel`).
