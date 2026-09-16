@@ -41,16 +41,6 @@ class AXK2Config(PreTrainedConfig):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int`, *optional*, defaults to 16):
         Number of heads for the indexer projections (DSA).
-    output_indexer_scores (`bool`, *optional*, defaults to `False`):
-        Whether or not to return the DSA indexer scores of every layer, used by the indexer distillation loss of
-        DeepSeek-V3.2 (`indexer_kl_loss_func`). Inherited from [`DeepseekV32Config`]: the indexer of this model does
-        not return its scores yet, so enabling it raises an error.
-    indexer_loss_coef (`float`, *optional*, defaults to 1.0):
-        Coefficient of the indexer distillation loss added to the language modeling loss when
-        `output_indexer_scores=True`. Inherited from [`DeepseekV32Config`].
-    dense_indexer (`bool`, *optional*, defaults to `False`):
-        Whether to ignore the indexer's top-k selection and run dense attention. Inherited from [`DeepseekV32Config`]:
-        not applied by the attention of this model yet.
     gated_norm_rank (`int`, *optional*, defaults to 16):
         Bottleneck rank for the low-rank input-dependent gate used by `AXK2GatedRMSNorm`. The gate wraps
         `input_layernorm` on every layer and `post_attention_layernorm` on MoE layers.
@@ -97,7 +87,6 @@ class AXK2Config(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
-
     attribute_map = {"num_local_experts": "n_routed_experts"}
 
     vocab_size: int = 163840
@@ -138,9 +127,6 @@ class AXK2Config(PreTrainedConfig):
     index_head_dim: int = 128
     index_n_heads: int = 16
     head_dim: int = 64
-    output_indexer_scores: bool = False
-    indexer_loss_coef: float = 1.0
-    dense_indexer: bool = False
     layer_types: list[str] | None = None
     gated_norm_rank: int = 16
 

@@ -21,11 +21,13 @@ from huggingface_hub.dataclasses import strict
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3ForCausalLM,
     DeepseekV3RMSNorm,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
@@ -33,10 +35,8 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 from ..deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
 from ..deepseek_v32.modeling_deepseek_v32 import (
     DeepseekV32DecoderLayer,
-    DeepseekV32ForCausalLM,
     DeepseekV32Indexer,
     DeepseekV32Model,
-    DeepseekV32ModelOutputWithPast,
     DeepseekV32PreTrainedModel,
     DeepseekV32RotaryEmbedding,
 )
@@ -61,16 +61,6 @@ class GlmMoeDsaConfig(DeepseekV32Config):
         Number of heads for the indexer projections (DSA).
     first_k_dense_replace (`int`, *optional*, defaults to 3):
         Number of leading layers that use a dense MLP; the rest use the MoE block.
-    output_indexer_scores (`bool`, *optional*, defaults to `False`):
-        Whether or not to return the DSA indexer scores of every layer, used by the indexer distillation loss of
-        DeepSeek-V3.2 (`indexer_kl_loss_func`). Inherited from [`DeepseekV32Config`]: the indexer of this model does
-        not return its scores yet, so enabling it raises an error.
-    indexer_loss_coef (`float`, *optional*, defaults to 1.0):
-        Coefficient of the indexer distillation loss added to the language modeling loss when
-        `output_indexer_scores=True`. Inherited from [`DeepseekV32Config`].
-    dense_indexer (`bool`, *optional*, defaults to `False`):
-        Whether to ignore the indexer's top-k selection and run dense attention. Inherited from [`DeepseekV32Config`]:
-        not applied by the attention of this model yet.
     indexer_types (`list[str]`, *optional*):
         Per-layer indexer mode (`"full"` runs the indexer, `"shared"` reuses the previous full
         layer's top-k). Defaults to the pattern derived from `index_topk_freq` /
@@ -88,6 +78,11 @@ class GlmMoeDsaConfig(DeepseekV32Config):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
+    output_indexer_loss = AttributeError()
+    indexer_loss_coef = AttributeError()
+    dense_indexer = AttributeError()
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 154880
     hidden_size: int = 6144
@@ -339,10 +334,6 @@ class GlmMoeDsaPreTrainedModel(DeepseekV32PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
 
 
-class GlmMoeDsaModelOutputWithPast(DeepseekV32ModelOutputWithPast):
-    pass
-
-
 class GlmMoeDsaModel(DeepseekV32Model):
     def forward(
         self,
@@ -353,7 +344,7 @@ class GlmMoeDsaModel(DeepseekV32Model):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> GlmMoeDsaModelOutputWithPast:
+    ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -397,13 +388,13 @@ class GlmMoeDsaModel(DeepseekV32Model):
             )
 
         hidden_states = self.norm(hidden_states)
-        return GlmMoeDsaModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
 
 
-class GlmMoeDsaForCausalLM(DeepseekV32ForCausalLM):
+class GlmMoeDsaForCausalLM(DeepseekV3ForCausalLM):
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
 

@@ -39,14 +39,11 @@ class DeepseekV32Config(PreTrainedConfig):
         Number of heads for the indexer projections (DSA).
     first_k_dense_replace (`int`, *optional*, defaults to 3):
         Number of leading layers that use a dense MLP; the rest use the MoE block.
-    output_indexer_scores (`bool`, *optional*, defaults to `False`):
-        Whether or not to return the DSA indexer scores of every layer. This is required to compute the indexer
-        distillation loss (see `indexer_kl_loss_func`) and is the only case in which the indexer builds an autograd
-        graph: top-k selection has no gradient, so the indexer is never trained through the attention output.
+    output_indexer_loss (`bool`, *optional*, defaults to `False`):
+        Whether to compute the indexer's KL distillation loss. Only the indexer receives gradients from this loss;
+        its inputs and the attention distribution used as its target are detached.
     indexer_loss_coef (`float`, *optional*, defaults to 1.0):
-        Coefficient of the indexer distillation loss added to the language modeling loss when
-        `output_indexer_scores=True`. The indexer parameters receive gradients only from this loss and the rest of the
-        model only from the language modeling loss, so it acts as a learning-rate multiplier for the indexer.
+        Coefficient of the indexer loss added to the language modeling loss when `output_indexer_loss=True`.
     dense_indexer (`bool`, *optional*, defaults to `False`):
         Whether to ignore the indexer's top-k selection and run dense attention, as in the dense warm-up stage of DSA
         training.
@@ -65,7 +62,8 @@ class DeepseekV32Config(PreTrainedConfig):
     ```"""
 
     model_type = "deepseek_v32"
-    keys_to_ignore_at_inference = ["past_key_values"]
+
+    keys_to_ignore_at_inference = ["past_key_values", "indexer_loss"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_b_proj": "colwise",
@@ -93,7 +91,6 @@ class DeepseekV32Config(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "moe_tp_experts",
     }
-
     attribute_map = {"num_local_experts": "n_routed_experts"}
 
     vocab_size: int = 129280
@@ -134,7 +131,7 @@ class DeepseekV32Config(PreTrainedConfig):
     mlp_bias: bool = False
     head_dim: int = 64
     first_k_dense_replace: int = 3
-    output_indexer_scores: bool = False
+    output_indexer_loss: bool = False
     indexer_loss_coef: float = 1.0
     dense_indexer: bool = False
     layer_types: list[str] | None = None
