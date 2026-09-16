@@ -190,6 +190,7 @@ class OlmoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    # TODO (ydshieh): check why this model produces larger diff. (1e-4 scale) than most models
     @is_flaky(max_attempts=2)
     def test_generate_with_static_cache(self):
         super().test_generate_with_static_cache()
