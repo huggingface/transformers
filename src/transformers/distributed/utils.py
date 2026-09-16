@@ -25,6 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
+    from torch.distributed.device_mesh import DeviceMesh
     from torch.distributed.tensor import DTensor
 
     from .configuration_utils import DistributedConfig
@@ -130,6 +131,20 @@ def _distributed_barrier():
         torch.distributed.barrier()
 
 
+class MeshManager:
+    """Named access to dense and expert parallel axes without exposing their view selection."""
+
+    def __init__(self, dense_mesh: DeviceMesh, expert_mesh: DeviceMesh):
+        self._dense_mesh = dense_mesh
+        self._expert_mesh = expert_mesh
+
+    def get_mesh(self, dims: str | tuple[str, ...]) -> DeviceMesh:
+        """Select expert axes for `ep`/`efsdp`, otherwise dense axes; DeviceMesh handles slicing."""
+        dims = (dims,) if isinstance(dims, str) else dims
+        mesh = self._expert_mesh if "ep" in dims or "efsdp" in dims else self._dense_mesh
+        return mesh[dims]
+
+
 # Retained for the legacy transformers.integrations.tensor_parallel API.
 def initialize_tensor_parallelism(
     tp_plan: str | dict[str, str] | None, tp_size: int | None = None, device_mesh=None, device_map=None
@@ -223,22 +238,15 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
 
 def initialize_distributed_mesh(
     distributed_config: DistributedConfig,
-):
-    """Create a device mesh containing every configured parallel dimension."""
-    mesh_shape = []
-    mesh_dim_names = []
+) -> tuple[torch.device | None, MeshManager | None]:
+    """Build named dense and expert views, independently of the expert dispatcher.
 
-    if distributed_config.pp_size > 1:
-        mesh_shape.append(distributed_config.pp_size)
-        mesh_dim_names.append("pp")
-    if distributed_config.fsdp_size > 1:
-        mesh_shape.append(distributed_config.fsdp_size)
-        mesh_dim_names.append("fsdp")
-    if distributed_config.tp_size > 1:
-        mesh_shape.append(distributed_config.tp_size)
-        mesh_dim_names.append("tp")
-
-    if not mesh_shape:
+    Both views include singleton dimensions so callers can always select their axes by name.
+    Each parameter's FSDP and TP/EP axes come from the same view. Separate roots avoid requiring
+    the newer `DeviceMesh._unflatten` API; the expert view is unused when EP is disabled.
+    """
+    mesh_shape = (distributed_config.pp_size, distributed_config.fsdp_size, distributed_config.tp_size)
+    if mesh_shape == (1, 1, 1):
         return None, None
 
     device_type = torch._C._get_accelerator().type
@@ -260,15 +268,17 @@ def initialize_distributed_mesh(
     else:
         device_map = torch.device(device_type)
 
-    device_mesh = torch.distributed.init_device_mesh(
+    dense_mesh = torch.distributed.init_device_mesh(
         device_type,
-        tuple(mesh_shape),
-        mesh_dim_names=tuple(mesh_dim_names),
+        mesh_shape,
+        mesh_dim_names=("pp", "fsdp", "tp"),
     )
-    # A flattened sub-mesh, so an all-reduce over every rank is one collective instead of one per dimension.
-    if len(mesh_dim_names) > 1:
-        device_mesh._flatten("_".join(mesh_dim_names))
-    return device_map, device_mesh
+    expert_mesh = torch.distributed.init_device_mesh(
+        device_type,
+        (distributed_config.pp_size, distributed_config.efsdp_size, distributed_config.ep_size),
+        mesh_dim_names=("pp", "efsdp", "ep"),
+    )
+    return device_map, MeshManager(dense_mesh, expert_mesh)
 
 
 def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
