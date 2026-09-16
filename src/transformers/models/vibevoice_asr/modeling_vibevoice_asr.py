@@ -379,9 +379,10 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
 
         combined_features = self.multi_modal_projector(acoustic_latents, semantic_latents)
         if padding_mask is not None:
-            num_audio_tokens = torch.ceil(
-                padding_mask.sum(dim=-1) / self.config.acoustic_tokenizer_encoder_config.hop_length
-            ).to(torch.int64)
+            hop_length = self.config.acoustic_tokenizer_encoder_config.hop_length
+            # Integer ceiling division: exact for any sample count, unlike float32 `torch.ceil`
+            # which rounds down quotients just above a hop multiple once counts exceed 2**24.
+            num_audio_tokens = (padding_mask.sum(dim=-1) + hop_length - 1) // hop_length
             padding_mask = torch.arange(num_audio_tokens.max(), device=combined_features.device) < num_audio_tokens[
                 :, None
             ].to(combined_features.device)
