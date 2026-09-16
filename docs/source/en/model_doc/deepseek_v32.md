@@ -81,10 +81,10 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 ### Training the indexer
 
-Top-k selection has no gradient, so the indexer never learns from the language modeling loss. Its parameters are trained with the distillation loss of the technical report (section 2.2): the KL divergence between the attention distribution, summed over heads and L1-normalized, and the softmax of the indexer scores. Pass `output_indexer_scores=True` (or set it in the config) with eager attention, which is needed for the attention probabilities. The loss is returned as `indexer_loss` and added to `loss` scaled by `config.indexer_loss_coef`. Only the indexer receives gradients from it, and the rest of the model only from the language modeling loss. Set `config.indexer_dense_warmup=True` for the dense warm-up stage, in which attention is dense and the indexer is distilled from the full attention distribution.
+Top-k selection has no gradient, so the indexer never learns from the language modeling loss. Its parameters are trained with the distillation loss of the technical report (section 2.2): the KL divergence between the attention distribution, summed over heads and normalized, and the softmax of the indexer scores. Pass `output_indexer_scores=True` (or set it in the config): every layer records its indexer scores and their target, recomputed from the attention's queries and keys without keeping the attention probabilities, so any attention implementation can be used. The loss is returned as `indexer_loss` and added to `loss` scaled by `config.indexer_loss_coef`. Only the indexer receives gradients from it, and the rest of the model only from the language modeling loss. Set `config.dense_indexer=True` for the dense warm-up stage, in which attention is dense and the indexer is distilled from the full attention distribution.
 
 ```python
-model = AutoModelForCausalLM.from_pretrained(model_name, attn_implementation="eager", dtype=torch.bfloat16)
+model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.bfloat16)
 outputs = model(**inputs, labels=inputs["input_ids"], output_indexer_scores=True)
 outputs.loss.backward()  # language modeling loss + config.indexer_loss_coef * outputs.indexer_loss
 ```

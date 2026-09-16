@@ -169,9 +169,7 @@ class HYV4Indexer(nn.Module):
     DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens.
 
     The Indexer has its own lightweight projections (wq_b, wk) separate from the main MLA attention, and returns
-    the top-k token indices, which the attention scatters into a sparse mask. Since top-k selection has no gradient,
-    the indexer is not trained through the attention output but with its own distillation loss on its scores
-    (`indexer_kl_loss_func`), which it returns on request.
+    the top-k token indices, which the attention scatters into a sparse mask.
 
     **Cache strategy**: the indexer key cache lives on the per-layer `DynamicIndexedLayer` (or the
     `StaticIndexedLayer` for static caches) inside the shared cache, accessed via
@@ -223,15 +221,10 @@ class HYV4Indexer(nn.Module):
             position_embeddings: `(cos, sin)` from RotaryEmbedding.
             attention_mask: Causal mask, broadcastable to `[B, S, T]`.
             past_key_values: Cache object containing the indexer key cache for this layer.
-            output_scores: Whether to also return the indexer scores, used for the indexer distillation loss (see
-                `indexer_kl_loss_func`). This is the only case in which the indexer builds an autograd graph.
 
         Returns:
-            `tuple[torch.Tensor, torch.Tensor | None]`: the `int32` top-k token indices of shape `[B, S, topk]` (the
-                eager / SDPA paths turn these into an additive sparse mask; the `flash-mla` kernel consumes them
-                directly), and the `float32` indexer scores of shape `[B, S, T]` if `output_scores=True`, `None`
-                otherwise. Keys that are not candidates (not visible, or not selected unless
-                `config.indexer_dense_warmup`) are masked out of the scores.
+            `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
+                turn these into an additive sparse mask; the `flash-mla` kernel consumes them directly.
         """
         batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings

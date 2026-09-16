@@ -161,11 +161,12 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_indexer_loss(self):
         r"""
         Top-k selection has no gradient, so the DSA indexer never learns from the language modeling loss: it is trained
-        with its own distillation loss. Check that the loss is computed, that it only reaches the indexer, and that the
-        language modeling loss never does.
+        with its own distillation loss. Check that the loss is computed with any attention implementation (the target
+        is recomputed from the queries and keys), that it only reaches the indexer, and that the language modeling loss
+        never does.
         """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config._attn_implementation = "eager"  # the loss needs the attention probabilities
+        config._attn_implementation = "sdpa"  # the loss does not need the attention probabilities
         config.output_indexer_scores = True
         config.index_topk = 2  # make the selection actually sparse
         input_ids, attention_mask = inputs_dict["input_ids"], inputs_dict["attention_mask"]
@@ -178,12 +179,16 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
 
         outputs = model(input_ids, attention_mask=attention_mask, labels=input_ids)
         self.assertEqual(len(outputs.indexer_scores), config.num_hidden_layers)
-        self.assertEqual(outputs.indexer_scores[0].shape, (batch_size, seq_length, seq_length))
-        # Sparse training stage: the indexer distribution is restricted to the `index_topk` selected keys of each query
-        self.assertTrue((torch.isfinite(outputs.indexer_scores[0]).sum(-1) == config.index_topk).all())
+        self.assertEqual(len(outputs.indexer_targets), config.num_hidden_layers)
+        # Sparse training stage: both distributions are restricted to the `index_topk` selected keys of each query
+        self.assertEqual(outputs.indexer_scores[0].shape, (batch_size, seq_length, config.index_topk))
+        self.assertEqual(outputs.indexer_targets[0].shape, (batch_size, seq_length, config.index_topk))
+        torch.testing.assert_close(
+            outputs.indexer_targets[0].sum(-1), torch.ones_like(outputs.indexer_targets[0][..., 0])
+        )
         self.assertTrue(torch.isfinite(outputs.indexer_loss))
         self.assertGreaterEqual(outputs.indexer_loss.item(), 0.0)
-        # The attention probabilities are only recorded for the loss, not returned unless asked for
+        # The attention probabilities are not needed, and not returned unless asked for
         self.assertIsNone(outputs.attentions)
         lm_loss = model.loss_function(logits=outputs.logits, labels=input_ids, vocab_size=config.vocab_size)
         torch.testing.assert_close(outputs.loss, lm_loss + config.indexer_loss_coef * outputs.indexer_loss)
@@ -201,17 +206,22 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertTrue(any(p.grad is not None for p in other_params))
         model.zero_grad(set_to_none=True)
 
-        # Dense warm-up stage: the indexer scores every visible key (eager masks are additive, so masked keys stay finite)
-        config.indexer_dense_warmup = True
-        outputs = model(input_ids, attention_mask=attention_mask, labels=input_ids)
-        self.assertTrue((torch.isfinite(outputs.indexer_scores[0]).sum(-1) == seq_length).all())
+        # Dense warm-up stage: both distributions cover every key, and the target is the attention distribution of the
+        # model (here computed by eager attention) summed over heads and normalized
+        config.dense_indexer = True
+        model.set_attn_implementation("eager")
+        outputs = model(input_ids, attention_mask=attention_mask, labels=input_ids, output_attentions=True)
+        self.assertEqual(outputs.indexer_scores[0].shape, (batch_size, seq_length, seq_length))
         self.assertTrue(torch.isfinite(outputs.indexer_loss))
+        for target, attentions in zip(outputs.indexer_targets, outputs.attentions):
+            torch.testing.assert_close(target, attentions.float().sum(dim=1) / config.num_attention_heads)
 
         # Nothing is computed or returned without the flag
         config.output_indexer_scores = False
         outputs = model(input_ids, attention_mask=attention_mask, labels=input_ids)
         self.assertIsNone(outputs.indexer_loss)
         self.assertIsNone(outputs.indexer_scores)
+        self.assertIsNone(outputs.indexer_targets)
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     @unittest.skip("DeepseekV32 applies RoPE to qk_rope_head_dim; generic rope scaling tests assume config.head_dim")

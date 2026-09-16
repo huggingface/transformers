@@ -78,9 +78,9 @@ class AXK2Config(DeepseekV32Config):
     indexer_loss_coef (`float`, *optional*, defaults to 1.0):
         Coefficient of the indexer distillation loss added to the language modeling loss when
         `output_indexer_scores=True`. Inherited from [`DeepseekV32Config`].
-    indexer_dense_warmup (`bool`, *optional*, defaults to `False`):
-        Whether to run dense attention while still computing indexer scores over every visible key (the DSA dense
-        warm-up stage). Inherited from [`DeepseekV32Config`]: not applied by the attention of this model yet.
+    dense_indexer (`bool`, *optional*, defaults to `False`):
+        Whether to ignore the indexer's top-k selection and run dense attention. Inherited from [`DeepseekV32Config`]:
+        not applied by the attention of this model yet.
     gated_norm_rank (`int`, *optional*, defaults to 16):
         Bottleneck rank for the low-rank input-dependent gate used by `AXK2GatedRMSNorm`. The gate wraps
         `input_layernorm` on every layer and `post_attention_layernorm` on MoE layers.
@@ -362,7 +362,7 @@ class AXK2Attention(DeepseekV32Attention):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
-        topk_indices, _ = self.indexer(
+        topk_indices, _, _ = self.indexer(
             hidden_states,
             q_resid,
             position_embeddings,

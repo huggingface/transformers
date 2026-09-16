@@ -47,10 +47,9 @@ class DeepseekV32Config(PreTrainedConfig):
         Coefficient of the indexer distillation loss added to the language modeling loss when
         `output_indexer_scores=True`. The indexer parameters receive gradients only from this loss and the rest of the
         model only from the language modeling loss, so it acts as a learning-rate multiplier for the indexer.
-    indexer_dense_warmup (`bool`, *optional*, defaults to `False`):
-        Whether to run dense attention (the indexer's top-k selection is not applied) while still computing indexer
-        scores over every visible key. This is the DSA "dense warm-up" stage, in which the indexer is distilled from
-        full attention before switching to sparse attention.
+    dense_indexer (`bool`, *optional*, defaults to `False`):
+        Whether to ignore the indexer's top-k selection and run dense attention, as in the dense warm-up stage of DSA
+        training.
 
     ```python
     >>> from transformers import DeepseekV32Config, DeepseekV32Model
@@ -137,7 +136,7 @@ class DeepseekV32Config(PreTrainedConfig):
     first_k_dense_replace: int = 3
     output_indexer_scores: bool = False
     indexer_loss_coef: float = 1.0
-    indexer_dense_warmup: bool = False
+    dense_indexer: bool = False
     layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):

@@ -21,7 +21,6 @@ from huggingface_hub.dataclasses import strict
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -37,6 +36,7 @@ from ..deepseek_v32.modeling_deepseek_v32 import (
     DeepseekV32ForCausalLM,
     DeepseekV32Indexer,
     DeepseekV32Model,
+    DeepseekV32ModelOutputWithPast,
     DeepseekV32PreTrainedModel,
     DeepseekV32RotaryEmbedding,
 )
@@ -68,9 +68,9 @@ class GlmMoeDsaConfig(DeepseekV32Config):
     indexer_loss_coef (`float`, *optional*, defaults to 1.0):
         Coefficient of the indexer distillation loss added to the language modeling loss when
         `output_indexer_scores=True`. Inherited from [`DeepseekV32Config`].
-    indexer_dense_warmup (`bool`, *optional*, defaults to `False`):
-        Whether to run dense attention while still computing indexer scores over every visible key (the DSA dense
-        warm-up stage). Inherited from [`DeepseekV32Config`]: not applied by the attention of this model yet.
+    dense_indexer (`bool`, *optional*, defaults to `False`):
+        Whether to ignore the indexer's top-k selection and run dense attention. Inherited from [`DeepseekV32Config`]:
+        not applied by the attention of this model yet.
     indexer_types (`list[str]`, *optional*):
         Per-layer indexer mode (`"full"` runs the indexer, `"shared"` reuses the previous full
         layer's top-k). Defaults to the pattern derived from `index_topk_freq` /
@@ -339,6 +339,10 @@ class GlmMoeDsaPreTrainedModel(DeepseekV32PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
 
 
+class GlmMoeDsaModelOutputWithPast(DeepseekV32ModelOutputWithPast):
+    pass
+
+
 class GlmMoeDsaModel(DeepseekV32Model):
     def forward(
         self,
@@ -349,7 +353,7 @@ class GlmMoeDsaModel(DeepseekV32Model):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> GlmMoeDsaModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -393,7 +397,7 @@ class GlmMoeDsaModel(DeepseekV32Model):
             )
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
+        return GlmMoeDsaModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
