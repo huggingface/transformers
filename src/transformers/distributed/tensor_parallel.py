@@ -241,7 +241,7 @@ class ColwiseParallel(TensorParallelLayer):
         return output.to_local() if self.use_local_output else output
 
 
-class UnitColwiseParallel(TensorParallelLayer):
+class UnitColwiseParallel(ColwiseParallel):
     """This forces all ranks to own at least 1 unit of the tensor.
     It is designed to be used on `query/key/value` layers when running TP. You cannot
     For `query = nn.Linear(hidden_dim, head_dim * num_heads)` you can't divide the second dimension blindly by the world size as the attention REQUIRES to split per-head. You cannot split 2 heads of dim 64 into 4 GPUs by just separating into 4 x 32. This would mix the heads.
