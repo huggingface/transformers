@@ -489,7 +489,7 @@ class DeepseekV3Attention(nn.Module):
 
         # Based on whether we absorb the latents directly, we either expand (non FA) or prepare all necessary latents (FA)
         query_latent_states = q_pass
-        if is_flash_attention_requested(self.config):
+        if is_flash_attention_requested(self.config, version=4):
             query_states, key_states, value_states = q_rot, k_rot, kv_nope
             key_latent_states, value_latent_states = self.prepare_kv_latent_states()
         else:
