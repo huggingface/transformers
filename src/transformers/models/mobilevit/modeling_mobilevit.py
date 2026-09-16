@@ -22,6 +22,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
@@ -33,6 +34,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
 from ...utils.generic import can_return_tuple
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_mobilevit import MobileViTConfig
 
 
@@ -570,18 +572,11 @@ class MobileViTEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        output_hidden_states: bool = False,
-        **kwargs,
     ) -> BaseModelOutputWithNoAttention:
-        all_hidden_states = () if output_hidden_states else None
-
         for layer_module in self.layer:
             hidden_states = layer_module(hidden_states)
 
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -609,6 +604,13 @@ class MobileViTPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class MobileViTModel(MobileViTPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": [
+            OutputRecorder(MobileViTMobileNetLayer, layer_name="encoder.layer", capture_initial_hidden_state=False),
+            OutputRecorder(MobileViTLayer, layer_name="encoder.layer", capture_initial_hidden_state=False),
+        ]
+    }
+
     def __init__(self, config: MobileViTConfig, expand_output: bool = True):
         r"""
         expand_output (`bool`, *optional*, defaults to `True`):
@@ -641,26 +643,18 @@ class MobileViTModel(MobileViTPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPoolingAndNoAttention:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         embedding_output = self.conv_stem(pixel_values)
-
-        encoder_outputs = self.encoder(
-            embedding_output,
-            output_hidden_states=output_hidden_states,
-        )
+        encoder_outputs = self.encoder(embedding_output)
 
         if self.expand_output:
             last_hidden_state = self.conv_1x1_exp(encoder_outputs.last_hidden_state)
@@ -674,7 +668,6 @@ class MobileViTModel(MobileViTPreTrainedModel):
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
         )
 
 
@@ -859,14 +852,14 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-        **kwargs,
-    ) -> SemanticSegmenterOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | SemanticSegmenterOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
@@ -896,18 +889,10 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
         ```"""
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
-        outputs = self.mobilevit(
-            pixel_values,
-            output_hidden_states=True,  # we need the intermediate hidden states
-            **kwargs,
-        )
+        outputs = self.mobilevit(pixel_values, **kwargs)
 
         encoder_hidden_states = outputs.hidden_states
 
@@ -924,7 +909,7 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         return SemanticSegmenterOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=outputs.hidden_states,
             attentions=None,
         )
 

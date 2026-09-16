@@ -17,6 +17,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...backbone_utils import filter_output_hidden_states
 from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
@@ -26,6 +27,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_mobilenet_v2 import MobileNetV2Config
 
 
@@ -259,6 +261,12 @@ class MobileNetV2PreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class MobileNetV2Model(MobileNetV2PreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": OutputRecorder(
+            MobileNetV2InvertedResidual, layer_name="layer", capture_initial_hidden_state=False
+        )
+    }
+
     def __init__(self, config: MobileNetV2Config, add_pooling_layer: bool = True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
@@ -324,29 +332,20 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPoolingAndNoAttention:
-        output_hidden_states = kwargs.get("output_hidden_states")
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.conv_stem(pixel_values)
 
-        all_hidden_states = () if output_hidden_states else None
-
-        for i, layer_module in enumerate(self.layer):
+        for layer_module in self.layer:
             hidden_states = layer_module(hidden_states)
-
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
 
         last_hidden_state = self.conv_1x1(hidden_states)
 
@@ -358,7 +357,6 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=all_hidden_states,
         )
 
 
@@ -387,6 +385,7 @@ class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -514,9 +513,8 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
         self,
         pixel_values: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-        **kwargs,
-    ) -> SemanticSegmenterOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | SemanticSegmenterOutput:
         r"""
         Examples:
 
@@ -541,18 +539,10 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
         ```"""
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
-        outputs = self.mobilenet_v2(
-            pixel_values,
-            output_hidden_states=True,  # we need the intermediate hidden states
-            **kwargs,
-        )
+        outputs = self.mobilenet_v2(pixel_values, **kwargs)
 
         encoder_hidden_states = outputs.hidden_states
 
@@ -569,7 +559,7 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
         return SemanticSegmenterOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=outputs.hidden_states,
             attentions=None,
         )
 

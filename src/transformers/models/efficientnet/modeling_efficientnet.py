@@ -29,6 +29,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_efficientnet import EfficientNetConfig
 
 
@@ -406,14 +407,9 @@ class EfficientNetEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.FloatTensor,
-        output_hidden_states: bool | None = False,
     ) -> BaseModelOutputWithNoAttention:
-        all_hidden_states = (hidden_states,) if output_hidden_states else None
-
         for block in self.blocks:
             hidden_states = block(hidden_states)
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
 
         hidden_states = self.top_conv(hidden_states)
         hidden_states = self.top_bn(hidden_states)
@@ -421,7 +417,6 @@ class EfficientNetEncoder(nn.Module):
 
         return BaseModelOutputWithNoAttention(
             last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
         )
 
 
@@ -449,6 +444,8 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class EfficientNetModel(EfficientNetPreTrainedModel):
+    _can_record_outputs = {"hidden_states": OutputRecorder(EfficientNetBlock, capture_initial_hidden_state=True)}
+
     def __init__(self, config: EfficientNetConfig):
         super().__init__(config)
         self.config = config
@@ -467,6 +464,7 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -476,13 +474,8 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        output_hidden_states = kwargs.get("output_hidden_states")
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         embedding_output = self.embeddings(pixel_values)
-        encoder_outputs = self.encoder(embedding_output, output_hidden_states=output_hidden_states)
+        encoder_outputs = self.encoder(embedding_output)
         last_hidden_state = encoder_outputs.last_hidden_state
         pooled_output = self.pooler(last_hidden_state)
         # Reshape (batch_size, 1280, 1 , 1) -> (batch_size, 1280)

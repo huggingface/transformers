@@ -26,6 +26,7 @@ from ...modeling_outputs import (
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..mobilevit.modeling_mobilevit import (
     MobileViTASPP,
     MobileViTASPPPooling,
@@ -423,6 +424,13 @@ class MobileViTV2PreTrainedModel(MobileViTPreTrainedModel):
 
 @auto_docstring
 class MobileViTV2Model(MobileViTV2PreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": [
+            OutputRecorder(MobileViTV2MobileNetLayer, layer_name="encoder.layer", capture_initial_hidden_state=False),
+            OutputRecorder(MobileViTV2Layer, layer_name="encoder.layer", capture_initial_hidden_state=False),
+        ]
+    }
+
     def __init__(self, config: MobileViTV2Config, expand_output: bool = True):
         r"""
         expand_output (`bool`, *optional*, defaults to `True`):
@@ -452,26 +460,18 @@ class MobileViTV2Model(MobileViTV2PreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPoolingAndNoAttention:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         embedding_output = self.conv_stem(pixel_values)
-
-        encoder_outputs = self.encoder(
-            embedding_output,
-            output_hidden_states=output_hidden_states,
-        )
+        encoder_outputs = self.encoder(embedding_output)
 
         last_hidden_state = encoder_outputs.last_hidden_state
 
@@ -484,7 +484,6 @@ class MobileViTV2Model(MobileViTV2PreTrainedModel):
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
         )
 
 
