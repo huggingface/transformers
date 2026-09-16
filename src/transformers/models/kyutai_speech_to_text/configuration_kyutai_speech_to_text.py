@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 from ..auto.configuration_auto import AutoConfig
@@ -53,7 +53,9 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
 
     model_type = "kyutai_speech_to_text"
     keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"codec_config": AutoConfig}
+    sub_configs_defaults = {
+        "codec_config": SubConfigSpec(config_class=AutoConfig, model_type="mimi"),
+    }
 
     codebook_vocab_size: int = 2049
     vocab_size: int = 4001
@@ -81,18 +83,12 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
     codec_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
-        if self.codec_config is None:
-            self.codec_config = AutoConfig.for_model("mimi")
-            logger.info("codec_config is None, using default audio encoder config.")
-        elif isinstance(self.codec_config, dict):
-            self.codec_config = AutoConfig.for_model(**self.codec_config)
-
+        super().__post_init__(**kwargs)
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
         self.frame_size = self.codec_config.frame_size
         self.head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
-        super().__post_init__(**kwargs)
 
     def validate_token_ids(self):
         # Final vocab size includes each codebook

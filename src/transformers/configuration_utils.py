@@ -319,7 +319,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
     base_config_key: ClassVar[str] = ""
     sub_configs_defaults: ClassVar[dict[str, SubConfigSpec]] = {}
 
-    keys_to_ignore_at_inference: ClassVar[list[str]] = []
+    keys_to_ignore_at_inference: ClassVar[list[str]] = ["past_key_values"]
     attribute_map: ClassVar[dict[str, str]] = {}
     base_model_tp_plan: ClassVar[dict[str, Any] | None] = None
     base_model_fsdp_plan: ClassVar[dict[Any, str]] = {
