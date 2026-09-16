@@ -88,7 +88,7 @@ class DistributedMixin:
         if hasattr(self.config, "distributed_config") and self.config.distributed_config.enable_expert_parallel:
             if not self._ep_plan:
                 raise ValueError(
-                    f"Expert parallelism was requested (`enable_expert_parallel=True`), but "
+                    f"Expert parallelism was requested (`ep_size > 1`), but "
                     f"`{self.__class__.__name__}` does not define an expert-parallel plan. Add a "
                     f"`base_model_ep_plan` to its config, or disable expert parallelism."
                 )

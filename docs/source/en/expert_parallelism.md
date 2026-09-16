@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## DistributedConfig
 
-Enable expert parallelism with the [`DistributedConfig`] class and the `enable_expert_parallel` argument.
+Enable expert parallelism with the [`DistributedConfig`] class and the `ep_size` argument. The current all-reduce implementation requires `ep_size=tp_size`, so every rank in an expert group receives the same tokens.
 
 ```py
 import os
@@ -30,7 +30,7 @@ from transformers.distributed.configuration_utils import DistributedConfig
 
 distributed_config = DistributedConfig(
     tp_size=int(os.environ["WORLD_SIZE"]),
-    enable_expert_parallel=True,
+    ep_size=int(os.environ["WORLD_SIZE"]),
 )
 
 model = AutoModelForCausalLM.from_pretrained(
@@ -42,7 +42,7 @@ model = AutoModelForCausalLM.from_pretrained(
 > [!TIP]
 > Expert parallelism automatically enables [tensor parallelism](./perf_infer_gpu_multi) for attention layers.
 
-This argument switches to the `ep_plan` (expert parallel plan) defined in each MoE model's config file. The [`GroupedGemmParallel`] class splits expert weights so each device loads only its local experts. The `ep_router` routes tokens to experts and an all-reduce operation combines their outputs.
+Setting `ep_size > 1` switches to the `ep_plan` (expert parallel plan) defined in each MoE model's config file. The [`GroupedGemmParallel`] class splits expert weights so each device loads only its local experts. The `ep_router` routes tokens to experts and an all-reduce operation combines their outputs.
 
 Launch your inference script with [torchrun](https://pytorch.org/docs/stable/elastic/run.html) and specify how many devices to use. The number of devices must evenly divide the total number of experts.
 
@@ -52,16 +52,16 @@ torchrun --nproc-per-node 8 your_script.py
 
 ## Combining with FSDP2
 
-Expert parallelism only shards the experts. Everything else (attention, embeddings, norms) and its optimizer state is replicated on every expert-parallel rank, which limits how large a model you can train. Add [FSDP2](./fsdp) on a second mesh dimension with `fsdp_size`, and keep using `tp_size` for the expert parallel width (`tp_size` is the EP size).
+Expert parallelism only shards the experts. Everything else (attention, embeddings, norms) and its optimizer state is replicated on every expert-parallel rank, which limits how large a model you can train. Add [FSDP2](./fsdp) on a second mesh dimension with `fsdp_size`, and keep `ep_size=tp_size` for the expert parallel width.
 
 ```py
 from transformers import AutoModelForCausalLM
 from transformers.distributed import DistributedConfig
 
 distributed_config = DistributedConfig(
-    tp_size=4,  # expert parallel size
+    tp_size=4,
+    ep_size=4,  # expert parallel size, must match tp_size
     fsdp_size=2,  # data parallel shards
-    enable_expert_parallel=True,
 )
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B", distributed_config=distributed_config)
 ```
@@ -83,9 +83,9 @@ The table below compares EP-only training with 2D EP+FSDP2 on 8xH100 GPUs. The w
 
 ## Mesh views
 
-`DistributedConfig` also accepts an explicit `ep_size`. For the current all-reduce implementation,
-set `ep_size=tp_size`; `DistributedConfig(tp_size=4, ep_size=4)` is equivalent to
-`DistributedConfig(tp_size=4, enable_expert_parallel=True)`. An explicit `ep_size=1` disables EP.
+The legacy `enable_expert_parallel=True` flag is a deprecated alias for `ep_size=tp_size` when `ep_size`
+is omitted, and will be removed in v5.20. It emits a `FutureWarning` and leaves `tp_size` and `fsdp_size`
+unchanged. An explicit `ep_size` takes precedence over the flag, and `ep_size=1` disables EP.
 
 Internally, a mesh manager provides two views of the same ranks: `(pp, fsdp, tp)` for dense layers
 and `(pp, efsdp, ep)` for experts, where `efsdp_size = fsdp_size * tp_size // ep_size`.
