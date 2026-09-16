@@ -56,10 +56,10 @@ class VisionEncoderDecoderConfig(PreTrainedConfig):
 
     model_type = "vision-encoder-decoder"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(
+        "decoder": SubConfigSpec(
             config_class=AutoConfig, model_type="bert", init_kwargs={"is_decoder": True, "add_cross_attention": True}
         ),
-        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="vit"),
+        "encoder": SubConfigSpec(config_class=AutoConfig, model_type="vit"),
     }
 
     encoder: PreTrainedConfig | dict | None = None

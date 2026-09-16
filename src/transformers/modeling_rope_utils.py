@@ -753,7 +753,7 @@ class RotaryEmbeddingConfigMixin:
         rope_theta = kwargs.pop("rope_theta", getattr(self, "rope_theta", self.default_theta))
         self.rope_parameters.setdefault("rope_theta", rope_theta)
 
-        partial_rotary_factor = kwargs.get("partial_rotary_factor", getattr(self, "partial_rotary_factor", None))
+        partial_rotary_factor = kwargs.pop("partial_rotary_factor", getattr(self, "partial_rotary_factor", None))
         if partial_rotary_factor is not None:
             self.rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
             self.ignore_keys_at_rope_validation = set(self.ignore_keys_at_rope_validation or []) | {

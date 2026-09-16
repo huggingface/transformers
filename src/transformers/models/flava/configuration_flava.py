@@ -169,6 +169,8 @@ class FlavaImageCodebookConfig(PreTrainedConfig):
     ```
     """
 
+    model_type = "flava_image_codebook"
+
     num_groups: int = 4
     input_channels: int = 3
     num_blocks_per_group: int = 2
