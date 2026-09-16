@@ -1185,12 +1185,16 @@ def align_special_tokens(model, processing_class):
         tokenizer: PreTrainedTokenizerBase = processing_class.tokenizer
     else:
         tokenizer = processing_class
+    # On a composite model the special tokens live on the text sub-config, and the top-level config does not
+    # forward attribute lookups to it. Reading the top-level config there finds nothing and every run reports a
+    # mismatch. `get_text_config()` returns the config itself for a text-only model.
+    config = model.config.get_text_config()
     model_has_generation_config = hasattr(model, "generation_config") and model.generation_config is not None
     updated_tokens = {}
 
     # 1 - Align EOS token. EOS is more complex than the others, as `generation_config` may hold more than one EOS
     # token.
-    tokenizer_has_new_eos = tokenizer.eos_token_id != getattr(model.config, "eos_token_id", None)
+    tokenizer_has_new_eos = tokenizer.eos_token_id != getattr(config, "eos_token_id", None)
     if model_has_generation_config:
         # `generation_config.eos_token_id` is None: direct comparison
         if model.generation_config.eos_token_id is None:
@@ -1204,7 +1208,7 @@ def align_special_tokens(model, processing_class):
 
     if tokenizer_has_new_eos:
         updated_tokens["eos_token_id"] = tokenizer.eos_token_id
-        model.config.eos_token_id = tokenizer.eos_token_id
+        config.eos_token_id = tokenizer.eos_token_id
         # The generation config may hold more than one EOS token. We preserve the original EOS tokens: any of the
         # EOS tokens defined here will halt generation.
         if model_has_generation_config:
@@ -1214,24 +1218,24 @@ def align_special_tokens(model, processing_class):
             model.generation_config.eos_token_id = [token for token in all_eos_tokens if token is not None]
 
     # 2 - Align BOS
-    tokenizer_has_new_bos = tokenizer.bos_token_id != getattr(model.config, "bos_token_id", None)
+    tokenizer_has_new_bos = tokenizer.bos_token_id != getattr(config, "bos_token_id", None)
     if model_has_generation_config:
         tokenizer_has_new_bos |= tokenizer.bos_token_id != model.generation_config.bos_token_id
 
     if tokenizer_has_new_bos:
         updated_tokens["bos_token_id"] = tokenizer.bos_token_id
-        model.config.bos_token_id = tokenizer.bos_token_id
+        config.bos_token_id = tokenizer.bos_token_id
         if model_has_generation_config:
             model.generation_config.bos_token_id = tokenizer.bos_token_id
 
     # 3 - Align PAD
-    tokenizer_has_new_pad = tokenizer.pad_token_id != getattr(model.config, "pad_token_id", None)
+    tokenizer_has_new_pad = tokenizer.pad_token_id != getattr(config, "pad_token_id", None)
     if model_has_generation_config:
         tokenizer_has_new_pad |= tokenizer.pad_token_id != model.generation_config.pad_token_id
 
     if tokenizer_has_new_pad:
         updated_tokens["pad_token_id"] = tokenizer.pad_token_id
-        model.config.pad_token_id = tokenizer.pad_token_id
+        config.pad_token_id = tokenizer.pad_token_id
         if model_has_generation_config:
             model.generation_config.pad_token_id = tokenizer.pad_token_id
 
