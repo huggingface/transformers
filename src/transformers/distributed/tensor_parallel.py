@@ -263,15 +263,24 @@ class UnitColwiseParallel(TensorParallelLayer):
     """
 
     def shard_param(self, module, param, mesh):
+        from torch.distributed.device_mesh import DeviceMesh
+
         meta = module._parameters.get(param)
         if meta is None:
             return
         placements = [Shard(meta.ndim - 2), Replicate()]
         remainder = meta.shape[meta.ndim - 2] % mesh.world_size
         split = meta.shape[meta.ndim - 2] // remainder
-        mesh = mesh.reshape(remainder, split)
+        # We need to create a device mesh anew
+        new_mesh = mesh.mesh.reshape(remainder, split)
+        new_device_mesh = DeviceMesh.from_group(
+            mesh.get_group(),
+            device_type=mesh.device_type,
+            mesh=new_mesh,
+            mesh_dim_names=[mesh.mesh_dim_names[0], "unit_replicate"],
+        )
         module._parameters[param] = torch.nn.Parameter(
-            distribute_tensor(meta, mesh, placements, src_data_rank=None),
+            distribute_tensor(meta, new_device_mesh, placements, src_data_rank=None),
             requires_grad=meta.requires_grad,
         )
 
