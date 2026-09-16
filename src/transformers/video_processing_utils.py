@@ -38,7 +38,7 @@ from .utils import (
     PROCESSOR_NAME,
     VIDEO_PROCESSOR_NAME,
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     copy_func,
     is_torch_available,
     is_torchcodec_available,
@@ -49,10 +49,12 @@ from .utils import (
 from .utils.hub import cached_file, hf_api
 from .utils.import_utils import requires
 from .video_utils import (
+    TORCHVISION_VIDEO_DECODING_ERROR,
     VideoInput,
     VideoMetadata,
     group_videos_by_shape,
     infer_channel_dimension_format,
+    is_torchvision_video_decoding_available,
     is_valid_video,
     load_video,
     make_batched_metadata,
@@ -74,78 +76,6 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-BASE_VIDEO_PROCESSOR_DOCSTRING = r"""
-    Args:
-        do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-            Whether to resize the video's (height, width) dimensions to the specified `size`. Can be overridden by the
-            `do_resize` parameter in the `preprocess` method.
-        size (`dict`, *optional*, defaults to `self.size`):
-            Size of the output video after resizing. Can be overridden by the `size` parameter in the `preprocess`
-            method.
-        size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
-            The size by which to make sure both the height and width can be divided.
-        default_to_square (`bool`, *optional*, defaults to `self.default_to_square`):
-            Whether to default to a square video when resizing, if size is an int.
-        resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-            Resampling filter to use if resizing the video. Only has an effect if `do_resize` is set to `True`. Can be
-            overridden by the `resample` parameter in the `preprocess` method.
-        do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
-            Whether to center crop the video to the specified `crop_size`. Can be overridden by `do_center_crop` in the
-            `preprocess` method.
-        crop_size (`dict[str, int]` *optional*, defaults to `self.crop_size`):
-            Size of the output video after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
-            method.
-        do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-            Whether to rescale the video by the specified scale `rescale_factor`. Can be overridden by the
-            `do_rescale` parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `self.rescale_factor`):
-            Scale factor to use if rescaling the video. Only has an effect if `do_rescale` is set to `True`. Can be
-            overridden by the `rescale_factor` parameter in the `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-            Whether to normalize the video. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
-            Mean to use if normalizing the video. This is a float or list of floats the length of the number of
-            channels in the video. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
-            overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
-            Standard deviation to use if normalizing the video. This is a float or list of floats the length of the
-            number of channels in the video. Can be overridden by the `image_std` parameter in the `preprocess` method.
-            Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_convert_rgb (`bool`, *optional*, defaults to `self.image_std`):
-            Whether to convert the video to RGB.
-        video_metadata (`VideoMetadata`, *optional*):
-            Metadata of the video containing information about total duration, fps and total number of frames.
-        do_sample_frames (`int`, *optional*, defaults to `self.do_sample_frames`):
-            Whether to sample frames from the video before processing or to process the whole video.
-        num_frames (`int`, *optional*, defaults to `self.num_frames`):
-            Maximum number of frames to sample when `do_sample_frames=True`.
-        fps (`int` or `float`, *optional*, defaults to `self.fps`):
-            Target frames to sample per second when `do_sample_frames=True`.
-        return_tensors (`str` or `TensorType`, *optional*):
-            Returns stacked tensors if set to `pt, otherwise returns a list of tensors.
-        data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-            The channel dimension format for the output video. Can be one of:
-            - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_channels, height, width) format.
-            - `"channels_last"` or `ChannelDimension.LAST`: video in (height, width, num_channels) format.
-            - Unset: Use the channel dimension format of the input video.
-        input_data_format (`ChannelDimension` or `str`, *optional*):
-            The channel dimension format for the input video. If unset, the channel dimension format is inferred
-            from the input video. Can be one of:
-            - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_channels, height, width) format.
-            - `"channels_last"` or `ChannelDimension.LAST`: video in (height, width, num_channels) format.
-            - `"none"` or `ChannelDimension.NONE`: video in (height, width) format.
-        device (`torch.device`, *optional*):
-            The device to process the videos on. If unset, the device is inferred from the input videos.
-        return_metadata (`bool`, *optional*):
-            Whether to return video metadata or not.
-        """
-
-
-@add_start_docstrings(
-    "Constructs a base VideoProcessor.",
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-)
 @requires(backends=("vision", "torchvision"))
 class BaseVideoProcessor(TorchvisionBackend):
     _auto_class = None
@@ -194,7 +124,7 @@ class BaseVideoProcessor(TorchvisionBackend):
 
         video = tvF.grayscale_to_rgb(video)
         if video.shape[-3] == 3 or not (video[..., 3, :, :] < 255).any():
-            return video
+            return video[..., :3, :, :]
 
         # There is a transparency layer, blend it with a white background.
         # Calculate the alpha proportion for blending.
@@ -211,7 +141,7 @@ class BaseVideoProcessor(TorchvisionBackend):
     ):
         """
         Default sampling function which uniformly samples the desired number of frames between 0 and total number of frames.
-        If `fps` is passed along with metadata, `fps` frames per second are sampled uniformty. Arguments `num_frames`
+        If `fps` is passed along with metadata, `fps` frames per second are sampled uniformly. Arguments `num_frames`
         and `fps` are mutually exclusive.
 
         Args:
@@ -324,9 +254,7 @@ class BaseVideoProcessor(TorchvisionBackend):
             processed_videos.append(video)
         return processed_videos
 
-    @add_start_docstrings(
-        BASE_VIDEO_PROCESSOR_DOCSTRING,
-    )
+    @auto_docstring
     def preprocess(
         self,
         videos: VideoInput,
@@ -662,7 +590,7 @@ class BaseVideoProcessor(TorchvisionBackend):
 
         # Load video_processor dict. Priority goes as (nested config if found -> video processor config -> image processor config)
         # We are downloading both configs because almost all models have a `processor_config.json` but
-        # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
+        # not all of these are nested. We need to check if it was saved recently as nested or if it is legacy style
         video_processor_dict = None
         if resolved_processor_file is not None:
             processor_dict = safe_load_json_file(resolved_processor_file)
@@ -826,6 +754,12 @@ class BaseVideoProcessor(TorchvisionBackend):
         """
         backend = "torchcodec"
         if not is_torchcodec_available():
+            # `torchvision` is only a valid fallback while it still ships the (now removed) video decoding API.
+            if not is_torchvision_video_decoding_available():
+                raise ImportError(
+                    "`torchcodec` is not installed and cannot be used to decode the video by default. "
+                    f"{TORCHVISION_VIDEO_DECODING_ERROR}"
+                )
             warnings.warn(
                 "`torchcodec` is not installed and cannot be used to decode the video by default. "
                 "Falling back to `torchvision`. Note that `torchvision` decoding is deprecated and will be removed in future versions. "

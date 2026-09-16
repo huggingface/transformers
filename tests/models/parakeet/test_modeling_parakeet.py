@@ -633,7 +633,6 @@ class ParakeetForTDTModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_attention_outputs = False
     test_resize_embeddings = False
-    test_torch_exportable = False
     _is_composite = True
 
     @unittest.skip(reason="No available flash-SDPA kernels for Parakeet test shapes on this setup")
@@ -955,7 +954,6 @@ class ParakeetForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_attention_outputs = False
     test_resize_embeddings = False
-    test_torch_exportable = False
     _is_composite = True
 
     @unittest.skip(reason="No available flash-SDPA kernels for Parakeet test shapes on this setup")

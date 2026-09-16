@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import Cache, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import Expectations, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -56,22 +56,6 @@ class MiniCPM3ModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = MiniCPM3ForCausalLM if is_torch_available() else None
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        """Needs to be overridden as MiniCPM3 has a special MLA cache format inherited from DeepSeek-V2."""
-        self.assertIsInstance(past_key_values, Cache)
-
-        expected_common_shape = (
-            batch_size,
-            getattr(config, "num_key_value_heads", config.num_attention_heads),
-            seq_length,
-        )
-        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
-        expected_value_shape = expected_common_shape + (config.v_head_dim,)
-
-        for layer in past_key_values.layers:
-            self.assertEqual(layer.keys.shape, expected_key_shape)
-            self.assertEqual(layer.values.shape, expected_value_shape)
-
     def test_tp_plan_matches_params(self):
         """Need to overwrite as the plan contains keys that are valid but depend on some configs flags and cannot
         be valid all at the same time"""
@@ -106,6 +90,7 @@ class MiniCPM3IntegrationTest(unittest.TestCase):
             {
                 ("cuda", 8): [0.765625, 3.640625, -0.189453125, -0.8359375, -0.8359375],
                 ("cuda", (8, 6)): [0.7344, 3.6562, -0.1060, -0.8633, -0.8633],
+                ("xpu", 5): [0.9453, 3.7188, -0.2832, -0.6367, -0.6367],
             }
         )  # fmt: skip
         expected = expected_slices.get_expectation()
@@ -121,6 +106,7 @@ class MiniCPM3IntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", 8): "My favourite condiment is \n[A]. ketchup \n[B]. mustard \n[C]. mayonnaise \n[D]. must",
+                ("xpu", 5): "My favourite condiment is \n[A]. ketchup \n[B]. mustard \n[C]. mayonnaise \n[D]. must",
             }
         )  # fmt: skip
         expected_text = expected_texts.get_expectation()

@@ -22,7 +22,7 @@ Video classification is the task of assigning a label or class to an entire vide
 
 This guide will show you how to:
 
-1. Fine-tune [VideoMAE](https://huggingface.co/docs/transformers/main/en/model_doc/videomae) on a subset of the [UCF101](https://www.crcv.ucf.edu/data/UCF101.php) dataset.
+1. Fine-tune [VideoMAE](../model_doc/videomae) on a subset of the [UCF101](https://www.crcv.ucf.edu/data/UCF101.php) dataset.
 2. Use your fine-tuned model for inference.
 
 <Tip>
@@ -359,7 +359,7 @@ You can access the `num_videos` argument to know the number of videos in the dat
 
 ## Train the model
 
-Leverage [`Trainer`](https://huggingface.co/docs/transformers/main_classes/trainer) from  🤗 Transformers for training the model. To instantiate a `Trainer`, you need to define the training configuration and an evaluation metric. The most important is the [`TrainingArguments`](https://huggingface.co/transformers/main_classes/trainer.html#transformers.TrainingArguments), which is a class that contains all the attributes to configure the training. It requires an output folder name, which will be used to save the checkpoints of the model. It also helps sync all the information in the model repository on 🤗 Hub.
+Leverage [`Trainer`] from  🤗 Transformers for training the model. To instantiate a `Trainer`, you need to define the training configuration and an evaluation metric. The most important is the [`TrainingArguments`], which is a class that contains all the attributes to configure the training. It requires an output folder name, which will be used to save the checkpoints of the model. It also helps sync all the information in the model repository on 🤗 Hub.
 
 Most of the training arguments are self-explanatory, but one that is quite important here is `remove_unused_columns=False`. This one will drop any features not used by the model's call function. By default it's `True` because usually it's ideal to drop unused feature columns, making it easier to unpack inputs into the model's call function. But, in this case, you need the unused features ('video' in particular) in order to create `pixel_values` (which is a mandatory key our model expects in its inputs).
 
@@ -460,7 +460,7 @@ Load a video for inference:
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sample_gif_two.gif" alt="Teams playing basketball"/>
 </div>
 
-The simplest way to try out your fine-tuned model for inference is to use it in a [`pipeline`](https://huggingface.co/docs/transformers/main/en/main_classes/pipelines#transformers.VideoClassificationPipeline). Instantiate a `pipeline` for video classification with your model, and pass your video to it:
+The simplest way to try out your fine-tuned model for inference is to use it in a [`VideoClassificationPipeline`]. Instantiate a `pipeline` for video classification with your model, and pass your video to it:
 
 ```py
 >>> from transformers import pipeline
@@ -480,7 +480,7 @@ You can also manually replicate the results of the `pipeline` if you'd like.
 ```py
 >>> def run_inference(model, video):
 ...     # (num_frames, num_channels, height, width)
-...     perumuted_sample_test_video = video.permute(1, 0, 2, 3)
+...     permuted_sample_test_video = video.permute(1, 0, 2, 3)
 ...     inputs = {
 ...         "pixel_values": perumuted_sample_test_video.unsqueeze(0),
 ...         "labels": torch.tensor(

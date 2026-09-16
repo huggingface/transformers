@@ -229,7 +229,7 @@ class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     skip_test_image_features_output_shape = True
 
     _is_composite = True
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent multimodal placeholder mask
 
     def setUp(self):
         self.model_tester = LightOnOcrVisionText2TextModelTester(self)
@@ -432,6 +432,10 @@ class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             # Concatenate features and check shape
             image_features = torch.cat(image_features_list, dim=0)
             self.assertEqual(image_features.shape[-1], config.text_config.hidden_size)
+
+    @unittest.skip("Pixtral backbone already overrides this test, no need to test again.")
+    def test_vision_axial_rope(self):
+        pass
 
 
 @slow

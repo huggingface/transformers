@@ -192,11 +192,11 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
                     f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
                 )
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         num_soft_tokens = image_inputs["num_soft_tokens_per_image"][image_idx]
         return f"{self.boi_token}{self.image_token * num_soft_tokens}{self.eoi_token}"
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         num_soft_tokens = video_inputs["num_soft_tokens_per_video"][video_idx]
         metadata = video_inputs["video_metadata"][video_idx]
 
@@ -215,7 +215,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
         )
         return video_replacement
 
-    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         """Replace the audio placeholder with the correct number of audio tokens.
 
         Unlike standard Gemma4 which has a conformer audio encoder with two stride-2

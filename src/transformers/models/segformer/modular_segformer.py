@@ -522,7 +522,7 @@ class SegformerPreTrainedModel(ViTPreTrainedModel):
     }
 
     def _init_weights(self, module):
-        raise NotImplementedError("No need to override this method")
+        raise AttributeError("No need to override this method")
 
 
 @auto_docstring
@@ -718,7 +718,7 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, SegformerForSemanticSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> image_processor = AutoImageProcessor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")

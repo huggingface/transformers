@@ -162,7 +162,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"transformer\.decoder\.layers\.(\d+)\.norm3\.":                       r"detr_decoder.layers.\1.mlp_layer_norm.",
 
     # ===========================================================================
-    # ot Product Scoring
+    # dot Product Scoring
     # ===========================================================================
     r"dot_prod_scoring\.prompt_mlp\.layers\.0\.":                          r"dot_product_scoring.text_mlp.layer1.",
     r"dot_prod_scoring\.prompt_mlp\.layers\.1\.":                          r"dot_product_scoring.text_mlp.layer2.",

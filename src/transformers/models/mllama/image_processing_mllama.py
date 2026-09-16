@@ -260,7 +260,7 @@ def pad_batches_and_tiles(
             a batch sample containing multiple images, where each image is pre-split into tiles.
             The shape of each tile array is (num_tiles, channels, tile_height, tile_width).
         max_image_tiles (int):
-            The maximum number of tiles any image was potantially split.
+            The maximum number of tiles any image was potentially split.
 
     Returns:
         `Tuple[torch.Tensor, List[List[int]]]`: A tuple containing:

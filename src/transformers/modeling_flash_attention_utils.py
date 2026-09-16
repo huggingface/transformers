@@ -28,6 +28,7 @@ from .utils import (
     is_rocm_platform,
     is_torch_cuda_available,
     is_torch_mlu_available,
+    is_torch_musa_available,
     is_torch_npu_available,
     is_torch_xpu_available,
     logging,
@@ -86,6 +87,7 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
         "supported_devices": (
             (is_torch_cuda_available, "cuda"),
             (is_torch_mlu_available, "mlu"),
+            (is_torch_musa_available, "musa"),
             (is_torch_npu_available, "npu"),
             (is_torch_xpu_available, "xpu"),
         ),
@@ -194,11 +196,11 @@ def _lazy_imports(
             flash_attn_func = getattr(kernel, "flash_attn_func", None)
             flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
             flash_attn_with_kvcache = getattr(kernel, "flash_attn_with_kvcache", None)
-            # Block-sparse kernels (e.g. ``kernels-staging/msa``) expose ``sparse_atten_func`` rather than
-            # ``flash_attn_varlen_func``. ``load_and_register_attn_kernel`` already registered their dedicated
-            # wrapper into ``ALL_ATTENTION_FUNCTIONS``, so they dispatch through the attention interface and
-            # never touch the flash varlen globals -- preloading them here is a no-op, not an error.
-            if flash_attn_varlen_func is None and hasattr(kernel, "sparse_atten_func"):
+            # Some kernels ship their own attention entry point rather than a varlen function, already
+            # registered into ``ALL_ATTENTION_FUNCTIONS``, so preloading them here is a no-op.
+            if flash_attn_varlen_func is None and (
+                hasattr(kernel, "sparse_atten_func") or hasattr(kernel, "flash_attn_forward")
+            ):
                 return flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache, pad_input, unpad_input
             if flash_attn_varlen_func is None:
                 raise ValueError(
@@ -316,7 +318,8 @@ def _unpad_input(hidden_states, attention_mask, unused_mask=None):
     seqlens_in_batch = all_masks.sum(dim=-1, dtype=torch.int32)
     used_seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(all_masks.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max()
+    # using .item() here is required to prevent a performance regression (#46693)
+    max_seqlen_in_batch = seqlens_in_batch.max().item()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
 
     return (
@@ -365,7 +368,8 @@ def _get_unpad_data(attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.T
     """
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max()
+    # using .item() here is required to prevent a performance regression (#46693)
+    max_seqlen_in_batch = seqlens_in_batch.max().item()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
     return (
         indices,
@@ -472,7 +476,9 @@ def prepare_fa_kwargs_from_position_ids(position_ids):
     tensor_kwargs = {"dtype": torch.int32, "device": position_ids.device}
 
     position_ids = position_ids.reshape(-1)
-    indices_q = (position_ids == 0).nonzero().view(-1)
+    # Packed sequences all restart from the same first position id, but it is not always 0
+    # (RoBERTa-like models start at padding_idx + 1)
+    indices_q = (position_ids == position_ids.min()).nonzero().view(-1)
 
     cu_seq_lens_q = torch.cat(
         (

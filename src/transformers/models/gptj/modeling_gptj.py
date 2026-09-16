@@ -101,8 +101,8 @@ class GPTJAttention(nn.Module):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.rotary_dim = config.rotary_dim
         self.pos_embd_dim = self.rotary_dim or self.embed_dim
-        self.register_buffer(
-            "embed_positions", create_sinusoidal_positions(self.max_positions, self.pos_embd_dim), persistent=False
+        self.embed_positions = nn.Buffer(
+            create_sinusoidal_positions(self.max_positions, self.pos_embd_dim), persistent=False
         )
 
     def _split_heads(self, tensor, num_attention_heads, attn_head_size, rotary):
@@ -284,7 +284,7 @@ class GPTJFlashAttention2(GPTJAttention):
             key = apply_rotary_pos_emb(key, sin, cos)
             query = apply_rotary_pos_emb(query, sin, cos)
 
-        # tanspose to have the desired shape
+        # transpose to have the desired shape
         # before transpose: batch_size x seq_length x num_attention_heads x head_dim
         # after transpose: batch_size x num_attention_heads x seq_length x head_dim
         key = key.permute(0, 2, 1, 3)

@@ -279,6 +279,8 @@ class Cohere2MoeModel(Cohere2Model):
 
 
 class Cohere2MoeForCausalLM(Cohere2ForCausalLM):
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

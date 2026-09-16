@@ -18,9 +18,9 @@ from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available
 
 from ...test_image_processing_common import (
+    ImageProcessingTester,
     ImageProcessingTestMixin,
     PostProcessSemanticSegmentationTestMixin,
-    prepare_image_inputs,
 )
 
 
@@ -28,7 +28,6 @@ if is_torch_available():
     import torch
 
     from transformers import Sapiens2ImageProcessor
-    from transformers.modeling_outputs import SemanticSegmenterOutput
     from transformers.models.sapiens2.modeling_sapiens2 import (
         Sapiens2ImageMattingOutput,
         Sapiens2NormalEstimatorOutput,
@@ -36,7 +35,7 @@ if is_torch_available():
     )
 
 
-class Sapiens2ImageProcessingTester:
+class Sapiens2ImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -78,33 +77,6 @@ class Sapiens2ImageProcessingTester:
             "image_std": self.image_std,
             "do_reduce_labels": self.do_reduce_labels,
         }
-
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
-    def prepare_post_process_semantic_segmentation_inputs(self):
-        inputs = {
-            "outputs": SemanticSegmenterOutput(
-                logits=torch.randn(self.batch_size, self.num_labels, self.size["height"], self.size["width"])
-            )
-        }
-        expected_shape = {
-            "num_labels": self.num_labels,
-            "height": self.size["height"],
-            "width": self.size["width"],
-        }
-        return inputs, expected_shape
 
 
 @require_torch

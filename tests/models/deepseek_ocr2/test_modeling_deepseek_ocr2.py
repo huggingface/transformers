@@ -116,7 +116,6 @@ class DeepseekOcr2VisionText2TextModelTester(VLMModelTester):
 class DeepseekOcr2ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = DeepseekOcr2VisionText2TextModelTester
     test_all_params_have_gradient = False
-    test_torch_exportable = False
 
     @unittest.skip(
         reason="DeepseekOcr2VisionModel builds a hybrid bidirectional+causal mask internally, so SDPA is always called with a non-null `attn_mask`."
@@ -201,7 +200,7 @@ class DeepseekOcr2IntegrationTest(unittest.TestCase):
         decoded = self.processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=False)
         EXPECTED_DECODED_TEXT = Expectations(
             {
-                ("cuda", None): "<|ref|>title<|/ref|><|det|>[[330, 198, 559, 230]]<|/det|>\n# R",
+                ("cuda", None): "<|ref|>title<|/ref|><|det|>[[330, 198, 558, 230]]<|/det|>\n# R",
                 ("xpu", 5): "<|ref|>title<|/ref|><|det|>[[330, 198, 558, 230]]<|/det|>\n# R",
             }
         ).get_expectation()  # fmt: skip

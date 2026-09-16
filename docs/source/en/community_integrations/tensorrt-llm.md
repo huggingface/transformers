@@ -9,14 +9,14 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
 
 # TensorRT-LLM
 
-[TensorRT-LLM](https://github.com/NVIDIA/TensorRT-LLM) is optimizes LLM inference on NVIDIA GPUs. It compiles models into a TensorRT engine with in-flight batching, paged KV caching, and tensor parallelism. [AutoDeploy](https://nvidia.github.io/TensorRT-LLM/torch/auto_deploy/auto-deploy.html) accepts Transformers models without requiring any changes. It automatically converts the model to an optimized runtime.
+[TensorRT-LLM](https://github.com/NVIDIA/TensorRT-LLM) optimizes LLM inference on NVIDIA GPUs. It compiles models into a TensorRT engine with in-flight batching, paged KV caching, and tensor parallelism. [AutoDeploy](https://nvidia.github.io/TensorRT-LLM/torch/auto_deploy/auto-deploy.html) accepts Transformers models without requiring any changes. It automatically converts the model to an optimized runtime.
 
 Pass a model id from the Hub to [build_and_run_ad.py](https://github.com/NVIDIA/TensorRT-LLM/blob/main/examples/auto_deploy/build_and_run_ad.py) to run a Transformers model.
 

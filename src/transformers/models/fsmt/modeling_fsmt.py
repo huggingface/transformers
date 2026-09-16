@@ -27,7 +27,6 @@
 """PyTorch Fairseq model, ported from https://github.com/pytorch/fairseq/tree/master/examples/wmt19"""
 
 import math
-from typing import Any
 
 import torch
 from torch import Tensor, nn
@@ -221,19 +220,10 @@ class PretrainedFSMTModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, SinusoidalPositionalEmbedding):
+        super()._init_weights(module)
+        if isinstance(module, SinusoidalPositionalEmbedding):
             weight = module.get_embedding(*module.weight.shape, module.padding_idx)
             init.copy_(module.weight, weight)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
 
     @property
     def dummy_inputs(self):
@@ -584,11 +574,9 @@ class FSMTDecoder(nn.Module):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
         elif input_ids is not None:
-            # embed positions
-            positions = self.embed_positions(input_ids)
-            if use_cache:
-                input_ids = input_ids[:, -1:]
-                positions = positions[:, -1:]  # happens after we embed them
+            # Embed positions, accounting for the tokens already in the cache
+            past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+            positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
             x = self.embed_tokens(input_ids) * self.embed_scale
         elif inputs_embeds is not None:
             # We assume zeros hidden states correspond to padding tokens
@@ -798,7 +786,7 @@ class Attention(nn.Module):
 
 
 def fill_with_neg_inf(t):
-    """FP16-compatible function that fills a input_ids with -inf."""
+    """FP16-compatible function that fills an input_ids with -inf."""
     return t.float().fill_(torch.finfo(t.dtype).min).type_as(t)
 
 
@@ -1117,19 +1105,14 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         mask = tensor.ne(padding_idx).int()
         return (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
 
-    def forward(
-        self,
-        input,
-        incremental_state: Any | None = None,
-        timestep: Tensor | None = None,
-    ):
+    def forward(self, input, *, past_key_values_length: int = 0):
         """Input is expected to be of size [bsz x seqlen]."""
         bsz, seq_len = input.shape[:2]
-        max_pos = self.padding_idx + 1 + seq_len
+        max_pos = self.padding_idx + 1 + past_key_values_length + seq_len
         if max_pos > self.weight.size(0):
             # expand embeddings if needed
             self.make_weight(max_pos, self.embedding_dim, self.padding_idx)
-        positions = self.make_positions(input, self.padding_idx)
+        positions = self.make_positions(input, self.padding_idx) + past_key_values_length
         return super().forward(positions)
 
 

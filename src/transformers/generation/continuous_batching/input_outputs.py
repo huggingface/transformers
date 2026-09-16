@@ -311,7 +311,7 @@ class ContinuousBatchingIOs:
         # If logprobs are generated, we retrieve them from the output tensor and cast them to the right dtype
         if self.return_logprobs:
             logprobs = self.output_ids[1, : self.num_request_in_batch].view(dtype=torch.float32).tolist()
-        # Otherwise, we can return an empty list because they wont be used
+        # Otherwise, we can return an empty list because they won't be used
         else:
             logprobs = None
         return self.requests_in_batch, new_tokens, logprobs

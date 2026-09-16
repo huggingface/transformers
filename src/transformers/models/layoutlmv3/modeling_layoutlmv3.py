@@ -97,9 +97,7 @@ class LayoutLMv3TextEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
@@ -558,8 +556,8 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
             self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
             if self.config.has_relative_attention_bias or self.config.has_spatial_attention_bias:
-                self.register_buffer(
-                    "visual_bbox", self.create_visual_bbox(image_size=(self.size, self.size)), persistent=False
+                self.visual_bbox = nn.Buffer(
+                    self.create_visual_bbox(image_size=(self.size, self.size)), persistent=False
                 )
 
             self.norm = nn.LayerNorm(config.hidden_size, eps=1e-6)
