@@ -555,6 +555,9 @@ def fa_peft_integration_check(
     q: torch.Tensor,
     k: torch.Tensor,
     v: torch.Tensor,
+    q_mla: torch.Tensor | None = None,
+    k_mla: torch.Tensor | None = None,
+    v_mla: torch.Tensor | None = None,
     target_dtype: torch.dtype | None = None,
 ):
     """
@@ -563,10 +566,26 @@ def fa_peft_integration_check(
     cast them back in float16 / bfloat16 just to be sure everything works as expected.
     This might slowdown training & inference so it is recommended to not cast the LayerNorms!
     """
+    def set_optional_to_dtype(x):
+        return x if x is None else x.to(target_dtype)
+
     if target_dtype and q.dtype == torch.float32:
         logger.warning_once(f"Casting fp32 inputs back to {target_dtype} for flash-attn compatibility.")
         q, k, v = q.to(target_dtype), k.to(target_dtype), v.to(target_dtype)
-    return q, k, v
+        q_mla, k_mla, v_mla = set_optional_to_dtype(q_mla), set_optional_to_dtype(k_mla), set_optional_to_dtype(v_mla)
+    return q, k, v, q_mla, k_mla, v_mla
+
+
+def prepare_mla(q_mla, k_mla):
+    if q_mla is None or k_mla is None:
+        return None
+    return torch.matmul(q_mla, k_mla).transpose(1, 2)
+
+
+def post_mla(out, v_mla):
+    if v_mla is None:
+        return out
+    return torch.matmul(out.transpose(1, 2), v_mla.transpose(-1, -2)).transpose(1, 2)
 
 
 class FlashAttentionKwargs(TypedDict, total=False):
@@ -603,6 +622,7 @@ def _process_flash_attention_kwargs(
     s_aux: torch.Tensor | None = None,
     max_seqlen_q: int | torch.IntTensor | None = None,
     max_seqlen_k: int | torch.IntTensor | None = None,
+    qv: torch.Tensor | None = None,
     supports_mapping: dict[str, bool] | None = None,
     **kwargs,
 ):
@@ -637,6 +657,8 @@ def _process_flash_attention_kwargs(
             The maximum sequence length in the query tensor during a varlen forward.
         max_seqlen_k (`Union[int, torch.IntTensor]`, *optional*):
             The maximum sequence length in the key/value tensor during a varlen forward.
+        qv (`torch.Tensor`, *optional*):
+            TODO
     Return:
         flash_kwargs (`dict`):
             A dict of kwargs that are requested and supported.
@@ -669,6 +691,9 @@ def _process_flash_attention_kwargs(
             flash_kwargs["s_aux"] = s_aux  # e.g. FA3 (vllm)
         else:
             flash_kwargs["learnable_sink"] = s_aux  # FA4
+
+    if supports_mapping["qv"] and qv is not None:
+        flash_kwargs["qv"] = qv
 
     # There is a limitation of the flash attention API, as the function `flash_attn_varlen_func`
     # may require `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
@@ -713,6 +738,9 @@ def _flash_attention_forward(
     max_length_k: int | None = None,
     target_dtype: torch.dtype | None = None,
     attn_implementation: str | None = None,
+    query_latent_states: torch.Tensor | None = None,
+    key_latent_states: torch.Tensor | None = None,
+    value_latent_states: torch.Tensor | None = None,
     **kwargs,
 ):
     """
@@ -739,9 +767,17 @@ def _flash_attention_forward(
     )
 
     # PEFT possibly silently casts tensors to fp32, this potentially reconverts to correct dtype or is a no op
-    query_states, key_states, value_states = fa_peft_integration_check(
-        query_states, key_states, value_states, target_dtype
+    query_states, key_states, value_states, query_latent_states, key_latent_states, value_latent_states = fa_peft_integration_check(
+        query_states,
+        key_states,
+        value_states,
+        q_mla=query_latent_states,
+        k_mla=key_latent_states,
+        v_mla=value_latent_states,
+        target_dtype=target_dtype,
     )
+
+    qv_latent = prepare_mla(query_latent_states, key_latent_states)
 
     # Extract the flash attention kwargs that have been requested (and are supported by the implementation)
     flash_kwargs = partial(
@@ -755,6 +791,7 @@ def _flash_attention_forward(
         use_top_left_mask=use_top_left_mask,
         softcap=softcap,
         deterministic=deterministic,
+        qv=qv_latent,
         **kwargs,
     )
 
@@ -770,6 +807,7 @@ def _flash_attention_forward(
         kwarg is not None for kwarg in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k)
     )
 
+    # TODO: fix varlen to include latent as well -> delay passing qv until the actual call
     # Contains at least one padding token in the sequence
     if attention_mask is not None:
         q, k, v, indices_q, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _upad_input(
@@ -828,5 +866,7 @@ def _flash_attention_forward(
         out = flash_fn(query_states, key_states, value_states, **flash_kwargs())
         if isinstance(out, tuple):
             out = out[0]
+
+    out = post_mla(out, value_latent_states)
 
     return out

@@ -29,7 +29,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_deepseek_v3 import DeepseekV3Config
 
@@ -417,9 +417,13 @@ class DeepseekV3Attention(nn.Module):
         self.scaling = yarn_apply_mscale(config.rope_parameters, self.qk_head_dim ** (-0.5))
 
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Expands the compressed latents into key and value states. Args:
+        """
+        Expands the compressed latents into key and value states.
+
+        Args:
             - kv_nope: key + value without positional encoding, shape [batch_size, 1, seqlen, self.kv_lora_rank]
             - k_rot: shared key with positional encoding, shape [batch_size, 1, seqlen, self.qk_rope_head_dim]
+
         Returns the key and value states, two tensors of shape [batch, num_heads, seq, (k or v)_head_dim].
         """
         batch_size, _, seq_length, _ = kv_nope.shape
@@ -434,6 +438,19 @@ class DeepseekV3Attention(nn.Module):
         key_states[..., : self.qk_nope_head_dim].copy_(k_nope)
         key_states[..., self.qk_nope_head_dim :].copy_(k_rot)
         return key_states, value_states
+
+    def prepare_kv_latent_states(self):
+        """TODO"""
+        kv_latents = self.kv_b_proj.weight.view(
+            -1,
+            self.qk_nope_head_dim + self.v_head_dim,
+            self.kv_lora_rank,
+        )
+
+        return kv_latents.split(
+            [self.qk_nope_head_dim, self.v_head_dim],
+            dim=1,
+        )
 
     def forward(
         self,
@@ -470,9 +487,15 @@ class DeepseekV3Attention(nn.Module):
         if past_key_values is not None:
             kv_nope, k_rot = past_key_values.update(kv_nope, k_rot, self.layer_idx)
 
-        query_states = torch.cat((q_pass, q_rot), dim=-1)
-
-        key_states, value_states = self.expand_kv(kv_nope, k_rot)
+        # Based on whether we absorb the latents directly, we either expand (non FA) or prepare all necessary latents (FA)
+        query_latent_states = q_pass
+        if is_flash_attention_requested(self.config):
+            query_states, key_states, value_states = q_rot, k_rot, kv_nope
+            key_latent_states, value_latent_states = self.prepare_kv_latent_states()
+        else:
+            query_states = torch.cat((q_pass, q_rot), dim=-1)
+            key_states, value_states = self.expand_kv(kv_nope, k_rot)
+            key_latent_states = value_latent_states = None
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -484,6 +507,9 @@ class DeepseekV3Attention(nn.Module):
             key_states,
             value_states,
             attention_mask,
+            query_latent_states=query_latent_states,
+            key_latent_states=key_latent_states,
+            value_latent_states=value_latent_states,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,

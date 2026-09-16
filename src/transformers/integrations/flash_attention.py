@@ -34,7 +34,11 @@ def flash_attention_forward(
     sliding_window: int | None = None,
     softcap: float | None = None,
     is_causal: bool | None = None,
-    s_aux: torch.Tensor | None = None,  # alias: learnable attention sink
+    s_aux: torch.Tensor | None = None,  # alias: learnable attention sin
+    # MLA based latents along the main input
+    query_latent_states: torch.Tensor | None = None,
+    key_latent_states: torch.Tensor | None = None,
+    value_latent_states: torch.Tensor | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     if kwargs.get("output_attentions", False):
@@ -52,16 +56,6 @@ def flash_attention_forward(
             "FlashAttention does not support inputs with dim=0.\n"
             "Please check your input shapes or use SDPA instead."
         )
-    # FA2 uses non-transposed inputs
-    query = query.transpose(1, 2)
-    key = key.transpose(1, 2)
-    value = value.transpose(1, 2)
-
-    # FlashAttention requires the query and value to share a head dim; pad `value` up to the
-    # query head dim (e.g. MLA, where `v_head_dim < qk_head_dim`) and crop the output below.
-    head_dim, v_head_dim = query.shape[-1], value.shape[-1]
-    if v_head_dim != head_dim:
-        value = torch.nn.functional.pad(value, [0, head_dim - v_head_dim])
 
     # In PEFT, usually we cast the layer norms in float32 for training stability reasons
     # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -69,6 +63,21 @@ def flash_attention_forward(
     # This might slowdown training & inference so it is recommended to not cast the LayerNorms
     # in fp32. (usually our RMSNorm modules handle it correctly)
     target_dtype = get_target_dtype(query, module)
+
+    # FA2 uses non-transposed inputs
+    query = query.transpose(1, 2)
+    key = key.transpose(1, 2)
+    value = value.transpose(1, 2)
+
+    # Optional MLA latents handling
+    # TODO: raise if any mixed state is received
+    is_mla = query_latent_states is not None and key_latent_states is not None and value_latent_states is not None
+
+    # FlashAttention requires the query and value to share a head dim; pad `value` up to the
+    # query head dim and crop the output below.
+    head_dim, v_head_dim = query.shape[-1], value.shape[-1]
+    if not is_mla and v_head_dim != head_dim:
+        value = torch.nn.functional.pad(value, [0, head_dim - v_head_dim])
 
     # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
     is_causal = is_causal if is_causal is not None else module.is_causal
@@ -93,10 +102,13 @@ def flash_attention_forward(
             if s_aux is not None
             else None
         ),
+        query_latent_states=query_latent_states,
+        key_latent_states=key_latent_states,
+        value_latent_states=value_latent_states,
         **kwargs,
     )
 
-    if v_head_dim != head_dim:
+    if not is_mla and v_head_dim != head_dim:
         attn_output = attn_output[..., :v_head_dim]
 
     return attn_output, None
