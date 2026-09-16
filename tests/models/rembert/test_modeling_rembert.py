@@ -199,30 +199,6 @@ class RemBertModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_decoder_causal_mask(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        model = RemBertModel(config)
-        model.to(torch_device)
-        model.eval()
-        input_ids_modified = input_ids.clone()
-        input_ids_modified[:, -1] = (input_ids_modified[:, -1] + 1) % config.vocab_size
-        res_orig = model(input_ids).last_hidden_state
-        res_mod = model(input_ids_modified).last_hidden_state
-        self.parent.assertTrue(
-            torch.allclose(res_orig[:, :-1], res_mod[:, :-1], atol=1e-4),
-            "Decoder model attended to future tokens!",
-        )
-
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -460,8 +436,18 @@ class RemBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         )
 
     def test_decoder_causal_mask(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_decoder_causal_mask(*config_and_inputs)
+        # Regression test for #48745
+        config, input_ids = self.model_tester.prepare_config_and_inputs_for_decoder()[:2]
+        model = RemBertModel(config).to(torch_device).eval()
+
+        input_ids_modified = input_ids.clone()
+        input_ids_modified[:, -1] = (input_ids_modified[:, -1] + 1) % config.vocab_size
+        res_orig = model(input_ids).last_hidden_state
+        res_mod = model(input_ids_modified).last_hidden_state
+        self.assertTrue(
+            torch.allclose(res_orig[:, :-1], res_mod[:, :-1], atol=1e-4),
+            "Decoder model attended to future tokens!",
+        )
 
     @slow
     def test_model_from_pretrained(self):
