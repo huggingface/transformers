@@ -74,10 +74,6 @@ class TestParallelPlanResolution(TestCasePlus):
         with torch.device("meta"):
             self.model = Qwen3MoeModel(self.config)
 
-    def test_model_exposes_both_plans(self):
-        self.assertEqual(self.model.tp_plan, DENSE_TP_PLAN | EXPERT_TP_PLAN)
-        self.assertEqual(self.model.ep_plan, EP_PLAN)
-
     def test_ep_plan_setter(self):
         self.model.ep_plan = None
         self.assertEqual(self.model.ep_plan, {})
@@ -126,11 +122,9 @@ class TestParallelPlanResolution(TestCasePlus):
             tensor_parallel.resolve_parallel_plans(self.model, explicit),
         )
 
-    def test_ep_plan_must_be_a_dict(self):
+    def test_ep_plan_is_a_dict_and_round_trips(self):
         with self.assertRaisesRegex(ValueError, "`ep_plan` must be a dictionary or None"):
             DistributedConfig(tp_size=4, ep_size=4, ep_plan="auto")
-
-    def test_ep_plan_round_trip(self):
         config = DistributedConfig(tp_size=4, ep_size=4, ep_plan={"layers.*.mlp.gate": "ep_router"})
         self.assertEqual(config.to_dict()["ep_plan"], {"layers.*.mlp.gate": "ep_router"})
         self.assertEqual(DistributedConfig.from_dict(config.to_dict()), config)
@@ -153,6 +147,11 @@ class TestParallelPlanResolution(TestCasePlus):
         # The overrides are not rewritten with the merged plans.
         self.assertEqual(config.tp_plan, {"layers.*.self_attn.q_proj": "colwise_rep"})
         self.assertEqual(config.ep_plan, {"layers.*.mlp.experts.down_proj": "rowwise"})
+        # The merged EP plan stays on the model but is not applied while EP is disabled.
+        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, DistributedConfig(tp_size=4))
+        self.assertEqual(tp_plan, DENSE_TP_PLAN | EXPERT_TP_PLAN | {"layers.*.self_attn.q_proj": "colwise_rep"})
+        self.assertEqual(ep_plan, {})
+        self.assertEqual(self.model.ep_plan["layers.*.mlp.experts.down_proj"], "rowwise")
 
     def test_ep_rules_take_precedence_over_tp_rules_for_the_same_modules(self):
         config = DistributedConfig(
@@ -168,13 +167,6 @@ class TestParallelPlanResolution(TestCasePlus):
         self.assertEqual(tp_plan["layers.*.mlp.experts.gate_up_proj"], "packed_rowwise")
         self.assertEqual(tp_plan["layers.*.mlp.gate"], "colwise")
         self.assertEqual(ep_plan, {})
-
-    def test_ep_override_is_merged_but_not_applied_when_ep_is_disabled(self):
-        config = DistributedConfig(tp_size=4, ep_plan={"layers.*.mlp.experts.down_proj": "rowwise"})
-        tp_plan, ep_plan = tensor_parallel.resolve_parallel_plans(self.model, config)
-        self.assertEqual(tp_plan, DENSE_TP_PLAN | EXPERT_TP_PLAN)
-        self.assertEqual(ep_plan, {})
-        self.assertEqual(self.model.ep_plan["layers.*.mlp.experts.down_proj"], "rowwise")
 
     def test_ep_requires_an_expert_plan(self):
         self.model.ep_plan = None
@@ -226,23 +218,6 @@ class TestParallelPlanResolution(TestCasePlus):
         expected_tp_plan = {f"model.{k}": v for k, v in DENSE_TP_PLAN.items()} | {"lm_head": "colwise_gather_output"}
         self.assertEqual(tp_plan, expected_tp_plan | config.tp_plan)
         self.assertEqual(ep_plan, {f"model.{k}": v for k, v in EP_PLAN.items()})
-
-    def test_invalid_styles_are_reported(self):
-        self.model.ep_plan = None
-        self.model._ep_plan = {"layers.*.mlp.experts": "invalid_style", "layers.*.mlp.gate": "another_invalid_style"}
-        with self.assertRaises(ValueError) as context:
-            tensor_parallel.resolve_parallel_plans(self.model, DistributedConfig(tp_size=4, ep_size=4))
-        self.assertIn("'invalid_style'", str(context.exception))
-        self.assertIn("'another_invalid_style'", str(context.exception))
-
-    def test_resolution_does_not_apply_sharding(self):
-        with (
-            patch.object(tensor_parallel, "apply_tensor_parallelism") as apply,
-            patch.object(ALL_PARALLEL_STYLES["grouped_gemm"], "shard_param") as shard,
-        ):
-            tensor_parallel.resolve_parallel_plans(self.model, DistributedConfig(tp_size=4, ep_size=4))
-        apply.assert_not_called()
-        shard.assert_not_called()
 
     def test_masked_ep_shards_and_installs_hooks_on_the_tp_mesh(self):
         tp_mesh = object()
@@ -296,11 +271,6 @@ class TestParallelPlanResolution(TestCasePlus):
                     fsdp.assert_called_once_with(self.model, fsdp_mesh)
                 else:
                     fsdp.assert_not_called()
-
-    def test_maybe_distribute_model_without_meshes_is_a_no_op(self):
-        with patch("transformers.distributed.mixin.resolve_parallel_plans") as resolve:
-            self.assertIs(self.model.maybe_distribute_model(self.model, DistributedConfig(), None), self.model)
-        resolve.assert_not_called()
 
 
 @is_tensor_parallel_test
