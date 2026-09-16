@@ -220,7 +220,7 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         max_attempts=3,
         description="Tiny floating-point non-determinism in earlier layers may cause top_k to select "
         "different proposal indices, which propagates to later outputs differing at scale ~1.0. "
-        "See PR #XXXX for more details.",
+        "See PR #48869 for more details.",
     )
     def test_save_load(self):
         super().test_save_load()
