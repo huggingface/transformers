@@ -165,8 +165,8 @@ class DynamicLayer(CacheLayerMixin):
 
     def reset(self) -> None:
         """Resets the cache values while preserving the objects."""
-        # The states are dropped instead of zeroed, as `update` grows them by concatenation: zeroing would leave the
-        # layer holding stale tokens for the next `update` to append to. This also skips the zeroing in `super`.
+        # Dropped rather than zeroed, as `update` grows them by concatenation. Clearing `is_initialized` first skips
+        # the zeroing in `super`, which is still called to reset the `cumulative_length` of the inheriting layers.
         self.keys = self.values = None
         self.is_initialized = False
         super().reset()
