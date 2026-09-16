@@ -83,7 +83,7 @@ model = AutoModelForCausalLM.from_pretrained(
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
     dtype=torch.bfloat16,
-    distributed_config=DistributedConfig(tp_size=16, enable_expert_parallel=True),
+    distributed_config=DistributedConfig(tp_size=16, ep_size=16),
 )
 ```
 
