@@ -563,17 +563,13 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         # the input-only tail is masked with the dtype minimum (finite, so score arithmetic stays NaN-free)
         self.assertTrue(bool((logits[..., 3:] == torch.finfo(logits.dtype).min).all()))
 
-        # loss-only calls keep the compact physical width; unmasked input-only labels raise an actionable error
+        # loss-only calls keep the compact physical width; input-only labels are masked with -100
         labels = torch.full_like(inputs_dict["input_ids"], -100)
         labels[:, -1] = 0
         with torch.no_grad():
             label_outputs = model(**inputs_dict, labels=labels)
         self.assertEqual(label_outputs.logits.shape[-1], 3)
         self.assertTrue(bool(torch.isfinite(label_outputs.loss)))
-        bad_labels = labels.clone()
-        bad_labels[0, -1] = config.image_token_id  # a valid input-only id beyond the pruned head
-        with self.assertRaisesRegex(ValueError, "masked with -100"):
-            model(**inputs_dict, labels=bad_labels)
 
         prompt = inputs_dict["input_ids"][:2]
         model_inputs = {
@@ -736,19 +732,21 @@ class Apertus1p5TextModelTest(CausalLMModelTest, unittest.TestCase):
                 generated = model.generate(input_ids, max_new_tokens=5, **generate_kwargs)
                 self.assertLess(int(generated[:, 7:].max()), 40)
 
-    def test_pruned_head_label_validation(self):
-        """Unmasked input-only ids in `labels` raise an actionable error instead of a bare CE index error."""
+    def test_pruned_head_masked_label_loss(self):
+        """Masked input-only tokens do not contribute to the causal loss over the physical head."""
         model = Apertus1p5TextForCausalLM(self._tiny_config(output_vocab_size=40)).to(torch_device).eval()
         input_ids = ids_tensor([1, 5], 40)
+        input_ids[0, 2] = 60  # a valid input id beyond the pruned head
         labels = input_ids.clone()
-        labels[0, 2] = 60  # a valid input id beyond the pruned head
-        with self.assertRaisesRegex(ValueError, "masked with -100"):
-            model(input_ids=input_ids, labels=labels)
-        labels[0, 2] = -1
-        with self.assertRaisesRegex(ValueError, "must be -100"):
-            model(input_ids=input_ids, labels=labels)
         labels[0, 2] = -100
-        self.assertTrue(bool(torch.isfinite(model(input_ids=input_ids, labels=labels).loss)))
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids, labels=labels)
+        self.assertEqual(outputs.logits.shape[-1], 40)
+        self.assertTrue(bool(torch.isfinite(outputs.loss)))
+        expected_loss = torch.nn.functional.cross_entropy(
+            outputs.logits[:, :-1].float().reshape(-1, 40), labels[:, 1:].reshape(-1), ignore_index=-100
+        )
+        torch.testing.assert_close(outputs.loss, expected_loss)
 
     def test_config_return_dict_false(self):
         config = self._tiny_config()
