@@ -814,6 +814,8 @@ class MobileViTV2DeepLabV3(nn.Module):
     """
 )
 class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
+    _can_record_outputs = {"hidden_states": OutputRecorder(MobileViTV2Layer, capture_initial_hidden_state=False)}
+
     def __init__(self, config: MobileViTV2Config) -> None:
         super().__init__(config)
 
@@ -825,6 +827,7 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -864,6 +867,7 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
+        kwargs["output_hidden_states"] = True
         outputs = self.mobilevitv2(pixel_values, **kwargs)
 
         encoder_hidden_states = outputs.hidden_states
