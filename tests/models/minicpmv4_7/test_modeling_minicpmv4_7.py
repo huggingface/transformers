@@ -358,6 +358,91 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
                 list(self_attentions[0].shape[-3:]), [config.text_config.num_attention_heads, seq_len, seq_len]
             )
 
+    # Canvas M-RoPE. `get_rope_index` is cheap and pure, so it is covered here with the same tiny
+    # model the rest of the suite uses. Token 100 is the visual placeholder; 10/11 wrap an image,
+    # 12/13 wrap a slice. `target_sizes_mrope` carries one `(h, w)` patch grid per visual crop --
+    # images, slices and video frames all go through this single list.
+    def _mrope_model(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.image_start_id = 10
+        config.image_end_id = 11
+        config.slice_start_id = 12
+        config.slice_end_id = 13
+        config.newline_id = 14
+        return self.model_tester.base_model_class(config).to(torch_device).eval()
+
+    def _get_rope_index(self, input_ids, grids=None):
+        model = self._mrope_model()
+        input_ids = torch.tensor(input_ids, device=torch_device)
+        attention_mask = torch.ones_like(input_ids)
+        grids = None if grids is None else [torch.tensor(grids, dtype=torch.int32, device=torch_device)]
+        return model.get_rope_index(input_ids, attention_mask=attention_mask, target_sizes_mrope=grids)
+
+    def test_get_rope_index_text_only_matches_1d(self):
+        """With no visual crop the canvas has to collapse back to plain 1-D positions."""
+        position_ids, rope_deltas = self._get_rope_index([[1, 2, 3, 4, 5, 6]])
+
+        self.assertEqual(tuple(position_ids.shape), (3, 1, 6))
+        expected = torch.arange(6, device=torch_device).expand(3, 1, 6)
+        self.assertTrue(torch.equal(position_ids, expected))
+        self.assertTrue(torch.equal(rope_deltas, torch.zeros(1, 1, dtype=torch.long, device=torch_device)))
+
+    def test_get_rope_index_image_lays_out_canvas(self):
+        """A single 2x2 image: time is frozen over the span while H/W walk the patch grid."""
+        # [bos, im_start, 4 visual patches, im_end, eos]
+        position_ids, rope_deltas = self._get_rope_index([[1, 10, 100, 100, 100, 100, 11, 2]], grids=[[2, 2]])
+
+        self.assertEqual(tuple(position_ids.shape), (3, 1, 8))
+        temporal, height, width = position_ids[:, 0]
+        self.assertEqual(temporal[2:6].unique().numel(), 1)
+        self.assertEqual(height[2:6].tolist(), [1, 1, 2, 2])
+        self.assertEqual(width[2:6].tolist(), [1, 2, 1, 2])
+        # Text after the image restarts one step past the whole canvas, on every channel.
+        self.assertEqual(position_ids[:, 0, -1].tolist(), [4, 4, 4])
+        # rope_deltas is the usual `max_position + 1 - real_length`.
+        self.assertTrue(torch.equal(rope_deltas, torch.tensor([[-3]], device=torch_device)))
+
+    def test_get_rope_index_slice_shares_image_timestep(self):
+        """Slices belong to the same picture, so they reuse its timestep and restart H/W."""
+        # [bos, im_start, 4 patches, im_end, slice_start, 4 patches, slice_end, eos]
+        input_ids = [[1, 10, 100, 100, 100, 100, 11, 12, 100, 100, 100, 100, 13, 2]]
+        sliced, _ = self._get_rope_index(input_ids, grids=[[2, 2], [2, 2]])
+        unsliced, _ = self._get_rope_index([[1, 10, 100, 100, 100, 100, 11, 2]], grids=[[2, 2]])
+
+        self.assertEqual(tuple(sliced.shape), (3, 1, 14))
+        temporal, height, width = sliced[:, 0]
+        self.assertEqual(temporal[1:13].unique().numel(), 1)
+        # The slice re-uses the very same canvas coordinates as the global view.
+        self.assertEqual(height[8:12].tolist(), unsliced[1, 0, 2:6].tolist())
+        self.assertEqual(width[8:12].tolist(), unsliced[2, 0, 2:6].tolist())
+
+    def test_get_rope_index_separate_images_advance_time(self):
+        """Two crops in their own im_start/im_end spans are different timesteps, unlike slices."""
+        input_ids = [[1, 10, 100, 100, 100, 100, 11, 10, 100, 100, 100, 100, 11, 2]]
+        position_ids, _ = self._get_rope_index(input_ids, grids=[[2, 2], [2, 2]])
+
+        temporal = position_ids[0, 0]
+        self.assertEqual(temporal[2:6].unique().numel(), 1)
+        self.assertEqual(temporal[8:12].unique().numel(), 1)
+        self.assertLess(int(temporal[2]), int(temporal[8]))
+
+    def test_get_rope_index_left_padding_matches_unpadded(self):
+        """Left padding must shift nothing: the canvas is built on the unpadded tokens."""
+        model = self._mrope_model()
+        grids = [torch.tensor([[2, 2]], dtype=torch.int32, device=torch_device)]
+
+        unpadded = torch.tensor([[1, 10, 100, 100, 100, 100, 11, 2]], device=torch_device)
+        baseline, _ = model.get_rope_index(
+            unpadded, attention_mask=torch.ones_like(unpadded), target_sizes_mrope=grids
+        )
+
+        padded = torch.tensor([[0, 0, 1, 10, 100, 100, 100, 100, 11, 2]], device=torch_device)
+        padded_mask = torch.tensor([[0, 0, 1, 1, 1, 1, 1, 1, 1, 1]], device=torch_device)
+        padded_positions, _ = model.get_rope_index(padded, attention_mask=padded_mask, target_sizes_mrope=grids)
+
+        self.assertTrue(torch.equal(padded_positions[:, 0, 2:], baseline[:, 0]))
+        self.assertTrue(torch.equal(padded_positions[:, 0, :2], torch.zeros(3, 2, dtype=torch.long)))
+
 
 @require_torch
 class MiniCPMV4_7ViTWindowAttentionMergerTest(unittest.TestCase):
