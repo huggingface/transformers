@@ -255,9 +255,25 @@ class UnitColwiseParallel(TensorParallelLayer):
           Rank: |  0 |  1 |  2 |  3 |
     This gives: |h0h1|h2h3|h4h5|h4h5|
     And we "ignore" the results from rank 2,3.
+
+    1. Update the rank's expected shape.
+    2. Prepare the slices appropriately when sharding the param.
+
+    We need to have [Shard(0), Replicate()] .
     """
 
-    pass
+    def shard_param(self, module, param, mesh):
+        meta = module._parameters.get(param)
+        if meta is None:
+            return
+        placements = [Shard(meta.ndim - 2), Replicate()]
+        remainder = meta.shape[meta.ndim - 2] % mesh.world_size
+        split = meta.shape[meta.ndim - 2] // remainder
+        mesh = mesh.reshape(remainder, split)
+        module._parameters[param] = torch.nn.Parameter(
+            distribute_tensor(meta, mesh, placements, src_data_rank=None),
+            requires_grad=meta.requires_grad,
+        )
 
 
 class RowwiseParallel(TensorParallelLayer):
