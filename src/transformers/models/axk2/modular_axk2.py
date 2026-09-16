@@ -351,10 +351,6 @@ class AXK2Attention(DeepseekV32Attention):
 
         key_states, value_states = self.expand_kv(k_pass, k_rot)
 
-        # Sparse-attention models cache the expanded K/V, not the compressed latents
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
         # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
         topk_indices = self.indexer(
             hidden_states,
