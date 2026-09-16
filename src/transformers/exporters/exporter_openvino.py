@@ -900,8 +900,12 @@ def _fix_scatter_reduce(gm, node):
 
     Handles two patterns the MoE/SSM models use:
       * ``reduce="sum", include_self=True`` → ``aten.scatter_add`` (BLT/JetMoe/NemotronH router).
-      * ``reduce="amax", include_self=False`` → masked-max over a one-hot expansion of ``index``
-        (BLT byte-pooling). Other combinations fall through to the generic OpConversionFailure.
+      * ``reduce="amax"/"amin", include_self=False`` → masked extremum over a one-hot expansion of
+        ``index`` (BLT byte-pooling, tapas segment reduction).
+      * ``reduce="sum"/"mean", include_self=False`` → ``scatter_add`` onto zeros, divided by a
+        scattered count for the mean (tapas segment reductions).
+
+    Other combinations fall through to the generic OpConversionFailure.
     """
     if node.target is not torch.ops.aten.scatter_reduce.two:
         return False
@@ -919,12 +923,44 @@ def _fix_scatter_reduce(gm, node):
         gm.graph.erase_node(node)
         return True
 
-    if reduce == "amax" and include_self is False:
-        # ``amax`` with ``include_self=False``: each source element competes for the max at
-        # ``index[j]``; positions no source scatters to keep ``self``'s original value. Decompose to
-        # a broadcast comparison + amax: build a one-hot mask ``(index.unsqueeze(dim) == arange(K))``,
-        # take the elementwise max of ``src`` where the mask is set (``-inf`` elsewhere), then fall
-        # back to ``self`` for positions with no scatter.
+    if reduce in ("sum", "mean") and include_self is False:
+        # ``include_self=False``: a position that receives at least one source element reduces over
+        # *only* those elements, while a position nothing scatters to keeps ``self``. Scattering onto
+        # zeros gives the former, and scattering ones alongside counts the contributors — which both
+        # divides the mean and says which positions were touched at all.
+        self_val = self_arg.meta.get("val")
+        src_val = src.meta.get("val")
+        if self_val is None or src_val is None:
+            return False
+        with gm.graph.inserting_before(node):
+            zeros = gm.graph.call_function(torch.ops.aten.zeros_like.default, args=(self_arg,))
+            sums = gm.graph.call_function(torch.ops.aten.scatter_add.default, args=(zeros, dim, index, src))
+            ones = gm.graph.call_function(torch.ops.aten.ones_like.default, args=(src,))
+            counts = gm.graph.call_function(torch.ops.aten.scatter_add.default, args=(zeros, dim, index, ones))
+            values = sums
+            if reduce == "mean":
+                # clamped so untouched positions divide by 1 instead of 0 — `where` discards them anyway
+                divisor = gm.graph.call_function(torch.ops.aten.clamp_min.default, args=(counts, 1))
+                values = gm.graph.call_function(torch.ops.aten.div.Tensor, args=(sums, divisor))
+            # OV's frontend has no ``gt.Scalar`` translation, so compare against a 0-dim tensor
+            zero_tensor = gm.graph.call_function(
+                torch.ops.aten.scalar_tensor.default,
+                args=(0,),
+                kwargs={"dtype": src_val.dtype, "device": src_val.device},
+            )
+            touched = gm.graph.call_function(torch.ops.aten.gt.Tensor, args=(counts, zero_tensor))
+            result = gm.graph.call_function(torch.ops.aten.where.self, args=(touched, values, self_arg))
+            result.meta.update(node.meta)
+        node.replace_all_uses_with(result)
+        gm.graph.erase_node(node)
+        return True
+
+    if reduce in ("amax", "amin") and include_self is False:
+        # ``amax``/``amin`` with ``include_self=False``: each source element competes for the extremum
+        # at ``index[j]``; positions no source scatters to keep ``self``'s original value. Decompose to
+        # a broadcast comparison + reduction: build a one-hot mask ``(index.unsqueeze(dim) ==
+        # arange(K))``, reduce ``src`` where the mask is set (the opposite extreme elsewhere, so it
+        # never wins), then fall back to ``self`` for positions with no scatter.
         self_val = self_arg.meta.get("val")
         src_val = src.meta.get("val")
         if self_val is None or src_val is None or not src_val.dtype.is_floating_point:
@@ -932,7 +968,10 @@ def _fix_scatter_reduce(gm, node):
         ndim = self_val.ndim
         d = dim if dim >= 0 else dim + ndim
         k_size = self_val.shape[d]
-        min_value = torch.finfo(src_val.dtype).min
+        # the identity for the reduction: an element that never wins
+        finfo = torch.finfo(src_val.dtype)
+        fill_value = finfo.min if reduce == "amax" else finfo.max
+        reduction = torch.ops.aten.amax.default if reduce == "amax" else torch.ops.aten.amin.default
         k_shape = [1] * (ndim + 1)
         k_shape[d] = -1
         with gm.graph.inserting_before(node):
@@ -954,13 +993,13 @@ def _fix_scatter_reduce(gm, node):
             # OV's frontend has no ``where.ScalarOther`` translation, so materialise the scalar
             # branches as 0-dim tensors and use ``where.self`` (broadcasts the same way).
             scalar_kwargs = {"dtype": src_val.dtype, "device": src_val.device}
-            min_tensor = gm.graph.call_function(
-                torch.ops.aten.scalar_tensor.default, args=(min_value,), kwargs=scalar_kwargs
+            fill_tensor = gm.graph.call_function(
+                torch.ops.aten.scalar_tensor.default, args=(fill_value,), kwargs=scalar_kwargs
             )
-            masked = gm.graph.call_function(torch.ops.aten.where.self, args=(mask, src_unsq, min_tensor))
-            maxes = gm.graph.call_function(torch.ops.aten.amax.default, args=(masked, [d + 1]))
+            masked = gm.graph.call_function(torch.ops.aten.where.self, args=(mask, src_unsq, fill_tensor))
+            extrema = gm.graph.call_function(reduction, args=(masked, [d + 1]))
             any_match = gm.graph.call_function(torch.ops.aten.any.dim, args=(mask, d + 1))
-            result = gm.graph.call_function(torch.ops.aten.where.self, args=(any_match, maxes, self_arg))
+            result = gm.graph.call_function(torch.ops.aten.where.self, args=(any_match, extrema, self_arg))
             result.meta.update(node.meta)
         node.replace_all_uses_with(result)
         gm.graph.erase_node(node)
@@ -1736,6 +1775,56 @@ def _patch_byte_group_hash(original):
     return patch
 
 
+@register_patch("openvino", "torch.nn.functional.embedding_bag")
+def _patch_embedding_bag(original):
+    """Decompose the 2-D form of ``embedding_bag`` into a gather and a reduction.
+
+    OV's CPU plugin cannot compile `aten._embedding_bag` at all — the graph converts, then
+    `compile_model` raises ``to_shape was called on a dynamic shape``. With one bag per row (a 2-D
+    `input` and no `offsets`), the op is just an embedding lookup reduced along the bag axis, which
+    OV handles. Anything else — explicit offsets, `include_last_offset`, `padding_idx`, `max_norm`
+    — falls back to the original and fails the same way it did before.
+    """
+
+    def patch(
+        input,
+        weight,
+        offsets=None,
+        max_norm=None,
+        norm_type=2.0,
+        scale_grad_by_freq=False,
+        mode="mean",
+        sparse=False,
+        per_sample_weights=None,
+        include_last_offset=False,
+        padding_idx=None,
+    ):
+        supported = input.dim() == 2 and offsets is None and max_norm is None and padding_idx is None
+        if not supported or include_last_offset or mode not in ("sum", "mean", "max"):
+            return original(
+                input,
+                weight,
+                offsets,
+                max_norm,
+                norm_type,
+                scale_grad_by_freq,
+                mode,
+                sparse,
+                per_sample_weights,
+                include_last_offset,
+                padding_idx,
+            )
+
+        embedded = torch.nn.functional.embedding(input, weight)
+        if mode == "sum":
+            if per_sample_weights is not None:
+                embedded = embedded * per_sample_weights.unsqueeze(-1).to(embedded.dtype)
+            return embedded.sum(dim=1)
+        return embedded.mean(dim=1) if mode == "mean" else embedded.amax(dim=1)
+
+    return patch
+
+
 @register_patch("openvino", "torch.cumsum", "torch.Tensor.cumsum")
 def _patch_cumsum(original):
     """Promote integral inputs to `int64` the way torch does before summing.
@@ -1746,10 +1835,12 @@ def _patch_cumsum(original):
     Narrower integer types have the same overflow exposure, so they are widened too.
     """
 
-    def patch(input, dim=None, *args, dtype=None, **kwargs):
+    # The axis is passed straight through (positionally, as `dim=`, or as the `axis=` alias longt5
+    # uses) — only `dtype` is intercepted.
+    def patch(input, *args, dtype=None, **kwargs):
         if dtype is None and input.dtype in (torch.bool, torch.uint8, torch.int8, torch.int16, torch.int32):
             dtype = torch.int64
-        return original(input, dim, *args, dtype=dtype, **kwargs)
+        return original(input, *args, dtype=dtype, **kwargs)
 
     return patch
 

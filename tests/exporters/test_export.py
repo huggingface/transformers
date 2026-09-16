@@ -58,6 +58,12 @@ from transformers.testing_utils import (
 # triple and returns ``True`` as soon as the model is found in any of them. Reasons live next
 # to the model name so the "why" travels with the entry.
 #
+# A scope may also carry an ``.exactness`` suffix (``"exactness"``, ``"openvino.exactness"``, …).
+# Those entries do not skip the test: the model is still exported and run, only the comparison
+# against eager is dropped. Use them when the comparison itself is meaningless — a forward that
+# draws its own randomness does not even agree with itself between two eager calls — so that a real
+# export break still fails instead of hiding behind a full skip.
+#
 # Adding a new skip: pick the most specific scope that applies and add a ``"Name": "reason"``
 # entry. Add a new scope key if the existing ones don't fit.
 
@@ -86,6 +92,16 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "model. TODO: revisit on demand."
         ),
         "GlmImageForConditionalGeneration": "Same as `GlmImageModel`.",
+    },
+    # Exported and run as usual, but not compared against eager (see the ``.exactness`` note above).
+    "exactness": {
+        "VibeVoiceAsrModel": (
+            "Its acoustic tokenizer is a VAE that samples inside the forward — `vae_std=0.625` of noise "
+            "over latents whose mean magnitude is 1.7e-06 — so two eager runs on the same inputs differ "
+            "by 0.037, more than the export gap itself. The exported graph returns the distribution's "
+            "mean, since the RNG traces as zeros."
+        ),
+        "VibeVoiceAsrForConditionalGeneration": "Same VAE sampling as `VibeVoiceAsrModel`.",
     },
     # Every backend, generate path only.
     "generate": {
@@ -330,13 +346,15 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "the cache refactor that was tried and reverted; the cause is not yet identified."
         ),
         "RecurrentGemmaForCausalLM": "Same unexplained divergence as `RecurrentGemmaModel`.",
-        "XLMForQuestionAnswering": "Same tied-`end_top_index` selection as `FlaubertForQuestionAnswering`.",
+        "HunYuanVLModel": "OpenVINO conversion of the vision stack fails (same family as the ONNX/ExecuTorch gaps).",
+        "HunYuanVLForConditionalGeneration": "Same OpenVINO gap as `HunYuanVLModel`.",
+    },
+    "openvino.exactness": {
         "FlaubertForQuestionAnswering": (
             "`end_top_index` is an index output chosen by `topk` over tied scores in the tiny test config, so "
             "OpenVINO's tie-break picks different — equally valid — indices."
         ),
-        "MMGroundingDinoForObjectDetection": "Same tied-`topk` box selection as `DFineModel`.",
-        "MMGroundingDinoModel": "Same tied-`topk` box selection as `DFineModel`.",
+        "XLMForQuestionAnswering": "Same tied-`end_top_index` selection as `FlaubertForQuestionAnswering`.",
         "DFineModel": (
             "The tiny test config's classification head emits a constant, so the encoder's `topk` over "
             "`enc_outputs_class` picks 30 of 84 *tied* scores — an arbitrary choice that OpenVINO breaks "
@@ -352,20 +370,8 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "RTDetrV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "PPDocLayoutV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "PPDocLayoutV3ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
-        "TapasModel": "OpenVINO has no conversion rule for `aten.scatter_reduce.two` (tapas segment reduction).",
-        "TapasForMaskedLM": "Same OpenVINO `scatter_reduce` gap as `TapasModel`.",
-        "TapasForQuestionAnswering": "Same OpenVINO `scatter_reduce` gap as `TapasModel`.",
-        "TapasForSequenceClassification": "Same OpenVINO `scatter_reduce` gap as `TapasModel`.",
-        "HunYuanVLModel": "OpenVINO conversion of the vision stack fails (same family as the ONNX/ExecuTorch gaps).",
-        "HunYuanVLForConditionalGeneration": "Same OpenVINO gap as `HunYuanVLModel`.",
-        "Kimi_K25Model": (
-            "OpenVINO CPU plugin fails to compile (`to_shape was called on a dynamic shape`) — a node in the "
-            "vision/MLA stack keeps a fully dynamic shape even under static export (data-dependent vision token "
-            "count from `image_grid_thw`)."
-        ),
-        "Kimi_K25ForConditionalGeneration": (
-            "Same OpenVINO `to_shape`/dynamic-shape compile failure as `Kimi_K25Model`."
-        ),
+        "MMGroundingDinoModel": "Same tied-`topk` box selection as `DFineModel`.",
+        "MMGroundingDinoForObjectDetection": "Same tied-`topk` box selection as `DFineModel`.",
     },
     # OpenVINO, generate path only.
     "openvino.generate": {},
@@ -752,22 +758,15 @@ class ExportTesterMixin:
             if "for expert" in source_code and "use_experts_implementation" not in source_code:
                 self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
 
-    def _should_skip(self, model_class, generate=False, dynamic=False, backend=None, generation_config=None):
-        """Return True if this model class should be skipped for export tests.
+    def _export_scopes(self, generate=False, dynamic=False, backend=None, static_cache=False) -> list[str]:
+        """The ``EXPORT_SKIPS`` scopes matching the current test, broad to specific.
 
-        Walks the scopes in ``EXPORT_SKIPS`` from broad to specific that match the current
-        ``(backend, generate, dynamic)`` triple — ``"all"`` always applies, ``"generate"`` only
-        for generate tests, ``"dynamic"`` / ``"static"`` for that shape variant on every backend,
-        ``"generate.dynamic"`` for the multi-token decode path, ``"static-cache"`` for a variant whose
-        ``generation_config`` requests a static cache, ``"<backend>"`` for that backend, and
-        ``"<backend>.<variant>"`` (including ``"<backend>.static-cache"``) for the more-specific
-        intersections. Also skips static-cache variants on models that can't compile fullgraph — they
-        don't support a static cache at all.
+        ``"all"`` always applies, ``"generate"`` only for generate tests, ``"dynamic"`` / ``"static"``
+        for that shape variant on every backend, ``"generate.dynamic"`` for the multi-token decode path,
+        ``"static-cache"`` for a variant whose ``generation_config`` requests a static cache,
+        ``"<backend>"`` for that backend, and ``"<backend>.<variant>"`` (including
+        ``"<backend>.static-cache"``) for the more-specific intersections.
         """
-        static_cache = _needs_static_cache(generation_config)
-        if static_cache and not model_class._can_compile_fullgraph:
-            return True
-        name = model_class.__name__
         scopes = ["all"]
         if generate:
             scopes.append("generate")
@@ -783,6 +782,32 @@ class ExportTesterMixin:
             scopes.append(f"{backend}.dynamic" if dynamic else f"{backend}.static")
             if static_cache:
                 scopes.append(f"{backend}.static-cache")
+        return scopes
+
+    def _should_skip(self, model_class, generate=False, dynamic=False, backend=None, generation_config=None):
+        """Return True if this model class should be skipped for export tests.
+
+        Walks the scopes from :meth:`_export_scopes` and returns ``True`` as soon as the model is
+        listed in any of them. Also skips static-cache variants on models that can't compile
+        fullgraph — they don't support a static cache at all.
+        """
+        name = model_class.__name__
+        static_cache = _needs_static_cache(generation_config)
+        if static_cache and not model_class._can_compile_fullgraph:
+            return True
+        scopes = self._export_scopes(generate=generate, dynamic=dynamic, backend=backend, static_cache=static_cache)
+        return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
+
+    def _should_skip_exactness(self, model_class, generate=False, dynamic=False, backend=None, generation_config=None):
+        """Return True if this model exports and runs but its outputs can't be compared to eager.
+
+        Same scope walk as :meth:`_should_skip`, against the ``.exactness`` variant of each scope.
+        """
+        name = model_class.__name__
+        static_cache = _needs_static_cache(generation_config)
+        scopes = self._export_scopes(generate=generate, dynamic=dynamic, backend=backend, static_cache=static_cache)
+        # ``"all"`` narrows to a bare ``"exactness"``, the way ``"generate"`` and ``"dynamic"`` are spelled
+        scopes = ["exactness" if scope == "all" else f"{scope}.exactness" for scope in scopes]
         return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
 
     def _prepare_export_model_and_inputs(self, model_class, device=torch_device):
@@ -882,7 +907,8 @@ class ExportTesterMixin:
                         exported_outputs = get_leaf_tensors(exported_program.module()(**copy.deepcopy(inputs)))
                         self.assertTrue(exported_outputs, f"Exported outputs are empty for {name}.")
 
-                    self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
+                    if not self._should_skip_exactness(model_class, dynamic=dynamic):
+                        self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
 
     # ──────────────────────── ONNX tests ─────────────────────────
 
@@ -945,9 +971,10 @@ class ExportTesterMixin:
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
                     # the OpenVINO runtime hands back numpy arrays on CPU, whatever device eager ran on
                     ov_tensors = {key: torch.as_tensor(value) for key, value in ov_outputs.items()}
-                    self._check_outputs_close(
-                        ov_tensors, eager_outputs[name], atol=atol, rtol=rtol, check_device=False, inputs=inputs
-                    )
+                    if not self._should_skip_exactness(model_class, dynamic=dynamic, backend="openvino"):
+                        self._check_outputs_close(
+                            ov_tensors, eager_outputs[name], atol=atol, rtol=rtol, check_device=False, inputs=inputs
+                        )
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 
@@ -1072,7 +1099,14 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                         exported_outputs = get_leaf_tensors(exported_program.module()(**copy.deepcopy(inputs)))
                         self.assertTrue(exported_outputs, "Exported outputs are empty.")
 
-                    self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
+                    if not self._should_skip_exactness(
+                        model_class,
+                        generate=True,
+                        dynamic=dynamic,
+                        backend="dynamo",
+                        generation_config=generation_config,
+                    ):
+                        self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
 
     # ──────────────────────── ONNX tests ─────────────────────────
 
