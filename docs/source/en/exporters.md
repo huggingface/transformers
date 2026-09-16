@@ -35,8 +35,8 @@ in the modeling code.
 | ---------------------- | -------------------------- | ------------------------------------------ |
 | [`DynamoExporter`]     | `ExportedProgram`          | Any PyTorch runtime, AOT compilation       |
 | [`OnnxExporter`]       | `ONNXProgram`              | Any ONNX runtime (ORT, TensorRT, OpenVINO) |
-| [`OpenVINOExporter`]   | `openvino.Model`           | OpenVINO runtime (Intel CPU/GPU/NPU)       |
 | [`ExecutorchExporter`] | `ExecutorchProgramManager` | Mobile and edge devices (ExecuTorch)       |
+| [`OpenVINOExporter`]   | `openvino.Model`           | OpenVINO runtime (Intel CPU/GPU/NPU)       |
 
 [`AutoHfExporter`] picks the right exporter from a config, and [`AutoExportConfig`] picks the
 right config class from a dict. Both follow the same auto-class pattern in Transformers, which

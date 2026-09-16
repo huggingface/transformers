@@ -176,6 +176,14 @@ def invert_mask(attention_mask):
     return attention_mask.eq(0)
 
 
+def triu_onnx(x, diagonal=0):
+    logger.warning_once(
+        "`triu_onnx` is deprecated and will be removed in v5.22. It emulated `torch.triu`, which now "
+        "exports cleanly — use `torch.triu` instead."
+    )
+    return torch.triu(x, diagonal)
+
+
 def _prepare_fsmt_decoder_inputs(
     config,
     input_ids,

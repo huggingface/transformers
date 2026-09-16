@@ -43,7 +43,7 @@ from __future__ import annotations
 import math
 import operator
 import re
-from collections.abc import MutableMapping
+from collections.abc import Mapping, MutableMapping
 from typing import TYPE_CHECKING, Any
 
 from ..utils import logging
@@ -121,22 +121,8 @@ class OpenVINOExporter(DynamoExporter):
         with torch.no_grad(), patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("openvino"):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
 
-        _drop_runtime_asserts(exported_program.graph_module)
-        # Run OV's own decomposition pass up front and decode the RESULT — handing the
-        # ``ExportedProgram`` to ``convert_model`` would re-run it internally, regenerating node
-        # names and discarding every fix applied below.
-        exported_program = _run_openvino_decompositions(exported_program)
-        apply_fx_program_fixes("openvino", exported_program)
-        graph_module = exported_program.module()
-        _deduplicate_output_args(graph_module)
-        apply_fx_node_fixes("openvino", graph_module)
-        _rename_bare_node_names(graph_module)
-        decoder = TorchFXPythonDecoder(graph_module, dynamic_shapes=True)
-        # Name every input port after its FX placeholder — OV may drop unused inputs, so all
-        # downstream port↔placeholder matching is done by name, never positionally.
-        decoder._input_signature = [n.name for n in graph_module.graph.nodes if n.op == "placeholder"]
-        ov_model = openvino.convert_model(decoder, extension=_OV_CONVERSION_EXTENSIONS)
-        _fix_non_tensor_inputs(ov_model, graph_module)
+        exported_program, graph_module = _fix_exported_program(exported_program)
+        ov_model = _convert_to_openvino(graph_module)
 
         inputs_names = [n for n in inputs_names if n in get_leaf_tensors(sample_inputs)]
         inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
@@ -156,14 +142,48 @@ class OpenVINOExporter(DynamoExporter):
 # of the conversion has a single responsibility.
 
 
-def _placeholder_for_port(port, placeholders: dict[str, Any]):
-    """Return the FX placeholder whose name is among ``port``'s tensor names, or ``None``.
+def _fix_exported_program(exported_program: ExportedProgram) -> tuple[ExportedProgram, Any]:
+    """Decompose and repair the exported program, returning it with the module to convert.
+
+    OV's own decomposition pass runs up front and the RESULT is what gets decoded — handing the
+    ``ExportedProgram`` to ``convert_model`` would re-run it internally, regenerating node names and
+    discarding every fix applied here. Both are returned because ``_make_stateful`` reads the program
+    while the port fixes read the module.
+    """
+    _drop_runtime_asserts(exported_program.graph_module)
+    exported_program = _run_openvino_decompositions(exported_program)
+    apply_fx_program_fixes("openvino", exported_program)
+    graph_module = exported_program.module()
+    _deduplicate_output_args(graph_module)
+    apply_fx_node_fixes("openvino", graph_module)
+    _rename_bare_node_names(graph_module)
+    return exported_program, graph_module
+
+
+def _convert_to_openvino(graph_module) -> openvino.Model:
+    """Hand the repaired FX graph to OV's frontend and fix up the ports it produces."""
+    decoder = TorchFXPythonDecoder(graph_module, dynamic_shapes=True)
+    # Name every input port after its FX placeholder — OV may drop unused inputs, so all
+    # downstream port↔placeholder matching is done by name, never positionally.
+    decoder._input_signature = [node.name for node in graph_module.graph.nodes if node.op == "placeholder"]
+    ov_model = openvino.convert_model(decoder, extension=_OV_CONVERSION_EXTENSIONS)
+    _fix_non_tensor_inputs(ov_model, graph_module)
+    return ov_model
+
+
+def _lookup_by_port(port, by_name: Mapping[str, Any]):
+    """Return the ``by_name`` entry keyed by one of ``port``'s tensor names, or ``None``.
 
     Every input port carries its placeholder's name (via ``decoder._input_signature``), so
     port↔placeholder matching is by name — OV drops unused inputs, which would shift any
     positional pairing.
     """
-    return next((placeholders[name] for name in port.get_names() if name in placeholders), None)
+    return next((by_name[name] for name in port.get_names() if name in by_name), None)
+
+
+def _port_named(port, names) -> bool:
+    """Whether any of ``port``'s tensor names is one of ``names``."""
+    return bool(port.get_names() & set(names))
 
 
 def _leaf_names_by_placeholder(graph_module, inputs_names: list[str]) -> dict[str, str]:
@@ -195,7 +215,7 @@ def _rename_model_ports(
     """
     leaf_names = _leaf_names_by_placeholder(graph_module, inputs_names)
     for port in ov_model.inputs:
-        name = next((leaf_names[n] for n in port.get_names() if n in leaf_names), None)
+        name = _lookup_by_port(port, leaf_names)
         if name is not None:
             port.get_tensor().set_names({name})
     # A passthrough output (e.g. T5's ``encoder_last_hidden_state`` returning the
@@ -231,7 +251,7 @@ def _fix_non_tensor_inputs(ov_model: openvino.Model, graph_module) -> None:
     placeholders = {node.name: node for node in graph_module.graph.nodes if node.op == "placeholder"}
     to_remove, changed = [], False
     for port in ov_model.inputs:
-        node = _placeholder_for_port(port, placeholders)
+        node = _lookup_by_port(port, placeholders)
         if node is None or not port.get_partial_shape().rank.is_dynamic:
             continue
         val = node.meta.get("val")
@@ -288,7 +308,7 @@ def _fuse_state_reorder(ov_model: openvino.Model, state_input_names: list[str]) 
     ``beam_idx`` and the fused ``Gather`` applies it to each state variable — for greedy decoding
     ``beam_idx = arange(batch)`` makes it the identity.
     """
-    main_input = next(port for port in ov_model.inputs if not port.get_names() & set(state_input_names))
+    main_input = next(port for port in ov_model.inputs if not _port_named(port, state_input_names))
     batch = main_input.get_partial_shape()[_STATE_BATCH_DIM]
     beam_idx = ov_ops.parameter(name="beam_idx", dtype=np.int32, shape=openvino.PartialShape([batch]))
     beam_idx.output(0).get_tensor().set_names({"beam_idx"})
@@ -1442,13 +1462,22 @@ def _patch_polar(original):
     return patch
 
 
+def _rotate_half_pairs(pairs: torch.Tensor) -> torch.Tensor:
+    """``rotate_half`` for interleaved re/im pairs: swap each pair and negate the imaginary part."""
+    real, imag = pairs[..., 0], pairs[..., 1]
+    return torch.stack((-imag, real), dim=-1)
+
+
 def _rotate_pairs(x: torch.Tensor, freqs_pairs: torch.Tensor) -> torch.Tensor:
-    """Complex-multiply ``x`` (viewed as ``[..., d/2, 2]`` re/im pairs) by broadcastable
-    ``freqs_pairs``: ``(a+bi)(c+di) = (ac-bd) + (ad+bc)i``."""
+    """Rotate ``x`` by ``freqs_pairs``, both viewed as ``[..., d/2, 2]`` re/im pairs.
+
+    The complex multiply ``(a+bi)(c+di)`` these models write is the same ``x * cos + rotate(x) * sin``
+    that [`~models.llama.modeling_llama.apply_rotary_pos_emb`] applies, with the pair-wise rotation
+    standing in for ``rotate_half`` because the pairs are interleaved rather than split in halves.
+    """
     pairs = x.float().reshape(*x.shape[:-1], -1, 2)
-    real = pairs[..., 0] * freqs_pairs[..., 0] - pairs[..., 1] * freqs_pairs[..., 1]
-    imag = pairs[..., 0] * freqs_pairs[..., 1] + pairs[..., 1] * freqs_pairs[..., 0]
-    return torch.stack((real, imag), dim=-1).flatten(3).type_as(x)
+    cos, sin = freqs_pairs[..., 0:1], freqs_pairs[..., 1:2]
+    return (pairs * cos + _rotate_half_pairs(pairs) * sin).flatten(3).type_as(x)
 
 
 @register_patch("openvino", "transformers.models.deepseek_v2.modeling_deepseek_v2.apply_rotary_emb")

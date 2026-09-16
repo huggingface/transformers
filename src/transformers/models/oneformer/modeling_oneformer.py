@@ -38,6 +38,7 @@ from ...utils import (
     requires_backends,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast
 from .configuration_oneformer import OneFormerConfig
 
@@ -979,9 +980,9 @@ class OneFormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module):
         position_embeddings: torch.Tensor | None = None,
         reference_points=None,
         spatial_shapes=None,
-        spatial_shapes_list=None,
         level_start_index=None,
         output_attentions: bool = False,
+        spatial_shapes_list=None,
     ):
         # add position embeddings to the hidden states before projecting to queries and keys
         if position_embeddings is not None:
@@ -1057,9 +1058,9 @@ class OneFormerPixelDecoderEncoderLayer(nn.Module):
         position_embeddings: torch.Tensor | None = None,
         reference_points=None,
         spatial_shapes=None,
-        spatial_shapes_list=None,
         level_start_index=None,
         output_attentions: bool = False,
+        spatial_shapes_list=None,
     ):
         """
         Args:
@@ -1142,6 +1143,7 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
         self.layers = nn.ModuleList([OneFormerPixelDecoderEncoderLayer(config) for _ in range(config.encoder_layers)])
 
     @staticmethod
+    @deprecate_kwarg("spatial_shapes", version="5.22", new_name="spatial_shapes_list")
     def get_reference_points(spatial_shapes_list, valid_ratios, device):
         """
         Get reference points for each feature map. Used in decoder.
@@ -1177,12 +1179,12 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
         attention_mask=None,
         position_embeddings=None,
         spatial_shapes=None,
-        spatial_shapes_list=None,
         level_start_index=None,
         valid_ratios=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        spatial_shapes_list=None,
     ):
         r"""
         Args:

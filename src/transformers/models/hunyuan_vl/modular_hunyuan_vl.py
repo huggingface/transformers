@@ -34,7 +34,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import (
     get_max_seqlen,
     is_flash_attention_requested,
@@ -684,8 +684,8 @@ class HunYuanVLVisionPatchMerger(nn.Module):
         dtype = hidden_states.dtype
         hidden_states = hidden_states.permute(0, 2, 1)
         hidden_states = hidden_states.reshape(hidden_states.shape[0], hidden_states.shape[1], *size)
-        torch._check(hidden_states.shape[2] > 1)
-        torch._check(hidden_states.shape[3] > 1)
+        torch_compilable_check(hidden_states.shape[2] > 1, "Spatial height must be greater than 1.")
+        torch_compilable_check(hidden_states.shape[3] > 1, "Spatial width must be greater than 1.")
         hidden_states = self.proj_conv(hidden_states)
         hidden_states = self.proj_act(hidden_states)
         hidden_states = self.proj_out(hidden_states)

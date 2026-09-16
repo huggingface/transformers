@@ -607,11 +607,16 @@ def _iter_subclasses(cls: type):
         yield from _iter_subclasses(subclass)
 
 
+def is_cache_class(cls: type) -> bool:
+    """Whether ``cls`` is a cache type — a [`Cache`] subclass, or a model-specific class following
+    the ``*Cache`` naming convention (e.g. ``xLSTMCache``, ``MimiConv1dPaddingCache``)."""
+    return issubclass(cls, Cache) or cls.__name__.endswith("Cache")
+
+
 def is_cache_object(value: Any) -> bool:
-    """Whether ``value`` is a cache — a [`Cache`] instance or a model-specific class following
-    the ``*Cache`` naming convention (e.g. ``xLSTMCache``, ``MimiConv1dPaddingCache``), matching
-    what [`register_cache_pytrees_for_model`] registers as pytree nodes."""
-    return isinstance(value, Cache) or type(value).__name__.endswith("Cache")
+    """Whether ``value`` is a cache, by the same rule [`register_cache_pytrees_for_model`] uses to
+    decide what to register as a pytree node."""
+    return is_cache_class(type(value))
 
 
 def register_cache_pytrees_for_model(model: PreTrainedModel):
@@ -620,14 +625,9 @@ def register_cache_pytrees_for_model(model: PreTrainedModel):
     for cache_type in _iter_subclasses(Cache):
         register_pytree_node(cache_type)
 
-    # Model-specific cache classes not inheriting from Cache (e.g. custom per-model caches)
+    # Model-specific cache classes (e.g. custom per-model caches not inheriting from Cache)
     for _, obj in inspect.getmembers(inspect.getmodule(model)):
-        if (
-            inspect.isclass(obj)
-            and obj.__module__ == model.__class__.__module__
-            and obj.__name__.endswith("Cache")
-            and not issubclass(obj, Cache)
-        ):
+        if inspect.isclass(obj) and obj.__module__ == model.__class__.__module__ and is_cache_class(obj):
             register_pytree_node(obj)
 
     # detectron2 ImageList (used by layoutlmv2)

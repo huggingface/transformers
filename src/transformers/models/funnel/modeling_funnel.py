@@ -148,9 +148,7 @@ class FunnelAttentionStructure(nn.Module):
             cos_embed = self.cos_dropout(torch.cos(sinusoid))
             pos_embed = torch.cat([sin_embed, cos_embed], dim=-1)
 
-            # Positions are integer indices fully determined by `seq_len`; keeping them as Python
-            # ints (instead of tensors) makes the relative-position `arange` sizes static, which is
-            # required for tracing / export.
+            # Python ints, not tensors, so the relative-position `arange` sizes stay static for export
             pos = list(range(seq_len))
             pooled_pos = pos
             position_embeds_list = []

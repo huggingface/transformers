@@ -297,10 +297,10 @@ def _patch_chunk(original):
     """Route a symbolic chunk size through the `torch.split` patch (see `_patch_split`)."""
 
     def patch(input, chunks, dim=0):
-        chunk_size = (input.size(dim) + chunks - 1) // chunks
-        if not isinstance(chunk_size, torch.SymInt):
+        size = input.size(dim)
+        if not isinstance(size, torch.SymInt):
             return original(input, chunks, dim)
-        return torch.split(input, chunk_size, dim)
+        return torch.split(input, (size + chunks - 1) // chunks, dim)
 
     return patch
 
