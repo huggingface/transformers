@@ -144,16 +144,10 @@ def is_sm100() -> bool:
     evaluate it once at trace time and inline the bool — keeping the untraceable
     `torch.cuda.get_device_capability()` pybind out of the graph — so the branches on it (SF layout, cast
     kwargs, psum layout, and the arch guards) stay compile-safe. Re-queries each eager call, so a faked
-    capability in tests is honoured.
-
-    False rather than raising where there is no device to ask: `get_device_capability()` asserts on a
-    CPU-only build. Caught rather than gated on `is_available()` so that a test faking the capability
-    alone still answers — which is the convention the callers' tests are written to.
+    capability in tests is honoured — which means faking BOTH, since `get_device_capability()` asserts
+    rather than answering on a CPU-only build and the availability check is what keeps it unreached.
     """
-    try:
-        return torch.cuda.get_device_capability()[0] >= 10
-    except (AssertionError, RuntimeError):
-        return False
+    return torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 10
 
 
 @torch._dynamo.assume_constant_result

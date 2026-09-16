@@ -28,9 +28,9 @@ Two layers, both mocking only what needs a Hopper/Blackwell GPU + a JIT CUDA too
   (packed int32 UE8M0 SFs, int32 grouped layout, `(qtensor, sf)` operand tuples, recipes, transformed
   Mega MoE weights, ...).
 
-Arch-gated paths are exercised by faking the device capability (`is_sm100()` reads it): the
-SF-packing / TMA-alignment / psum-layout code it selects is pure tensor arithmetic, so mocking the
-capability to SM100 drives the Blackwell paths on any device.
+Arch-gated paths are exercised by faking the device (`is_sm100()` reads availability, then the
+capability): the SF-packing / TMA-alignment / psum-layout code it selects is pure tensor arithmetic,
+so mocking both to a Blackwell device drives those paths anywhere, a CPU-only runner included.
 """
 
 import contextlib
@@ -361,12 +361,14 @@ class DeepGemmForwardTest(unittest.TestCase):
     def _bundle(self, *, is_sm100):
         captured = {}
         bundle = _make_bundle(captured)
-        # The forwards read the arch via `is_sm100()` (which queries `get_device_capability`), so fake the
-        # device to the requested arch: lets SM100 dispatch/packing run on this SM80 box and drives the
-        # Hopper-rejection guards. `[0]` is all `is_sm100()` reads.
+        # The forwards read the arch via `is_sm100()`, so fake the device to the requested arch: lets
+        # SM100 dispatch/packing run on this SM80 box and drives the Hopper-rejection guards. `[0]` is
+        # all `is_sm100()` reads of the capability, and it reaches that only when CUDA is available —
+        # so a CPU-only runner needs both faked, or every arch-gated branch below goes untested.
         capability = (10, 0) if is_sm100 else (9, 0)
         with (
             mock.patch.object(dg, "load_deepgemm_kernel", return_value=bundle),
+            mock.patch.object(torch.cuda, "is_available", return_value=True),
             mock.patch.object(torch.cuda, "get_device_capability", return_value=capability),
         ):
             yield captured
@@ -431,11 +433,12 @@ class DeepGemmForwardTest(unittest.TestCase):
         int8_w = torch.zeros(1, 1, dtype=torch.int8, device=torch_device)
         f32_sf = torch.ones(1, 1, dtype=torch.float32, device=torch_device)
         ue8m0_sf = f32_sf.to(torch.float8_e8m0fnu)
-        with mock.patch.object(torch.cuda, "get_device_capability", return_value=(9, 0)):  # SM90
+        available = mock.patch.object(torch.cuda, "is_available", return_value=True)
+        with available, mock.patch.object(torch.cuda, "get_device_capability", return_value=(9, 0)):  # SM90
             with self.assertRaisesRegex(NotImplementedError, "Blackwell"):
                 dg._assert_sm100_requirements(int8_w, ue8m0_sf)  # FP4 has no Hopper kernel
             dg._assert_sm100_requirements(fp8_w, f32_sf)  # float32 SF is fine on SM90 -> no raise
-        with mock.patch.object(torch.cuda, "get_device_capability", return_value=(10, 0)):  # SM100
+        with available, mock.patch.object(torch.cuda, "get_device_capability", return_value=(10, 0)):  # SM100
             with self.assertRaisesRegex(NotImplementedError, "float32 scale-factor path"):
                 dg._assert_sm100_requirements(fp8_w, f32_sf)  # no float32 SF path on Blackwell
             dg._assert_sm100_requirements(int8_w, ue8m0_sf)  # UE8M0 on SM100 -> no raise
