@@ -47,14 +47,14 @@ This model takes raw waveforms directly and has no feature extractor. Pass a flo
 import torch
 from scipy.io import wavfile
 
-from transformers import Qwen3TTSTokenizerMultiCodebookModel
+from transformers import AutoModel
 from transformers.audio_utils import load_audio_librosa
 
 
 model_id = "shahvandit/qwen3-tts-tokenizer-multi-codebook-hf"
 
 # load model
-model = Qwen3TTSTokenizerMultiCodebookModel.from_pretrained(model_id, device_map="auto").eval()
+model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
 
 # load audio at the sample rate the tokenizer expects
 audio = load_audio_librosa(
@@ -94,12 +94,12 @@ code tensors, one per utterance, each already trimmed to its own length:
 ```python
 import torch
 
-from transformers import Qwen3TTSTokenizerMultiCodebookModel
+from transformers import AutoModel
 from transformers.audio_utils import load_audio_librosa
 
 
 model_id = "shahvandit/qwen3-tts-tokenizer-multi-codebook-hf"
-model = Qwen3TTSTokenizerMultiCodebookModel.from_pretrained(model_id, device_map="auto").eval()
+model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
 
 audios = [
     load_audio_librosa(url, sampling_rate=model.config.input_sample_rate)
