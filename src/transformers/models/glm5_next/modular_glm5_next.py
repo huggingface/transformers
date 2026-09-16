@@ -408,7 +408,7 @@ class Glm5NextTextForgetGate(nn.Module):
 @use_kernel_forward_from_hub("RMSNormGated")
 class Glm5NextTextRMSNormGated(Qwen3_5RMSNormGated):
     def __init__(self, hidden_size, eps=1e-6, **kwargs):
-        super().__init__(hidden_size, eps, kwargs)
+        super().__init__(hidden_size, eps, **kwargs)
         self.activation = "sigmoid"
 
     def forward(self, hidden_states, gate=None):
