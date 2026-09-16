@@ -13,7 +13,6 @@
 # limitations under the License.
 """PyTorch Qwen3TTS Multi-Codebook Tokenizer model."""
 
-from dataclasses import dataclass
 from types import SimpleNamespace
 
 import numpy as np
@@ -24,10 +23,11 @@ from torch import nn
 from ...cache_utils import DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
+from ..dac.modeling_dac import DacDecoderOutput
 from ..mimi.modeling_mimi import (
     MimiEncoderOutput,
     MimiEuclideanCodebook,
@@ -213,9 +213,7 @@ class Qwen3TTSTokenizerMultiCodebookEncoderOutput(MimiEncoderOutput):
     pass
 
 
-@auto_docstring
-@dataclass
-class Qwen3TTSTokenizerMultiCodebookOutput(ModelOutput):
+class Qwen3TTSTokenizerMultiCodebookOutput(DacDecoderOutput):
     r"""
     audio_values (`List[torch.FloatTensor]`):
         Decoded audio values, obtained using the decoder part of Qwen3TTSTokenizerMultiCodebook.
