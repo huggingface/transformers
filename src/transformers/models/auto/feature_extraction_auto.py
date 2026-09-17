@@ -37,6 +37,7 @@ logger = logging.get_logger(__name__)
 MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
         ("audioflamingo3", "WhisperFeatureExtractor"),
+        ("canary", "ParakeetFeatureExtractor"),
         ("csm", "EncodecFeatureExtractor"),
         ("data2vec-audio", "Wav2Vec2FeatureExtractor"),
         ("glmasr", "WhisperFeatureExtractor"),

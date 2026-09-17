@@ -242,6 +242,13 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
         self.entry_count[name] += compressed.shape[1]
         return self.compressed_kv[name]
 
+    def reset(self) -> None:
+        super().reset()
+        # Dropped rather than zeroed, as they grow by concatenation, like the main states
+        for name in self.compressed_kv:
+            self.buffer_kv[name] = self.buffer_gate[name] = self.compressed_kv[name] = None
+            self.entry_count[name] = 0
+
 
 class DeepseekV4CSACache(DeepseekV4HCACache):
     r"""Cache layer for CSA blocks (paper §2.3.1). Extends :class:`DeepseekV4HCACache`
@@ -289,6 +296,11 @@ class DeepseekV4CSACache(DeepseekV4HCACache):
         self.overlap_kv[name] = chunk_kv[:, -1, :, :head_dim].clone()
         self.overlap_gate[name] = chunk_gate[:, -1, :, :head_dim].clone()
         return prior_kv, prior_gate
+
+    def reset(self) -> None:
+        super().reset()
+        for name in self.overlap_kv:
+            self.overlap_kv[name] = self.overlap_gate[name] = None
 
 
 class DeepseekV4GroupedLinear(nn.Linear):
@@ -999,7 +1011,7 @@ class DeepseekV4Experts(nn.Module):
     ) -> torch.Tensor:
         final = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+            mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
             hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in hit:
             expert_idx = expert_idx[0]

@@ -28,9 +28,9 @@ import warnings
 from pathlib import Path
 from unittest.mock import patch
 
-import httpx
 import pytest
 from huggingface_hub import HfApi, snapshot_download, split_torch_state_dict_into_shards
+from huggingface_hub.utils import httpx
 from parameterized import parameterized
 from pytest import mark
 

@@ -123,6 +123,8 @@ Parameters load in parallel and peak memory only depends on model size. Use `max
 
 ```py
 import json
+import os
+import tempfile
 
 with tempfile.TemporaryDirectory() as tmp_dir:
     model.save_pretrained(tmp_dir, max_shard_size="50GB")
@@ -254,7 +256,7 @@ model = AutoModel.from_config(my_config)
 
 ## Custom models
 
-Custom models builds on Transformers' configuration and modeling classes, supports the [AutoClass](#autoclass) API, and are loaded with [`~PreTrainedModel.from_pretrained`]. The difference is that the modeling code is *not* from Transformers.
+Custom models builds on Transformers' configuration and modeling classes, supports the [`AutoClass`] API, and are loaded with [`~PreTrainedModel.from_pretrained`]. The difference is that the modeling code is *not* from Transformers.
 
 Take extra precaution when loading a custom model. While the Hub includes [malware scanning](https://hf.co/docs/hub/security-malware#malware-scanning) for every repository, you should still be careful to avoid inadvertently executing malicious code.
 
