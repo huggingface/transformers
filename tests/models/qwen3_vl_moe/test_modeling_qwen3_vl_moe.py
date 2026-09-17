@@ -134,6 +134,19 @@ class Qwen3VLMoeVisionText2TextModelTester(VLMModelTester):
 class Qwen3VLMoeModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Qwen3VLMoeVisionText2TextModelTester
 
+    def test_output_router_logits_from_config(self):
+        """`config.output_router_logits` turns the auxiliary loss on, and an explicit argument wins over it."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Qwen3VLMoeForConditionalGeneration(config).to(torch_device).eval()
+        input_ids = inputs_dict["input_ids"]
+
+        assert model(input_ids).aux_loss is None
+        assert model(input_ids, output_router_logits=True).aux_loss is not None
+
+        model.config.get_text_config().output_router_logits = True
+        assert model(input_ids).aux_loss is not None
+        assert model(input_ids, output_router_logits=False).aux_loss is None
+
     @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
         super().test_training_gradient_checkpointing()

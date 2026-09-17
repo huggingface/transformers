@@ -106,6 +106,7 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
     vocab_size: int = 151424
     max_position_embeddings: int = 65536
     attention_bias: bool = True
+    output_router_logits: bool = False
     router_aux_loss_coef: float = 0.0001
     use_qk_norm = AttributeError()
     num_mtp_layers = AttributeError()
@@ -354,9 +355,14 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        output_router_logits: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Glm4vMoeCausalLMOutputWithPast:
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
+        )
+
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -368,6 +374,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             mm_token_type_ids=mm_token_type_ids,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -381,7 +388,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
 
         aux_loss = None
-        if kwargs.get("output_router_logits", False):
+        if output_router_logits:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
                 self.num_experts,
