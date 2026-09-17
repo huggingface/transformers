@@ -428,13 +428,13 @@ def _find_mapping_for_image_processor(base_class_name: str) -> dict | None:
             return getattr(val, "__name__", None) == name
         return False
 
-    for mapping_dict in IMAGE_PROCESSOR_MAPPING_NAMES.values():
-        if any(_value_matches(v, base_class_name) for v in mapping_dict.values()):
-            return mapping_dict
-
     for content in IMAGE_PROCESSOR_MAPPING._extra_content.values():
         if any(_value_matches(v, base_class_name) for v in content.values()):
             return content
+
+    for mapping_dict in IMAGE_PROCESSOR_MAPPING_NAMES.values():
+        if any(_value_matches(v, base_class_name) for v in mapping_dict.values()):
+            return mapping_dict
 
     return None
 
@@ -707,6 +707,7 @@ class AutoImageProcessor:
         fast_image_processor_class: type | None = None,
         image_processor_classes: dict[str, type] | None = None,
         exist_ok: bool = False,
+        overrides_ok: bool = False,
     ):
         """
         Register a new image processor for this class.
@@ -722,7 +723,10 @@ class AutoImageProcessor:
                 Dictionary mapping backend names to image processor classes. Allows registering custom backends.
                 Example: `{"pil": MyPilProcessor, "torchvision": MyTorchvisionProcessor, "custom": MyCustomProcessor}`
             exist_ok (`bool`, *optional*, defaults to `False`):
-                If `True`, allow overwriting existing registrations.
+                If `True`, allow overwriting existing registrations. Note that this will not overwrite anything if the config is
+                a local `transformers` class.
+            overrides_ok (`bool`, *optional*, defaults to `False`):
+                If `True`, allow overwriting existing registrations, even if it is mapped to an existing `transformers` local config.
         """
         # Handle backward compatibility: convert old parameters to new format
         if image_processor_classes is None:
@@ -740,7 +744,7 @@ class AutoImageProcessor:
             )
 
         # Avoid resetting existing processors if we are passing partial updates
-        if config_class in IMAGE_PROCESSOR_MAPPING._extra_content:
+        if config_class in IMAGE_PROCESSOR_MAPPING:
             existing_mapping = IMAGE_PROCESSOR_MAPPING[config_class]
             existing_mapping.update(image_processor_classes)
             image_processor_classes = existing_mapping
@@ -754,7 +758,9 @@ class AutoImageProcessor:
                     f"Image processor class for backend '{backend_key}' must inherit from `BaseImageProcessor`. "
                     f"Got: {processor_class}"
                 )
-        IMAGE_PROCESSOR_MAPPING.register(config_class, image_processor_classes, exist_ok=exist_ok)
+        IMAGE_PROCESSOR_MAPPING.register(
+            config_class, image_processor_classes, exist_ok=exist_ok, overrides_ok=overrides_ok
+        )
 
 
 __all__ = ["IMAGE_PROCESSOR_MAPPING", "AutoImageProcessor"]

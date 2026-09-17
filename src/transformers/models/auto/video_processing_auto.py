@@ -49,54 +49,52 @@ logger = logging.get_logger(__name__)
 if TYPE_CHECKING:
     # This significantly improves completion suggestion performance when
     # the transformers package is used with Microsoft's Pylance language server.
-    VIDEO_PROCESSOR_MAPPING_NAMES: OrderedDict[str, tuple[str | None, str | None]] = OrderedDict()
+    VIDEO_PROCESSOR_MAPPING_NAMES: OrderedDict[str, dict[str, str | None]] = OrderedDict()
 else:
     # Merge non-standard mapping names with auto-inferred `VIDEO_PROCESSOR_MAPPING_NAMES`
     MISSING_VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
-            ("cosmos3_omni", "Qwen3VLVideoProcessor"),
-            ("exaone4_5", "Qwen2VLVideoProcessor"),
-            ("hyperclovax_vision_v2", "Qwen2VLVideoProcessor"),
-            ("instructblip", "InstructBlipVideoVideoProcessor"),
-            ("pe_audio_video", "PeVideoVideoProcessor"),
-            ("qwen2_5_omni", "Qwen2VLVideoProcessor"),
-            ("qwen2_5_vl", "Qwen2VLVideoProcessor"),
-            ("qwen3_5", "Qwen3VLVideoProcessor"),
-            ("qwen3_5_moe", "Qwen3VLVideoProcessor"),
-            ("qwen3_omni_moe", "Qwen2VLVideoProcessor"),
-            ("qwen3_vl_moe", "Qwen3VLVideoProcessor"),
-            ("qwen4_exp", "Qwen3VLVideoProcessor"),
-            ("videoprism", "LlavaOnevisionVideoProcessor"),
+            ("cosmos3_omni", {"torchvision": "Qwen3VLVideoProcessor"}),
+            ("exaone4_5", {"torchvision": "Qwen2VLVideoProcessor"}),
+            ("hyperclovax_vision_v2", {"torchvision": "Qwen2VLVideoProcessor"}),
+            ("instructblip", {"torchvision": "InstructBlipVideoVideoProcessor"}),
+            ("pe_audio_video", {"torchvision": "PeVideoVideoProcessor"}),
+            ("qwen2_5_omni", {"torchvision": "Qwen2VLVideoProcessor"}),
+            ("qwen2_5_vl", {"torchvision": "Qwen2VLVideoProcessor"}),
+            ("qwen3_5", {"torchvision": "Qwen3VLVideoProcessor"}),
+            ("qwen3_5_moe", {"torchvision": "Qwen3VLVideoProcessor"}),
+            ("qwen3_omni_moe", {"torchvision": "Qwen2VLVideoProcessor"}),
+            ("qwen3_vl_moe", {"torchvision": "Qwen3VLVideoProcessor"}),
+            ("qwen4_exp", {"torchvision": "Qwen3VLVideoProcessor"}),
+            ("videoprism", {"torchvision": "LlavaOnevisionVideoProcessor"}),
         ]
     )
     VIDEO_PROCESSOR_MAPPING_NAMES.update(MISSING_VIDEO_PROCESSOR_MAPPING_NAMES)
 
-for model_type, video_processors in VIDEO_PROCESSOR_MAPPING_NAMES.items():
-    fast_video_processor_class = video_processors
-
+for model_type, video_processors_dict in VIDEO_PROCESSOR_MAPPING_NAMES.items():
     # If the torchvision is not available, we set it to None
     if not is_torchvision_available():
-        fast_video_processor_class = None
+        video_processors_dict["torchvision"] = None
 
-    VIDEO_PROCESSOR_MAPPING_NAMES[model_type] = fast_video_processor_class
+    VIDEO_PROCESSOR_MAPPING_NAMES[model_type] = video_processors_dict
 
 VIDEO_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, VIDEO_PROCESSOR_MAPPING_NAMES)
 
 
 def video_processor_class_from_name(class_name: str):
-    for module_name, extractor in VIDEO_PROCESSOR_MAPPING_NAMES.items():
-        if class_name == extractor:
-            module_name = model_type_to_module_name(module_name)
+    for video_processors_dict in VIDEO_PROCESSOR_MAPPING._extra_content.values():
+        for extractor_class in video_processors_dict.values():
+            if isinstance(extractor_class, type) and getattr(extractor_class, "__name__", None) == class_name:
+                return extractor_class
 
+    for model_type, extractors_dict in VIDEO_PROCESSOR_MAPPING.items():
+        if class_name in extractors_dict.values():
+            module_name = model_type_to_module_name(model_type)
             module = importlib.import_module(f".{module_name}", "transformers.models")
             try:
                 return getattr(module, class_name)
             except AttributeError:
                 continue
-
-    for extractor in VIDEO_PROCESSOR_MAPPING._extra_content.values():
-        if getattr(extractor, "__name__", None) == class_name:
-            return extractor
 
     # We did not find the class, but maybe it's because a dep is missing. In that case, the class will be in the main
     # init and we return the proper dummy to get an appropriate error message.
@@ -105,6 +103,47 @@ def video_processor_class_from_name(class_name: str):
         return getattr(main_module, class_name)
 
     return None
+
+
+def _resolve_auto_map_class_ref(auto_map, backend):
+    """Extract the class reference string from an auto_map entry based on backend preference.
+
+    Returns:
+        A string that may be:
+        - A simple class name (e.g. `"MyImageProcessor"`)
+        - A Hub reference in the form `upstream_repo--path/to/file.py::ClassName`, where the part before
+          `--` is the upstream repo ID (used for trust_remote_code resolution).
+    """
+    if isinstance(auto_map, dict):
+        return auto_map.get(backend) or next(iter(auto_map.values()))
+    if isinstance(auto_map, (list, tuple)):
+        if backend == "torchvision" and len(auto_map) > 1 and auto_map[1] is not None:
+            return auto_map[1]
+        return auto_map[0]
+    return auto_map
+
+
+def _load_backend_class(video_processor_class_name: str, backend: str):
+    """
+    Load video processor class for a given backend. Uses the mapping from
+    VIDEO_PROCESSOR_MAPPING when `video_processor_class_name` is found in its
+    values (so config overrides and custom backends are respected). Falls
+    back to base+Pil convention for remote code / unknown processors.
+    """
+    mapping = {"torchvision": video_processor_class_name}
+    for mapping_dict in (
+        *VIDEO_PROCESSOR_MAPPING._extra_content.values(),
+        *VIDEO_PROCESSOR_MAPPING.values(),
+    ):
+        if any(v == video_processor_class_name for v in mapping_dict.values()):
+            mapping = mapping_dict
+            break
+
+    if (backend_processor_class_name := mapping.get(backend)) is not None:
+        processor_class = video_processor_class_from_name(backend_processor_class_name)
+        return processor_class
+    else:
+        raise ImportError(f"Video processor cannot be loaded - requested {backend} backend is not available.")
 
 
 def get_video_processor_config(
@@ -313,6 +352,7 @@ class AutoVideoProcessor:
         >>> # video_processor = AutoVideoProcessor.from_pretrained("./test/saved_model/")
         ```"""
         config = kwargs.pop("config", None)
+        backend = kwargs.pop("backend", "torchvision")
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
@@ -354,23 +394,26 @@ class AutoVideoProcessor:
                 # Continue to fallback logic below (AutoTokenizer, AutoImageProcessor, etc.)
                 pass
 
+        # Map to the requested backend-processor if necessary, and save cls before backend filtering
+        resolved_video_processor_class = video_processor_class
         if video_processor_class is not None:
-            video_processor_class = video_processor_class_from_name(video_processor_class)
+            video_processor_class = _load_backend_class(video_processor_class, backend)
 
         has_remote_code = video_processor_auto_map is not None
         has_local_code = video_processor_class is not None or type(config) in VIDEO_PROCESSOR_MAPPING
         explicit_local_code = False
         if has_remote_code:
             if has_local_code:
-                local_video_processor_class = video_processor_class or VIDEO_PROCESSOR_MAPPING[type(config)]
+                local_video_processor_class = video_processor_class or VIDEO_PROCESSOR_MAPPING[type(config)].get(
+                    backend
+                )
                 explicit_local_code = (
                     local_video_processor_class is not None
                     and not local_video_processor_class.__module__.startswith("transformers.")
                 )
-            if "--" in video_processor_auto_map:
-                upstream_repo = video_processor_auto_map.split("--")[0]
-            else:
-                upstream_repo = None
+
+            class_ref = _resolve_auto_map_class_ref(video_processor_auto_map, backend)
+            upstream_repo = class_ref.split("--")[0] if "--" in class_ref else None
             trust_remote_code = resolve_trust_remote_code(
                 trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
             )
@@ -385,12 +428,16 @@ class AutoVideoProcessor:
             return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         # Last try: we use the VIDEO_PROCESSOR_MAPPING.
         elif type(config) in VIDEO_PROCESSOR_MAPPING:
-            video_processor_class = VIDEO_PROCESSOR_MAPPING[type(config)]
+            video_processor_class = VIDEO_PROCESSOR_MAPPING[type(config)].get(backend)
             if video_processor_class is not None:
                 return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
+            raise ValueError(
+                f"Could not load any video processor class for {pretrained_model_name_or_path} with {backend} backend. "
+                "Please install the backend dependencies or select another backend that is available in your environment."
+            )
         # Raise a more informative error message if torchvision isn't found, otherwise just fallback to default
-        if not is_torchvision_available():
+        if resolved_video_processor_class is not None and backend == "torchvision" and not is_torchvision_available():
             raise ValueError(
                 f"{pretrained_model_name_or_path} requires `torchvision` to be installed. Please install `torchvision` and try again."
             )

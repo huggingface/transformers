@@ -378,6 +378,7 @@ class _BaseAutoModelClass:
 
         # Set the adapter kwargs
         kwargs["adapter_kwargs"] = adapter_kwargs
+        print(has_remote_code, trust_remote_code, explicit_local_code, has_local_code)
 
         if has_remote_code and trust_remote_code and not explicit_local_code:
             model_class = get_class_from_dynamic_module(
@@ -667,7 +668,9 @@ class _LazyAutoMapping(OrderedDict[type[PreTrainedConfig], _LazyAutoMappingValue
         model_type = self._reverse_config_mapping[item.__name__]
         return model_type in self._model_mapping
 
-    def register(self, key: type[PreTrainedConfig] | str, value: _LazyAutoMappingValue, exist_ok=False) -> None:
+    def register(
+        self, key: type[PreTrainedConfig] | str, value: _LazyAutoMappingValue, exist_ok=False, overrides_ok=False
+    ) -> None:
         """
         Register a new model in this mapping.
         """
@@ -682,7 +685,7 @@ class _LazyAutoMapping(OrderedDict[type[PreTrainedConfig], _LazyAutoMappingValue
         # Transformers model/processor/... corresponding to the config)
         # This is because remote/native is indistinguisable from the config class only in such cases, as they both use the same class - then
         # `from_pretrained`/`from_config` are responsible to grab the correct class depending on whether `trust_remote_code` is True/False
-        if getattr(key, "__module__", "").startswith("transformers."):
+        if not overrides_ok and getattr(key, "__module__", "").startswith("transformers."):
             return
 
         # Register the new mapping (this will always take precedence in __getattr__ and __contains__ compared to base mapping)
