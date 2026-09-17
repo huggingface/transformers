@@ -84,7 +84,6 @@ class LongcatFlashConfig(PreTrainedConfig):
 
     vocab_size: int = 131072
     hidden_size: int = 6144
-    num_hidden_layers: int = 56
     num_layers: int = 28
     num_attention_heads: int = 64
     num_key_value_heads: int | None = None
@@ -114,11 +113,15 @@ class LongcatFlashConfig(PreTrainedConfig):
     expert_ffn_hidden_size: int = 2048
     routed_scaling_factor: float = 6.0
 
-    def __post_init__(self, **kwargs):
-        # Each of the `num_layers` decoder layers holds two attention sublayers, so the
-        # cache is keyed by twice as many layers as the checkpoints declare.
-        self.num_hidden_layers = 2 * self.num_layers
+    @property
+    def num_hidden_layers(self) -> int:
+        return 2 * self.num_layers
 
+    @num_hidden_layers.setter
+    def num_hidden_layers(self, value: int):
+        self.num_layers = value // 2
+
+    def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
