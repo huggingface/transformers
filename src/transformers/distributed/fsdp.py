@@ -187,15 +187,12 @@ def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) 
 
 def apply_fully_sharded_data_parallelism(model: nn.Module, mesh_manager: MeshManager) -> nn.Module:
     """
-    Apply FSDP2 (fully_shard) to a model: the trunk on the `fsdp` axis, dispatched experts on `efsdp`.
+    Apply FSDP2 (fully_shard) to a model: dispatched experts on `efsdp` and the rest of the modules on `fsdp`.
 
     Torch availability, distributed initialization and the version requirement
     are asserted upstream by `initialize_distributed_mesh`.
-
-    With token dispatch, the routed experts are wrapped separately on `efsdp`, even when its size is one, so the
-    surrounding model's `fsdp` wrapper excludes them: their DTensors live on the expert view, and FSDP2 requires a
-    parameter's mesh and its FSDP mesh to share a root.
     """
+    distributed_config = model.config.distributed_config
     fsdp_mesh = mesh_manager.get_mesh("fsdp")
     fsdp_plan = dict(getattr(model, "_fsdp_plan", None) or {})
     if not fsdp_plan:
@@ -210,11 +207,8 @@ def apply_fully_sharded_data_parallelism(model: nn.Module, mesh_manager: MeshMan
     adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, model)
     reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
 
-    if (
-        distributed_config is not None
-        and distributed_config.ep_size > 1
-        and "ep_dispatch_experts" in getattr(model, "ep_plan", {}).values()
-    ):
+    fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
+    if distributed_config.ep_size > 1 and "ep_dispatch_experts" in model.ep_plan.values():
         expert_mesh = mesh_manager.get_mesh("efsdp")
         for module in model.modules():
             if getattr(module, "_is_expert_parallel", False):
