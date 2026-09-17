@@ -382,6 +382,10 @@ class GenerationConfig(PushToHubMixin):
     # Hash to detect whether the instance was modified after loading
     _original_object_hash: int | None
 
+    # Set at runtime to correctly slice inputs in `_prefill` in case we restart from an existing non-empty Cache, and the mask would
+    # otherwise be dropped due to containing only 1s. This allows to differentiate between restarting with full or sliced input_ids
+    _mask_length: int | None
+
     def __init__(self, **kwargs):
         # Snapshot of the attributes the caller explicitly provided (before the `kwargs.pop(...)` calls below
         # consume them). Used by `validate()` to restrict "minor issue" warnings to flags actually set by the user,
@@ -1219,6 +1223,8 @@ class GenerationConfig(PushToHubMixin):
             del output["_commit_hash"]
         if "_original_object_hash" in output:
             del output["_original_object_hash"]
+        if "_mask_length" in output:
+            del output["_mask_length"]
 
         # Transformers version when serializing this file
         output["transformers_version"] = __version__

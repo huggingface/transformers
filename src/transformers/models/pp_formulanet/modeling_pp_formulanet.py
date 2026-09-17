@@ -1066,7 +1066,7 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
         ```python
         >>> from io import BytesIO
 
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, PPFormulaNetForConditionalGeneration
 

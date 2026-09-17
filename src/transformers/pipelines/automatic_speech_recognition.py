@@ -14,8 +14,8 @@
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Union
 
-import httpx
 import numpy as np
+from huggingface_hub.utils import httpx
 
 from ..generation import GenerationConfig
 from ..tokenization_python import PreTrainedTokenizer
