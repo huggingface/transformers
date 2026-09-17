@@ -52,11 +52,11 @@ if is_torch_available():
         Apertus1p5TextPreTrainedModel,
         Apertus1p5VisionTokenizerConfig,
         Apertus1p5VisionTokenizerModel,
-        WatermarkingConfig,
         WavTokenizerConfig,
         WavTokenizerEncoderModel,
     )
     from transformers.models.wavtokenizer.modeling_wavtokenizer import WavTokenizerEncoderOutput
+    from transformers.trainer_pt_utils import LabelSmoother
 
 
 class Apertus1p5ModelTester:
@@ -550,7 +550,7 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             )
 
     def test_pruned_lm_head_in_composite(self):
-        """The composite keeps a compact physical head but exposes full-width logits with an input-only tail."""
+        """The composite returns physical-width logits with and without labels."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.text_config.output_vocab_size = 3  # image/audio placeholders are input-only ids 3 and 4
         model = Apertus1p5ForConditionalGeneration(config).to(torch_device).eval()
@@ -558,10 +558,8 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
         with torch.no_grad():
             logits = model(**inputs_dict).logits
-        self.assertEqual(logits.shape[-1], config.text_config.vocab_size)
-        self.assertTrue(bool(torch.isfinite(logits[..., :3]).all()))
-        # the input-only tail is masked with the dtype minimum (finite, so score arithmetic stays NaN-free)
-        self.assertTrue(bool((logits[..., 3:] == torch.finfo(logits.dtype).min).all()))
+        self.assertEqual(logits.shape[-1], 3)
+        self.assertTrue(bool(torch.isfinite(logits).all()))
 
         # loss-only calls keep the compact physical width; input-only labels are masked with -100
         labels = torch.full_like(inputs_dict["input_ids"], -100)
@@ -570,6 +568,7 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             label_outputs = model(**inputs_dict, labels=labels)
         self.assertEqual(label_outputs.logits.shape[-1], 3)
         self.assertTrue(bool(torch.isfinite(label_outputs.loss)))
+        torch.testing.assert_close(label_outputs.logits, logits)
 
         prompt = inputs_dict["input_ids"][:2]
         model_inputs = {
@@ -593,24 +592,6 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                     **generate_kwargs,
                 )
                 self.assertLess(int(generated[:, prompt.shape[1] :].max()), 3)
-
-        outputs = model.generate(
-            prompt,
-            **model_inputs,
-            max_new_tokens=4,
-            do_sample=False,
-            watermarking_config=WatermarkingConfig(greenlist_ratio=0.5),
-            return_dict_in_generate=True,
-            output_scores=True,
-        )
-        self.assertTrue(all(score.shape[-1] == config.text_config.vocab_size for score in outputs.scores))
-        # processors may shift tail scores slightly (e.g. the watermark bias); they must stay unsampleable
-        self.assertTrue(
-            all(bool((score[..., 3:] <= torch.finfo(score.dtype).min / 2).all()) for score in outputs.scores)
-        )
-        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, normalize_logits=True)
-        self.assertEqual(transition_scores.shape, (prompt.shape[0], len(outputs.scores)))
-        self.assertTrue(bool(torch.isfinite(transition_scores).all()))
 
     def test_mismatched_image_placeholders_raise(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -670,6 +651,43 @@ class Apertus1p5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                     torch.testing.assert_close(reloaded(input_ids).logits, expected_logits)
 
 
+@require_torch
+class Apertus1p5PrunedGenerationTest(unittest.TestCase):
+    def test_generation_options(self):
+        """Basic generation handles input-only IDs, independently of returned logits padding."""
+        cases = [
+            ("greedy", [[11, 12, 13]], {}),
+            ("beam_search", [[11, 12, 13]], {"num_beams": 2}),
+            ("beam_sampling", [[11, 12, 13]], {"num_beams": 2, "do_sample": True}),
+            ("repetition_penalty", [[11, 60, 12]], {"repetition_penalty": 1.1}),
+            ("no_repeat_bigram", [[11, 12, 60, 12]], {"no_repeat_ngram_size": 2}),
+        ]
+        for model_class in (Apertus1p5TextForCausalLM, Apertus1p5ForConditionalGeneration):
+            torch.manual_seed(0)
+            config = Apertus1p5ModelTester(self).get_config()
+            config.text_config.output_vocab_size = 40
+            if model_class is Apertus1p5TextForCausalLM:
+                config = config.text_config
+            model = model_class(config).to(torch_device).eval()
+            self.assertLess(model.lm_head.out_features, model.get_input_embeddings().num_embeddings)
+            for name, ids, options in cases:
+                with self.subTest(model=model_class.__name__, case=name):
+                    torch.manual_seed(0)
+                    input_ids = torch.tensor(ids, device=torch_device)
+                    generation_kwargs = {"do_sample": False, **options}
+                    with torch.no_grad():
+                        output = model.generate(
+                            input_ids=input_ids,
+                            attention_mask=torch.ones_like(input_ids),
+                            max_new_tokens=2,
+                            eos_token_id=None,
+                            **generation_kwargs,
+                        )
+                    generated = output[:, input_ids.shape[1] :]
+                    self.assertEqual(tuple(generated.shape), (len(ids), 2))
+                    self.assertTrue(bool(((generated >= 0) & (generated < model.lm_head.out_features)).all()))
+
+
 class Apertus1p5TextModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Apertus1p5TextModel
@@ -699,7 +717,7 @@ class Apertus1p5TextModelTest(CausalLMModelTest, unittest.TestCase):
         return Apertus1p5TextConfig(**kwargs)
 
     def test_pruned_head_logits_and_generation(self):
-        """A compact physical head exposes full-width logits whose input-only tail is non-generatable."""
+        """A compact physical head returns only output-token scores for loss and generation."""
         config = self._tiny_config(output_vocab_size=40)
         model = Apertus1p5TextForCausalLM(config).to(torch_device).eval()
         self.assertEqual(model.lm_head.out_features, 40)
@@ -713,10 +731,9 @@ class Apertus1p5TextModelTest(CausalLMModelTest, unittest.TestCase):
 
         with torch.no_grad():
             logits = model(input_ids=input_ids).logits
-        self.assertEqual(logits.shape[-1], config.vocab_size)
-        self.assertTrue(bool(torch.isfinite(logits[..., :40]).all()))
-        # the input-only tail is masked with the dtype minimum (finite, so score arithmetic stays NaN-free)
-        self.assertTrue(bool((logits[..., 40:] == torch.finfo(logits.dtype).min).all()))
+        self.assertEqual(logits.shape[-1], 40)
+        self.assertTrue(bool(torch.isfinite(logits).all()))
+        torch.testing.assert_close(logits, outputs.logits)
 
         for generate_kwargs in (
             {"do_sample": False},
@@ -724,7 +741,7 @@ class Apertus1p5TextModelTest(CausalLMModelTest, unittest.TestCase):
             {"num_beams": 2, "do_sample": False},
             {"do_sample": False, "repetition_penalty": 1.2},
             {"do_sample": False, "no_repeat_ngram_size": 1},
-            # classifier-free guidance subtracts two score sets; the finite tail mask must survive it
+            # classifier-free guidance combines scores from conditional and unconditional forwards
             {"do_sample": False, "guidance_scale": 1.5},
             {"do_sample": True, "guidance_scale": 1.5},
         ):
@@ -748,8 +765,26 @@ class Apertus1p5TextModelTest(CausalLMModelTest, unittest.TestCase):
         )
         torch.testing.assert_close(outputs.loss, expected_loss)
 
+    def test_pruned_head_label_smoothing(self):
+        model = Apertus1p5TextForCausalLM(self._tiny_config(output_vocab_size=40)).to(torch_device).eval()
+        input_ids = ids_tensor([1, 5], 40)
+        input_ids[0, 2] = 60
+        labels = input_ids.clone()
+        labels[0, 2] = -100
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids)
+        actual = LabelSmoother(epsilon=0.1)(outputs, labels, shift_labels=True)
+        expected = torch.nn.functional.cross_entropy(
+            outputs.logits[:, :-1].float().reshape(-1, 40),
+            labels[:, 1:].reshape(-1),
+            ignore_index=-100,
+            label_smoothing=0.1,
+        )
+        self.assertTrue(bool(torch.isfinite(actual)))
+        torch.testing.assert_close(actual, expected)
+
     def test_config_return_dict_false(self):
-        config = self._tiny_config()
+        config = self._tiny_config(output_vocab_size=40)
         config.return_dict = False
         model = Apertus1p5TextForCausalLM(config).to(torch_device).eval()
         input_ids = ids_tensor([2, 5], config.vocab_size)
@@ -759,8 +794,8 @@ class Apertus1p5TextModelTest(CausalLMModelTest, unittest.TestCase):
             structured_outputs = model(input_ids=input_ids, use_cache=False, return_dict=True)
 
         self.assertIsInstance(outputs, tuple)
-        self.assertEqual(outputs[0].shape[:2], input_ids.shape)
-        self.assertEqual(structured_outputs.logits.shape[:2], input_ids.shape)
+        self.assertEqual(outputs[0].shape, (*input_ids.shape, 40))
+        self.assertEqual(structured_outputs.logits.shape, (*input_ids.shape, 40))
 
     def test_uses_text_pretrained_base(self):
         self.assertTrue(issubclass(Apertus1p5TextForCausalLM, Apertus1p5TextPreTrainedModel))
@@ -939,9 +974,8 @@ class Apertus1p5IntegrationTest(unittest.TestCase):
         with torch.no_grad():
             logits = self.model(input_ids=input_ids, pixel_values=image, image_sizes=torch.tensor([[256, 256]])).logits
         output_vocab_size = getattr(config.text_config, "output_vocab_size", None) or config.text_config.vocab_size
-        self.assertEqual(logits.shape[-1], config.text_config.vocab_size)
-        self.assertTrue(torch.isfinite(logits[..., :output_vocab_size]).all())
-        self.assertTrue((logits[..., output_vocab_size:] == torch.finfo(logits.dtype).min).all())
+        self.assertEqual(logits.shape[-1], output_vocab_size)
+        self.assertTrue(torch.isfinite(logits).all())
 
     def test_processor_golden_token_sequences(self):
         """The processor must emit the exact reference id sequences against the real vocabulary."""

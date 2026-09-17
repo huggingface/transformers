@@ -7,7 +7,7 @@ compared against the references recorded by the first:
   records greedy text tokens, media codes, the next-token argmax, and the backbone continuation.
 - CASE 2, model sharding: the composite split over all visible GPUs via `device_map="auto"`; checks
   that the layout really spans >= 2 devices, that the media tokenizers stay fp32 beside the bf16
-  backbone, the padded-logits contract, and parity with the CASE 1 references. This is sequential
+  backbone, physical-width logits, and parity with the CASE 1 references. This is sequential
   model sharding: the layer-wise layout of pipeline parallelism but without micro-batch scheduling,
   so only one GPU computes at a time.
 - CASE 3, tensor parallelism: relaunches this file under `torchrun --nproc_per_node=2` and loads the
@@ -61,14 +61,14 @@ def setup(transformers):
     return checkpoint, processor
 
 
-def check_padded_logits(model, input_ids):
-    """Run forward pass and check logits are padded correctly"""
+def check_physical_logits(model, input_ids):
+    """Check finite logits at the global physical LM-head width."""
     text_config = model.config.get_text_config()
     with torch.no_grad():
         logits = model(input_ids=input_ids.to(model.device)).logits
-    assert logits.shape[-1] == text_config.vocab_size, f"unexpected logits shape {logits.shape}"
-    tail = logits[..., text_config.output_vocab_size :]
-    assert (tail == torch.finfo(logits.dtype).min).all(), "padded tail must be finfo.min everywhere"
+    output_vocab_size = text_config.output_vocab_size or text_config.vocab_size
+    assert logits.shape[-1] == output_vocab_size, f"unexpected logits shape {logits.shape}"
+    assert torch.isfinite(logits).all(), "non-finite logits"
     return logits
 
 
@@ -99,7 +99,7 @@ def case_1_single_device(transformers, checkpoint, processor, references):
             checkpoint, dtype=torch.bfloat16, device_map="cuda:0"
         ).eval()
         text_inputs = processor(text=TEXT_PROMPT, return_tensors="pt").to(model.device)
-        check_padded_logits(model, text_inputs["input_ids"])
+        check_physical_logits(model, text_inputs["input_ids"])
         with torch.no_grad():
             ref_text = model.generate(**text_inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False)[0].tolist()
 
@@ -136,7 +136,7 @@ def case_2_automatic_sharding(transformers, checkpoint, processor, references):
 
     Shard the composite model over all visible GPUs with `device_map="auto"` and check: the layout
     actually spans >= 2 devices, the media tokenizers stay fp32 next to the bf16 backbone, the
-    padded-logits contract holds, and text generation, media codes, and the next-token argmax are
+    physical-width logits are returned, and text generation, media codes, and the next-token argmax are
     identical to the CASE 1 references. Sequential model sharding, not true pipeline parallelism:
     layer-wise stages as in PP, but with no micro-batching, one GPU computing at a time.
     """
@@ -164,7 +164,7 @@ def case_2_automatic_sharding(transformers, checkpoint, processor, references):
         assert backbone_dtypes == {torch.bfloat16}, f"unexpected backbone dtypes {backbone_dtypes}"
 
         text_inputs = processor(text=TEXT_PROMPT, return_tensors="pt").to(model.device)
-        check_padded_logits(model, text_inputs["input_ids"])
+        check_physical_logits(model, text_inputs["input_ids"])
         with torch.no_grad():
             sharded_text = model.generate(**text_inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False)[0].tolist()
         assert sharded_text == references["ref_text"], "sharded text generation diverged"
@@ -246,7 +246,7 @@ def tp_main():
     head_rows = head_weight.to_local().shape[0] if hasattr(head_weight, "to_local") else head_weight.shape[0]
 
     inputs = processor(text=TEXT_PROMPT, return_tensors="pt").to(model.device)
-    check_padded_logits(model, inputs["input_ids"])
+    check_physical_logits(model, inputs["input_ids"])
     with torch.no_grad():
         generated = model.generate(**inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False)
     continuation = generated[0, inputs["input_ids"].shape[1] :].tolist()
@@ -255,7 +255,7 @@ def tp_main():
         assert local_q_rows * world_size == full_q_rows, "q_proj was not sharded"
         # The pruned lm_head may stay replicated at its physical width or be row-sharded with a
         # gather, depending on how the runtime applies the class-level `lm_head` plan entry; both
-        # layouts keep the full-width padded-logits contract intact.
+        # layouts return logits at the global physical head width.
         assert head_rows in {
             config.output_vocab_size,
             config.output_vocab_size // world_size,
