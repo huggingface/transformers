@@ -1006,72 +1006,75 @@ def resolve_parallel_plans(
     return tp_plan, ep_plan
 
 
-def apply_tensor_parallelism(
-    model: nn.Module,
-    tp_mesh: DeviceMesh,
-    plan: dict[str, str] | None = None,
-    install_forward: Callable | None = None,
-):
-    """DTensor backend: shard params as placeholders and install TP forward hooks. Defaults to `model.tp_plan`.
-
-    `install_forward(style_name, style, module)` replaces the default `style.install_forward(module, tp_mesh)`.
-    """
-    plan = model.tp_plan if plan is None else plan
-    _validate_parallel_plan_styles(plan)
+def apply_tensor_parallelism(model, tp_mesh, tp_plan=None):
+    """Apply parameter sharding and forward hooks on the TP mesh."""
+    tp_plan = model.tp_plan if tp_plan is None else tp_plan
 
     for name, module in model.named_modules():
         # Create DTensor placeholders so the loader knows which shard belongs to this rank.
         for p_name, _ in list(module.named_parameters(recurse=False)):
             full = f"{name}.{p_name}" if name else p_name
-            style_name = _get_parameter_plan(parameter_name=full, plan=plan, is_weight=True)
+            style_name = _get_parameter_plan(parameter_name=full, plan=tp_plan, is_weight=True)
             if style_name is not None and style_name in ALL_PARALLEL_STYLES:
                 style = ALL_PARALLEL_STYLES[style_name]
-                style.validate_param(module, p_name, mesh, parameter_name=full)
-                style.shard_param(module, p_name, mesh)
+                style.validate_param(module, p_name, tp_mesh, parameter_name=full)
+                style.shard_param(module, p_name, tp_mesh)
 
-        # Install the input/output transforms required by this module's style.
-        style_name = _get_parameter_plan(parameter_name=name, plan=plan, is_weight=False)
+        # Install the input/output transforms required by this module's TP style.
+        style_name = _get_parameter_plan(parameter_name=name, plan=tp_plan, is_weight=False)
         if style_name is not None and style_name in ALL_PARALLEL_STYLES:
             if style_name == "mla_kv_a_proj":
                 # MLA needs to know the qk_rope_head_dim to split the projection output into KV and RoPE parts.
                 # TODO: Store qk_rope_head_dim on MLA projection modules when the models initialize them.
                 module.config = model.config.get_text_config()
-            if install_forward is None:
-                ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
-            else:
-                install_forward(style_name, ALL_PARALLEL_STYLES[style_name], module)
+            ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
+        module._is_hooked = True
+
+    return model
+
+def apply_masked_expert_parallelism(model: nn.Module, tp_mesh: DeviceMesh, plan: dict[str, str]):
+    """Shard experts and install router masking and all-reduce hooks on the TP mesh."""
+    for name, module in model.named_modules():
+        for p_name, _ in list(module.named_parameters(recurse=False)):
+            full = f"{name}.{p_name}" if name else p_name
+            style_name = _get_parameter_plan(parameter_name=full, plan=plan, is_weight=True)
+            if style_name is not None and style_name in ALL_PARALLEL_STYLES:
+                style = ALL_PARALLEL_STYLES[style_name]
+                style.validate_param(module, p_name, tp_mesh, parameter_name=full)
+                style.shard_param(module, p_name, tp_mesh)
+
+        style_name = _get_parameter_plan(parameter_name=name, plan=plan, is_weight=False)
+        if style_name is not None and style_name in ALL_PARALLEL_STYLES:
+            ALL_PARALLEL_STYLES[style_name].install_forward(module, tp_mesh)
         module._is_hooked = True
 
     return model
 
 
-def apply_masked_expert_parallelism(model: nn.Module, tp_mesh: DeviceMesh, ep_plan: dict[str, str]):
-    """Shard the experts across `tp_mesh` and install the router masking and all-reduce hooks.
-
-    Every rank of the mesh sees the same tokens, runs its local experts on them and all-reduces the outputs, so
-    this path requires `ep_size == tp_size`.
-    """
-    return apply_tensor_parallelism(model, tp_mesh, ep_plan)
-
-
 def apply_dispatch_expert_parallelism(
-    model: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh, ep_plan: dict[str, str]
+    model: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh, plan: dict[str, str]
 ):
-    """Shard the experts across `ep_mesh` and install the all-to-all dispatch hooks.
+    """Shard experts on EP; use TP to split shared tokens and reconstruct outputs around dispatch."""
+    for name, module in model.named_modules():
+        for p_name, _ in list(module.named_parameters(recurse=False)):
+            full = f"{name}.{p_name}" if name else p_name
+            style_name = _get_parameter_plan(parameter_name=full, plan=plan, is_weight=True)
+            if style_name is not None and style_name in ALL_PARALLEL_STYLES:
+                style = ALL_PARALLEL_STYLES[style_name]
+                style.validate_param(module, p_name, ep_mesh, parameter_name=full)
+                style.shard_param(module, p_name, ep_mesh)
 
-    Every rank keeps its own tokens and only exchanges the routed (token, expert) pairs, so `ep_size` is free of
-    `tp_size`. TP ranks share a batch: the dispatch hook takes `tp_mesh` to send disjoint token slices and rebuild
-    the replicated output.
-    """
+        # Dispatch hooks need both meshes to redistribute tokens between TP and EP ranks.
+        style_name = _get_parameter_plan(parameter_name=name, plan=plan, is_weight=False)
+        if style_name is not None and style_name in ALL_PARALLEL_STYLES:
+            style = ALL_PARALLEL_STYLES[style_name]
+            if style_name == "ep_dispatch_experts":
+                style.install_forward(module, ep_mesh=ep_mesh, tp_mesh=tp_mesh)
+            else:
+                style.install_forward(module, ep_mesh)
+        module._is_hooked = True
 
-    def install_forward(style_name, style, module):
-        if style_name == "ep_dispatch_experts":
-            style.install_forward(module, ep_mesh, tp_mesh=tp_mesh)
-        else:
-            style.install_forward(module, ep_mesh)
-
-    return apply_tensor_parallelism(model, ep_mesh, ep_plan, install_forward=install_forward)
-
+    return model
 
 def gather_state_dict_for_save(
     state_dict: dict[str, torch.Tensor],
