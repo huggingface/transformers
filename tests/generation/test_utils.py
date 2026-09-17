@@ -2894,17 +2894,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         num_kv_heads = getattr(config, "num_key_value_heads", num_attention_heads)
         hidden_size = getattr(config, "d_model", config.hidden_size)
         head_dim = getattr(config, "head_dim", hidden_size // num_attention_heads)
-        # Check for MLA and DSA attributes: MLA models cache compressed latents, DSA does not yet
+        # Check for MLA and DSA attributes: Those models cache compressed latents
         kv_lora_rank = getattr(config, "kv_lora_rank", None)
         qk_rope_head_dim = getattr(config, "qk_rope_head_dim", None)
         uses_mla = kv_lora_rank is not None and qk_rope_head_dim is not None
-        uses_dsa = uses_mla and getattr(config, "index_topk", None) is not None
-
-        # DSA models expand the latents before caching, so their keys and values have distinct head dims.
-        if uses_dsa:
-            key_shape = (batch_size, num_attention_heads, seq_length, config.qk_nope_head_dim + qk_rope_head_dim)
-            value_shape = (batch_size, num_attention_heads, seq_length, config.v_head_dim)
-            return key_shape, value_shape
 
         # For MLA models, return the shape of "kv_nope" as key and "k_rot" as value
         if uses_mla:
