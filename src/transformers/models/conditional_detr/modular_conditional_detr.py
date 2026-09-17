@@ -37,7 +37,11 @@ from ...utils import (
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import requires
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..deformable_detr.modeling_deformable_detr import inverse_sigmoid
+from ..deformable_detr.modeling_deformable_detr import (
+    DeformableDetrForObjectDetectionCriterion,
+    DeformableDetrLoss,
+    inverse_sigmoid,
+)
 from ..detr.image_processing_detr import DetrImageProcessor
 from ..detr.image_processing_pil_detr import DetrImageProcessorPil
 from ..detr.modeling_detr import (
@@ -48,6 +52,7 @@ from ..detr.modeling_detr import (
     DetrEncoderLayer,
     DetrForObjectDetection,
     DetrForSegmentation,
+    DetrHungarianMatcher,
     DetrLearnedPositionEmbedding,
     DetrMLP,
     DetrMLPPredictionHead,
@@ -60,6 +65,7 @@ from ..detr.modeling_detr import (
     DetrSinePositionEmbedding,
     eager_attention_forward,
 )
+from ..detr.modular_detr import _set_aux_loss
 from .configuration_conditional_detr import ConditionalDetrConfig
 
 
@@ -1020,10 +1026,31 @@ class ConditionalDetrModel(DetrModel):
         )
 
 
+class ConditionalDetrForObjectDetectionLoss(DeformableDetrLoss):
+    def loss_masks(self):
+        raise AttributeError("Mask loss is not used for Conditional DETR object detection")
+
+    def _get_target_permutation_idx(self):
+        raise AttributeError("Target permutation is not used for Conditional DETR object detection")
+
+
+class ConditionalDetrForObjectDetectionCriterion(DeformableDetrForObjectDetectionCriterion):
+    def __init__(self, config):
+        super().__init__(config)
+        losses = ["labels", "boxes", "cardinality"]
+        weight_dict = {
+            "loss_ce": 1,
+            "loss_bbox": config.bbox_loss_coefficient,
+            "loss_giou": config.giou_loss_coefficient,
+        }
+        self.loss_module = ConditionalDetrForObjectDetectionLoss(config, losses, weight_dict)
+
+
 class ConditionalDetrForObjectDetection(DetrForObjectDetection):
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__(config)
         self.class_labels_classifier = nn.Linear(config.d_model, config.num_labels)
+        self.criterion = ConditionalDetrForObjectDetectionCriterion(config)
 
     # taken from https://github.com/Atten4Vis/conditionalDETR/blob/master/models/conditional_detr.py
     def _set_aux_loss(self, outputs_class, outputs_coord):
@@ -1126,8 +1153,8 @@ class ConditionalDetrForObjectDetection(DetrForObjectDetection):
                     outputs_coord = tmp.sigmoid()
                     outputs_coords.append(outputs_coord)
                 outputs_coord = torch.stack(outputs_coords)
-            loss, loss_dict, auxiliary_outputs = self.loss_function(
-                logits, labels, self.device, pred_boxes, self.config, outputs_class, outputs_coord
+            loss, loss_dict, auxiliary_outputs = self.criterion(
+                logits, labels, pred_boxes, outputs_class, outputs_coord
             )
 
         return ConditionalDetrObjectDetectionOutput(
@@ -1146,8 +1173,235 @@ class ConditionalDetrForObjectDetection(DetrForObjectDetection):
         )
 
 
-class ConditionalDetrForSegmentation(DetrForSegmentation):
+class ConditionalDetrForSegmentationHungarianMatcher(DetrHungarianMatcher):
     pass
+
+
+class ConditionalDetrForSegmentationLoss(DeformableDetrLoss):
+    def __init__(self, config, losses, weight_dict):
+        super().__init__(config, losses, weight_dict)
+        self.matcher = ConditionalDetrForSegmentationHungarianMatcher(
+            class_cost=config.class_cost, bbox_cost=config.bbox_cost, giou_cost=config.giou_cost
+        )
+
+    def get_loss(self, loss, outputs, targets, indices, num_boxes):
+        loss_map = {
+            "labels": self.loss_labels,
+            "cardinality": self.loss_cardinality,
+            "boxes": self.loss_boxes,
+            "masks": self.loss_masks,
+        }
+        if loss not in loss_map:
+            raise ValueError(f"Loss {loss} not supported")
+        return loss_map[loss](outputs, targets, indices, num_boxes)
+
+
+class ConditionalDetrForSegmentationCriterion(DeformableDetrForObjectDetectionCriterion):
+    def __init__(self, config):
+        super().__init__(config)
+        # Segmentation adds mask and dice losses to the inherited box/classification losses.
+        losses = ["labels", "boxes", "cardinality", "masks"]
+        weight_dict = {
+            "loss_ce": 1,
+            "loss_bbox": config.bbox_loss_coefficient,
+            "loss_giou": config.giou_loss_coefficient,
+            "loss_mask": config.mask_loss_coefficient,
+            "loss_dice": config.dice_loss_coefficient,
+        }
+        self.loss_module = ConditionalDetrForSegmentationLoss(config, losses, weight_dict)
+
+    def forward(self, logits, labels, pred_boxes, pred_masks, outputs_class=None, outputs_coord=None):
+        outputs_loss = {}
+        auxiliary_outputs = None
+        outputs_loss["logits"] = logits
+        outputs_loss["pred_boxes"] = pred_boxes
+        outputs_loss["pred_masks"] = pred_masks
+        if self.auxiliary_loss:
+            auxiliary_outputs = _set_aux_loss(outputs_class, outputs_coord)
+            outputs_loss["auxiliary_outputs"] = auxiliary_outputs
+
+        loss_dict = self.loss_module(outputs_loss, labels)
+
+        loss = self.loss_module.get_weighted_loss(loss_dict)
+        return loss, loss_dict, auxiliary_outputs
+
+
+class ConditionalDetrForSegmentation(DetrForSegmentation):
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_mask: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.FloatTensor | None = None,
+        encoder_outputs: torch.FloatTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: list[dict] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.FloatTensor] | ConditionalDetrSegmentationOutput:
+        r"""
+        decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
+            Mask to avoid performing attention on certain object queries in the decoder. Mask values selected in `[0, 1]`:
+
+            - 1 for queries that are **not masked**,
+            - 0 for queries that are **masked**.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Kept for backward compatibility, but cannot be used for segmentation, as segmentation requires
+            multi-scale features from the backbone that are not available when bypassing it with inputs_embeds.
+        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+            Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
+            embedded representation. Useful for tasks that require custom query initialization.
+        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
+            Labels for computing the bipartite matching loss, DICE/F-1 loss and Focal loss. List of dicts, each
+            dictionary containing at least the following 3 keys: 'class_labels', 'boxes' and 'masks' (the class labels,
+            bounding boxes and segmentation masks of an image in the batch respectively). The class labels themselves
+            should be a `torch.LongTensor` of len `(number of bounding boxes in the image,)`, the boxes a
+            `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)` and the masks a
+            `torch.FloatTensor` of shape `(number of bounding boxes in the image, height, width)`.
+
+        Examples:
+
+        ```python
+        >>> import io
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
+        >>> from PIL import Image
+        >>> import torch
+        >>> import numpy
+
+        >>> from transformers import AutoImageProcessor, ConditionalDetrForSegmentation
+        >>> from transformers.image_transforms import rgb_to_id
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
+
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/conditional_detr-resnet-50-panoptic")
+        >>> model = ConditionalDetrForSegmentation.from_pretrained("facebook/conditional_detr-resnet-50-panoptic")
+
+        >>> # prepare image for the model
+        >>> inputs = image_processor(images=image, return_tensors="pt")
+
+        >>> # forward pass
+        >>> outputs = model(**inputs)
+
+        >>> # Use the `post_process_panoptic_segmentation` method of the `image_processor` to retrieve post-processed panoptic segmentation maps
+        >>> # Segmentation results are returned as a list of dictionaries
+        >>> result = image_processor.post_process_panoptic_segmentation(outputs, target_sizes=[(300, 500)])
+
+        >>> # A tensor of shape (height, width) where each value denotes a segment id, filled with -1 if no segment is found
+        >>> panoptic_seg = result[0]["segmentation"]
+        >>> panoptic_seg.shape
+        torch.Size([300, 500])
+        >>> # Get prediction score and segment_id to class_id mapping of each segment
+        >>> panoptic_segments_info = result[0]["segments_info"]
+        >>> len(panoptic_segments_info)
+        5
+        ```"""
+
+        batch_size, num_channels, height, width = pixel_values.shape
+        device = pixel_values.device
+
+        if pixel_mask is None:
+            pixel_mask = torch.ones((batch_size, height, width), device=device)
+
+        vision_features = self.conditional_detr.model.backbone(pixel_values, pixel_mask)
+        feature_map, mask = vision_features[-1]
+
+        # Apply 1x1 conv to map (batch_size, C, H, W) -> (batch_size, hidden_size, H, W), then flatten to (batch_size, HW, hidden_size)
+        projected_feature_map = self.conditional_detr.model.input_projection(feature_map)
+        flattened_features = projected_feature_map.flatten(2).transpose(1, 2)
+        spatial_position_embeddings = (
+            self.conditional_detr.model.position_embedding(
+                shape=feature_map.shape, device=device, dtype=pixel_values.dtype, mask=mask
+            )
+            .flatten(2)
+            .transpose(1, 2)
+        )
+        flattened_mask = mask.flatten(1)
+
+        if encoder_outputs is None:
+            encoder_outputs = self.conditional_detr.model.encoder(
+                inputs_embeds=flattened_features,
+                attention_mask=flattened_mask,
+                spatial_position_embeddings=spatial_position_embeddings,
+                **kwargs,
+            )
+
+        object_queries_position_embeddings = self.conditional_detr.model.query_position_embeddings.weight.unsqueeze(
+            0
+        ).repeat(batch_size, 1, 1)
+
+        # Use decoder_inputs_embeds as queries if provided, otherwise initialize with zeros
+        if decoder_inputs_embeds is not None:
+            queries = decoder_inputs_embeds
+        else:
+            queries = torch.zeros_like(object_queries_position_embeddings)
+
+        decoder_outputs = self.conditional_detr.model.decoder(
+            inputs_embeds=queries,
+            attention_mask=decoder_attention_mask,
+            spatial_position_embeddings=spatial_position_embeddings,
+            object_queries_position_embeddings=object_queries_position_embeddings,
+            encoder_hidden_states=encoder_outputs.last_hidden_state,
+            encoder_attention_mask=flattened_mask,
+            **kwargs,
+        )
+
+        sequence_output = decoder_outputs[0]
+
+        logits = self.conditional_detr.class_labels_classifier(sequence_output)
+        pred_boxes = self.conditional_detr.bbox_predictor(sequence_output).sigmoid()
+
+        height, width = feature_map.shape[-2:]
+        memory = encoder_outputs.last_hidden_state.transpose(1, 2).view(batch_size, self.config.d_model, height, width)
+        attention_mask = flattened_mask.view(batch_size, height, width)
+
+        if attention_mask is not None:
+            min_dtype = torch.finfo(memory.dtype).min
+            attention_mask = torch.where(
+                attention_mask.unsqueeze(1).unsqueeze(1),
+                torch.full((), 0.0, device=memory.device, dtype=memory.dtype),
+                min_dtype,
+            )
+
+        bbox_mask = self.bbox_attention(sequence_output, memory, attention_mask=attention_mask)
+
+        seg_masks = self.mask_head(
+            features=projected_feature_map,
+            attention_masks=bbox_mask,
+            fpn_features=[vision_features[2][0], vision_features[1][0], vision_features[0][0]],
+        )
+
+        pred_masks = seg_masks.view(
+            batch_size, self.conditional_detr.config.num_queries, seg_masks.shape[-2], seg_masks.shape[-1]
+        )
+
+        loss, loss_dict, auxiliary_outputs = None, None, None
+        if labels is not None:
+            outputs_class, outputs_coord = None, None
+            if self.config.auxiliary_loss:
+                intermediate = decoder_outputs.intermediate_hidden_states
+                outputs_class = self.conditional_detr.class_labels_classifier(intermediate)
+                outputs_coord = self.conditional_detr.bbox_predictor(intermediate).sigmoid()
+            loss, loss_dict, auxiliary_outputs = self.criterion(
+                logits, labels, pred_boxes, pred_masks, outputs_class, outputs_coord
+            )
+
+        return ConditionalDetrSegmentationOutput(
+            loss=loss,
+            loss_dict=loss_dict,
+            logits=logits,
+            pred_boxes=pred_boxes,
+            pred_masks=pred_masks,
+            auxiliary_outputs=auxiliary_outputs,
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+        )
 
 
 __all__ = [
