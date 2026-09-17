@@ -953,9 +953,8 @@ class DeepseekV4HyperConnection(nn.Module):
 
         All weights are returned execpt "pre", which is consumed here.
         """
-        batch_size, seq_len, hc, hidden_size = hidden_streams.shape
-        if hc != self.hc_mult:
-            raise ValueError(f"Expected {self.hc_mult} hidden streams, got {hc}")
+        batch_size, seq_len = hidden_streams.shape[:2]
+        hc = self.hc_mult
 
         # Flatten and norm the hidden streams
         flattened = hidden_streams.view(batch_size, seq_len, -1).float()
