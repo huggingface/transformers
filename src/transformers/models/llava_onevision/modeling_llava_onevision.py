@@ -520,10 +520,6 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 return_dict=True,
             ).pooler_output
-            image_newline = (
-                self.image_newline[None, None, :].repeat(video_features.shape[0], 1, 1).to(video_features.device)
-            )
-            video_features = torch.cat((video_features, image_newline), dim=1)
             video_features = video_features.flatten(0, 1).to(inputs_embeds.device, inputs_embeds.dtype)
             _, special_video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features
@@ -595,7 +591,8 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
 
         video_features = self.apply_pooling(video_features)
         video_features = video_features.reshape(batch_size, frames * video_features.shape[1], -1)
-        vision_outputs.pooler_output = video_features
+        image_newline = self.image_newline[None, None, :].repeat(batch_size, 1, 1).to(video_features.device)
+        vision_outputs.pooler_output = torch.cat((video_features, image_newline), dim=1)
 
         return vision_outputs
 
