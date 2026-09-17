@@ -18,10 +18,11 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-from huggingface_hub import constants, hf_hub_download
+from huggingface_hub import _CACHED_NO_EXIST, constants, hf_hub_download
 from huggingface_hub.errors import HfHubHTTPError, LocalEntryNotFoundError, OfflineModeIsEnabled
 
 from transformers.utils import CONFIG_NAME, WEIGHTS_NAME, cached_file, has_file, list_repo_templates
+from transformers.utils.hub import cached_files
 
 
 RANDOM_BERT = "hf-internal-testing/tiny-random-bert"
@@ -87,6 +88,53 @@ class GetFromCacheTests(unittest.TestCase):
             self.assertIsNone(path)
             # This check we did call the fake head request
             mock_head.assert_called()
+
+    def test_pinned_revision_known_missing_files(self):
+        for filename in ("missing.json", CONFIG_NAME):
+            # A known-missing file must raise even if another requested file is not cached yet.
+            for filenames in ([filename], ["uncached.json", filename]):
+                with (
+                    self.subTest(filenames=filenames),
+                    mock.patch(
+                        "transformers.utils.hub.try_to_load_from_cache",
+                        side_effect=lambda repo, name, **kwargs: _CACHED_NO_EXIST if name == filename else None,
+                    ),
+                    mock.patch("transformers.utils.hub.hf_hub_download") as download,
+                    mock.patch("transformers.utils.hub.snapshot_download") as snapshot,
+                ):
+                    with self.assertRaisesRegex(OSError, f"Could not locate {filename} inside {RANDOM_BERT}"):
+                        cached_files(RANDOM_BERT, filenames, revision=FULL_COMMIT_HASH)
+                    download.assert_not_called()
+                    snapshot.assert_not_called()
+
+    def test_pinned_revision_optional_missing_files(self):
+        for repo_type in (None, "dataset"):
+            for filenames, expected in ((["missing.json"], None), (["present.json", "missing.json"], ["cached.json"])):
+                with (
+                    self.subTest(repo_type=repo_type, filenames=filenames),
+                    mock.patch(
+                        "transformers.utils.hub.try_to_load_from_cache",
+                        side_effect=lambda repo, name, **kwargs: (
+                            _CACHED_NO_EXIST if name == "missing.json" else "cached.json"
+                        ),
+                    ) as cache,
+                    mock.patch("transformers.utils.hub.hf_hub_download") as download,
+                    mock.patch("transformers.utils.hub.snapshot_download") as snapshot,
+                ):
+                    self.assertEqual(
+                        cached_files(
+                            RANDOM_BERT,
+                            filenames,
+                            revision=FULL_COMMIT_HASH,
+                            repo_type=repo_type,
+                            _raise_exceptions_for_missing_entries=False,
+                        ),
+                        expected,
+                    )
+                    self.assertEqual(cache.call_count, len(filenames))
+                    self.assertTrue(all(call.kwargs["repo_type"] == repo_type for call in cache.call_args_list))
+                    download.assert_not_called()
+                    snapshot.assert_not_called()
 
     def test_has_file(self):
         self.assertTrue(has_file(TINY_BERT_PT_ONLY, WEIGHTS_NAME))

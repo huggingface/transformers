@@ -486,24 +486,30 @@ def cached_files(
     # When `revision` pins an immutable commit, the cache is authoritative for it: every file we already know about at
     # that commit - either downloaded, or recorded as missing - can be served without a single call to the Hub.
     commit_hash = _pinned_commit_hash(revision)
-    everything_is_known = (
-        commit_hash is not None
-        and not force_download
-        and all(
-            try_to_load_from_cache(
+    existing_files = []
+    file_counter = 0
+    if commit_hash is not None and not force_download:
+        for filename in full_filenames:
+            resolved_file = try_to_load_from_cache(
                 path_or_repo_id, filename, cache_dir=cache_dir, revision=commit_hash, repo_type=repo_type
             )
-            is not None
-            for filename in full_filenames
-        )
-    )
+            if resolved_file is not None:
+                if resolved_file is not _CACHED_NO_EXIST:
+                    file_counter += 1
+                    existing_files.append(resolved_file)
+                elif not _raise_exceptions_for_missing_entries:
+                    file_counter += 1
+                else:
+                    raise OSError(f"Could not locate {filename} inside {path_or_repo_id}.")
+
+    # Return cached files when all entries are known, including allowed missing entries.
+    if file_counter == len(full_filenames):
+        return existing_files if existing_files else None
 
     user_agent = http_user_agent(user_agent)
     # download the files if needed
     try:
-        if everything_is_known:
-            pass  # nothing to download
-        elif len(full_filenames) == 1:
+        if len(full_filenames) == 1:
             # This is slightly better for only 1 file
             hf_hub_download(
                 path_or_repo_id,
