@@ -40,33 +40,31 @@ if is_torch_available():
 
 
 class LayoutLMv2ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, **kwargs):
+    def __init__(self, **kwargs):
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"height": 18, "width": 18})
         kwargs.setdefault("apply_ocr", True)
-        super().__init__(parent, **kwargs)
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_pytesseract
 class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = LayoutLMv2ImageProcessingTester(self)
+    image_processing_tester_class = LayoutLMv2ImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
             self.assertTrue(hasattr(image_processing, "apply_ocr"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
@@ -79,7 +77,7 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
         ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
 
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # with apply_OCR = True
             image_processing = image_processing_class()
 
@@ -110,13 +108,13 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     @require_torch
     def test_backends_equivalence(self):
         """Test equivalence across backends for LayoutLMv2."""
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = load_coco_image("000000039769.jpg")
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 
@@ -133,18 +131,18 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     @require_torch
     def test_backends_equivalence_batched(self):
         """Test batched equivalence across backends for LayoutLMv2."""
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+        if hasattr(self.image_processing_tester, "do_center_crop") and self.image_processing_tester.do_center_crop:
             self.skipTest(
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
             )
 
-        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        dummy_images = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, return_tensors="pt")
 
@@ -163,12 +161,12 @@ class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     @require_vision
     @pytest.mark.torch_compile_test
     def test_can_compile_torchvision_backend(self):
-        if "torchvision" not in self.image_processing_classes:
+        if "torchvision" not in self.image_processor_classes:
             self.skipTest("Skipping compilation test as torchvision image processor is not defined")
 
         torch.compiler.reset()
         input_image = torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8)
-        image_processor = self.image_processing_classes["torchvision"](**self.image_processor_dict)
+        image_processor = self.image_processor_classes["torchvision"](**self.image_processor_dict)
         output_eager = image_processor(input_image, device=torch_device, return_tensors="pt")
 
         image_processor = torch.compile(image_processor, mode="reduce-overhead")

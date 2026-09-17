@@ -21,28 +21,26 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class PPChart2TableImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, **kwargs):
+    def __init__(self, **kwargs):
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"height": 1024, "width": 1024})
         kwargs.setdefault("do_normalize", True)
         kwargs.setdefault("image_mean", [0.48145466, 0.4578275, 0.40821073])
         kwargs.setdefault("image_std", [0.26862954, 0.26130258, 0.27577711])
-        super().__init__(parent, **kwargs)
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class PPChart2TableImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = PPChart2TableImageProcessingTester(self)
+    image_processing_tester_class = PPChart2TableImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "do_resize"))
             self.assertTrue(hasattr(image_processor, "size"))

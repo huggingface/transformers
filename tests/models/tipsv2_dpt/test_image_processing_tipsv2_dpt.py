@@ -33,15 +33,15 @@ if is_torch_available():
 
 
 class Tipsv2DptImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, num_labels=3, **kwargs):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("num_labels", 3)
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"height": 18, "width": 18})
         kwargs.setdefault("do_rescale", True)
         kwargs.setdefault("rescale_factor", 1 / 255)
         kwargs.setdefault("do_normalize", False)
         kwargs.setdefault("do_convert_rgb", True)
-        super().__init__(parent, **kwargs)
-        self.num_labels = num_labels
+        super().__init__(**kwargs)
 
 
 @require_torch
@@ -49,16 +49,14 @@ class Tipsv2DptImageProcessingTester(ImageProcessingTester):
 class Tipsv2DptImageProcessingTest(
     ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
 ):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Tipsv2DptImageProcessingTester(self)
+    image_processing_tester_class = Tipsv2DptImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
@@ -68,7 +66,7 @@ class Tipsv2DptImageProcessingTest(
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 18, "width": 18})
             self.assertFalse(image_processor.do_normalize)

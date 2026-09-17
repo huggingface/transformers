@@ -38,7 +38,7 @@ if is_vision_available():
 
 
 class YolosImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, **kwargs):
+    def __init__(self, **kwargs):
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"shortest_edge": 18, "longest_edge": 1333})
         kwargs.setdefault("do_normalize", True)
@@ -47,7 +47,7 @@ class YolosImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("do_rescale", True)
         kwargs.setdefault("rescale_factor", 1 / 255)
         kwargs.setdefault("do_pad", True)
-        super().__init__(parent, **kwargs)
+        super().__init__(**kwargs)
 
     def get_expected_values(self, image_inputs, batched=False):
         """
@@ -100,16 +100,14 @@ class YolosImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = YolosImageProcessingTester(self)
+    image_processing_tester_class = YolosImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -118,7 +116,7 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
             self.assertTrue(hasattr(image_processing, "size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 1333})
             self.assertEqual(image_processor.do_pad, True)
@@ -137,7 +135,7 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
         ]
     )
     def test_resize_max_size_respected(self, image_size, longest_edge, shortest_edge):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
 
             # create torch tensors as image
@@ -163,7 +161,7 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
 
         target = {"image_id": 39769, "annotations": target}
 
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # encode them
             image_processing = image_processing_class.from_pretrained("hustvl/yolos-small")
             encoding = image_processing(images=image, annotations=target, return_tensors="pt")
@@ -210,7 +208,7 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
 
         masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
 
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # encode them
             image_processing = image_processing_class(format="coco_panoptic")
             encoding = image_processing(images=image, annotations=target, masks_path=masks_path, return_tensors="pt")
@@ -278,7 +276,7 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
         images = [image_0, image_1]
         annotations = [annotations_0, annotations_1]
 
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class()
             encoding = image_processing(
                 images=images,
@@ -400,7 +398,7 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
         annotations = [annotation_0, annotation_1]
 
         # encode them
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(format="coco_panoptic")
             encoding = image_processing(
                 images=images,
@@ -496,7 +494,7 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
 
     # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_max_width_max_height_resizing_and_pad_strategy with Detr->Yolos
     def test_max_width_max_height_resizing_and_pad_strategy(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_1 = torch.ones([200, 100, 3], dtype=torch.uint8)
 
             # do_pad=False, max_height=100, max_width=100, image=200x100 -> 100x50

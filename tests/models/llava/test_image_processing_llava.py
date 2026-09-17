@@ -31,7 +31,7 @@ if is_vision_available():
 
 
 class LlavaImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, **kwargs):
+    def __init__(self, **kwargs):
         kwargs.setdefault("do_pad", True)
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"shortest_edge": 20})
@@ -41,24 +41,22 @@ class LlavaImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("image_mean", [0.48145466, 0.4578275, 0.40821073])
         kwargs.setdefault("image_std", [0.26862954, 0.26130258, 0.27577711])
         kwargs.setdefault("do_convert_rgb", True)
-        super().__init__(parent, **kwargs)
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest with CLIP->Llava
 class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = LlavaImageProcessingTester(self)
+    image_processing_tester_class = LlavaImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     # Ignore copy
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_pad"))
             self.assertTrue(hasattr(image_processing, "do_resize"))
@@ -71,7 +69,7 @@ class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"shortest_edge": 20})
             self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
@@ -103,11 +101,11 @@ class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 result.paste(image, ((height - width) // 2, 0))
                 return result
 
-        for i, (backend_name, image_processing_class) in enumerate(self.image_processing_classes.items()):
+        for i, (backend_name, image_processing_class) in enumerate(self.image_processor_classes.items()):
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             numpify = backend_name == "pil"
             torchify = backend_name == "torchvision"
-            image_inputs = self.image_processor_tester.prepare_image_inputs(
+            image_inputs = self.image_processing_tester.prepare_image_inputs(
                 equal_resolution=False, numpify=numpify, torchify=torchify
             )
 

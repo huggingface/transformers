@@ -70,6 +70,4 @@ class LightGlueImageProcessingTester(SuperGlueImageProcessingTester):
 @require_torch
 @require_vision
 class LightGlueImageProcessingTest(SuperGlueImageProcessingTest, unittest.TestCase):
-    def setUp(self) -> None:
-        super().setUp()
-        self.image_processor_tester = LightGlueImageProcessingTester(self)
+    image_processing_tester_class = LightGlueImageProcessingTester

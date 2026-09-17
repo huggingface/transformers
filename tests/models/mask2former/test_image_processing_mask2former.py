@@ -41,7 +41,7 @@ if is_vision_available():
 
 
 class Mask2FormerImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, **kwargs):
+    def __init__(self, **kwargs):
         kwargs.setdefault("batch_size", 2)
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"shortest_edge": 32, "longest_edge": 1333})
@@ -52,11 +52,11 @@ class Mask2FormerImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("num_labels", 10)
         kwargs.setdefault("do_reduce_labels", True)
         kwargs.setdefault("ignore_index", 255)
-        super().__init__(parent, **kwargs)
-        self.num_queries = 3
-        self.num_classes = 2
-        self.height = 3
-        self.width = 4
+        kwargs.setdefault("num_queries", 3)
+        kwargs.setdefault("num_classes", 2)
+        kwargs.setdefault("height", 3)
+        kwargs.setdefault("width", 4)
+        super().__init__(**kwargs)
 
     def get_fake_mask2former_outputs(self):
         return Mask2FormerForUniversalSegmentationOutput(
@@ -80,16 +80,14 @@ class Mask2FormerImageProcessingTester(ImageProcessingTester):
 class Mask2FormerImageProcessingTest(
     ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
 ):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Mask2FormerImageProcessingTester(self)
+    image_processing_tester_class = Mask2FormerImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -101,7 +99,7 @@ class Mask2FormerImageProcessingTest(
 
     def comm_get_image_processing_inputs(
         self,
-        image_processor_tester,
+        image_processing_tester,
         image_processing_class,
         with_segmentation_maps=False,
         is_instance_map=False,
@@ -109,12 +107,12 @@ class Mask2FormerImageProcessingTest(
         numpify=False,
         input_data_format=None,
     ):
-        image_processing = image_processing_class(**image_processor_tester.prepare_image_processor_dict())
+        image_processing = image_processing_class(**image_processing_tester.prepare_image_processor_dict())
         # prepare image and target
-        num_labels = image_processor_tester.num_labels
+        num_labels = image_processing_tester.num_labels
         annotations = None
         instance_id_to_semantic_id = None
-        image_inputs = image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=numpify)
+        image_inputs = image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=numpify)
         if with_segmentation_maps:
             high = num_labels
             if is_instance_map:
@@ -145,7 +143,7 @@ class Mask2FormerImageProcessingTest(
     def test_with_size_divisor(self):
         size_divisors = [8, 16, 32]
         weird_input_sizes = [(407, 802), (582, 1094)]
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             for size_divisor in size_divisors:
                 image_processor_dict = {**self.image_processor_dict, **{"size_divisor": size_divisor}}
                 image_processing = image_processing_class(**image_processor_dict)
@@ -165,16 +163,16 @@ class Mask2FormerImageProcessingTest(
             input_data_format=None,
             do_resize=True,
         ):
-            image_processor_tester = Mask2FormerImageProcessingTester(
-                self,
+            image_processing_tester = Mask2FormerImageProcessingTester(
+                parent=self,
                 num_channels=num_channels,
                 do_resize=do_resize,
                 image_mean=[0.5] * num_channels,
                 image_std=[0.5] * num_channels,
             )
-            for image_processing_class in self.image_processing_classes.values():
+            for image_processing_class in self.image_processor_classes.values():
                 inputs = self.comm_get_image_processing_inputs(
-                    image_processor_tester=image_processor_tester,
+                    image_processing_tester=image_processing_tester,
                     image_processing_class=image_processing_class,
                     with_segmentation_maps=True,
                     is_instance_map=is_instance_map,
@@ -244,7 +242,7 @@ class Mask2FormerImageProcessingTest(
         instance_seg2, inst2class2 = get_instance_segmentation_and_mapping(annotation2)
 
         # create a image processor
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(do_reduce_labels=True, ignore_index=255, size=(512, 512))
 
             # prepare the images and annotations
@@ -288,7 +286,7 @@ class Mask2FormerImageProcessingTest(
         )
 
         # create a image processor
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(do_reduce_labels=True, ignore_index=255, size=(512, 512))
 
             # prepare the images and annotations
@@ -346,7 +344,7 @@ class Mask2FormerImageProcessingTest(
         panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
 
         # create a image processor
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(ignore_index=0, do_resize=False)
 
             # prepare the images and annotations
@@ -388,12 +386,12 @@ class Mask2FormerImageProcessingTest(
         self.assertEqual(rle[1], 45)
 
     def test_post_process_instance_segmentation(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(num_labels=self.image_processor_tester.num_classes)
-            outputs = self.image_processor_tester.get_fake_mask2former_outputs()
+        for image_processing_class in self.image_processor_classes.values():
+            image_processor = image_processing_class(num_labels=self.image_processing_tester.num_classes)
+            outputs = self.image_processing_tester.get_fake_mask2former_outputs()
             segmentation = image_processor.post_process_instance_segmentation(outputs, threshold=0)
 
-            self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
+            self.assertTrue(len(segmentation) == self.image_processing_tester.batch_size)
             for el in segmentation:
                 self.assertTrue("segmentation" in el)
                 self.assertTrue("segments_info" in el)
@@ -404,7 +402,7 @@ class Mask2FormerImageProcessingTest(
                 outputs, threshold=0, return_binary_maps=True
             )
 
-            self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
+            self.assertTrue(len(segmentation) == self.image_processing_tester.batch_size)
             for el in segmentation:
                 self.assertTrue("segmentation" in el)
                 self.assertTrue("segments_info" in el)
@@ -413,12 +411,12 @@ class Mask2FormerImageProcessingTest(
                 self.assertEqual(el["segmentation"].shape[1:], (384, 384))
 
     def test_post_process_panoptic_segmentation(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(num_labels=self.image_processor_tester.num_classes)
-            outputs = self.image_processor_tester.get_fake_mask2former_outputs()
+        for image_processing_class in self.image_processor_classes.values():
+            image_processing = image_processing_class(num_labels=self.image_processing_tester.num_classes)
+            outputs = self.image_processing_tester.get_fake_mask2former_outputs()
             segmentation = image_processing.post_process_panoptic_segmentation(outputs, threshold=0)
 
-            self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
+            self.assertTrue(len(segmentation) == self.image_processing_tester.batch_size)
             for el in segmentation:
                 self.assertTrue("segmentation" in el)
                 self.assertTrue("segments_info" in el)
@@ -426,9 +424,9 @@ class Mask2FormerImageProcessingTest(
                 self.assertEqual(el["segmentation"].shape, (384, 384))
 
     def test_post_process_label_fusing(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(num_labels=self.image_processor_tester.num_classes)
-            outputs = self.image_processor_tester.get_fake_mask2former_outputs()
+        for image_processing_class in self.image_processor_classes.values():
+            image_processor = image_processing_class(num_labels=self.image_processing_tester.num_classes)
+            outputs = self.image_processing_tester.get_fake_mask2former_outputs()
 
             segmentation = image_processor.post_process_panoptic_segmentation(
                 outputs, threshold=0, mask_threshold=0, overlap_mask_area_threshold=0
@@ -455,13 +453,13 @@ class Mask2FormerImageProcessingTest(
 
     def test_backends_equivalence(self):
         """Override to also compare segmentation labels (mask_labels, class_labels) across backends."""
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image, dummy_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
+        dummy_image, dummy_map = self.image_processing_tester.prepare_semantic_segmentation_inputs_ade20k()
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
 
@@ -478,15 +476,15 @@ class Mask2FormerImageProcessingTest(
 
     def test_slow_fast_equivalence_batched(self):
         """Override to also compare segmentation labels (mask_labels, class_labels) across backends."""
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_images, dummy_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+        dummy_images, dummy_maps = self.image_processing_tester.prepare_semantic_segmentation_inputs_ade20k(
             batched=True
         )
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
 

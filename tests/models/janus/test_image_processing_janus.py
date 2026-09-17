@@ -30,7 +30,7 @@ if is_vision_available():
 
 
 class JanusImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, **kwargs):
+    def __init__(self, **kwargs):
         kwargs.setdefault("image_size", 384)
         kwargs.setdefault("max_resolution", 200)
         kwargs.setdefault("do_resize", True)
@@ -40,23 +40,21 @@ class JanusImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("image_mean", [0.48145466, 0.4578275, 0.40821073])
         kwargs.setdefault("image_std", [0.26862954, 0.26130258, 0.27577711])
         kwargs.setdefault("do_convert_rgb", True)
-        super().__init__(parent, **kwargs)
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class JanusImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = JanusImageProcessingTester(self)
+    image_processing_tester_class = JanusImageProcessingTester
 
     @property
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.image_processor_dict
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
@@ -66,7 +64,7 @@ class JanusImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 384, "width": 384})
             self.assertEqual(list(image_processor.image_mean), [0.48145466, 0.4578275, 0.40821073])
@@ -78,9 +76,9 @@ class JanusImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(list(image_processor.image_mean), [1.0, 2.0, 1.0])
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
@@ -95,9 +93,9 @@ class JanusImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
 
@@ -110,9 +108,9 @@ class JanusImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
@@ -126,9 +124,9 @@ class JanusImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_nested_input(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
 
             # Test batched as a list of images.
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
@@ -147,10 +145,10 @@ class JanusImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @require_vision
     @require_torch
     def test_backends_equivalence_postprocess(self):
-        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        dummy_images = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
         dummy_images = [image / 255.0 for image in dummy_images]
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, return_tensors="pt")
 

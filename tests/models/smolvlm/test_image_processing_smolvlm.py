@@ -34,10 +34,13 @@ if is_torch_available():
 
 
 class SmolVLMImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, max_resolution=40, num_images=1, resample=PILImageResampling.LANCZOS, **kwargs):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("max_resolution", 40)
+        kwargs.setdefault("num_images", 1)
+        kwargs.setdefault("resample", PILImageResampling.LANCZOS)
         kwargs.setdefault("do_convert_rgb", True)
         kwargs.setdefault("do_resize", True)
-        kwargs.setdefault("size", {"longest_edge": max_resolution})
+        kwargs.setdefault("size", {"longest_edge": kwargs["max_resolution"]})
         kwargs.setdefault("max_image_size", {"longest_edge": 20})
         kwargs.setdefault("do_rescale", True)
         kwargs.setdefault("rescale_factor", 1 / 255)
@@ -46,9 +49,7 @@ class SmolVLMImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
         kwargs.setdefault("do_pad", True)
         kwargs.setdefault("do_image_splitting", True)
-        super().__init__(parent, max_resolution=max_resolution, **kwargs)
-        self.num_images = num_images
-        self.resample = resample
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         effective_nb_images = (
@@ -118,16 +119,14 @@ class SmolVLMImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = SmolVLMImageProcessingTester(self)
+    image_processing_tester_class = SmolVLMImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
             self.assertTrue(hasattr(image_processing, "do_resize"))
@@ -144,35 +143,35 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_image_splitting"))
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for sample_images in image_inputs:
                 for image in sample_images:
                     self.assertIsInstance(image, np.ndarray)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
-                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+                tuple(encoded_images.shape), (self.image_processing_tester.batch_size, *expected_output_image_shape)
             )
 
     def test_call_numpy_4_channels(self):
         # SmolVLM always processes images as RGB, so it always returns images with 3 channels
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processor_dict = self.image_processor_dict
             image_processing = image_processing_class(**image_processor_dict)
             # create random numpy tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
 
             for sample_images in image_inputs:
                 for image in sample_images:
@@ -180,44 +179,44 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
-                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+                tuple(encoded_images.shape), (self.image_processing_tester.batch_size, *expected_output_image_shape)
             )
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
             for images in image_inputs:
                 for image in images:
                     self.assertIsInstance(image, Image.Image)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
-                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+                tuple(encoded_images.shape), (self.image_processing_tester.batch_size, *expected_output_image_shape)
             )
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
             for images in image_inputs:
                 for image in images:
@@ -225,22 +224,22 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
             self.assertEqual(
                 tuple(encoded_images.shape),
-                (self.image_processor_tester.batch_size, *expected_output_image_shape),
+                (self.image_processing_tester.batch_size, *expected_output_image_shape),
             )
 
     @require_vision
     @require_torch
     def test_backends_equivalence(self):
         """Override to also compare pixel_attention_mask, rows, and cols (return_row_col_info=True)."""
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = load_image(
@@ -251,8 +250,10 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         dummy_image = dummy_image.resize((100, 150))
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
-            image_processor = image_processing_class(**self.image_processor_dict, resample=PILImageResampling.BICUBIC)
+        for backend_name, image_processing_class in self.image_processor_classes.items():
+            image_processor = image_processing_class(
+                **{**self.image_processor_dict, "resample": PILImageResampling.BICUBIC}
+            )
             encodings[backend_name] = image_processor(dummy_image, return_tensors="pt", return_row_col_info=True)
 
         backend_names = list(encodings.keys())
@@ -271,15 +272,15 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @require_torch
     def test_backends_equivalence_batched(self):
         """Override to also compare pixel_attention_mask, rows, and cols (return_row_col_info=True)."""
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+        if hasattr(self.image_processing_tester, "do_center_crop") and self.image_processing_tester.do_center_crop:
             self.skipTest(
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
             )
 
-        dummy_images = self.image_processor_tester.prepare_image_inputs(
+        dummy_images = self.image_processing_tester.prepare_image_inputs(
             equal_resolution=False, num_images=5, torchify=True
         )
         # pop some images to have non homogenous batches:
@@ -289,8 +290,10 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 dummy_images[i].pop()
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
-            image_processor = image_processing_class(**self.image_processor_dict, resample=PILImageResampling.BICUBIC)
+        for backend_name, image_processing_class in self.image_processor_classes.items():
+            image_processor = image_processing_class(
+                **{**self.image_processor_dict, "resample": PILImageResampling.BICUBIC}
+            )
             encodings[backend_name] = image_processor(dummy_images, return_tensors="pt", return_row_col_info=True)
 
         backend_names = list(encodings.keys())
@@ -306,7 +309,7 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(reference.cols, encoding.cols)
 
     def test_get_num_patches_without_images(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             num_patches_and_row_cols = image_processing.get_number_of_image_patches(
                 height=100, width=100, images_kwargs={}

@@ -48,7 +48,7 @@ if is_vision_available():
 
 
 class ImageGPTImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, **kwargs):
+    def __init__(self, **kwargs):
         kwargs.setdefault(
             "clusters",
             np.asarray(
@@ -61,7 +61,7 @@ class ImageGPTImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"height": 18, "width": 18})
         kwargs.setdefault("do_normalize", True)
-        super().__init__(parent, **kwargs)
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return (self.size["height"] * self.size["width"],)
@@ -70,13 +70,11 @@ class ImageGPTImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = ImageGPTImageProcessingTester(self)
+    image_processing_tester_class = ImageGPTImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     @slow
     @require_torch_accelerator
@@ -84,12 +82,12 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @pytest.mark.torch_compile_test
     def test_can_compile_torchvision_backend(self):
         # Test compilation with torchvision backend (equivalent to fast processor)
-        if "torchvision" not in self.image_processing_classes:
+        if "torchvision" not in self.image_processor_classes:
             self.skipTest("Skipping compilation test as torchvision backend is not available")
 
         torch.compiler.reset()
         input_image = torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8)
-        image_processor = self.image_processing_classes["torchvision"](**self.image_processor_dict)
+        image_processor = self.image_processor_classes["torchvision"](**self.image_processor_dict)
         output_eager = image_processor(input_image, device=torch_device, return_tensors="pt")
 
         image_processor = torch.compile(image_processor, mode="reduce-overhead")
@@ -99,7 +97,7 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         )
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "clusters"))
             self.assertTrue(hasattr(image_processing, "do_resize"))
@@ -107,7 +105,7 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_normalize"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
@@ -115,7 +113,7 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_image_processor_to_json_string(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             obj = json.loads(image_processor.to_json_string())
             for key, value in self.image_processor_dict.items():
@@ -125,7 +123,7 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     self.assertEqual(obj[key], value)
 
     def test_image_processor_to_json_file(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor_first = image_processing_class(**self.image_processor_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -141,7 +139,7 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     self.assertEqual(image_processor_first[key], value)
 
     def test_image_processor_from_and_save_pretrained(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor_first = image_processing_class(**self.image_processor_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -156,7 +154,7 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     self.assertEqual(value, value)
 
     def test_image_processor_save_load_with_autoimageprocessor(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor_first = image_processing_class(**self.image_processor_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -180,44 +178,44 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Override the test from ImageProcessingTestMixin as ImageGPT model takes input_ids as input
     def test_call_pil(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").input_ids
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(encoded_images)
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(encoded_images)
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").input_ids
             self.assertEqual(
-                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+                tuple(encoded_images.shape), (self.image_processing_tester.batch_size, *expected_output_image_shape)
             )
 
     # Override the test from ImageProcessingTestMixin as ImageGPT model takes input_ids as input
     def test_call_numpy(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").input_ids
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(encoded_images)
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(encoded_images)
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").input_ids
             self.assertEqual(
-                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+                tuple(encoded_images.shape), (self.image_processing_tester.batch_size, *expected_output_image_shape)
             )
 
     @unittest.skip(reason="ImageGPT assumes clusters for 3 channels")
@@ -226,12 +224,12 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Override the test from ImageProcessingTestMixin as ImageGPT model takes input_ids as input
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
 
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
@@ -244,7 +242,7 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images = image_processing(image_inputs, return_tensors="pt").input_ids
             self.assertEqual(
                 tuple(encoded_images.shape),
-                (self.image_processor_tester.batch_size, *expected_output_image_shape),
+                (self.image_processing_tester.batch_size, *expected_output_image_shape),
             )
 
     # For quantization-based processors, use absolute tolerance only to avoid infinity issues
@@ -252,13 +250,13 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @require_torch
     def test_backends_equivalence(self):
         """Test equivalence across backends for quantization-based processors."""
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = load_coco_image("000000039769.jpg")
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 
@@ -275,18 +273,18 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @require_torch
     def test_backends_equivalence_batched(self):
         """Test batched equivalence across backends for quantization-based processors."""
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+        if hasattr(self.image_processing_tester, "do_center_crop") and self.image_processing_tester.do_center_crop:
             self.skipTest(
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
             )
 
-        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        dummy_images = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, return_tensors="pt")
 
@@ -304,12 +302,12 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @require_vision
     @pytest.mark.torch_compile_test
     def test_can_compile_fast_image_processor(self):
-        if "torchvision" not in self.image_processing_classes:
+        if "torchvision" not in self.image_processor_classes:
             self.skipTest("Skipping compilation test as torchvision image processor is not defined")
 
         torch.compiler.reset()
         input_image = torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8)
-        image_processor = self.image_processing_classes["torchvision"](**self.image_processor_dict)
+        image_processor = self.image_processor_classes["torchvision"](**self.image_processor_dict)
         output_eager = image_processor(input_image, device=torch_device, return_tensors="pt")
 
         image_processor = torch.compile(image_processor, mode="reduce-overhead")

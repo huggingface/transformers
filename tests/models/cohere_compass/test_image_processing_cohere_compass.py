@@ -40,41 +40,23 @@ if is_vision_available():
 
 
 class CohereCompassImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        num_frames=10,
-        min_resolution=56,
-        max_resolution=1024,
-        min_pixels=56 * 56,
-        max_pixels=28 * 28 * 1280,
-        do_normalize=True,
-        image_mean=OPENAI_CLIP_MEAN,
-        image_std=OPENAI_CLIP_STD,
-        do_resize=True,
-        patch_size=14,
-        temporal_patch_size=2,
-        merge_size=2,
-        do_convert_rgb=True,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.num_channels = num_channels
-        self.num_frames = num_frames
-        self.min_pixels = min_pixels
-        self.max_pixels = max_pixels
-        self.patch_size = patch_size
-        self.temporal_patch_size = temporal_patch_size
-        self.merge_size = merge_size
-        self.do_resize = do_resize
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
+    def __init__(self, **kwargs):
+        kwargs.setdefault("batch_size", 7)
+        kwargs.setdefault("num_channels", 3)
+        kwargs.setdefault("num_frames", 10)
+        kwargs.setdefault("min_resolution", 56)
+        kwargs.setdefault("max_resolution", 1024)
+        kwargs.setdefault("min_pixels", 56 * 56)
+        kwargs.setdefault("max_pixels", 28 * 28 * 1280)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", OPENAI_CLIP_MEAN)
+        kwargs.setdefault("image_std", OPENAI_CLIP_STD)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("temporal_patch_size", 2)
+        kwargs.setdefault("merge_size", 2)
+        kwargs.setdefault("do_convert_rgb", True)
+        super().__init__(**kwargs)
 
     def prepare_image_processor_dict(self):
         return {
@@ -116,16 +98,14 @@ class CohereCompassImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class CohereCompassImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = CohereCompassImageProcessingTester(self)
+    image_processing_tester_class = CohereCompassImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_normalize"))
             self.assertTrue(hasattr(image_processing, "image_mean"))
@@ -137,7 +117,7 @@ class CohereCompassImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
             self.assertTrue(hasattr(image_processing, "merge_size"))
 
     def test_image_processor_to_json_string(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             obj = json.loads(image_processor.to_json_string())
             for key, value in self.image_processor_dict.items():
@@ -150,11 +130,11 @@ class CohereCompassImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
         self.assertEqual(best_resolution, (560, 280))
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
             for image in image_inputs:
                 self.assertIsInstance(image[0], Image.Image)
 
@@ -177,11 +157,11 @@ class CohereCompassImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
             self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image[0], np.ndarray)
 
@@ -204,11 +184,11 @@ class CohereCompassImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
             self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
             for image in image_inputs:
                 self.assertIsInstance(image[0], torch.Tensor)
@@ -236,9 +216,9 @@ class CohereCompassImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
         pass
 
     def test_nested_input(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
 
             # Test batched as a list of images
             process_out = image_processing(image_inputs, return_tensors="pt")
@@ -264,7 +244,7 @@ class CohereCompassImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
             self.assertTrue((image_grid_thws_nested == expected_image_grid_thws).all())
 
     def test_custom_image_size(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             with tempfile.TemporaryDirectory() as tmpdirname:
                 image_processing.save_pretrained(tmpdirname)
@@ -272,34 +252,34 @@ class CohereCompassImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
                     tmpdirname, max_pixels=56 * 56, min_pixels=28 * 28
                 )
 
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
             process_out = image_processor_loaded(image_inputs, return_tensors="pt")
             expected_output_video_shape = [112, 1176]
             self.assertListEqual(list(process_out.pixel_values.shape), expected_output_video_shape)
 
     def test_custom_pixels(self):
         pixel_choices = frozenset(itertools.product((100, 150, 200, 20000), (100, 150, 200, 20000)))
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor_dict = self.image_processor_dict.copy()
             for a_pixels, b_pixels in pixel_choices:
                 image_processor_dict["min_pixels"] = min(a_pixels, b_pixels)
                 image_processor_dict["max_pixels"] = max(a_pixels, b_pixels)
                 image_processor = image_processing_class(**image_processor_dict)
-                image_inputs = self.image_processor_tester.prepare_image_inputs()
+                image_inputs = self.image_processing_tester.prepare_image_inputs()
                 # Just checking that it doesn't raise an error
                 image_processor(image_inputs, return_tensors="pt")
 
     @require_vision
     @require_torch
     def test_backends_equivalence(self):
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = load_coco_image("000000039769.jpg")
 
         # Create processors for each backend
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 
@@ -317,14 +297,14 @@ class CohereCompassImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
     @require_vision
     @require_torch
     def test_backends_equivalence_batched(self):
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        dummy_images = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
         # Create processors for each backend
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, return_tensors="pt")
 
@@ -340,7 +320,7 @@ class CohereCompassImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
             )
 
     def test_get_num_patches_without_images(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             num_patches = image_processing.get_number_of_image_patches(height=100, width=100, images_kwargs={})
             self.assertEqual(num_patches, 64)

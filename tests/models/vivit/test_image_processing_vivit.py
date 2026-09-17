@@ -33,15 +33,15 @@ if is_vision_available():
 
 
 class VivitImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, num_frames=10, **kwargs):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("num_frames", 10)
         kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
         kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
         kwargs.setdefault("do_normalize", True)
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"shortest_edge": 18})
         kwargs.setdefault("crop_size", {"height": 18, "width": 18})
-        super().__init__(parent, **kwargs)
-        self.num_frames = num_frames
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return self.num_frames, self.num_channels, self.crop_size["height"], self.crop_size["width"]
@@ -64,13 +64,11 @@ class VivitImageProcessingTester(ImageProcessingTester):
 class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = VivitImageProcessor if is_vision_available() else None
 
-    def setUp(self):
-        self.image_processing_classes = {"pil": VivitImageProcessor} if is_vision_available() else {}
-        self.image_processor_tester = VivitImageProcessingTester(self)
+    image_processing_tester_class = VivitImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
         image_processing = self.image_processing_class(**self.image_processor_dict)
@@ -108,50 +106,50 @@ class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PIL videos
-        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False)
+        video_inputs = self.image_processing_tester.prepare_video_inputs(equal_resolution=False)
         for video in video_inputs:
             self.assertIsInstance(video, list)
             self.assertIsInstance(video[0], Image.Image)
 
         # Test not batched input
         encoded_videos = image_processing(video_inputs[0], return_tensors="pt").pixel_values
-        expected_output_video_shape = self.image_processor_tester.expected_output_image_shape([encoded_videos[0]])
+        expected_output_video_shape = self.image_processing_tester.expected_output_image_shape([encoded_videos[0]])
         self.assertEqual(tuple(encoded_videos.shape), (1, *expected_output_video_shape))
 
         # Test batched
         encoded_videos = image_processing(video_inputs, return_tensors="pt").pixel_values
-        expected_output_video_shape = self.image_processor_tester.expected_output_image_shape(encoded_videos)
+        expected_output_video_shape = self.image_processing_tester.expected_output_image_shape(encoded_videos)
         self.assertEqual(
-            tuple(encoded_videos.shape), (self.image_processor_tester.batch_size, *expected_output_video_shape)
+            tuple(encoded_videos.shape), (self.image_processing_tester.batch_size, *expected_output_video_shape)
         )
 
     def test_call_numpy(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
-        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, numpify=True)
+        video_inputs = self.image_processing_tester.prepare_video_inputs(equal_resolution=False, numpify=True)
         for video in video_inputs:
             self.assertIsInstance(video, list)
             self.assertIsInstance(video[0], np.ndarray)
 
         # Test not batched input
         encoded_videos = image_processing(video_inputs[0], return_tensors="pt").pixel_values
-        expected_output_video_shape = self.image_processor_tester.expected_output_image_shape([encoded_videos[0]])
+        expected_output_video_shape = self.image_processing_tester.expected_output_image_shape([encoded_videos[0]])
         self.assertEqual(tuple(encoded_videos.shape), (1, *expected_output_video_shape))
 
         # Test batched
         encoded_videos = image_processing(video_inputs, return_tensors="pt").pixel_values
-        expected_output_video_shape = self.image_processor_tester.expected_output_image_shape(encoded_videos)
+        expected_output_video_shape = self.image_processing_tester.expected_output_image_shape(encoded_videos)
         self.assertEqual(
-            tuple(encoded_videos.shape), (self.image_processor_tester.batch_size, *expected_output_video_shape)
+            tuple(encoded_videos.shape), (self.image_processing_tester.batch_size, *expected_output_video_shape)
         )
 
     def test_call_numpy_4_channels(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
-        self.image_processor_tester.num_channels = 4
-        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, numpify=True)
+        self.image_processing_tester.num_channels = 4
+        video_inputs = self.image_processing_tester.prepare_video_inputs(equal_resolution=False, numpify=True)
         for video in video_inputs:
             self.assertIsInstance(video, list)
             self.assertIsInstance(video[0], np.ndarray)
@@ -164,7 +162,7 @@ class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_std=(1.0, 1.0, 1.0, 1.0),
             input_data_format="channels_first",
         ).pixel_values
-        expected_output_video_shape = self.image_processor_tester.expected_output_image_shape([encoded_videos[0]])
+        expected_output_video_shape = self.image_processing_tester.expected_output_image_shape([encoded_videos[0]])
         self.assertEqual(tuple(encoded_videos.shape), (1, *expected_output_video_shape))
 
         # Test batched
@@ -175,31 +173,31 @@ class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_std=(1.0, 1.0, 1.0, 1.0),
             input_data_format="channels_first",
         ).pixel_values
-        expected_output_video_shape = self.image_processor_tester.expected_output_image_shape(encoded_videos)
+        expected_output_video_shape = self.image_processing_tester.expected_output_image_shape(encoded_videos)
         self.assertEqual(
-            tuple(encoded_videos.shape), (self.image_processor_tester.batch_size, *expected_output_video_shape)
+            tuple(encoded_videos.shape), (self.image_processing_tester.batch_size, *expected_output_video_shape)
         )
-        self.image_processor_tester.num_channels = 3
+        self.image_processing_tester.num_channels = 3
 
     def test_call_pytorch(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
-        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, torchify=True)
+        video_inputs = self.image_processing_tester.prepare_video_inputs(equal_resolution=False, torchify=True)
         for video in video_inputs:
             self.assertIsInstance(video, list)
             self.assertIsInstance(video[0], torch.Tensor)
 
         # Test not batched input
         encoded_videos = image_processing(video_inputs[0], return_tensors="pt").pixel_values
-        expected_output_video_shape = self.image_processor_tester.expected_output_image_shape([encoded_videos[0]])
+        expected_output_video_shape = self.image_processing_tester.expected_output_image_shape([encoded_videos[0]])
         self.assertEqual(tuple(encoded_videos.shape), (1, *expected_output_video_shape))
 
         # Test batched
         encoded_videos = image_processing(video_inputs, return_tensors="pt").pixel_values
-        expected_output_video_shape = self.image_processor_tester.expected_output_image_shape(encoded_videos)
+        expected_output_video_shape = self.image_processing_tester.expected_output_image_shape(encoded_videos)
         self.assertEqual(
-            tuple(encoded_videos.shape), (self.image_processor_tester.batch_size, *expected_output_video_shape)
+            tuple(encoded_videos.shape), (self.image_processing_tester.batch_size, *expected_output_video_shape)
         )
 
     @unittest.skip("VivitImageProcessor has not been refactored to use the new image processing backend architecture")

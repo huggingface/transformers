@@ -29,7 +29,10 @@ if is_torch_available():
 
 
 class EfficientNetImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, do_rescale=True, rescale_offset=True, rescale_factor=1 / 127.5, **kwargs):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("do_rescale", True)
+        kwargs.setdefault("rescale_offset", True)
+        kwargs.setdefault("rescale_factor", 1 / 127.5)
         kwargs.setdefault("batch_size", 13)
         kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
         kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
@@ -37,25 +40,20 @@ class EfficientNetImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"height": 18, "width": 18})
         kwargs.setdefault("resample", PILImageResampling.BILINEAR)
-        super().__init__(parent, **kwargs)
-        self.do_rescale = do_rescale
-        self.rescale_offset = rescale_offset
-        self.rescale_factor = rescale_factor
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = EfficientNetImageProcessingTester(self)
+    image_processing_tester_class = EfficientNetImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -64,7 +62,7 @@ class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertTrue(hasattr(image_processing, "size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
@@ -75,7 +73,7 @@ class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase
         # EfficientNet optionally rescales between -1 and 1 instead of the usual 0 and 1
         image_np = np.arange(0, 256, 1, dtype=np.uint8).reshape(1, 8, 32)
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             if backend_name == "torchvision":
                 image = torch.from_numpy(image_np)
@@ -99,7 +97,7 @@ class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase
     @require_vision
     @require_torch
     def test_rescale_normalize(self):
-        if "torchvision" not in self.image_processing_classes:
+        if "torchvision" not in self.image_processor_classes:
             self.skipTest(reason="Skipping rescale_normalize test as torchvision backend is not available")
 
         image = torch.arange(0, 256, 1, dtype=torch.uint8).reshape(1, 8, 32).repeat(3, 1, 1)
@@ -108,7 +106,7 @@ class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase
         image_mean_1 = (0.5, 0.5, 0.5)
         image_std_1 = (0.5, 0.5, 0.5)
 
-        image_processor = self.image_processing_classes["torchvision"](**self.image_processor_dict)
+        image_processor = self.image_processor_classes["torchvision"](**self.image_processor_dict)
 
         # Rescale between [-1, 1] with rescale_factor=1/127.5 and rescale_offset=True. Then normalize
         rescaled_normalized = image_processor.rescale_and_normalize_efficientnet(

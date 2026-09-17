@@ -21,7 +21,7 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class DeiTImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, **kwargs):
+    def __init__(self, **kwargs):
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"height": 20, "width": 20})
         kwargs.setdefault("do_center_crop", True)
@@ -29,7 +29,7 @@ class DeiTImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("do_normalize", True)
         kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
         kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        super().__init__(parent, **kwargs)
+        super().__init__(**kwargs)
 
 
 @require_torch
@@ -37,16 +37,14 @@ class DeiTImageProcessingTester(ImageProcessingTester):
 class DeiTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     test_cast_dtype = True
 
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = DeiTImageProcessingTester(self)
+    image_processing_tester_class = DeiTImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
@@ -57,7 +55,7 @@ class DeiTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "image_std"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 20, "width": 20})
             self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})

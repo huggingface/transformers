@@ -28,14 +28,14 @@ if is_vision_available():
 
 
 class ViltImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, **kwargs):
+    def __init__(self, **kwargs):
         kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
         kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
         kwargs.setdefault("do_normalize", True)
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"shortest_edge": 30})
         kwargs.setdefault("size_divisor", 2)
-        super().__init__(parent, **kwargs)
+        super().__init__(**kwargs)
 
     def get_expected_values(self, image_inputs, batched=False):
         """
@@ -87,16 +87,14 @@ class ViltImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class ViltImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = ViltImageProcessingTester(self)
+    image_processing_tester_class = ViltImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -110,7 +108,7 @@ class ViltImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "model_input_names"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"shortest_edge": 30})
 

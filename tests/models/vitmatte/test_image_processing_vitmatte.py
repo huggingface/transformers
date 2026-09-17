@@ -42,7 +42,7 @@ if is_vision_available():
 
 
 class VitMatteImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, **kwargs):
+    def __init__(self, **kwargs):
         kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
         kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
         kwargs.setdefault("do_normalize", True)
@@ -50,22 +50,20 @@ class VitMatteImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("rescale_factor", 0.5)
         kwargs.setdefault("do_pad", True)
         kwargs.setdefault("size_divisor", 10)
-        super().__init__(parent, **kwargs)
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = VitMatteImageProcessingTester(self)
+    image_processing_tester_class = VitMatteImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -77,25 +75,25 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_numpy(self):
         # create random numpy tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+        image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
 
         # Test not batched input (image processor does not support batched inputs)
         image = image_inputs[0]
         trimap = np.random.randint(0, 3, size=image.shape[:2])
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
             # Verify that width and height can be divided by size_divisibility and that correct dimensions got merged
-            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisor == 0)
-            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
+            self.assertTrue(encoded_images.shape[-1] % self.image_processing_tester.size_divisor == 0)
+            self.assertTrue(encoded_images.shape[-2] % self.image_processing_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 4)
 
     def test_call_pytorch(self):
         # create random PyTorch tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
@@ -103,17 +101,17 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Test not batched input (image processor does not support batched inputs)
         image = image_inputs[0]
         trimap = np.random.randint(0, 3, size=image.shape[1:])
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
             # Verify that width and height can be divided by size_divisibility and that correct dimensions got merged
-            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisor == 0)
-            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
+            self.assertTrue(encoded_images.shape[-1] % self.image_processing_tester.size_divisor == 0)
+            self.assertTrue(encoded_images.shape[-2] % self.image_processing_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 4)
 
         # create batched tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+        image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
         image_input = torch.stack(image_inputs, dim=0)
         self.assertIsInstance(image_input, torch.Tensor)
         self.assertTrue(image_input.shape[1] == 3)
@@ -123,44 +121,44 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertIsInstance(trimap_input, torch.Tensor)
         self.assertTrue(trimap_input.shape[1] == 1)
 
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
             # Verify that width and height can be divided by size_divisibility and that correct dimensions got merged
-            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisor == 0)
-            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
+            self.assertTrue(encoded_images.shape[-1] % self.image_processing_tester.size_divisor == 0)
+            self.assertTrue(encoded_images.shape[-2] % self.image_processing_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 4)
 
     def test_call_pil(self):
         # create random PIL images
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+        image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
 
         # Test not batched input (image processor does not support batched inputs)
         image = image_inputs[0]
         trimap = np.random.randint(0, 3, size=image.size[::-1])
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
             # Verify that width and height can be divided by size_divisibility and that correct dimensions got merged
-            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisor == 0)
-            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
+            self.assertTrue(encoded_images.shape[-1] % self.image_processing_tester.size_divisor == 0)
+            self.assertTrue(encoded_images.shape[-2] % self.image_processing_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 4)
 
     def test_call_numpy_4_channels(self):
         # Test that can process images which have an arbitrary number of channels
 
         # create random numpy tensors
-        self.image_processor_tester.num_channels = 4
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+        self.image_processing_tester.num_channels = 4
+        image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
 
         # Test not batched input (image processor does not support batched inputs)
         image = image_inputs[0]
         trimap = np.random.randint(0, 3, size=image.shape[:2])
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             encoded_images = image_processor(
                 images=image,
@@ -172,12 +170,12 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             ).pixel_values
 
             # Verify that width and height can be divided by size_divisibility and that correct dimensions got merged
-            self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisor == 0)
-            self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisor == 0)
+            self.assertTrue(encoded_images.shape[-1] % self.image_processing_tester.size_divisor == 0)
+            self.assertTrue(encoded_images.shape[-2] % self.image_processing_tester.size_divisor == 0)
             self.assertTrue(encoded_images.shape[-3] == 5)
 
     def test_padding(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processing = image_processing_class(**self.image_processor_dict)
             if backend_name == "pil":
                 image = np.random.randn(3, 249, 491)
@@ -199,7 +197,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_image_processor_preprocess_arguments(self):
         is_tested = False
 
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
 
             # validation done by _valid_processor_keys attribute
@@ -214,7 +212,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             # validation done by @filter_out_non_signature_kwargs decorator
             if hasattr(image_processor.preprocess, "_filter_out_non_signature_kwargs"):
-                inputs = self.image_processor_tester.prepare_image_inputs()
+                inputs = self.image_processing_tester.prepare_image_inputs()
                 image = inputs[0]
                 trimap = np.random.randint(0, 3, size=image.size[::-1])
 
@@ -229,7 +227,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             # ViTMatte-specific: validation for processors requiring trimaps (no _filter_out_non_signature_kwargs)
             if "trimaps" in inspect.signature(image_processor.preprocess).parameters:
-                inputs = self.image_processor_tester.prepare_image_inputs()
+                inputs = self.image_processing_tester.prepare_image_inputs()
                 image = inputs[0]
                 trimap = np.random.randint(0, 3, size=image.size[::-1])
 
@@ -242,7 +240,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.skipTest(reason="No validation found for `preprocess` method")
 
     def test_backends_equivalence(self):
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = load_image(
@@ -254,7 +252,7 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         # Create processors for each backend
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, trimaps=dummy_trimap, return_tensors="pt")
 
@@ -267,15 +265,15 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_backends_equivalence_batched(self):
         # this only checks on equal resolution, since the slow processor doesn't work otherwise
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+        dummy_images = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
         dummy_trimaps = [np.random.randint(0, 3, size=image.shape[1:]) for image in dummy_images]
 
         # Create processors for each backend
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, trimaps=dummy_trimaps, return_tensors="pt")
 
@@ -292,13 +290,13 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @pytest.mark.torch_compile_test
     def test_can_compile_torchvision_backend(self):
         # override as trimaps are needed for the image processor
-        if "torchvision" not in self.image_processing_classes:
+        if "torchvision" not in self.image_processor_classes:
             self.skipTest("Skipping compilation test as torchvision image processor is not defined")
 
         torch.compiler.reset()
         input_image = torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8)
         dummy_trimap = np.random.randint(0, 3, size=input_image.shape[1:])
-        image_processor = self.image_processing_classes["torchvision"](**self.image_processor_dict)
+        image_processor = self.image_processor_classes["torchvision"](**self.image_processor_dict)
         output_eager = image_processor(input_image, dummy_trimap, device=torch_device, return_tensors="pt")
 
         image_processor = torch.compile(image_processor, mode="reduce-overhead")

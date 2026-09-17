@@ -30,29 +30,27 @@ if is_vision_available():
 
 
 class Cohere2VisionImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, **kwargs):
+    def __init__(self, **kwargs):
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"height": 30, "width": 30})
         kwargs.setdefault("do_normalize", True)
         kwargs.setdefault("image_mean", [0.48145466, 0.4578275, 0.40821073])
         kwargs.setdefault("image_std", [0.26862954, 0.26130258, 0.27577711])
         kwargs.setdefault("do_convert_rgb", True)
-        super().__init__(parent, **kwargs)
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class Cohere2VisionProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Cohere2VisionImageProcessingTester(self)
+    image_processing_tester_class = Cohere2VisionImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "do_resize"))
             self.assertTrue(hasattr(image_processor, "size"))
@@ -62,11 +60,11 @@ class Cohere2VisionProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
@@ -79,11 +77,11 @@ class Cohere2VisionProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(encoded_images.shape), (70, 3, 30, 30))
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
 
@@ -96,11 +94,11 @@ class Cohere2VisionProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(encoded_images.shape), (70, 3, 30, 30))
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
@@ -114,14 +112,14 @@ class Cohere2VisionProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(encoded_images.shape), (70, 3, 30, 30))
 
     def test_call_numpy_4_channels(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Test that can process images which have an arbitrary number of channels
             # Initialize image_processing
             image_processor = image_processing_class(**self.image_processor_dict)
 
             # create random numpy tensors
-            self.image_processor_tester.num_channels = 4
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
+            self.image_processing_tester.num_channels = 4
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
 
             # Test not batched input
             encoded_images = image_processor(
@@ -151,7 +149,7 @@ class Cohere2VisionProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         If row/column are swapped, the image would be resized to wrong dimensions and patches
         would not match the original content.
         """
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             patch_size = 64
             image_processor = image_processing_class(
                 do_resize=True,
@@ -227,7 +225,7 @@ class Cohere2VisionProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         the expected grid layout. If rows/columns are swapped, the wrong grid would be
         chosen for asymmetric images.
         """
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             patch_size = 64
             image_processor = image_processing_class(
                 size={"height": patch_size, "width": patch_size},

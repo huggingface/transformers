@@ -37,7 +37,10 @@ if is_vision_available():
 
 
 class Kimi26ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, num_frames=10, do_normalize=True, do_convert_rgb=True, **kwargs):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("num_frames", 10)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("do_convert_rgb", True)
         kwargs.setdefault("min_resolution", 56)
         kwargs.setdefault("max_resolution", 1024)
         kwargs.setdefault("do_resize", True)
@@ -47,10 +50,7 @@ class Kimi26ImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("max_patches", 36)
         kwargs.setdefault("patch_size", 14)
         kwargs.setdefault("merge_size", 2)
-        super().__init__(parent, **kwargs)
-        self.num_frames = num_frames
-        self.do_normalize = do_normalize
-        self.do_convert_rgb = do_convert_rgb
+        super().__init__(**kwargs)
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(
@@ -80,16 +80,14 @@ class Kimi26ImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Kimi26ImageProcessingTester(self)
+    image_processing_tester_class = Kimi26ImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_normalize"))
             self.assertTrue(hasattr(image_processing, "image_mean"))
@@ -102,11 +100,11 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "size"))
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
             for image in image_inputs:
                 self.assertIsInstance(image[0], Image.Image)
 
@@ -124,16 +122,16 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images = process_out.pixel_values
             image_grid_thws = process_out.image_grid_thw
             expected_output_image_shape = (252, 3, 14, 14)
-            expected_image_grid_thws = torch.Tensor([[1, 6, 6]] * self.image_processor_tester.batch_size)
+            expected_image_grid_thws = torch.Tensor([[1, 6, 6]] * self.image_processing_tester.batch_size)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
             self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image[0], np.ndarray)
 
@@ -151,16 +149,16 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images = process_out.pixel_values
             image_grid_thws = process_out.image_grid_thw
             expected_output_image_shape = (252, 3, 14, 14)
-            expected_image_grid_thws = torch.Tensor([[1, 6, 6]] * self.image_processor_tester.batch_size)
+            expected_image_grid_thws = torch.Tensor([[1, 6, 6]] * self.image_processing_tester.batch_size)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
             self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
             for image in image_inputs:
                 self.assertIsInstance(image[0], torch.Tensor)
@@ -179,7 +177,7 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images = process_out.pixel_values
             image_grid_thws = process_out.image_grid_thw
             expected_output_image_shape = (252, 3, 14, 14)
-            expected_image_grid_thws = torch.Tensor([[1, 6, 6]] * self.image_processor_tester.batch_size)
+            expected_image_grid_thws = torch.Tensor([[1, 6, 6]] * self.image_processing_tester.batch_size)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
             self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
@@ -188,16 +186,16 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         pass
 
     def test_nested_input(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
 
             # Test batched as a list of images
             process_out = image_processing(image_inputs, return_tensors="pt")
             encoded_images = process_out.pixel_values
             image_grid_thws = process_out.image_grid_thw
             expected_output_image_shape = (252, 3, 14, 14)
-            expected_image_grid_thws = torch.Tensor([[1, 6, 6]] * self.image_processor_tester.batch_size)
+            expected_image_grid_thws = torch.Tensor([[1, 6, 6]] * self.image_processing_tester.batch_size)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
             self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
@@ -207,7 +205,7 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images_nested = process_out.pixel_values
             image_grid_thws_nested = process_out.image_grid_thw
             expected_output_image_shape = (252, 3, 14, 14)
-            expected_image_grid_thws = torch.Tensor([[1, 6, 6]] * self.image_processor_tester.batch_size)
+            expected_image_grid_thws = torch.Tensor([[1, 6, 6]] * self.image_processing_tester.batch_size)
             self.assertEqual(tuple(encoded_images_nested.shape), expected_output_image_shape)
             self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
@@ -218,7 +216,7 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_non_square_grid_orientation(self):
         # Regression test: `navit_resize` used to be called with transposed (height, width) arguments, distorting
         # every non-square image. The grid must be [1, height // patch, width // patch] after padding.
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor_dict = {**self.image_processor_dict, "max_patches": 16384}
             image_processing = image_processing_class(**image_processor_dict)
             image = Image.fromarray(np.random.default_rng(0).integers(0, 256, (56, 112, 3), dtype=np.uint8))
@@ -233,13 +231,13 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_custom_pixels(self):
         "Test different values for min and max pixels when resizing"
         pixel_choices = frozenset((100, 150, 200, 20000))
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor_dict = self.image_processor_dict.copy()
             for size in pixel_choices:
                 image_processor_dict["size"]["max_height"] = size
                 image_processor_dict["size"]["max_width"] = size
                 image_processor = image_processing_class(**image_processor_dict)
-                image_inputs = self.image_processor_tester.prepare_image_inputs()
+                image_inputs = self.image_processing_tester.prepare_image_inputs()
                 # Just checking that it doesn't raise an error
                 image_processor(image_inputs, return_tensors="pt")
 
@@ -249,7 +247,7 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processor_dict["size"]["max_height"] = 100
             image_processor_dict["size"]["max_width"] = 200
             image_processor = image_processing_class(**image_processor_dict)
-            image_inputs = self.image_processor_tester.prepare_image_inputs()
+            image_inputs = self.image_processing_tester.prepare_image_inputs()
             image_processor(image_inputs, return_tensors="pt")
 
     # Override to test additional outputs for equivalence such as `image_grid_thw`
@@ -258,7 +256,7 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         # Create processors for each backend
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 
@@ -274,16 +272,16 @@ class Kimi26ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_backends_equivalence_batched(self):
-        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+        if hasattr(self.image_processing_tester, "do_center_crop") and self.image_processing_tester.do_center_crop:
             self.skipTest(
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
             )
 
-        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        dummy_images = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
         # Create processors for each backend
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, return_tensors="pt")
 

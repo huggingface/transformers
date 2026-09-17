@@ -19,7 +19,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
@@ -32,40 +32,23 @@ if is_vision_available():
     from PIL import Image
 
 
-class Glm5NextImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=80,
-        do_rescale=True,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        temporal_patch_size=2,
-        patch_size=14,
-        merge_size=2,
-        patch_expand_factor=1,  # We only expect 1s atp, if this changes the implementation also needs to change
-        min_image_tokens=1,
-        max_image_tokens=64,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_rescale = do_rescale
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.temporal_patch_size = temporal_patch_size
-        self.patch_size = patch_size
-        self.merge_size = merge_size
-        self.patch_expand_factor = patch_expand_factor
-        self.min_image_tokens = min_image_tokens
-        self.max_image_tokens = max_image_tokens
+class Glm5NextImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("batch_size", 3)
+        kwargs.setdefault("num_channels", 3)
+        kwargs.setdefault("min_resolution", 30)
+        kwargs.setdefault("max_resolution", 80)
+        kwargs.setdefault("do_rescale", True)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+        kwargs.setdefault("temporal_patch_size", 2)
+        kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("merge_size", 2)
+        kwargs.setdefault("patch_expand_factor", 1)
+        kwargs.setdefault("min_image_tokens", 1)
+        kwargs.setdefault("max_image_tokens", 64)
+        super().__init__(**kwargs)
 
     def prepare_image_processor_dict(self):
         return {
@@ -122,16 +105,14 @@ class Glm5NextImageProcessingTester:
 @require_torch
 @require_vision
 class Glm5NextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Glm5NextImageProcessingTester(self)
+    image_processing_tester_class = Glm5NextImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -141,7 +122,7 @@ class Glm5NextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "max_image_tokens"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.min_image_tokens, 1)
 
@@ -150,75 +131,75 @@ class Glm5NextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # batch size is flattened
     def test_call_pil(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
 
             # Create random PIL images
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
 
             # Create random NumPy arrays
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
 
             # Create random PyTorch tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_call_numpy_4_channels(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Test that images with an arbitrary number of channels can be processed
-            self.image_processor_tester.num_channels = 4
+            self.image_processing_tester.num_channels = 4
 
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
 
             # Create random NumPy arrays
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
 
             # Test not batched input
             encoded_images = image_processing(
@@ -228,7 +209,7 @@ class Glm5NextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 image_mean=(0.0, 0.0, 0.0, 0.0),
                 image_std=(1.0, 1.0, 1.0, 1.0),
             ).pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched
@@ -239,7 +220,7 @@ class Glm5NextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 image_mean=(0.0, 0.0, 0.0, 0.0),
                 image_std=(1.0, 1.0, 1.0, 1.0),
             ).pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test that normalization is applied independently to each channel
@@ -260,7 +241,7 @@ class Glm5NextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 return_tensors="pt",
             ).pixel_values
 
-            patch_dim = self.image_processor_tester.temporal_patch_size * self.image_processor_tester.patch_size**2
+            patch_dim = self.image_processing_tester.temporal_patch_size * self.image_processing_tester.patch_size**2
             for channel, expected in enumerate((1.0, 128 / 255 / 2, 51 / 255 / 4, 0.0)):
                 block = output[:, channel * patch_dim : (channel + 1) * patch_dim]
                 torch.testing.assert_close(block, torch.full_like(block, expected))

@@ -32,7 +32,9 @@ if is_torch_available():
 
 
 class AriaImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, max_resolution=40, num_images=1, size=None, **kwargs):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("max_resolution", 40)
+        kwargs.setdefault("num_images", 1)
         kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
         kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
         kwargs.setdefault("max_image_size", 980)
@@ -42,9 +44,8 @@ class AriaImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("do_convert_rgb", True)
         kwargs.setdefault("do_normalize", True)
         kwargs.setdefault("resample", PILImageResampling.BICUBIC)
-        super().__init__(parent, max_resolution=max_resolution, **kwargs)
-        self.num_images = num_images
-        self.size = size if size is not None else {"longest_edge": max_resolution}
+        kwargs.setdefault("size", {"longest_edge": kwargs["max_resolution"]})
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.max_image_size, self.max_image_size
@@ -89,16 +90,14 @@ class AriaImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = AriaImageProcessingTester(self)
+    image_processing_tester_class = AriaImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
             self.assertTrue(hasattr(image_processing, "max_image_size"))
@@ -109,33 +108,33 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "split_image"))
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for sample_images in image_inputs:
                 for image in sample_images:
                     self.assertIsInstance(image, np.ndarray)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
-                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+                tuple(encoded_images.shape), (self.image_processing_tester.batch_size, *expected_output_image_shape)
             )
 
     def test_call_numpy_4_channels(self):
         # Aria always processes images as RGB, so it always returns images with 3 channels
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor_dict = self.image_processor_dict
             image_processing = image_processing_class(**image_processor_dict)
             # create random numpy tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
 
             for sample_images in image_inputs:
                 for image in sample_images:
@@ -143,42 +142,42 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
-                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+                tuple(encoded_images.shape), (self.image_processing_tester.batch_size, *expected_output_image_shape)
             )
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
             for images in image_inputs:
                 for image in images:
                     self.assertIsInstance(image, Image.Image)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
-                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+                tuple(encoded_images.shape), (self.image_processing_tester.batch_size, *expected_output_image_shape)
             )
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
             for images in image_inputs:
                 for image in images:
@@ -186,24 +185,24 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             # Test batched
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
             self.assertEqual(
                 tuple(encoded_images.shape),
-                (self.image_processor_tester.batch_size, *expected_output_image_shape),
+                (self.image_processing_tester.batch_size, *expected_output_image_shape),
             )
 
     def test_pad_for_patching(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             numpify = backend_name == "pil"
             torchify = backend_name == "torchvision"
             image_processing = image_processing_class(**self.image_processor_dict)
             # Create odd-sized images
-            image_input = self.image_processor_tester.prepare_image_inputs(
+            image_input = self.image_processing_tester.prepare_image_inputs(
                 batch_size=1,
                 max_resolution=400,
                 num_images=1,
@@ -228,7 +227,7 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(encoded_images.shape[-2:], image_shape)
 
     def test_get_num_patches_without_images(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             num_patches = image_processing.get_number_of_image_patches(height=100, width=100, images_kwargs={})
             self.assertEqual(num_patches, 1)
@@ -251,7 +250,7 @@ class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # (e.g. 490, 1470) that are not divisible by 980.  The old floor-division formula
         # returned wrong counts (as low as 0); ceil division matches what divide_to_patches
         # actually produces.
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Use the full default split_resolutions so odd-multiple slots are reachable.
             image_processing = image_processing_class(**{**self.image_processor_dict, "split_resolutions": None})
 

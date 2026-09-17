@@ -21,7 +21,7 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class ChineseCLIPImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, **kwargs):
+    def __init__(self, **kwargs):
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"height": 224, "width": 224})
         kwargs.setdefault("do_center_crop", True)
@@ -30,22 +30,24 @@ class ChineseCLIPImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("image_mean", [0.48145466, 0.4578275, 0.40821073])
         kwargs.setdefault("image_std", [0.26862954, 0.26130258, 0.27577711])
         kwargs.setdefault("do_convert_rgb", True)
-        super().__init__(parent, **kwargs)
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class ChineseCLIPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processing_tester_class = ChineseCLIPImageProcessingTester
+
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = ChineseCLIPImageProcessingTester(self, do_center_crop=True)
+        self.image_processing_tester = ChineseCLIPImageProcessingTester(parent=self, do_center_crop=True)
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
@@ -57,7 +59,7 @@ class ChineseCLIPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 224, "width": 224})
             self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
@@ -76,17 +78,21 @@ class ChineseCLIPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 @require_torch
 @require_vision
 class ChineseCLIPImageProcessingTestFourChannels(ImageProcessingTestMixin, unittest.TestCase):
+    image_processing_tester_class = ChineseCLIPImageProcessingTester
+
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = ChineseCLIPImageProcessingTester(self, num_channels=3, do_center_crop=True)
+        self.image_processing_tester = ChineseCLIPImageProcessingTester(
+            parent=self, num_channels=3, do_center_crop=True
+        )
         self.expected_encoded_image_num_channels = 3
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))

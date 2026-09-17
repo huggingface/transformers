@@ -41,7 +41,8 @@ if is_vision_available():
 
 
 class OneFormerImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, repo_path="shi-labs/oneformer_demo", **kwargs):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("repo_path", "shi-labs/oneformer_demo")
         kwargs.setdefault("batch_size", 2)
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"shortest_edge": 32, "longest_edge": 1333})
@@ -53,13 +54,11 @@ class OneFormerImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("ignore_index", 255)
         kwargs.setdefault("class_info_file", "ade20k_panoptic.json")
         kwargs.setdefault("num_text", 10)
-        super().__init__(parent, **kwargs)
-        self.repo_path = repo_path
-        # for the post_process_functions
-        self.num_queries = 10
-        self.num_classes = 10
-        self.height = 3
-        self.width = 4
+        kwargs.setdefault("num_queries", 10)
+        kwargs.setdefault("num_classes", 10)
+        kwargs.setdefault("height", 3)
+        kwargs.setdefault("width", 4)
+        super().__init__(**kwargs)
 
     def get_fake_oneformer_outputs(self):
         return OneFormerForUniversalSegmentationOutput(
@@ -83,16 +82,14 @@ class OneFormerImageProcessingTester(ImageProcessingTester):
 class OneFormerImageProcessingTest(
     ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
 ):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = OneFormerImageProcessingTester(self)
+    image_processing_tester_class = OneFormerImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_proc_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "image_mean"))
             self.assertTrue(hasattr(image_processor, "image_std"))
@@ -111,10 +108,10 @@ class OneFormerImageProcessingTest(
     ):
         image_processor = image_processing_class(**self.image_processor_dict)
         # prepare image and target
-        num_labels = self.image_processor_tester.num_labels
+        num_labels = self.image_processing_tester.num_labels
         annotations = None
         instance_id_to_semantic_id = None
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+        image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
         if with_segmentation_maps:
             high = num_labels
             if is_instance_map:
@@ -142,7 +139,7 @@ class OneFormerImageProcessingTest(
 
     def test_call_with_segmentation_maps(self):
         def common(is_instance_map=False, segmentation_type=None):
-            for image_processing_class in self.image_processing_classes.values():
+            for image_processing_class in self.image_processor_classes.values():
                 inputs = self.comm_get_image_processor_inputs(
                     with_segmentation_maps=True,
                     is_instance_map=is_instance_map,
@@ -160,7 +157,7 @@ class OneFormerImageProcessingTest(
                     self.assertEqual(mask_label.shape[0], class_label.shape[0])
                     # this ensure padding has happened
                     self.assertEqual(mask_label.shape[1:], pixel_values.shape[2:])
-                    self.assertEqual(len(text_input), self.image_processor_tester.num_text)
+                    self.assertEqual(len(text_input), self.image_processing_tester.num_text)
 
         common()
         common(is_instance_map=True)
@@ -179,34 +176,34 @@ class OneFormerImageProcessingTest(
         self.assertEqual(rle[1], 45)
 
     def test_post_process_instance_segmentation(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(
-                num_labels=self.image_processor_tester.num_classes,
+                num_labels=self.image_processing_tester.num_classes,
                 max_seq_length=77,
                 task_seq_length=77,
                 class_info_file="ade20k_panoptic.json",
-                num_text=self.image_processor_tester.num_text,
+                num_text=self.image_processing_tester.num_text,
                 repo_path="shi-labs/oneformer_demo",
             )
-            outputs = self.image_processor_tester.get_fake_oneformer_outputs()
+            outputs = self.image_processing_tester.get_fake_oneformer_outputs()
             segmentation = image_processor.post_process_instance_segmentation(outputs, threshold=0)
 
-            self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
+            self.assertTrue(len(segmentation) == self.image_processing_tester.batch_size)
             for el in segmentation:
                 self.assertTrue("segmentation" in el)
                 self.assertTrue("segments_info" in el)
                 self.assertEqual(type(el["segments_info"]), list)
                 self.assertEqual(
-                    el["segmentation"].shape, (self.image_processor_tester.height, self.image_processor_tester.width)
+                    el["segmentation"].shape, (self.image_processing_tester.height, self.image_processing_tester.width)
                 )
 
             segmentation_with_opts = image_processor.post_process_instance_segmentation(
                 outputs,
                 threshold=0,
-                target_sizes=[(1, 4) for _ in range(self.image_processor_tester.batch_size)],
+                target_sizes=[(1, 4) for _ in range(self.image_processing_tester.batch_size)],
                 task_type="panoptic",
             )
-            self.assertTrue(len(segmentation_with_opts) == self.image_processor_tester.batch_size)
+            self.assertTrue(len(segmentation_with_opts) == self.image_processing_tester.batch_size)
             for el in segmentation_with_opts:
                 self.assertTrue("segmentation" in el)
                 self.assertTrue("segments_info" in el)
@@ -214,25 +211,25 @@ class OneFormerImageProcessingTest(
                 self.assertEqual(el["segmentation"].shape, (1, 4))
 
     def test_post_process_panoptic_segmentation(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(
-                num_labels=self.image_processor_tester.num_classes,
+                num_labels=self.image_processing_tester.num_classes,
                 max_seq_length=77,
                 task_seq_length=77,
                 class_info_file="ade20k_panoptic.json",
-                num_text=self.image_processor_tester.num_text,
+                num_text=self.image_processing_tester.num_text,
                 repo_path="shi-labs/oneformer_demo",
             )
-            outputs = self.image_processor_tester.get_fake_oneformer_outputs()
+            outputs = self.image_processing_tester.get_fake_oneformer_outputs()
             segmentation = image_processor.post_process_panoptic_segmentation(outputs, threshold=0)
 
-            self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
+            self.assertTrue(len(segmentation) == self.image_processing_tester.batch_size)
             for el in segmentation:
                 self.assertTrue("segmentation" in el)
                 self.assertTrue("segments_info" in el)
                 self.assertEqual(type(el["segments_info"]), list)
                 self.assertEqual(
-                    el["segmentation"].shape, (self.image_processor_tester.height, self.image_processor_tester.width)
+                    el["segmentation"].shape, (self.image_processing_tester.height, self.image_processing_tester.width)
                 )
 
     def test_can_load_with_local_metadata(self):
@@ -243,7 +240,7 @@ class OneFormerImageProcessingTest(
             "2": {"isthing": 1, "name": "baz"},
         }
         metadata = prepare_metadata(class_info)
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             with tempfile.TemporaryDirectory() as tmpdirname:
                 metadata_path = os.path.join(tmpdirname, "metadata.json")
                 with open(metadata_path, "w") as f:
@@ -258,13 +255,13 @@ class OneFormerImageProcessingTest(
 
     def test_backends_equivalence(self):
         """Override base class test to also compare segmentation labels."""
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image, dummy_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
+        dummy_image, dummy_map = self.image_processing_tester.prepare_semantic_segmentation_inputs_ade20k()
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
 
@@ -287,15 +284,15 @@ class OneFormerImageProcessingTest(
 
     def test_backends_equivalence_batched(self):
         """Override base class test to also compare segmentation labels."""
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_images, dummy_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+        dummy_images, dummy_maps = self.image_processing_tester.prepare_semantic_segmentation_inputs_ade20k(
             batched=True
         )
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(
                 dummy_images,

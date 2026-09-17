@@ -20,42 +20,27 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_vision_available():
     from PIL import Image
 
 
-class NeoMMEImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=5,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=80,
-        do_resize=True,
-        do_rescale=True,
-        rescale_factor=1 / 127.5,
-        do_normalize=True,
-        image_mean=None,
-        image_std=None,
-        patch_size=4,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        # These values implement `pixel / 127.5 - 1`; they are not dataset statistics.
-        self.image_mean = image_mean if image_mean is not None else [1.0, 1.0, 1.0]
-        self.image_std = image_std if image_std is not None else [1.0, 1.0, 1.0]
-        self.patch_size = patch_size
+class NeoMMEImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("batch_size", 5)
+        kwargs.setdefault("num_channels", 3)
+        kwargs.setdefault("min_resolution", 30)
+        kwargs.setdefault("max_resolution", 80)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("do_rescale", True)
+        kwargs.setdefault("rescale_factor", 1 / 127.5)
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("image_mean", [1.0, 1.0, 1.0])
+        kwargs.setdefault("image_std", [1.0, 1.0, 1.0])
+        kwargs.setdefault("patch_size", 4)
+        super().__init__(**kwargs)
 
     def prepare_image_processor_dict(self):
         """Return mixin kwargs without resolution budgets."""
@@ -98,16 +83,14 @@ class NeoMMEImageProcessingTester:
 @require_torch
 @require_vision
 class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = NeoMMEImageProcessingTester(self)
+    image_processing_tester_class = NeoMMEImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             for attribute in ("do_resize", "do_rescale", "rescale_factor", "do_normalize", "patch_size"):
                 self.assertTrue(hasattr(image_processing, attribute))
@@ -115,9 +98,9 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertTrue(hasattr(image_processing, attribute))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.patch_size, self.image_processor_tester.patch_size)
+            self.assertEqual(image_processor.patch_size, self.image_processing_tester.patch_size)
             self.assertIsNone(image_processor.max_side)
             self.assertIsNone(image_processor.size)
 
@@ -132,32 +115,32 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(dict(image_processor.size), {"min_pixels": 256, "max_pixels": 1024})
 
     def _check_call(self, image_inputs) -> None:
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
 
             single = image_processing(image_inputs[0], return_tensors="pt")
             self.assertEqual(
                 tuple(single.pixel_values.shape),
-                self.image_processor_tester.expected_output_image_shape([image_inputs[0]]),
+                self.image_processing_tester.expected_output_image_shape([image_inputs[0]]),
             )
             self.assertEqual(tuple(single.image_grid_hw.shape), (1, 2))
 
             batched = image_processing(image_inputs, return_tensors="pt")
             self.assertEqual(
                 tuple(batched.pixel_values.shape),
-                self.image_processor_tester.expected_output_image_shape(image_inputs),
+                self.image_processing_tester.expected_output_image_shape(image_inputs),
             )
             self.assertEqual(tuple(batched.image_grid_hw.shape), (len(image_inputs), 2))
             self.assertEqual(int(batched.image_grid_hw.prod(dim=-1).sum()), batched.pixel_values.shape[0])
 
     def test_call_pil(self):
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+        image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
         self._check_call(image_inputs)
 
     def test_call_numpy(self):
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+        image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
         self._check_call(image_inputs)
@@ -165,7 +148,7 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_call_pytorch(self):
         import torch
 
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
         self._check_call(image_inputs)
@@ -180,10 +163,10 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_rescale_and_padding(self):
         """Padding is added before rescaling, so padded pixels become exactly -1."""
-        patch_size = self.image_processor_tester.patch_size
+        patch_size = self.image_processing_tester.patch_size
         image = Image.fromarray(np.full((patch_size, patch_size + 1, 3), 255, dtype=np.uint8))
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             with self.subTest(backend=backend_name):
                 outputs = image_processing_class(patch_size=patch_size)(images=[image], return_tensors="np")
                 self.assertEqual(outputs["image_grid_hw"].tolist(), [[1, 2]])
@@ -191,12 +174,12 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertAlmostEqual(float(outputs["pixel_values"][1].min()), -1.0, places=6)
 
     def test_patch_layout(self):
-        patch_size = self.image_processor_tester.patch_size
+        patch_size = self.image_processing_tester.patch_size
         height, width = 2 * patch_size, 2 * patch_size
         array = np.random.default_rng(0).integers(0, 255, (height, width, 3), dtype=np.uint8)
         image = Image.fromarray(array)
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             with self.subTest(backend=backend_name):
                 patches = image_processing_class(patch_size=patch_size)(images=[image], return_tensors="np")[
                     "pixel_values"
@@ -216,8 +199,8 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             "resized_to_same_shape": ([self.make_image(32, 16), self.make_image(64, 32)], {"max_side": 16}),
         }
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
-            processor = image_processing_class(patch_size=self.image_processor_tester.patch_size)
+        for backend_name, image_processing_class in self.image_processor_classes.items():
+            processor = image_processing_class(patch_size=self.image_processing_tester.patch_size)
             for case, (images, kwargs) in cases.items():
                 with self.subTest(backend=backend_name, case=case):
                     grouped = processor(images=images, disable_grouping=False, return_tensors="pt", **kwargs)
@@ -226,11 +209,11 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     self.assertTrue(grouped.image_grid_hw.equal(ungrouped.image_grid_hw))
 
     def test_resolution_budgets(self):
-        patch_size = self.image_processor_tester.patch_size
+        patch_size = self.image_processing_tester.patch_size
         image = self.make_image(64, 32)
         small = self.make_image(patch_size, patch_size)
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             with self.subTest(backend=backend_name):
                 processor = image_processing_class(patch_size=patch_size)
                 self.assertEqual(processor(images=[image], return_tensors="np")["image_grid_hw"].tolist(), [[16, 8]])
@@ -287,10 +270,10 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_caps_clamp_min_pixels(self):
         """A cap takes precedence over the minimum pixel floor."""
-        patch_size = self.image_processor_tester.patch_size
+        patch_size = self.image_processing_tester.patch_size
         image = self.make_image(64, 32)
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             with self.subTest(backend=backend_name):
                 processor = image_processing_class(patch_size=patch_size)
                 for cap, floor in (
@@ -314,14 +297,14 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertEqual(grid["image_grid_hw"].tolist(), [[2, 2]])
 
     def test_unsupported_image_kwargs_raise(self):
-        processor = self.image_processing_classes["torchvision"](patch_size=self.image_processor_tester.patch_size)
+        processor = self.image_processor_classes["torchvision"](patch_size=self.image_processing_tester.patch_size)
         image = self.make_image(16, 16)
         for kwargs in ({"size": 8}, {"do_center_crop": True}):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 processor(images=[image], **kwargs)
 
     def test_get_number_of_image_patches(self):
-        patch_size = self.image_processor_tester.patch_size
+        patch_size = self.image_processing_tester.patch_size
         cases = [
             (9, 13, {}),
             (64, 32, {"max_side": 16}),
@@ -332,7 +315,7 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             (16, 16, {"size": {"min_pixels": 341, "max_pixels": 10**9}}),
         ]
 
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             with self.subTest(backend=backend_name):
                 processor = image_processing_class(patch_size=patch_size)
                 for height, width, kwargs in cases:

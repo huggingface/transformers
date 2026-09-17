@@ -27,29 +27,27 @@ if is_torch_available():
 
 
 class GotOcr2ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, **kwargs):
+    def __init__(self, **kwargs):
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"height": 20, "width": 20})
         kwargs.setdefault("do_normalize", True)
         kwargs.setdefault("image_mean", [0.48145466, 0.4578275, 0.40821073])
         kwargs.setdefault("image_std", [0.26862954, 0.26130258, 0.27577711])
         kwargs.setdefault("do_convert_rgb", True)
-        super().__init__(parent, **kwargs)
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = GotOcr2ImageProcessingTester(self)
+    image_processing_tester_class = GotOcr2ImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "do_resize"))
             self.assertTrue(hasattr(image_processor, "size"))
@@ -59,13 +57,13 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
 
     def test_backends_equivalence_crop_to_patches(self):
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)[0]
+        dummy_image = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)[0]
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict, crop_to_patches=True)
             encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 
@@ -79,17 +77,17 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)
 
     def test_backends_equivalence_batched_crop_to_patches(self):
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         # Prepare image inputs so that we have two groups of images with equal resolution with a group of images with
         # different resolutions in between
-        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
-        dummy_images += self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
-        dummy_images += self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+        dummy_images = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+        dummy_images += self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        dummy_images += self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict, crop_to_patches=True)
             encodings[backend_name] = image_processor(dummy_images, return_tensors="pt")
 
@@ -103,11 +101,11 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)
 
     def test_crop_to_patches(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             if backend_name == "pil":
                 # PIL backend processes single images
-                image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)[0]
+                image = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, numpify=True)[0]
                 processed_images = image_processor.crop_image_to_patches(
                     image,
                     min_patches=1,
@@ -119,7 +117,7 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertEqual(processed_images[0].shape[:2], (20, 20))
             else:
                 # Torchvision backend processes batches
-                image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)[0]
+                image = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)[0]
                 processed_images = image_processor.crop_image_to_patches(
                     image.unsqueeze(0),
                     min_patches=1,
@@ -131,7 +129,7 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 self.assertEqual(processed_images.shape[-2:], (20, 20))
 
     def test_get_num_patches_without_images(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             num_patches = image_processing.get_number_of_image_patches(height=100, width=100, images_kwargs={})
             self.assertEqual(num_patches, 1)

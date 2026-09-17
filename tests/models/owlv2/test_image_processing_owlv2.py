@@ -31,29 +31,27 @@ if is_torch_available():
 
 
 class Owlv2ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, do_convert_rgb=True, **kwargs):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("do_convert_rgb", True)
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"height": 18, "width": 18})
         kwargs.setdefault("do_normalize", True)
         kwargs.setdefault("image_mean", [0.48145466, 0.4578275, 0.40821073])
         kwargs.setdefault("image_std", [0.26862954, 0.26130258, 0.27577711])
-        super().__init__(parent, **kwargs)
-        self.do_convert_rgb = do_convert_rgb
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Owlv2ImageProcessingTester(self)
+    image_processing_tester_class = Owlv2ImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
@@ -62,7 +60,7 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "image_std"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
@@ -73,7 +71,7 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @slow
     def test_image_processor_integration_test(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             processor = image_processing_class()
 
             image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
@@ -84,7 +82,7 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @slow
     def test_image_processor_integration_test_resize(self):
-        for backend_name in self.image_processing_classes.keys():
+        for backend_name in self.image_processor_classes.keys():
             checkpoint = "google/owlv2-base-patch16-ensemble"
             processor = AutoProcessor.from_pretrained(checkpoint, backend=backend_name)
             model = Owlv2ForObjectDetection.from_pretrained(checkpoint)

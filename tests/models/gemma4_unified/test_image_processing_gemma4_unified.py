@@ -35,7 +35,7 @@ if is_vision_available():
 
 
 class Gemma4UnifiedImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, **kwargs):
+    def __init__(self, **kwargs):
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("do_normalize", False)
         kwargs.setdefault("image_mean", [0.0, 0.0, 0.0])
@@ -44,7 +44,7 @@ class Gemma4UnifiedImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("patch_size", 6)
         kwargs.setdefault("max_soft_tokens", 70)
         kwargs.setdefault("pooling_kernel_size", 1)
-        super().__init__(parent, **kwargs)
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images=None):
         """Return the expected per-image output shape: (max_soft_tokens, model_patch_size² * 3)."""
@@ -56,9 +56,7 @@ class Gemma4UnifiedImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Gemma4UnifiedImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Gemma4UnifiedImageProcessingTester(self)
+    image_processing_tester_class = Gemma4UnifiedImageProcessingTester
 
     @unittest.skip("Gemma4Unified patchification requires RGB (3-channel) images; 4-channel inputs are unsupported.")
     def test_call_numpy_4_channels(self):
@@ -66,11 +64,11 @@ class Gemma4UnifiedImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
         """Test that all expected attributes are present."""
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "do_normalize"))
@@ -83,7 +81,7 @@ class Gemma4UnifiedImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
 
     def test_image_processor_defaults(self):
         """Test default parameter values for Gemma4Unified matching VARASP_SL280_K3."""
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             proc = image_processing_class()
             self.assertEqual(proc.patch_size, 16)
             self.assertEqual(proc.max_soft_tokens, 280)
@@ -94,7 +92,7 @@ class Gemma4UnifiedImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
             self.assertEqual(proc.resample, 3)
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.patch_size, 6)
             self.assertEqual(image_processor.max_soft_tokens, 70)
@@ -104,7 +102,7 @@ class Gemma4UnifiedImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
 
     def test_output_keys(self):
         """Test that the output contains pixel_values, image_position_ids, and num_soft_tokens_per_image."""
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             image = Image.fromarray(np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8))
             result = image_processing(image, return_tensors="pt")
@@ -141,7 +139,7 @@ class Gemma4UnifiedImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
     @parameterized.expand([(70), (140), (280), (560), (1120)])
     def test_max_soft_tokens_values(self, max_soft_tokens):
         """Test that the processor produces valid patchified output for each supported max_soft_tokens value."""
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             processor = image_processing_class(patch_size=16, max_soft_tokens=max_soft_tokens, pooling_kernel_size=3)
             image = Image.fromarray(np.random.randint(0, 255, (200, 300, 3), dtype=np.uint8))
             result = processor(image, return_tensors="pt")
@@ -159,14 +157,14 @@ class Gemma4UnifiedImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
 
     def test_position_ids_structure(self):
         """Test that image_position_ids has correct real and padding structure."""
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             image = Image.fromarray(np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8))
             result = image_processing(image, return_tensors="pt")
 
             position_ids = result.image_position_ids[0]  # (max_patches, 2)
             max_patches = (
-                self.image_processor_tester.max_soft_tokens * self.image_processor_tester.pooling_kernel_size**2
+                self.image_processing_tester.max_soft_tokens * self.image_processing_tester.pooling_kernel_size**2
             )
 
             # Real positions should be non-negative
@@ -189,7 +187,7 @@ class Gemma4UnifiedImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
 
     def test_padding_patches_are_zero(self):
         """Test that padding patches in pixel_values are filled with zeros."""
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             image = Image.fromarray(np.random.randint(1, 255, (100, 100, 3), dtype=np.uint8))
             result = image_processing(image, return_tensors="pt")

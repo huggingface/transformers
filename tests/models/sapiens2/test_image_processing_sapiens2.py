@@ -36,15 +36,15 @@ if is_torch_available():
 
 
 class Sapiens2ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, num_labels=5, **kwargs):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("num_labels", 5)
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"height": 20, "width": 18})
         kwargs.setdefault("do_normalize", True)
         kwargs.setdefault("image_mean", [0.485, 0.456, 0.406])
         kwargs.setdefault("image_std", [0.229, 0.224, 0.225])
         kwargs.setdefault("do_reduce_labels", False)
-        super().__init__(parent, **kwargs)
-        self.num_labels = num_labels
+        super().__init__(**kwargs)
 
 
 @require_torch
@@ -52,16 +52,14 @@ class Sapiens2ImageProcessingTester(ImageProcessingTester):
 class Sapiens2ImageProcessingTest(
     ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
 ):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Sapiens2ImageProcessingTester(self)
+    image_processing_tester_class = Sapiens2ImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
@@ -71,7 +69,7 @@ class Sapiens2ImageProcessingTest(
             self.assertTrue(hasattr(image_processing, "do_reduce_labels"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 20, "width": 18})
             self.assertEqual(image_processor.do_reduce_labels, False)
@@ -83,9 +81,9 @@ class Sapiens2ImageProcessingTest(
             self.assertEqual(image_processor.do_reduce_labels, True)
 
     def test_call_segmentation_maps(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
             maps = [torch.zeros(image.shape[-2:]).long() for image in image_inputs]
 
             # Single image + map
@@ -94,14 +92,14 @@ class Sapiens2ImageProcessingTest(
                 encoding["pixel_values"].shape,
                 (
                     1,
-                    self.image_processor_tester.num_channels,
-                    self.image_processor_tester.size["height"],
-                    self.image_processor_tester.size["width"],
+                    self.image_processing_tester.num_channels,
+                    self.image_processing_tester.size["height"],
+                    self.image_processing_tester.size["width"],
                 ),
             )
             self.assertEqual(
                 encoding["labels"].shape,
-                (1, self.image_processor_tester.size["height"], self.image_processor_tester.size["width"]),
+                (1, self.image_processing_tester.size["height"], self.image_processing_tester.size["width"]),
             )
             self.assertEqual(encoding["labels"].dtype, torch.long)
             self.assertTrue(encoding["labels"].min().item() >= 0)
@@ -112,18 +110,18 @@ class Sapiens2ImageProcessingTest(
             self.assertEqual(
                 encoding["pixel_values"].shape,
                 (
-                    self.image_processor_tester.batch_size,
-                    self.image_processor_tester.num_channels,
-                    self.image_processor_tester.size["height"],
-                    self.image_processor_tester.size["width"],
+                    self.image_processing_tester.batch_size,
+                    self.image_processing_tester.num_channels,
+                    self.image_processing_tester.size["height"],
+                    self.image_processing_tester.size["width"],
                 ),
             )
             self.assertEqual(
                 encoding["labels"].shape,
                 (
-                    self.image_processor_tester.batch_size,
-                    self.image_processor_tester.size["height"],
-                    self.image_processor_tester.size["width"],
+                    self.image_processing_tester.batch_size,
+                    self.image_processing_tester.size["height"],
+                    self.image_processing_tester.size["width"],
                 ),
             )
             self.assertEqual(encoding["labels"].dtype, torch.long)

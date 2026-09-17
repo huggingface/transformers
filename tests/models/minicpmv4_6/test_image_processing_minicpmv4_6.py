@@ -32,7 +32,7 @@ if is_vision_available():
 
 
 class MiniCPMV4_6ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, **kwargs):
+    def __init__(self, **kwargs):
         kwargs.setdefault("batch_size", 2)
         kwargs.setdefault("min_resolution", 64)
         kwargs.setdefault("max_resolution", 128)
@@ -47,7 +47,7 @@ class MiniCPMV4_6ImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("patch_size", 14)
         kwargs.setdefault("slice_mode", True)
         kwargs.setdefault("downsample_mode", "16x")
-        super().__init__(parent, **kwargs)
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, image_inputs):
         """Return the expected NaViT-packed shape [C, P, total_L] for pixel_values[0]."""
@@ -74,63 +74,61 @@ class MiniCPMV4_6ImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class MiniCPMV4_6ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = MiniCPMV4_6ImageProcessingTester(self)
+    image_processing_tester_class = MiniCPMV4_6ImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_shape))
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            expected_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_shape))
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_shape))
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            expected_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_shape))
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_shape))
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            expected_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_shape))
 
     @unittest.skip("NaViT expected_output_image_shape cannot infer channel dim for 4-channel images")
@@ -138,7 +136,7 @@ class MiniCPMV4_6ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         pass
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_rescale"))
             self.assertTrue(hasattr(image_processing, "rescale_factor"))
@@ -152,9 +150,9 @@ class MiniCPMV4_6ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertTrue(hasattr(image_processing, "downsample_mode"))
 
     def test_call_returns_expected_keys(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
-            images = self.image_processor_tester.prepare_image_inputs(torchify=True)
+            images = self.image_processing_tester.prepare_image_inputs(torchify=True)
             result = image_processor(images, return_tensors="pt")
             self.assertIn("pixel_values", result)
             self.assertIn("target_sizes", result)
@@ -162,16 +160,16 @@ class MiniCPMV4_6ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self.assertIn("grids", result)
 
     def test_pixel_values_are_tensors(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
-            images = self.image_processor_tester.prepare_image_inputs(torchify=True)
+            images = self.image_processing_tester.prepare_image_inputs(torchify=True)
             result = image_processor(images, return_tensors="pt")
             for pv in result["pixel_values"]:
                 self.assertIsInstance(pv, torch.Tensor)
 
     def test_downsample_modes(self):
-        for image_processing_class in self.image_processing_classes.values():
-            images = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+        for image_processing_class in self.image_processor_classes.values():
+            images = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
             ip_16x = image_processing_class(**{**self.image_processor_dict, "downsample_mode": "16x"})
             result_16x = ip_16x(images, return_tensors="pt")

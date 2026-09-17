@@ -23,18 +23,18 @@ from ...test_processing_common import url_to_local_path
 
 
 class BridgeTowerImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, do_rescale=True, rescale_factor=1 / 255, do_center_crop=True, do_pad=True, **kwargs):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("do_rescale", True)
+        kwargs.setdefault("rescale_factor", 1 / 255)
+        kwargs.setdefault("do_center_crop", True)
+        kwargs.setdefault("do_pad", True)
         kwargs.setdefault("image_mean", [0.48145466, 0.4578275, 0.40821073])
         kwargs.setdefault("image_std", [0.26862954, 0.26130258, 0.27577711])
         kwargs.setdefault("do_normalize", True)
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"shortest_edge": 288})
         kwargs.setdefault("size_divisor", 32)
-        super().__init__(parent, **kwargs)
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_center_crop = do_center_crop
-        self.do_pad = do_pad
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["shortest_edge"], self.size["shortest_edge"]
@@ -43,16 +43,14 @@ class BridgeTowerImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = BridgeTowerImageProcessingTester(self)
+    image_processing_tester_class = BridgeTowerImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -64,7 +62,7 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
     @require_vision
     @require_torch
     def test_backends_equivalence(self):
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = load_image(
@@ -74,7 +72,7 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         )
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 
@@ -89,18 +87,18 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
     @require_vision
     @require_torch
     def test_slow_fast_equivalence_batched(self):
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+        if hasattr(self.image_processing_tester, "do_center_crop") and self.image_processing_tester.do_center_crop:
             self.skipTest(
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
             )
 
-        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        dummy_images = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, return_tensors="pt")
 

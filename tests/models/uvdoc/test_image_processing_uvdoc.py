@@ -22,30 +22,28 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class UVDocImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, **kwargs):
+    def __init__(self, **kwargs):
         kwargs.setdefault("do_normalize", False)
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"height": 18, "width": 18})
-        super().__init__(parent, **kwargs)
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class UVDocImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = UVDocImageProcessingTester(self)
+    image_processing_tester_class = UVDocImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     @unittest.skip("UVDoc image processors doesn't support 4 channel images")
     def test_call_numpy_4_channels(self):
         pass
 
     def test_post_process_document_rectification(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
 
             batch_size = 2
@@ -80,7 +78,7 @@ class UVDocImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_post_process_document_rectification_different_sizes(self):
         """Test post-processing with original images of different sizes (list of tensors)."""
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
 
             # Create predictions for 2 images (model output size is fixed)

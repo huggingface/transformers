@@ -25,7 +25,7 @@ if is_torch_available():
 
 
 class DeepseekOcr2ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, **kwargs):
+    def __init__(self, **kwargs):
         kwargs.setdefault("min_resolution", 500)
         kwargs.setdefault("max_resolution", 800)
         kwargs.setdefault("do_resize", True)
@@ -35,22 +35,20 @@ class DeepseekOcr2ImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
         kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
         kwargs.setdefault("do_convert_rgb", True)
-        super().__init__(parent, **kwargs)
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class DeepseekOcr2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = DeepseekOcr2ImageProcessingTester(self)
+    image_processing_tester_class = DeepseekOcr2ImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "do_resize"))
             self.assertTrue(hasattr(image_processor, "size"))
@@ -65,18 +63,18 @@ class DeepseekOcr2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
         pass
 
     def test_crop_to_patches(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
-            tile_size = self.image_processor_tester.tile_size
+            tile_size = self.image_processing_tester.tile_size
             if backend_name == "pil":
-                image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)[0]
+                image = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, numpify=True)[0]
                 processed_images = image_processor.crop_image_to_patches(
                     image, min_patches=1, max_patches=6, tile_size=tile_size
                 )
                 self.assertGreater(len(processed_images), 0)
                 self.assertEqual(processed_images[0].shape[:2], (tile_size, tile_size))
             else:
-                image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)[0]
+                image = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)[0]
                 stacked_patches, n_patches = image_processor.crop_image_to_patches(
                     image.unsqueeze(0).float(), min_patches=1, max_patches=6, tile_size=tile_size
                 )
@@ -85,9 +83,9 @@ class DeepseekOcr2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
 
     def test_preprocess_global_only(self):
         """Test preprocessing without crop_to_patches (global view only)."""
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict, crop_to_patches=False)
-            images = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=False)
+            images = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, numpify=False)
             result = image_processor(images, return_tensors="pt")
             self.assertIn("pixel_values", result)
             self.assertEqual(len(result["num_local_patches"]), len(images))
@@ -96,7 +94,7 @@ class DeepseekOcr2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
 
     def test_preprocess_with_crop_to_patches(self):
         """Test preprocessing with crop_to_patches enabled."""
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict, crop_to_patches=True)
             images = prepare_image_inputs(
                 batch_size=2, num_channels=3, min_resolution=500, max_resolution=700, equal_resolution=True
@@ -110,13 +108,13 @@ class DeepseekOcr2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
 
     def test_backends_equivalence(self):
         """Override to also compare pixel_values_local and num_local_patches."""
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)[0]
+        dummy_image = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)[0]
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 
@@ -137,13 +135,13 @@ class DeepseekOcr2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
 
     def test_backends_equivalence_batched(self):
         """Override to also compare pixel_values_local and num_local_patches (variable shape)."""
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        dummy_images = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, return_tensors=None)
 

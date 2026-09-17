@@ -34,15 +34,15 @@ if is_torch_available():
 
 
 class MobileViTImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, num_labels=5, **kwargs):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("num_labels", 5)
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"shortest_edge": 20})
         kwargs.setdefault("do_center_crop", True)
         kwargs.setdefault("crop_size", {"height": 18, "width": 18})
         kwargs.setdefault("do_flip_channel_order", True)
         kwargs.setdefault("do_reduce_labels", False)
-        super().__init__(parent, **kwargs)
-        self.num_labels = num_labels
+        super().__init__(**kwargs)
 
     def prepare_post_process_semantic_segmentation_inputs(self):
         inputs = {
@@ -68,16 +68,14 @@ class MobileViTImageProcessingTester(ImageProcessingTester):
 class MobileViTImageProcessingTest(
     ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
 ):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = MobileViTImageProcessingTester(self)
+    image_processing_tester_class = MobileViTImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
@@ -87,7 +85,7 @@ class MobileViTImageProcessingTest(
             self.assertTrue(hasattr(image_processing, "do_reduce_labels"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"shortest_edge": 20})
             self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
@@ -101,11 +99,11 @@ class MobileViTImageProcessingTest(
             self.assertEqual(image_processor.do_reduce_labels, True)
 
     def test_call_segmentation_maps(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
             maps = []
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
@@ -117,17 +115,17 @@ class MobileViTImageProcessingTest(
                 encoding["pixel_values"].shape,
                 (
                     1,
-                    self.image_processor_tester.num_channels,
-                    self.image_processor_tester.crop_size["height"],
-                    self.image_processor_tester.crop_size["width"],
+                    self.image_processing_tester.num_channels,
+                    self.image_processing_tester.crop_size["height"],
+                    self.image_processing_tester.crop_size["width"],
                 ),
             )
             self.assertEqual(
                 encoding["labels"].shape,
                 (
                     1,
-                    self.image_processor_tester.crop_size["height"],
-                    self.image_processor_tester.crop_size["width"],
+                    self.image_processing_tester.crop_size["height"],
+                    self.image_processing_tester.crop_size["width"],
                 ),
             )
             self.assertEqual(encoding["labels"].dtype, torch.long)
@@ -139,18 +137,18 @@ class MobileViTImageProcessingTest(
             self.assertEqual(
                 encoding["pixel_values"].shape,
                 (
-                    self.image_processor_tester.batch_size,
-                    self.image_processor_tester.num_channels,
-                    self.image_processor_tester.crop_size["height"],
-                    self.image_processor_tester.crop_size["width"],
+                    self.image_processing_tester.batch_size,
+                    self.image_processing_tester.num_channels,
+                    self.image_processing_tester.crop_size["height"],
+                    self.image_processing_tester.crop_size["width"],
                 ),
             )
             self.assertEqual(
                 encoding["labels"].shape,
                 (
-                    self.image_processor_tester.batch_size,
-                    self.image_processor_tester.crop_size["height"],
-                    self.image_processor_tester.crop_size["width"],
+                    self.image_processing_tester.batch_size,
+                    self.image_processing_tester.crop_size["height"],
+                    self.image_processing_tester.crop_size["width"],
                 ),
             )
             self.assertEqual(encoding["labels"].dtype, torch.long)
@@ -158,24 +156,24 @@ class MobileViTImageProcessingTest(
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test not batched input (PIL images)
-            image, segmentation_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
+            image, segmentation_map = self.image_processing_tester.prepare_semantic_segmentation_inputs_ade20k()
 
             encoding = image_processing(image, segmentation_map, return_tensors="pt")
             self.assertEqual(
                 encoding["pixel_values"].shape,
                 (
                     1,
-                    self.image_processor_tester.num_channels,
-                    self.image_processor_tester.crop_size["height"],
-                    self.image_processor_tester.crop_size["width"],
+                    self.image_processing_tester.num_channels,
+                    self.image_processing_tester.crop_size["height"],
+                    self.image_processing_tester.crop_size["width"],
                 ),
             )
             self.assertEqual(
                 encoding["labels"].shape,
                 (
                     1,
-                    self.image_processor_tester.crop_size["height"],
-                    self.image_processor_tester.crop_size["width"],
+                    self.image_processing_tester.crop_size["height"],
+                    self.image_processing_tester.crop_size["width"],
                 ),
             )
             self.assertEqual(encoding["labels"].dtype, torch.long)
@@ -183,7 +181,7 @@ class MobileViTImageProcessingTest(
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Test batched input (PIL images)
-            images, segmentation_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+            images, segmentation_maps = self.image_processing_tester.prepare_semantic_segmentation_inputs_ade20k(
                 batched=True
             )
 
@@ -192,17 +190,17 @@ class MobileViTImageProcessingTest(
                 encoding["pixel_values"].shape,
                 (
                     2,
-                    self.image_processor_tester.num_channels,
-                    self.image_processor_tester.crop_size["height"],
-                    self.image_processor_tester.crop_size["width"],
+                    self.image_processing_tester.num_channels,
+                    self.image_processing_tester.crop_size["height"],
+                    self.image_processing_tester.crop_size["width"],
                 ),
             )
             self.assertEqual(
                 encoding["labels"].shape,
                 (
                     2,
-                    self.image_processor_tester.crop_size["height"],
-                    self.image_processor_tester.crop_size["width"],
+                    self.image_processing_tester.crop_size["height"],
+                    self.image_processing_tester.crop_size["width"],
                 ),
             )
             self.assertEqual(encoding["labels"].dtype, torch.long)
@@ -210,12 +208,12 @@ class MobileViTImageProcessingTest(
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
     def test_reduce_labels(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
 
             # ADE20k has 150 classes, and the background is included, so labels should be between 0 and 150
-            image, map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
+            image, map = self.image_processing_tester.prepare_semantic_segmentation_inputs_ade20k()
             encoding = image_processing(image, map, return_tensors="pt")
             self.assertTrue(encoding["labels"].min().item() >= 0)
             self.assertTrue(encoding["labels"].max().item() <= 150)
@@ -226,14 +224,14 @@ class MobileViTImageProcessingTest(
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
             # Ensure reduce label returns the same number of masks
-            image, map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(batched=True)
+            image, map = self.image_processing_tester.prepare_semantic_segmentation_inputs_ade20k(batched=True)
             encoding = image_processing(image, map, return_tensors="pt")
             self.assertTrue(len(encoding["labels"]) == len(map))
 
     @require_vision
     @require_torch
     def test_backends_equivalence(self):
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         # Test with single image
@@ -243,7 +241,7 @@ class MobileViTImageProcessingTest(
             )
         )
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
 
@@ -254,9 +252,9 @@ class MobileViTImageProcessingTest(
             self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].pixel_values)
 
         # Test with single image and segmentation map
-        image, segmentation_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
+        image, segmentation_map = self.image_processing_tester.prepare_semantic_segmentation_inputs_ade20k()
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(image, segmentation_map, return_tensors="pt")
 

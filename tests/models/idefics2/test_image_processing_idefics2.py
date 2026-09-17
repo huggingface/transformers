@@ -30,7 +30,8 @@ if is_torch_available():
 
 
 class Idefics2ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, num_images=1, **kwargs):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("num_images", 1)
         kwargs.setdefault("do_convert_rgb", True)
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"shortest_edge": 378, "longest_edge": 980})
@@ -41,8 +42,7 @@ class Idefics2ImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
         kwargs.setdefault("do_pad", True)
         kwargs.setdefault("do_image_splitting", True)
-        super().__init__(parent, **kwargs)
-        self.num_images = num_images
+        super().__init__(**kwargs)
 
     def get_expected_values(self, image_inputs, batched=False):
         if not batched:
@@ -131,16 +131,14 @@ class Idefics2ImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Idefics2ImageProcessingTester(self)
+    image_processing_tester_class = Idefics2ImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
             self.assertTrue(hasattr(image_processing, "do_resize"))
@@ -154,31 +152,31 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_image_splitting"))
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for sample_images in image_inputs:
                 for image in sample_images:
                     self.assertIsInstance(image, np.ndarray)
 
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
-                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+                tuple(encoded_images.shape), (self.image_processing_tester.batch_size, *expected_output_image_shape)
             )
 
     def test_call_numpy_4_channels(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor_dict = self.image_processor_dict.copy()
             image_processor_dict["image_mean"] = [0.5, 0.5, 0.5, 0.5]
             image_processor_dict["image_std"] = [0.5, 0.5, 0.5, 0.5]
             image_processing = image_processing_class(**image_processor_dict)
-            self.image_processor_tester.num_channels = 4
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            self.image_processing_tester.num_channels = 4
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
 
             for sample_images in image_inputs:
                 for image in sample_images:
@@ -187,62 +185,62 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             encoded_images = image_processing(
                 image_inputs[0], input_data_format="channels_last", return_tensors="pt"
             ).pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             encoded_images = image_processing(
                 image_inputs, input_data_format="channels_last", return_tensors="pt"
             ).pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
-                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+                tuple(encoded_images.shape), (self.image_processing_tester.batch_size, *expected_output_image_shape)
             )
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
             for images in image_inputs:
                 for image in images:
                     self.assertIsInstance(image, Image.Image)
 
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
-                tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+                tuple(encoded_images.shape), (self.image_processing_tester.batch_size, *expected_output_image_shape)
             )
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
             for images in image_inputs:
                 for image in images:
                     self.assertIsInstance(image, torch.Tensor)
 
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape(image_inputs)
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
             self.assertEqual(
                 tuple(encoded_images.shape),
-                (self.image_processor_tester.batch_size, *expected_output_image_shape),
+                (self.image_processing_tester.batch_size, *expected_output_image_shape),
             )
 
     def test_image_splitting(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor_dict = self.image_processor_dict.copy()
             image_processor_dict["do_image_splitting"] = True
             image_processing = image_processing_class(**image_processor_dict)
 
-            image_inputs = self.image_processor_tester.prepare_image_inputs(
+            image_inputs = self.image_processing_tester.prepare_image_inputs(
                 equal_resolution=True, torchify=True, num_images=1
             )
 
@@ -256,15 +254,15 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             if len(result.pixel_values.shape) == 5:
                 self.assertEqual(result.pixel_values.shape[1], 1)
             else:
-                self.assertEqual(result.pixel_values.shape[1], self.image_processor_tester.num_channels)
+                self.assertEqual(result.pixel_values.shape[1], self.image_processing_tester.num_channels)
 
     def test_pixel_attention_mask(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor_dict = self.image_processor_dict.copy()
             image_processor_dict["do_pad"] = True
             image_processing = image_processing_class(**image_processor_dict)
 
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
             result = image_processing(image_inputs, return_tensors="pt")
             self.assertIn("pixel_attention_mask", result)
@@ -275,13 +273,13 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image_processor_dict["do_image_splitting"] = False
             image_processing = image_processing_class(**image_processor_dict)
 
-            equal_size_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+            equal_size_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
             result = image_processing(equal_size_inputs, return_tensors="pt")
             self.assertNotIn("pixel_attention_mask", result)
 
     def test_convert_rgb(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             rgba_image = Image.new("RGBA", (100, 100), (255, 0, 0, 128))
 
             image_processor_dict = self.image_processor_dict.copy()
@@ -304,10 +302,10 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_backends_equivalence_batched(self):
         """Override to also compare pixel_attention_mask across backends."""
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_images = self.image_processor_tester.prepare_image_inputs(
+        dummy_images = self.image_processing_tester.prepare_image_inputs(
             equal_resolution=False, num_images=5, torchify=True
         )
         indices_to_pop = [i if np.random.random() < 0.5 else None for i in range(len(dummy_images))]
@@ -316,7 +314,7 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 dummy_images[i].pop()
 
         encodings = {}
-        for backend_name, image_processing_class in self.image_processing_classes.items():
+        for backend_name, image_processing_class in self.image_processor_classes.items():
             image_processor = image_processing_class(**self.image_processor_dict)
             encodings[backend_name] = image_processor(dummy_images, return_tensors="pt")
 

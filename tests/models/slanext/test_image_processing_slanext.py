@@ -31,7 +31,9 @@ if is_torch_available():
 
 
 class SLANeXtImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, do_rescale=True, rescale_factor=1 / 255, **kwargs):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("do_rescale", True)
+        kwargs.setdefault("rescale_factor", 1 / 255)
         kwargs.setdefault("min_resolution", 10)
         kwargs.setdefault("image_mean", [0.485, 0.456, 0.406])
         kwargs.setdefault("image_std", [0.229, 0.224, 0.225])
@@ -39,9 +41,7 @@ class SLANeXtImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"height": 512, "width": 512})
         kwargs.setdefault("do_pad", True)
-        super().__init__(parent, **kwargs)
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
+        super().__init__(**kwargs)
 
     def get_expected_value(self, image_inputs):
         image = image_inputs[0]
@@ -73,61 +73,59 @@ class SLANeXtImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class SLANeXtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = SLANeXtImageProcessingTester(self)
+    image_processing_tester_class = SLANeXtImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     # SLANeXt resizes images adaptively based on aspect ratio, leading to inconsistent output sizes across a batch.
     # Override to skip batched input tests.
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
             for image in image_inputs:
                 self.assertIsInstance(image, torch.Tensor)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
     # SLANeXt resizes images adaptively based on aspect ratio, leading to inconsistent output sizes across a batch.
     # Override to skip batched input tests.
     def test_call_numpy(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image, np.ndarray)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
     # SLANeXt resizes images adaptively based on aspect ratio, leading to inconsistent output sizes across a batch.
     # Override to skip batched input tests.
     def test_call_pil(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=False)
             for image in image_inputs:
                 self.assertIsInstance(image, Image.Image)
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            expected_output_image_shape = self.image_processing_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
     @unittest.skip(reason="SLANeXtImageProcessorFast does not support 4 channel images yet")

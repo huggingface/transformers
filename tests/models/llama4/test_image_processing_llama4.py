@@ -21,7 +21,7 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 
 class Llama4ImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, **kwargs):
+    def __init__(self, **kwargs):
         kwargs.setdefault("max_patches", 1)
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"height": 20, "width": 20})
@@ -30,22 +30,20 @@ class Llama4ImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
         kwargs.setdefault("do_convert_rgb", True)
         kwargs.setdefault("do_pad", False)
-        super().__init__(parent, **kwargs)
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class Llama4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Llama4ImageProcessingTester(self)
+    image_processing_tester_class = Llama4ImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "do_resize"))
             self.assertTrue(hasattr(image_processor, "size"))
@@ -55,9 +53,9 @@ class Llama4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
 
     def test_split_tiles(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
-            image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)[0]
+            image = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)[0]
             processed_images = image_processor(
                 image,
                 max_patches=16,

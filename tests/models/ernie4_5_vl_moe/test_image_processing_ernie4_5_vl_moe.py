@@ -35,7 +35,9 @@ if is_vision_available():
 
 
 class Ernie4_5_VLMoeImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, do_normalize=True, do_convert_rgb=True, **kwargs):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("do_normalize", True)
+        kwargs.setdefault("do_convert_rgb", True)
         kwargs.setdefault("min_resolution", 56)
         kwargs.setdefault("max_resolution", 1024)
         kwargs.setdefault("do_resize", True)
@@ -44,9 +46,7 @@ class Ernie4_5_VLMoeImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("size", {"shortest_edge": 56 * 56, "longest_edge": 6177 * 28 * 28})
         kwargs.setdefault("patch_size", 14)
         kwargs.setdefault("merge_size", 2)
-        super().__init__(parent, **kwargs)
-        self.do_normalize = do_normalize
-        self.do_convert_rgb = do_convert_rgb
+        super().__init__(**kwargs)
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         images = prepare_image_inputs(
@@ -64,16 +64,14 @@ class Ernie4_5_VLMoeImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Ernie4_5_VLMoeImageProcessingTester(self)
+    image_processing_tester_class = Ernie4_5_VLMoeImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_normalize"))
             self.assertTrue(hasattr(image_processing, "image_mean"))
@@ -85,7 +83,7 @@ class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             self.assertTrue(hasattr(image_processing, "merge_size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size["shortest_edge"], 56 * 56)
             self.assertEqual(image_processor.size["longest_edge"], 6177 * 28 * 28)
@@ -103,11 +101,11 @@ class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
         self.assertEqual(best_resolution, (560, 280))
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
             for image in image_inputs:
                 self.assertIsInstance(image[0], Image.Image)
 
@@ -130,11 +128,11 @@ class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
             for image in image_inputs:
                 self.assertIsInstance(image[0], np.ndarray)
 
@@ -157,11 +155,11 @@ class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             self.assertTrue((image_grid_thws == expected_image_grid_thws).all())
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
 
             for image in image_inputs:
                 self.assertIsInstance(image[0], torch.Tensor)
@@ -189,9 +187,9 @@ class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
         pass
 
     def test_nested_input(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
 
             # Test batched as a list of images
             process_out = image_processing(image_inputs, return_tensors="pt")
@@ -217,7 +215,7 @@ class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             self.assertTrue((image_grid_thws_nested == expected_image_grid_thws).all())
 
     def test_custom_image_size(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             with tempfile.TemporaryDirectory() as tmpdirname:
                 image_processing.save_pretrained(tmpdirname)
@@ -225,14 +223,14 @@ class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
                     tmpdirname, size={"shortest_edge": 28 * 28, "longest_edge": 56 * 56}
                 )
 
-            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+            image_inputs = self.image_processing_tester.prepare_image_inputs(equal_resolution=True)
             process_out = image_processor_loaded(image_inputs, return_tensors="pt")
             expected_output_image_shape = [112, 588]
             self.assertListEqual(list(process_out.pixel_values.shape), expected_output_image_shape)
 
     def test_custom_pixels(self):
         pixel_choices = frozenset(itertools.product((100, 150, 200, 20000), (100, 150, 200, 20000)))
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor_dict = self.image_processor_dict.copy()
             for a_pixels, b_pixels in pixel_choices:
                 image_processor_dict["size"] = {
@@ -240,7 +238,7 @@ class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
                     "longest_edge": max(a_pixels, b_pixels),
                 }
                 image_processor = image_processing_class(**image_processor_dict)
-                image_inputs = self.image_processor_tester.prepare_image_inputs()
+                image_inputs = self.image_processing_tester.prepare_image_inputs()
                 # Just checking that it doesn't raise an error
                 image_processor(image_inputs, return_tensors="pt")
 
@@ -248,7 +246,7 @@ class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
     @require_torch
     def test_backends_equivalence(self):
         """Override base test to also compare image_grid_thw."""
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = load_image(
@@ -257,8 +255,8 @@ class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             )
         )
 
-        image_processor_pil = self.image_processing_classes["pil"](**self.image_processor_dict)
-        image_processor_torchvision = self.image_processing_classes["torchvision"](**self.image_processor_dict)
+        image_processor_pil = self.image_processor_classes["pil"](**self.image_processor_dict)
+        image_processor_torchvision = self.image_processor_classes["torchvision"](**self.image_processor_dict)
 
         encoding_pil = image_processor_pil(dummy_image, return_tensors="pt")
         encoding_torchvision = image_processor_torchvision(dummy_image, return_tensors="pt")
@@ -273,17 +271,17 @@ class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
     @require_torch
     def test_backends_equivalence_batched(self):
         """Override base test to also compare image_grid_thw."""
-        if len(self.image_processing_classes) < 2:
+        if len(self.image_processor_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+        if hasattr(self.image_processing_tester, "do_center_crop") and self.image_processing_tester.do_center_crop:
             self.skipTest(
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
             )
 
-        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
-        image_processor_pil = self.image_processing_classes["pil"](**self.image_processor_dict)
-        image_processor_torchvision = self.image_processing_classes["torchvision"](**self.image_processor_dict)
+        dummy_images = self.image_processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        image_processor_pil = self.image_processor_classes["pil"](**self.image_processor_dict)
+        image_processor_torchvision = self.image_processor_classes["torchvision"](**self.image_processor_dict)
 
         encoding_pil = image_processor_pil(dummy_images, return_tensors="pt")
         encoding_torchvision = image_processor_torchvision(dummy_images, return_tensors="pt")
@@ -295,7 +293,7 @@ class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
         )
 
     def test_get_num_patches_without_images(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             num_patches = image_processing.get_number_of_image_patches(height=100, width=100, images_kwargs={})
             self.assertEqual(num_patches, 64)

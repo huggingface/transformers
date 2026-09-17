@@ -28,11 +28,11 @@ if is_torch_available():
 
 
 class SuperPointImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent, **kwargs):
+    def __init__(self, **kwargs):
         kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"height": 480, "width": 640})
         kwargs.setdefault("do_grayscale", True)
-        super().__init__(parent, **kwargs)
+        super().__init__(**kwargs)
 
     def prepare_keypoint_detection_output(self, pixel_values):
         max_number_keypoints = 50
@@ -55,16 +55,14 @@ class SuperPointImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        super().setUp()
-        self.image_processor_tester = SuperPointImageProcessingTester(self)
+    image_processing_tester_class = SuperPointImageProcessingTester
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.image_processing_tester.prepare_image_processor_dict()
 
     def test_image_processing(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_resize"))
             self.assertTrue(hasattr(image_processing, "size"))
@@ -73,7 +71,7 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             self.assertTrue(hasattr(image_processing, "do_grayscale"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 480, "width": 640})
 
@@ -87,9 +85,9 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         pass
 
     def test_input_image_properly_converted_to_grayscale(self):
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            image_inputs = self.image_processor_tester.prepare_image_inputs()
+            image_inputs = self.image_processing_tester.prepare_image_inputs()
             pre_processed_images = image_processor.preprocess(image_inputs)
             for image in pre_processed_images["pixel_values"]:
                 if isinstance(image, torch.Tensor):
@@ -115,11 +113,11 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 self.assertTrue(all_below_image_size)
                 self.assertTrue(all_above_zero)
 
-        for image_processing_class in self.image_processing_classes.values():
+        for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            image_inputs = self.image_processor_tester.prepare_image_inputs()
+            image_inputs = self.image_processing_tester.prepare_image_inputs()
             pre_processed_images = image_processor.preprocess(image_inputs, return_tensors="pt")
-            outputs = self.image_processor_tester.prepare_keypoint_detection_output(**pre_processed_images)
+            outputs = self.image_processing_tester.prepare_keypoint_detection_output(**pre_processed_images)
 
             tuple_image_sizes = [(image.size[0], image.size[1]) for image in image_inputs]
             tuple_post_processed_outputs = image_processor.post_process_keypoint_detection(outputs, tuple_image_sizes)
