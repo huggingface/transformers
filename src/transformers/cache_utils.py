@@ -645,12 +645,6 @@ class StaticIndexedLayer(StaticLayer):
         self.indexer_keys: torch.Tensor | None = None
         self.is_indexer_initialized: bool = False
 
-    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
-        super().lazy_initialization(key_states, value_states)
-        # The indexer update runs independently of (and after) the main K/V `update`, so it tracks its
-        # own cumulative length rather than reusing `self.cumulative_length`.
-        self.indexer_cumulative_length = torch.zeros((), dtype=torch.long, device=self.device)
-
     def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
         self.indexer_dtype, self.indexer_device = indexer_key_states.dtype, indexer_key_states.device
         batch_size, _, index_head_dim = indexer_key_states.shape
@@ -659,6 +653,9 @@ class StaticIndexedLayer(StaticLayer):
             dtype=self.indexer_dtype,
             device=self.indexer_device,
         )
+        # The indexer update runs independently of the main K/V `update` — it can even run first — so it
+        # tracks its own cumulative length here, alongside the buffer it belongs to.
+        self.indexer_cumulative_length = torch.zeros((), dtype=torch.long, device=self.indexer_device)
         # Tag as static addresses for cudagraphs / compile, mirroring the main K/V buffers.
         if not is_torchdynamo_compiling():
             torch._dynamo.mark_static_address(self.indexer_keys)
