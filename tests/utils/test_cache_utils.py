@@ -175,34 +175,6 @@ class CacheTest(unittest.TestCase):
         cache = StaticCache(config=config, max_cache_len=8)
         self.assertEqual(cache.get_max_length(), 8)
 
-    @require_torch_accelerator
-    def test_offloaded_cache_prefetches_across_linear_attention_layers(self):
-        """
-        Regression test for offloaded caches on hybrid (attention + linear-attention) models. Attention layers are
-        offloaded to CPU after their `update` and must be prefetched back before the next decoding step. The prefetch
-        has to skip the interleaved linear-attention layers (which never go through the offloading `update` path) and
-        target the next attention layer; otherwise the offloaded KV stays on CPU and the next `update` fails with a
-        cpu/accelerator device mismatch.
-        """
-        # Hybrid layout: an attention layer every 4 layers, linear-attention layers in between (as in e.g. Qwen3.5).
-        layers = [DynamicLayer() if layer_idx % 4 == 3 else LinearAttentionLayer() for layer_idx in range(8)]
-        attention_indices = [3, 7]
-        cache = Cache(layers=layers, offloading=True, offload_only_non_sliding=False)
-
-        def _kv(seq_len):
-            states = torch.rand(1, 4, seq_len, 16, device=torch_device)
-            return states, states.clone()
-
-        # Prefill: each attention layer is updated once, then offloaded to CPU.
-        for layer_idx in attention_indices:
-            cache.update(*_kv(5), layer_idx)
-
-        # Decode: updating the attention layers again used to raise a device mismatch, as their offloaded KV was
-        # never prefetched back to the accelerator.
-        for layer_idx in attention_indices:
-            keys, _ = cache.update(*_kv(1), layer_idx)
-            self.assertEqual(keys.device.type, torch.device(torch_device).type)
-
     @require_optimum_quanto
     def test_quantized_layer_beam_reorder(self):
         """
@@ -239,6 +211,34 @@ class CacheTest(unittest.TestCase):
         self.assertEqual(layer.get_seq_length(), 0)
         keys, _ = layer.update(states(order, 3), states(order, 3))
         self.assertEqual(keys.shape[-2], 3)
+
+    @require_torch_accelerator
+    def test_offloaded_cache_prefetches_across_linear_attention_layers(self):
+        """
+        Regression test for offloaded caches on hybrid (attention + linear-attention) models. Attention layers are
+        offloaded to CPU after their `update` and must be prefetched back before the next decoding step. The prefetch
+        has to skip the interleaved linear-attention layers (which never go through the offloading `update` path) and
+        target the next attention layer; otherwise the offloaded KV stays on CPU and the next `update` fails with a
+        cpu/accelerator device mismatch.
+        """
+        # Hybrid layout: an attention layer every 4 layers, linear-attention layers in between (as in e.g. Qwen3.5).
+        layers = [DynamicLayer() if layer_idx % 4 == 3 else LinearAttentionLayer() for layer_idx in range(8)]
+        attention_indices = [3, 7]
+        cache = Cache(layers=layers, offloading=True, offload_only_non_sliding=False)
+
+        def _kv(seq_len):
+            states = torch.rand(1, 4, seq_len, 16, device=torch_device)
+            return states, states.clone()
+
+        # Prefill: each attention layer is updated once, then offloaded to CPU.
+        for layer_idx in attention_indices:
+            cache.update(*_kv(5), layer_idx)
+
+        # Decode: updating the attention layers again used to raise a device mismatch, as their offloaded KV was
+        # never prefetched back to the accelerator.
+        for layer_idx in attention_indices:
+            keys, _ = cache.update(*_kv(1), layer_idx)
+            self.assertEqual(keys.device.type, torch.device(torch_device).type)
 
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
