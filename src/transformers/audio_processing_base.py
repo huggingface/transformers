@@ -133,7 +133,7 @@ class AudioProcessingMixin(PreprocessingMixin):
     _nested_config_keys = ["audio_processor", "feature_extractor"]
     _auto_class_default = "AutoAudioProcessor"
     _file_type_label = "audio processor"
-    _excluded_dict_keys = {"mel_filters", "window", "_cached_stft_window"}
+    _excluded_dict_keys = {"mel_filters", "window", "_cached_stft_window", "_cached_audio_kernel_inputs"}
     _extra_init_pops = ["feature_extractor_type"]
     _config_filename_kwarg = "audio_processor_filename"
     _subfolder_default = ""

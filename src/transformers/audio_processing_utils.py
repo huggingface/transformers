@@ -51,6 +51,9 @@ class BaseAudioProcessor(AudioProcessingMixin):
     # Keys `_finalize_output` adds on top of the derived ones, for `model_input_names`.
     extra_model_input_names: list[str] = []
     dither: float = 0.0
+    use_fused_cuda: bool | None = None
+    feature_normalization: str | None = None
+    feature_normalization_eps: float = 1e-5
     # Output keys left untouched by `convert_to_tensors`, for non-array metadata a model
     # returns alongside its features (e.g. Cohere-ASR's `audio_chunk_index`).
     skip_tensor_conversion: list[str] = []
@@ -77,9 +80,12 @@ class BaseAudioProcessor(AudioProcessingMixin):
         # Validate the *resolved* attribute set, not just what the caller passed: a bad value reaching us
         # from a class default or a hub config should fail here, not crash somewhere inside `_preprocess`.
         validate_typed_dict(self.valid_kwargs, {key: getattr(self, key) for key in self._valid_kwargs_names})
-        if self.spectrogram_config is not None:
-            if self.spectrogram_config.mel_scale_config is not None and not hasattr(self, "mel_filters"):
-                self.mel_filters = self._mel_filter_bank(self.spectrogram_config)
+        if (
+            self.spectrogram_config is not None
+            and self.spectrogram_config.mel_scale_config is not None
+            and not hasattr(self, "mel_filters")
+        ):
+            self.mel_filters = self._mel_filter_bank(self.spectrogram_config)
         self._cached_stft_window = None
 
     @property
@@ -217,15 +223,18 @@ class BaseAudioProcessor(AudioProcessingMixin):
     ) -> BatchFeature:
         # Path 1: per-waveform spectrogram extraction, padded at the feature level.
         if do_extract_spectrogram and not do_batch_spectrogram:
-            features = self.compute_features(
-                audio,
-                spectrogram_config=spectrogram_config,
-                padding=padding,
-                max_length=max_length,
-                truncation=truncation,
-                pad_to_multiple_of=pad_to_multiple_of,
-                **kwargs,
-            )
+            features = [
+                self.spectrogram(
+                    waveform,
+                    spectrogram_config=spectrogram_config,
+                    padding=padding,
+                    max_length=max_length,
+                    truncation=truncation,
+                    pad_to_multiple_of=pad_to_multiple_of,
+                    **kwargs,
+                )
+                for waveform in audio
+            ]
             feature_lengths = [f.shape[0] for f in features]
             features = self._finalize_features(features, feature_lengths, **kwargs)
             features, feature_ranges = self._pad_features(
@@ -274,18 +283,20 @@ class BaseAudioProcessor(AudioProcessingMixin):
         batched = self._stack_waveforms(audio, padding=padding)
 
         if do_extract_spectrogram:
-            output = {
-                "audio_features": self.compute_features(
-                    batched,
-                    spectrogram_config=spectrogram_config,
-                    audio_ranges=audio_ranges,
-                    padding=padding,
-                    max_length=max_length,
-                    truncation=truncation,
-                    pad_to_multiple_of=pad_to_multiple_of,
-                    **kwargs,
-                )
-            }
+            features, feature_lengths = self._compute_batched_features(
+                batched,
+                spectrogram_config=spectrogram_config,
+                audio_ranges=audio_ranges,
+                padding=padding,
+                max_length=max_length,
+                truncation=truncation,
+                pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
+                padding_value=padding_value,
+                return_tensors=return_tensors,
+                **kwargs,
+            )
+            output = {"audio_features": features}
         else:
             output = {"audio_values": batched}
 
@@ -293,15 +304,16 @@ class BaseAudioProcessor(AudioProcessingMixin):
             # Features live on the frame axis: map audio ranges → feature ranges via hop_length.
             if do_extract_spectrogram:
                 spec_cfg = spectrogram_config
-                audio_lengths = np.array([end - start for start, end in audio_ranges])
-                feature_lengths = self._valid_frame_counts(audio_lengths, spec_cfg)
-                mask_ranges = [(0, int(length)) for length in feature_lengths]
                 mask_length = self._padded_frame_count(padded_length, spec_cfg)
+                output["audio_features_mask"] = self._get_mask_from_lengths(
+                    feature_lengths, mask_length, like=next(iter(output.values()))
+                )
             else:
                 mask_ranges = audio_ranges
                 mask_length = padded_length
-            mask_key = "audio_features_mask" if do_extract_spectrogram else "audio_values_mask"
-            output[mask_key] = self._get_mask(mask_ranges, mask_length, like=next(iter(output.values())))
+                output["audio_values_mask"] = self._get_mask(
+                    mask_ranges, mask_length, like=next(iter(output.values()))
+                )
 
         output = self._finalize_output(
             output,
@@ -319,6 +331,38 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return BatchFeature(
             data=output, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion
         )
+
+    def _compute_batched_features(
+        self,
+        audio,
+        *,
+        audio_ranges,
+        spectrogram_config,
+        use_fused_cuda=None,
+        **kwargs,
+    ):
+        """Compute the complete batched feature recipe before masks and output augmentation.
+
+        Backend adapters may replace this internal seam with an equivalent accelerated
+        implementation. The default composes the portable feature pipeline and the
+        processor's declared batched normalization.
+        """
+        features = self.spectrogram(
+            audio,
+            spectrogram_config=spectrogram_config,
+            audio_ranges=audio_ranges,
+            use_fused_cuda=use_fused_cuda,
+            **kwargs,
+        )
+        audio_lengths = np.asarray([end - start for start, end in audio_ranges])
+        feature_lengths = self._valid_frame_counts(audio_lengths, spectrogram_config)
+        if self.feature_normalization is None:
+            return features, feature_lengths
+        if self.feature_normalization != "per_feature_standardize":
+            raise ValueError(f"Unknown feature normalization: {self.feature_normalization!r}")
+
+        features = self._standardize_features(features, feature_lengths, eps=self.feature_normalization_eps)
+        return features, feature_lengths
 
     def _finalize_features(self, features, feature_lengths, **kwargs):
         """Hook: per-utterance feature processing after extraction, before feature-level padding.
@@ -515,15 +559,18 @@ class BaseAudioProcessor(AudioProcessingMixin):
             mask[i, start:end] = 1
         return mask
 
+    def _get_mask_from_lengths(self, lengths, padded_length, *, like=None):
+        return self._get_mask([(0, int(length)) for length in lengths], padded_length, like=like)
+
     # ── Spectrogram core ─────────────────────────────────────────────────
 
-    def compute_features(self, audio, *, spectrogram_config: SpectrogramConfig | None, **kwargs):
-        """Compute features without padding, mask construction, or model-specific output assembly.
+    def spectrogram(self, audio, *, spectrogram_config: SpectrogramConfig | None, **kwargs):
+        """Compute a spectrogram without padding, mask construction, or model-specific output assembly.
 
-        `audio` is one backend waveform, a batch with samples on the last axis, or a list of
-        waveforms. A list returns a list; an array preserves its leading batch dimensions.
-        Output axes are (..., frequency/mel, frames), except `matmul_order="features_first"`
-        projects to (..., frames, mel). `transpose_features=True` swaps the final two axes.
+        `audio` is one backend array with samples on the last axis. Leading batch dimensions
+        are preserved. Output axes are (..., frequency/mel, frames), except
+        `matmul_order="features_first"` projects to (..., frames, mel).
+        `transpose_features=True` swaps the final two axes.
         Dtype and numerical stages come from `spectrogram_config`. Supply resolved options
         such as `dither` through kwargs; an optional `mel_filters` selects a call-local bank.
         Length metadata and padding policy belong to the calling workflow.
@@ -535,23 +582,63 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
         norm_kwargs = {k: v for k, v in kwargs.items() if k not in ("audio_ranges", "feature_ranges")}
 
-        if isinstance(audio, list):
-            features = [self._compute_spectrum(a, spectrogram_config=spectrogram_config, **kwargs) for a in audio]
-            if spectrogram_config.mel_scale_config is not None:
-                features = [self._project_to_mel(f, spectrogram_config=spectrogram_config, **kwargs) for f in features]
-            features = [self._log_compress(f, spectrogram_config=spectrogram_config, **norm_kwargs) for f in features]
-        else:
-            features = self._compute_spectrum(audio, spectrogram_config=spectrogram_config, **kwargs)
-            if spectrogram_config.mel_scale_config is not None:
-                features = self._project_to_mel(features, spectrogram_config=spectrogram_config, **kwargs)
-            features = self._log_compress(features, spectrogram_config=spectrogram_config, **norm_kwargs)
+        features = self._compute_spectrum(audio, spectrogram_config=spectrogram_config, **kwargs)
+        if spectrogram_config.mel_scale_config is not None:
+            features = self._project_to_mel(features, spectrogram_config=spectrogram_config, **kwargs)
+        features = self._log_compress(features, spectrogram_config=spectrogram_config, **norm_kwargs)
 
         return features
 
     def _compute_spectrum(self, audio, *, spectrogram_config, **kwargs):
         return self._waveform_to_spectrum(audio, spectrogram_config=spectrogram_config, **kwargs)
 
-    def _waveform_to_spectrum(self, audio, *, spectrogram_config, dither, **kwargs):
+    def _waveform_to_spectrum(self, audio, *, spectrogram_config, dither, audio_ranges=None, **kwargs):
+        """Convert waveforms with samples on the last axis to ``(..., frequency, frames)`` spectra."""
+        self._validate_spectrogram_config(spectrogram_config)
+        needs_manual_framing = self._needs_manual_framing(spectrogram_config)
+        stft_cfg = spectrogram_config.stft_config
+
+        audio = self._condition_waveform_for_stft(
+            audio,
+            spectrogram_config=spectrogram_config,
+            dither=dither,
+            audio_ranges=audio_ranges,
+        )
+        window, frame_length = self._get_or_create_stft_window(
+            audio,
+            spectrogram_config=spectrogram_config,
+            needs_manual_framing=needs_manual_framing,
+        )
+
+        if needs_manual_framing:
+            audio_dtype = audio.dtype
+            frames = self._frame_waveform(
+                audio,
+                window,
+                frame_length + stft_cfg.extra_samples_per_frame,
+                stft_cfg.hop_length,
+                stft_cfg.n_fft,
+                stft_cfg,
+            )
+            frames = self._process_frames(
+                frames, spectrogram_config=spectrogram_config, audio_ranges=audio_ranges, **kwargs
+            )
+            stft_out = self._stft_framed(
+                frames, window, frame_length, stft_cfg.n_fft, stft_cfg, audio_dtype=audio_dtype
+            )
+        else:
+            stft_out = self._stft_native(audio, window, frame_length, stft_cfg.hop_length, stft_cfg.n_fft, stft_cfg)
+
+        magnitudes = self._spectrum_magnitude(
+            stft_out,
+            stft_cfg.power,
+            spectrogram_config=spectrogram_config,
+            audio_ranges=audio_ranges,
+            **kwargs,
+        )
+        return self._cast_stft_output(magnitudes, spectrogram_config)
+
+    def _validate_spectrogram_config(self, spectrogram_config: SpectrogramConfig) -> None:
         stft_cfg = spectrogram_config.stft_config
         if spectrogram_config.mel_scale_config is not None and not stft_cfg.onesided:
             raise ValueError("onesided=False is only supported for spectrograms without a mel projection.")
@@ -578,10 +665,12 @@ class BaseAudioProcessor(AudioProcessingMixin):
                 raise ValueError(
                     "fft_dtype applies to the manual-framing path only; this configuration uses the native STFT."
                 )
-        n_fft = stft_cfg.n_fft
-        win_length = stft_cfg.win_length or n_fft
-        hop_length = stft_cfg.hop_length or win_length // 2
+        if stft_cfg.pad < 0:
+            raise ValueError(f"pad must be non-negative, got {stft_cfg.pad}.")
 
+    def _condition_waveform_for_stft(self, audio, *, spectrogram_config: SpectrogramConfig, dither, audio_ranges):
+        """Apply waveform operations in their numerically significant order before STFT framing."""
+        stft_cfg = spectrogram_config.stft_config
         if spectrogram_config.computation_dtype and stft_cfg.fft_dtype in (None, "complex64"):
             # with `fft_dtype="float64"` / `"native"`, the cast happens at the FFT boundary instead
             dtype_str = spectrogram_config.computation_dtype
@@ -592,16 +681,18 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
                 audio = audio.to(getattr(torch, dtype_str))
         if dither > 0:
-            audio = self._dither_waveform(audio, kwargs.get("audio_ranges"), dither=dither)
+            audio = self._dither_waveform(audio, audio_ranges, dither=dither)
         if spectrogram_config.waveform_scale is not None:
             audio = audio * spectrogram_config.waveform_scale
         if spectrogram_config.preemphasis is not None and spectrogram_config.preemphasis_mode == "waveform":
-            audio = self._preemphasize_waveform(audio, spectrogram_config.preemphasis, kwargs.get("audio_ranges"))
-        if stft_cfg.pad < 0:
-            raise ValueError(f"pad must be non-negative, got {stft_cfg.pad}.")
+            audio = self._preemphasize_waveform(audio, spectrogram_config.preemphasis, audio_ranges)
         if stft_cfg.pad:
             audio = self._pad_axis(audio, stft_cfg.pad, stft_cfg.pad, axis=-1, value=0.0)
+        return audio
 
+    def _get_or_create_stft_window(self, audio, *, spectrogram_config, needs_manual_framing):
+        """Return the prepared STFT window, caching it for the processor's declared configuration."""
+        stft_cfg = spectrogram_config.stft_config
         # Window construction follows the input dtype and, for torch, its device. A processor can
         # legitimately alternate CPU and accelerator inputs, so those properties are part of the
         # cache identity even when the spectrogram configuration object itself is unchanged.
@@ -613,25 +704,13 @@ class BaseAudioProcessor(AudioProcessingMixin):
         ):
             _, window, frame_length = self._cached_stft_window
         else:
-            window = self._create_stft_window(win_length, stft_cfg, audio)
-            window, frame_length = self._prepare_window_and_framing(window, win_length, n_fft, needs_manual_framing)
+            window = self._create_stft_window(stft_cfg.win_length, stft_cfg, audio)
+            window, frame_length = self._prepare_window_and_framing(
+                window, stft_cfg.win_length, stft_cfg.n_fft, needs_manual_framing
+            )
             if spectrogram_config is self.spectrogram_config:
                 self._cached_stft_window = (window_cache_key, window, frame_length)
-
-        if needs_manual_framing:
-            audio_dtype = audio.dtype
-            frames = self._frame_waveform(
-                audio, window, frame_length + stft_cfg.extra_samples_per_frame, hop_length, n_fft, stft_cfg
-            )
-            frames = self._process_frames(frames, spectrogram_config=spectrogram_config, **kwargs)
-            stft_out = self._stft_framed(frames, window, frame_length, n_fft, stft_cfg, audio_dtype=audio_dtype)
-        else:
-            stft_out = self._stft_native(audio, window, frame_length, hop_length, n_fft, stft_cfg)
-
-        magnitudes = self._spectrum_magnitude(
-            stft_out, stft_cfg.power, spectrogram_config=spectrogram_config, **kwargs
-        )
-        return self._cast_stft_output(magnitudes, spectrogram_config)
+        return window, frame_length
 
     # ── Spectrogram hooks ────────────────────────────────────────────────
 
@@ -657,14 +736,14 @@ class BaseAudioProcessor(AudioProcessingMixin):
     def _frame_count(self, lengths, stft_cfg):
         """Frames the framing yields for `lengths` samples, excluding the extra centered frame."""
         lengths = lengths + 2 * stft_cfg.pad
-        win_length = stft_cfg.win_length or stft_cfg.n_fft
-        hop_length = stft_cfg.hop_length or win_length // 2
         if stft_cfg.center == "left":
-            count = (lengths + win_length // 2 - (win_length + stft_cfg.extra_samples_per_frame)) // hop_length + 1
+            count = (
+                lengths + stft_cfg.win_length // 2 - (stft_cfg.win_length + stft_cfg.extra_samples_per_frame)
+            ) // stft_cfg.hop_length + 1
             return max(0, count) if isinstance(count, int) else count.clip(min=0)
         if not stft_cfg.center:
-            return (lengths - (win_length + stft_cfg.extra_samples_per_frame)) // hop_length + 1
-        return lengths // hop_length
+            return (lengths - (stft_cfg.win_length + stft_cfg.extra_samples_per_frame)) // stft_cfg.hop_length + 1
+        return lengths // stft_cfg.hop_length
 
     def _padded_frame_count(self, padded_length, spectrogram_config) -> int:
         """Width of the extracted features' frame axis, and therefore of the padding mask.
@@ -687,9 +766,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """
         stft_cfg = spectrogram_config.stft_config
         if spectrogram_config.count_frames_by_hop:
-            win_length = stft_cfg.win_length or stft_cfg.n_fft
-            hop_length = stft_cfg.hop_length or win_length // 2
-            return (audio_lengths + 2 * stft_cfg.pad + hop_length - 1) // hop_length
+            return (audio_lengths + 2 * stft_cfg.pad + stft_cfg.hop_length - 1) // stft_cfg.hop_length
         return self._frame_count(audio_lengths, stft_cfg)
 
     # ── Spectrogram backend ──────────────────────────────────────────────

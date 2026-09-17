@@ -658,6 +658,7 @@ else:
 
 
 _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
+    "parakeet-audio": {"repo_id": "kernels-community/parakeet-audio", "version": 1},
     "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 4},
     "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 2},
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},

@@ -109,7 +109,7 @@ class GraniteSpeech5AudioProcessorMixin:
             padding_side=padding_side,
             padding_value=padding_value,
         )
-        logmel = self.compute_features(
+        logmel = self.spectrogram(
             self._stack(padded), spectrogram_config=spectrogram_config, audio_ranges=ranges, **kwargs
         )
         stacking = frame_stacking

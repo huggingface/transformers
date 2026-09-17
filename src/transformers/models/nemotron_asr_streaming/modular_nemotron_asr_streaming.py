@@ -891,6 +891,10 @@ class NemotronAsrStreamingForRNNT(
 
 
 class NemotronAsrStreamingAudioProcessorMixin(ParakeetAudioProcessorMixin):
+    # Unlike Parakeet, Nemotron consumes log-mel features without per-feature
+    # standardization. Override the inherited recipe explicitly.
+    feature_normalization = None
+
     def _validate_preprocess_kwargs(self, *, do_extract_spectrogram, **kwargs):
         if not do_extract_spectrogram:
             raise ValueError("Nemotron streaming requires spectrogram extraction.")

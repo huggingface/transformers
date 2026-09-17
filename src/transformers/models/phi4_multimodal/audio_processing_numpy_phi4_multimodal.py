@@ -22,8 +22,8 @@ class Phi4MultimodalAudioProcessorNumpy(Phi4MultimodalAudioProcessorMixin, Numpy
     def _process_frames(self, frames, *, spectrogram_config, audio_ranges=None, **kwargs):
         # Mask frames that overlap the boundary between real audio and padding
         stft_cfg = spectrogram_config.stft_config
-        win_length = stft_cfg.win_length or stft_cfg.n_fft
-        hop_length = stft_cfg.hop_length or win_length // 2
+        win_length = stft_cfg.win_length
+        hop_length = stft_cfg.hop_length
         batch_size = frames.shape[0]
 
         if audio_ranges is not None and batch_size > 1:

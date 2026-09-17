@@ -76,6 +76,27 @@ def test_nested_audio_configs():
     assert config != config.stft_config
 
 
+def test_stft_config_resolves_lengths_without_serializing_defaults():
+    config = StftConfig(n_fft=512)
+
+    assert config.win_length == 512
+    assert config.hop_length == 256
+    assert "win_length" not in config
+    assert "hop_length" not in config
+    assert "win_length" not in config.to_dict()
+    assert "hop_length" not in config.to_dict()
+
+    resized = replace(config, n_fft=256)
+    assert resized.win_length == 256
+    assert resized.hop_length == 128
+    assert "win_length" not in resized.to_dict()
+    assert "hop_length" not in resized.to_dict()
+
+    explicit = StftConfig(n_fft=512, win_length=400, hop_length=160)
+    assert explicit.to_dict()["win_length"] == 400
+    assert explicit.to_dict()["hop_length"] == 160
+
+
 @pytest.mark.parametrize("config", [StftConfig(), MelScaleConfig(), SpectrogramConfig()])
 def test_audio_configs_stay_frozen(config):
     key = next(iter(dict(config)))

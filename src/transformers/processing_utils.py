@@ -458,6 +458,9 @@ class AudioKwargs(TypedDict, total=False):
             - `'np'`: Return NumPy `np.ndarray` objects.
         device (`str`, *optional*):
             The device to use for processing (e.g. "cpu", "cuda"), only relevant for the torch backend.
+        use_fused_cuda (`bool`, *optional*):
+            Controls compatible fused CUDA audio kernels. The default, `None`, selects them automatically;
+            `False` forces the eager backend and `True` requires a compatible kernel.
         load_audio_backend (`str`, *optional*):
             Backend used by [`~audio_utils.load_audio`] to decode/resample audio referenced by URL/path
             in `apply_chat_template`. One of `"auto"`, `"torchcodec"`, `"librosa"`, `"torchaudio"`.
@@ -477,6 +480,7 @@ class AudioKwargs(TypedDict, total=False):
     dither: Annotated[float | int | None, positive_any_number]
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator]
     device: Annotated[Union[str, "torch.device"] | None, device_validator]
+    use_fused_cuda: bool | None
     load_audio_backend: str | None
 
 

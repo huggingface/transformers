@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
-
 from ...audio_processing_backends import TorchAudioBackend
 
 
@@ -45,14 +43,7 @@ class ParakeetAudioProcessorMixin:
         "pre_log_offset": 2**-24,
         "transpose_features": True,
     }
-
-    def _finalize_output(self, output, audio_ranges=None, *, spectrogram_config, **kwargs):
-        if audio_ranges is None or "audio_features" not in output:
-            return output
-        audio_lengths = np.asarray([end - start for start, end in audio_ranges])
-        frame_counts = self._valid_frame_counts(audio_lengths, spectrogram_config)
-        output["audio_features"] = self._standardize_features(output["audio_features"], frame_counts, eps=1e-5)
-        return output
+    feature_normalization = "per_feature_standardize"
 
 
 class ParakeetAudioProcessor(ParakeetAudioProcessorMixin, TorchAudioBackend):

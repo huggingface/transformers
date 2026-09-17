@@ -88,7 +88,7 @@ class GraniteSpeechAudioProcessorMixin:
             padding_side=padding_side,
             padding_value=padding_value,
         )
-        logmel = self.compute_features(
+        logmel = self.spectrogram(
             self._stack(padded), spectrogram_config=spectrogram_config, audio_ranges=ranges, **kwargs
         ).swapaxes(-1, -2)
         if logmel.shape[1] % 2 == 1:

@@ -62,12 +62,19 @@ class ParakeetAudioProcessingTest(AudioProcessingTestMixin, unittest.TestCase):
             torch.randn(12_000, device=torch_device),
         ]
 
-        output = processor(audio, sampling_rate=16_000, padding=True, return_tensors="pt")
+        output = processor(
+            audio,
+            sampling_rate=16_000,
+            padding=True,
+            return_tensors="pt",
+            use_fused_cuda=False,
+        )
         cpu_output = processor(
             [waveform.cpu() for waveform in audio],
             sampling_rate=16_000,
             padding=True,
             return_tensors="pt",
+            use_fused_cuda=False,
         )
 
         self.assertEqual(output.audio_features.device.type, "cuda")

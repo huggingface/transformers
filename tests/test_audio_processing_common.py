@@ -15,9 +15,11 @@ sibling backend classes (`torch` and optionally `numpy`) from
 
 from __future__ import annotations
 
+import os
 import pathlib
 import sys
 import unittest
+from dataclasses import replace
 from functools import partial
 from unittest.mock import patch
 
@@ -27,7 +29,7 @@ from transformers.models.auto.feature_extraction_auto import (
     FEATURE_EXTRACTOR_MAPPING_NAMES,
     feature_extractor_class_from_name,
 )
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_kernels, require_torch, require_torch_gpu, torch_device
 from transformers.utils import is_torch_available
 
 from .test_preprocessing_common import PreprocessingTesterMixin
@@ -454,3 +456,180 @@ class AudioBackendOptimizationTest(unittest.TestCase):
 
         clamp.assert_called_once()
         torch.testing.assert_close(output, torch.full_like(output, 1e-4))
+
+    def test_torch_mask_vectorizes_arbitrary_ranges(self):
+        processor = self._make_torch_processor(mel_floor=0.0)
+
+        mask = processor._get_mask([(0, 3), (2, 5)], 6, like=torch.empty(2, 6))
+
+        torch.testing.assert_close(
+            mask,
+            torch.tensor([[1, 1, 1, 0, 0, 0], [0, 0, 1, 1, 1, 0]], dtype=torch.int32),
+        )
+
+    @staticmethod
+    def _make_nemo_log_mel_processor(*, standardize=True):
+        from transformers.audio_processing_backends import TorchAudioBackend
+        from transformers.audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
+
+        class Processor(TorchAudioBackend):
+            sampling_rate = 16_000
+            feature_normalization = "per_feature_standardize" if standardize else None
+
+        return Processor(
+            spectrogram_config=SpectrogramConfig(
+                stft_config=StftConfig(
+                    n_fft=512,
+                    hop_length=160,
+                    win_length=400,
+                    window_fn="hann_window",
+                    power=2.0,
+                    pad_mode="constant",
+                    periodic=False,
+                    magnitude_mode="sqrt_sum_squares",
+                ),
+                mel_scale_config=MelScaleConfig(
+                    n_mels=80,
+                    f_min=0.0,
+                    norm="slaney",
+                    mel_scale="slaney",
+                    matmul_order="filters_first_matmul",
+                    bank_rounding="librosa",
+                ),
+                preemphasis=0.97,
+                preemphasis_mode="waveform",
+                log_mode="log",
+                mel_floor=0.0,
+                pre_log_offset=2**-24,
+                transpose_features=True,
+            )
+        )
+
+    @require_torch_gpu
+    @require_kernels
+    def test_common_torch_backend_selects_local_hub_kernel_automatically(self):
+        kernel_path = pathlib.Path(__file__).resolve().parents[2] / "kernels/parakeet-audio/torch-ext/parakeet_audio"
+        local_kernels = f"kernels-community/parakeet-audio={kernel_path}"
+
+        with patch.dict(os.environ, {"LOCAL_KERNELS": local_kernels}):
+            from transformers.integrations import hub_kernels
+
+            with patch.dict(hub_kernels._KERNEL_MODULE_MAPPING, {"parakeet-audio": None}):
+                for standardize in (False, True):
+                    for num_samples in (80_000, 480_000):
+                        with self.subTest(standardize=standardize, num_samples=num_samples):
+                            processor = self._make_nemo_log_mel_processor(standardize=standardize)
+                            audio = [torch.randn(num_samples), torch.randn(num_samples - 1_440)]
+                            # A value-equivalent per-call config exercises the shared recipe
+                            # dispatcher without relying on processor or model identity.
+                            call_config = replace(processor.spectrogram_config)
+                            eager = processor(
+                                audio,
+                                sampling_rate=16_000,
+                                spectrogram_config=call_config,
+                                padding=True,
+                                return_tensors="pt",
+                                device=torch_device,
+                                use_fused_cuda=False,
+                            )
+                            fused = processor(
+                                audio,
+                                sampling_rate=16_000,
+                                spectrogram_config=call_config,
+                                padding=True,
+                                return_tensors="pt",
+                                device=torch_device,
+                            )
+
+                            self.assertEqual(fused.audio_features.device.type, "cuda")
+                            self.assertTrue(torch.equal(fused.audio_features_mask, eager.audio_features_mask))
+                            torch.testing.assert_close(
+                                fused.audio_features, eager.audio_features, rtol=1e-3, atol=2e-4
+                            )
+                            self.assertLess((fused.audio_features - eager.audio_features).abs().mean().item(), 2e-6)
+
+    @require_kernels
+    def test_common_torch_backend_rejects_incompatible_required_kernel(self):
+        processor = self._make_nemo_log_mel_processor()
+        config = replace(
+            processor.spectrogram_config,
+            stft_config=replace(processor.spectrogram_config.stft_config, normalized=True),
+        )
+        processor = processor.__class__(spectrogram_config=config)
+
+        with self.assertRaisesRegex(ValueError, "stft.normalized"):
+            processor(
+                torch.randn(16_000),
+                sampling_rate=16_000,
+                padding=True,
+                return_tensors="pt",
+                use_fused_cuda=True,
+            )
+
+    def test_cpu_native_stft_retains_optimized_torch_stft_path(self):
+        processor = self._make_torch_processor(mel_floor=0.0)
+        config = processor.spectrogram_config.stft_config
+        audio = torch.randn(2, 32)
+        window = torch.hann_window(config.n_fft)
+
+        with patch("torch.stft", wraps=torch.stft) as stft:
+            processor._stft_native(audio, window, config.n_fft, 4, config.n_fft, config)
+
+        stft.assert_called_once()
+
+    def test_native_stft_caches_fft_sized_window(self):
+        from transformers.audio_processing_backends import TorchAudioBackend
+        from transformers.audio_utils import SpectrogramConfig, StftConfig
+
+        class Processor(TorchAudioBackend):
+            sampling_rate = 16_000
+
+        processor = Processor(
+            spectrogram_config=SpectrogramConfig(stft_config=StftConfig(n_fft=16, win_length=10, hop_length=4))
+        )
+        audio = torch.randn(1, 64)
+
+        with (
+            patch.object(processor, "_create_stft_window", wraps=processor._create_stft_window) as create_window,
+            patch.object(processor, "_stft_native", wraps=processor._stft_native) as native_stft,
+        ):
+            for _ in range(2):
+                processor.spectrogram(
+                    audio,
+                    spectrogram_config=processor.spectrogram_config,
+                    dither=0.0,
+                )
+
+        create_window.assert_called_once()
+        self.assertEqual(len(native_stft.call_args_list), 2)
+        for call in native_stft.call_args_list:
+            _, window, frame_length, _, n_fft, _ = call.args
+            self.assertEqual(window.shape, (16,))
+            self.assertEqual(frame_length, n_fft)
+
+    @require_torch_gpu
+    def test_cuda_native_stft_dispatches_directly_to_fft_primitive(self):
+        processor = self._make_torch_processor(mel_floor=0.0)
+        config = replace(processor.spectrogram_config.stft_config, win_length=6)
+        audio = torch.randn(2, 32, device=torch_device)
+        window = torch.hann_window(config.n_fft, device=torch_device)
+
+        with (
+            patch("torch.stft", side_effect=AssertionError("torch.stft adds avoidable dispatch overhead")),
+            patch("torch.fft.rfft", wraps=torch.fft.rfft) as rfft,
+        ):
+            processor._stft_native(audio, window, config.n_fft, 4, config.n_fft, config)
+
+        rfft.assert_called_once()
+
+    @require_torch_gpu
+    def test_cuda_full_window_native_stft_retains_torch_stft_path(self):
+        processor = self._make_torch_processor(mel_floor=0.0)
+        config = processor.spectrogram_config.stft_config
+        audio = torch.randn(2, 32, device=torch_device)
+        window = torch.hann_window(config.n_fft, device=torch_device)
+
+        with patch("torch.stft", wraps=torch.stft) as stft:
+            processor._stft_native(audio, window, config.n_fft, 4, config.n_fft, config)
+
+        stft.assert_called_once()

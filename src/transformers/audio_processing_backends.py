@@ -24,7 +24,14 @@ from .audio_utils import (
     mel_to_hertz,
 )
 from .processing_utils import AudioKwargs
-from .utils import is_speech_available, is_torch_available, logging, requires_backends
+from .utils import (
+    TensorType,
+    is_kernels_available,
+    is_speech_available,
+    is_torch_available,
+    logging,
+    requires_backends,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -161,7 +168,7 @@ class NumpyAudioBackend(BaseAudioProcessor):
     def _frame_waveform(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
         if stft_cfg.center == "left":
             # semicausal (USM/Gemma): zeros prepended only
-            audio = self._pad_axis(audio, (stft_cfg.win_length or n_fft) // 2, 0, axis=-1)
+            audio = self._pad_axis(audio, stft_cfg.win_length // 2, 0, axis=-1)
         elif stft_cfg.center:
             pad_width = [(0, 0)] * (audio.ndim - 1) + [(frame_length // 2, frame_length // 2)]
             audio = np.pad(audio, pad_width, mode=stft_cfg.pad_mode)
@@ -373,8 +380,8 @@ class NumpyAudioBackend(BaseAudioProcessor):
             return fbank.numpy()
 
         waveform = np.squeeze(waveform)
-        features = self.compute_features([waveform], spectrogram_config=self.spectrogram_config, dither=self.dither)
-        return features[0].T
+        features = self.spectrogram(waveform, spectrogram_config=self.spectrogram_config, dither=self.dither)
+        return features.T
 
 
 class TorchAudioBackend(BaseAudioProcessor):
@@ -393,12 +400,300 @@ class TorchAudioBackend(BaseAudioProcessor):
     def _astype(self, x, dtype_name):
         return x.to(getattr(torch, dtype_name))
 
+    def _prepare_waveform(self, audio_el, *, device=None, **kwargs):
+        return audio_el.to(device=device) if device is not None else audio_el
+
+    def _fused_cuda_incompatibility(
+        self,
+        audio,
+        *,
+        spectrogram_config,
+        audio_ranges,
+        padding_side,
+        padding_value,
+        return_tensors,
+        dither,
+        **kwargs,
+    ):
+        if not is_kernels_available():
+            return "the `kernels` package is not installed or has an incompatible version"
+        if self.feature_normalization not in (None, "per_feature_standardize"):
+            return "feature_normalization must be None or 'per_feature_standardize'"
+
+        config = spectrogram_config
+        stft = config.stft_config
+        mel = config.mel_scale_config
+        numerical_hooks = (
+            "_compute_spectrum",
+            "_waveform_to_spectrum",
+            "_spectrum_magnitude",
+            "_project_to_mel",
+            "_log_compress",
+            "_shape_log_features",
+            "_process_frames",
+            "_stft_framed",
+        )
+        overridden_hooks = [
+            name for name in numerical_hooks if getattr(type(self), name) is not getattr(TorchAudioBackend, name)
+        ]
+        unsupported = {
+            "stft.pad": stft.pad != 0,
+            "single_item_manual_framing": self._needs_manual_framing(config) and audio.shape[0] == 1,
+            "stft.center": stft.center not in (False, True, "left"),
+            "stft.pad_mode": stft.center is True and stft.pad_mode not in ("constant", "reflect"),
+            "stft.power": stft.power not in (1.0, 2.0),
+            "stft.normalized": stft.normalized is not False,
+            "stft.onesided": not stft.onesided,
+            "stft.extra_samples_per_frame": stft.extra_samples_per_frame not in (0, 1),
+            "stft.fft_dtype": stft.fft_dtype not in (None, "float64", "native", "complex64"),
+            "stft.window_dtype": stft.window_dtype is not None,
+            "mel_scale_config": mel is None,
+            "mel.computation_dtype": mel is not None and mel.computation_dtype is not None,
+            "mel_filters": kwargs.get("mel_filters") is not None,
+            "preemphasis_mode": config.preemphasis is not None
+            and config.preemphasis_mode not in ("waveform", "per_frame", "htk_per_frame"),
+            "mel_floor": config.mel_floor < 0.0,
+            "log_mode": config.log_mode not in (None, "log", "log10", "dB"),
+            "computation_dtype": config.computation_dtype not in (None, "float64"),
+            "subtract_mean": config.subtract_mean,
+            "combined_peak_rescaling": config.floor_below_peak is not None
+            and (config.log_shift is not None or config.log_scale is not None),
+            "log_reference": kwargs.get("reference", 1.0) != 1.0,
+            "db_range": kwargs.get("db_range") is not None,
+            "numerical_hooks": bool(overridden_hooks),
+            "dither": dither < 0.0,
+            "padding_side": padding_side != "right",
+            "padding_value": padding_value != 0.0,
+            "return_tensors": return_tensors not in (None, TensorType.PYTORCH),
+            "audio_ranges": any(start != 0 for start, _ in audio_ranges),
+            "audio": audio.device.type != "cuda" or audio.dtype != torch.float32 or not audio.is_contiguous(),
+        }
+        incompatible = [name for name, is_unsupported in unsupported.items() if is_unsupported]
+        return f"incompatible setting(s): {', '.join(incompatible)}" if incompatible else None
+
+    @staticmethod
+    def _load_fused_cuda_kernel(*, required):
+        from .integrations.hub_kernels import lazy_load_kernel
+
+        try:
+            kernel = lazy_load_kernel("parakeet-audio")
+        except Exception as error:
+            if required:
+                raise ImportError("Failed to load `kernels-community/parakeet-audio` version 1.") from error
+            logger.warning_once(
+                "Could not load the fused CUDA audio kernel from the Hub; falling back to the eager Torch path. "
+                f"Loader error: {error}"
+            )
+            return None
+        if kernel is not None and not hasattr(kernel, "fused_log_mel"):
+            if required:
+                raise ImportError(
+                    "The loaded `kernels-community/parakeet-audio` build does not expose `fused_log_mel`."
+                )
+            logger.warning_once(
+                "The loaded fused CUDA audio kernel has an incompatible API; falling back to the eager Torch path."
+            )
+            return None
+        if kernel is None and required:
+            raise ImportError(
+                "`use_fused_cuda=True` requires a compatible `kernels-community/parakeet-audio` version 1 build."
+            )
+        return kernel
+
+    def _run_fused_cuda_kernel(self, kernel, audio, *, audio_ranges, spectrogram_config, standardize, **kwargs):
+        lengths = torch.tensor([end - start for start, end in audio_ranges], dtype=torch.int64, device=audio.device)
+        compute_dtype = (
+            torch.float64
+            if spectrogram_config.computation_dtype == "float64"
+            or spectrogram_config.stft_config.fft_dtype in ("float64", "native")
+            else audio.dtype
+        )
+        cache_key = (audio.device, compute_dtype, spectrogram_config)
+        if getattr(self, "_cached_audio_kernel_inputs", (None,))[0] != cache_key:
+            stft = spectrogram_config.stft_config
+            needs_manual_framing = self._needs_manual_framing(spectrogram_config)
+            compute_audio = audio.to(compute_dtype)
+            window = self._create_stft_window(stft.win_length, stft, compute_audio)
+            window, _ = self._prepare_window_and_framing(
+                window,
+                stft.win_length,
+                stft.n_fft,
+                needs_manual_framing=needs_manual_framing,
+            )
+            mel_filters = self._mel_filter_bank(spectrogram_config).to(device=audio.device, dtype=compute_dtype)
+            self._cached_audio_kernel_inputs = (cache_key, window.contiguous(), mel_filters.contiguous())
+        _, window, mel_filters = self._cached_audio_kernel_inputs
+
+        dither = kwargs.get("dither", self.dither)
+        kernel_audio = self._dither_waveform(audio, audio_ranges, dither=dither) if dither else audio
+        if spectrogram_config.waveform_scale is not None:
+            kernel_audio = kernel_audio * spectrogram_config.waveform_scale
+        kernel_audio = kernel_audio.to(compute_dtype)
+        mel_order = spectrogram_config.mel_scale_config.matmul_order
+        output_time_major = (mel_order == "features_first") != spectrogram_config.transpose_features
+        log_mode = spectrogram_config.log_mode
+        mel_floor = spectrogram_config.mel_floor
+        if log_mode == "dB":
+            mel_floor = max(mel_floor, kwargs.get("min_value", 1e-10))
+        features, feature_lengths = kernel.fused_log_mel(
+            kernel_audio.contiguous(),
+            lengths,
+            window,
+            mel_filters,
+            hop_length=spectrogram_config.stft_config.hop_length,
+            preemphasis=spectrogram_config.preemphasis or 0.0,
+            log_offset=spectrogram_config.pre_log_offset or 0.0,
+            standardize=standardize,
+            normalization_eps=self.feature_normalization_eps,
+            center=spectrogram_config.stft_config.center is True,
+            reflect_padding=spectrogram_config.stft_config.pad_mode == "reflect",
+            power=spectrogram_config.stft_config.power,
+            log_mode=log_mode,
+            mel_floor=mel_floor,
+            log_multiplier=(10.0 if spectrogram_config.stft_config.power == 2.0 else 20.0)
+            if log_mode == "dB"
+            else 1.0,
+            drop_last_frame=spectrogram_config.drop_last_frame,
+            output_time_major=output_time_major,
+            floor_below_peak=spectrogram_config.floor_below_peak,
+            log_shift=spectrogram_config.log_shift,
+            log_scale=spectrogram_config.log_scale,
+            frame_length=(
+                spectrogram_config.stft_config.win_length + spectrogram_config.stft_config.extra_samples_per_frame
+                if self._needs_manual_framing(spectrogram_config)
+                else spectrogram_config.stft_config.n_fft
+            ),
+            window_length=(
+                spectrogram_config.stft_config.win_length
+                if self._needs_manual_framing(spectrogram_config)
+                else spectrogram_config.stft_config.n_fft
+            ),
+            center_left=spectrogram_config.stft_config.center == "left",
+            remove_dc_offset=spectrogram_config.remove_dc_offset,
+            preemphasis_mode=spectrogram_config.preemphasis_mode,
+            extra_samples_per_frame=spectrogram_config.stft_config.extra_samples_per_frame,
+            matmul_order=mel_order,
+        )
+        if not standardize:
+            audio_lengths = np.asarray([end - start for start, end in audio_ranges])
+            feature_lengths = torch.as_tensor(
+                self._valid_frame_counts(audio_lengths, spectrogram_config), dtype=torch.int32, device=audio.device
+            )
+        return features, feature_lengths
+
+    def spectrogram(self, audio, *, spectrogram_config, use_fused_cuda=None, **kwargs):
+        if use_fused_cuda is False:
+            return super().spectrogram(
+                audio, spectrogram_config=spectrogram_config, use_fused_cuda=use_fused_cuda, **kwargs
+            )
+
+        if not isinstance(audio, torch.Tensor) or audio.device.type != "cuda" or audio.dtype != torch.float32:
+            return super().spectrogram(
+                audio, spectrogram_config=spectrogram_config, use_fused_cuda=use_fused_cuda, **kwargs
+            )
+
+        batched = audio.unsqueeze(0) if audio.ndim == 1 else audio
+        audio_ranges = kwargs.get("audio_ranges")
+        workflow_keys = {"audio_ranges", "padding_side", "padding_value", "return_tensors"}
+        kernel_kwargs = {name: value for name, value in kwargs.items() if name not in workflow_keys}
+        if audio_ranges is None:
+            audio_ranges = [(0, batched.shape[-1])] * batched.shape[0]
+        incompatibility = self._fused_cuda_incompatibility(
+            batched,
+            spectrogram_config=spectrogram_config,
+            audio_ranges=audio_ranges,
+            padding_side=kwargs.get("padding_side", "right"),
+            padding_value=kwargs.get("padding_value", 0.0),
+            return_tensors=kwargs.get("return_tensors", TensorType.PYTORCH),
+            **kernel_kwargs,
+        )
+        if incompatibility is not None:
+            if use_fused_cuda is True:
+                raise ValueError(f"The fused CUDA audio kernel is unavailable because {incompatibility}.")
+            return super().spectrogram(
+                audio, spectrogram_config=spectrogram_config, use_fused_cuda=use_fused_cuda, **kwargs
+            )
+        kernel = self._load_fused_cuda_kernel(required=use_fused_cuda is True)
+        if kernel is None:
+            return super().spectrogram(
+                audio, spectrogram_config=spectrogram_config, use_fused_cuda=use_fused_cuda, **kwargs
+            )
+        features, _ = self._run_fused_cuda_kernel(
+            kernel,
+            batched,
+            audio_ranges=audio_ranges,
+            spectrogram_config=spectrogram_config,
+            standardize=False,
+            **kernel_kwargs,
+        )
+        return features if audio.ndim > 1 else features[0]
+
+    def _compute_batched_features(self, audio, *, audio_ranges, spectrogram_config, use_fused_cuda=None, **kwargs):
+        if use_fused_cuda is False:
+            return super()._compute_batched_features(
+                audio,
+                audio_ranges=audio_ranges,
+                spectrogram_config=spectrogram_config,
+                use_fused_cuda=use_fused_cuda,
+                **kwargs,
+            )
+
+        incompatibility = self._fused_cuda_incompatibility(
+            audio,
+            spectrogram_config=spectrogram_config,
+            audio_ranges=audio_ranges,
+            **kwargs,
+        )
+        if incompatibility is not None:
+            if use_fused_cuda is True:
+                exception = ImportError if not is_kernels_available() else ValueError
+                raise exception(f"The fused CUDA audio kernel is unavailable because {incompatibility}.")
+            return super()._compute_batched_features(
+                audio,
+                audio_ranges=audio_ranges,
+                spectrogram_config=spectrogram_config,
+                use_fused_cuda=use_fused_cuda,
+                **kwargs,
+            )
+
+        kernel = self._load_fused_cuda_kernel(required=use_fused_cuda is True)
+        if kernel is None:
+            return super()._compute_batched_features(
+                audio,
+                audio_ranges=audio_ranges,
+                spectrogram_config=spectrogram_config,
+                use_fused_cuda=use_fused_cuda,
+                **kwargs,
+            )
+        return self._run_fused_cuda_kernel(
+            kernel,
+            audio,
+            audio_ranges=audio_ranges,
+            spectrogram_config=spectrogram_config,
+            standardize=self.feature_normalization == "per_feature_standardize",
+            **kwargs,
+        )
+
     def _amax_over_features(self, x):
         return x.amax(dim=(-2, -1), keepdim=True)
 
     def _zeros_int32(self, shape, *, like=None):
         device = like.device if isinstance(like, torch.Tensor) else None
         return torch.zeros(shape, dtype=torch.int32, device=device)
+
+    def _get_mask(self, ranges, padded_length, *, like=None):
+        if not isinstance(like, torch.Tensor):
+            return super()._get_mask(ranges, padded_length, like=like)
+        range_tensor = torch.tensor(ranges, dtype=torch.int64, device=like.device)
+        positions = torch.arange(padded_length, device=like.device)
+        return ((positions >= range_tensor[:, :1]) & (positions < range_tensor[:, 1:])).to(torch.int32)
+
+    def _get_mask_from_lengths(self, lengths, padded_length, *, like=None):
+        if not isinstance(like, torch.Tensor):
+            return super()._get_mask_from_lengths(lengths, padded_length, like=like)
+        lengths = torch.as_tensor(lengths, dtype=torch.int64, device=like.device)
+        positions = torch.arange(padded_length, device=like.device)
+        return (positions < lengths[:, None]).to(torch.int32)
 
     def _as_backend_array(self, x, *, like=None):
         if isinstance(x, np.ndarray):
@@ -489,7 +784,7 @@ class TorchAudioBackend(BaseAudioProcessor):
 
     def _frame_waveform(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
         if stft_cfg.center == "left":
-            pad_left = (stft_cfg.win_length or n_fft) // 2
+            pad_left = stft_cfg.win_length // 2
             audio = torch.nn.functional.pad(audio, (pad_left, 0), mode="constant", value=0.0)
         elif stft_cfg.center:
             audio = torch.nn.functional.pad(audio, (frame_length // 2, frame_length // 2), mode=stft_cfg.pad_mode)
@@ -524,18 +819,41 @@ class TorchAudioBackend(BaseAudioProcessor):
         return spec.transpose(-2, -1)
 
     def _stft_native(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
-        stft_out = torch.stft(
-            audio,
-            n_fft=n_fft,
-            hop_length=hop_length,
-            win_length=frame_length,
-            window=window,
-            center=stft_cfg.center,
-            pad_mode=stft_cfg.pad_mode,
-            normalized=stft_cfg.normalized == "frame_length",
-            onesided=stft_cfg.onesided,
-            return_complex=True,
-        )
+        win_length = stft_cfg.win_length
+        if audio.device.type == "cuda" and win_length < n_fft:
+            # `torch.stft` performs this same pad -> unfold -> window -> FFT sequence,
+            # but its generic wrapper adds material dispatch overhead on short GPU
+            # workloads. Express the operations directly so CUDA reaches the cached
+            # cuFFT plan without that wrapper; this is also the eager layout used by
+            # native cuFFT audio frontends such as fast-gpu-asr. This specialization
+            # pays off when the cached analysis window was padded to the larger FFT
+            # size; full-window CUDA transforms and CPU transforms keep `torch.stft`,
+            # which benchmarks faster for those cases.
+            if stft_cfg.center:
+                signal_dim = audio.ndim
+                extended_shape = [1] * (3 - signal_dim) + list(audio.shape)
+                pad = n_fft // 2
+                audio = torch.nn.functional.pad(audio.view(extended_shape), (pad, pad), mode=stft_cfg.pad_mode)
+                audio = audio.view(audio.shape[-signal_dim:])
+
+            frames = audio.unfold(-1, n_fft, hop_length)
+            frames = frames * window
+            fft = torch.fft.rfft if stft_cfg.onesided else torch.fft.fft
+            norm = "ortho" if stft_cfg.normalized == "frame_length" else "backward"
+            stft_out = fft(frames, n=n_fft, norm=norm).transpose(-2, -1)
+        else:
+            stft_out = torch.stft(
+                audio,
+                n_fft=n_fft,
+                hop_length=hop_length,
+                win_length=frame_length,
+                window=window,
+                center=stft_cfg.center,
+                pad_mode=stft_cfg.pad_mode,
+                normalized=stft_cfg.normalized == "frame_length",
+                onesided=stft_cfg.onesided,
+                return_complex=True,
+            )
         stft_out = self._round_through_complex64(stft_out, stft_cfg)
         if stft_cfg.normalized in (True, "window"):
             stft_out = stft_out / window.pow(2.0).sum().sqrt()

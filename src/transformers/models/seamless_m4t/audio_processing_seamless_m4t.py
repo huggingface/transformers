@@ -89,13 +89,10 @@ class SeamlessM4tAudioProcessorMixin:
 
 
 class SeamlessM4tAudioProcessor(SeamlessM4tAudioProcessorMixin, TorchAudioBackend):
-    def compute_features(self, audio, *, spectrogram_config, **kwargs):
-        features = []
-        for waveform in audio:
-            waveform = waveform.squeeze()
-            f = super().compute_features([waveform], spectrogram_config=spectrogram_config, **kwargs)
-            features.append(f[0].transpose(-2, -1))
-        return features
+    def spectrogram(self, audio, *, spectrogram_config, **kwargs):
+        audio = audio.squeeze()
+        features = super().spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
+        return features.transpose(-2, -1)
 
     def _finalize_features(self, features, feature_lengths, **kwargs):
         # bit-exact with the legacy FE: numpy reductions use pairwise summation, whose

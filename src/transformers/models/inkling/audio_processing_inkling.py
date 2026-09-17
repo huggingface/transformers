@@ -89,7 +89,9 @@ class InklingAudioProcessorMixin:
         hop, n_fft = stft_cfg.hop_length, stft_cfg.n_fft
         right_pad = math.ceil(audio.shape[-1] / hop) * hop - audio.shape[-1]
         audio = self._pad_axis(audio, max(n_fft - hop, 0), right_pad, axis=-1)
-        return super()._waveform_to_spectrum(audio, spectrogram_config=spectrogram_config, **kwargs)
+        return super()._waveform_to_spectrum(
+            audio, spectrogram_config=spectrogram_config, audio_ranges=audio_ranges, **kwargs
+        )
 
     def _spectrum_magnitude(self, stft_out, power, spectrogram_config=None, **kwargs):
         # The legacy extractor clamps at 1e-10 *inside* the sqrt
