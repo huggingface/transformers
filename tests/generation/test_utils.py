@@ -3972,6 +3972,8 @@ class GenerationIntegrationTests(unittest.TestCase):
         )
         set_seed(1)
         model = LlamaForCausalLM(config).eval()
+        # Make sure we call several forwards in a row without crop in-between with the assistant
+        model.generation_config.num_assistant_tokens = 3
 
         # Do it once with a prefill shorter than the sliding window
         input_ids = torch.randint(1, 60, (1, 2))
@@ -3985,8 +3987,6 @@ class GenerationIntegrationTests(unittest.TestCase):
             do_sample=False,
             max_new_tokens=8,
             assistant_model=model,
-            num_assistant_tokens=5,
-            assistant_confidence_threshold=0.0,
         )
         # It must not crash above, and be the same here
         self.assertTrue(torch.equal(reference, assisted))
@@ -4003,8 +4003,6 @@ class GenerationIntegrationTests(unittest.TestCase):
             do_sample=False,
             max_new_tokens=8,
             assistant_model=model,
-            num_assistant_tokens=5,
-            assistant_confidence_threshold=0.0,
         )
         # It must not crash above, and be the same here
         self.assertTrue(torch.equal(reference, assisted))
