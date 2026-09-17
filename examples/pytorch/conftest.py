@@ -60,7 +60,6 @@ _is_worker = False
 _worker_id = "ctrl"
 _worker_pids = {}  # {workerid: pid}  — controller only
 _ctrl_stop = threading.Event()
-_worker_stop = threading.Event()
 _pending_cleanups = {}  # {nodeid: cleanup_fn} — worker only, avoids item.addfinalizer
 
 
@@ -136,20 +135,16 @@ def _pss(pid):
 
 
 def _children(ppid):
+    """Return direct child PIDs using /proc/{pid}/task/{pid}/children (O(1), no /proc scan)."""
     result = []
     try:
-        for entry in os.listdir("/proc"):
-            if not entry.isdigit():
-                continue
-            try:
-                with open(f"/proc/{entry}/status") as f:
-                    for line in f:
-                        if line.startswith("PPid:"):
-                            if int(line.split()[1]) == ppid:
-                                result.append(int(entry))
-                            break
-            except Exception:  # noqa: S110
-                pass
+        path = f"/proc/{ppid}/task/{ppid}/children"
+        with open(path) as f:
+            for token in f.read().split():
+                try:
+                    result.append(int(token))
+                except ValueError:  # noqa: S110
+                    pass
     except Exception:  # noqa: S110
         pass
     return result
@@ -196,19 +191,7 @@ def _ctrl_monitor_loop():
             _mlog("[CTRL] " + " | ".join(parts))
         except Exception as exc:
             _mlog(f"[CTRL] monitor error: {exc}")
-        _ctrl_stop.wait(1)
-
-
-def _worker_monitor_loop(wid, pid):
-    while not _worker_stop.is_set():
-        try:
-            rss, pss = _tree(pid)
-            nch = len(_children(pid))
-            sys_used, _ = _sys_mem()
-            _mlog(f"[{wid}] RSS+subtree={rss:.0f} PSS+subtree={pss:.0f}MB nchildren={nch} SYS={sys_used:.0f}MB")
-        except Exception as exc:
-            _mlog(f"[{wid}] monitor error: {exc}")
-        _worker_stop.wait(1)
+        _ctrl_stop.wait(2)
 
 
 # ── wav2vec2 detailed checkpoints ─────────────────────────────────────────────
@@ -360,12 +343,6 @@ def pytest_configure(config):
         except Exception:  # noqa: S110
             pass
         _mlog(f"[{_worker_id}] Worker process started pid={os.getpid()}")
-        threading.Thread(
-            target=_worker_monitor_loop,
-            args=(_worker_id, os.getpid()),
-            daemon=True,
-            name="mem-worker",
-        ).start()
     else:
         _mlog(f"[CTRL] Controller started pid={os.getpid()}")
         threading.Thread(target=_ctrl_monitor_loop, daemon=True, name="mem-ctrl").start()
@@ -444,6 +421,5 @@ def pytest_sessionfinish(session, exitstatus):
     if not _MEM_ENABLED:
         return
     _ctrl_stop.set()
-    _worker_stop.set()
     label = f"worker:{_worker_id}" if _is_worker else "CTRL"
     _mlog(f"[{label}] Session finished, monitors stopped")
