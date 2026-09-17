@@ -226,6 +226,25 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
             self.assertIn(key, outputs)
         self.assertEqual(outputs["input_ids"].shape[0], 1)
 
+    @require_librosa
+    @require_torch
+    def test_apply_transcription_request_matches_chat_template_batched(self):
+        processor = self.get_processor()
+        audio_urls = MODALITY_INPUT_DATA["audio"]
+
+        helper_outputs = processor.apply_transcription_request(audio_urls)
+        conversation = [[{"role": "user", "content": [{"type": "audio", "url": url}]}] for url in audio_urls]
+        manual_outputs = processor.apply_chat_template(
+            conversation,
+            tokenize=True,
+            return_dict=True,
+            add_generation_prompt=True,
+        )
+
+        for key in ("input_ids", "attention_mask", "input_features", "input_features_mask", "padding_mask"):
+            self.assertIn(key, helper_outputs)
+            self.assertTrue(helper_outputs[key].equal(manual_outputs[key]))
+
     def test_feature_extractor_defaults(self):
         self.skipTest("MossTranscribeDiarizeProcessor requires text and audio together.")
 

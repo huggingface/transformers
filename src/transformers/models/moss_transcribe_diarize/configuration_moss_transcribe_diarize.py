@@ -31,11 +31,6 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
     r"""
     audio_merge_size (`int`, *optional*, defaults to 4):
         Number of consecutive Whisper encoder frames concatenated before the multi-modal projector.
-    adaptor_input_dim (`int`, *optional*):
-        Input dimension of the multi-modal projector. Always derived as `audio_config.d_model * audio_merge_size`;
-        any value passed in is overwritten.
-    projector_bias (`bool`, *optional*, defaults to `True`):
-        Whether to use bias in the multi-modal projector linear layers.
     audio_chunk_size (`int`, *optional*, defaults to 480000):
         Whisper encoder window size in raw audio samples, used with `padding_mask` to recover `audio_chunk_mapping`.
     """
@@ -76,7 +71,6 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
         "scale_embedding": False,
     }
     audio_merge_size: int = 4
-    adaptor_input_dim: int | None = None
     projector_bias: bool = True
     audio_chunk_size: int = 480_000
 
@@ -91,9 +85,11 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen3"](**self._default_text_config_kwargs)
 
-        self.adaptor_input_dim = self.audio_config.d_model * self.audio_merge_size
-
         super().__post_init__(**kwargs)
+
+    @property
+    def adaptor_input_dim(self) -> int:
+        return self.audio_config.d_model * self.audio_merge_size
 
 
 __all__ = ["MossTranscribeDiarizeConfig"]
