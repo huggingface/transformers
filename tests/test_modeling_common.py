@@ -25,6 +25,7 @@ import warnings
 from collections import defaultdict
 from contextlib import contextmanager
 from copy import deepcopy
+from typing import get_args
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -5747,6 +5748,61 @@ class ModelTesterMixin(ExportTesterMixin):
                     with patch.object(CompileableContextVar, "reset", new=new_reset):
                         with torch.no_grad():
                             _ = model(**all_inputs)
+
+    def test_router_logits_are_returned(self):
+        """A model that declares `router_logits` as recordable must hand them back from every head that wraps it.
+        The recorder fills the backbone output, and a head that rebuilds its output field by field can silently drop
+        them, so this checks the value reaches the caller."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config)).to(device=torch_device)
+                model.eval()
+
+                recordable_outputs = set().union(
+                    *(
+                        (module._can_record_outputs or {}).keys()
+                        for module in model.modules()
+                        if isinstance(module, PreTrainedModel)
+                    )
+                )
+                if "router_logits" not in recordable_outputs:
+                    self.skipTest("This model does not record router logits.")
+                # Only heads whose output type promises the field are held to it. The generic classification heads
+                # return `SequenceClassifierOutputWithPast` and never claimed router logits in the first place.
+                return_type = model_class.forward.__annotations__.get("return")
+                output_fields = set().union(
+                    *(getattr(t, "__dataclass_fields__", {}).keys() for t in (get_args(return_type) or (return_type,)))
+                )
+                if "router_logits" not in output_fields:
+                    self.skipTest(f"{model_class.__name__} does not declare router_logits in its output type.")
+                # A dense config (no sparse layer instantiated) records nothing, so there is nothing to check.
+                # A recorder value is an `OutputRecorder`, a module class, a class name, or a list of those.
+                router_recorders = []
+                for module in model.modules():
+                    if isinstance(module, PreTrainedModel):
+                        value = (module._can_record_outputs or {}).get("router_logits")
+                        if value is not None:
+                            router_recorders.extend(value if isinstance(value, (list, tuple)) else [value])
+                router_class_names = tuple(
+                    recorder if isinstance(recorder, str) else getattr(recorder, "target_class", recorder).__name__
+                    for recorder in router_recorders
+                )
+                if not any(type(module).__name__.endswith(router_class_names) for module in model.modules()):
+                    self.skipTest(f"{model_class.__name__} was built without any sparse layer.")
+
+                inputs = self._prepare_for_class(inputs_dict, model_class)
+                inputs.pop("output_router_logits", None)
+                with torch.no_grad():
+                    outputs = model(**inputs, output_router_logits=True)
+
+                router_logits = getattr(outputs, "router_logits", None)
+                self.assertIsNotNone(
+                    router_logits, f"{model_class.__name__} records router logits but does not return them"
+                )
+                self.assertIsInstance(router_logits, tuple)
+                self.assertGreater(len(router_logits), 0)
 
     def test_format_of_can_record_outputs(self):
         """Test that that the attribute `_can_record_outputs` is correctly set for a model. It must either be "None" or

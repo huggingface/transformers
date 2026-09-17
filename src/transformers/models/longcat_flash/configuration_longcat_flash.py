@@ -106,6 +106,7 @@ class LongcatFlashConfig(PreTrainedConfig):
     qk_head_dim: int | None = None
     moe_topk: int = 12
     n_routed_experts: int = 512
+    output_router_logits: bool = False
     zero_expert_num: int = 256
     expert_ffn_hidden_size: int = 2048
     routed_scaling_factor: float = 6.0
