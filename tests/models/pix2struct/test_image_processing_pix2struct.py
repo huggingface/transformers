@@ -58,10 +58,6 @@ class Pix2StructImageProcessingTester(ImageProcessingTester):
 class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = Pix2StructImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     @require_vision
     @require_torch
     def test_backends_equivalence(self):
@@ -325,10 +321,6 @@ class Pix2StructImageProcessingTestFourChannels(ImageProcessingTestMixin, unitte
         super().setUp()
         self.image_processor_tester.num_channels = 4
         self.expected_encoded_image_num_channels = 3
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():

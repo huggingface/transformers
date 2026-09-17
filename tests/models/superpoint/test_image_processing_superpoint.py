@@ -57,10 +57,6 @@ class SuperPointImageProcessingTester(ImageProcessingTester):
 class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = SuperPointImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_image_processing(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)

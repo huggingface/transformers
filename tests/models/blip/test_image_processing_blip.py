@@ -37,16 +37,8 @@ class BlipImageProcessingTester(ImageProcessingTester):
 class BlipImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = BlipImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
 
 @require_torch
 @require_vision
 class BlipImageProcessingTestFourChannels(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = BlipImageProcessingTester
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()

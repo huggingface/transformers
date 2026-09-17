@@ -58,10 +58,6 @@ class Cosmos3EdgeImageProcessingTester(ImageProcessingTester):
 class Cosmos3EdgeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = Cosmos3EdgeImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def assert_packed_output(self, output, batch_size):
         """Check Edge's flattened patch matrix against its per-image THW grids."""
         expected_num_patches = int(output.image_grid_thw.prod(dim=-1).sum())

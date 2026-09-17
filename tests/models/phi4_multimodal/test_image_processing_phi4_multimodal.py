@@ -69,10 +69,6 @@ class Phi4MultimodalImageProcessingTester(ImageProcessingTester):
 class Phi4MultimodalImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = Phi4MultimodalImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     @unittest.skip(reason="Phi4MultimodalImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")
     def test_call_numpy_4_channels(self):
         pass

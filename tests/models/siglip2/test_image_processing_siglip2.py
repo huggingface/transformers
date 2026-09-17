@@ -49,10 +49,6 @@ class Siglip2ImageProcessingTester(ImageProcessingTester):
 class Siglip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = Siglip2ImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     # Ignore copy
     # Ignore copy
     @unittest.skip(reason="not supported")

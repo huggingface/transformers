@@ -66,10 +66,6 @@ class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     image_processing_tester_class = VivitImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_rescale(self):
         # ViVit optionally rescales between -1 and 1 instead of the usual 0 and 1
         image = np.arange(0, 256, 1, dtype=np.uint8).reshape(1, 8, 32)

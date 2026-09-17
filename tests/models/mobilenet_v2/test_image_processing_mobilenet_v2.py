@@ -69,10 +69,6 @@ class MobileNetV2ImageProcessingTest(
 ):
     image_processing_tester_class = MobileNetV2ImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_call_segmentation_maps(self):
         # Initialize image_processing
         for image_processing_class in self.image_processing_classes.values():

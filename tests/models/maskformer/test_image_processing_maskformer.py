@@ -82,10 +82,6 @@ class MaskFormerImageProcessingTest(
 ):
     image_processing_tester_class = MaskFormerImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def comm_get_image_processing_inputs(
         self, image_processing_class, with_segmentation_maps=False, is_instance_map=False, segmentation_type="np"
     ):

@@ -34,7 +34,3 @@ class PPChart2TableImageProcessingTester(ImageProcessingTester):
 @require_vision
 class PPChart2TableImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = PPChart2TableImageProcessingTester
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()

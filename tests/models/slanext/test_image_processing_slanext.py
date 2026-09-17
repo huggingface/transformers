@@ -75,10 +75,6 @@ class SLANeXtImageProcessingTester(ImageProcessingTester):
 class SLANeXtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = SLANeXtImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     # SLANeXt resizes images adaptively based on aspect ratio, leading to inconsistent output sizes across a batch.
     # Override to skip batched input tests.
     def test_call_pytorch(self):

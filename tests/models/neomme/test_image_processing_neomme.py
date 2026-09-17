@@ -85,10 +85,6 @@ class NeoMMEImageProcessingTester(ImageProcessingTester):
 class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = NeoMMEImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def _check_call(self, image_inputs) -> None:
         for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)

@@ -61,10 +61,6 @@ class IdeficsImageProcessingTester(ImageProcessingTester):
 class IdeficsImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = IdeficsImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     @require_torchvision
     def test_torchvision_numpy_transforms_equivalency(self):
         def convert_to_rgb(image):

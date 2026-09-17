@@ -71,10 +71,6 @@ class Lfm2VlImageProcessingTester(ImageProcessingTester):
 class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = Lfm2VlImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     @require_vision
     def test_smart_resize(self):
         # verify that smart resize output dims are divisible by encoder_patch_size * downsample_factor

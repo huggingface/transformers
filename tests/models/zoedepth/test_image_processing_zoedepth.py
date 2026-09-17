@@ -67,10 +67,6 @@ class ZoeDepthImageProcessingTester(ImageProcessingTester):
 class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = ZoeDepthImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_ensure_multiple_of(self):
         # Test variable by turning off all other variables which affect the size, size which is not multiple of 32
         image = np.zeros((489, 640, 3))

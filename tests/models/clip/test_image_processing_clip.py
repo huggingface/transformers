@@ -37,7 +37,3 @@ class CLIPImageProcessingTester(ImageProcessingTester):
 @require_vision
 class CLIPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = CLIPImageProcessingTester
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()

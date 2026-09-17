@@ -40,10 +40,6 @@ class PPDocLayoutV3ImageProcessingTester(ImageProcessingTester):
 class PPDocLayoutV3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = PPDocLayoutV3ImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     @unittest.skip(
         reason="PPDocLayoutV3 uses antialias=False which is not supported for 4-channel images consistently"
     )

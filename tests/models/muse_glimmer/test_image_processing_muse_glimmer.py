@@ -101,10 +101,6 @@ class MuseGlimmerImageProcessingTester(ImageProcessingTester):
 class MuseGlimmerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = MuseGlimmerImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     # batch size is flattened
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():

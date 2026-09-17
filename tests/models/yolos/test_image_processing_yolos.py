@@ -102,10 +102,6 @@ class YolosImageProcessingTester(ImageProcessingTester):
 class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = YolosImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_from_dict_with_legacy_integer_size(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)

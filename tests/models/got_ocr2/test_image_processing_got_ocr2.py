@@ -42,10 +42,6 @@ class GotOcr2ImageProcessingTester(ImageProcessingTester):
 class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = GotOcr2ImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_backends_equivalence_crop_to_patches(self):
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")

@@ -87,10 +87,6 @@ class Qwen2VLImageProcessingTester(ImageProcessingTester):
 class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = Qwen2VLImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)

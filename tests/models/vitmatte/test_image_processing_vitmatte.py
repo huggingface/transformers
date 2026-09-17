@@ -58,10 +58,6 @@ class VitMatteImageProcessingTester(ImageProcessingTester):
 class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = VitMatteImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_call_numpy(self):
         # create random numpy tensors
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)

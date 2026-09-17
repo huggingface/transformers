@@ -67,10 +67,6 @@ class BeitImageProcessingTester(ImageProcessingTester):
 class BeitImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase):
     image_processing_tester_class = BeitImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_call_segmentation_maps(self):
         for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing

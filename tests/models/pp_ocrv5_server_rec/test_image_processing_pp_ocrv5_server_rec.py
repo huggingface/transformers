@@ -86,10 +86,6 @@ class PPOCRV5ServerRecImageProcessingTester(ImageProcessingTester):
 class PPOCRV5ServerRecImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = PPOCRV5ServerRecImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     @unittest.skip(reason="PPOCRV5ServerRecImageProcessor does not support 4 channel images yet")
     def test_call_numpy_4_channels():
         pass

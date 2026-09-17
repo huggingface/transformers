@@ -48,11 +48,6 @@ class JanusImageProcessingTester(ImageProcessingTester):
 class JanusImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = JanusImageProcessingTester
 
-    @property
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.image_processor_dict
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)

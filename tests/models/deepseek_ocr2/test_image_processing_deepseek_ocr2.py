@@ -43,10 +43,6 @@ class DeepseekOcr2ImageProcessingTester(ImageProcessingTester):
 class DeepseekOcr2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = DeepseekOcr2ImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     @unittest.skip(reason="Not supported")
     def test_call_numpy_4_channels(self):
         pass

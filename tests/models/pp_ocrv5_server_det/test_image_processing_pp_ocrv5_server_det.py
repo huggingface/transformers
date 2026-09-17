@@ -91,10 +91,6 @@ class PPOCRV5ServerDetImageProcessingTester(ImageProcessingTester):
 class PPOCRV5ServerDetImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = PPOCRV5ServerDetImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     # PPOCRV5ServerDet can’t stack the images into a batch because the image processor resizes them adaptively, leading to inconsistent output sizes."
     # Skip Test batched
     def test_call_pytorch(self):

@@ -86,10 +86,6 @@ class VideoLlama3ImageProcessingTester(ImageProcessingTester):
 class VideoLlama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = VideoLlama3ImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)

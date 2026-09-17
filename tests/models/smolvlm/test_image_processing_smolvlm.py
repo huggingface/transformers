@@ -121,10 +121,6 @@ class SmolVLMImageProcessingTester(ImageProcessingTester):
 class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = SmolVLMImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_call_numpy(self):
         for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing

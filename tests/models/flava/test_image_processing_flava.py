@@ -96,10 +96,6 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     image_processing_tester_class = FlavaImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_from_dict_with_codebook_size_overrides(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(

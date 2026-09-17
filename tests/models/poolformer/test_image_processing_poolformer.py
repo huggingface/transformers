@@ -37,10 +37,6 @@ class PoolFormerImageProcessingTester(ImageProcessingTester):
 class PoolFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = PoolFormerImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
 
 @require_torch
 @require_vision

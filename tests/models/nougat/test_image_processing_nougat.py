@@ -64,10 +64,6 @@ class NougatImageProcessingTester(ImageProcessingTester):
 class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = NougatImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_expected_output(self):
         dummy_image = self.image_processor_tester.prepare_dummy_image()
         for image_processing_class in self.image_processing_classes.values():

@@ -41,10 +41,6 @@ class DeepseekVLImageProcessingTester(ImageProcessingTester):
 class DeepseekVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = DeepseekVLImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     # Ignore copy
     @unittest.skip(reason="Not supported")
     def test_call_numpy_4_channels(self):

@@ -82,10 +82,6 @@ class Mask2FormerImageProcessingTest(
 ):
     image_processing_tester_class = Mask2FormerImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def comm_get_image_processing_inputs(
         self,
         image_processor_tester,

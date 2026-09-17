@@ -59,10 +59,6 @@ class HunYuanVLImageProcessingTester(ImageProcessingTester):
 class HunYuanVLImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = HunYuanVLImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def assert_image_processor_output(self, output, batch_size):
         grid_h = grid_w = 2
         patches_per_image = grid_h * grid_w

@@ -45,10 +45,6 @@ class BridgeTowerImageProcessingTester(ImageProcessingTester):
 class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = BridgeTowerImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     @require_vision
     @require_torch
     def test_backends_equivalence(self):

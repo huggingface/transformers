@@ -52,10 +52,6 @@ class LayoutLMv2ImageProcessingTester(ImageProcessingTester):
 class LayoutLMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = LayoutLMv2ImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     @unittest.skip(reason="Tesseract version is not correct in ci. @Arthur FIXME")
     def test_layoutlmv2_integration_test(self):
         from datasets import load_dataset

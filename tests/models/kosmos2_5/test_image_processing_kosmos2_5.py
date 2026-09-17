@@ -59,10 +59,6 @@ class Kosmos2_5ImageProcessingTester(ImageProcessingTester):
 class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = Kosmos2_5ImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     # Overwrite from the common test to use `flattened_patches` instead of `pixel_values`.
     # TODO: enhance the common test to avoid overwriting
     @require_vision
@@ -296,10 +292,6 @@ class Kosmos2_5ImageProcessingTestFourChannels(ImageProcessingTestMixin, unittes
         super().setUp()
         self.image_processor_tester.num_channels = 4
         self.expected_encoded_image_num_channels = 3
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
 
     # Overwrite from the common test to use `flattened_patches` instead of `pixel_values`.
     # TODO: enhance the common test to avoid overwriting

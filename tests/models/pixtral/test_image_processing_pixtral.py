@@ -84,10 +84,6 @@ class PixtralImageProcessingTester(ImageProcessingTester):
 class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = PixtralImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     # The following tests are overridden as PixtralImageProcessor can return images of different sizes
     # and thus doesn't support returning batched tensors
 

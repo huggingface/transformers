@@ -33,7 +33,3 @@ class MobileNetV1ImageProcessingTester(ImageProcessingTester):
 @require_vision
 class MobileNetV1ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = MobileNetV1ImageProcessingTester
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()

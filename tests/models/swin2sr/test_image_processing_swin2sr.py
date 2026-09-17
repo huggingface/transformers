@@ -61,10 +61,6 @@ class Swin2SRImageProcessingTester(ImageProcessingTester):
 class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = Swin2SRImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def calculate_expected_size(self, image):
         old_height, old_width = get_image_size(image)
         size = self.image_processor_tester.size_divisor

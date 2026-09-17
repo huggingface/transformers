@@ -50,11 +50,6 @@ class Gemma3ImageProcessingTester(ImageProcessingTester):
 class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = Gemma3ImageProcessingTester
 
-    @property
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.image_processor_dict
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_without_pan_and_scan(self):
         """
         Disable do_pan_and_scan parameter.

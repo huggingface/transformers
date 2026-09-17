@@ -68,10 +68,6 @@ class RTDetrImageProcessingTester(ImageProcessingTester):
 class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = RTDetrImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_valid_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")

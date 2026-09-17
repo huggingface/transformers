@@ -62,10 +62,6 @@ class Step3p7ImageProcessingTester(ImageProcessingTester):
 class Step3p7ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = Step3p7ImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def _processor(self):
         image_processing_class = next(iter(self.image_processing_classes.values()))
         return image_processing_class(**self.image_processor_dict)

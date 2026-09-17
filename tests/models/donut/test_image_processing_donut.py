@@ -49,10 +49,6 @@ class DonutImageProcessingTester(ImageProcessingTester):
 class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = DonutImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_from_dict_with_legacy_size_tuple(self):
         for image_processing_class in self.image_processing_classes.values():
             # Legacy configs use (width, height) order.

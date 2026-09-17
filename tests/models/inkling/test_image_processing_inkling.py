@@ -51,10 +51,6 @@ class InklingImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_call_numpy_4_channels(self):
         pass
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_image_processor_defaults(self):
         for image_processing_class in self.image_processing_classes.values():
             proc = image_processing_class()

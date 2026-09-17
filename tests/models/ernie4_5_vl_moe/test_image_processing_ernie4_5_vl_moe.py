@@ -66,10 +66,6 @@ class Ernie4_5_VLMoeImageProcessingTester(ImageProcessingTester):
 class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = Ernie4_5_VLMoeImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_select_best_resolution(self):
         # Test with a final resize resolution
         best_resolution = smart_resize(561, 278, factor=28)

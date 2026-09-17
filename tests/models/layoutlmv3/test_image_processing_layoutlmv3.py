@@ -33,10 +33,6 @@ class LayoutLMv3ImageProcessingTester(ImageProcessingTester):
 class LayoutLMv3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = LayoutLMv3ImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_LayoutLMv3_integration_test(self):
         from datasets import load_dataset
 

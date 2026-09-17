@@ -39,10 +39,6 @@ class ChineseCLIPImageProcessingTester(ImageProcessingTester):
 class ChineseCLIPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = ChineseCLIPImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     @unittest.skip(
         reason="ChineseCLIPImageProcessor doesn't treat 4 channel PIL and numpy consistently yet"
     )  # FIXME Amy
@@ -58,10 +54,6 @@ class ChineseCLIPImageProcessingTestFourChannels(ImageProcessingTestMixin, unitt
     def setUp(self):
         super().setUp()
         self.expected_encoded_image_num_channels = 3
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
 
     @unittest.skip(
         reason="ChineseCLIPImageProcessor doesn't treat 4 channel PIL and numpy consistently yet"

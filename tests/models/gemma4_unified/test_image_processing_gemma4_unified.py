@@ -62,10 +62,6 @@ class Gemma4UnifiedImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
     def test_call_numpy_4_channels(self):
         pass
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_image_processor_defaults(self):
         """Test default parameter values for Gemma4Unified matching VARASP_SL280_K3."""
         for image_processing_class in self.image_processing_classes.values():

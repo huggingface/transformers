@@ -42,10 +42,6 @@ class Ovis2ImageProcessingTester(ImageProcessingTester):
 class Ovis2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = Ovis2ImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_backends_equivalence_crop_to_patches(self):
         """Test equivalence between backends when cropping to patches."""
         if len(self.image_processing_classes) < 2:

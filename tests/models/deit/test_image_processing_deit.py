@@ -38,7 +38,3 @@ class DeiTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     test_cast_dtype = True
 
     image_processing_tester_class = DeiTImageProcessingTester
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()

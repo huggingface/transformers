@@ -50,11 +50,6 @@ class LlavaNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->LlavaNext
     image_processing_tester_class = LlavaNextImageProcessingTester
 
-    @property
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.image_processor_dict
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.test_image_processor_from_dict_with_kwargs
     def test_select_best_resolution(self):
         possible_resolutions = [[672, 336], [336, 672], [672, 672], [336, 1008], [1008, 336]]

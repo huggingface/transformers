@@ -85,10 +85,6 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
         super().setUp()
         self.model_id = "tue-mps/coco_panoptic_eomt_large_640"
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_call_numpy(self):
         for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing

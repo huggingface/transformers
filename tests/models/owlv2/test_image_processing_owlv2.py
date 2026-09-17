@@ -46,10 +46,6 @@ class Owlv2ImageProcessingTester(ImageProcessingTester):
 class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = Owlv2ImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     @slow
     def test_image_processor_integration_test(self):
         for image_processing_class in self.image_processing_classes.values():

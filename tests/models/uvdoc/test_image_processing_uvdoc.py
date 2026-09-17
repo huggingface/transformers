@@ -34,10 +34,6 @@ class UVDocImageProcessingTester(ImageProcessingTester):
 class UVDocImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = UVDocImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     @unittest.skip("UVDoc image processors doesn't support 4 channel images")
     def test_call_numpy_4_channels(self):
         pass

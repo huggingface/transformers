@@ -84,10 +84,6 @@ class OneFormerImageProcessingTest(
 ):
     image_processing_tester_class = OneFormerImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
     def test_image_proc_properties(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
