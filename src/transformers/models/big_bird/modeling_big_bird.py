@@ -1894,11 +1894,6 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> MaskedLMOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
