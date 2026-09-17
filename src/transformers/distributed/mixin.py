@@ -209,7 +209,7 @@ class DistributedMixin:
                 # Masked EP: the EP group is the TP group, every rank keeps every token.
                 model = apply_tensor_parallelism(model, tp_mesh, ep_plan)
             elif "ep_dispatch_experts" in ep_plan.values():
-                # EP + DP with tp_size >= 1: the ranks of a TP group share the same batch. If we want a specific token, 
+                # EP + DP with tp_size >= 1: the ranks of a TP group share the same batch. If we want a specific token,
                 # we will have to slice the batch here in order to avoid computing tp_size times the same batch.
                 model = apply_expert_parallelism(model, ep_mesh, tp_mesh, ep_plan)
 

@@ -38,6 +38,7 @@ if is_torch_available():
 
 if is_torch_distributed_available():
     import torch.distributed as dist
+    from torch.distributed.nn.functional import all_to_all_single
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
 
@@ -762,17 +763,42 @@ class RouterParallelMegaMoe(EpRouterParallel):
 
 
 class EpDispatchExpertsParallel(MoeExpertsParallel):
-    """Dispatch disjoint TP token slices to the experts' owners, then replicate the combined output on TP."""
+    """
+    Dispatch disjoint TP token slices to the experts' owners, then replicate the combined output on TP.
 
-    def _dispatch_experts_forward(self,
-    experts_forward: Callable,
-    num_local_experts: int,
-    hidden_states: torch.Tensor,
-    top_k_index: torch.Tensor,
-    top_k_weights: torch.Tensor,
-    ep_group,
-    ep_size: int,
-    tp_size: int = 1,
+    Example:
+    Let's say we have 8 experts [E0, E7] with DistributedConfig(tp_size=2, fsdp_size=4, ep_size=4). That imply:
+        - Since fsdp_size=4, we have 4 batches B denoted [B0, B3]
+        - Because we have tp_size=2, that means *both ranks share the same batch*
+        - efsdp = (fsdp_size * tp_size) / ep_size = 4 * 2 / 4 = 2
+
+    GPU         0      1       2      3       4      5       6      7
+                |      |       |      |       |      |       |      |
+    dense view  ---------------------------------------------------------
+    batch       [====B0====]   [====B1====]   [====B2====]   [====B3====]
+    tp_size     [___________ 0 ___________]   [___________ 1 ___________]
+    fsdp_size        0              1              2              3
+
+    expert view ---------------------------------------------------------
+
+    experts     E0E1   E2E3    E4E5   E6E7    E0E1   E2E3    E4E5   E6E7
+    ep_size      0      1       2      3       0      1       2      3
+    efsdp_size [___________ 0 ___________]   [___________ 1 ___________]
+
+    Assume token 1 in B0 chose E4, which lives on another rank, so it must travel by all-to-all. B0 sits on 2 ranks (cf diagram), so if both sent it, E4 would compute it twice.
+    We need to make sure that token 1 is in rank 0 range, so rank 0 sends it and rank 1 does not have it in its slice.
+    """
+
+    def _dispatch_experts_forward(
+        self,
+        experts_forward: Callable,
+        num_local_experts: int,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
+        ep_group,
+        ep_size: int,
+        tp_size: int = 1,
     ) -> torch.Tensor:
         """
         Expert-parallel forward by token dispatch. Every rank routes its own tokens, sends each selected (token, expert)
@@ -782,7 +808,6 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
         gradients sum contributions from `ep_size / tp_size` batches: they are scaled by `tp_size / ep_size` before the
         remaining expert-data-parallel reduction, matching the trunk's FSDP average.
         """
-        from torch.distributed.nn.functional import all_to_all_single
 
         num_tokens, hidden_dim = hidden_states.shape
         num_top_k = top_k_index.size(-1)
@@ -794,7 +819,9 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
         order = torch.argsort(expert_ids)
         send_tokens = hidden_states[order // num_top_k]
         send_counts = torch.zeros(num_local_experts * ep_size, dtype=torch.long, device=hidden_states.device)
-        send_counts = send_counts.scatter_add_(0, expert_ids, torch.ones_like(expert_ids)).view(ep_size, num_local_experts)
+        send_counts = send_counts.scatter_add_(0, expert_ids, torch.ones_like(expert_ids)).view(
+            ep_size, num_local_experts
+        )
         recv_counts = torch.empty_like(send_counts)
         torch.distributed.all_to_all_single(recv_counts, send_counts, group=ep_group)
         send_sizes, recv_sizes = torch.stack([send_counts.sum(dim=1), recv_counts.sum(dim=1)]).tolist()
@@ -1038,9 +1065,7 @@ def apply_tensor_parallelism(model, tp_mesh, tp_plan=None):
     return model
 
 
-def apply_expert_parallelism(
-    model: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh, plan: dict[str, str]
-):
+def apply_expert_parallelism(model: nn.Module, ep_mesh: DeviceMesh, tp_mesh: DeviceMesh, plan: dict[str, str]):
     """Shard experts on EP; use TP to split shared tokens and reconstruct outputs around dispatch."""
     for name, module in model.named_modules():
         for p_name, _ in list(module.named_parameters(recurse=False)):
