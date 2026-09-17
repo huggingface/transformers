@@ -117,14 +117,14 @@ class Gemma4CausalLMOutputWithPast(ModelOutput):
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
+    last_hidden_state (`torch.FloatTensor`, *optional*):
+        Final layer hidden states from the language model, of shape `(batch_size, sequence_length, hidden_size)`.
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
     audio_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
-    last_hidden_state (`torch.FloatTensor`, *optional*):
-        Final layer hidden states from the language model, of shape `(batch_size, sequence_length, hidden_size)`.
     shared_kv_states (`dict`, *optional*):
         Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
@@ -1862,12 +1862,16 @@ class Gemma4ForCausalLM(Gemma4PreTrainedModel, GenerationMixin):
 
         hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss.
-        if isinstance(logits_to_keep, torch.Tensor) and logits_to_keep.dtype == torch.bool:
-            # Bool mask for non-contiguous position selection, see https://github.com/huggingface/transformers/issues/48784
-            logits = self.lm_head(hidden_states[logits_to_keep])
+        if isinstance(logits_to_keep, int):
+            slice_indices = slice(-logits_to_keep, None)
+            hidden_states = hidden_states[:, slice_indices, :]
+        elif logits_to_keep.dtype == torch.bool:
+            hidden_states = hidden_states[logits_to_keep]
         else:
-            slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-            logits = self.lm_head(hidden_states[:, slice_indices, :])
+            hidden_states = hidden_states[:, logits_to_keep, :]
+
+        # Bool mask for non-contiguous position selection, see https://github.com/huggingface/transformers/issues/48784
+        logits = self.lm_head(hidden_states)
         if self.config.final_logit_softcapping is not None:
             logits = logits / self.config.final_logit_softcapping
             logits = torch.tanh(logits)
@@ -2588,12 +2592,16 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
 
         hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss.
-        if isinstance(logits_to_keep, torch.Tensor) and logits_to_keep.dtype == torch.bool:
-            # Bool mask for non-contiguous position selection, see https://github.com/huggingface/transformers/issues/48784
-            logits = self.lm_head(hidden_states[logits_to_keep])
+        if isinstance(logits_to_keep, int):
+            slice_indices = slice(-logits_to_keep, None)
+            hidden_states = hidden_states[:, slice_indices, :]
+        elif logits_to_keep.dtype == torch.bool:
+            hidden_states = hidden_states[logits_to_keep]
         else:
-            slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-            logits = self.lm_head(hidden_states[:, slice_indices, :])
+            hidden_states = hidden_states[:, logits_to_keep, :]
+
+        # Bool mask for non-contiguous position selection, see https://github.com/huggingface/transformers/issues/48784
+        logits = self.lm_head(hidden_states)
         if (final_logit_softcapping := self.config.get_text_config().final_logit_softcapping) is not None:
             logits = logits / final_logit_softcapping
             logits = torch.tanh(logits)

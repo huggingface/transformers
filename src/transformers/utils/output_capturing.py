@@ -286,10 +286,10 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
                 recordable_keys["output_hidden_states"], (list, tuple, set)
             ):
                 num_hidden_states_layers = getattr(self, "_output_capturing_hook_counts", {}).get("hidden_states", 0)
-                collected_outputs["_hidden_states_layers"] = {
-                    idx if idx >= 0 else num_hidden_states_layers + idx
-                    for idx in recordable_keys["output_hidden_states"]
-                }
+                hidden_states_layers = set()
+                for idx in recordable_keys["output_hidden_states"]:
+                    hidden_states_layers.add(idx if idx >= 0 else num_hidden_states_layers + idx)
+                collected_outputs["_hidden_states_layers"] = hidden_states_layers
             # Let's activate the output collector hooks if needed!
             output_token = _active_collector.set(collected_outputs)
 

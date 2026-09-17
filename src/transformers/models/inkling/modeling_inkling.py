@@ -792,8 +792,15 @@ class InklingForCausalLM(InklingPreTrainedModel, GenerationMixin):
 
         hidden_states = outputs.last_hidden_state / self.config.logits_mup_width_multiplier
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        if isinstance(logits_to_keep, int):
+            slice_indices = slice(-logits_to_keep, None)
+            hidden_states = hidden_states[:, slice_indices, :]
+        elif logits_to_keep.dtype == torch.bool:
+            hidden_states = hidden_states[logits_to_keep]
+        else:
+            hidden_states = hidden_states[:, logits_to_keep, :]
+
+        logits = self.lm_head(hidden_states)
         unpadded_vocab_size = self.config.unpadded_vocab_size
         if unpadded_vocab_size is not None and unpadded_vocab_size < logits.shape[-1]:
             logits = logits[..., :unpadded_vocab_size]
@@ -1297,8 +1304,15 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
 
         hidden_states = outputs[0] / self.config.text_config.logits_mup_width_multiplier
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        if isinstance(logits_to_keep, int):
+            slice_indices = slice(-logits_to_keep, None)
+            hidden_states = hidden_states[:, slice_indices, :]
+        elif logits_to_keep.dtype == torch.bool:
+            hidden_states = hidden_states[logits_to_keep]
+        else:
+            hidden_states = hidden_states[:, logits_to_keep, :]
+
+        logits = self.lm_head(hidden_states)
         unpadded_vocab_size = self.config.text_config.unpadded_vocab_size
         if unpadded_vocab_size is not None and unpadded_vocab_size < logits.shape[-1]:
             logits = logits[..., :unpadded_vocab_size]
