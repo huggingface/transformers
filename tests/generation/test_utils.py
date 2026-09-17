@@ -2892,7 +2892,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         num_kv_heads = getattr(config, "num_key_value_heads", num_attention_heads)
         hidden_size = getattr(config, "d_model", config.hidden_size)
         head_dim = getattr(config, "head_dim", hidden_size // num_attention_heads)
-        # Check for MLA and DSA attributes: MLA models cache compressed latents, DSA does not yet
+        # Check for MLA and DSA attributes: Those models cache compressed latents
         kv_lora_rank = getattr(config, "kv_lora_rank", None)
         qk_rope_head_dim = getattr(config, "qk_rope_head_dim", None)
         uses_mla = kv_lora_rank is not None and qk_rope_head_dim is not None
