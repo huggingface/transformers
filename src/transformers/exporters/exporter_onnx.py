@@ -63,6 +63,7 @@ from .utils import (
 
 if is_torch_available():
     import torch
+    from torch._prims_common import is_contiguous_or_false
     from torch.export import ExportedProgram
     from torch.onnx import ONNXProgram
 
@@ -460,7 +461,10 @@ def _patch_reshape(original):
     """
 
     def patch(input, *shape, **kwargs):
-        if isinstance(input, torch.Tensor) and not input.is_contiguous():
+        # `is_contiguous()` itself guards on data-dependent strides (hunyuan_vl's vision stack reshapes
+        # on an unbacked token count), so ask the question in a form that answers "don't know" with
+        # `False` and clone — copying an already-contiguous tensor is wasteful but never wrong.
+        if isinstance(input, torch.Tensor) and not is_contiguous_or_false(input):
             input = input.clone(memory_format=torch.contiguous_format)
         return original(input, *shape, **kwargs)
 
