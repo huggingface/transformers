@@ -414,7 +414,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                     # Only apply temporal scaling for videos; still images have no
                     # temporal dimension to space out (fixes #45325).
                     if modality_type == 2:
-                        time_interval = tokens_per_second * int(next(second_per_grid_ts))
+                        time_interval = tokens_per_second * next(second_per_grid_ts)
                     else:
                         time_interval = 1
                     vision_position_ids = self.get_vision_position_ids(
@@ -698,4 +698,5 @@ __all__ = [
     "Qwen2_5_VLPreTrainedModel",
     "Qwen2_5_VLProcessor",
     "Qwen2_5_VLTextModel",  # noqa: F822
+    "Qwen2_5_VisionTransformerPretrainedModel",
 ]
