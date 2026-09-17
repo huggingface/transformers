@@ -709,8 +709,7 @@ class GenerationMixin(ContinuousMixin):
         if (
             isinstance(past_key_values, Cache)
             and past_key_values.is_compileable
-            and attention_mask is not None
-            and attention_mask.ndim == 2
+            and (attention_mask is None or attention_mask.ndim == 2)
         ):
             # Some models may overwrite the general one
             causal_mask_creation_function = getattr(self, "create_masks_for_generate", create_masks_for_generate)
@@ -727,6 +726,10 @@ class GenerationMixin(ContinuousMixin):
                 mm_token_type_ids=model_inputs.get("mm_token_type_ids"),
                 is_first_iteration=is_first_iteration,
             )
+            if isinstance(attention_mask, dict):
+                attention_mask = {k: v.contiguous() if v is not None else None for k, v in attention_mask.items()}
+            else:
+                attention_mask = attention_mask.contiguous() if attention_mask is not None else None
 
         if attention_mask is not None:
             model_inputs[attention_mask_key] = attention_mask
@@ -2703,6 +2706,18 @@ class GenerationMixin(ContinuousMixin):
         if not kwargs_has_position_ids and accepts_position_ids and not self.config.is_encoder_decoder:
             model_kwargs["position_ids"] = self._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
+        # We can drop the mask altogether if it's all 1s, i.e. no padding, to make downstream attention mask creation and inference
+        # faster (we will never have padding). Note that we cannot drop it earlier, as position_ids creation absolutely needs to check
+        # the mask even if it's only 1s, in case we restart from an existing cache and only new sequence input_ids
+        if (
+            not self.config.is_encoder_decoder
+            and accepts_attention_mask
+            and (model_kwargs["attention_mask"] == 1).all()
+        ):
+            # Record the length to slice correctly in `_prefill` if restarting from existing Cache
+            generation_config._mask_length = model_kwargs["attention_mask"].shape[1]
+            model_kwargs["attention_mask"] = None
+
         if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
             # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`
             model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
@@ -3248,8 +3263,8 @@ class GenerationMixin(ContinuousMixin):
         do_sample: bool,
         beams_to_keep: int,
         num_beams: int,
-        vocab_size: int,
         batch_size: int,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Get top-K continuations given the accumulated log probs on the next token.
@@ -3276,6 +3291,7 @@ class GenerationMixin(ContinuousMixin):
         else:
             topk_log_probs, topk_indices = torch.topk(accumulated_log_probs, k=beams_to_keep)
 
+        vocab_size = accumulated_log_probs.shape[-1] // num_beams
         # Gather K top beams, recover the beam index by floor division and token id by modulo division
         topk_current_beam_indices = topk_indices // vocab_size
         topk_running_beam_indices = self._gather_beams(running_beam_indices, topk_current_beam_indices)
@@ -3430,15 +3446,6 @@ class GenerationMixin(ContinuousMixin):
 
         batch_size_unflattened, cur_len = input_ids.shape[:2]
         batch_size = batch_size_unflattened // num_beams
-        # TODO (joao): standardize special cases
-        if self.__class__.__name__ == "MoshiDepthDecoder":
-            vocab_size = self.config.audio_vocab_size
-        elif self.__class__.__name__ == "ImageGPTForCausalImageModeling":
-            vocab_size = self.get_output_embeddings().out_features
-        elif self.__class__.__name__ == "BarkSemanticModel":
-            vocab_size = self.config.output_vocab_size
-        else:
-            vocab_size = self.config.get_text_config().vocab_size
         decoder_prompt_len = cur_len
         this_peer_finished = False
 
@@ -3581,7 +3588,7 @@ class GenerationMixin(ContinuousMixin):
 
             log_probs = self._unflatten_beam_dim(log_probs, batch_size, num_beams)
             log_probs = log_probs + running_beam_scores[:, :, None]
-            log_probs = torch.reshape(log_probs, (batch_size, num_beams * vocab_size))
+            log_probs = torch.reshape(log_probs, (batch_size, -1))  # The -1 dim is `num_beams * vocab_size`
 
             # c. Retrieve top-K continuations, i.e. select the next token (greedy or sampling) and then keep the best
             # continuations among all beams based on the accumulated scores.
@@ -3594,7 +3601,6 @@ class GenerationMixin(ContinuousMixin):
                 do_sample=do_sample,
                 beams_to_keep=beams_to_keep,
                 num_beams=num_beams,
-                vocab_size=vocab_size,
                 batch_size=batch_size,
             )
 
@@ -4096,8 +4102,13 @@ class GenerationMixin(ContinuousMixin):
             else:
                 attention_mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
                 attention_mask = model_kwargs.get(attention_mask_key)
+                mask_length = (
+                    attention_mask.shape[1]
+                    if attention_mask is not None
+                    else getattr(generation_config, "_mask_length", -1)
+                )
                 # In this case we need to slice - if it's smaller than the mask, only the new inputs were passed -> no need to do anything
-                if attention_mask is not None and input_ids.shape[1] == attention_mask.shape[1]:
+                if mask_length == input_ids.shape[1]:
                     # inputs will be sliced as `input_ids[:, -next_sequence_length :]` in `prepare_inputs_for_generation`
                     next_sequence_length = input_ids.shape[1] - past_length
 
