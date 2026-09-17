@@ -322,7 +322,11 @@ def save_model_checkpoint_distributed(model, checkpoint_dir: str, *, consolidate
 
 
 def load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike) -> None:
-    """Load local safetensors weights into an initialized model, preserving its current mesh and placements."""
+    """Load local safetensors weights into an initialized model, preserving its current mesh and placements.
+
+    Pass the directory containing the rank-local safetensors files, or the retained `sharded/` directory after
+    consolidation.
+    """
     if not is_torch_greater_or_equal("2.7"):
         raise OSError("Distributed checkpointing requires `torch>=2.7`.")
 
