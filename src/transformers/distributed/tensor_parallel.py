@@ -870,6 +870,7 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
             if isinstance(top_k_weights, DTensor):
                 top_k_weights = top_k_weights.to_local()
             num_tokens = hidden_states.size(0)
+
             if tp_size > 1:
                 # Inputs and router scores are replicated on TP. Sum the slice gradients before they
                 # reach the router and trunk, and combine outputs with an identity backward.
@@ -893,6 +894,7 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
                 output = self._combine_tokens(
                     expert_output, top_k_weights, order, send_sizes, recv_sizes, ep_group
                 ).to(hidden_states.dtype)
+
             if tp_size > 1:
                 full_output = output.new_zeros(num_tokens, output.size(-1))
                 full_output[rows] = output
