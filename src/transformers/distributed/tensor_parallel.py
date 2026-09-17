@@ -595,18 +595,6 @@ if is_torch_distributed_available():
             dist.all_reduce(grad, group=ctx.process_group)
             return grad, None
 
-    class _ScaleGrad(torch.autograd.Function):
-        """Identity whose backward scales the gradient."""
-
-        @staticmethod
-        def forward(ctx, tensor, scale):
-            ctx.scale = scale
-            return tensor
-
-        @staticmethod
-        def backward(ctx, grad_output):
-            return grad_output * ctx.scale, None
-
 
 class MoeExpertsParallel(TensorParallelLayer):
     def should_use_local_tensors(self, module):
@@ -798,15 +786,18 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
         top_k_weights: torch.Tensor,
         ep_group,
         ep_size: int,
-        tp_size: int = 1,
     ) -> torch.Tensor:
         """
         Expert-parallel forward by token dispatch. Every rank routes its own tokens, sends each selected (token, expert)
         pair to the rank that owns the expert with an all-to-all, runs its local experts on what it receives with
         `experts_forward` (the experts module's own forward, called as a top-1 routing with unit weights), sends the
-        results back and combines them with the routing weights. Each TP group trains on its own batch, so the expert
-        gradients sum contributions from `ep_size / tp_size` batches: they are scaled by `tp_size / ep_size` before the
-        remaining expert-data-parallel reduction, matching the trunk's FSDP average.
+        results back and combines them with the routing weights. An expert's gradient therefore sums the batches of
+        its EP group; the expert FSDP reduction divides by `fsdp_size` to match the trunk's average (see `fsdp.py`).
+
+        Every local expert also runs on one zero pad row, dropped before the results are sent back. It keeps the
+        expert output connected to the received tokens and to every expert's weights on every rank, whatever the
+        experts implementation does with an empty input, so the reverse all-to-all and the expert FSDP reduction run
+        in the backward of every rank, including one whose experts nobody picked this step.
         """
 
         num_tokens, hidden_dim = hidden_states.shape
@@ -835,13 +826,15 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
         recv_expert_ids = torch.arange(num_local_experts, device=hidden_states.device).repeat(ep_size)
         recv_expert_ids = recv_expert_ids.repeat_interleave(recv_counts.reshape(-1), output_size=sum(recv_sizes))
 
-        # An EP group collects ep_size / tp_size distinct batches. The remaining efsdp reduction averages
-        # expert replicas; together these give the same fsdp_size divisor as the trunk.
-        expert_gradient_scale = tp_size / ep_size
-        recv_tokens = _ScaleGrad.apply(recv_tokens, 1.0 / expert_gradient_scale)
-        unit_weights = torch.ones_like(recv_expert_ids, dtype=recv_tokens.dtype).unsqueeze(-1)
-        expert_out = experts_forward(recv_tokens, recv_expert_ids.unsqueeze(-1), unit_weights)
-        expert_out = _ScaleGrad.apply(expert_out, expert_gradient_scale)
+        # One zero pad row per local expert, so no expert ever sees an empty input (see the docstring). Eager
+        # experts return a disconnected `zeros_like` on zero tokens, which would drop this rank out of the reverse
+        # all-to-all backward and the expert FSDP reduce-scatter while the other ranks wait on both.
+        num_recv = recv_tokens.size(0)
+        pad_expert_ids = torch.arange(num_local_experts, device=hidden_states.device)
+        padded_tokens = torch.cat([recv_tokens, recv_tokens.new_zeros(num_local_experts, hidden_dim)])
+        padded_expert_ids = torch.cat([recv_expert_ids, pad_expert_ids]).unsqueeze(-1)
+        unit_weights = torch.ones_like(padded_expert_ids, dtype=recv_tokens.dtype)
+        expert_out = experts_forward(padded_tokens, padded_expert_ids, unit_weights)[:num_recv]
 
         # Send the results back to the owners of the tokens and combine them with the routing weights.
         recv_out = all_to_all_single(
@@ -857,21 +850,10 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
         return combined.view(num_tokens, num_top_k, hidden_dim).sum(dim=1).to(hidden_states.dtype)
 
     def install_forward(self, module, ep_mesh, *, tp_mesh=None):
-        original_forward = module.forward
+        # Capture the module's own forward now: below, `module.forward` becomes `tp_forward`.
+        experts_forward = module.forward
         ep_group, ep_size = ep_mesh.get_group(), ep_mesh.size()
         tp_size = tp_mesh.size() if tp_mesh is not None else 1
-
-        def experts_forward(hidden_states, top_k_index, top_k_weights):
-            output = original_forward(hidden_states, top_k_index, top_k_weights)
-            if hidden_states.size(0) == 0 and torch.is_grad_enabled():
-                # Eager experts may return disconnected zeros on an empty receiver. Keep both the
-                # reverse all-to-all and the expert FSDP reductions in the backward graph on every rank.
-                output = output + hidden_states
-                for param in module.parameters():
-                    if isinstance(param, DTensor):
-                        param = param.to_local()
-                    output = output + param.reshape(-1)[:0].sum()
-            return output
 
         def tp_forward(hidden_states, top_k_index, top_k_weights):
             if isinstance(hidden_states, DTensor):
@@ -903,7 +885,6 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
                     top_k_weights,
                     ep_group,
                     ep_size,
-                    tp_size=tp_size,
                 )
             if tp_size > 1:
                 full_output = output.new_zeros(num_tokens, output.size(-1))

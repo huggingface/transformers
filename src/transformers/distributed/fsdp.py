@@ -213,6 +213,13 @@ def apply_fully_sharded_data_parallelism(model: nn.Module, mesh_manager: MeshMan
         for module in model.modules():
             if getattr(module, "_is_expert_parallel", False):
                 fully_shard(module, mesh=expert_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
+                # An expert group spans several data-parallel batches, so an expert's gradient sums over
+                # all of them. FSDP2 would divide by the efsdp group size; dividing by fsdp_size instead
+                # gives the same per-batch average the dense modules get on the fsdp mesh, even when efsdp has a single rank.
+                module.set_gradient_divide_factor(float(distributed_config.fsdp_size))
+                if torch.distributed.get_backend(expert_mesh.get_group()) != "nccl":
+                    # Non-NCCL backends need to sum first, then apply the division otherwise it runtime error.
+                    module.set_force_sum_reduction_for_comms(True)
 
     for module_name, module in reshard_targets:
         fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
