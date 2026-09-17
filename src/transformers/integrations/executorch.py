@@ -793,13 +793,15 @@ def _attention_mask(*args, **kwargs):
     return None
 
 
-def _check_attention_options(dropout, softcap, head_mask):
+def _check_attention_options(dropout, softcap, head_mask, *, s_aux=None):
     if dropout:
         raise ValueError("Cache-aware export attention does not support dropout")
     if softcap is not None:
         raise ValueError("Cache-aware export attention does not support softcap")
     if head_mask is not None:
         raise ValueError("Cache-aware export attention does not support head_mask")
+    if s_aux is not None:
+        raise ValueError("Cache-aware export attention does not support attention sinks (s_aux)")
 
 
 def _off_graph_cache_id(module):
@@ -829,7 +831,7 @@ def _off_graph_attention_forward(
     _cache_ids=None,
     **kwargs,
 ):
-    _check_attention_options(kwargs.get("dropout"), softcap, head_mask)
+    _check_attention_options(kwargs.get("dropout"), softcap, head_mask, s_aux=kwargs.get("s_aux"))
     assert position_ids is not None
     assert position_ids is not None, "position_ids must be provided for off-graph cache placement"
     assert scaling is not None, "scaling must be provided by the attention module"

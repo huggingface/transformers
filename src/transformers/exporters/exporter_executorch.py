@@ -568,7 +568,7 @@ def _mlx_in_graph_attention_forward(
     _cache_windows=None,
     **kwargs,
 ):
-    _check_attention_options(kwargs.get("dropout"), softcap, head_mask)
+    _check_attention_options(kwargs.get("dropout"), softcap, head_mask, s_aux=kwargs.get("s_aux"))
     if _cache_windows is None:
         config = module.config
         if hasattr(config, "get_text_config"):
