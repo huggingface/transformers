@@ -1530,8 +1530,9 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         # instead, so re-allocate them with the vision length, as the parent does for encoder-decoder models.
         pixel_values = model_kwargs.get("pixel_values")
         num_images = pixel_values.shape[1] if pixel_values is not None else 1
-        vision_model = self.model.vision_model
-        cross_attention_cache_len = num_images * vision_model.max_num_tiles * vision_model.num_patches
+        vision_config = self.config.vision_config
+        num_patches = (vision_config.image_size // vision_config.patch_size) ** 2 + 1
+        cross_attention_cache_len = num_images * vision_config.max_num_tiles * num_patches
 
         cross_attention_layers = set(self.config.get_text_config(decoder=True).cross_attention_layers)
         for layer_idx in range(len(cache.layers)):
