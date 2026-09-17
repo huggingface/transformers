@@ -23,14 +23,9 @@ import re
 import numpy as np
 import torch
 
-from ...audio_utils import (
-    AudioInput,
-    make_audio_chat_template_content,
-    make_list_of_audio_chat_template,
-    prepare_keyword_inputs,
-)
+from ...audio_utils import AudioInput, make_audio_chat_template_content, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_keyword_inputs, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, logging
 from ...utils.import_utils import requires
