@@ -104,6 +104,19 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "gemma3n_text": "qwen3_5_text",
     "glm5_next_text": "glm5_next",
     "qwen3_5_moe_text": "qwen3_5_text",
+    # A standalone text sub-model declares its own model_type, so without an
+    # entry here the reverse conversion is never looked up and save_pretrained
+    # writes the internal packed layout instead of the released one. Same shape
+    # as "glm5_next_text" above, and the only other model_type that needs it:
+    # qwen2_moe packs `mlp.experts.*.gate_proj.weight` into a single
+    # `mlp.experts.gate_up_proj`, so a save that skips the conversion leaves the
+    # experts packed under names no external loader expects.
+    #
+    # test_core_model_loading.py sweeps every *_text model_type in
+    # MODEL_MAPPING_NAMES and asserts this set is exactly the one the rule
+    # selects, so the next family to need it is caught by a failing test rather
+    # than by a user.
+    "glm4v_moe_text": "qwen2_moe",
     "llava_next_video": "llava_next",
     "llava_onevision": "llava_next",
     # class-based mappings

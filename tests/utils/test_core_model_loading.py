@@ -12,15 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+import os
+import tempfile
 import unittest
 from types import SimpleNamespace
 
 import torch
 import torch.nn as nn
+from safetensors.torch import load_file as safe_load_file
 from torch.distributed.tensor.placement_types import Shard
 
 from transformers import PreTrainedConfig, PreTrainedModel
 from transformers.conversion_mapping import (
+    _MODEL_TO_CONVERSION_PATTERN,
     get_checkpoint_conversion_mapping,
     get_model_conversion_mapping,
     register_checkpoint_conversion_mapping,
@@ -1674,6 +1678,176 @@ class TestConversionMapping(unittest.TestCase):
         # Only one unscoped transform (from the root); child must be suppressed.
         self.assertEqual(len(transforms), 1)
         self.assertIsNone(transforms[0].scope_prefix)
+
+
+class TestTextSubmodelConversionPatterns(unittest.TestCase):
+    """A standalone text sub-model must save in the released layout.
+
+    A sub-model declares its own `model_type`, so unless
+    `_MODEL_TO_CONVERSION_PATTERN` maps it onto its parent's pattern the reverse
+    conversion is never looked up and `save_pretrained` writes the internal
+    packed layout. huggingface/transformers#48676 fixed that for
+    `glm5_next_text`.
+
+    Rather than extend that one model at a time as each consumer gets bitten,
+    these tests sweep every `*_text` model_type registered as a standalone model
+    and assert the aliased set is exactly the one a mechanical rule selects. A
+    new family that needs an entry then shows up as a failing test instead of as
+    a silently mislabelled checkpoint.
+    """
+
+    #: Prefixes a rule introduces when it relocates a tower rather than
+    #: restructuring keys in place.
+    RELOCATION_PREFIXES = (
+        "language_model.",
+        "vision_tower.",
+        "audio_tower.",
+        "thinker.",
+        "visual.",
+    )
+
+    #: Aliased for a reason this rule does not model: these borrow a *sibling*
+    #: pattern rather than their own parent's, so the parent-derived sweep below
+    #: has nothing to say about them and must not claim they are unnecessary.
+    BORROWS_A_SIBLING_PATTERN = {"gemma3n_text", "qwen3_5_moe_text"}
+
+    @staticmethod
+    def _text_submodel_types():
+        """Every `*_text` model_type registered as a standalone model."""
+        from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
+
+        return sorted(mt for mt in MODEL_MAPPING_NAMES if mt.endswith("_text"))
+
+    def _alias_verdict(self, model_type):
+        """Whether `model_type` needs an alias onto its parent, and why.
+
+        Two properties have to hold. The parent's rules must RESTRUCTURE KEYS --
+        a source pattern with a modulelist wildcard collapsing into a single
+        target -- because that is what a save has to undo; a rule that only
+        transforms a value under an unchanged name is already a no-op on the
+        child's own save. And the parent's rules must not RELOCATE a tower,
+        because `get_model_conversion_mapping` walks sub-modules and collects
+        each one's rules, so an alias re-applies the parent's rules on the
+        PARENT's own save and would shift a tensor that was already moved.
+        """
+        parent = model_type[: -len("_text")]
+        mapping = get_checkpoint_conversion_mapping(parent)
+        if not mapping:
+            return False, f"{parent} has no conversion pattern"
+
+        for transform in mapping:
+            sources = [str(s) for s in (getattr(transform, "source_patterns", None) or [])]
+            targets = [str(t) for t in (getattr(transform, "target_patterns", None) or [])]
+            for target in targets:
+                moved = [
+                    prefix
+                    for prefix in self.RELOCATION_PREFIXES
+                    if prefix in target and not any(prefix in s for s in sources)
+                ]
+                if moved:
+                    return False, f"{parent} relocates under {moved[0]}, so aliasing is unsafe"
+
+        for transform in mapping:
+            sources = [str(s) for s in (getattr(transform, "source_patterns", None) or [])]
+            targets = [str(t) for t in (getattr(transform, "target_patterns", None) or [])]
+            if any("*" in s for s in sources) and not any("*" in t for t in targets):
+                return True, f"{parent} packs a modulelist, so a save must unpack it"
+
+        return False, f"{parent} does not restructure keys"
+
+    def test_the_aliased_set_is_exactly_what_the_rule_selects(self):
+        """No model is in this map by hand-picking, and none is missing."""
+        selected = {mt for mt in self._text_submodel_types() if self._alias_verdict(mt)[0]}
+        aliased = {
+            mt
+            for mt in self._text_submodel_types()
+            if mt in _MODEL_TO_CONVERSION_PATTERN and mt not in self.BORROWS_A_SIBLING_PATTERN
+        }
+        self.assertEqual(
+            selected,
+            aliased,
+            "the rule and the map disagree; a *_text sub-model whose parent packs a "
+            "modulelist needs an entry in _MODEL_TO_CONVERSION_PATTERN",
+        )
+
+    def test_every_unaliased_text_submodel_has_a_mechanical_reason(self):
+        """The exclusions are derived, not asserted, so they stay true."""
+        for model_type in self._text_submodel_types():
+            if model_type in _MODEL_TO_CONVERSION_PATTERN:
+                continue
+            with self.subTest(model_type=model_type):
+                needs, reason = self._alias_verdict(model_type)
+                self.assertFalse(needs, f"{model_type} needs an alias: {reason}")
+
+    def test_an_aliased_text_submodel_inherits_its_base_rules(self):
+        """The alias has to actually deliver the base's rules to the child.
+
+        Containment rather than equality: a sub-model can legitimately pick up
+        extra rules from a class-based mapping on top of the aliased ones --
+        `qwen3_5_moe_text` borrows `qwen3_5_text`'s single rule and adds the two
+        expert-packing rules its own class registers.
+        """
+
+        def rule_signatures(mapping):
+            return {
+                (
+                    tuple(str(s) for s in (getattr(t, "source_patterns", None) or [])),
+                    tuple(str(x) for x in (getattr(t, "target_patterns", None) or [])),
+                )
+                for t in mapping
+            }
+
+        for model_type in self._text_submodel_types():
+            base = _MODEL_TO_CONVERSION_PATTERN.get(model_type)
+            if base is None:
+                continue
+            with self.subTest(model_type=model_type, base=base):
+                mapping = get_checkpoint_conversion_mapping(model_type)
+                self.assertTrue(mapping, "the alias is only useful if the base has rules")
+                self.assertLessEqual(
+                    rule_signatures(get_checkpoint_conversion_mapping(base)),
+                    rule_signatures(mapping),
+                    f"{model_type} does not inherit every rule from {base}",
+                )
+
+    def test_a_standalone_moe_text_submodel_saves_unpacked_experts(self):
+        """The behaviour the alias exists for, end to end.
+
+        Without the entry this writes `mlp.experts.gate_up_proj` -- the packed
+        tensor the module holds in memory -- under a name no external loader
+        expects. With it, the experts come back out as `mlp.experts.N.*`.
+        """
+        from transformers.models.glm4v_moe.configuration_glm4v_moe import Glm4vMoeTextConfig
+        from transformers.models.glm4v_moe.modeling_glm4v_moe import Glm4vMoeTextModel
+
+        config = Glm4vMoeTextConfig(
+            hidden_size=32,
+            intermediate_size=32,
+            moe_intermediate_size=16,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            n_routed_experts=4,
+            n_shared_experts=1,
+            num_experts_per_tok=2,
+            first_k_dense_replace=1,
+            vocab_size=99,
+            head_dim=8,
+        )
+        self.assertEqual(config.model_type, "glm4v_moe_text")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            Glm4vMoeTextModel(config).save_pretrained(tmp_dir, safe_serialization=True)
+            saved = safe_load_file(os.path.join(tmp_dir, "model.safetensors"))
+
+        routed = [key for key in saved if ".mlp.experts." in key]
+        self.assertTrue(routed, "the probe config produced no routed experts")
+        for key in routed:
+            self.assertRegex(
+                key,
+                r"\.mlp\.experts\.\d+\.(gate_proj|up_proj|down_proj)\.weight$",
+                "routed experts were saved packed, so the alias did not apply",
+            )
 
 
 if __name__ == "__main__":
