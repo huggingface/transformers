@@ -165,6 +165,65 @@ outputs = method.execute(list(inputs.values()))
 </hfoption>
 </hfoptions>
 
+## MLX causal-LM export
+
+Use `backend="mlx"` to export a nonquantized causal LM for the ExecuTorch MLX runtime.
+This is a cache-aware, batch-one, unpadded input-ID path, separate from the generic
+`export_for_generation` decomposition. Both in-graph and runtime-owned off-graph caches are supported.
+
+```python
+import torch
+from transformers import AutoModelForCausalLM
+from transformers.exporters import ExecutorchConfig, ExecutorchExporter
+
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", dtype=torch.bfloat16).to("cpu")
+config = ExecutorchConfig(
+    backend="mlx",
+    cache_mode="in-graph",  # or "off-graph"
+    max_context_len=2048,
+    max_seq_len=512,
+    dtype="bf16",
+    logits_to_keep="last",
+    strict=True,
+    prefer_deferred_runtime_asserts_over_guards=True,
+)
+program = ExecutorchExporter().export(model, {}, config=config)
+with open("/tmp/model_mlx.pte", "wb") as output:
+    program.write_to_file(output)
+```
+
+MLX preparation generates sample inputs and explicit bounded shapes. Pass `{}` for sample inputs
+and leave `dynamic_shapes` unset (or empty); nonempty caller specifications are rejected rather
+than silently replaced. The generated shapes apply regardless of the `dynamic` flag, and the
+caller's config is not modified.
+
+The exported forward inputs are `input_ids` (`int64[1, S]`) and `cache_position` (`int64[S]`). Positions
+must be contiguous. `max_seq_len` bounds the number of tokens in one invocation, not the total
+context capacity. If it is `None`, preparation uses the context limit capped by a configured sliding
+window. Explicit bounds exceeding the context or sliding window are rejected for either cache mode.
+
+`logits_to_keep="full"` returns logits for every input token; `"last"` returns only the final token's
+logits. `"selected"` adds a rank-one int64 `logits_to_keep` input indexing tokens in the current input
+sequence. Its length has an independent bound; selecting logits does not shorten cache writes.
+
+In-graph mode installs MLX static/ring cache buffers inside the exported model. Off-graph mode emits
+cache-update/attention operations and versioned plus legacy cache metadata; execution requires the
+runner to provide the runtime-owned cache. Tracing uses the operator's fake implementation and does
+not require a live runtime cache.
+
+The loaded model must be on CPU and match `dtype` (`"fp32"`, `"fp16"`, or `"bf16"`). Preparation does
+not move or cast it. It sets evaluation mode and, for in-graph mode, enables caching and chooses
+static generation caching while preserving `generation_config.cache_config`. These preparation
+changes persist; preparation is not transactional. Temporary attention/mask registrations and
+attention selection are restored even when capture or lowering fails.
+
+A compatible ExecuTorch installation must provide the MLX backend and LLM cache/export helpers;
+matching source checkouts may be needed while these APIs evolve. The current ExecuTorch metadata
+package also imports TorchAO transitively, even for nonquantized export. MLX dependencies are loaded
+only when this backend is selected. Running the artifact requires an ExecuTorch build with the MLX
+delegate and its Apple Silicon/Metal runtime requirements. Quantization, hidden-state taps, and
+multi-method speculative-decoding export are not part of this integration.
+
 ## Dynamic shapes
 
 Passing `dynamic=True` marks every tensor

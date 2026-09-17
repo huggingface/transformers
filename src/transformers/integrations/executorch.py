@@ -11,6 +11,9 @@
 # specific language governing permissions and limitations under the License.
 
 import logging
+import sys
+from contextlib import contextmanager
+from dataclasses import dataclass
 from itertools import zip_longest
 
 import torch
@@ -463,6 +466,384 @@ def get_head_shapes(config) -> tuple[int | list[int], int | list[int]]:
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
 
     return num_heads, head_dim
+
+
+def _positive_int(name, value):
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(f"{name} must be a positive integer")
+    return value
+
+
+@dataclass(frozen=True)
+class _CacheLayout:
+    """Owner geometry plus full-decoder attention windows and cache IDs."""
+
+    kv_heads: tuple[int, ...]
+    head_dims: tuple[int, ...]
+    windows: tuple[int, ...]
+    cache_ids: tuple[int, ...]
+
+    @property
+    def layer_configs(self):
+        return [
+            {"num_kv_heads": heads, "head_dim": dim, "window_size": window}
+            for heads, dim, window in zip(self.kv_heads, self.head_dims, self.windows)
+        ]
+
+
+def _resolve_cache_layout(text_config):
+    """Resolve effective per-layer settings once, without reading heterogeneous globals."""
+    count = _positive_int("num_hidden_layers", text_config.num_hidden_layers)
+    shared = getattr(text_config, "num_kv_shared_layers", 0)
+    if isinstance(shared, bool) or not isinstance(shared, int) or not 0 <= shared < count:
+        raise ValueError("num_kv_shared_layers must be an integer in [0, num_hidden_layers)")
+    owner_count = count - shared
+    per_layer = getattr(text_config, "per_layer_config", None)
+    layer_configs = [per_layer[i] if per_layer is not None else text_config for i in range(count)]
+    layer_types = getattr(text_config, "layer_types", None)
+    if layer_types is None:
+        layer_types = [
+            "sliding_attention" if getattr(layer, "sliding_window", None) is not None else "full_attention"
+            for layer in layer_configs
+        ]
+    else:
+        layer_types = list(layer_types)
+    if len(layer_types) != count or any(t not in ("full_attention", "sliding_attention") for t in layer_types):
+        raise ValueError("Expected one full_attention or sliding_attention type per decoder layer")
+    windows = [
+        _positive_int(f"layer {i} sliding_window", getattr(layer, "sliding_window", None))
+        if layer_types[i] == "sliding_attention"
+        else 0
+        for i, layer in enumerate(layer_configs)
+    ]
+    kv_heads, head_dims = get_head_shapes(text_config)
+    kv_heads = [kv_heads] * owner_count if isinstance(kv_heads, int) else list(kv_heads)
+    head_dims = [head_dims] * owner_count if isinstance(head_dims, int) else list(head_dims)
+    if len(kv_heads) != owner_count or len(head_dims) != owner_count:
+        raise ValueError("KV head geometry must match the nonshared cache prefix")
+    for value in kv_heads + head_dims:
+        _positive_int("KV head geometry", value)
+    donors = {layer_type: i for i, layer_type in enumerate(layer_types[:owner_count])}
+    cache_ids = list(range(owner_count))
+    for i in range(owner_count, count):
+        donor = donors.get(layer_types[i])
+        if donor is None:
+            raise ValueError("Every shared-KV layer must have an earlier nonshared donor of the same attention type")
+        layer = layer_configs[i]
+        heads = getattr(layer, "num_key_value_heads", layer.num_attention_heads)
+        dim = getattr(layer, "head_dim", layer.hidden_size // layer.num_attention_heads)
+        _positive_int("Shared KV head count", heads)
+        _positive_int("Shared KV head dimension", dim)
+        if (heads, dim, windows[i]) != (kv_heads[donor], head_dims[donor], windows[donor]):
+            raise ValueError(f"Shared-KV layer {i} must match donor {donor}'s head geometry and sliding window")
+        cache_ids.append(donor)
+    return _CacheLayout(tuple(kv_heads), tuple(head_dims), tuple(windows), tuple(cache_ids))
+
+
+def _cache_layout(text_config):
+    """Return cache-owner geometry from the shared full-decoder resolver."""
+    layout = _resolve_cache_layout(text_config)
+    return list(layout.kv_heads), list(layout.head_dims), list(layout.windows[: len(layout.kv_heads)])
+
+
+def _export_inputs(max_seq_len, logits_to_keep):
+    length = min(3, max_seq_len)
+    seq_dim = torch.export.Dim("seq_length_dim", min=1, max=max_seq_len) if max_seq_len > 1 else None
+    inputs = {
+        "input_ids": torch.zeros((1, length), dtype=torch.long, device="cpu"),
+        "cache_position": torch.arange(length, dtype=torch.long, device="cpu"),
+    }
+    shapes = {
+        "input_ids": {1: seq_dim} if seq_dim is not None else None,
+        "cache_position": {0: seq_dim} if seq_dim is not None else None,
+    }
+    if logits_to_keep == "selected":
+        inputs["logits_to_keep"] = torch.arange(min(2, length), dtype=torch.int64, device="cpu")
+        shapes["logits_to_keep"] = (
+            {0: torch.export.Dim("logits_to_keep_dim", min=1, max=max_seq_len)} if max_seq_len > 1 else None
+        )
+    return inputs, shapes
+
+
+class _LogitsToKeepMixin:
+    def _logits_kwargs(self, logits_to_keep):
+        if self.logits_to_keep_mode == "full":
+            return {}
+        if self.logits_to_keep_mode == "last":
+            return {"logits_to_keep": 1}
+        if logits_to_keep is None or logits_to_keep.dtype != torch.int64 or logits_to_keep.dim() != 1:
+            raise ValueError("selected logits_to_keep requires an int64[K] tensor")
+        return {"logits_to_keep": logits_to_keep}
+
+
+class _CacheAndOutputMixin(_LogitsToKeepMixin):
+    """Forward through a live cache supplied by the concrete wrapper's _get_cache."""
+
+    def forward(self, input_ids=None, inputs_embeds=None, cache_position=None, logits_to_keep=None):
+        return self._forward_with_cache(self._get_cache(), input_ids, inputs_embeds, cache_position, logits_to_keep)
+
+    def _forward_with_cache(self, cache, input_ids, inputs_embeds, cache_position, logits_to_keep):
+        if cache_position is not None:
+            for layer in cache.layers:
+                if hasattr(layer, "cumulative_length"):
+                    layer.cumulative_length.copy_(cache_position[0])
+        # Cache occupancy is not the absolute position after a restart or ring wrap.
+        position_ids = cache_position.unsqueeze(0) if cache_position is not None else None
+        return self.model(
+            input_ids=input_ids,
+            inputs_embeds=inputs_embeds,
+            cache_position=cache_position,
+            position_ids=position_ids,
+            attention_mask=None,
+            past_key_values=cache,
+            use_cache=True,
+            **self._logits_kwargs(logits_to_keep),
+        ).logits
+
+
+def _hf_cache_buffer_bindings(wrapper, cache):
+    """Resolve native HF cache destinations against the wrapper's current buffers."""
+    return [
+        (vars(layer), attribute, getattr(wrapper, f"{buffer_name}_{index}"))
+        for index, layer in enumerate(cache.layers)
+        for attribute, buffer_name in (
+            ("keys", "key_cache"),
+            ("values", "value_cache"),
+            ("cumulative_length", "cumulative_length"),
+        )
+    ]
+
+
+@contextmanager
+def _cache_buffer_scope(wrapper, cache):
+    """Rebind live cache references for stateless capture, preserving tensor mutations."""
+    # Resolve all destinations and substituted tensors inside forward, before any mutation.
+    bindings = list(wrapper._cache_buffer_bindings(wrapper, cache))
+    previous = [(mapping, name, mapping[name]) for mapping, name, _ in bindings]
+    try:
+        for mapping, name, tensor in bindings:
+            mapping[name] = tensor
+        yield
+    finally:
+        for mapping, name, tensor in reversed(previous):
+            mapping[name] = tensor
+
+
+@contextmanager
+def _in_graph_cache_capture_scope(wrapper, *, strict):
+    """Enable per-forward buffer rebinding only for non-strict capture.
+
+    This is not device/dtype synchronization and does not isolate concurrent forwards
+    sharing the same cache. Only references and the capture flag are restored on exit.
+    """
+    if strict:
+        yield
+        return
+    previous = wrapper._bind_cache_buffers
+    try:
+        wrapper._bind_cache_buffers = True
+        yield
+    finally:
+        wrapper._bind_cache_buffers = previous
+
+
+class _InGraphCacheAndOutput(_CacheAndOutputMixin, torch.nn.Module):
+    """Cache-owning wrapper with backend-supplied capture-time buffer bindings.
+
+    An optional native cache must contain initialized `StaticLayer` instances. Existing
+    tensors are registered without allocation or conversion; sliding and recurrent layers
+    require separate export preparation. Alternatively, a backend may install its cache and
+    register buffers after construction, supplying its own binding resolver.
+
+    Resolvers return (destination mapping, slot name, replacement tensor) triples using the
+    live cache and current wrapper buffers. Use `_in_graph_cache_capture_scope` around capture
+    to enable rebinding for non-strict export.
+    """
+
+    _bind_cache_buffers = False
+
+    def __init__(self, model, logits_to_keep, *, cache=None, cache_buffer_bindings=_hf_cache_buffer_bindings):
+        super().__init__()
+        self.model = model
+        self.logits_to_keep_mode = logits_to_keep
+        self.cache = cache
+        self._cache_buffer_bindings = cache_buffer_bindings
+        if cache is not None:
+            if not isinstance(cache, StaticCache) or not cache.layers:
+                raise ValueError("Expected a nonempty initialized native StaticCache")
+            buffers = []
+            for index, layer in enumerate(cache.layers):
+                if type(layer) is not StaticLayer or not layer.is_initialized:
+                    raise ValueError("Native cache registration requires initialized StaticLayer instances")
+                for attribute, buffer_name in (
+                    ("keys", "key_cache"),
+                    ("values", "value_cache"),
+                    ("cumulative_length", "cumulative_length"),
+                ):
+                    tensor = getattr(layer, attribute, None)
+                    if not isinstance(tensor, torch.Tensor):
+                        raise ValueError(f"Cache layer {index}.{attribute} must be an initialized tensor")
+                    buffers.append((f"{buffer_name}_{index}", tensor))
+            for name, tensor in buffers:
+                self.register_buffer(name, tensor, persistent=False)
+
+    def _get_cache(self):
+        return self.cache
+
+    def forward(self, input_ids=None, inputs_embeds=None, cache_position=None, logits_to_keep=None):
+        cache = self._get_cache()
+        if cache is None:
+            raise ValueError("Install and register a cache before forwarding through the in-graph wrapper")
+        if self._bind_cache_buffers:
+            with _cache_buffer_scope(self, cache):
+                return self._forward_with_cache(cache, input_ids, inputs_embeds, cache_position, logits_to_keep)
+        return self._forward_with_cache(cache, input_ids, inputs_embeds, cache_position, logits_to_keep)
+
+
+class _OffGraphWrapper(_LogitsToKeepMixin, torch.nn.Module):
+    def __init__(self, model, logits_to_keep):
+        super().__init__()
+        self.model = model
+        self.logits_to_keep_mode = logits_to_keep
+
+    def forward(self, input_ids, cache_position, logits_to_keep=None):
+        assert input_ids.shape[0] == 1, "Off-graph cache export supports batch size one"
+        return self.model(
+            input_ids=input_ids,
+            cache_position=cache_position,
+            position_ids=cache_position.unsqueeze(0),
+            use_cache=False,
+            past_key_values=None,
+            **self._logits_kwargs(logits_to_keep),
+        ).logits
+
+
+@contextmanager
+def _attention_scope(target, name, attention, mask):
+    """Temporarily select attention and masking callbacks for export.
+
+    Nested scopes restore their own entry state. This is not isolation from
+    unrelated concurrent eager forwards, which also see HF's global registries.
+    """
+    from ..masking_utils import ALL_MASK_ATTENTION_FUNCTIONS, AttentionMaskInterface
+    from ..modeling_utils import ALL_ATTENTION_FUNCTIONS, AttentionInterface
+
+    missing = object()
+    configs, seen = [], set()
+    pending = [getattr(module, "config", None) for module in target.modules()]
+    fields = ("_attn_implementation_internal", "_attn_implementation", "_attn_was_changed")
+    while pending:
+        config = pending.pop()
+        if config is None or id(config) in seen:
+            continue
+        seen.add(id(config))
+        configs.append((config.__dict__, {key: config.__dict__.get(key, missing) for key in fields}))
+        pending.extend(getattr(config, key, None) for key in getattr(config, "sub_configs", ()))
+
+    registries = [ALL_ATTENTION_FUNCTIONS, ALL_MASK_ATTENTION_FUNCTIONS]
+    # Models may instantiate local interfaces in their defining Python module.
+    # Include inherited definitions and instance attributes, without importing anything.
+    namespaces, seen = [], set()
+    for module in target.modules():
+        namespaces.append(vars(module))
+        for cls in type(module).__mro__:
+            if cls in seen:
+                continue
+            seen.add(cls)
+            namespaces.append(vars(cls))
+            defining_module = sys.modules.get(cls.__module__)
+            if defining_module is not None and defining_module not in seen:
+                seen.add(defining_module)
+                namespaces.append(vars(defining_module))
+    for namespace in namespaces:
+        registries.extend(v for v in namespace.values() if isinstance(v, (AttentionInterface, AttentionMaskInterface)))
+    registries = list({id(registry): registry for registry in registries}.values())
+    mappings, seen = [], set()
+    for registry in registries:
+        for mapping in (registry._global_mapping, registry._local_mapping):
+            if id(mapping) not in seen:
+                seen.add(id(mapping))
+                mappings.append((mapping, mapping.get(name, missing)))
+    try:
+        for registry in registries:
+            implementation = attention if isinstance(registry, AttentionInterface) else mask
+            registry.register(name, implementation)
+            # A local override otherwise shadows the registered global function.
+            if name in registry._local_mapping:
+                registry[name] = implementation
+        target.set_attn_implementation(name)
+        if getattr(target.config, "_attn_implementation", None) != name:
+            raise ValueError(f"Model did not select {name!r}; export requires HF AttentionInterface support")
+        yield
+    finally:
+        for mapping, snapshot in reversed(configs):
+            for key, value in snapshot.items():
+                if value is missing:
+                    mapping.pop(key, None)
+                else:
+                    mapping[key] = value
+        for mapping, value in reversed(mappings):
+            if value is missing:
+                mapping.pop(name, None)
+            else:
+                mapping[name] = value
+
+
+def _attention_mask(*args, **kwargs):
+    return None
+
+
+def _check_attention_options(dropout, softcap, head_mask):
+    if dropout:
+        raise ValueError("Cache-aware export attention does not support dropout")
+    if softcap is not None:
+        raise ValueError("Cache-aware export attention does not support softcap")
+    if head_mask is not None:
+        raise ValueError("Cache-aware export attention does not support head_mask")
+
+
+def _off_graph_cache_id(module):
+    if not getattr(module, "is_kv_shared_layer", False):
+        return module.layer_idx
+    config = module.config
+    if hasattr(config, "get_text_config"):
+        config = config.get_text_config()
+    first_shared = config.num_hidden_layers - getattr(config, "num_kv_shared_layers", 0)
+    layer_types = getattr(config, "layer_types", None)
+    if layer_types is None:
+        return first_shared - 1
+    donors = list(layer_types[:first_shared])
+    return len(donors) - 1 - donors[::-1].index(layer_types[module.layer_idx])
+
+
+def _off_graph_attention_forward(
+    module,
+    query,
+    key,
+    value,
+    attention_mask,
+    position_ids=None,
+    scaling=None,
+    softcap=None,
+    head_mask=None,
+    _cache_ids=None,
+    **kwargs,
+):
+    _check_attention_options(kwargs.get("dropout"), softcap, head_mask)
+    assert position_ids is not None
+    assert position_ids is not None, "position_ids must be provided for off-graph cache placement"
+    assert scaling is not None, "scaling must be provided by the attention module"
+    # Eager execution needs ET's active cache; strict capture uses its fake kernel.
+    output = torch.ops.kvcache.update_and_attend(
+        query,
+        key,
+        value,
+        position_ids[0].reshape(-1, 1),
+        layer_id=_off_graph_cache_id(module) if _cache_ids is None else _cache_ids[module.layer_idx],
+        scale=scaling,
+        out_dtype=query.dtype,
+    )
+    return output.transpose(1, 2).contiguous(), None
 
 
 class TorchExportableModuleWithStaticCache(torch.nn.Module):
