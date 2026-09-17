@@ -70,22 +70,6 @@ class Cosmos3EdgeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         self.assertEqual(output.image_grid_thw.shape[0], batch_size)
         self.assertEqual(tuple(output.pixel_values.shape), (expected_num_patches, expected_patch_width))
 
-    def test_image_processor_properties(self):
-        """Cover the patch and merge settings added by the Edge image processor."""
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            for attribute in (
-                "do_resize",
-                "size",
-                "do_normalize",
-                "image_mean",
-                "image_std",
-                "do_convert_rgb",
-                "patch_size",
-                "merge_size",
-            ):
-                self.assertTrue(hasattr(image_processor, attribute))
-
     def test_image_processor_from_dict_with_kwargs(self):
         """Ensure Edge's pixel-budget size dictionary can be overridden on loading."""
         for image_processing_class in self.image_processor_classes.values():

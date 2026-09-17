@@ -75,19 +75,6 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def image_processor_dict(self):
         return self.image_processing_tester.prepare_image_processor_dict()
 
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "downsample_factor"))
-            self.assertTrue(hasattr(image_processing, "min_tiles"))
-            self.assertTrue(hasattr(image_processing, "max_tiles"))
-            self.assertTrue(hasattr(image_processing, "use_thumbnail"))
-            self.assertTrue(hasattr(image_processing, "min_image_tokens"))
-            self.assertTrue(hasattr(image_processing, "max_image_tokens"))
-            self.assertTrue(hasattr(image_processing, "encoder_patch_size"))
-            self.assertTrue(hasattr(image_processing, "tile_size"))
-            self.assertTrue(hasattr(image_processing, "max_pixels_tolerance"))
-
     @require_vision
     def test_smart_resize(self):
         # verify that smart resize output dims are divisible by encoder_patch_size * downsample_factor

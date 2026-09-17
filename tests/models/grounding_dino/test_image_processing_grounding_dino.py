@@ -72,17 +72,6 @@ class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessin
         return self.image_processing_tester.prepare_image_processor_dict()
 
     # Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTest.test_image_processor_properties with DeformableDetr->GroundingDino
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "do_rescale"))
-            self.assertTrue(hasattr(image_processing, "do_pad"))
-            self.assertTrue(hasattr(image_processing, "size"))
-
     # Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTest.test_image_processor_from_dict_with_kwargs with DeformableDetr->GroundingDino
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_classes.values():

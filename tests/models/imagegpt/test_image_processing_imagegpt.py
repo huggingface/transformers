@@ -96,14 +96,6 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             output_eager.input_ids.float(), output_compiled.input_ids.float(), atol=1e-4, rtol=1e-4, mean_atol=1e-5
         )
 
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "clusters"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)

@@ -107,12 +107,6 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         for backend_name in backend_names[1:]:
             self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].flattened_patches)
 
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processor, "do_normalize"))
-            self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
-
     def test_expected_patches(self):
         dummy_image = self.image_processing_tester.prepare_dummy_image()
 
@@ -335,12 +329,6 @@ class Pix2StructImageProcessingTestFourChannels(ImageProcessingTestMixin, unitte
     @property
     def image_processor_dict(self):
         return self.image_processing_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processor, "do_normalize"))
-            self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
 
     def test_call_pil(self):
         for image_processing_class in self.image_processor_classes.values():

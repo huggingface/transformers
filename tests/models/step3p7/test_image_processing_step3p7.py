@@ -66,18 +66,6 @@ class Step3p7ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def image_processor_dict(self):
         return self.image_processing_tester.prepare_image_processor_dict()
 
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "patch_size"))
-            self.assertTrue(hasattr(image_processing, "do_rescale"))
-            self.assertTrue(hasattr(image_processing, "rescale_factor"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-
     def _processor(self):
         image_processing_class = next(iter(self.image_processor_classes.values()))
         return image_processing_class(**self.image_processor_dict)

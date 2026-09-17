@@ -142,12 +142,6 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             output_eager.flattened_patches, output_compiled.flattened_patches, atol=1e-4, rtol=1e-4, mean_atol=1e-5
         )
 
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processor, "do_normalize"))
-            self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
-
     def test_expected_patches(self):
         dummy_image = self.image_processing_tester.prepare_dummy_image()
 
@@ -343,12 +337,6 @@ class Kosmos2_5ImageProcessingTestFourChannels(ImageProcessingTestMixin, unittes
     @unittest.skip(reason="Kosmos2_5ImageProcessor does not support 4 channels yet")
     def test_can_compile_torchvision_backend(self):
         return super().test_can_compile_torchvision_backend()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processor, "do_normalize"))
-            self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
 
     def test_call_pil(self):
         # create random PIL images

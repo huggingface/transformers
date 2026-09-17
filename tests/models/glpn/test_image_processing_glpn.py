@@ -83,18 +83,6 @@ class GLPNImageProcessingTester(ImageProcessingTester):
 class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = GLPNImageProcessingTester
 
-    def setUp(self):
-        super().setUp()
-        self.image_processor_dict = self.image_processing_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size_divisor"))
-            self.assertTrue(hasattr(image_processing, "resample"))
-            self.assertTrue(hasattr(image_processing, "do_rescale"))
-
     def test_call_pil(self):
         # Initialize image_processing
         for image_processing_class in self.image_processor_classes.values():

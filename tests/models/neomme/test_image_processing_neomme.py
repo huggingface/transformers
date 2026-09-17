@@ -89,14 +89,6 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def image_processor_dict(self):
         return self.image_processing_tester.prepare_image_processor_dict()
 
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            for attribute in ("do_resize", "do_rescale", "rescale_factor", "do_normalize", "patch_size"):
-                self.assertTrue(hasattr(image_processing, attribute))
-            for attribute in ("max_side", "size"):
-                self.assertTrue(hasattr(image_processing, attribute))
-
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)

@@ -79,10 +79,6 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
 
     image_processing_tester_class = FuyuImageProcessingTester
 
-    def setUp(self):
-        super().setUp()
-        self.image_processor_dict = self.image_processing_tester.prepare_image_processor_dict()
-
     def test_call_pil(self):
         """Override to handle Fuyu's custom output structure"""
         for image_processing_class in self.image_processor_classes.values():
@@ -190,19 +186,6 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
         self._assert_tensors_equivalence(
             output_eager.images[0][0], output_compiled.images[0][0], atol=1e-4, rtol=1e-4, mean_atol=1e-5
         )
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processor, "do_resize"))
-            self.assertTrue(hasattr(image_processor, "size"))
-            self.assertTrue(hasattr(image_processor, "do_pad"))
-            self.assertTrue(hasattr(image_processor, "do_normalize"))
-            self.assertTrue(hasattr(image_processor, "image_mean"))
-            self.assertTrue(hasattr(image_processor, "image_std"))
-            self.assertTrue(hasattr(image_processor, "do_rescale"))
-            self.assertTrue(hasattr(image_processor, "rescale_factor"))
-            self.assertTrue(hasattr(image_processor, "patch_size"))
 
     def test_patches(self):
         """Test that patchify_image produces the expected number of patches."""

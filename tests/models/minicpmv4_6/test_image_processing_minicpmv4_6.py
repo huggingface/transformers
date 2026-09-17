@@ -135,20 +135,6 @@ class MiniCPMV4_6ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
     def test_call_numpy_4_channels(self):
         pass
 
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_rescale"))
-            self.assertTrue(hasattr(image_processing, "rescale_factor"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "max_slice_nums"))
-            self.assertTrue(hasattr(image_processing, "scale_resolution"))
-            self.assertTrue(hasattr(image_processing, "patch_size"))
-            self.assertTrue(hasattr(image_processing, "slice_mode"))
-            self.assertTrue(hasattr(image_processing, "downsample_mode"))
-
     def test_call_returns_expected_keys(self):
         for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)

@@ -78,18 +78,6 @@ class HunYuanVLImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(tuple(output.pixel_values.shape), expected_output_shape)
         self.assertTrue((output.image_grid_thw == expected_grid_thw).all())
 
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-            self.assertTrue(hasattr(image_processing, "patch_size"))
-            self.assertTrue(hasattr(image_processing, "temporal_patch_size"))
-            self.assertTrue(hasattr(image_processing, "merge_size"))
-
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)

@@ -67,19 +67,6 @@ class Gemma4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def image_processor_dict(self):
         return self.image_processing_tester.prepare_image_processor_dict()
 
-    def test_image_processor_properties(self):
-        """Test that all expected attributes are present."""
-        for image_processing_class in self.image_processor_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-            self.assertTrue(hasattr(image_processing, "patch_size"))
-            self.assertTrue(hasattr(image_processing, "max_soft_tokens"))
-            self.assertTrue(hasattr(image_processing, "pooling_kernel_size"))
-
     def test_image_processor_defaults(self):
         """Test default parameter values for Gemma4 matching VARASP_SL280_K3."""
         for image_processing_class in self.image_processor_classes.values():

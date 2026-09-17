@@ -55,18 +55,6 @@ class PerceptionLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
     def image_processor_dict(self):
         return self.image_processing_tester.prepare_image_processor_dict()
 
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "tile_size"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-            self.assertTrue(hasattr(image_processing, "max_num_tiles"))
-            self.assertTrue(hasattr(image_processing, "vision_input_type"))
-
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)

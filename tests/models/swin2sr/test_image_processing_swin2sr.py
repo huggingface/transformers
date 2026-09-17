@@ -65,14 +65,6 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def image_processor_dict(self):
         return self.image_processing_tester.prepare_image_processor_dict()
 
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_rescale"))
-            self.assertTrue(hasattr(image_processing, "rescale_factor"))
-            self.assertTrue(hasattr(image_processing, "do_pad"))
-            self.assertTrue(hasattr(image_processing, "size_divisor"))
-
     def calculate_expected_size(self, image):
         old_height, old_width = get_image_size(image)
         size = self.image_processing_tester.size_divisor

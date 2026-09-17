@@ -352,6 +352,10 @@ class ImageProcessingTestMixin:
     def image_processor_classes(self):
         return self.image_processing_tester.image_processor_classes
 
+    @property
+    def image_processor_dict(self):
+        return self.image_processing_tester.prepare_image_processor_dict()
+
     def _assert_tensors_equivalence(self, tensor1, tensor2, atol=1e-1, rtol=1e-3, mean_atol=5e-3):
         """Assert that two tensors are equivalent within specified tolerances."""
         torch.testing.assert_close(tensor1, tensor2, atol=atol, rtol=rtol)
@@ -398,6 +402,25 @@ class ImageProcessingTestMixin:
         reference_encoding = encodings[reference_backend].pixel_values
         for backend_name in backend_names[1:]:
             self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].pixel_values)
+
+    def test_image_processor_has_attributes(self):
+        """Check that processor class registers input kwargs as attributes"""
+        for image_processor_class in self.image_processor_classes.values():
+            image_processor = image_processor_class(**self.image_processor_dict)
+            for key, expected_value in self.image_processor_dict.items():
+                # Legacy pixel bounds are stored in size rather than as separate attributes.
+                if key in ("min_pixels", "max_pixels"):
+                    size_key = "shortest_edge" if key == "min_pixels" else "longest_edge"
+                    value = image_processor.size[size_key]
+                else:
+                    value = getattr(image_processor, key)
+
+                if isinstance(expected_value, np.ndarray):
+                    np.testing.assert_array_equal(value, expected_value)
+                elif isinstance(expected_value, (list, tuple)):
+                    self.assertSequenceEqual(value, expected_value)
+                else:
+                    self.assertEqual(value, expected_value)
 
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processor_classes.values():
