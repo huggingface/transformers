@@ -1054,61 +1054,6 @@ def check_target_module_exists(optim_target_modules, key: str, return_is_regex: 
     return target_module_found
 
 
-def apply_weight_conversion(model, state_dict):
-    """
-    Apply the conversion mapping that was used to load the model with `from_pretrained`, or the default one
-    if the model was created in another way and is part of the default mappings, to a state dict without loading
-    it into the model.
-    """
-    from .core_model_loading import WeightConverter, WeightRenaming, dot_natural_key, rename_source_key
-
-    weight_conversions = getattr(model, "_weight_conversions", None)
-    # In this case, the model was not created with `from_pretrained` -> let's check if it's in the hardcoded
-    # mappings, and recreate the mapping from there if it is
-    if weight_conversions is None:
-        from .conversion_mapping import get_model_conversion_mapping
-
-        # Do not reload with the legacy renaming, if present
-        weight_conversions = get_model_conversion_mapping(model, add_legacy=False)
-        weight_conversions = weight_conversions if len(weight_conversions) > 0 else None
-
-    # We did not find any operations to perform -> quick escape
-    if weight_conversions is None:
-        return state_dict
-
-    renamings = [entry for entry in weight_conversions if isinstance(entry, WeightRenaming)]
-    converters = [entry for entry in weight_conversions if isinstance(entry, WeightConverter)]
-    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
-    model_keys = model.state_dict().keys()
-
-    conversion_mapping = {}
-    state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
-    for original_key, tensor in state_dict:
-        # Rename the key according to all renaming pattern and optional weight converter patterns
-        renamed_key, source_pattern = rename_source_key(original_key, renamings, converters)
-        if renamed_key not in model_keys and original_key in model_keys:
-            # Key should probably not have been renamed
-            renamed_key, source_pattern = original_key, None
-        if source_pattern is not None:
-            new_converter = copy.deepcopy(pattern_to_converter[source_pattern])
-            # each target key gets its own converter instance
-            mapping = conversion_mapping.setdefault(renamed_key, new_converter)
-        else:
-            mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
-            source_pattern = original_key
-
-        mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
-
-    new_state_dict = {}
-    for first_param_name, converter in conversion_mapping.items():
-        realized_value = converter.convert(first_param_name, model=model, config=model.config)
-        for target_name, param in realized_value.items():
-            param = param[0] if isinstance(param, list) else param
-            new_state_dict[target_name] = param
-
-    return new_state_dict
-
-
 def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     """
     This is the same as
@@ -1129,6 +1074,8 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
             - `missing_keys` is a list of str containing the missing keys
             - `unexpected_keys` is a list of str containing the unexpected keys
     """
+    from .conversion_mapping import get_model_conversion_mapping
+    from .integrations.deepspeed import _apply_weight_conversions_to_state_dict
     from .modeling_utils import PreTrainedModel
 
     # Load the index
@@ -1156,13 +1103,15 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
         check_torch_load_is_safe()
         loader = partial(torch.load, map_location="cpu", weights_only=True)
 
+    # Due to potential many-weights-to-one conversion patterns, we need the whole state_dict at once
     state_dict = {}
     for shard_file in shard_files:
         state_dict.update(loader(os.path.join(folder, shard_file)))
     if isinstance(model, PreTrainedModel):
-        state_dict = apply_weight_conversion(model, state_dict)
+        weight_mapping = getattr(model, "_weight_conversions", None) or get_model_conversion_mapping(model)
+        state_dict = _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping)
 
-    # If strict=True, error before loading the state dict.
+    # If strict=True, error before loading any of the state dicts.
     loaded_keys = state_dict.keys()
     model_keys = model.state_dict().keys()
     missing_keys = [key for key in model_keys if key not in loaded_keys]
