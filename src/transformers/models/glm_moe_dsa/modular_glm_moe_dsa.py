@@ -330,6 +330,11 @@ class GlmMoeDsaDecoderLayer(DeepseekV32DecoderLayer):
 
 class GlmMoeDsaPreTrainedModel(DeepseekV32PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
+    # The indexer returns only indices and the attention its shared top-k, neither is an indexer loss input
+    _can_record_outputs = {
+        "hidden_states": GlmMoeDsaDecoderLayer,
+        "attentions": GlmMoeDsaAttention,
+    }
 
 
 class GlmMoeDsaModel(DeepseekV32Model):

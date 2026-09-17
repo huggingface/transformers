@@ -168,8 +168,9 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         model = DeepseekV32ForCausalLM(config).to(torch_device).train()
         input_ids, attention_mask = inputs["input_ids"], inputs["attention_mask"]
         labels = input_ids.masked_fill(~attention_mask.bool(), -100)
+        valid_queries = attention_mask.bool()
 
-        # Compare the recomputed target against the actual eager attention probabilities.
+        # The indexer returns its top-k indices and their scores, and the scores are recorded as the loss input.
         indexer_outputs = []
         hooks = [
             layer.self_attn.indexer.register_forward_hook(lambda module, args, output: indexer_outputs.append(output))
@@ -178,14 +179,24 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         outputs = model(input_ids, attention_mask=attention_mask, labels=labels, output_attentions=True)
         for hook in hooks:
             hook.remove()
+        self.assertEqual(len(outputs.indexer_scores), config.num_hidden_layers)
+        self.assertEqual(len(outputs.indexer_targets), config.num_hidden_layers)
         reference_loss = 0
-        for (indices, scores), attentions in zip(indexer_outputs, outputs.attentions):
+        for (indices, scores), recorded, target, attentions in zip(
+            indexer_outputs, outputs.indexer_scores, outputs.indexer_targets, outputs.attentions
+        ):
+            self.assertIs(recorded, scores)
+            self.assertEqual(scores.shape, indices.shape)
             indices = indices.long()
-            target = attentions.detach().float().mean(dim=1).gather(-1, indices)
-            log_probs = scores.gather(-1, indices).log_softmax(-1)
+            # The recorded target is the actual eager attention distribution over the selected keys. Padding queries
+            # may see no key at all, in which case their target row is zero and they are excluded from the loss anyway.
+            expected_target = attentions.detach().float().mean(dim=1).gather(-1, indices)
+            torch.testing.assert_close(target[valid_queries], expected_target[valid_queries])
+            # Early queries select masked keys when fewer than topk are visible: the loss clamps their scores.
+            log_probs = scores.clamp_min(torch.finfo(scores.dtype).min).log_softmax(-1)
             kl = torch.nn.functional.kl_div(log_probs, target, reduction="none").sum(-1)
-            reference_loss += kl.masked_fill(~attention_mask.bool(), 0).sum()
-        reference_loss /= config.num_hidden_layers * attention_mask.sum()
+            reference_loss += kl.masked_fill(~valid_queries, 0).sum()
+        reference_loss /= config.num_hidden_layers * valid_queries.sum()
         torch.testing.assert_close(outputs.indexer_loss, reference_loss)
         lm_loss = model.loss_function(logits=outputs.logits, labels=labels, vocab_size=config.vocab_size)
         torch.testing.assert_close(outputs.loss, lm_loss + outputs.indexer_loss)
@@ -207,7 +218,13 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         torch.testing.assert_close(sdpa_outputs.indexer_loss, outputs.indexer_loss)
         disabled_outputs = model(input_ids, attention_mask=attention_mask, labels=labels, output_indexer_loss=False)
         self.assertIsNone(disabled_outputs.indexer_loss)
+        self.assertIsNone(disabled_outputs.indexer_scores)
+        self.assertIsNone(disabled_outputs.indexer_targets)
         torch.testing.assert_close(disabled_outputs.logits, sdpa_outputs.logits)
+        # Either loss input can be recorded on its own, like any other recordable output
+        scores_only = model.model(input_ids, attention_mask=attention_mask, output_indexer_scores=True)
+        self.assertEqual(len(scores_only.indexer_scores), config.num_hidden_layers)
+        self.assertIsNone(scores_only.indexer_targets)
 
     @parameterized.expand([(False,), (True,)])
     def test_indexer_loss_checkpointing(self, use_reentrant):
@@ -225,9 +242,14 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         outputs.loss.backward()
         checkpointed_outputs.loss.backward()
         for (name, parameter), checkpointed_parameter in zip(model.named_parameters(), checkpointed.parameters()):
-            if ".indexer." in name or parameter.grad is not None:
+            if ".indexer." in name and use_reentrant:
+                # Reentrant checkpointing runs the layer under `no_grad`, so the recorded scores carry no graph.
+                self.assertIsNone(checkpointed_parameter.grad, name)
+            elif ".indexer." in name or parameter.grad is not None:
                 self.assertIsNotNone(checkpointed_parameter.grad, name)
                 torch.testing.assert_close(checkpointed_parameter.grad, parameter.grad)
+        if use_reentrant:
+            return
 
         # Warm-up trains only the indexer, with a frozen backbone and no labels.
         checkpointed.zero_grad(set_to_none=True)
@@ -266,7 +288,7 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
             mask = torch.ones_like(padded_ids)
             mask[:, :2] = 0 if left else 1
             mask[:, -2:] = 1 if left else 0
-            torch.testing.assert_close(model.model(padded_ids, attention_mask=mask).indexer_loss, expected)
+            torch.testing.assert_close(model(padded_ids, attention_mask=mask).indexer_loss, expected)
         for mask in (torch.zeros_like(input_ids), torch.zeros_like(causal_mask)):
             outputs = model(input_ids, attention_mask=mask)
             torch.testing.assert_close(outputs.indexer_loss, torch.zeros_like(outputs.indexer_loss))

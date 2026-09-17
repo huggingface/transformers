@@ -165,7 +165,8 @@ class GlmMoeDsaIndexer(nn.Module):
     """
     DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens.
 
-    The indexer uses its own projections, separate from the main attention, to score keys and select top-k tokens.
+    The Indexer has its own lightweight projections (wq_b, wk) separate from the main MLA attention, and scores
+    every query against the cached keys to select the top-k tokens the attention may attend to.
 
     **Cache strategy**: the indexer key cache lives on the per-layer `DynamicIndexedLayer` (or the
     `StaticIndexedLayer` for static caches) inside the shared cache, accessed via
@@ -638,6 +639,7 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
+    # The indexer returns only indices and the attention its shared top-k, neither is an indexer loss input
     _can_record_outputs = {
         "hidden_states": GlmMoeDsaDecoderLayer,
         "attentions": GlmMoeDsaAttention,

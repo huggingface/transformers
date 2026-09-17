@@ -20,6 +20,7 @@
 
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as F
@@ -44,7 +45,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_axk2 import AXK2Config
 
 
@@ -195,7 +196,8 @@ class AXK2Indexer(nn.Module):
     """
     DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens.
 
-    The indexer uses its own projections, separate from the main attention, to score keys and select top-k tokens.
+    The Indexer has its own lightweight projections (wq_b, wk) separate from the main MLA attention, and scores
+    every query against the cached keys to select the top-k tokens the attention may attend to.
 
     **Cache strategy**: the indexer key cache lives on the per-layer `DynamicIndexedLayer` (or the
     `StaticIndexedLayer` for static caches) inside the shared cache, accessed via
@@ -228,54 +230,71 @@ class AXK2Indexer(nn.Module):
         attention_mask: torch.Tensor,
         position_ids: torch.Tensor,  # Kept for BC
         past_key_values: Cache | None = None,
-        output_scores: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Score keys and select top-k tokens for each query.
-
-        The reference indexer uses an orthogonal Hadamard transform and FP8 scoring. Here the dot products are
-        computed directly in FP32.
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        # Top-k has no gradient; only the distillation loss trains the indexer.
-        with torch.set_grad_enabled(torch.is_grad_enabled() and output_scores):
-            # The inputs come from the main model, which is trained by the language modeling loss only: detach them so
-            # the indexer loss reaches no parameter but the indexer's.
-            hidden_states, q_resid = hidden_states.detach(), q_resid.detach()
-            batch_size, seq_len, _ = hidden_states.shape
-            cos, sin = position_embeddings
-            q = self.wq_b(q_resid)  # [B, S, H*D]
-            q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
-            q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+        Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
 
-            k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
-            k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+        This is the bf16 equivalent of the reference Indexer which uses `rotate_activation` (Hadamard transform)
+        and `fp8_index` (FP8 quantized scoring kernel). Since the Hadamard transform is orthogonal (dot products
+        are preserved: Hq·Hk = q·k), and FP8 quantization is a precision optimization, we skip both and compute
+        scores directly in bf16/fp32.
 
-            # The indexer uses NON-interleaved (half-split) RoPE — unlike the main MLA attention
-            q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
-            q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
-            k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
+        The scoring logic computes:
+            index_score[b,s,t] = Σ_h (weight[b,s,h] · softmax_scale · q[b,s,h,:] · k[b,t,:])
 
-            if past_key_values is not None:
-                k = past_key_values.update_indexer(k, self.layer_idx)
+        Args:
+            hidden_states: Input hidden states `[B, S, hidden_size]`.
+            q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
+            position_embeddings: `(cos, sin)` from RotaryEmbedding.
+            attention_mask: Causal mask, broadcastable to `[B, S, T]`.
+            past_key_values: Cache object containing the indexer key cache for this layer.
 
-            # Flatten queries and heads to avoid broadcasting a copy of the keys for every query position.
-            with maybe_autocast(device_type=hidden_states.device.type, enabled=False):
-                scores = torch.matmul(q.flatten(1, 2).float(), k.transpose(-1, -2).float()) * self.softmax_scale
-                scores = F.relu(scores).view(batch_size, seq_len, self.n_heads, k.shape[1])
-                weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (
-                    self.n_heads**-0.5
-                )
-                index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+        Returns:
+            `tuple[torch.Tensor, torch.Tensor]`: the `int32` top-k token indices of shape `[B, S, topk]` and their
+                `float32` index scores. The eager / SDPA paths turn the indices into an additive sparse mask; the
+                `flash-mla` kernel consumes them directly. The scores are the input of the indexer's distillation
+                loss; they are `-inf` at masked keys, which early queries select when fewer than `topk` are visible.
+        """
+        # The inputs come from the main model, which is trained by the language modeling loss only: detach them so
+        # the indexer loss reaches no parameter but the indexer's.
+        hidden_states, q_resid = hidden_states.detach(), q_resid.detach()
+        batch_size, seq_len, _ = hidden_states.shape
+        cos, sin = position_embeddings
+        q = self.wq_b(q_resid)  # [B, S, H*D]
+        q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
+        q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-            if attention_mask.dtype == torch.bool:
-                index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
-            else:
-                index_scores = index_scores + attention_mask
+        k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
+        k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-            topk = min(self.index_topk, index_scores.shape[-1])
-            topk_indices = index_scores.topk(topk, dim=-1).indices.to(torch.int32)
-            # Early queries can select masked keys when fewer than topk are visible. Keep log-softmax finite.
-            scores = index_scores.clamp_min(torch.finfo(torch.float32).min) if output_scores else None
-            return topk_indices, scores
+        # The indexer uses NON-interleaved (half-split) RoPE — unlike the main MLA attention
+        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+        q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
+        k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
+
+        if past_key_values is not None:
+            k = past_key_values.update_indexer(k, self.layer_idx)
+
+        # Score in FP32 like the reference kernel, also under autocast. Flatten queries and heads to avoid broadcasting a
+        # copy of the keys for every query position.
+        with maybe_autocast(device_type=hidden_states.device.type, enabled=False):
+            scores = torch.matmul(q.flatten(1, 2).float(), k.transpose(-1, -2).float()) * self.softmax_scale
+            scores = F.relu(scores).view(batch_size, seq_len, self.n_heads, k.shape[1])
+            # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
+            weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (
+                self.n_heads**-0.5
+            )
+            index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+
+        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
+        if attention_mask.dtype == torch.bool:
+            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
+        else:
+            index_scores = index_scores + attention_mask
+
+        topk = min(self.index_topk, index_scores.shape[-1])
+        topk_scores, topk_indices = index_scores.topk(topk, dim=-1)  # [B, S, topk]
+        return topk_indices.to(torch.int32), topk_scores
 
 
 class AXK2TopkRouter(nn.Module):
@@ -721,6 +740,7 @@ class AXK2PreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": AXK2DecoderLayer,
         "attentions": AXK2Attention,
+        "indexer_scores": OutputRecorder(AXK2Indexer, index=1),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = ["inv_freq"]
@@ -735,6 +755,29 @@ class AXK2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, AXK2Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+
+
+@auto_docstring(
+    custom_intro="""
+    Base class for DeepSeek-V3.2 model outputs, with the recorded inputs of the indexer's distillation loss.
+    """
+)
+@dataclass
+class AXK2ModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    indexer_scores (`tuple(torch.FloatTensor)`, *optional*, returned when `output_indexer_scores=True` is passed):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, index_topk)`.
+
+        The indexer's scores of the keys it selected, the input of its distillation loss.
+    indexer_targets (`tuple(torch.FloatTensor)`, *optional*, returned when `output_indexer_targets=True` is passed):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, index_topk)`.
+
+        The attention distribution over the selected keys, averaged over heads, the target of the indexer's
+        distillation loss.
+    """
+
+    indexer_scores: tuple[torch.FloatTensor, ...] | None = None
+    indexer_targets: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
@@ -767,7 +810,7 @@ class AXK2Model(AXK2PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> AXK2ModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -809,7 +852,7 @@ class AXK2Model(AXK2PreTrainedModel):
             )
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
+        return AXK2ModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
