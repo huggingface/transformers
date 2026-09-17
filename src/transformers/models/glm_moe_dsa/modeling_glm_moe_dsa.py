@@ -30,6 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
+from ...integrations.mla import conditional_kv_expansion
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -332,6 +333,7 @@ class GlmMoeDsaAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
         self.is_causal = True
+        self.is_mla = True
         self.q_a_proj = nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
         self.q_a_layernorm = GlmMoeDsaRMSNorm(self.q_lora_rank)
         self.q_b_proj = nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
@@ -359,10 +361,15 @@ class GlmMoeDsaAttention(nn.Module):
         self.skip_topk = config.indexer_types[layer_idx] == "shared"
         self.indexer = None if self.skip_topk else GlmMoeDsaIndexer(config, layer_idx)
 
+    @conditional_kv_expansion
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Expands the compressed latents into key and value states. Args:
+        """
+        Expands the compressed latents into key and value states.
+
+        Args:
             - kv_nope: key + value without positional encoding, shape [batch_size, 1, seqlen, self.kv_lora_rank]
             - k_rot: shared key with positional encoding, shape [batch_size, 1, seqlen, self.qk_rope_head_dim]
+
         Returns the key and value states, two tensors of shape [batch, num_heads, seq, (k or v)_head_dim].
         """
         batch_size, _, seq_length, _ = kv_nope.shape
@@ -404,16 +411,16 @@ class GlmMoeDsaAttention(nn.Module):
         cos, sin = position_embeddings
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
 
-        query_states = torch.cat((q_pass, q_rot), dim=-1)
-
-        key_states, value_states = self.expand_kv(k_pass, k_rot)
-
-        # Sparse-attention models cache the expanded K/V, not the compressed latents. TODO (remi-or): fix this with topk
+        # Cache read / write is performed while latent KV is still compressed
         if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+
+        query_states = torch.cat((q_pass, q_rot), dim=-1)
+        key_states, value_states = self.expand_kv(k_pass, k_rot)
 
         # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
         if self.indexer is not None:
+            # FIXME: the mask is not compatible with FA
             topk_indices = self.indexer(
                 hidden_states,
                 q_resid,
@@ -440,6 +447,7 @@ class GlmMoeDsaAttention(nn.Module):
             else:
                 attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
         else:
+            attention_mask = None
             sparse_indices = topk_indices
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -634,9 +642,10 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["GlmMoeDsaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
     _supports_flex_attn = False
+    _supports_flash_attn = True
+    _compatible_flash_implementations = ["flash_attention_4"]
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
@@ -719,7 +728,7 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        topk_indices = None  # MAIN DIFF with DSV3.2
+        topk_indices = kwargs.pop("prev_topk_indices")  # MAIN DIFF with DSV3.2
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states, topk_indices = decoder_layer(
                 hidden_states,

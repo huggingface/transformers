@@ -38,6 +38,7 @@ def flash_attention_forward(
     is_causal: bool | None = None,
     s_aux: torch.Tensor | None = None,  # alias: learnable attention sin
     qv_latents: torch.Tensor | None = None,  # MLA/DSA latents
+    indices: torch.IntTensor | None = None,  # DSA topk indices
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     if kwargs.get("output_attentions", False):
@@ -99,6 +100,7 @@ def flash_attention_forward(
             else None
         ),
         qv_latents=qv_latents,
+        indices=indices,
         **kwargs,
     )
 

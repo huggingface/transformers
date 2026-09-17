@@ -626,6 +626,7 @@ def _process_flash_attention_kwargs(
     max_seqlen_q: int | torch.IntTensor | None = None,
     max_seqlen_k: int | torch.IntTensor | None = None,
     qv: torch.Tensor | None = None,
+    gather_kv_indices: torch.IntTensor | None = None,
     supports_mapping: dict[str, bool] | None = None,
     **kwargs,
 ):
@@ -662,6 +663,8 @@ def _process_flash_attention_kwargs(
             The maximum sequence length in the key/value tensor during a varlen forward.
         qv (`torch.Tensor`, *optional*):
             The MLA latents absorbed by the Flash Attention API. See `integrations/mla` for more information.
+        gather_kv_indices (`torch.IntTensor`, *optional*):
+            The topk indices returned by and indexer in an MLA setup, also often referred as DSA.
     Return:
         flash_kwargs (`dict`):
             A dict of kwargs that are requested and supported.
@@ -697,6 +700,9 @@ def _process_flash_attention_kwargs(
 
     if supports_mapping["qv"] and qv is not None:
         flash_kwargs["qv"] = qv
+
+    if supports_mapping["gather_kv_indices"] and gather_kv_indices is not None:
+        flash_kwargs["gather_kv_indices"] = gather_kv_indices
 
     # There is a limitation of the flash attention API, as the function `flash_attn_varlen_func`
     # may require `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
@@ -740,6 +746,7 @@ def _flash_attention_forward(
     max_length_q: int | None = None,
     max_length_k: int | None = None,
     qv_latents: torch.Tensor | None = None,
+    indices: torch.IntTensor | None = None,
     target_dtype: torch.dtype | None = None,
     attn_implementation: str | None = None,
     **kwargs,
@@ -759,6 +766,8 @@ def _flash_attention_forward(
             Input value states to be passed to Flash Attention API
         qv_latents (`torch.Tensor`, *optional*):
             Input MLA latents to be passed to Flash Attention API
+        indices (`torch.IntTensor`, *optional*):
+            The DSA topk indices to be passed to Flash Attention API
         attention_mask (`torch.Tensor`, *optional*):
             The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
             position of padding tokens and 1 for the position of non-padding tokens.
@@ -784,6 +793,7 @@ def _flash_attention_forward(
         use_top_left_mask=use_top_left_mask,
         softcap=softcap,
         deterministic=deterministic,
+        gather_kv_indices=indices,
         **kwargs,
     )
 
