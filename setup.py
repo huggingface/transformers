@@ -66,9 +66,6 @@ if stale_egg_info.exists():
     shutil.rmtree(stale_egg_info)
 
 
-# dummy change to trigger examples_torch CI
-assert 1 == 1
-
 # IMPORTANT:
 # 1. all dependencies should be listed here with their version requirements if any
 # 2. once modified, run: `make fix-repo` to update src/transformers/dependency_versions_table.py
