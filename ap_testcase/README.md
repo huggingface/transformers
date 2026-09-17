@@ -108,10 +108,37 @@ setup or case failures produce a nonzero exit code.
 | `04_audio_tokenization.py` | Audio tokenization from processor output vs. fully manual preprocessing | yes |
 | `05_generation_chat_messages.py` | Full generation from chat messages (text-only + multimodal, incl. media auto-loading), thinking activation via `enable_thinking`, seeded sampling parameters | yes |
 | `06_generation_raw_text.py` | Full generation from raw text with image and audio placeholders (base-model style), incl. a batch | yes |
-| `07_language_model_from_composite.py` | All text-only classes from the composite: `Apertus1p5TextConfig` extraction, `Apertus1p5TextForCausalLM` (pruned output layer, padded-logits contract with finite logits and a zero-probability tail, greedy + beam generation), bare `Apertus1p5TextModel` hidden states | yes |
-| `08_multi_device_inference.py` | Multi-device placement (needs >= 2 GPUs, else skips): `device_map="auto"` sharding (fp32-keep of media tokenizers, padded-logits contract, generation parity vs single device) and `DistributedConfig(tp_size=2)` tensor parallelism over the text backbone via torchrun | yes |
+| `07_language_model_from_composite.py` | All text-only classes from the composite: `Apertus1p5TextConfig` extraction, `Apertus1p5TextForCausalLM` (pruned output layer, finite physical-width logits, greedy + beam generation), bare `Apertus1p5TextModel` hidden states | yes |
+| `08_multi_device_inference.py` | Multi-device placement (needs >= 2 GPUs, else skips): `device_map="auto"` sharding (fp32-keep of media tokenizers, physical-width logits, generation parity vs single device) and `DistributedConfig(tp_size=2)` tensor parallelism over the text backbone via torchrun | yes |
 | `09_training_loop.py` | Training smoke test (needs a GPU, else skips): pruned-head label contract (physical-width loss logits, finite loss with input-only labels masked using `-100`), an overfit loop on the last layer + lm_head, and a DDP variant via torchrun with >= 2 GPUs | yes |
+| `10_generation_options.py` | Five generation cases plus eight optional generation/scoring cases, with explicit input-only IDs and independent transition-score checks | yes |
 
-The model-loading scripts 03-07 run on CPU and take a few minutes each (bf16 8B load is about
+The model-loading scripts 03-07 and 10 run on CPU and take a few minutes each (bf16 8B load is about
 1 minute); 08 and 09 need CUDA devices and skip themselves otherwise. The URL-fetching case in 01
 needs network access (the media auto-loading in 05 works from a local temporary file).
+
+## Generation option coverage
+
+`10_generation_options.py` loads the text causal LM once and runs five cases by default. Use
+`--include-optional` to run all 13. Optional cases are shown as `SKIP` otherwise; when selected,
+their failures produce a nonzero exit code. Synthetic token IDs guarantee the boundary cases.
+
+| Cases | Selection | What is checked |
+| --- | --- | --- |
+| Greedy, beam search, beam sampling | Default | Two generated tokens per prompt, all inside the physical output vocabulary |
+| Repetition penalty, no-repeat bigram | Default | Input-only prompt IDs and a guaranteed input-only banned continuation are handled |
+| Encoder repetition penalty, encoder no-repeat bigram | Optional | Prompt-based reward/ban processors handle the same input-only conditions |
+| Watermarking | Optional | Generation succeeds without emitting input-only tokens |
+| Normalized transition scores | Optional | Single-prompt log-probabilities match an independent reference |
+| Batched unnormalized transition scores | Optional | Two prompts' scores match independent gathers, catching incorrect vocabulary offsets |
+| Bad words, sequence bias, suppression | Optional | Constraints targeting input-only IDs are accepted and generation succeeds |
+
+The fast `Apertus1p5PrunedGenerationTest` covers only the five default cases on tiny text and
+composite models. Both test layers fix the seed, disable early EOS, and check behavior without
+requiring padded logits. Existing slow tests and scripts 05-07 retain real text/media coverage.
+
+```bash
+python ap_testcase/10_generation_options.py
+python ap_testcase/10_generation_options.py --include-optional
+python -m pytest tests/models/apertus1p5/test_modeling_apertus1p5.py -k PrunedGeneration
+```
