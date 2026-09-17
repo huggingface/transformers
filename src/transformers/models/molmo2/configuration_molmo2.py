@@ -133,7 +133,9 @@ class Molmo2TextConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"qkv_bias": "attention_bias", "layer_norm_eps": "rms_norm_eps"}
     base_model_tp_plan = {
-        "layers.*.self_attn.qkv_proj": "colwise_gather_output",
+        "layers.*.self_attn.q_proj": "colwise_gather_output",
+        "layers.*.self_attn.k_proj": "colwise_gather_output",
+        "layers.*.self_attn.v_proj": "colwise_gather_output",
         "layers.*.self_attn.o_proj": "rowwise_split_input",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",

@@ -41,7 +41,6 @@ from ...image_utils import (
 )
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_masks_for_generate
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -66,6 +65,7 @@ from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoInput, VideoMetadata
 from ..llama.modeling_llama import (
+    LlamaDecoderLayer,
     LlamaMLP,
     LlamaModel,
     LlamaPreTrainedModel,
@@ -81,7 +81,6 @@ from ..llava.modeling_llava import (
 )
 from ..olmo.modeling_olmo import OlmoMLP
 from ..olmo2.modeling_olmo2 import Olmo2Attention
-from ..phi3.modeling_phi3 import Phi3DecoderLayer
 from ..siglip2.modeling_siglip2 import (
     Siglip2EncoderLayer,
     Siglip2MLP,
@@ -199,7 +198,9 @@ class Molmo2TextConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"qkv_bias": "attention_bias", "layer_norm_eps": "rms_norm_eps"}
     base_model_tp_plan = {
-        "layers.*.self_attn.qkv_proj": "colwise_gather_output",
+        "layers.*.self_attn.q_proj": "colwise_gather_output",
+        "layers.*.self_attn.k_proj": "colwise_gather_output",
+        "layers.*.self_attn.v_proj": "colwise_gather_output",
         "layers.*.self_attn.o_proj": "rowwise_split_input",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
@@ -1138,37 +1139,15 @@ class Molmo2RMSNorm(LlamaRMSNorm):
 
 
 class Molmo2Attention(Olmo2Attention):
-    """Molmo2 attention: Olmo2-style q/k RMSNorm with a fused QKV projection and renamed output projection."""
+    """Olmo2 attention whose q/k RMSNorm runs either over the full projection (`olmo`) or per head (`qwen3`)."""
 
     def __init__(self, config: Molmo2TextConfig, layer_idx: int) -> None:
-        nn.Module.__init__(self)
-        self.config = config
-        self.layer_idx = layer_idx
-        self.num_heads = config.num_attention_heads
-        self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.head_dim = config.head_dim
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = True
-
-        self.fused_dims = (
-            config.num_attention_heads * config.head_dim,
-            config.head_dim * config.num_key_value_heads,
-            config.head_dim * config.num_key_value_heads,
-        )
-        self.qkv_proj = nn.Linear(config.hidden_size, sum(self.fused_dims), bias=config.attention_bias)
-        self.o_proj = nn.Linear(config.num_attention_heads * config.head_dim, config.hidden_size, bias=False)
-
+        super().__init__(config, layer_idx)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.qk_norm_type = config.qk_norm_type
         if self.qk_norm_type == "qwen3":
-            q_norm_dim = config.head_dim
-            k_norm_dim = config.head_dim
-        else:
-            q_norm_dim = config.num_attention_heads * config.head_dim
-            k_norm_dim = config.num_key_value_heads * config.head_dim
-        self.q_norm = Molmo2RMSNorm(q_norm_dim, eps=config.rms_norm_eps)
-        self.k_norm = Molmo2RMSNorm(k_norm_dim, eps=config.rms_norm_eps)
+            self.q_norm = Molmo2RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.k_norm = Molmo2RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -1177,37 +1156,30 @@ class Molmo2Attention(Olmo2Attention):
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
-        query_shape = (*input_shape, self.num_heads, self.head_dim)
-        key_value_shape = (*input_shape, self.num_key_value_heads, self.head_dim)
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        qkv = self.qkv_proj(hidden_states)
-        query_states, key_states, value_states = torch.split(qkv, self.fused_dims, dim=-1)
-
-        value_states = value_states.view(key_value_shape)
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         if self.qk_norm_type == "olmo":
             query_states = self.q_norm(query_states)
             key_states = self.k_norm(key_states)
-
-        query_states = query_states.view(query_shape)
-        key_states = key_states.view(key_value_shape)
-
+        query_states = query_states.view(hidden_shape)
+        key_states = key_states.view(hidden_shape)
         if self.qk_norm_type == "qwen3":
             query_states = self.q_norm(query_states)
             key_states = self.k_norm(key_states)
-
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            cache_kwargs = {"sin": sin, "cos": cos}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -1233,16 +1205,11 @@ class Molmo2MLP(OlmoMLP):
     pass
 
 
-class Molmo2DecoderLayer(Phi3DecoderLayer):
-    def __init__(self, config: Molmo2TextConfig, layer_idx: int | None = None):
-        GradientCheckpointingLayer.__init__(self)
-        self.config = config
+class Molmo2DecoderLayer(LlamaDecoderLayer):
+    def __init__(self, config: Molmo2TextConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
         self.norm_after = config.norm_after
-        self.self_attn = Molmo2Attention(config, layer_idx)
-        self.attn_norm = Molmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.dropout = nn.Dropout(config.residual_dropout)
-        self.mlp = Molmo2MLP(config)
-        self.ff_norm = Molmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -1257,7 +1224,7 @@ class Molmo2DecoderLayer(Phi3DecoderLayer):
         # `norm_after=True` normalizes each sublayer's output (post-norm) instead of its input (pre-norm)
         residual = hidden_states
         if not self.norm_after:
-            hidden_states = self.attn_norm(hidden_states)
+            hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
         hidden_states, _ = self.self_attn(
@@ -1270,16 +1237,16 @@ class Molmo2DecoderLayer(Phi3DecoderLayer):
             **kwargs,
         )
         if self.norm_after:
-            hidden_states = self.attn_norm(hidden_states)
+            hidden_states = self.input_layernorm(hidden_states)
         hidden_states = residual + self.dropout(hidden_states)
 
         # Fully Connected
         residual = hidden_states
         if not self.norm_after:
-            hidden_states = self.ff_norm(hidden_states)
+            hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         if self.norm_after:
-            hidden_states = self.ff_norm(hidden_states)
+            hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = residual + self.dropout(hidden_states)
         return hidden_states
 
@@ -1485,7 +1452,7 @@ class Molmo2TextModel(LlamaModel):
         # (see `conversion_mapping.py`), so the embedding covers `vocab_size + additional_vocab_size`.
         self.embed_tokens = nn.Embedding(config.vocab_size + (config.additional_vocab_size or 0), config.hidden_size)
         self.embedding_dropout = nn.Dropout(config.embedding_dropout)
-        # trf-ignore: TRF034 (false positive: Phi3DecoderLayer subclasses GradientCheckpointingLayer)
+        # trf-ignore: TRF034 (false positive: LlamaDecoderLayer subclasses GradientCheckpointingLayer)
         self.layers = nn.ModuleList(
             [Molmo2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
