@@ -243,6 +243,7 @@ def get_balanced_memory(
     no_split_module_classes: set[str] | None = None,
     hf_quantizer: "HfQuantizer | None" = None,
     low_zero: bool = False,
+    no_placement_params: set[str] | None = None,
 ):
     """
     Compute a `max_memory` dictionary for [`infer_auto_device_map`] that will balance the use of each available GPU.
@@ -268,6 +269,11 @@ def get_balanced_memory(
         low_zero (`bool`, *optional*):
             Minimizes the number of weights on GPU 0, which is convenient when it's used for other operations (like the
             Transformers generate function).
+        no_placement_params (`set[str]`, *optional*):
+            Parameter names (relative to their no-split module, see `_no_placement_params`) that
+            [`infer_auto_device_map`] will exclude from placement when they do not fit an accelerator. They are
+            excluded from the per-device budget here too: counting a ~100 GB table that will never be placed inflates
+            every GPU's share up to its physical limit and leaves no headroom for loading temporaries.
     """
     # Get default / clean up max_memory
     user_not_set_max_memory = max_memory is None
@@ -295,7 +301,24 @@ def get_balanced_memory(
                     break  # only one device
 
     module_sizes, leave_modules_sizes = compute_module_sizes(model, hf_quantizer)
-    per_gpu = module_sizes[""] // (num_devices - 1 if low_zero else num_devices)
+    # Size of the no-placement parameters, both in total and per no-split module that holds them
+    no_placement_sizes: dict[str, int] = defaultdict(int)
+    if no_placement_params:
+        no_split_names = {
+            k for k, v in model.named_modules() if v.__class__.__name__ in (no_split_module_classes or [])
+        }
+        for module_name in no_split_names:
+            module = model.get_submodule(module_name)
+            for param_name, param in module.named_parameters():
+                if param_name in no_placement_params:
+                    dtype_size = (
+                        hf_quantizer.param_element_size(model, f"{module_name}.{param_name}", param)
+                        if hf_quantizer is not None
+                        else param.element_size()
+                    )
+                    no_placement_sizes[module_name] += param.numel() * dtype_size
+    total_size = module_sizes[""] - sum(no_placement_sizes.values())
+    per_gpu = total_size // (num_devices - 1 if low_zero else num_devices)
 
     # We can't just set the memory to model_size // num_devices as it will end being too small: each GPU will get
     # slightly less layers and some layers will end up offload at the end. So this function computes a buffer size to
@@ -314,9 +337,10 @@ def get_balanced_memory(
     buffer = 0
     if len(no_split_module_classes) > 0:
         all_no_split_modules = {k for k, v in model.named_modules() if v.__class__.__name__ in no_split_module_classes}
-        buffer = max(module_sizes[k] for k in all_no_split_modules)
+        buffer = max(module_sizes[k] - no_placement_sizes[k] for k in all_no_split_modules)
 
-    mean_leaves = int(sum(leave_modules_sizes.values()) / max(len(leave_modules_sizes), 1))
+    leaves_total = sum(leave_modules_sizes.values()) - sum(no_placement_sizes.values())
+    mean_leaves = int(leaves_total / max(len(leave_modules_sizes), 1))
     buffer = int(1.25 * max(buffer, mean_leaves))
     per_gpu += buffer
 
@@ -329,7 +353,7 @@ def get_balanced_memory(
         max_memory[idx] = min(max_memory[0] if low_zero and idx == 0 else per_gpu, max_memory[idx])
 
     if low_zero:
-        min_zero = max(0, module_sizes[""] - sum([max_memory[i] for i in range(1, num_devices)]))
+        min_zero = max(0, total_size - sum([max_memory[i] for i in range(1, num_devices)]))
         max_memory[0] = min(min_zero, max_memory[0])
 
     return max_memory
@@ -355,6 +379,7 @@ def _get_device_map(
                 no_split_module_classes=no_split_modules,
                 hf_quantizer=hf_quantizer,
                 low_zero=(device_map == "balanced_low_0"),
+                no_placement_params=no_placement_params,
             )
         else:
             inferred_max_memory = get_max_memory(max_memory)
