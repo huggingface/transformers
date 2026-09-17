@@ -206,7 +206,7 @@ class DistributedMixin:
             ep_mesh = mesh_manager.get_mesh("ep")
 
             if {"ep_router", "moe_tp_experts"}.issubset(ep_plan.values()):
-                # Masked EP: the EP group is the TP group, every rank keeps every token.
+                # Legacy masked EP: the EP group is the TP group, every rank keeps every token.
                 model = apply_tensor_parallelism(model, tp_mesh, ep_plan)
             elif "ep_dispatch_experts" in ep_plan.values():
                 # EP + DP with tp_size >= 1: the ranks of a TP group share the same batch. If we want a specific token,
