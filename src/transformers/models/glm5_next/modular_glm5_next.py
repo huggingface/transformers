@@ -167,6 +167,9 @@ class Glm5NextTextConfig(GlmMoeDsaConfig):
     mlp_bias = AttributeError()
     rope_parameters = AttributeError()
     first_k_dense_replace = AttributeError()
+    # The k-pool indexer scores pools of keys, so the DeepSeek V3.2 token-level indexer loss does not apply.
+    output_indexer_loss = AttributeError()
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:

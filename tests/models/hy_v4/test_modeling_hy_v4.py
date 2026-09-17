@@ -22,6 +22,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...models.deepseek_v32.test_modeling_deepseek_v32 import IndexerLossTesterMixin
 
 
 if is_torch_available():
@@ -70,7 +71,7 @@ class HYV4ModelTester(CausalLMModelTester):
 
 
 @require_torch
-class HYV4ModelTest(CausalLMModelTest, unittest.TestCase):
+class HYV4ModelTest(IndexerLossTesterMixin, CausalLMModelTest, unittest.TestCase):
     model_tester_class = HYV4ModelTester
     # HYV4 routes each token to a subset of experts, so not every expert receives a gradient.
     test_all_params_have_gradient = False

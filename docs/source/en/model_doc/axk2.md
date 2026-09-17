@@ -74,6 +74,10 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 </hfoption>
 </hfoptions>
 
+### Training the indexer
+
+A.X-K2 uses the DeepSeek Sparse Attention indexer of DeepSeek-V3.2. Pass `output_indexer_loss=True` (or set it in the config) to compute its KL distillation loss, returned as `indexer_loss` and added to `loss` when labels are supplied. Only the indexer receives gradients from it. See [Training the indexer](deepseek_v32#training-the-indexer) in the DeepSeek-V3.2 documentation for the dense warm-up stage, gradient checkpointing and gradient accumulation.
+
 ## AXK2Config
 
 [[autodoc]] AXK2Config

@@ -35,6 +35,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...models.deepseek_v32.test_modeling_deepseek_v32 import IndexerLossTesterMixin
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
@@ -75,10 +76,16 @@ class GlmMoeDsaModelTester(CausalLMModelTester):
 
 
 @require_torch
-class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
+class GlmMoeDsaModelTest(IndexerLossTesterMixin, CausalLMModelTest, unittest.TestCase):
     model_tester_class = GlmMoeDsaModelTester
     test_all_params_have_gradient = False
     model_split_percents = [0.5, 0.7, 0.8]
+
+    def prepare_indexer_loss_config_and_inputs(self):
+        config, inputs = super().prepare_indexer_loss_config_and_inputs()
+        # Exercise cross-layer top-k sharing: only the first layer runs an indexer and contributes a loss.
+        config.indexer_types = ["full", "shared"]
+        return config, inputs
 
     @unittest.skip("Float8 quantization + TP numerical noise exceeds match threshold")
     def test_tp_generation_quantized(self):

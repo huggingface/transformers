@@ -41,6 +41,9 @@ class AXK2Config(PreTrainedConfig):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int`, *optional*, defaults to 16):
         Number of heads for the indexer projections (DSA).
+    output_indexer_loss (`bool`, *optional*, defaults to `False`):
+        Whether to compute the indexer's KL distillation loss. Only the indexer receives gradients from this loss;
+        its inputs and the attention distribution used as its target are detached.
     gated_norm_rank (`int`, *optional*, defaults to 16):
         Bottleneck rank for the low-rank input-dependent gate used by `AXK2GatedRMSNorm`. The gate wraps
         `input_layernorm` on every layer and `post_attention_layernorm` on MoE layers.
@@ -59,7 +62,7 @@ class AXK2Config(PreTrainedConfig):
     ```"""
 
     model_type = "axk2"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["past_key_values", "indexer_loss"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_gate_proj": "colwise",
@@ -128,6 +131,7 @@ class AXK2Config(PreTrainedConfig):
     index_head_dim: int = 128
     index_n_heads: int = 16
     head_dim: int = 64
+    output_indexer_loss: bool = False
     layer_types: list[str] | None = None
     gated_norm_rank: int = 16
 

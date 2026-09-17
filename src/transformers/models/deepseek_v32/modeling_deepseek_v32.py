@@ -723,26 +723,66 @@ class DeepseekV32PreTrainedModel(PreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of DeepSeek Sparse Attention models, with the indexer's distillation loss.
+    """
+)
 @dataclass
 class DeepseekV32ModelOutputWithPast(BaseModelOutputWithPast):
-    """
+    r"""
     indexer_loss (`torch.FloatTensor`, *optional*):
-        Indexer KL loss averaged over layers and valid queries, or normalized by `num_items_in_batch` when supplied.
+        Indexer KL loss averaged over the layers that run an indexer and over valid queries, or normalized by
+        `num_items_in_batch` when supplied.
+
         Returned when `output_indexer_loss=True`.
     """
 
     indexer_loss: torch.FloatTensor | None = None
 
 
+@auto_docstring(
+    custom_intro="""
+    Base class for causal language model outputs of DeepSeek Sparse Attention models, with the indexer's distillation
+    loss.
+    """
+)
 @dataclass
 class DeepseekV32CausalLMOutputWithPast(CausalLMOutputWithPast):
-    """
+    r"""
     indexer_loss (`torch.FloatTensor`, *optional*):
-        Indexer KL loss averaged over layers and valid queries, or normalized by `num_items_in_batch` when supplied.
+        Indexer KL loss averaged over the layers that run an indexer and over valid queries, or normalized by
+        `num_items_in_batch` when supplied.
+
         Returned when `output_indexer_loss=True`.
     """
 
     indexer_loss: torch.FloatTensor | None = None
+
+
+def get_indexer_query_mask(
+    attention_mask: torch.Tensor | dict | None, causal_mask: torch.Tensor, query_length: int
+) -> torch.Tensor:
+    """Boolean `[B, S]` mask of the queries that count in the indexer loss: every non-padding query."""
+    if isinstance(attention_mask, torch.Tensor) and attention_mask.ndim == 2:
+        return attention_mask[:, -query_length:].bool()
+    if causal_mask.dtype != torch.bool:
+        causal_mask = causal_mask > torch.finfo(causal_mask.dtype).min
+    return causal_mask.any(dim=-1).squeeze(1)
+
+
+def normalize_indexer_loss(
+    indexer_losses: list[torch.Tensor],
+    indexer_query_mask: torch.Tensor,
+    num_items_in_batch: torch.Tensor | int | None = None,
+) -> torch.Tensor:
+    """Average the per-layer loss sums over the layers that ran an indexer and over the valid queries, or over
+    `num_items_in_batch` when it is supplied, as the language modeling loss is under gradient accumulation."""
+    device = indexer_losses[-1].device
+    indexer_loss = torch.stack([layer_loss.to(device) for layer_loss in indexer_losses]).sum()
+    normalizer = indexer_query_mask.sum() if num_items_in_batch is None else num_items_in_batch
+    normalizer = torch.as_tensor(normalizer, device=device).clamp_min(1)
+    return indexer_loss / (len(indexer_losses) * normalizer)
 
 
 @auto_docstring
@@ -807,15 +847,11 @@ class DeepseekV32Model(DeepseekV32PreTrainedModel):
             output_indexer_loss = self.config.output_indexer_loss
         indexer_query_mask = None
         if output_indexer_loss:
-            if isinstance(attention_mask, torch.Tensor) and attention_mask.ndim == 2:
-                indexer_query_mask = attention_mask[:, -inputs_embeds.shape[1] :].bool()
-            else:
-                mask = causal_mask_mapping["deepseek_sparse_attention"]
-                visible_keys = mask if mask.dtype == torch.bool else mask > torch.finfo(mask.dtype).min
-                indexer_query_mask = visible_keys.any(dim=-1).squeeze(1)
+            causal_mask = causal_mask_mapping["deepseek_sparse_attention"]
+            indexer_query_mask = get_indexer_query_mask(attention_mask, causal_mask, inputs_embeds.shape[1])
 
         hidden_states = inputs_embeds
-        indexer_loss = None
+        indexer_losses = []
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
@@ -832,16 +868,13 @@ class DeepseekV32Model(DeepseekV32PreTrainedModel):
             )
             if output_indexer_loss:
                 hidden_states, layer_loss = layer_output
-                indexer_loss = layer_loss if indexer_loss is None else indexer_loss.to(layer_loss.device) + layer_loss
+                indexer_losses.append(layer_loss)
             else:
                 hidden_states = layer_output
 
-        if indexer_loss is not None:
-            normalizer = kwargs.get("num_items_in_batch")
-            if normalizer is None:
-                normalizer = indexer_query_mask.sum()
-            normalizer = torch.as_tensor(normalizer, device=indexer_loss.device).clamp_min(1)
-            indexer_loss = indexer_loss / (self.config.num_hidden_layers * normalizer)
+        indexer_loss = None
+        if indexer_losses:
+            indexer_loss = normalize_indexer_loss(indexer_losses, indexer_query_mask, kwargs.get("num_items_in_batch"))
 
         hidden_states = self.norm(hidden_states)
         return DeepseekV32ModelOutputWithPast(
