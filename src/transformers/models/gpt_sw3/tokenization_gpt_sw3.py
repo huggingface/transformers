@@ -120,9 +120,21 @@ class GPTSw3Tokenizer(SentencePieceBackend):
         self.keep_accents = keep_accents
 
         # Used for whitespace normalization in input texts
-        # fmt : off
-        self.whitespaces = {" ", " ", " ", " ", " ", "　", " ", " ", " ", " ", "￼", ""}
-        # fmt : on
+        # Escapes are used on purpose: these code points are easy to lose to editors and
+        # automated rewrites that normalize unusual whitespace in source files.
+        self.whitespaces = {
+            "\u0020",  # space
+            "\u2002",  # en space
+            "\u2003",  # em space
+            "\u2005",  # four-per-em space
+            "\u2008",  # punctuation space
+            "\u2009",  # thin space
+            "\u200a",  # hair space
+            "\u202f",  # narrow no-break space
+            "\u3000",  # ideographic space
+            "\ufffc",  # object replacement character
+            "\u0084",  # control character, also removed by non_printing_characters_re
+        }
 
         # Regular expression to remove non-printing characters (e.g. some unicode control chars) in preprocessing
         self.non_printing_characters_re = re.compile(
