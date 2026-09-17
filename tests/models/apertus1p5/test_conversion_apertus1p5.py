@@ -41,31 +41,21 @@ if is_torch_available():
 @require_torch
 class Apertus1p5ConversionTest(unittest.TestCase):
     def test_valid_logits_layout(self):
-        tail_min = torch.finfo(torch.float32).min
-        pruned_logits = torch.tensor([[[1.0, -2.0, tail_min, tail_min]]])
-        self.assertTrue(conversion._has_valid_logits_layout(pruned_logits, output_vocab_size=2, vocab_size=4))
+        pruned_logits = torch.tensor([[[1.0, -2.0]]])
+        self.assertTrue(conversion._has_valid_logits_layout(pruned_logits, output_vocab_size=2))
+        self.assertFalse(conversion._has_valid_logits_layout(pruned_logits[..., :1], output_vocab_size=2))
 
-        physical_only_logits = pruned_logits[..., :2]
-        self.assertFalse(conversion._has_valid_logits_layout(physical_only_logits, output_vocab_size=2, vocab_size=4))
+        padded_logits = torch.nn.functional.pad(pruned_logits, (0, 2), value=torch.finfo(torch.float32).min)
+        self.assertFalse(conversion._has_valid_logits_layout(padded_logits, output_vocab_size=2))
 
-        oversized_logits = torch.cat((pruned_logits, pruned_logits[..., -1:]), dim=-1)
-        self.assertFalse(conversion._has_valid_logits_layout(oversized_logits, output_vocab_size=2, vocab_size=4))
-
-        finite_tail = pruned_logits.clone()
-        finite_tail[..., -1] = 0
-        self.assertFalse(conversion._has_valid_logits_layout(finite_tail, output_vocab_size=2, vocab_size=4))
-
-        # a -inf tail is the stale pre-finfo.min layout the checker exists to catch
-        neginf_tail = pruned_logits.clone()
-        neginf_tail[..., 2:] = -torch.inf
-        self.assertFalse(conversion._has_valid_logits_layout(neginf_tail, output_vocab_size=2, vocab_size=4))
-
-        nonfinite_prefix = pruned_logits.clone()
-        nonfinite_prefix[..., 0] = torch.inf
-        self.assertFalse(conversion._has_valid_logits_layout(nonfinite_prefix, output_vocab_size=2, vocab_size=4))
+        for value in (torch.nan, torch.inf, -torch.inf):
+            with self.subTest(value=value):
+                nonfinite_logits = pruned_logits.clone()
+                nonfinite_logits[..., 0] = value
+                self.assertFalse(conversion._has_valid_logits_layout(nonfinite_logits, output_vocab_size=2))
 
         unpruned_logits = torch.tensor([[[1.0, -2.0, 3.0, 4.0]]])
-        self.assertTrue(conversion._has_valid_logits_layout(unpruned_logits, output_vocab_size=4, vocab_size=4))
+        self.assertTrue(conversion._has_valid_logits_layout(unpruned_logits, output_vocab_size=4))
 
     def test_fp32_tokenizer_source_check(self):
         # fp32 floats and integer tensors (e.g. codebook indices) pass
