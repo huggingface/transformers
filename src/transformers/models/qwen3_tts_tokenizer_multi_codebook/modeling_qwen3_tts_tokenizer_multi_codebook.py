@@ -2094,8 +2094,8 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
         super().__init__(config)
         self.config = config
 
-        self.input_sample_rate = config.input_sample_rate
-        self.output_sample_rate = config.output_sample_rate
+        self.input_sampling_rate = config.input_sampling_rate
+        self.output_sampling_rate = config.output_sampling_rate
         self.decode_upsample_rate = config.decode_upsample_rate
         self.encode_downsample_rate = config.encode_downsample_rate
 
