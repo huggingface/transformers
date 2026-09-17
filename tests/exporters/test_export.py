@@ -269,6 +269,13 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "PPDocLayoutV3ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "MMGroundingDinoModel": "Same tied-`topk` box selection as `DFineModel`.",
         "MMGroundingDinoForObjectDetection": "Same tied-`topk` box selection as `DFineModel`.",
+        "LwDetrModel": (
+            "The encoder's `topk` ranks proposals by scores that sit ~1e-4 apart in relative terms "
+            "(~9.39e-07 absolute) in the tiny test config, so ONNX Runtime's slightly different arithmetic "
+            "orders two of them the other way round: `enc_outputs_coord_logits` holds the same boxes, "
+            "swapped, matching the other proposal's coordinates exactly."
+        ),
+        "LwDetrForObjectDetection": "Same near-tied `topk` ordering as `LwDetrModel`.",
     },
     "onnx.generate": {
         "ReformerModelWithLMHead": (
