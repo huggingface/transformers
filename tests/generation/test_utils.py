@@ -1595,8 +1595,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     # MoE routing accumulates FP noise across experts (different routing decisions
                     # at the margin between static and dynamic cache → different expert matmuls).
                     atol = rtol = 1e-3
-                else:
+                elif dtype == torch.float32:
                     atol = rtol = 1e-5
+                else:
+                    atol = rtol = 5e-5
                 assert_similar_generate_outputs(
                     dynamic_cache_generation, static_cache_generation, atol=atol, rtol=rtol
                 )
