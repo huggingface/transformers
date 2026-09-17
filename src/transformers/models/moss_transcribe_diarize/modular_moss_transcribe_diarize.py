@@ -23,13 +23,12 @@ from ...audio_utils import (
     AudioInput,
     make_audio_chat_template_content,
     make_list_of_audio_chat_template,
-    prepare_keyword_inputs,
 )
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...processing_utils import Unpack, prepare_prompt_input
+from ...processing_utils import Unpack, prepare_keyword_inputs, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.import_utils import requires
