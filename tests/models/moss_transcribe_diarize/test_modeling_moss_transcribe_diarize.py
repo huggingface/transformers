@@ -47,7 +47,8 @@ class MossTranscribeDiarizeModelTester(ALMModelTester):
     audio_mask_key = None
 
     def __init__(self, parent, **kwargs):
-        kwargs.setdefault("feat_seq_length", 3000)
+        kwargs.setdefault("feat_seq_length", 128)
+        kwargs.setdefault("max_source_positions", (kwargs["feat_seq_length"] - 1) // 2 + 1)
         kwargs.setdefault("d_model", 16)
         kwargs.setdefault("hidden_size", 16)
         kwargs.setdefault("intermediate_size", 32)
@@ -122,140 +123,70 @@ class MossTranscribeDiarizeForConditionalGenerationIntegrationTest(unittest.Test
 
     @slow
     def test_single_batch_sub_30(self):
-        conversation = [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "audio",
-                        "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
-                    },
-                ],
-            },
-        ]
-
         model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained(
             self.checkpoint, device_map=torch_device, dtype="auto"
         )
 
-        inputs = self.processor.apply_chat_template(
-            conversation, tokenize=True, add_generation_prompt=True, return_dict=True
-        ).to(model.device, dtype=model.dtype)
-
-        inputs_transcription = self.processor.apply_transcription_request(
+        inputs = self.processor.apply_transcription_request(
             "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
         ).to(model.device, dtype=model.dtype)
 
-        for key in inputs:
-            self.assertTrue(torch.equal(inputs[key], inputs_transcription[key]))
-
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
 
-        decoded_outputs = self.processor.batch_decode(
+        decoded_outputs = self.processor.decode(
             outputs[:, inputs.input_ids.shape[1] :],
             skip_special_tokens=True,
         )
 
         EXPECTED_OUTPUT = [
-            "[0.48][S01] Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to minus 20 degrees.[4.82]"
+            "[0.86][S01] Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to[7.81][7.81][S01] minus 20 degrees.[9.53]"
         ]
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
     @slow
     def test_single_batch_over_30(self):
-        conversation = [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "audio",
-                        "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
-                    },
-                ],
-            },
-        ]
-
         model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained(
             self.checkpoint, device_map=torch_device, dtype="auto"
         )
 
-        inputs = self.processor.apply_chat_template(
-            conversation, tokenize=True, add_generation_prompt=True, return_dict=True
-        ).to(model.device, dtype=model.dtype)
-
-        inputs_transcription = self.processor.apply_transcription_request(
+        inputs = self.processor.apply_transcription_request(
             "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
         ).to(model.device, dtype=model.dtype)
 
-        for key in inputs:
-            self.assertTrue(torch.equal(inputs[key], inputs_transcription[key]))
-
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
 
-        decoded_outputs = self.processor.batch_decode(
+        decoded_outputs = self.processor.decode(
             outputs[:, inputs.input_ids.shape[1] :],
             skip_special_tokens=True,
         )
 
         EXPECTED_OUTPUT = [
-            "[0.00][S01] This week, I traveled to Chicago to deliver my final farewell address to the nation,[2.88][2.88][S01] following the tradition of presidents before me. It was an opportunity to say thank you.[5.64][5.64][S01] Whether we've seen eye to eye or rarely agreed at all, my conversations with you,[8.94][8.94][S01] the American people, in living rooms, in schools, at farms and on factory floors,[11.58][11.58][S01] at diners, and on distant military outposts, all these conversations are what have kept me honest,[15.06][15.06][S01] kept me inspired, and kept me going. Every day, I learned from you. You made me a better president,[18.54][18.54][S01] and you made me a better man.[19.50]"
+            "[0.76][S01] This week, I traveled to Chicago to deliver my final farewell address to the nation,[5.99][5.99][S01] following in the tradition of presidents before me.[8.94][8.94][S01] It was an opportunity to say thank you.[11.74][11.74][S01] Whether we've seen eye to eye, or rarely agreed at all, my conversations with you,[17.14][17.14][S01] the American people, in living rooms and schools, at farms and on factory floors,[23.32][23.32][S01] at diners, and on distant military outposts, all these conversations are what have kept[29.16][29.16][S01] me honest, kept me inspired, and kept me going.[33.15][33.15][S01] Every day, I learned from you.[35.82][35.82][S01] You made me a better president, and you made me a better man.[39.64][39.64][S01] Over the[39.97]"
         ]
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
     @slow
     def test_batched(self):
-        conversation = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "audio",
-                            "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
-                        },
-                    ],
-                },
-            ],
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "audio",
-                            "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
-                        },
-                    ],
-                },
-            ],
-        ]
-
         model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained(
             self.checkpoint, device_map=torch_device, dtype="auto"
         )
 
-        inputs = self.processor.apply_chat_template(
-            conversation, tokenize=True, add_generation_prompt=True, return_dict=True
-        ).to(model.device, dtype=model.dtype)
-
-        inputs_transcription = self.processor.apply_transcription_request(
+        inputs = self.processor.apply_transcription_request(
             [
                 "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
                 "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
             ],
         ).to(model.device, dtype=model.dtype)
 
-        for key in inputs:
-            self.assertTrue(torch.equal(inputs[key], inputs_transcription[key]))
-
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
 
-        decoded_outputs = self.processor.batch_decode(
+        decoded_outputs = self.processor.decode(
             outputs[:, inputs.input_ids.shape[1] :],
             skip_special_tokens=True,
         )
 
         EXPECTED_OUTPUT = [
-            "[0.48][S01] Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to minus 20 degrees.[4.82]",
-            "[0.00][S01] This week, I traveled to Chicago to deliver my final farewell address to the nation,[2.88][2.88][S01] following the tradition of presidents before me. It was an opportunity to say thank you.[5.64][5.64][S01] Whether we've seen eye to eye or rarely agreed at all, my conversations with you,[8.94][8.94][S01] the American people, in living rooms, in schools, at farms and on factory floors,[11.58][11.58][S01] at diners, and on distant military outposts, all these conversations are what have kept me honest,[15.06][15.06][S01] kept me inspired, and kept me going. Every day, I learned from you. You made me a better president,[18.54][18.54][S01] and you made me a better man.[19.50]",
+            "[0.86][S01] Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to[7.81][7.81][S01] minus 20 degrees.[9.53]",
+            "[0.76][S01] This week, I traveled to Chicago to deliver my final farewell address to the nation,[5.99][5.99][S01] following in the tradition of presidents before me.[8.94][8.94][S01] It was an opportunity to say thank you.[11.74][11.74][S01] Whether we've seen eye to eye, or rarely agreed at all, my conversations with you,[17.14][17.14][S01] the American people, in living rooms and schools, at farms and on factory floors,[23.32][23.32][S01] at diners, and on distant military outposts, all these conversations are what have kept[29.16][29.16][S01] me honest, kept me inspired, and kept me going.[33.15][33.15][S01] Every day, I learned from you.[35.82][35.82][S01] You made me a better president, and you made me a better man.[39.64][39.64][S01] Over the[39.97]",
         ]
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)

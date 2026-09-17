@@ -22,6 +22,7 @@ from ...audio_utils import (
     AudioInput,
     make_audio_chat_template_content,
     make_list_of_audio_chat_template,
+    prepare_keyword_inputs,
     prepare_language_inputs,
 )
 from ...feature_extraction_utils import BatchFeature
@@ -64,15 +65,6 @@ LANGUAGE_CODE_TO_NAME = {
     "ja": "日文",
     "japanese": "日文",
 }
-
-
-def _prepare_keyword_inputs(keywords, batch_size: int) -> list[list[str] | None]:
-    """Broadcast / validate the hotword argument to match batch_size."""
-    if isinstance(keywords, str):
-        keywords = [keywords]
-    if isinstance(keywords, list | tuple) and all(isinstance(item, str) for item in keywords):
-        keywords = [list(keywords)] * batch_size
-    return prepare_prompt_input(keywords, batch_size, input_name="keywords")
 
 
 class FunAsrNanoProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
@@ -159,7 +151,7 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
 
         languages = prepare_language_inputs(language, batch_size, LANGUAGE_CODE_TO_NAME, return_code=False)
         prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
-        keyword_batches = _prepare_keyword_inputs(keywords, batch_size)
+        keyword_batches = prepare_keyword_inputs(keywords, batch_size)
 
         conversations = []
         for audio_item, prompt_text, keyword_list, language_name in zip(

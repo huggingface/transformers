@@ -472,12 +472,6 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
             `config.audio_chunk_size` to recover `audio_chunk_mapping`.
         """
         device = input_features.device
-        num_samples = padding_mask.shape[0]
-
-        audio_lengths = padding_mask.sum(-1).to(device=device)
-        per_sample_windows = (audio_lengths + self.config.audio_chunk_size - 1) // self.config.audio_chunk_size
-        per_sample_windows = per_sample_windows.clamp(min=1)
-        audio_chunk_mapping = torch.repeat_interleave(torch.arange(num_samples, device=device), per_sample_windows)
 
         # `WhisperEncoder` does not support masking `input_features` (silence in the padded log-mel region is
         # ignored by convention), so only the post-hoc lengths are needed to trim the encoder's output below.
@@ -491,22 +485,17 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
 
         audio_outputs = self.audio_tower(input_features, return_dict=True, **kwargs)
         audio_embeds = audio_outputs.last_hidden_state
-        valid_mask = torch.arange(audio_embeds.shape[1], device=device)[None, :] < conv_lengths[:, None]
 
-        # Trim each sample's valid frames to a multiple of `merge_size` so one reshape over the whole batch
-        # groups frames without crossing a sample boundary.
-        valid_frames = audio_embeds[valid_mask]
-        sample_ids = torch.repeat_interleave(audio_chunk_mapping, conv_lengths)
-        sample_lengths = torch.zeros(num_samples, dtype=torch.long, device=device).scatter_add_(
-            0, audio_chunk_mapping, conv_lengths
-        )
-        trimmed_lengths = (sample_lengths // merge_size) * merge_size
-        sample_starts = torch.nn.functional.pad(sample_lengths.cumsum(0)[:-1], (1, 0), value=0)
-        position_in_sample = torch.arange(valid_frames.shape[0], device=device) - sample_starts[sample_ids]
-        keep_mask = position_in_sample < trimmed_lengths[sample_ids]
+        # Round each chunk's valid length up to a whole number of merge groups independently (zero-padded),
+        # matching `_get_audio_token_length`. This happens before concatenation, so a >30s audio's
+        # trailing Whisper window doesn't lose frames or leak them into a neighboring chunk's merge group.
+        padded_lengths = ((conv_lengths + merge_size - 1) // merge_size) * merge_size
+        keep_mask = torch.arange(audio_embeds.shape[1], device=device)[None, :] < padded_lengths[:, None]
+
+        valid_frames = audio_embeds[keep_mask.to(audio_embeds.device)]
 
         hidden_size = valid_frames.shape[-1]
-        merged_features = valid_frames[keep_mask].reshape(-1, merge_size * hidden_size)
+        merged_features = valid_frames.reshape(-1, merge_size * hidden_size)
         audio_outputs.pooler_output = self.multi_modal_projector(merged_features)
         return audio_outputs
 
@@ -542,10 +531,7 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
         input_features: torch.FloatTensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        use_cache: bool | None = None,
         padding_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MossTranscribeDiarizeModelOutputWithPast:
@@ -576,10 +562,7 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
 
         outputs = self.language_model(
             attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
             **kwargs,
         )
 
@@ -618,11 +601,9 @@ class MossTranscribeDiarizeForConditionalGeneration(MossTranscribeDiarizePreTrai
         input_features: torch.FloatTensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         padding_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -655,10 +636,8 @@ class MossTranscribeDiarizeForConditionalGeneration(MossTranscribeDiarizePreTrai
             input_features=input_features,
             input_features_mask=input_features_mask,
             attention_mask=attention_mask,
-            position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
             padding_mask=padding_mask,
             **kwargs,
         )
