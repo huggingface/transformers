@@ -117,14 +117,14 @@ class Gemma4CausalLMOutputWithPast(ModelOutput):
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    last_hidden_state (`torch.FloatTensor`, *optional*):
-        Final layer hidden states from the language model, of shape `(batch_size, sequence_length, hidden_size)`.
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
     audio_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
+    last_hidden_state (`torch.FloatTensor`, *optional*):
+        Final layer hidden states from the language model, of shape `(batch_size, sequence_length, hidden_size)`.
     shared_kv_states (`dict`, *optional*):
         Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
@@ -1861,9 +1861,13 @@ class Gemma4ForCausalLM(Gemma4PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss.
+        if isinstance(logits_to_keep, torch.Tensor) and logits_to_keep.dtype == torch.bool:
+            # Bool mask for non-contiguous position selection, see https://github.com/huggingface/transformers/issues/48784
+            logits = self.lm_head(hidden_states[logits_to_keep])
+        else:
+            slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+            logits = self.lm_head(hidden_states[:, slice_indices, :])
         if self.config.final_logit_softcapping is not None:
             logits = logits / self.config.final_logit_softcapping
             logits = torch.tanh(logits)
@@ -2551,16 +2555,16 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
         video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
+        logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
+            A `torch.BoolTensor` must have the same shape as the input (`(batch_size, sequence_length)`); logits are
+            then computed only for the positions marked `True`, flattened in `input_ids` order, which supports
+            non-contiguous spans (e.g. packed sequences).
         per_layer_inputs (`torch.Tensor`, *optional*):
             Pre-computed per-layer input text embeddings of shape `(batch_size, sequence_length, num_hidden_layers,
             hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from `input_ids`
             via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds` instead of `input_ids`,
             you should probably precompute them and forward them along `inputs_embeds`, otherwise recomputing them needs
             to reverse the main embedding, which is expensive.
-        logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
-            A `torch.BoolTensor` must have the same shape as the input (`(batch_size, sequence_length)`); logits are
-            then computed only for the positions marked `True`, flattened in `input_ids` order, which supports
-            non-contiguous spans (e.g. packed sequences).
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -2583,20 +2587,13 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss. A bool
-        # mask is used as-is (flattening (batch_size, sequence_length) into the kept count; torch itself raises an
-        # IndexError if its shape doesn't match `hidden_states.shape[:2]`); everything else is wrapped so it only
-        # slices the sequence dimension.
-        slice_indices = (
-            logits_to_keep
-            if isinstance(logits_to_keep, torch.Tensor) and logits_to_keep.dtype == torch.bool
-            else (
-                slice(None),
-                slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep,
-                ...,
-            )
-        )
-        logits = self.lm_head(hidden_states[slice_indices])
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss.
+        if isinstance(logits_to_keep, torch.Tensor) and logits_to_keep.dtype == torch.bool:
+            # Bool mask for non-contiguous position selection, see https://github.com/huggingface/transformers/issues/48784
+            logits = self.lm_head(hidden_states[logits_to_keep])
+        else:
+            slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+            logits = self.lm_head(hidden_states[:, slice_indices, :])
         if (final_logit_softcapping := self.config.get_text_config().final_logit_softcapping) is not None:
             logits = logits / final_logit_softcapping
             logits = torch.tanh(logits)
