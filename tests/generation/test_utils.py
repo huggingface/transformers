@@ -78,6 +78,8 @@ if is_torch_available():
         GPT2LMHeadModel,
         GPT2Tokenizer,
         ImageGPTForCausalImageModeling,
+        LlamaConfig,
+        LlamaForCausalLM,
         SpeechEncoderDecoderModel,
     )
     from transformers.cache_utils import (
@@ -409,6 +411,41 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 )
 
             self._check_generate_outputs(output_generate, model.config, use_cache=True)
+
+    @pytest.mark.generate
+    def test_cached_decode_matches_cacheless(self):
+        """Greedy decoding with a cache must produce what recomputing the whole sequence produces.
+
+        The two tests above run both configurations but only check their own shapes, so a cache that feeds
+        its layers the wrong positions or a mask of the wrong width passes both. Models whose state *is*
+        their cache (`_is_stateful`) have no cacheless form to compare against and are skipped.
+        """
+        for model_class in self.all_generative_model_classes:
+            if model_class._is_stateful:
+                self.skipTest(reason=f"{model_class.__name__} keeps recurrent state, so decode has no cacheless form")
+            # Only the weights are pinned; the testers draw inputs from a `global_rng` this does not touch,
+            # so the input varies per process — the invariant has to hold for any input.
+            set_seed(42)
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            model = model_class(config).to(torch_device).eval()
+
+            cached, cacheless = (
+                self._greedy_generate(
+                    model=model,
+                    inputs_dict=inputs_dict,
+                    output_logits=True,
+                    output_scores=True,
+                    return_dict_in_generate=True,
+                    use_cache=use_cache,
+                )
+                for use_cache in (True, False)
+            )
+
+            assert_similar_generate_outputs(cached, cacheless, atol=1e-3, rtol=1e-3)
+            # That check is id-first, so it cannot see a cache bug that moves the logits without flipping
+            # the argmax. This tolerance is loose enough for kernel noise, tight enough for a real one.
+            for step, (with_cache, without_cache) in enumerate(zip(cached.logits, cacheless.logits)):
+                torch.testing.assert_close(with_cache, without_cache, rtol=1e-2, atol=1e-2, msg=f"step {step}")
 
     @pytest.mark.generate
     def test_sample_generate(self):
@@ -1560,8 +1597,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     # MoE routing accumulates FP noise across experts (different routing decisions
                     # at the margin between static and dynamic cache → different expert matmuls).
                     atol = rtol = 1e-3
-                else:
+                elif dtype == torch.float32:
                     atol = rtol = 1e-5
+                else:
+                    atol = rtol = 5e-5
                 assert_similar_generate_outputs(
                     dynamic_cache_generation, static_cache_generation, atol=atol, rtol=rtol
                 )
@@ -2855,17 +2894,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         num_kv_heads = getattr(config, "num_key_value_heads", num_attention_heads)
         hidden_size = getattr(config, "d_model", config.hidden_size)
         head_dim = getattr(config, "head_dim", hidden_size // num_attention_heads)
-        # Check for MLA and DSA attributes: MLA models cache compressed latents, DSA does not yet
+        # Check for MLA and DSA attributes: Those models cache compressed latents
         kv_lora_rank = getattr(config, "kv_lora_rank", None)
         qk_rope_head_dim = getattr(config, "qk_rope_head_dim", None)
         uses_mla = kv_lora_rank is not None and qk_rope_head_dim is not None
-        uses_dsa = uses_mla and getattr(config, "index_topk", None) is not None
-
-        # DSA models expand the latents before caching, so their keys and values have distinct head dims.
-        if uses_dsa:
-            key_shape = (batch_size, num_attention_heads, seq_length, config.qk_nope_head_dim + qk_rope_head_dim)
-            value_shape = (batch_size, num_attention_heads, seq_length, config.v_head_dim)
-            return key_shape, value_shape
 
         # For MLA models, return the shape of "kv_nope" as key and "k_rot" as value
         if uses_mla:
@@ -3953,6 +3985,61 @@ class GenerationIntegrationTests(unittest.TestCase):
             max_new_tokens=7,
         )
         self.assertTrue(out.shape[-1] <= (input_length + 7))
+
+    def test_assisted_decoding_sliding_window_multi_token_draft(self):
+        """
+        Test that assisted decoding works correctly when the assistant model has sliding window and will draft several
+        tokens at once. Indeed, the assistant always activates past recording on its Cache, and it calls `generate` which
+        performs several calls to `forward` in a row without calling `crop` in-between, so the DynamicSlidingWindowLayer cache
+        must correctly handle returning the necessary tokens, even with past recording activated.
+        """
+        config = LlamaConfig(
+            vocab_size=64,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=4,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            head_dim=8,
+            max_position_embeddings=512,
+            sliding_window=6,
+        )
+        set_seed(1)
+        model = LlamaForCausalLM(config).eval()
+        # Make sure we call several forwards in a row without crop in-between with the assistant
+        model.generation_config.num_assistant_tokens = 3
+
+        # Do it once with a prefill shorter than the sliding window
+        input_ids = torch.randint(1, 60, (1, 2))
+        attention_mask = torch.ones_like(input_ids)
+        reference = model.generate(
+            input_ids=input_ids, attention_mask=attention_mask, do_sample=False, max_new_tokens=8
+        )
+        assisted = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            do_sample=False,
+            max_new_tokens=8,
+            assistant_model=model,
+        )
+        # It must not crash above, and be the same here
+        self.assertTrue(torch.equal(reference, assisted))
+
+        # And again with a prefill longer than sliding window
+        input_ids = torch.randint(1, 60, (1, 12))
+        attention_mask = torch.ones_like(input_ids)
+        reference = model.generate(
+            input_ids=input_ids, attention_mask=attention_mask, do_sample=False, max_new_tokens=8
+        )
+        assisted = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            do_sample=False,
+            max_new_tokens=8,
+            assistant_model=model,
+        )
+        # It must not crash above, and be the same here
+        self.assertTrue(torch.equal(reference, assisted))
 
     def test_mtp_mask_creation_uses_per_layer_config(self):
         config = AutoConfig.for_model(

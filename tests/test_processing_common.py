@@ -21,6 +21,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -156,6 +157,9 @@ class ProcessorTesterMixin:
 
     # Max-length value used in chat template tests. Override in subclasses if needed.
     chat_template_max_length = 100  # max_length in test_apply_chat_template_*
+
+    # Role used in chat template tests. Override in subclasses whose template expects another role.
+    chat_template_user_role = "user"
 
     @classmethod
     def setUpClass(cls):
@@ -789,38 +793,40 @@ class ProcessorTesterMixin:
         call_signature = inspect.signature(processor.__call__)
         input_args = [param.name for param in call_signature.parameters.values() if param.annotation != param.empty]
 
-        if not ("text" in input_args and ("images" in input_args and "videos" in input_args)):
-            self.skipTest(f"{self.processor_class} doesn't support several vision modalities with text.")
+        if not (
+            "text" in input_args
+            and "images" in input_args
+            and hasattr(processor, "image_processor")
+            and hasattr(processor, "tokenizer")
+        ):
+            self.skipTest(f"{self.processor_class} doesn't support images with text.")
 
         # Prepare inputs and filter by input signature. Make sure to use a high batch size, we'll set some
         # samples to text-only later
-        text = self.prepare_text_inputs(batch_size=3, modalities=["image", "video"])
         image_inputs = self.prepare_images_inputs(batch_size=3)
-        video_inputs = self.prepare_videos_inputs(batch_size=3)
-        inputs_dict = {"text": text, "images": image_inputs, "videos": video_inputs}
-        inputs_dict = {k: v for k, v in inputs_dict.items() if k in input_args}
+        image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
+        inputs_dict_nested = {"images": image_inputs_nested}
+        modalities = ["image"]
 
         processing_kwargs = {"return_tensors": "pt", "padding": True}
         # Shouldn't sample when input is a decoded video without metadata (fpx/duration/etc.)
-        if "videos" in inputs_dict:
+        if "videos" in input_args and hasattr(processor, "video_processor"):
+            video_inputs = self.prepare_videos_inputs(batch_size=3)
+            inputs_dict_nested["videos"] = [[video] for video in video_inputs]
+            modalities.append("video")
             processing_kwargs["do_sample_frames"] = False
 
         # First call processor with all inputs and use nested input type, which is the format supported by all multimodal processors
-        image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
-        video_inputs_nested = [[video] for video in video_inputs]
-        inputs_dict_nested = {"text": text, "images": image_inputs_nested, "videos": video_inputs_nested}
-        inputs_dict_nested = {k: v for k, v in inputs_dict_nested.items() if k in input_args}
+        text = self.prepare_text_inputs(batch_size=3, modalities=modalities)
+        inputs_dict_nested["text"] = text
         inputs = processor(**inputs_dict_nested, **processing_kwargs)
         self.assertTrue(self.text_input_name in inputs)
 
         # Now call with one of the samples with no associated vision input. Let's set the first input to be a plain text
         # with no placeholder tokens and no images/videos. The final format would be `images = [[], [image2], [image3]]`
         plain_text = "lower newer"
-        image_inputs_nested[0] = []
-        video_inputs_nested[0] = []
-        text[0] = plain_text
-        inputs_dict_no_vision = {"text": text, "images": image_inputs_nested, "videos": video_inputs_nested}
-        inputs_dict_no_vision = {k: v for k, v in inputs_dict_no_vision.items() if k in input_args}
+        inputs_dict_no_vision = {key: [[]] + value[1:] for key, value in inputs_dict_nested.items() if key != "text"}
+        inputs_dict_no_vision["text"] = [plain_text] + text[1:]
         inputs_nested = processor(**inputs_dict_no_vision, **processing_kwargs)
 
         # Check that text samples are same and are expanded with placeholder tokens correctly. First sample
@@ -1323,6 +1329,56 @@ class ProcessorTesterMixin:
                 "audio_processor",
                 MODALITY_INPUT_DATA["audio"],
             )
+
+    @require_librosa
+    def test_chat_template_audio_sampling_rate(self):
+        """Audio decoded by `apply_chat_template` reaches the processor with the `sampling_rate` it was decoded at,
+        so audio processors don't warn about a missing one. Users may pass it flat or nested under `audio_kwargs`,
+        and a nested one must be forwarded as-is instead of being duplicated by a flat one."""
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        audio_processor = getattr(processor, "feature_extractor", getattr(processor, "audio_processor", None))
+        if audio_processor is None:
+            self.skipTest(f"{self.processor_class} has no audio processor")
+
+        sampling_rate = audio_processor.sampling_rate
+        messages = [
+            {
+                "role": self.chat_template_user_role,
+                "content": [
+                    {"type": "audio", "url": MODALITY_INPUT_DATA["audio"][0]},
+                    {"type": "text", "text": "What is happening in this audio?"},
+                ],
+            },
+        ]
+
+        for processor_kwargs in [
+            None,
+            {"sampling_rate": sampling_rate},
+            {"audio_kwargs": {"sampling_rate": sampling_rate}},
+            {"sampling_rate": None},
+            {"audio_kwargs": {"sampling_rate": None}},
+        ]:
+            with patch.object(
+                type(processor), "__call__", autospec=True, side_effect=type(processor).__call__
+            ) as mocked_call:
+                out_dict = processor.apply_chat_template(
+                    messages,
+                    add_generation_prompt=True,
+                    tokenize=True,
+                    return_dict=True,
+                    return_tensors="pt",
+                    processor_kwargs=processor_kwargs,
+                )
+
+            call_kwargs = mocked_call.call_args.kwargs
+            passed_sampling_rate = call_kwargs.get(
+                "sampling_rate", call_kwargs.get("audio_kwargs", {}).get("sampling_rate")
+            )
+            self.assertEqual(passed_sampling_rate, sampling_rate)
+            self.assertIn(self.audio_input_name, out_dict)
 
     @require_torchcodec
     @parameterized.expand([(1, "pt")])

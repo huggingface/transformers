@@ -21,6 +21,7 @@ from safetensors import safe_open
 
 from .._typing import PeftConfigLike
 from ..conversion_mapping import get_model_conversion_mapping
+from ..core_model_loading import WeightRenaming
 from ..utils import (
     CONFIG_NAME,
     check_peft_version,
@@ -43,7 +44,7 @@ if is_accelerate_available():
     from accelerate.utils import get_balanced_memory, infer_auto_device_map
 
 # Minimum PEFT version supported for the integration
-MIN_PEFT_VERSION = "0.19.1"
+MIN_PEFT_VERSION = "0.20.0"
 
 
 logger = logging.get_logger(__name__)
@@ -63,7 +64,7 @@ class PeftAdapterMixin:
     prompt tuning, prompt learning are out of scope as these adapters are not "injectable" into a torch module. For
     using these methods, please refer to the usage guide of PEFT library.
 
-    With this mixin, if the correct PEFT version is installed (>= 0.19.1), it is possible to:
+    With this mixin, if the correct PEFT version is installed (>= 0.20.0), it is possible to:
 
     - Load an adapter stored on a local path or in a remote Hub repository, and inject it in the model
     - Attach new adapters in the model and train them with Trainer or by your own.
@@ -242,6 +243,16 @@ class PeftAdapterMixin:
         if not hotswap:
             # Create and add fresh new adapters into the model, unless the weights are hotswapped
             inject_adapter_in_model(peft_config, self, adapter_name)
+
+        from peft.utils.other import AuxiliaryTrainingWrapper
+
+        for module_name, module in self.named_modules():
+            if not isinstance(module, AuxiliaryTrainingWrapper):
+                continue
+            for source_key, target_key in module.adapter_state_dict_load_map(adapter_name).items():
+                peft_weight_conversions.append(
+                    WeightRenaming(f"{module_name}.{source_key}", f"{module_name}.{target_key}")
+                )
 
         adapter_key_markers = {adapter_name}
         if peft_config is not None and getattr(peft_config, "peft_type", None) is not None:

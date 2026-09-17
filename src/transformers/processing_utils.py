@@ -2100,15 +2100,21 @@ class ProcessorMixin(PushToHubMixin):
                     True  # force offset mapping so we can infer token boundaries
                 )
 
-        # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`
-        sampling_rate = kwargs.get("sampling_rate", processor_kwargs.get("sampling_rate"))
+        # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`.
+        audio_kwargs_from_user = processor_kwargs.get("audio_kwargs", {})
+        sampling_rate = kwargs.get(
+            "sampling_rate", processor_kwargs.get("sampling_rate", audio_kwargs_from_user.get("sampling_rate"))
+        )
         if sampling_rate is None:
             if hasattr(self._audio_processor, "sampling_rate"):
                 sampling_rate = self._audio_processor.sampling_rate
             else:
                 sampling_rate = 16_000
 
-        load_audio_backend = kwargs.get("load_audio_backend", processor_kwargs.get("load_audio_backend"))
+        load_audio_backend = kwargs.get(
+            "load_audio_backend",
+            processor_kwargs.get("load_audio_backend", audio_kwargs_from_user.get("load_audio_backend")),
+        )
         if load_audio_backend is None:
             default_audio_kwargs = self.valid_processor_kwargs._defaults.get("audio_kwargs", {})
             load_audio_backend = default_audio_kwargs.get("load_audio_backend", "auto")
@@ -2229,6 +2235,14 @@ class ProcessorMixin(PushToHubMixin):
             # Set only is user passes a non-None value. Otherwise wa want to use each processor's own defaults
             if return_tensors:
                 processor_kwargs["return_tensors"] = return_tensors
+
+            # Audio was loaded/resampled by us above, so let the audio processor know at which rate.
+            # (we additionally preserve the location of the kwarg in the nested structure kwargs -> processor -> audio)
+            if batch_audios:
+                if "sampling_rate" in audio_kwargs_from_user:
+                    processor_kwargs["audio_kwargs"] = {**audio_kwargs_from_user, "sampling_rate": sampling_rate}
+                else:
+                    processor_kwargs["sampling_rate"] = sampling_rate
 
             images_exist = any((im is not None) for im_list in batch_images for im in im_list)
             videos_exist = any((vid is not None) for vid_list in batch_videos for vid in vid_list)

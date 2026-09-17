@@ -28,17 +28,17 @@ Parakeet models, [introduced by NVIDIA NeMo](https://developer.nvidia.com/blog/p
 **Model Architecture**
 
 - **Fast Conformer Encoder**: A linearly scalable Conformer architecture that processes mel-spectrogram features and reduces sequence length through subsampling. This is more efficient version of the Conformer Encoder found in [FastSpeech2Conformer](./fastspeech2_conformer.md) (see [`ParakeetEncoder`] for the encoder implementation and details).
-- [**ParakeetForCTC**](#parakeetforctc): a Fast Conformer Encoder + a CTC decoder
+- [**ParakeetForCTC**](#parakeetforctc-usage): a Fast Conformer Encoder + a CTC decoder
   - **CTC Decoder**: Simple but effective decoder consisting of:
     - 1D convolution projection from encoder hidden size to vocabulary size (for optimal NeMo compatibility).
     - CTC loss computation for training.
     - Greedy CTC decoding for inference.
-- [**ParakeetForRNNT**](#parakeetforrnnt): a Fast Conformer Encoder + an RNN-T (RNN Transducer) decoder
+- [**ParakeetForRNNT**](#parakeetforrnnt-usage): a Fast Conformer Encoder + an RNN-T (RNN Transducer) decoder
   - **RNN-T Decoder**: Standard neural transducer:
     - LSTM prediction network maintains language context across token predictions.
     - Joint network combines encoder and decoder outputs.
     - Greedy transducer decoding for inference: a blank emission advances the encoder frame by one, a non-blank emission stays on the same frame.
-- [**ParakeetForTDT**](#parakeetfortdt): a Fast Conformer Encoder + a TDT (Token Duration Transducer) decoder
+- [**ParakeetForTDT**](#parakeetfortdt-usage): a Fast Conformer Encoder + a TDT (Token Duration Transducer) decoder
   - **TDT Decoder**: Jointly predicts tokens and their durations, enabling efficient decoding:
     - LSTM prediction network maintains language context across token predictions.
     - Joint network combines encoder and decoder outputs.
@@ -51,7 +51,7 @@ This model was contributed by [Nithin Rao Koluguri](https://huggingface.co/nithi
 
 ## Usage
 
-### `ParakeetForCTC` usage
+### ParakeetForCTC usage
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -91,7 +91,7 @@ print(processor.decode(outputs))
 </hfoption>
 </hfoptions>
 
-### `ParakeetForRNNT` usage
+### ParakeetForRNNT usage
 
 <hfoptions id="rnnt-usage">
 <hfoption id="Pipeline">
@@ -168,7 +168,7 @@ Timestamped tokens: [[{'token': 'm', 'start': 0.4, 'end': 0.48}, {'token': 'is',
 </hfoption>
 </hfoptions>
 
-### `ParakeetForTDT` usage
+### ParakeetForTDT usage
 
 <hfoptions id="tdt-usage">
 <hfoption id="Pipeline">

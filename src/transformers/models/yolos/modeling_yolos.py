@@ -148,8 +148,15 @@ class InterpolateMidPositionEmbeddings(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
         self.config = config
+        seq_length = (
+            1 + (config.image_size[0] * config.image_size[1] // config.patch_size**2) + config.num_detection_tokens
+        )
+        self.mid_position_embeddings = nn.Parameter(
+            torch.zeros(config.num_hidden_layers - 1, 1, seq_length, config.hidden_size)
+        )
 
-    def forward(self, pos_embed, img_size=(800, 1344)) -> torch.Tensor:
+    def forward(self, img_size=(800, 1344)) -> torch.Tensor:
+        pos_embed = self.mid_position_embeddings
         cls_pos_embed = pos_embed[:, :, 0, :]
         cls_pos_embed = cls_pos_embed[:, None]
         det_pos_embed = pos_embed[:, :, -self.config.num_detection_tokens :, :]
@@ -401,23 +408,6 @@ class YolosEncoder(nn.Module):
         self.config = config
         self.layer = nn.ModuleList([YolosLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
-
-        seq_length = (
-            1 + (config.image_size[0] * config.image_size[1] // config.patch_size**2) + config.num_detection_tokens
-        )
-        self.mid_position_embeddings = (
-            nn.Parameter(
-                torch.zeros(
-                    config.num_hidden_layers - 1,
-                    1,
-                    seq_length,
-                    config.hidden_size,
-                )
-            )
-            if config.use_mid_position_embeddings
-            else None
-        )
-
         self.interpolation = InterpolateMidPositionEmbeddings(config) if config.use_mid_position_embeddings else None
 
     def forward(
@@ -427,14 +417,14 @@ class YolosEncoder(nn.Module):
         width: int,
     ) -> BaseModelOutput:
         if self.config.use_mid_position_embeddings:
-            interpolated_mid_position_embeddings = self.interpolation(self.mid_position_embeddings, (height, width))
+            interpolated_mid_position_embeddings = self.interpolation((height, width))
 
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(hidden_states)
 
             if self.config.use_mid_position_embeddings:
                 if i < (self.config.num_hidden_layers - 1):
-                    hidden_states = hidden_states + interpolated_mid_position_embeddings[i]
+                    hidden_states = hidden_states + interpolated_mid_position_embeddings[i].to(hidden_states.device)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -573,20 +563,13 @@ class YolosForObjectDetection(YolosPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> YolosObjectDetectionOutput:
         r"""
-        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: `'class_labels'` and `'boxes'` (the class labels and bounding boxes of an image in the
-            batch respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding
-            boxes in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image,
-            4)`.
-
         Examples:
 
         ```python
         >>> from transformers import AutoImageProcessor, AutoModelForObjectDetection
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
