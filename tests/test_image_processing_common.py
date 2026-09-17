@@ -445,9 +445,11 @@ class ImageProcessingTestMixin:
     def test_image_processor_from_dict_with_kwargs_has_attributes(self):
         """Check that processor initialized with from_dict with kwargs registers kwargs as attributes"""
         for image_processor_class in self.image_processor_classes.values():
-            kwargs = {"size": {"height": 123, "width": 321}}
-            image_processor = image_processor_class.from_dict(self.image_processor_dict, **kwargs)
-            self._assert_has_attributes(image_processor, kwargs)
+            image_processor = image_processor_class.from_dict(self.image_processor_dict, do_convert_rgb=False)
+            self._assert_has_attributes(image_processor, {"do_convert_rgb": False})
+
+            image_processor = image_processor_class.from_dict(self.image_processor_dict, do_convert_rgb=True)
+            self._assert_has_attributes(image_processor, {"do_convert_rgb": True})
 
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processing_classes.values():
