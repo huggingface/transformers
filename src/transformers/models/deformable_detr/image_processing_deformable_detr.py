@@ -50,7 +50,10 @@ from ...image_utils import (
     validate_annotations,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import (
+    TensorType,
+    auto_docstring,
+)
 
 
 class DeformableDetrImageProcessorKwargs(ImagesKwargs, total=False):
