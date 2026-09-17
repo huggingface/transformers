@@ -2,6 +2,7 @@ import torch
 
 from ..modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
 from ..utils import logging
+from .mla import mla
 
 
 logger = logging.get_logger(__name__)
@@ -23,6 +24,7 @@ def get_target_dtype(query: torch.Tensor, module: torch.nn.Module) -> torch.dtyp
     return None
 
 
+@mla
 def flash_attention_forward(
     module: torch.nn.Module,
     query: torch.Tensor,
@@ -34,11 +36,8 @@ def flash_attention_forward(
     sliding_window: int | None = None,
     softcap: float | None = None,
     is_causal: bool | None = None,
-    s_aux: torch.Tensor | None = None,  # alias: learnable attention sink
-    # MLA based latents along the main input
-    query_latent_states: torch.Tensor | None = None,
-    key_latent_states: torch.Tensor | None = None,
-    value_latent_states: torch.Tensor | None = None,
+    s_aux: torch.Tensor | None = None,  # alias: learnable attention sin
+    qv_latents: torch.Tensor | None = None,  # MLA/DSA latents
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     if kwargs.get("output_attentions", False):
@@ -69,14 +68,11 @@ def flash_attention_forward(
     key = key.transpose(1, 2)
     value = value.transpose(1, 2)
 
-    # Optional MLA latents handling
-    # TODO: raise if any mixed state is received
-    is_mla = query_latent_states is not None and key_latent_states is not None and value_latent_states is not None
-
     # FlashAttention requires the query and value to share a head dim; pad `value` up to the
     # query head dim and crop the output below.
+    # NOTE: The only exception is MLA (`qv_latents`) where different head dims are expected
     head_dim, v_head_dim = query.shape[-1], value.shape[-1]
-    if not is_mla and v_head_dim != head_dim:
+    if qv_latents is None and v_head_dim != head_dim:
         value = torch.nn.functional.pad(value, [0, head_dim - v_head_dim])
 
     # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
@@ -102,13 +98,11 @@ def flash_attention_forward(
             if s_aux is not None
             else None
         ),
-        query_latent_states=query_latent_states,
-        key_latent_states=key_latent_states,
-        value_latent_states=value_latent_states,
+        qv_latents=qv_latents,
         **kwargs,
     )
 
-    if not is_mla and v_head_dim != head_dim:
+    if qv_latents is None and v_head_dim != head_dim:
         attn_output = attn_output[..., :v_head_dim]
 
     return attn_output, None

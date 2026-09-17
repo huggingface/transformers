@@ -385,6 +385,7 @@ def _upad_input(
     attention_mask: torch.Tensor,
     query_length: int,
     unpad_input_func,
+    qv_latents: torch.Tensor | None = None,
 ):
     """
     Unpads query, key, and values tensors, using a single dimension for all tokens even though they belong to different batches.
@@ -404,14 +405,18 @@ def _upad_input(
             Target length.
         unpad_input_func:
             The function to use for unpadding the input tensors.
+        qv_latents (`torch.Tensor`, *optional*):
+            MLA latents with padding. Shape: (batch_size, query_length, num_heads, head_dim).
 
     Return:
         query_layer (`torch.Tensor`):
             Query state without padding. Shape: (total_target_length, num_heads, head_dim).
         key_layer (`torch.Tensor`):
-            Key state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
+            Key state without padding. Shape: (total_source_length, num_key_value_heads, head_dim).
         value_layer (`torch.Tensor`):
-            Value state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
+            Value state without padding. Shape: (total_source_length, num_key_value_heads, head_dim).
+        qv_latents (`torch.Tensor`, *optional*):
+            The MLA latents without padding. Shape: (total_target_length, num_heads, head_dim).
         indices_q (`torch.Tensor`):
             The indices of non-masked tokens from the flattened input target sequence.
         (cu_seqlens_q, cu_seqlens_k) (`tuple[int]`):
@@ -431,26 +436,37 @@ def _upad_input(
     key_layer = _index_first_axis(key_layer, indices_k)
     value_layer = _index_first_axis(value_layer, indices_k)
     if query_length == kv_seq_len:
-        query_layer = _index_first_axis(query_layer, indices_k)
         cu_seqlens_q = cu_seqlens_k
         max_seqlen_in_batch_q = max_seqlen_in_batch_k
         indices_q = indices_k
+
+        query_layer = _index_first_axis(query_layer, indices_k)
+        if qv_latents is not None:
+            qv_latents = _index_first_axis(qv_latents, indices_k)
+
     elif query_length == 1:
         max_seqlen_in_batch_q = 1
         cu_seqlens_q = torch.arange(
             batch_size + 1, dtype=torch.int32, device=query_layer.device
         )  # There is a memcpy here, that is very bad.
         indices_q = cu_seqlens_q[:-1]
+
         query_layer = query_layer.squeeze(1)
+        if qv_latents is not None:
+            qv_latents = qv_latents.squeeze(1)
     else:
         # The -q_len: slice assumes left padding.
         attention_mask = attention_mask[:, -query_length:]
+
         query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q, *_ = unpad_input_func(query_layer, attention_mask)
+        if qv_latents is not None:
+            qv_latents = _index_first_axis(qv_latents, indices_q)
 
     return (
         query_layer,
         key_layer,
         value_layer,
+        qv_latents,
         indices_q,
         (cu_seqlens_q, cu_seqlens_k),
         (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
@@ -497,7 +513,7 @@ def prepare_fa_kwargs_from_position_ids(position_ids):
     return (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k)
 
 
-def _prepare_from_posids(query, key, value, position_ids):
+def _prepare_from_posids(query, key, value, position_ids, qv_latents=None):
     """
     This function returns necessary arguments to call `flash_attn_varlen_func`.
     All three query, key, value states will be flattened.
@@ -513,6 +529,8 @@ def _prepare_from_posids(query, key, value, position_ids):
             Value state with padding. Shape: (batch_size, kv_seq_len, num_key_value_heads, head_dim).
         position_ids (`torch.Tensor`):
             Boolean or int tensor of shape (batch_size, sequence_length), 1 means valid and 0 means not valid.
+        qv_latents (`torch.Tensor`, *optional*):
+            MLA latents with padding. Shape: (batch_size, query_length, num_heads, head_dim).
 
     Return:
         query (`torch.Tensor`):
@@ -521,6 +539,8 @@ def _prepare_from_posids(query, key, value, position_ids):
             Key state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
         value (`torch.Tensor`):
             Value state with padding. Shape: (total_source_length, num_key_value_heads, head_dim).
+        qv_latents (`torch.Tensor`, *optional*):
+            MLA latents without padding. Shape: (total_target_length, num_heads, head_dim).
         (cu_seqlens_q, cu_seqlens_k) (`tuple[int]`):
             The cumulative sequence lengths for the target (query) and source (key, value), used to index into ragged (unpadded) tensors. `cu_seqlens` shape is (batch_size + 1,).
         (max_seqlen_in_batch_q, max_seqlen_in_batch_k) (`tuple[int]`):
@@ -529,10 +549,12 @@ def _prepare_from_posids(query, key, value, position_ids):
     query = query.contiguous().view(-1, query.size(-2), query.size(-1))
     key = key.contiguous().view(-1, key.size(-2), key.size(-1))
     value = value.contiguous().view(-1, value.size(-2), value.size(-1))
+    if qv_latents is not None:
+        qv_latents = qv_latents.contiguous().view(-1, qv_latents.size(-2), qv_latents.size(-1))
 
     (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = prepare_fa_kwargs_from_position_ids(position_ids)
 
-    return (query, key, value, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k))
+    return (query, key, value, qv_latents, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k))
 
 
 def _is_packed_sequence(position_ids, batch_size):
@@ -555,9 +577,6 @@ def fa_peft_integration_check(
     q: torch.Tensor,
     k: torch.Tensor,
     v: torch.Tensor,
-    q_mla: torch.Tensor | None = None,
-    k_mla: torch.Tensor | None = None,
-    v_mla: torch.Tensor | None = None,
     target_dtype: torch.dtype | None = None,
 ):
     """
@@ -566,26 +585,10 @@ def fa_peft_integration_check(
     cast them back in float16 / bfloat16 just to be sure everything works as expected.
     This might slowdown training & inference so it is recommended to not cast the LayerNorms!
     """
-    def set_optional_to_dtype(x):
-        return x if x is None else x.to(target_dtype)
-
     if target_dtype and q.dtype == torch.float32:
         logger.warning_once(f"Casting fp32 inputs back to {target_dtype} for flash-attn compatibility.")
         q, k, v = q.to(target_dtype), k.to(target_dtype), v.to(target_dtype)
-        q_mla, k_mla, v_mla = set_optional_to_dtype(q_mla), set_optional_to_dtype(k_mla), set_optional_to_dtype(v_mla)
-    return q, k, v, q_mla, k_mla, v_mla
-
-
-def prepare_mla(q_mla, k_mla):
-    if q_mla is None or k_mla is None:
-        return None
-    return torch.matmul(q_mla, k_mla).transpose(1, 2)
-
-
-def post_mla(out, v_mla):
-    if v_mla is None:
-        return out
-    return torch.matmul(out.transpose(1, 2), v_mla.transpose(-1, -2)).transpose(1, 2)
+    return q, k, v
 
 
 class FlashAttentionKwargs(TypedDict, total=False):
@@ -736,11 +739,9 @@ def _flash_attention_forward(
     cu_seq_lens_k: torch.LongTensor | None = None,
     max_length_q: int | None = None,
     max_length_k: int | None = None,
+    qv_latents: torch.Tensor | None = None,
     target_dtype: torch.dtype | None = None,
     attn_implementation: str | None = None,
-    query_latent_states: torch.Tensor | None = None,
-    key_latent_states: torch.Tensor | None = None,
-    value_latent_states: torch.Tensor | None = None,
     **kwargs,
 ):
     """
@@ -756,6 +757,8 @@ def _flash_attention_forward(
             Input key states to be passed to Flash Attention API
         value_states (`torch.Tensor`):
             Input value states to be passed to Flash Attention API
+        qv_latents (`torch.Tensor`, *optional*):
+            Input MLA latents to be passed to Flash Attention API
         attention_mask (`torch.Tensor`, *optional*):
             The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
             position of padding tokens and 1 for the position of non-padding tokens.
@@ -767,17 +770,7 @@ def _flash_attention_forward(
     )
 
     # PEFT possibly silently casts tensors to fp32, this potentially reconverts to correct dtype or is a no op
-    query_states, key_states, value_states, query_latent_states, key_latent_states, value_latent_states = fa_peft_integration_check(
-        query_states,
-        key_states,
-        value_states,
-        q_mla=query_latent_states,
-        k_mla=key_latent_states,
-        v_mla=value_latent_states,
-        target_dtype=target_dtype,
-    )
-
-    qv_latent = prepare_mla(query_latent_states, key_latent_states)
+    query_states, key_states, value_states = fa_peft_integration_check(query_states, key_states, value_states, target_dtype=target_dtype)
 
     # Extract the flash attention kwargs that have been requested (and are supported by the implementation)
     flash_kwargs = partial(
@@ -791,7 +784,6 @@ def _flash_attention_forward(
         use_top_left_mask=use_top_left_mask,
         softcap=softcap,
         deterministic=deterministic,
-        qv=qv_latent,
         **kwargs,
     )
 
@@ -807,11 +799,10 @@ def _flash_attention_forward(
         kwarg is not None for kwarg in (cu_seq_lens_q, cu_seq_lens_k, max_length_q, max_length_k)
     )
 
-    # TODO: fix varlen to include latent as well -> delay passing qv until the actual call
     # Contains at least one padding token in the sequence
     if attention_mask is not None:
-        q, k, v, indices_q, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _upad_input(
-            query_states, key_states, value_states, attention_mask, query_length, unpad_fn
+        q, k, v, qv, indices_q, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _upad_input(
+            query_states, key_states, value_states, attention_mask, query_length, unpad_fn, qv_latents=qv_latents
         )
 
         # TODO for now this is required to work with
@@ -825,7 +816,7 @@ def _flash_attention_forward(
             v,
             cu_seqlens_q=cu_seq_lens_q,
             cu_seqlens_k=cu_seq_lens_k,
-            **flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k),
+            **flash_kwargs(qv=qv, max_seqlen_q=max_length_q, max_seqlen_k=max_length_k),
         )
         if isinstance(out_unpad, tuple):
             out_unpad = out_unpad[0]
@@ -835,13 +826,15 @@ def _flash_attention_forward(
     # Padding free, i.e. sequences flattened into one total sequence
     elif is_fa_with_varlen_kwargs or is_fa_with_position_ids:
         if cu_seq_lens_q is None or cu_seq_lens_k is None:
-            q, k, v, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _prepare_from_posids(
-                query_states, key_states, value_states, position_ids
+            q, k, v, qv_latents, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _prepare_from_posids(
+                query_states, key_states, value_states, position_ids, qv_latents=qv_latents
             )
         else:
             q = query_states.reshape(-1, query_states.size(-2), query_states.size(-1))
             k = key_states.reshape(-1, key_states.size(-2), key_states.size(-1))
             v = value_states.reshape(-1, value_states.size(-2), value_states.size(-1))
+            if qv_latents is not None:
+                qv_latents = qv_latents.reshape(-1, qv_latents.size(-2), qv_latents.size(-1))
 
         # TODO for now this is required to work with
         # https://huggingface.co/kernels-community/metal-flash-sdpa/blob/main/torch-ext/metal_flash_sdpa/__init__.py
@@ -854,7 +847,7 @@ def _flash_attention_forward(
             v,
             cu_seqlens_q=cu_seq_lens_q,
             cu_seqlens_k=cu_seq_lens_k,
-            **flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k),
+            **flash_kwargs(qv=qv_latents, max_seqlen_q=max_length_q, max_seqlen_k=max_length_k),
         )
         if isinstance(out, tuple):
             out = out[0]
@@ -863,10 +856,8 @@ def _flash_attention_forward(
 
     # No padding
     else:
-        out = flash_fn(query_states, key_states, value_states, **flash_kwargs())
+        out = flash_fn(query_states, key_states, value_states, **flash_kwargs(qv=qv_latents))
         if isinstance(out, tuple):
             out = out[0]
-
-    out = post_mla(out, value_latent_states)
 
     return out
