@@ -446,8 +446,9 @@ def pytest_runtest_logreport(report):
     if not _MEM_ENABLED or _is_worker:
         return
     # Track which test each worker is currently running (for CTRL monitor line)
-    if hasattr(report, "workerid"):
-        wid = report.workerid
+    # xdist sets report.node = WorkerController; workerid lives on the node object
+    wid = getattr(report, "workerid", None) or getattr(getattr(report, "node", None), "workerid", None)
+    if wid:
         if report.when == "setup" and report.passed:
             _worker_current_test[wid] = report.nodeid
         elif report.when == "teardown":
