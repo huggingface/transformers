@@ -186,6 +186,7 @@ class Qwen3_5MoeExperts(Qwen3NextExperts):
     pass
 
 
+@use_kernel_forward_from_hub("SoftmaxTopKRouter")
 class Qwen3_5MoeTopKRouter(Qwen3VLMoeTextTopKRouter):
     pass
 
@@ -194,6 +195,7 @@ class Qwen3_5MoeSparseMoeBlock(Qwen3NextSparseMoeBlock):
     pass
 
 
+@use_kernel_forward_from_hub("RMSNormZeroCentered")
 class Qwen3_5MoeRMSNorm(Qwen3NextRMSNorm):
     pass
 
