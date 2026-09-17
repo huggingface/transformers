@@ -67,33 +67,13 @@ class DummyNoiseScheduler:
             def __init__(self, prev_sample):
                 self.prev_sample = prev_sample
 
-        # Deterministic output: ignore the random input latent and noise estimate (see class docstring)
-        prev_sample = torch.zeros_like(sample) + 0.1 * timestep.to(sample.dtype) / 1000
-        return StepOutput(prev_sample)
+        # Simple update
+        return StepOutput(sample - 0.1 * eps)
 
     def set_timesteps(self, num_inference_steps):
         self.num_inference_steps = num_inference_steps
         # Create timesteps as torch tensors going from high to low (typical for diffusion)
         self.timesteps = torch.linspace(1000, 1, num_inference_steps).long()
-
-
-class ConditionedNoiseScheduler(DummyNoiseScheduler):
-    """A deterministic scheduler whose denoised latent depends on the diffusion head's estimate.
-
-    `DummyNoiseScheduler` returns the same constant for every row, so every sequence in a batch
-    decodes to the same near-silent waveform. That is fine for tests that compare two runs of the
-    same batch, but it makes it impossible to tell whose audio is whose. Deriving the latent from
-    `eps` instead makes each row's audio a function of that row's own hidden state, so a test can
-    detect audio being attributed to the wrong sequence. It stays deterministic as long as the
-    initial latent is -- see the `torch.randn` patch in `test_generate_batched_matches_single`.
-    """
-
-    def step(self, eps, timestep, sample):
-        class StepOutput:
-            def __init__(self, prev_sample):
-                self.prev_sample = prev_sample
-
-        return StepOutput(sample - 0.1 * eps)
 
 
 class VibeVoiceModelTester:
@@ -325,24 +305,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
 
     @pytest.mark.generate
     def test_generate_batched_matches_single(self):
-        """Every sequence in a batch must receive its own audio, not a neighbour's.
-
-        `_decode_audio_latent` scatters the diffusing rows back into a full-batch tensor, because
-        the acoustic tokenizer's streaming `padding_cache` is indexed by batch row, so its output
-        has to be read back by batch position too. Reading it by position among the diffusing rows
-        instead agrees only while every row emits an audio token on the same step, and silently
-        hands a sequence its neighbour's audio from the first step where they diverge.
-
-        Three things have to hold for this to test anything, and each is easy to lose by accident:
-          * the rows must stop emitting audio tokens at different steps (asserted below), otherwise
-            the two indexings coincide;
-          * the rows must decode to *different* waveforms, or swapping them is invisible. The
-            tokenizer defaults used elsewhere in this file (`layer_scale_init_value=1e-6`) decode
-            everything to ~1e-7, below `assert_close`'s tolerance, hence the config here;
-          * the inputs must be fixed. `ids_tensor`'s default RNG is module-level and is NOT seeded
-            by `set_seed`, so it is given an explicit one.
-        """
-        seed = 7
+        # different default to trigger error for incorrectly indexing of audio chunks
         model_tester = VibeVoiceModelTester(
             self,
             batch_size=4,
@@ -354,14 +317,13 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
                 "num_filters": 4,
                 "downsampling_ratios": [2],
                 "depths": [1, 1],
-                # See the docstring: the defaults decode every row to ~0, making rows
-                # indistinguishable and the comparison below vacuous.
                 "layer_scale_init_value": 0.1,
                 "initializer_range": 0.5,
                 "weight_init_value": 0.5,
             },
         )
         config = model_tester.get_config()
+        seed = 7
         input_ids = ids_tensor(
             [model_tester.batch_size, model_tester.seq_length], model_tester.vocab_size, rng=random.Random(seed)
         )
@@ -372,7 +334,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
 
         # No `min_new_tokens`: the rows have to be free to stop at different steps.
         generate_kwargs = {
-            "noise_scheduler": ConditionedNoiseScheduler(),
+            "noise_scheduler": DummyNoiseScheduler(),
             "max_new_tokens": 20,
             "do_sample": False,
             "return_dict_in_generate": True,
@@ -380,10 +342,10 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
             "num_diffusion_steps": 10,
         }
 
-        # The initial diffusion latent is the only randomness in the loop, and it is drawn with a
-        # shape that depends on how many rows are diffusing -- so batched and single-sample runs
-        # would otherwise start from different noise and be incomparable. Zero it.
-        zeros_instead_of_randn = lambda *args, **kwargs: torch.zeros(*args, **kwargs)  # noqa: E731
+        # Initialize diffusion with same input for comparable outputs
+        def zeros_instead_of_randn(*args, **kwargs):
+            return torch.zeros(*args, **kwargs)
+
         with torch.no_grad(), patch("torch.randn", zeros_instead_of_randn):
             batched = model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
             per_sample = [

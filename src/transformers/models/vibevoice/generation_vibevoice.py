@@ -688,10 +688,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 )
                 audio_output = self._decode_audio_latent(audio_latent, diffusion_mask, batch_size, acoustic_cache)
                 acoustic_cache = audio_output.padding_cache
-                # NOTE: `audio_output.audio` is indexed by position in the BATCH, not by position
-                # among the diffusing rows: `_decode_audio_latent` scatters the compacted latents
-                # back into a full-batch tensor before decoding, because the acoustic tokenizer's
-                # streaming `padding_cache` is per batch row. So index it with `sample_idx`.
                 for sample_idx in diffusion_mask.nonzero(as_tuple=False).view(-1):
                     audio_chunks[sample_idx.item()].append(audio_output.audio[sample_idx])
 
