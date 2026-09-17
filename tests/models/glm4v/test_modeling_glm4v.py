@@ -118,7 +118,7 @@ class Glm4vVisionText2TextModelTester:
 
     def get_config(self):
         return Glm4vConfig(
-            text_config=self.text_config,
+            text_config=copy.deepcopy(self.text_config),
             vision_config=self.vision_config,
             image_token_id=self.image_token_id,
             video_token_id=self.video_token_id,
