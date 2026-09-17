@@ -24,7 +24,12 @@ import re
 import numpy as np
 import torch
 
-from ...audio_utils import AudioInput, make_audio_chat_template_content, make_list_of_audio_chat_template
+from ...audio_utils import (
+    AudioInput,
+    make_audio_chat_template_content,
+    make_list_of_audio_chat_template,
+    prepare_keyword_inputs,
+)
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
@@ -43,10 +48,8 @@ class MossTranscribeDiarizeProcessorKwargs(ProcessingKwargs, total=False):
         },
         "common_kwargs": {
             "return_tensors": "pt",
-            "padding_side": "left",
         },
         "audio_kwargs": {
-            "sampling_rate": 16000,
             "padding": "max_length",
             "return_attention_mask": True,
         },
@@ -59,40 +62,23 @@ _SEGMENT_PATTERN = re.compile(
 )
 
 
-def _prepare_keyword_inputs(keywords, batch_size: int) -> list[list[str] | None]:
-    """Broadcast / validate the hotword argument to match batch_size."""
-    if isinstance(keywords, str):
-        keywords = [keywords]
-    if isinstance(keywords, list | tuple) and all(isinstance(item, str) for item in keywords):
-        keywords = [list(keywords)] * batch_size
-    return prepare_prompt_input(keywords, batch_size, input_name="keywords")
-
-
 @requires(backends=("torch",))
 @auto_docstring
 class MossTranscribeDiarizeProcessor(ProcessorMixin):
     r"""
-    Constructs a VibeVoice ASR processor which wraps [`VibeVoiceAcousticTokenizerFeatureExtractor`] and
+    Constructs a MOSS-Transcribe-Diarize processor which wraps [`WhisperFeatureExtractor`] and
     [`Qwen2TokenizerFast`] into a single processor that inherits both the audio feature extraction and
     tokenizer functionalities.
 
     See the [`~MossTranscribeDiarizeProcessor.__call__`] for more information.
 
     Args:
-        feature_extractor (`VibeVoiceAcousticTokenizerFeatureExtractor`):
+        feature_extractor (`WhisperFeatureExtractor`):
             The feature extractor for audio processing.
         tokenizer (`Qwen2TokenizerFast`):
             The tokenizer for text processing.
         chat_template (`str`, *optional*):
             A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
-        audio_token (`str`, *optional*, defaults to `"<|box_start|>"`):
-            The audio token placeholder to use in the chat template.
-        audio_bos_token (`str`, *optional*, defaults to `"<|object_ref_start|>"`):
-            The audio begin-of-sequence token placeholder to use in the chat template.
-        audio_eos_token (`str`, *optional*, defaults to `"<|object_ref_end|>"`):
-            The audio end-of-sequence token placeholder to use in the chat template.
-        audio_duration_token (`str`, *optional*, defaults to `"<|AUDIO_DURATION|>"`):
-            The audio duration token placeholder to use in the chat template.
     """
 
     valid_processor_kwargs = MossTranscribeDiarizeProcessorKwargs
@@ -107,7 +93,6 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         audio_token: str = "<|audio_pad|>",
         audio_bos_token: str = "<|audio_start|>",
         audio_eos_token: str = "<|audio_end|>",
-        audio_duration_token: str | None = None,
         audio_tokens_per_second: float = 12.5,
         audio_merge_size: int = 4,
         time_marker_every_seconds: int = 2,
@@ -119,9 +104,6 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
             Special token marking the start of the audio span in the chat template.
         audio_eos_token (`str`, *optional*, defaults to `"<|audio_end|>"`):
             Special token marking the end of the audio span in the chat template.
-        audio_duration_token (`str`, *optional*):
-            Unused by MOSS-Transcribe-Diarize, which has no audio-duration placeholder in its prompts; kept only
-            because [`~VibeVoiceAsrProcessor.__call__`] is shared with [`VibeVoiceAsrProcessor`].
         audio_tokens_per_second (`float`, *optional*, defaults to 12.5):
             Expected number of audio placeholder tokens per second of input audio.
         audio_merge_size (`int`, *optional*, defaults to 4):
@@ -136,7 +118,6 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(audio_bos_token)
         self.audio_eos_token = audio_eos_token
         self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(audio_eos_token)
-        self.audio_duration_token = audio_duration_token
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
         self.audio_tokens_per_second = audio_tokens_per_second
         self.audio_merge_size = int(audio_merge_size)
@@ -166,13 +147,6 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
 
         if audio is not None:
             _, text, _, audio = self.prepare_inputs_layout(text=text, audio=audio, **kwargs)
-
-            # Replace audio duration placeholders in text
-            if self.audio_duration_token:
-                audio_durations = iter([len(el) / self.feature_extractor.sampling_rate for el in audio])
-                audio_duration_pattern = re.compile(re.escape(self.audio_duration_token))
-                for i in range(len(text)):
-                    text[i] = audio_duration_pattern.sub(lambda _: f"{next(audio_durations):.2f}", text[i])
 
         model_inputs = super().__call__(text=text, audio=audio, **kwargs)
 
@@ -244,19 +218,36 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
 
         # Based on `WhisperEncoder._get_feat_extract_output_lengths` (conv stride 2 only), so the placeholder
         # token count matches `get_audio_features` from the same mask.
-        mel_lengths = audio_inputs["input_features_mask"].sum(-1)
-        conv_lengths = (mel_lengths - 1) // 2 + 1
-
-        per_sample_conv_lengths = torch.zeros(len(audio), dtype=torch.long)
-        per_sample_conv_lengths.scatter_add_(0, audio_chunk_mapping, conv_lengths)
-        audio_inputs["num_audio_tokens"] = per_sample_conv_lengths // self.audio_merge_size
-
+        audio_lengths = audio_inputs["input_features_mask"].sum(-1)
+        audio_inputs["num_audio_tokens"] = self._get_audio_token_length(audio_lengths, audio_chunk_mapping)
         audio_replacements = [self.replace_audio_token(audio_inputs, audio_idx=idx) for idx in range(len(audio))]
         return audio_inputs, audio_replacements
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         num_tokens = int(audio_inputs["num_audio_tokens"][audio_idx])
-        return self._build_time_marker_span(num_tokens)
+
+        tokens_per_marker = int(self.audio_tokens_per_second * self.time_marker_every_seconds)
+        if tokens_per_marker <= 0:
+            return self.audio_token * num_tokens
+
+        # This model is trained with literal second-count tokens (ex 2, 4, ...) interleaved
+        # into the audio span every `time_marker_every_seconds`, so the model can ground text to timestamps.
+        duration = num_tokens / float(self.audio_tokens_per_second)
+        parts, consumed = [], 0
+        for sec in range(self.time_marker_every_seconds, int(duration) + 1, self.time_marker_every_seconds):
+            pos = (sec // self.time_marker_every_seconds) * tokens_per_marker
+            segment_len = pos - consumed
+            if segment_len > 0:
+                parts.append(self.audio_token * segment_len)
+                consumed += segment_len
+            parts.append(str(sec))
+
+        # Since `duration` rarely lands on an exact multiple of `time_marker_every_seconds`, the loop above
+        # stops at the last full interval and any audio tokens beyond that point get no marker.
+        remainder = num_tokens - consumed
+        if remainder > 0:
+            parts.append(self.audio_token * remainder)
+        return "".join(parts)
 
     @property
     def unused_input_names(self) -> list[str]:
@@ -295,7 +286,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
             raise ValueError("`audio` must contain at least one sample.")
 
         prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
-        keyword_batches = _prepare_keyword_inputs(keywords, batch_size)
+        keyword_batches = prepare_keyword_inputs(keywords, batch_size)
 
         conversations = []
         for audio_item, prompt_text, keyword_list in zip(audio_items, prompts, keyword_batches):
@@ -416,29 +407,16 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
 
         return transcriptions[0] if is_single else transcriptions
 
-    def _build_time_marker_span(self, num_tokens: int) -> str:
-        num_tokens = int(num_tokens)
-        if num_tokens <= 0:
-            return ""
-
-        tokens_per_marker = int(self.audio_tokens_per_second * self.time_marker_every_seconds)
-        if tokens_per_marker <= 0:
-            return self.audio_token * num_tokens
-
-        duration = num_tokens / float(self.audio_tokens_per_second)
-        parts, consumed = [], 0
-        for sec in range(self.time_marker_every_seconds, int(duration) + 1, self.time_marker_every_seconds):
-            pos = (sec // self.time_marker_every_seconds) * tokens_per_marker
-            segment_len = pos - consumed
-            if segment_len > 0:
-                parts.append(self.audio_token * segment_len)
-                consumed += segment_len
-            parts.append(str(sec))
-
-        remainder = num_tokens - consumed
-        if remainder > 0:
-            parts.append(self.audio_token * remainder)
-        return "".join(parts)
+    def _get_audio_token_length(self, audio_lengths, audio_chunk_mapping):
+        num_samples = int(audio_chunk_mapping[-1]) + 1
+        conv_lengths = (audio_lengths - 1) // 2 + 1
+        # Each chunk rounds up to a whole number of merge groups independently (into its own
+        # zero-padded tail) before summing. If done after concatenating chunks, a chunk's
+        # trailing framees would be lost (up to `self.audio_merge_size - 1`) to floor-division.
+        chunk_tokens = (conv_lengths + self.audio_merge_size - 1) // self.audio_merge_size
+        per_sample_tokens = torch.zeros(num_samples, dtype=torch.long)
+        per_sample_tokens.scatter_add_(0, audio_chunk_mapping, chunk_tokens)
+        return per_sample_tokens
 
     @property
     def model_input_names(self) -> list[str]:
