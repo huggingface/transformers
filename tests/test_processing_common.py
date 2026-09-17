@@ -793,38 +793,40 @@ class ProcessorTesterMixin:
         call_signature = inspect.signature(processor.__call__)
         input_args = [param.name for param in call_signature.parameters.values() if param.annotation != param.empty]
 
-        if not ("text" in input_args and ("images" in input_args and "videos" in input_args)):
-            self.skipTest(f"{self.processor_class} doesn't support several vision modalities with text.")
+        if not (
+            "text" in input_args
+            and "images" in input_args
+            and hasattr(processor, "image_processor")
+            and hasattr(processor, "tokenizer")
+        ):
+            self.skipTest(f"{self.processor_class} doesn't support images with text.")
 
         # Prepare inputs and filter by input signature. Make sure to use a high batch size, we'll set some
         # samples to text-only later
-        text = self.prepare_text_inputs(batch_size=3, modalities=["image", "video"])
         image_inputs = self.prepare_images_inputs(batch_size=3)
-        video_inputs = self.prepare_videos_inputs(batch_size=3)
-        inputs_dict = {"text": text, "images": image_inputs, "videos": video_inputs}
-        inputs_dict = {k: v for k, v in inputs_dict.items() if k in input_args}
+        image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
+        inputs_dict_nested = {"images": image_inputs_nested}
+        modalities = ["image"]
 
         processing_kwargs = {"return_tensors": "pt", "padding": True}
         # Shouldn't sample when input is a decoded video without metadata (fpx/duration/etc.)
-        if "videos" in inputs_dict:
+        if "videos" in input_args and hasattr(processor, "video_processor"):
+            video_inputs = self.prepare_videos_inputs(batch_size=3)
+            inputs_dict_nested["videos"] = [[video] for video in video_inputs]
+            modalities.append("video")
             processing_kwargs["do_sample_frames"] = False
 
         # First call processor with all inputs and use nested input type, which is the format supported by all multimodal processors
-        image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
-        video_inputs_nested = [[video] for video in video_inputs]
-        inputs_dict_nested = {"text": text, "images": image_inputs_nested, "videos": video_inputs_nested}
-        inputs_dict_nested = {k: v for k, v in inputs_dict_nested.items() if k in input_args}
+        text = self.prepare_text_inputs(batch_size=3, modalities=modalities)
+        inputs_dict_nested["text"] = text
         inputs = processor(**inputs_dict_nested, **processing_kwargs)
         self.assertTrue(self.text_input_name in inputs)
 
         # Now call with one of the samples with no associated vision input. Let's set the first input to be a plain text
         # with no placeholder tokens and no images/videos. The final format would be `images = [[], [image2], [image3]]`
         plain_text = "lower newer"
-        image_inputs_nested[0] = []
-        video_inputs_nested[0] = []
-        text[0] = plain_text
-        inputs_dict_no_vision = {"text": text, "images": image_inputs_nested, "videos": video_inputs_nested}
-        inputs_dict_no_vision = {k: v for k, v in inputs_dict_no_vision.items() if k in input_args}
+        inputs_dict_no_vision = {key: [[]] + value[1:] for key, value in inputs_dict_nested.items() if key != "text"}
+        inputs_dict_no_vision["text"] = [plain_text] + text[1:]
         inputs_nested = processor(**inputs_dict_no_vision, **processing_kwargs)
 
         # Check that text samples are same and are expanded with placeholder tokens correctly. First sample
