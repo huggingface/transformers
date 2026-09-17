@@ -150,6 +150,46 @@ class Kimi_K25VideoProcessor(BaseVideoProcessor):
 
         return flatten_patches, num_frames, grid_h, grid_w
 
+    def get_number_of_video_patches(
+        self, num_frames: int, height: int, width: int, videos_kwargs: dict | None = None
+    ) -> int:
+        """
+        A utility that returns number of video patches for a given video size.
+
+        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
+        without a video input.
+
+        Args:
+            num_frames (`int`):
+                Number of frames in the input video.
+            height (`int`):
+                Height of the input video.
+            width (`int`):
+                Width of the input video.
+            videos_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the video processor.
+        Returns:
+            `int`: Number of video patches per video, counting each temporal chunk as one frame.
+        """
+        videos_kwargs = videos_kwargs or {}
+        max_size_per_side = videos_kwargs["size"]["max_height"] if "size" in videos_kwargs else self.size["max_height"]
+        patch_size = videos_kwargs.get("patch_size", self.patch_size)
+        merge_size = videos_kwargs.get("merge_size", self.merge_size)
+        max_patches = videos_kwargs.get("max_patches", self.max_patches)
+        temporal_patch_size = videos_kwargs.get("temporal_patch_size", self.temporal_patch_size)
+
+        (resized_height, resized_width), (pad_height, pad_width) = navit_resize(
+            height,
+            width,
+            patch_size=patch_size,
+            merge_kernel_size=merge_size,
+            max_patches=max_patches,
+            max_size_per_side=max_size_per_side,
+        )
+        grid_h, grid_w = pad_height // patch_size, pad_width // patch_size
+        grid_t = math.ceil(num_frames / temporal_patch_size)
+        return grid_t * grid_h * grid_w
+
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
