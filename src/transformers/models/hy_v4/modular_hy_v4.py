@@ -379,7 +379,7 @@ class HYV4HyperConnection(DeepseekV4HyperConnection):
     def __init__(self, config: HYV4Config):
         super().__init__()
         del self.hc_sinkhorn_iters
-        mix = 2 * self.hc_mult  # noqa: F841
+        concatenated_weights_size = 2 * self.hc_mult  # noqa: F841
         self.hc_post_magnitude = config.hc_magnitude
         self.scale = nn.Parameter(torch.empty(2))
 
