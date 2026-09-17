@@ -48,14 +48,7 @@ if is_diffusers_available():
 
 
 class DummyNoiseScheduler:
-    """
-    A simple dummy noise scheduler for testing purposes.
-
-    Contrary to real schedulers, `step` returns a *deterministic* output that does not depend on the (randomly
-    sampled) input latent. The denoised latent is fed back into the language model as the next-step embedding, so a
-    random latent would make generated sequences differ between two `generate` calls (the global RNG state advances),
-    breaking tests that compare two runs (e.g. dynamic vs static cache, eager vs compiled).
-    """
+    """A simple dummy noise scheduler for testing purposes."""
 
     def __init__(self):
         self.num_inference_steps = None
