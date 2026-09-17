@@ -18,7 +18,6 @@ import copy
 import importlib.metadata
 import json
 import os
-import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Optional, Union
@@ -1687,6 +1686,12 @@ class SpQRConfig(QuantizationConfigMixin):
             raise TypeError("shapes must be a dict")
 
 
+# What a modelopt export's `quant_algo` means in our vocabulary: the format it becomes, and the
+# activation format that algo implies when the config does not name one. modelopt exports other
+# algos (FP8, INT4 AWQ, W4A8, MXFP4); they are refused rather than silently mis-read.
+_MODELOPT_ALGOS = {"NVFP4": (QuantizationMethod.NVFP4, "nvfp4")}
+
+
 @dataclass
 class FineGrainedConfig(QuantizationConfigMixin):
     """
@@ -1743,35 +1748,29 @@ class FineGrainedConfig(QuantizationConfigMixin):
         # MiniMax ships the skip-list under ``ignored_layers``; accept it as an alias.
         if modules_to_not_convert is None and "ignored_layers" in kwargs:
             modules_to_not_convert = kwargs.pop("ignored_layers")
-        # NVIDIA modelopt exports: `quant_algo` names the format, the skip list is a glob-style
-        # `ignore` (or `exclude_modules`, modelopt's own spelling), and `kv_cache_scheme` is
-        # dropped — the KV cache stays in the compute dtype. The calibrated `input_scale` TENSORS
-        # are the loader's business, not this config's.
+        # NVIDIA modelopt exports: `quant_algo` names the format (modelopt covers FP8, INT4 AWQ,
+        # W4A8 and others; `_MODELOPT_ALGOS` is the subset this path serves) and the skip list is
+        # a glob-style `ignore`, or `exclude_modules` in modelopt's own spelling. The calibrated
+        # `input_scale` TENSORS are the loader's business, not this config's.
         if str(self.quant_method) == "modelopt" or kwargs.get("quant_algo") is not None:
             quant_algo = kwargs.pop("quant_algo", None)
-            kwargs.pop("config_groups", None)
-            kwargs.pop("kv_cache_scheme", None)
-            kwargs.pop("producer", None)
-            if quant_algo != "NVFP4":
-                raise ValueError(f"modelopt checkpoints are supported for quant_algo='NVFP4' only; got {quant_algo!r}")
-            self.activation_format = activation_format or "nvfp4"
+            if quant_algo not in _MODELOPT_ALGOS:
+                raise ValueError(
+                    f"modelopt checkpoints are supported for quant_algo in "
+                    f"{sorted(_MODELOPT_ALGOS)}; got {quant_algo!r}"
+                )
+            # "modelopt" names the PRODUCER, not a format, so the algo it exported becomes the
+            # format here and nothing downstream has to ask where a config came from.
+            self.quant_method, algo_activation_format = _MODELOPT_ALGOS[quant_algo]
+            self.activation_format = activation_format or algo_activation_format
             ignore = kwargs.pop("ignore", None) or kwargs.pop("exclude_modules", None)
             if modules_to_not_convert is None and ignore is not None:
-                # modelopt ships glob-style subtree entries ("model.layers.0*",
-                # "model.layers.1.*"); translate each to a BOUNDED regex — a naive
-                # "*" -> ".*" leaves the dots unescaped and "layers.1..*" swallows
-                # layers 10-19 (and ``should_convert_module``'s bare-prefix clause
-                # would even match "layers.16" from "layers.1")
+                # modelopt ships glob-style subtree entries, under `ignore` as "model.layers.0*" /
+                # "model.layers.1.*" and under `exclude_modules` bare ("self_attn", "layers.0.")
+                from ..quantizers.quantizers_utils import subtree_pattern_to_regex
 
-                # (``exclude_modules`` entries are bare subtrees — "self_attn", "layers.0." —
-                # which land on the same bounded form)
-                def _subtree_regex(glob):
-                    prefix = glob[:-2] if glob.endswith(".*") else glob.rstrip("*").rstrip(".")
-                    return re.escape(prefix) + r"(\..*)?$"
-
-                modules_to_not_convert = [_subtree_regex(g) for g in ignore]
+                modules_to_not_convert = [subtree_pattern_to_regex(g) for g in ignore]
         self.modules_to_not_convert = modules_to_not_convert
-        # TODO: check overlap with not to convert
         self.modules_to_convert = modules_to_convert
         self.activation_scheme = activation_scheme
         self.weight_block_size = weight_block_size
@@ -1837,7 +1836,6 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         if modules_to_not_convert is None and "ignored_layers" in kwargs:
             modules_to_not_convert = kwargs.pop("ignored_layers")
         self.modules_to_not_convert = modules_to_not_convert
-        # TODO: check overlap with not to convert
         self.modules_to_convert = modules_to_convert
         self.activation_scheme = activation_scheme
         self.weight_block_size = weight_block_size

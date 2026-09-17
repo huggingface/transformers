@@ -145,7 +145,6 @@ class DtensorShardOperation:
 
             has_strided_shard = any(not placement.is_shard() for _, placement in dim_placements)
             # finally fetch from the disk only the slices
-            # finally fetch from the disk only the slices
             if has_strided_shard:
                 # Multi-interval dim: read each piece separately, then concatenate.
                 return self._slice_and_cat(source, intervals_by_dim, device, dtype)
@@ -159,15 +158,13 @@ class DtensorShardOperation:
 
         # MoE path
         # tensor_idx identifies the axis-0 piece in param space (not in source.shape).
+        # if this rank owns expert `tensor_idx` along axis 0, we need to slice the inner dimensions, else we drop it
+        if not self._owns_expert(tensor_idx, dim_placements):
+            return None
+
         normalized_dim_placements = [
             (mesh_dim, placement, self._normalize_param_dim(placement.dim)) for mesh_dim, placement in dim_placements
         ]
-
-        # if this rank owns expert `tensor_idx` along axis 0, we need to slice the inner dimensions, else we drop it
-        has_axis0_shard = any(param_dim == 0 for _, _, param_dim in normalized_dim_placements)
-        owns_tensor_idx = self._axis0_offset <= tensor_idx < self._axis0_offset + self._axis0_local_size
-        if has_axis0_shard and not owns_tensor_idx:
-            return None
 
         # `param_dim` indexes the full parameter layout [N, in, out] (expert axis first).
         # In per-expert loading, leading axis is absent ([in, out]).

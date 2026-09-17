@@ -364,9 +364,11 @@ def _compile_constant_helpers():
 @parameterized.expand(_compile_constant_helpers())
 def test_availability_helpers_are_compile_safe(helper_name: str, args: tuple):
     """
-    These helpers get called from inside `torch.compile`d regions — e.g. `is_dtensor`, which every MoE
-    kernel integration reaches through `to_local`. Each carries `@_make_compile_constant`, so dynamo evaluates
-    it once at trace time and never enters the body; this checks the marker actually takes effect.
+    These helpers get called from inside `torch.compile`d regions — e.g. `is_deepgemm_loadable`, which
+    `prefers_deepgemm_linear` reaches from the traced `fp8_linear` dispatch gate. Each carries
+    `@_make_compile_constant`, so dynamo evaluates it once at trace time and never enters the body
+    (whose probes reach `importlib.metadata`, which dynamo cannot follow); this checks the marker
+    actually takes effect.
 
     Folding rather than keeping the bodies traceable is deliberate. Most bottom out in
     `_is_package_available`, whose `importlib.metadata` lookup dynamo cannot follow — and follows

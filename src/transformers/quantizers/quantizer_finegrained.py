@@ -14,7 +14,13 @@
 import re
 from typing import TYPE_CHECKING
 
-from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
+from ..utils import (
+    is_accelerate_available,
+    is_torch_available,
+    is_torch_distributed_available,
+    is_torch_xpu_available,
+    logging,
+)
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
 
@@ -47,7 +53,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
         """The dequantize chain folds a weight into full precision with its per-block scale alone.
         NVFP4 carries a second level (modelopt's `weight_scale_2`) that the chain has no slot for,
         so refuse rather than hand back a weight scaled by `1 / global`."""
-        if self._quant_method() in ("nvfp4", "modelopt"):
+        if self._quant_method() == "nvfp4":
             raise NotImplementedError(
                 f"`dequantize=True` is not supported for {self._quant_method()!r} checkpoints: their "
                 "two-level scales cannot be folded into a full-precision weight by this path. Load "
@@ -56,7 +62,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
-            raise ImportError("Loading an FP8 quantized model requires accelerate (`pip install accelerate`)")
+            raise ImportError("Loading a fine-grained quantized model requires accelerate (`pip install accelerate`)")
 
         if self.quantization_config.dequantize:
             self._assert_dequantize_supported()
@@ -66,12 +72,13 @@ class FineGrainedHfQuantizer(HfQuantizer):
             if self.pre_quantized:
                 self._assert_dequantize_supported()
                 logger.warning_once(
-                    "Using FP8 quantized models requires a GPU or XPU, we will default to dequantizing the model to bf16 since no GPU or XPU is available"
+                    "Fine-grained quantized models require a GPU or XPU; dequantizing to bf16 since neither is "
+                    "available."
                 )
                 self.quantization_config.dequantize = True
                 return
             else:
-                raise RuntimeError("No GPU or XPU found. A GPU or XPU is needed for FP8 quantization.")
+                raise RuntimeError("No GPU or XPU found. A GPU or XPU is needed for fine-grained quantization.")
 
         if torch.cuda.is_available():
             compute_capability = torch.cuda.get_device_capability()
@@ -79,9 +86,9 @@ class FineGrainedHfQuantizer(HfQuantizer):
             if (major < 8) or (major == 8 and minor < 9):
                 self._assert_dequantize_supported()
                 logger.warning_once(
-                    "FP8 quantized models is only supported on GPUs with compute capability >= 8.9 (e.g 4090/H100)"
-                    f", actual = `{major}.{minor}`. We will default to dequantizing the model to bf16. Feel free "
-                    f"to use a different quantization method like bitsandbytes or torchao"
+                    "Fine-grained quantized models are only supported on GPUs with compute capability >= 8.9 "
+                    f"(e.g 4090/H100), actual = `{major}.{minor}`. We will default to dequantizing the model to "
+                    "bf16. Feel free to use a different quantization method like bitsandbytes or torchao"
                 )
                 self.quantization_config.dequantize = True
                 return
@@ -89,9 +96,9 @@ class FineGrainedHfQuantizer(HfQuantizer):
         device_map = kwargs.get("device_map")
         if device_map is None:
             logger.warning_once(
-                "You have loaded an FP8 model on CPU and have a CUDA or XPU device available, make sure to set "
-                "your model on a GPU or XPU device in order to run your model. To remove this warning, "
-                "pass device_map = 'cuda' or 'xpu'. "
+                "You have loaded a fine-grained quantized model on CPU and have a CUDA or XPU device available, "
+                "make sure to set your model on a GPU or XPU device in order to run your model. To remove this "
+                "warning, pass device_map = 'cuda' or 'xpu'."
             )
         elif isinstance(device_map, dict):
             if (
@@ -100,13 +107,14 @@ class FineGrainedHfQuantizer(HfQuantizer):
                 and ("cpu" in device_map.values() or "disk" in device_map.values())
             ):
                 raise ValueError(
-                    "You are attempting to load an FP8 model with a device_map that contains a cpu/disk device."
+                    "You are attempting to load a fine-grained quantized model with a device_map that contains "
+                    "a cpu/disk device."
                     "This is not supported when the model is quantized on the fly. "
                     "Please use a quantized checkpoint or remove the cpu/disk device from the device_map."
                 )
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        # `FP8GroupedLinear` is a subclass of `FineGrainedLinear`, so the tuple covers it implicitly.
+        # `FineGrainedGroupedLinear` subclasses `FineGrainedLinear`, so the tuple covers it implicitly.
         from ..integrations.finegrained import FineGrainedExperts, FineGrainedLinear
 
         module, tensor_name = get_module_from_name(model, param_name)
@@ -157,6 +165,13 @@ class FineGrainedHfQuantizer(HfQuantizer):
             # GPT-OSS MXFP4 runs weight-only (W4A16): raw bf16 activations against packed
             # weights. The kernels' weight-native default would quantize activations to mxfp4.
             self.quantization_config.activation_format = "bf16"
+        if getattr(self.quantization_config, "activation_format", None) == "bf16":
+            # Weight-only holds no activation global, so a calibrated checkpoint's `input_scale`
+            # has no slot to load into. Not an unexpected key — one this run has no use for, which
+            # a later W4A4 run of the same checkpoint reads.
+            model._keys_to_ignore_on_load_unexpected = set(model._keys_to_ignore_on_load_unexpected or []) | {
+                r"input_scale$"
+            }
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
@@ -168,19 +183,29 @@ class FineGrainedHfQuantizer(HfQuantizer):
         replace_with_finegrained_layer(
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
-        if getattr(self.quantization_config, "activation_format", None) == "bf16":
-            # Weight-only: the experts hold no activation global, so a calibrated checkpoint's
-            # `input_scale` has no slot to load into. It is not an unexpected key, it is one this
-            # run has no use for — a later W4A4 run of the same checkpoint reads it.
-            model._keys_to_ignore_on_load_unexpected = set(model._keys_to_ignore_on_load_unexpected or []) | {
-                r"input_scale$"
-            }
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         from ..integrations.finegrained import disable_deepgemm_on_multi_device
 
         disable_deepgemm_on_multi_device(model)
         return model
+
+    @staticmethod
+    def _expert_shard(dim: int, packed: bool = False) -> str:
+        """Register a param-only style that shards an expert tensor on `dim`, and return the name
+        a plan carries it under. A style name is the only way a plan can express a placement, and
+        the built-in styles locate their axis by counting from the END of the shape — which lands
+        inside a swizzled scale grid's inner tile rather than on its row blocks, and on the expert
+        axis of a bias."""
+        from torch.distributed.tensor import Shard
+        from torch.distributed.tensor.placement_types import _StridedShard
+
+        from ..distributed.tensor_parallel import ALL_PARALLEL_STYLES, MoEParamShard
+
+        placement = _StridedShard(dim=dim, split_factor=2) if packed else Shard(dim)
+        name = f"moe_experts_{'packed_' if packed else ''}shard{dim}"
+        ALL_PARALLEL_STYLES.register(name, MoEParamShard(placement))
+        return name
 
     def update_tp_plan(self, config):
         if "Qwen3" in config.__class__.__name__:
@@ -203,20 +228,65 @@ class FineGrainedHfQuantizer(HfQuantizer):
 
             config.base_model_tp_plan = text_plan
 
-        # Per-impl rewrite of the experts parallel-layer kind. Applied LAST so it composes
-        # on top of any plan written above (e.g. the Qwen3 dense plan). Models carry the
-        # experts mapping under `base_model_tp_plan` and/or `base_model_ep_plan` — rewrite
-        # both. See `FineGrainedExperts._impl_tp_layer_overrides`.
+        # Per-impl rewrite of the experts parallel-layer kind. Applied LAST so it composes on
+        # top of any plan written above (e.g. the Qwen3 dense plan). Models carry the experts
+        # mapping under `base_model_tp_plan` and/or `base_model_ep_plan` — rewrite both.
         from ..integrations.finegrained import FineGrainedExperts
 
         impl = getattr(config, "_experts_implementation", None)
-        layer_overrides = FineGrainedExperts._impl_tp_layer_overrides.get(impl)
-        if layer_overrides:
-            for plan_attr in ("base_model_tp_plan", "base_model_ep_plan"):
-                base_plan = getattr(config, plan_attr, None) or {}
-                updated_plan = {k: layer_overrides.get(v, v) for k, v in base_plan.items()}
-                if updated_plan != base_plan:
-                    setattr(config, plan_attr, updated_plan)
+        interleaved_gate_up = impl != "deepgemm_megamoe"
+        layer_overrides = FineGrainedExperts._impl_tp_layer_overrides.get(impl, {})
+        for plan_attr in ("base_model_tp_plan", "base_model_ep_plan"):
+            base_plan = getattr(config, plan_attr, None) or {}
+            updated_plan = {k: layer_overrides.get(v, v) for k, v in base_plan.items()}
+
+            # Every companion beside a projection weight — block scales, bias, NVFP4 globals, a
+            # static activation scale — is expert-indexed too, so each shards with the weight. The
+            # matcher keys on the exact parameter name and falls back only to the owning MODULE,
+            # whose entry shards nothing, so without these the weight is this rank's expert slice
+            # while its scales are every rank's. gate_up's input global is per-tensor: replicated.
+            for key, style in list(updated_plan.items()):
+                # only the experts' own projections: a dense `self_attn.q_proj` is `colwise` too
+                projection = key.rpartition(".")[2]
+                if projection not in ("gate_up_proj", "up_proj", "down_proj"):
+                    continue
+                if style == "grouped_gemm":
+                    companions = ["_scale_inv", "_bias", "_weight_global_scale", "_activation_scale"]
+                    if projection == "down_proj":
+                        companions.append("_input_global_scale")
+                    for suffix in companions:
+                        updated_plan.setdefault(f"{key}{suffix}", style)
+                    continue
+
+                # ...and only a STACKED experts module: `mlp.up_proj`, and the dense
+                # `mlp.shared_experts.up_proj`, end in the same word but are plain 2-D linears
+                # that colwise/rowwise already shard correctly. The model's own entry for the
+                # owning module is what distinguishes them.
+                if updated_plan.get(key.rpartition(".")[0]) not in ("moe_tp_experts", "megamoe_experts"):
+                    continue
+                if not is_torch_distributed_available():
+                    continue  # the styles below need a distributed build; without one, no TP
+
+                # Intra-expert TP: the experts stay whole and the projection's own axis splits, so
+                # the per-expert globals, activation scales and the down bias (added after the
+                # row-reduce) stay replicated — but the scale grid still has to follow its weight.
+                # dim 1 is the output axis and dim 2 the input axis in BOTH the affine and the
+                # 5-D swizzled scale container, which is why naming those two suffices.
+                if projection == "down_proj" and style in ("rowwise", "packed_rowwise"):
+                    updated_plan.setdefault(f"{key}_scale_inv", self._expert_shard(2))
+                elif projection != "down_proj" and style in ("packed_colwise", "colwise"):
+                    # `packed_colwise` splits the output axis as two packed halves — the
+                    # `[gate; up]` STACK. A quantized module holds the kernels' INTERLEAVED rows,
+                    # where that split hands a rank gate|up pairs for channels its own down
+                    # projection does not serve, so the weight's own style changes with it.
+                    rows = self._expert_shard(1, packed=not interleaved_gate_up)
+                    if interleaved_gate_up:
+                        updated_plan[key] = rows
+                    updated_plan.setdefault(f"{key}_scale_inv", rows)
+                    updated_plan.setdefault(f"{key}_bias", rows)
+
+            if updated_plan != base_plan:
+                setattr(config, plan_attr, updated_plan)
 
         return config
 
@@ -241,42 +311,27 @@ class FineGrainedHfQuantizer(HfQuantizer):
         return getattr(method, "value", method)
 
     def get_weight_conversions(self):
-        from ..core_model_loading import WeightConverter
-        from ..integrations.finegrained import (
-            FineGrainedDequantize,
-            FineGrainedInterleaveGateUp,
-            FineGrainedPackedBlocks,
-            FineGrainedScaleContainer,
-            FineGrainedSwizzleScales,
-        )
+        """The converters this CHECKPOINT's own key layout needs, on top of the model's plan."""
+        if not self.pre_quantized:
+            return []
+        if self.quantization_config.dequantize:
+            return self._dequantize_conversions()
+        if self._quant_method() == "mxfp4":
+            return self._mxfp4_conversions()
+        if self._quant_method() == "nvfp4":
+            return self._nvfp4_conversions()
+        return []
 
-        # {proj}_blocks + {proj}_scales checkpoints (GPT-OSS): the blocks regroup into the packed
-        # weight, the exponent bytes take the scale container op; then the usual layout ops. Bare
-        # patterns (no `experts.` scope), so they ride here rather than via `_with_expert_layout_ops`.
-        if self.pre_quantized and self._quant_method() == "mxfp4" and not self.quantization_config.dequantize:
-            converters = []
-            for proj in ("gate_up_proj", "down_proj"):
-                interleave = [FineGrainedInterleaveGateUp(self)] if proj == "gate_up_proj" else []
-                converters += [
-                    WeightConverter(
-                        source_patterns=rf"{proj}_blocks$",
-                        target_patterns=proj,
-                        operations=[FineGrainedPackedBlocks(self), *interleave, FineGrainedSwizzleScales(self)],
-                    ),
-                    WeightConverter(
-                        source_patterns=rf"{proj}_scales$",
-                        target_patterns=f"{proj}_scale_inv",
-                        operations=[*interleave, FineGrainedScaleContainer(self), FineGrainedSwizzleScales(self)],
-                    ),
-                ]
-            return converters
+    def _dequantize_conversions(self):
+        """Every quantized key folded back to a full-precision weight. One converter per key
+        layout: the packed `{proj}_blocks` + `{proj}_scales` pair GPT-OSS ships, and the
+        `weight` + `weight_scale_inv` pair everything else does."""
+        from ..core_model_loading import Transpose, WeightConverter
+        from ..integrations.finegrained import FineGrainedDequantize, FineGrainedPackedBlocks
 
-        # The same GPT-OSS keys under `dequantize=True`: the blocks regroup into the packed rows
-        # and the exponent-byte scales come back out of them as bf16, in the (E, hidden, 2I)
-        # orientation the unquantized experts hold.
-        if self.pre_quantized and self._quant_method() == "mxfp4" and self.quantization_config.dequantize:
-            from ..core_model_loading import Transpose
-
+        if self._quant_method() == "mxfp4":
+            # the blocks regroup into the packed rows and the exponent-byte scales come back out
+            # of them as bf16, in the (E, hidden, 2I) orientation the unquantized experts hold
             return [
                 WeightConverter(
                     source_patterns=[rf"{proj}_blocks$", rf"{proj}_scales$"],
@@ -286,132 +341,159 @@ class FineGrainedHfQuantizer(HfQuantizer):
                 for proj in ("gate_up_proj", "down_proj")
             ]
 
-        # modelopt NVFP4 scales (`weight_scale`, `weight_scale_2`, `input_scale`), in both layouts
-        # a modelopt checkpoint ships them in: per expert per projection (GLM-5.2-NVFP4) or already
-        # stacked per layer (the fused vLLM layout, Muse-Spark). A checkpoint matches one set and
-        # the other never fires. Routed experts only — a generic `weight_scale*` rename would run
-        # before converter collection and mangle these keys.
-        if self.pre_quantized and self._quant_method() == "modelopt" and not self.quantization_config.dequantize:
-            # A weight-only run keeps activations bf16, so its experts hold no activation global
-            # and the checkpoint's calibrated `input_scale` has nowhere to land: leave those keys
-            # to the unexpected-key filter below rather than converting them onto a module slot
-            # that does not exist.
-            calibrated = getattr(self.quantization_config, "activation_format", None) != "bf16"
-            from ..core_model_loading import Concatenate, MergeModulelist
-            from ..integrations.finegrained import (
-                FineGrainedInputGlobals,
-                FineGrainedScaleContainer,
-                FineGrainedViewPackedInt8,
-                FineGrainedWeightGlobals,
+        # anchored `weight$` so the scale keys land in the scale slots; the activation
+        # scales are collected only to be dropped
+        return [
+            WeightConverter(
+                source_patterns=["weight$", "weight_scale_inv", "activation_scale"],
+                target_patterns="weight",
+                operations=[FineGrainedDequantize(self)],
             )
+        ]
 
-            # MergeModulelist is what stamps each source with its expert index, which is what lets
-            # expert parallelism keep only this rank's experts (see `tensor_idx` in
-            # core_model_loading). Without it every rank collects all E values and the forward
-            # asserts on the per-expert count.
-            per_expert = [
-                WeightConverter(
-                    source_patterns=[
-                        "mlp.experts.*.gate_proj.weight_scale$",
-                        "mlp.experts.*.up_proj.weight_scale$",
-                    ],
-                    target_patterns="mlp.experts.gate_up_proj_scale_inv",
-                    operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
-                ),
-                WeightConverter(
-                    source_patterns="mlp.experts.*.down_proj.weight_scale$",
-                    target_patterns="mlp.experts.down_proj_scale_inv",
-                    operations=[MergeModulelist(dim=0)],
-                ),
-                # every second-level global of a layer in ONE converter: the gate|up stack's two
-                # calibrated halves merge into one global per expert by folding the up half's onto
-                # the down projection, so the weight globals and the down's input scale have to be
-                # decided together (`FineGrainedWeightGlobals`)
-                WeightConverter(
-                    source_patterns=[
-                        "mlp.experts.*.gate_proj.weight_scale_2",
-                        "mlp.experts.*.up_proj.weight_scale_2",
-                        "mlp.experts.*.down_proj.weight_scale_2",
-                        *(["mlp.experts.*.down_proj.input_scale"] if calibrated else []),
-                    ],
-                    target_patterns=[
-                        "mlp.experts.gate_up_proj_weight_global_scale",
-                        "mlp.experts.down_proj_weight_global_scale",
-                        *(["mlp.experts.down_proj_input_global_scale"] if calibrated else []),
-                    ],
-                    operations=[MergeModulelist(dim=0), FineGrainedWeightGlobals(self)],
-                ),
-            ]
-            if calibrated:
-                per_expert.append(
-                    WeightConverter(
-                        source_patterns=[
-                            "mlp.experts.*.gate_proj.input_scale",
-                            "mlp.experts.*.up_proj.input_scale",
-                        ],
-                        target_patterns="mlp.experts.gate_up_proj_input_global_scale",
-                        operations=[MergeModulelist(dim=0), FineGrainedInputGlobals(self)],
-                    )
-                )
-            fused = [
-                # the container cast the module's scale dtype needs; `_with_expert_layout_ops`
-                # adds the interleave and the swizzle on top (it re-adds the cast, which is
-                # idempotent)
-                WeightConverter(
-                    source_patterns=rf"experts\.{proj}_weight_scale$",
-                    target_patterns=f"experts.{proj}_scale_inv",
-                    operations=[FineGrainedScaleContainer(self)],
-                )
-                for proj in ("gate_up_proj", "down_proj")
-            ]
-            fused += [
-                # the same one-converter rule as the per-expert layout above, over the keys the
-                # fused layout ships
-                WeightConverter(
-                    source_patterns=[
-                        r"experts\.gate_up_proj_weight_scale_2$",
-                        r"experts\.down_proj_weight_scale_2$",
-                        *([r"experts\.down_proj_input_scale$"] if calibrated else []),
-                    ],
-                    target_patterns=[
-                        "experts.gate_up_proj_weight_global_scale",
-                        "experts.down_proj_weight_global_scale",
-                        *(["experts.down_proj_input_global_scale"] if calibrated else []),
-                    ],
-                    operations=[FineGrainedWeightGlobals(self)],
-                ),
-            ]
-            if calibrated:
-                fused.append(
-                    WeightConverter(
-                        source_patterns=r"experts\.gate_up_proj_input_scale$",
-                        target_patterns="experts.gate_up_proj_input_global_scale",
-                        operations=[FineGrainedInputGlobals(self)],
-                    )
-                )
-            # the fused expert WEIGHTS take the packed uint8 -> int8 view the `.weight`-anchored
-            # rule below gives the per-expert layout; the layout ops ride on top of both
-            fused += [
-                WeightConverter(
-                    source_patterns=rf"experts\.{proj}$",
-                    target_patterns=f"experts.{proj}",
-                    operations=[FineGrainedViewPackedInt8(self)],
-                )
-                for proj in ("gate_up_proj", "down_proj")
-            ]
-            return per_expert + fused
+    def _mxfp4_conversions(self):
+        """{proj}_blocks + {proj}_scales checkpoints (GPT-OSS): the blocks regroup into the packed
+        weight, the exponent bytes take the scale container op; then the usual layout ops. Bare
+        patterns (no `experts.` scope), so they ride here rather than via `_with_expert_layout_ops`."""
+        from ..core_model_loading import WeightConverter
+        from ..integrations.finegrained import (
+            FineGrainedInterleaveGateUp,
+            FineGrainedPackedBlocks,
+            FineGrainedScaleContainer,
+            FineGrainedSwizzleScales,
+        )
 
-        if self.pre_quantized and self.quantization_config.dequantize:
-            return [
-                # anchored `weight$` so the scale keys land in the scale slots; the activation
-                # scales are collected only to be dropped
+        converters = []
+        for proj in ("gate_up_proj", "down_proj"):
+            interleave = [FineGrainedInterleaveGateUp(self)] if proj == "gate_up_proj" else []
+            converters += [
                 WeightConverter(
-                    source_patterns=["weight$", "weight_scale_inv", "activation_scale"],
-                    target_patterns="weight",
-                    operations=[FineGrainedDequantize(self)],
-                )
+                    source_patterns=rf"{proj}_blocks$",
+                    target_patterns=proj,
+                    operations=[FineGrainedPackedBlocks(self), *interleave, FineGrainedSwizzleScales(self)],
+                ),
+                WeightConverter(
+                    source_patterns=rf"{proj}_scales$",
+                    target_patterns=f"{proj}_scale_inv",
+                    operations=[*interleave, FineGrainedScaleContainer(self), FineGrainedSwizzleScales(self)],
+                ),
             ]
-        return []
+        return converters
+
+    def _nvfp4_conversions(self):
+        """modelopt NVFP4 scales (`weight_scale`, `weight_scale_2`, `input_scale`), in both layouts
+        a modelopt checkpoint ships them in: per expert per projection (GLM-5.2-NVFP4) or already
+        stacked per layer (the fused vLLM layout, Muse-Spark). A checkpoint matches one set and
+        the other never fires. Routed experts only — a generic `weight_scale*` rename would run
+        before converter collection and mangle these keys."""
+        from ..core_model_loading import Concatenate, MergeModulelist, WeightConverter
+        from ..integrations.finegrained import (
+            FineGrainedInputGlobals,
+            FineGrainedScaleContainer,
+            FineGrainedViewPackedInt8,
+            FineGrainedWeightGlobals,
+        )
+
+        # A weight-only run keeps activations bf16, so its experts hold no activation global and
+        # the checkpoint's calibrated `input_scale` has nowhere to land: leave those keys to the
+        # unexpected-key filter rather than converting them onto a module slot that does not exist.
+        calibrated = getattr(self.quantization_config, "activation_format", None) != "bf16"
+
+        # MergeModulelist is what stamps each source with its expert index, which is what lets
+        # expert parallelism keep only this rank's experts (see `tensor_idx` in
+        # core_model_loading). Without it every rank collects all E values and the forward
+        # asserts on the per-expert count.
+        per_expert = [
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.gate_proj.weight_scale$",
+                    "mlp.experts.*.up_proj.weight_scale$",
+                ],
+                target_patterns="mlp.experts.gate_up_proj_scale_inv",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight_scale$",
+                target_patterns="mlp.experts.down_proj_scale_inv",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            # every second-level global of a layer in ONE converter: the gate|up stack's two
+            # calibrated halves merge into one global per expert by folding the up half's onto
+            # the down projection, so the weight globals and the down's input scale have to be
+            # decided together (`FineGrainedWeightGlobals`)
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.gate_proj.weight_scale_2",
+                    "mlp.experts.*.up_proj.weight_scale_2",
+                    "mlp.experts.*.down_proj.weight_scale_2",
+                    *(["mlp.experts.*.down_proj.input_scale"] if calibrated else []),
+                ],
+                target_patterns=[
+                    "mlp.experts.gate_up_proj_weight_global_scale",
+                    "mlp.experts.down_proj_weight_global_scale",
+                    *(["mlp.experts.down_proj_input_global_scale"] if calibrated else []),
+                ],
+                operations=[MergeModulelist(dim=0), FineGrainedWeightGlobals(self)],
+            ),
+        ]
+        if calibrated:
+            per_expert.append(
+                WeightConverter(
+                    source_patterns=[
+                        "mlp.experts.*.gate_proj.input_scale",
+                        "mlp.experts.*.up_proj.input_scale",
+                    ],
+                    target_patterns="mlp.experts.gate_up_proj_input_global_scale",
+                    operations=[MergeModulelist(dim=0), FineGrainedInputGlobals(self)],
+                )
+            )
+        fused = [
+            # the container cast the module's scale dtype needs; `_with_expert_layout_ops`
+            # adds the interleave and the swizzle on top (it re-adds the cast, which is
+            # idempotent)
+            WeightConverter(
+                source_patterns=rf"experts\.{proj}_weight_scale$",
+                target_patterns=f"experts.{proj}_scale_inv",
+                operations=[FineGrainedScaleContainer(self)],
+            )
+            for proj in ("gate_up_proj", "down_proj")
+        ]
+        fused += [
+            # the same one-converter rule as the per-expert layout above, over the keys the
+            # fused layout ships
+            WeightConverter(
+                source_patterns=[
+                    r"experts\.gate_up_proj_weight_scale_2$",
+                    r"experts\.down_proj_weight_scale_2$",
+                    *([r"experts\.down_proj_input_scale$"] if calibrated else []),
+                ],
+                target_patterns=[
+                    "experts.gate_up_proj_weight_global_scale",
+                    "experts.down_proj_weight_global_scale",
+                    *(["experts.down_proj_input_global_scale"] if calibrated else []),
+                ],
+                operations=[FineGrainedWeightGlobals(self)],
+            ),
+        ]
+        if calibrated:
+            fused.append(
+                WeightConverter(
+                    source_patterns=r"experts\.gate_up_proj_input_scale$",
+                    target_patterns="experts.gate_up_proj_input_global_scale",
+                    operations=[FineGrainedInputGlobals(self)],
+                )
+            )
+        # the fused expert WEIGHTS take the packed uint8 -> int8 view the `.weight`-anchored
+        # rule below gives the per-expert layout; the layout ops ride on top of both
+        fused += [
+            WeightConverter(
+                source_patterns=rf"experts\.{proj}$",
+                target_patterns=f"experts.{proj}",
+                operations=[FineGrainedViewPackedInt8(self)],
+            )
+            for proj in ("gate_up_proj", "down_proj")
+        ]
+        return per_expert + fused
 
     def update_weight_conversions(self, weight_conversions):
         """Rewrite the model's conversion plan for this checkpoint:
@@ -458,7 +540,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
                 updated.append(conv)
             return updated + self.get_weight_conversions()
 
-        if self.pre_quantized and self._quant_method() == "modelopt":
+        if self.pre_quantized and self._quant_method() == "nvfp4":
             updated = []
             for conv in weight_conversions:
                 if isinstance(conv, WeightConverter) and any(p.endswith(".weight") for p in conv.source_patterns):
@@ -505,11 +587,10 @@ class FineGrainedHfQuantizer(HfQuantizer):
                 t for t in targets if re.search(r"experts\.(gate_up_proj|down_proj)(_scale_inv|_bias)?\$?$", t)
             ]
             if expert_targets:
-                conv = WeightConverter(
-                    source_patterns=conv.source_patterns,
-                    target_patterns=conv.target_patterns,
-                    operations=list(conv.operations) + layout_ops(expert_targets[0]),
-                )
+                # Append to the EXISTING converter rather than rebuild it: `scope_prefix`,
+                # `base_model_prefix` and `force_cpu` are set on it before this hook runs and
+                # are not `__init__` arguments, so a fresh one silently loses them.
+                conv.operations = list(conv.operations) + layout_ops(expert_targets[0])
             updated.append(conv)
         # dense linears have no converter: their scale keys take the container cast alone
         updated.append(

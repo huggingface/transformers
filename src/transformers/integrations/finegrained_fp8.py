@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import functools
 import os
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -39,15 +38,13 @@ from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
 from .moe import ExpertsInterface, use_experts_implementation
 
 
-warnings.warn(
-    "finegrained_fp8 is frozen for backward compatibility and no longer "
-    "receives new recipes; the fine-grained quantization machinery lives in transformers.integrations.finegrained "
-    "(block-FP8, MXFP8, MXFP4, NVFP4, weight-only).",
-    DeprecationWarning,
-)
-
-
 logger = logging.get_logger(__name__)
+
+logger.warning(
+    "finegrained_fp8 is frozen for backward compatibility and no longer receives new recipes; the "
+    "fine-grained quantization machinery lives in transformers.integrations.finegrained "
+    "(block-FP8, MXFP8, MXFP4, NVFP4, weight-only)."
+)
 
 
 _FP8_DTYPE = torch.float8_e4m3fn

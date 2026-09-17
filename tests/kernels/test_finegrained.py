@@ -15,7 +15,12 @@
 mocked, so these pin exactly what the integration passes to `kernels-community/finegrained-kernels`
 (the As-positional / no-block_size / expert_start / b_global_scale contract) without a GPU."""
 
+import os
+import socket
+import subprocess
+import tempfile
 import unittest
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from unittest import mock
 
@@ -29,7 +34,13 @@ from transformers.integrations.finegrained import (
     finegrained_linear,
     load_finegrained_kernel,
 )
-from transformers.testing_utils import require_torch, require_torch_gpu
+from transformers.testing_utils import (
+    TestCasePlus,
+    require_torch,
+    require_torch_gpu,
+    require_torch_multi_accelerator,
+    slow,
+)
 
 
 @dataclass
@@ -341,8 +352,7 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         A form the kernels do not implement rides as the module's own ``_apply_post_norm``."""
         kernel, rec = _fake_bundle()
         m = self._experts(has_gate=True)
-        norm = torch.nn.LayerNorm(m.hidden_dim)
-        m.post_expert_norm, m._apply_post_norm = norm, norm
+        m.post_expert_norm, m.has_post_expert_norm = torch.nn.LayerNorm(m.hidden_dim), True
         p1, p2, p3, p4 = _loaded(kernel)
         with p1, p2, p3, p4:
             fg.finegrained_grouped_mm_experts_forward(m, *self._route())
@@ -357,20 +367,20 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
                 self.rows += x.shape[0]
                 return x
 
-        m.post_expert_norm = m._apply_post_norm = _Recording()
+        m.post_expert_norm = _Recording()
         with p1, p2, p3, p4, mock.patch.object(deepgemm, "is_deepgemm_loadable", return_value=False):
             m(*self._route())
         self.assertTrue(m.post_expert_norm.rows, "the eager loop never applied the post-expert norm")
 
-    def test_naming_a_post_expert_norm_requires_the_hook_that_applies_it(self):
-        """The shared experts interface: a class that names a post-expert norm has to define
+    def test_declaring_a_post_expert_norm_requires_the_hook_that_applies_it(self):
+        """The shared experts interface: a class that declares a post-expert norm has to define
         `_apply_post_norm`, where its own math lives — there is no default passthrough to fall
         back on, the way `act_fn` has no default activation."""
         from transformers.integrations.moe import use_experts_implementation
 
         with self.assertRaises(TypeError):
 
-            @use_experts_implementation(post_expert_norm="rms_norm")
+            @use_experts_implementation(has_post_expert_norm=True)
             class _NoHook(torch.nn.Module):
                 def forward(self, hidden_states, top_k_index, top_k_weights):
                     return hidden_states
@@ -381,7 +391,7 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
         folds it into its reduce instead of calling the module."""
         kernel, rec = _fake_bundle()
         m = self._experts(has_gate=True)
-        m.post_expert_norm = m._apply_post_norm = torch.nn.RMSNorm(m.hidden_dim, eps=1e-4)
+        m.post_expert_norm, m.has_post_expert_norm = torch.nn.RMSNorm(m.hidden_dim, eps=1e-4), True
         p1, p2, p3, p4 = _loaded(kernel)
         for name, fused in (("rms_norm", True), ("input_scaled_rms_norm", True), ("a_models_own_norm", False)):
             m.post_expert_norm_name = name
@@ -427,16 +437,187 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
 class FrozenFp8ShimTest(unittest.TestCase):
     def test_frozen_module_warns_and_is_self_contained(self):
         import importlib
-        import warnings
 
         import transformers.integrations.finegrained_fp8 as frozen
 
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
+        # the notice rides the library logger, so it honours transformers' verbosity settings
+        with self.assertLogs("transformers.integrations.finegrained_fp8", level="WARNING") as captured:
             importlib.reload(frozen)
-        self.assertTrue(any(issubclass(x.category, DeprecationWarning) for x in w))
+        self.assertTrue(any("frozen for backward compatibility" in line for line in captured.output))
         # distinct machinery: the frozen classes are not the live ones
         self.assertIsNot(frozen.FP8Linear, FineGrainedLinear)
+
+
+@require_torch
+class FineGrainedValidateEnvironmentTest(unittest.TestCase):
+    """`validate_environment` on the LIVE quantizer. The only tests that covered a
+    `validate_environment` sat on `FineGrainedFP8HfQuantizer`, which no `from_pretrained` can
+    reach any more (`AUTO_QUANTIZER_MAPPING["fp8"]` is `FineGrainedHfQuantizer`)."""
+
+    @contextmanager
+    def _no_accelerator(self):
+        with ExitStack() as stack:
+            stack.enter_context(mock.patch("torch.cuda.is_available", return_value=False))
+            stack.enter_context(
+                mock.patch("transformers.quantizers.quantizer_finegrained.is_torch_xpu_available", return_value=False)
+            )
+            yield
+
+    def _quantizer(self, pre_quantized, **cfg_kwargs):
+        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+        from transformers.utils.quantization_config import FineGrainedConfig
+
+        quantizer = FineGrainedHfQuantizer(FineGrainedConfig(**cfg_kwargs))
+        quantizer.pre_quantized = pre_quantized
+        return quantizer
+
+    def test_no_accelerator_refuses_to_quantize(self):
+        # quantizing a bf16 checkpoint needs the hardware; there is nothing to fall back to
+        quantizer = self._quantizer(pre_quantized=False)
+        with self._no_accelerator(), self.assertRaises(RuntimeError):
+            quantizer.validate_environment()
+
+    def test_no_accelerator_dequantizes_a_quantized_checkpoint(self):
+        quantizer = self._quantizer(pre_quantized=True)
+        with self._no_accelerator():
+            quantizer.validate_environment()
+        self.assertTrue(quantizer.quantization_config.dequantize)
+
+    def test_nvfp4_refuses_to_dequantize(self):
+        # two-level scales have no slot in the dequantize chain, so the CPU fallback that rescues
+        # block-FP8 must refuse here rather than hand back a weight scaled by `1 / global`
+        for pre_quantized, kwargs in ((True, {}), (False, {"dequantize": True})):
+            with self.subTest(pre_quantized=pre_quantized):
+                quantizer = self._quantizer(pre_quantized=pre_quantized, quant_method="nvfp4", **kwargs)
+                with self._no_accelerator(), self.assertRaises(NotImplementedError):
+                    quantizer.validate_environment()
+
+
+class FineGrainedParallelPlanTest(unittest.TestCase):
+    """`update_tp_plan`: a model's plan as a quantized experts module needs it."""
+
+    BASE_EP = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.self_attn.q_proj": "colwise",
+    }
+
+    def _planned(self, impl=None, raw=None):
+        from types import SimpleNamespace
+
+        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+        from transformers.utils.quantization_config import FineGrainedConfig
+
+        quantizer = FineGrainedHfQuantizer(FineGrainedConfig())
+        config = SimpleNamespace(base_model_tp_plan=dict(raw or self.BASE_EP), _experts_implementation=impl)
+        quantizer.update_tp_plan(config)
+        return config.base_model_tp_plan
+
+    def test_every_companion_shards_with_its_expert_weight(self):
+        """The plan matcher keys on the exact parameter name and falls back only to the owning
+        module, whose entry shards nothing — so a scale with no entry of its own stays whole while
+        its weight is this rank's expert slice, and every rank but the first reads another rank's
+        scales."""
+        from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
+
+        plan = self._planned()
+        style = lambda name: _get_parameter_tp_plan(f"layers.3.mlp.experts.{name}", plan)  # noqa: E731
+
+        for name in ("gate_up_proj", "gate_up_proj_scale_inv", "gate_up_proj_weight_global_scale"):
+            self.assertEqual(style(name), "grouped_gemm", name)
+        for name in ("down_proj_scale_inv", "down_proj_bias", "down_proj_input_global_scale"):
+            self.assertEqual(style(name), "grouped_gemm", name)
+        # one per-tensor value for the pre-routing hidden states: replicated, so no entry of its own
+        self.assertEqual(style("gate_up_proj_input_global_scale"), "moe_tp_experts")
+        self.assertEqual(plan["layers.*.self_attn.q_proj"], "colwise")
+
+    def test_intra_expert_entries_follow_the_projection_axis(self):
+        """Under intra-expert TP the experts stay whole and the projection's own axis splits, so
+        the scale grid must follow its weight while the per-expert globals stay replicated. And
+        `packed_colwise` splits the output axis as two packed halves — the `[gate; up]` STACK —
+        where a quantized module holds interleaved rows, so the weight's own style changes too."""
+        from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
+
+        base = {
+            "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+            "layers.*.mlp.experts.down_proj": "rowwise",
+            "layers.*.mlp.experts": "moe_tp_experts",
+        }
+        plan = self._planned(raw=base)
+        style = lambda n: _get_parameter_tp_plan(f"layers.3.mlp.experts.{n}", plan)  # noqa: E731
+
+        # interleaved rows take a CONTIGUOUS split of the output axis, and the scale/bias with them
+        for name in ("gate_up_proj", "gate_up_proj_scale_inv", "gate_up_proj_bias"):
+            self.assertEqual(style(name), "moe_experts_shard1", name)
+        # the down scale splits on dim 2 — the reduce axis affine and 5-D swizzled alike
+        self.assertEqual(style("down_proj"), "rowwise")
+        self.assertEqual(style("down_proj_scale_inv"), "moe_experts_shard2")
+        # TP does not split experts, so anything indexed per expert stays whole
+        for name in ("gate_up_proj_weight_global_scale", "down_proj_weight_global_scale", "down_proj_bias"):
+            self.assertEqual(style(name), "moe_tp_experts", name)
+
+        # the one backend holding the stack keeps the packed split, weight and companions alike
+        stacked = self._planned(raw=base, impl="deepgemm_megamoe")
+        self.assertEqual(_get_parameter_tp_plan("layers.3.mlp.experts.gate_up_proj", stacked), "packed_colwise")
+        self.assertEqual(
+            _get_parameter_tp_plan("layers.3.mlp.experts.gate_up_proj_scale_inv", stacked),
+            "moe_experts_packed_shard1",
+        )
+
+    def test_dense_projections_that_share_a_name_are_left_alone(self):
+        """`mlp.up_proj` and `mlp.shared_experts.down_proj` end in the same words as the stacked
+        expert projections but are plain 2-D linears that colwise/rowwise already shard right.
+        Rewriting them to an expert-axis style sharded a dim they do not have — a CUDA illegal
+        memory access in the dense FP8 matmul, seen on DeepSeek-V3 under TP."""
+        from transformers.distributed.tensor_parallel import _get_parameter_tp_plan
+
+        plan = self._planned(
+            raw={
+                "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+                "layers.*.mlp.experts.down_proj": "rowwise",
+                "layers.*.mlp.experts": "moe_tp_experts",
+                "layers.*.mlp.up_proj": "colwise",
+                "layers.*.mlp.down_proj": "rowwise",
+                "layers.*.mlp.shared_experts.up_proj": "colwise",
+                "layers.*.mlp.shared_experts.down_proj": "rowwise",
+            }
+        )
+        for dense, expected in (
+            ("layers.*.mlp.up_proj", "colwise"),
+            ("layers.*.mlp.down_proj", "rowwise"),
+            ("layers.*.mlp.shared_experts.up_proj", "colwise"),
+            ("layers.*.mlp.shared_experts.down_proj", "rowwise"),
+        ):
+            self.assertEqual(plan[dense], expected, dense)
+        # and no scale entry was invented for a dense linear, whose scale `rowwise`/`colwise`
+        # already reaches through the module fallback
+        strays = [k for k in plan if k.endswith("_scale_inv") and ".experts." not in k]
+        self.assertEqual(strays, [], f"invented dense scale entries: {strays}")
+        # the stacked experts still get theirs
+        self.assertEqual(
+            _get_parameter_tp_plan("layers.3.mlp.experts.gate_up_proj_scale_inv", plan),
+            "moe_experts_shard1",
+        )
+
+    def test_the_impl_rewrites_the_layer_kinds(self):
+        megamoe = self._planned("deepgemm_megamoe")
+        self.assertEqual(megamoe["layers.*.mlp.gate"], "megamoe_router")
+        self.assertEqual(megamoe["layers.*.mlp.experts"], "megamoe_experts")
+
+
+class SubtreePatternTest(unittest.TestCase):
+    def test_a_checkpoints_glob_skip_list_is_bounded(self):
+        """modelopt names skipped subtrees with globs. Passed through as regexes the dots match any
+        character and the star is greedy, so "model.layers.1.*" also takes layers 10-19."""
+        from transformers.quantizers.quantizers_utils import should_convert_module, subtree_pattern_to_regex
+
+        skip = [subtree_pattern_to_regex(g) for g in ("model.layers.0*", "model.layers.1.*", "self_attn")]
+        for name in ("model.layers.0.mlp", "model.layers.1.mlp.down_proj", "model.layers.2.self_attn.q_proj"):
+            self.assertFalse(should_convert_module(name, skip), name)
+        for name in ("model.layers.16.mlp.down_proj", "model.layers.2.mlp.gate_proj", "model.my_self_attn.q_proj"):
+            self.assertTrue(should_convert_module(name, skip), name)
 
 
 @require_torch
@@ -606,7 +787,7 @@ class FineGrainedScaleLayoutTest(unittest.TestCase):
                     experts.gate_up_proj_scale_inv.shape,
                     (4, 256, 256 // (16 if kw["weight_format"] == "nvfp4" else 32)),
                 )
-        # block-FP8's (N/128, K/128) grid never reaches a scaled-MMA, whatever its scale dtype
+        # block-FP8 has no per-group scale grid to swizzle: one scalar per (N/128, K/128) block
         _, experts = self._experts("fp8")
         self.assertEqual(experts.gate_up_proj_scale_inv.shape, (4, 2, 2))
         with mock.patch.object(fg, "_swizzles_scales", return_value=False):
@@ -1360,7 +1541,7 @@ class FineGrainedRealKernelTest(unittest.TestCase):
             ):
                 norm.weight.data.uniform_(0.5, 1.5)
                 experts.post_expert_norm, experts.post_expert_norm_name = norm, norm_name
-                experts._apply_post_norm = norm  # what the swap carries from the model's class
+                experts.has_post_expert_norm = True
                 normed = self._moe_reference(dequantized, x, idx, wts, norm)
                 self.assertGreater(relative(normed, reference), 0.05, "the norm has to change the output")
                 for name, forward in forwards:
@@ -1428,3 +1609,185 @@ class FineGrainedRealKernelTest(unittest.TestCase):
         for proj, grid in affine.items():
             restored = reverse.convert({proj: getattr(experts, f"{proj}_scale_inv").data})[proj]
             self.assertTrue(torch.equal(restored.view(torch.uint8), grid.view(torch.uint8)), proj)
+
+
+# Run inside each rank; rank 0 writes its logits out for the parent to compare against the
+# reference it computes in-process.
+_WORKER = """
+import os, sys
+import torch
+from transformers import AutoModelForCausalLM
+from transformers.distributed import DistributedConfig
+
+model_dir, out_dir = sys.argv[1], sys.argv[2]
+world = int(os.environ["WORLD_SIZE"])
+ids = torch.arange(16, dtype=torch.long).unsqueeze(0)
+
+# both modes in ONE launch: they share the tp_size=2 mesh, so the process group is created once
+# and only the plan differs — a second torchrun would pay another interpreter + CUDA start
+for mode, expert_parallel in (("ep", True), ("tp", False)):
+    model = AutoModelForCausalLM.from_pretrained(
+        model_dir,
+        dtype="auto",
+        attn_implementation="eager",
+        distributed_config=DistributedConfig(tp_size=world, enable_expert_parallel=expert_parallel),
+    ).eval()
+    with torch.no_grad():
+        logits = model(ids.to(model.device)).logits.float().cpu()
+    if int(os.environ["RANK"]) == 0:
+        # the local shard of a stacked expert weight: the witness that this leg sharded at all
+        gate_up = model.get_parameter("model.layers.0.mlp.experts.gate_up_proj")
+        local = gate_up.to_local() if hasattr(gate_up, "to_local") else gate_up
+        torch.save({"logits": logits, "expert_local": tuple(local.shape)}, os.path.join(out_dir, mode + ".pt"))
+    del model
+    torch.cuda.empty_cache()
+"""
+
+
+@slow
+@require_torch_multi_accelerator
+class FineGrainedDistributedEquivalenceTest(TestCasePlus):
+    """Sharded output must match unsharded output. Catches wrong AXES, which shape checks cannot."""
+
+    @classmethod
+    def setUpClass(cls):
+        import torch
+
+        from transformers.models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
+        from transformers.models.deepseek_v3.modeling_deepseek_v3 import DeepseekV3ForCausalLM
+
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.model_dir = os.path.join(cls._tmp.name, "tiny_moe")
+        # The kernels autotune per shape from a cold cache, which dwarfs everything else here
+        # (8+ minutes at the stock 100-trial budget). This test only needs a CORRECT config, not
+        # a fast one, and the reference is tuned under the same budget — so cut the search and
+        # share one cache across the reference and the ranks.
+        cls._env = {
+            "FINEGRAINED_AUTOTUNE_TRIALS": "1",
+            "TRITON_CACHE_DIR": os.path.join(cls._tmp.name, "triton"),
+        }
+        os.environ.update(cls._env)
+        # V3, not V4: V4 ships an EMPTY `base_model_tp_plan`, so its TP leg sharded nothing.
+        # V3 carries `experts.gate_up_proj: packed_colwise` + `down_proj: rowwise` AND dense
+        # `shared_experts.*`, covering EP, intra-expert TP and the dense siblings the companion
+        # rules must leave alone. Dims are multiples of the 128 block so a 2-way split stays
+        # block-aligned and the on-the-fly scales are identical whole or sharded.
+        cfg = DeepseekV3Config(
+            vocab_size=64,
+            hidden_size=256,
+            intermediate_size=256,
+            moe_intermediate_size=256,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            # V3 defaults this to 128, which makes `num_key_value_groups` 0 and zeroes out the
+            # heads `repeat_kv` produces under the eager attention this test pins
+            num_key_value_heads=4,
+            n_routed_experts=4,
+            num_experts_per_tok=2,
+            n_shared_experts=1,
+            n_group=1,
+            topk_group=1,
+            first_k_dense_replace=0,
+            max_position_embeddings=32,
+            q_lora_rank=None,
+            kv_lora_rank=32,
+            qk_nope_head_dim=32,
+            qk_rope_head_dim=16,
+            v_head_dim=32,
+        )
+        torch.manual_seed(0)
+        bf16_dir = os.path.join(cls._tmp.name, "bf16")
+        DeepseekV3ForCausalLM(cfg).save_pretrained(bf16_dir, safe_serialization=True)
+
+        # Quantize ONCE and save, so every load below is `pre_quantized`. Quantizing on the fly
+        # instead would defeat the whole test: each rank derives its scales from the weight shard
+        # it already holds, so they come out correctly sized whatever the plan says, and a plan
+        # that shards no scale at all still produces the right answer. Only a checkpoint scale —
+        # which arrives whole and must be SPLIT — can catch a missing companion rule.
+        from transformers import AutoModelForCausalLM
+        from transformers.utils.quantization_config import FineGrainedFP8Config
+
+        quantized = AutoModelForCausalLM.from_pretrained(
+            bf16_dir,
+            dtype="auto",
+            attn_implementation="eager",
+            quantization_config=FineGrainedFP8Config(),
+            device_map="cuda:0",
+        )
+        quantized.save_pretrained(cls.model_dir, safe_serialization=True)
+        del quantized
+        torch.cuda.empty_cache()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    @staticmethod
+    def _free_port() -> int:
+        with socket.socket() as sock:
+            sock.bind(("", 0))
+            return sock.getsockname()[1]
+
+    def _sharded_logits(self):
+        """`{mode: logits}` from one 2-rank `torchrun`, through the real TP/EP load path."""
+        import torch
+
+        script = os.path.join(self._tmp.name, "worker.py")
+        with open(script, "w") as fh:
+            fh.write(_WORKER)
+        subprocess.run(
+            [
+                "torchrun",
+                "--nproc_per_node=2",
+                f"--master_port={self._free_port()}",
+                script,
+                self.model_dir,
+                self._tmp.name,
+            ],
+            check=True,
+            env={**os.environ, **self._env, "TOKENIZERS_PARALLELISM": "false"},
+        )
+        return {mode: torch.load(os.path.join(self._tmp.name, f"{mode}.pt")) for mode in ("ep", "tp")}
+
+    def test_ep_and_tp_match_the_unsharded_model(self):
+        import torch
+
+        from transformers import AutoModelForCausalLM
+
+        # the reference runs here rather than in a third subprocess — one less interpreter start.
+        # No `quantization_config`: the checkpoint carries it, so this loads pre-quantized.
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_dir,
+            dtype="auto",
+            attn_implementation="eager",
+            device_map="cuda:0",
+        ).eval()
+        ids = torch.arange(16, dtype=torch.long, device=model.device).unsqueeze(0)
+        with torch.no_grad():
+            reference = model(ids).logits.float().cpu()
+        del model
+        torch.cuda.empty_cache()
+
+        # global stacked shape: (experts, 2 * moe_intermediate, hidden)
+        whole = (4, 512, 256)
+        # EP splits the expert axis, intra-expert TP splits the output rows; either way the
+        # local shard must be SMALLER than the whole, or the leg proved nothing
+        expected_local = {"ep": (2, 512, 256), "tp": (4, 256, 256)}
+
+        for tag, payload in self._sharded_logits().items():
+            with self.subTest(mode=tag):
+                self.assertEqual(
+                    payload["expert_local"],
+                    expected_local[tag],
+                    f"{tag}: experts were not sharded ({payload['expert_local']} of {whole}) — this "
+                    "leg cannot catch a bad axis, check the model's plan carries expert entries",
+                )
+                sharded = payload["logits"]
+                self.assertEqual(sharded.shape, reference.shape)
+                # a mis-paired axis does not drift, it garbles: the tolerance only has to
+                # absorb reduction-order differences between one GEMM and two
+                torch.testing.assert_close(sharded, reference, rtol=2e-2, atol=2e-2)
+                self.assertTrue(
+                    torch.equal(sharded.argmax(-1), reference.argmax(-1)),
+                    f"{tag}: argmax diverged from the unsharded model",
+                )

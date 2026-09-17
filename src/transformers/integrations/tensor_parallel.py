@@ -64,14 +64,20 @@ def shard_and_distribute_module(*args, **kwargs):
 
 
 def to_local(t):
-    """Unwrap a `DTensor` to its local shard if needed; pass through otherwise.
+    """Deprecated: unwrap a `DTensor` to its local shard, or pass through.
 
-    Custom kernels (CUTLASS, CuteDSL, Triton) take raw tensor pointers and don't
-    understand `DTensor`, so weights wrapped by FSDP2 / EP need this unwrap before
-    they can be fed to the kernel. ``to_local()`` is autograd-aware on the train
-    path: backward rewraps the gradient as a DTensor matching each parameter's
-    placements.
+    Kept for callers that predate `_hf_quantized_needs_local_tp`. A quantized module that sets
+    it is handed local tensors by the TP loader, so the kernels — which take raw pointers and do
+    not understand `DTensor` — need no unwrap of their own; nothing in transformers calls this.
+    `DTensor.to_local()` is the direct replacement and is autograd-aware on the train path,
+    rewrapping the gradient to match each parameter's placements.
     """
+    warnings.warn(
+        "`to_local` is deprecated. Set `_hf_quantized_needs_local_tp = True` on the module so the "
+        "tensor-parallel loader hands it local tensors, or call `DTensor.to_local()` directly.",
+        FutureWarning,
+        stacklevel=2,
+    )
     from ..distributed.utils import is_dtensor
 
     if is_dtensor(t):

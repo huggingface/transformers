@@ -37,14 +37,12 @@ from dataclasses import dataclass
 import torch
 
 from ..utils import logging
-from ..utils.deprecation import deprecate_kwarg
 from ..utils.import_utils import (
     is_kernels_available,
     maybe_import_error,
     resolve_internal_import,
 )
 from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
-from .tensor_parallel import to_local
 
 
 logger = logging.get_logger(__name__)
@@ -571,7 +569,6 @@ def _combine_routed_output(
 # ── Public dispatches ──────────────────────────────────────────────────────────
 
 
-@deprecate_kwarg("output_dtype", version="v5.16")
 def prefers_deepgemm_linear(
     weight: torch.Tensor,
     weight_scale_inv: torch.Tensor,
@@ -598,7 +595,6 @@ def prefers_deepgemm_linear(
         # A pre-swizzled (SWIZZLE_32_4_4) scale is not readable as row-major — DeepGEMM would
         # consume the permuted buffer as affine and return garbage. Correctness gate, any arch.
         and weight_scale_inv.ndim <= 2
-        and is_deepgemm_loadable()
         and activation_scale is None
         # DeepGEMM serves neither the NVFP4 two-level globals nor an explicit activation format
         and weight_global_scale is None
@@ -606,6 +602,9 @@ def prefers_deepgemm_linear(
         and activation_format is None
         and (weight.dtype == torch.int8 or (block_size is not None and block_size[0] == block_size[1] == 128))
         and os.environ.get("TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR", "0") != "1"
+        # last: an environment probe (arch, `CUDA_HOME/bin/nvcc`, nvcc version) rather than a
+        # tensor check, so the cheap gates above short-circuit before it
+        and is_deepgemm_loadable()
     )
 
 
@@ -653,11 +652,47 @@ def deepgemm_fp8_fp4_linear(
     return output
 
 
+def _assert_dynamic_activations(self: torch.nn.Module) -> None:
+    """DeepGEMM quantizes activations inside its kernels, so a checkpoint's calibrated per-tensor
+    scale has nowhere to be applied."""
+    if getattr(self, "activation_scheme", "dynamic") == "static":
+        raise NotImplementedError(
+            "DeepGEMM experts dispatch does not support activation_scheme='static'; use "
+            "`experts_implementation='grouped_mm'` (or 'batched_mm')."
+        )
+
+
+def _assert_affine_scales(module: torch.nn.Module) -> None:
+    """DeepGEMM reads row-major block scales. A module loaded for a triton backend holds them in the
+    SWIZZLE_32_4_4 layout (5-D); consuming that as affine returns garbage, so a backend switched to
+    DeepGEMM after such a load fails here instead."""
+    for name in ("gate_up_proj_scale_inv", "up_proj_scale_inv", "down_proj_scale_inv"):
+        scale = getattr(module, name, None)
+        if scale is not None and scale.ndim == 5:
+            raise NotImplementedError(
+                f"DeepGEMM experts need row-major block scales, but `{name}` is held swizzled for the "
+                "triton experts backends. Switching to a DeepGEMM backend after load is not supported — "
+                "pass `experts_implementation=...` to `from_pretrained` so the model loads for it."
+            )
+
+
+def _assert_stacked_gate_up(module: torch.nn.Module) -> None:
+    """Mega MoE's ``transform_weights_for_mega_moe`` does its own gate/up interleave, so it takes the
+    stacked ``[gate; up]`` rows. A module loaded for a triton backend holds them interleaved; switched
+    to this backend after load, silently re-permuting would be a wrong answer rather than a failure."""
+    if getattr(module, "has_gate", True) and getattr(module, "holds_interleaved_gate_up", False):
+        raise NotImplementedError(
+            "Mega MoE needs gate|up stacked, but this module was loaded interleaved for the triton "
+            "experts backend. Switching to 'deepgemm_megamoe' after load is not supported — pass "
+            "`experts_implementation=...` to `from_pretrained` so the model loads for it."
+        )
+
+
 def _assert_no_post_expert_norm(self: torch.nn.Module) -> None:
     """Mega MoE fuses the routing-weighted reduce into its kernel, so a model's per-expert output
     norm has nowhere to go — it would be dropped silently, so refuse instead. The other DeepGEMM
     arms reduce in `_combine_routed_output` and apply the norm on the rows just before it."""
-    if getattr(self, "post_expert_norm", None) is not None:
+    if getattr(self, "has_post_expert_norm", False):
         raise NotImplementedError(
             "DeepGEMM Mega MoE cannot apply this model's per-expert output norm; use "
             "`experts_implementation='deepgemm'`, 'grouped_mm' or 'batched_mm'."
@@ -666,46 +701,64 @@ def _assert_no_post_expert_norm(self: torch.nn.Module) -> None:
 
 def _apply_post_expert_norm(self: torch.nn.Module, rows: torch.Tensor) -> torch.Tensor:
     """The model's per-expert output norm, on the routed rows before the routing weights — the
-    same place the reference forwards apply it. A no-op for a model that names none."""
-    if getattr(self, "post_expert_norm_name", None) is None:
+    same place the reference forwards apply it. A no-op for a model that declares none."""
+    if not getattr(self, "has_post_expert_norm", False):
         return rows
     return self._apply_post_norm(rows)
 
 
-def deepgemm_experts_guards(*, affine_scales: bool = False, sm100: bool = False, post_expert_norm: bool = True):
+def _assert_bf16_hidden_states(hidden_states: torch.Tensor) -> None:
+    """Every DeepGEMM experts arm builds its intermediates and its output in bfloat16, so anything
+    else silently changes the dtype the caller gets back."""
+    if hidden_states.dtype != torch.bfloat16:
+        raise ValueError(f"DeepGEMM experts path requires bfloat16 hidden states, got {hidden_states.dtype}")
+
+
+def deepgemm_experts_guards(
+    forward=None,
+    *,
+    affine_scales: bool = False,
+    sm100: bool = False,
+    post_expert_norm: bool = True,
+    stacked_gate_up: bool = False,
+):
     """State an experts forward's requirements on the module, checked before any kernel work.
 
-    ``post_expert_norm=False`` refuses a model that names a per-expert output norm — Mega MoE
-    only, whose fused reduce has no seam for it. ``affine_scales`` additionally refuses the
-    SWIZZLE_32_4_4 scales a module loaded for a triton backend holds, and ``sm100`` fails before
-    the hub download + JIT when the device cannot serve these dtypes."""
+    Usable bare (`@deepgemm_experts_guards`) for an arm that only needs the common checks.
+
+    ``post_expert_norm=False`` refuses a model that declares a per-expert output norm — Mega MoE
+    only, whose fused reduce has no seam for it. ``affine_scales`` refuses the SWIZZLE_32_4_4
+    scales a module loaded for a triton backend holds, ``stacked_gate_up`` refuses the interleaved
+    rows that same load produces, and ``sm100`` fails before the hub download + JIT when the device
+    cannot serve these dtypes."""
 
     def decorate(forward):
         @functools.wraps(forward)
-        def guarded(self, *args, **kwargs):
+        def guarded(self, hidden_states, *args, **kwargs):
+            _assert_bf16_hidden_states(hidden_states)
+            _assert_dynamic_activations(self)
             if not post_expert_norm:
                 _assert_no_post_expert_norm(self)
             if affine_scales:
                 _assert_affine_scales(self)
+            if stacked_gate_up:
+                _assert_stacked_gate_up(self)
             if sm100:
                 _assert_sm100_requirements(self.gate_up_proj, self.down_proj_scale_inv)
-            return forward(self, *args, **kwargs)
+            return forward(self, hidden_states, *args, **kwargs)
 
         return guarded
 
-    return decorate
+    return decorate(forward) if forward is not None else decorate
 
 
-@deepgemm_experts_guards()
+@deepgemm_experts_guards
 def deepgemm_bf16_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
-    if hidden_states.dtype != torch.bfloat16:
-        raise ValueError(f"DeepGEMM experts path requires bfloat16 hidden states, got {hidden_states.dtype}")
-
     deepgemm = load_deepgemm_kernel()
     # Non-transposed weights (E, N, K) → NT kernel; transposed (E, K, N) → NN kernel.
     grouped_bf16_matmul = deepgemm.grouped_bf16_matmul_nn if self.is_transposed else deepgemm.grouped_bf16_matmul_nt
@@ -766,32 +819,6 @@ def deepgemm_bf16_experts_forward(
     )
 
 
-def _assert_affine_scales(module: torch.nn.Module) -> None:
-    """DeepGEMM reads row-major block scales. A module loaded for a triton backend holds them in the
-    SWIZZLE_32_4_4 layout (5-D); consuming that as affine returns garbage, so a backend switched to
-    DeepGEMM after such a load fails here instead."""
-    for name in ("gate_up_proj_scale_inv", "up_proj_scale_inv", "down_proj_scale_inv"):
-        scale = getattr(module, name, None)
-        if scale is not None and scale.ndim == 5:
-            raise RuntimeError(
-                f"DeepGEMM experts need row-major block scales, but `{name}` is held swizzled for the "
-                "triton experts backends. Switching to a DeepGEMM backend after load is not supported — "
-                "pass `experts_implementation=...` to `from_pretrained` so the model loads for it."
-            )
-
-
-def _assert_stacked_gate_up(module: torch.nn.Module) -> None:
-    """Mega MoE's ``transform_weights_for_mega_moe`` does its own gate/up interleave, so it takes the
-    stacked ``[gate; up]`` rows. A module loaded for a triton backend holds them interleaved; switched
-    to this backend after load, silently re-permuting would be a wrong answer rather than a failure."""
-    if getattr(module, "has_gate", True) and getattr(module, "holds_interleaved_gate_up", False):
-        raise RuntimeError(
-            "Mega MoE needs gate|up stacked, but this module was loaded interleaved for the triton "
-            "experts backend. Switching to 'deepgemm_megamoe' after load is not supported — pass "
-            "`experts_implementation=...` to `from_pretrained` so the model loads for it."
-        )
-
-
 @deepgemm_experts_guards(affine_scales=True, sm100=True)
 def deepgemm_fp8_fp4_experts_forward(
     self: torch.nn.Module,
@@ -807,11 +834,6 @@ def deepgemm_fp8_fp4_experts_forward(
             "its kernels are bound to a single CUDA context and corrupt across devices. Use "
             "`experts_implementation='grouped_mm'`, or run one device per process (TP/EP)."
         )
-
-    if self.activation_scheme == "static":
-        raise NotImplementedError("DeepGEMM experts dispatch does not support static activation quantization.")
-    if hidden_states.dtype != torch.bfloat16:
-        raise ValueError(f"DeepGEMM experts path requires bfloat16 hidden states, got {hidden_states.dtype}")
 
     deepgemm = load_deepgemm_kernel()
 
@@ -902,15 +924,9 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
          the ``[E_local, 2*I, *]`` leading dims so downstream ``.size(...)`` reads
          stay valid.
 
-    Unwraps any ``DTensor`` wrappers FSDP2/EP may have placed around the loader-
-    side Parameters — the kernel takes raw pointers.
+    Runs inside the first forward, where the parameters are already local: the module carries
+    ``_hf_quantized_needs_local_tp``, so the TP layer hands local shards rather than DTensors.
     """
-    # A module loaded for a triton backend holds swizzled block scales, which DeepGEMM would read as
-    # affine and turn into garbage — refuse before the (hub-download + JIT) kernel load.
-    _assert_affine_scales(module)
-    # Same for its interleaved gate|up rows: `transform_weights_for_mega_moe` interleaves stacked rows
-    # itself, and re-permuting already-interleaved ones would be a silent wrong answer.
-    _assert_stacked_gate_up(module)
     # The UE8M0 scale grid is group-32 along both dims, so the kernel's SF layout needs both divisible.
     intermediate_hidden = module.intermediate_dim
     num_local_experts = module.num_experts
@@ -925,8 +941,8 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
     gate_up_sf_raw = module.gate_up_proj_scale_inv.data
     down_sf_raw = module.down_proj_scale_inv.data
     # Force int8 view: the kernel's interleave reshape/empty_like/copy_ is bit-level.
-    gate_up_w = to_local(module.gate_up_proj.data).view(torch.int8).contiguous()
-    down_w = to_local(module.down_proj.data).view(torch.int8).contiguous()
+    gate_up_w = module.gate_up_proj.data.view(torch.int8).contiguous()
+    down_w = module.down_proj.data.view(torch.int8).contiguous()
 
     gate_up_sf = deepgemm.transform_sf_into_required_layout(
         gate_up_sf_raw.float(),
@@ -952,7 +968,7 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
     module.down_proj_scale_inv = torch.nn.Parameter(down_sf, requires_grad=False)
 
 
-@deepgemm_experts_guards(affine_scales=True, sm100=True, post_expert_norm=False)
+@deepgemm_experts_guards(affine_scales=True, sm100=True, post_expert_norm=False, stacked_gate_up=True)
 def deepgemm_fp8_fp4_megamoe_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,

@@ -81,11 +81,6 @@ def build_glob_alternation(
 class ConversionOps(ABC):
     """Base class for weight conversion operations."""
 
-    # Whether this op maps SEVERAL sources onto SEVERAL targets in one call — a converter is
-    # otherwise restricted to one-to-many, one-to-one or many-to-one, since an m:n mapping only
-    # makes sense when a single operation owns the whole relation (see `WeightConverter`).
-    supports_many_to_many: bool = False
-
     def __repr__(self):
         if hasattr(self, "dim"):
             return f"{self.__class__.__name__}(dim={self.dim})"
@@ -618,8 +613,6 @@ class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
     The final fusions are defined by the amount of original module lists.
     """
 
-    supports_many_to_many = True
-
     def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
         self.stack_dim = stack_dim
         self.concat_dim = concat_dim
@@ -681,8 +674,6 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
     The splits are equal and are defined by the amount of original module lists.
     The final decoupled module lists are defined by the amount of keys.
     """
-
-    supports_many_to_many = True
 
     def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
         self.stack_dim = stack_dim
@@ -1151,6 +1142,23 @@ class PrefixChange(WeightRenaming):
         return result
 
 
+def _internal_many_to_many_conversions() -> tuple[type[ConversionOps], ...]:
+    """The classes known to be able to use m:n.
+
+    A function, not the module-level tuple it would rather be: `FineGrainedWeightGlobals` lives in
+    `integrations.finegrained`, which imports THIS module, so naming it at import time fails
+    whenever the integration is imported first (`cannot import name ... from partially initialized
+    module`). Called once per `WeightConverter`, at construction.
+    """
+    from .integrations.finegrained import FineGrainedWeightGlobals
+
+    return (
+        ErnieFuseAndSplitTextVisionExperts,
+        ErnieSplitAndDecoupleTextVisionExperts,
+        FineGrainedWeightGlobals,
+    )
+
+
 class WeightConverter(WeightTransform):
     __slots__ = ("operations", "force_cpu")
 
@@ -1166,8 +1174,8 @@ class WeightConverter(WeightTransform):
         self.force_cpu = force_cpu
 
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
-            # We allow many-to-many only if an operation declares that it handles the whole relation
-            if not any(op.supports_many_to_many for op in self.operations):
+            # We allow many-to-many only if we use an internal operation that can handle it
+            if not any(isinstance(op, _internal_many_to_many_conversions()) for op in self.operations):
                 raise ValueError(
                     f"source keys={self.source_patterns}, target_patterns={self.target_patterns} but you can only have one to many, one to one or many to one."
                 )

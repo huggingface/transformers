@@ -46,7 +46,6 @@ from parameterized import parameterized
 from test_utils import make_experts, make_fp8_experts
 
 import transformers.integrations.deepgemm as dg
-from transformers.distributed.utils import is_dtensor
 from transformers.integrations.deepgemm import (
     deepgemm_bf16_experts_forward,
     deepgemm_fp8_fp4_experts_forward,
@@ -230,21 +229,6 @@ class DeepGemmLoaderTest(unittest.TestCase):
 
         run(torch.zeros(3, device=torch_device))  # a graph break / traced probe would raise here
 
-    def test_to_local_is_compile_safe(self):
-        # Regression guard: every experts forward here unwraps its weights through `to_local`, so it runs
-        # inside the traced region. It calls `is_dtensor`, whose torch-distributed availability check must
-        # therefore fold to a constant instead of being traced — its body reaches `importlib.metadata`,
-        # which dynamo cannot follow (and follows differently across Python versions). `@lru_cache` is no
-        # protection: dynamo steps past cache wrappers, so the marker has to sit on the wrapped function.
-        torch.compiler.reset()
-
-        @torch.compile(fullgraph=True)
-        def run(x):
-            return x.to_local() + 1 if is_dtensor(x) else x + 1
-
-        out = run(torch.zeros(3, device=torch_device))  # a graph break / traced probe would raise here
-        self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
-
 
 # ── Capturing fake DeepGEMM bundle ─────────────────────────────────────────────
 #
@@ -375,6 +359,26 @@ class DeepGemmForwardTest(unittest.TestCase):
 
     # ── deepgemm_fp8_fp4_linear ────────────────────────────────────────────────
 
+    def test_every_arm_refuses_hidden_states_that_are_not_bfloat16(self):
+        """Each arm builds its intermediates and its output in bfloat16, so anything else changes
+        the dtype the caller gets back. The check belongs to the guard, not to one forward: it
+        used to be copied into two of the three and missing from Mega MoE, which allocates its
+        output bfloat16 regardless."""
+        import transformers.integrations.deepgemm as dg
+
+        class _Experts(torch.nn.Module):
+            activation_scheme = "dynamic"
+
+        arms = (
+            dg.deepgemm_bf16_experts_forward,
+            dg.deepgemm_fp8_fp4_experts_forward,
+            dg.deepgemm_fp8_fp4_megamoe_experts_forward,
+        )
+        for forward in arms:
+            with self.subTest(forward=forward.__name__), self.assertRaises(ValueError) as caught:
+                forward(_Experts(), torch.zeros(2, 4, dtype=torch.float16), None, None)
+            self.assertIn("bfloat16", str(caught.exception))
+
     def test_post_expert_norm_runs_on_the_reducing_arms_and_is_refused_by_megamoe(self):
         """Mega MoE fuses the routing-weighted reduce, so a per-expert output norm has nowhere to
         go and is refused. The other arms reduce in `_combine_routed_output`, so the norm rides the
@@ -384,8 +388,7 @@ class DeepGemmForwardTest(unittest.TestCase):
         applied = []
 
         class _Experts(torch.nn.Module):
-            post_expert_norm_name = "input_scaled_rms_norm"
-            post_expert_norm = object()
+            has_post_expert_norm = True
 
             def _apply_post_norm(self, rows):
                 applied.append(tuple(rows.shape))
@@ -397,7 +400,7 @@ class DeepGemmForwardTest(unittest.TestCase):
         self.assertIs(dg._apply_post_expert_norm(module, rows), rows)
         self.assertEqual(applied, [(4, 8)])
 
-        # a model naming no norm is untouched
+        # a model declaring no norm is untouched
         plain = torch.nn.Module()
         self.assertIs(dg._apply_post_expert_norm(plain, rows), rows)
 
