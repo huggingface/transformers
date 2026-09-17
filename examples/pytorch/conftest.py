@@ -412,10 +412,7 @@ def pytest_runtest_logreport(report):
         return  # only log failures/errors for call/setup to reduce noise
     try:
         sys_used, _ = _sys_mem()
-        _mlog(
-            f"[CTRL] {report.when.upper()} {report.nodeid}"
-            f" outcome={report.outcome} | SYS={sys_used:.0f}MB"
-        )
+        _mlog(f"[CTRL] {report.when.upper()} {report.nodeid} outcome={report.outcome} | SYS={sys_used:.0f}MB")
     except Exception:  # noqa: S110
         pass
 
