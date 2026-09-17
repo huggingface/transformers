@@ -138,13 +138,12 @@ class DistributedConfig:
 
         if "ep_dispatch_experts" in ep_plan.values():
             if self.pp_size > 1:
-                raise ValueError("Combining token dispatch with pipeline parallelism is not supported yet.")
+                raise ValueError("Combining token dispatch with pipeline parallelism is not supported/tested yet.")
             if not is_torch_greater_or_equal("2.7"):
                 raise OSError("Expert-parallel token dispatch requires `torch>=2.7`.")
-        elif self.ep_size != self.tp_size:
+        elif {"ep_router", "moe_tp_experts"}.issubset(ep_plan.values()) and self.ep_size != self.tp_size:
             raise ValueError(
-                "All-reduce expert parallelism requires `ep_size=tp_size`, so every rank of an expert group sees "
-                "the same tokens. Use `ep_plan={..: 'ep_dispatch_experts'}` for token dispatch with `ep_size > tp_size`."
+                "All-reduce expert parallelism requires `ep_size=tp_size`, so every rank of an expert group sees the same tokens"
             )
 
     @classmethod
