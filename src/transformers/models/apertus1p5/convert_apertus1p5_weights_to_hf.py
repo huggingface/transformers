@@ -97,14 +97,9 @@ NAMED_SPECIAL_TOKEN_ATTRIBUTES = (
 _TEMPLATE_LIST_CONTENT_MARKER = "message.content is not string and message.content is not mapping"
 
 
-def _has_valid_logits_layout(logits: torch.Tensor, output_vocab_size: int, vocab_size: int) -> bool:
-    """Check that physical logits are finite and the padded input-only tail is non-generatable."""
-    if logits.shape[-1] != vocab_size:
-        return False
-    tail = logits[..., output_vocab_size:]
-    return bool(
-        torch.isfinite(logits[..., :output_vocab_size]).all() and (tail == torch.finfo(logits.dtype).min).all()
-    )
+def _has_valid_logits_layout(logits: torch.Tensor, output_vocab_size: int) -> bool:
+    """Check that logits have the physical LM-head width and are finite."""
+    return logits.shape[-1] == output_vocab_size and bool(torch.isfinite(logits).all())
 
 
 def _check_output_is_not_a_source(output_dir: str, *source_dirs: str) -> None:
@@ -469,12 +464,12 @@ def verify(composite_dir: str, max_new_tokens: int = 12):
     header_ok = "<|img_start|>16*16<|img_token_start|>" in decoded and decoded.count("<|image|>") == 256
     with torch.no_grad():
         logits = model(**inputs).logits
-    image_forward_ok = header_ok and _has_valid_logits_layout(logits, expected_head, config.text_config.vocab_size)
+    image_forward_ok = header_ok and _has_valid_logits_layout(logits, expected_head)
     if not image_forward_ok:
         failed_checks.append("image forward")
     print(
         f"[{'PASS' if image_forward_ok else 'FAIL'}] processor image forward: header+counts ok: {header_ok}, "
-        f"logits {tuple(logits.shape)}, finite physical prefix and finfo.min padded tail"
+        f"logits {tuple(logits.shape)}, finite with physical width {expected_head}"
     )
 
     inputs = processor(text="<|audio|>What is said?", audio=[sine[0, 0].numpy()], return_tensors="pt")
@@ -482,14 +477,12 @@ def verify(composite_dir: str, max_new_tokens: int = 12):
     audio_layout_ok = decoded.count("<|audio|>") == 40 and "<|audio_start|>" in decoded
     with torch.no_grad():
         logits = model(**inputs).logits
-    audio_forward_ok = audio_layout_ok and _has_valid_logits_layout(
-        logits, expected_head, config.text_config.vocab_size
-    )
+    audio_forward_ok = audio_layout_ok and _has_valid_logits_layout(logits, expected_head)
     if not audio_forward_ok:
         failed_checks.append("audio forward")
     print(
         f"[{'PASS' if audio_forward_ok else 'FAIL'}] processor audio forward: layout ok: {audio_layout_ok}, "
-        f"logits {tuple(logits.shape)}, finite physical prefix and finfo.min padded tail"
+        f"logits {tuple(logits.shape)}, finite with physical width {expected_head}"
     )
 
     if failed_checks:
