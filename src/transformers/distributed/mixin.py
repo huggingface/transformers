@@ -26,7 +26,6 @@ from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
     _validate_parallel_plan_styles,
     apply_dispatch_expert_parallelism,
-    apply_masked_expert_parallelism,
     apply_tensor_parallelism,
     gather_state_dict_for_save,
     resolve_parallel_plans,
@@ -214,7 +213,7 @@ class DistributedMixin:
                 # Because we do masked all-reduce EP, we need to shard the experts on TP mesh (tp_size = ep_size).
                 # We can't use ep mesh because it belongs to the expert mesh (efsdp for dispatch path)
                 # which is different from the dense mesh (fsdp).
-                model = apply_masked_expert_parallelism(model, mesh_manager.get_mesh("tp"), ep_plan)
+                model = apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), ep_plan)
 
         if distributed_config.fsdp_size > 1 or "ep_dispatch_experts" in ep_plan.values():
             model = apply_fully_sharded_data_parallelism(model, mesh_manager)
