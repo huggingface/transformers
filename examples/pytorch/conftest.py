@@ -62,6 +62,7 @@ _worker_pids = {}  # {workerid: pid}  — controller only
 _ctrl_stop = threading.Event()
 _ckpt_offsets = {}  # {workerid: file_offset} — controller only, for reading worker CKPT files
 _worker_current_test = {}  # {workerid: nodeid} — controller only, current test per worker
+_last_worker_pss = {}  # {workerid: pss_mb} — cached from last monitor cycle, for CKPT annotation
 _pending_cleanups = {}  # {nodeid: cleanup_fn} — worker only, avoids item.addfinalizer
 
 
@@ -188,6 +189,7 @@ def _ctrl_monitor_loop():
             ]
             for wid, wpid in sorted(_worker_pids.items()):
                 wr, wp = _tree(wpid)
+                _last_worker_pss[wid] = wp
                 nch = len(_children(wpid))
                 test_nodeid = _worker_current_test.get(wid, "")
                 test_short = test_nodeid.split("::")[-1] if test_nodeid else "idle"
@@ -204,7 +206,16 @@ def _ctrl_monitor_loop():
                         _ckpt_offsets[gw] = fh.tell()
                     for ckpt_line in new_text.splitlines():
                         if ckpt_line:
-                            sys.stderr.write(ckpt_line + "\n")
+                            others = []
+                            for other_wid in sorted(_worker_pids):
+                                if other_wid == gw:
+                                    continue
+                                op = _last_worker_pss.get(other_wid, 0)
+                                t = _worker_current_test.get(other_wid, "")
+                                ts = t.split("::")[-1] if t else "idle"
+                                others.append(f"{other_wid} PSS={op:.0f}MB [{ts}]")
+                            suffix = " || " + " | ".join(others) if others else ""
+                            sys.stderr.write(ckpt_line + suffix + "\n")
                             sys.stderr.flush()
                 except Exception:  # noqa: S110
                     pass
