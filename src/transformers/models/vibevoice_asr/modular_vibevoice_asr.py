@@ -317,9 +317,12 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
 
         combined_features = self.multi_modal_projector(acoustic_latents, semantic_latents)
         if padding_mask is not None:
-            num_audio_tokens = torch.ceil(
-                padding_mask.sum(dim=-1) / self.config.acoustic_tokenizer_encoder_config.hop_length
-            ).to(torch.int64)
+            # Use integer arithmetic to avoid float32 precision issues for long audio.
+            # float32 has only 24-bit significand, so above 2**24 samples (~11.65 min at 24 kHz)
+            # not every sample count is representable, causing torch.ceil to miscount.
+            # ceil(a / b) = (a + b - 1) // b avoids floating point entirely.
+            hop_length = self.config.acoustic_tokenizer_encoder_config.hop_length
+            num_audio_tokens = (padding_mask.sum(dim=-1) + hop_length - 1) // hop_length
             padding_mask = torch.arange(num_audio_tokens.max(), device=combined_features.device) < num_audio_tokens[
                 :, None
             ].to(combined_features.device)
