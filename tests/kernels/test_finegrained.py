@@ -16,6 +16,7 @@ mocked, so these pin exactly what the integration passes to `kernels-community/f
 (the As-positional / no-block_size / expert_start / b_global_scale contract) without a GPU."""
 
 import os
+import re
 import socket
 import subprocess
 import tempfile
@@ -434,6 +435,55 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
 
 
 @require_torch
+class FineGrainedFusedNormGateTest(unittest.TestCase):
+    """A norm the kernels can fuse must NOT be fused when a forward collective sits on it.
+
+    Fusing runs the norm inside the launch that produced the rows, so an all-reduce that has to
+    land between the two has nowhere to go — and under intra-expert TP those rows are a partial
+    sum over the sharded intermediate, so the fused norm would normalize a fraction of the value.
+    The wrapped module does the reduce in its own forward, so the fallback is the correct path.
+    """
+
+    class _Norm(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.weight = torch.nn.Parameter(torch.ones(4))
+            self.eps = 1e-6
+
+    def _operands(self, *, input_reduce: bool):
+        norm = self._Norm()
+        if input_reduce:
+            norm._hf_tp_input_reduce = True  # what `ReplicatedWithInputAllReduce` marks
+
+        module = mock.Mock()
+        module.has_gate = True
+        module.act_fn_name = "silu"
+        module.swiglu_alpha = None
+        module.has_post_expert_norm = True
+        module.post_expert_norm = norm
+        module.post_expert_norm_name = "input_scaled_rms_norm"
+        module._apply_post_norm = lambda x: x
+        kernel = mock.Mock()
+        kernel.get_supported_act_fns.return_value = ("silu",)
+        kernel.get_supported_norms.return_value = ("input_scaled_rms_norm",)
+        return fg._moe_operands(kernel, module), module
+
+    def test_a_fusable_norm_fuses_when_nothing_reduces_its_input(self):
+        operands, _ = self._operands(input_reduce=False)
+        self.assertEqual(operands["post_expert_norm"], "input_scaled_rms_norm")
+        self.assertIsNotNone(operands["post_expert_norm_weight"], "the fused form needs the norm's weight")
+
+    def test_a_fusable_norm_falls_back_when_its_input_is_all_reduced(self):
+        operands, module = self._operands(input_reduce=True)
+        self.assertIs(
+            operands["post_expert_norm"],
+            module._apply_post_norm,
+            "fused past a collective: the kernel would normalize this rank's partial sum",
+        )
+        self.assertIsNone(operands["post_expert_norm_weight"])
+
+
+@require_torch
 class FrozenFp8ShimTest(unittest.TestCase):
     def test_frozen_module_warns_and_is_self_contained(self):
         import importlib
@@ -548,9 +598,12 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         plan = self._planned(raw=base)
         style = lambda n: _get_parameter_tp_plan(f"layers.3.mlp.experts.{n}", plan)  # noqa: E731
 
-        # interleaved rows take a CONTIGUOUS split of the output axis, and the scale/bias with them
-        for name in ("gate_up_proj", "gate_up_proj_scale_inv", "gate_up_proj_bias"):
-            self.assertEqual(style(name), "moe_experts_shard1", name)
+        # the weight keeps the style the MODEL declared — `packed_colwise` is the strided split a
+        # concatenated `[gate; up]` checkpoint needs, since the interleave into the kernels' row
+        # order runs on each rank's shard, after sharding. The companions follow it.
+        self.assertEqual(style("gate_up_proj"), "packed_colwise")
+        for name in ("gate_up_proj_scale_inv", "gate_up_proj_bias"):
+            self.assertEqual(style(name), "moe_experts_packed_shard1", name)
         # the down scale splits on dim 2 — the reduce axis affine and 5-D swizzled alike
         self.assertEqual(style("down_proj"), "rowwise")
         self.assertEqual(style("down_proj_scale_inv"), "moe_experts_shard2")
@@ -558,12 +611,13 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         for name in ("gate_up_proj_weight_global_scale", "down_proj_weight_global_scale", "down_proj_bias"):
             self.assertEqual(style(name), "moe_tp_experts", name)
 
-        # the one backend holding the stack keeps the packed split, weight and companions alike
-        stacked = self._planned(raw=base, impl="deepgemm_megamoe")
-        self.assertEqual(_get_parameter_tp_plan("layers.3.mlp.experts.gate_up_proj", stacked), "packed_colwise")
+        # a natively INTERLEAVED layout declares `colwise`, and its companions split contiguously
+        inter = dict(base, **{"layers.*.mlp.experts.gate_up_proj": "colwise"})
+        plan_i = self._planned(raw=inter)
+        self.assertEqual(_get_parameter_tp_plan("layers.3.mlp.experts.gate_up_proj", plan_i), "colwise")
         self.assertEqual(
-            _get_parameter_tp_plan("layers.3.mlp.experts.gate_up_proj_scale_inv", stacked),
-            "moe_experts_packed_shard1",
+            _get_parameter_tp_plan("layers.3.mlp.experts.gate_up_proj_scale_inv", plan_i),
+            "moe_experts_shard1",
         )
 
     def test_dense_projections_that_share_a_name_are_left_alone(self):
@@ -598,7 +652,7 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         # the stacked experts still get theirs
         self.assertEqual(
             _get_parameter_tp_plan("layers.3.mlp.experts.gate_up_proj_scale_inv", plan),
-            "moe_experts_shard1",
+            "moe_experts_packed_shard1",
         )
 
     def test_the_impl_rewrites_the_layer_kinds(self):
@@ -1154,7 +1208,8 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
         globals_converters = [
             c
             for c in self._modelopt_conversions()
-            if any("global_scale" in t for t in _targets(c)) and any("experts.*." in p for p in c.source_patterns)
+            if any("global_scale" in t for t in _targets(c))
+            and any(re.search(p, "model.layers.0.mlp.experts.7.gate_proj.weight_scale_2") for p in c.source_patterns)
         ]
         self.assertTrue(globals_converters, "no global-scale converter found")
         for conv in globals_converters:
@@ -1169,15 +1224,45 @@ class FineGrainedModeloptConverterTest(unittest.TestCase):
         as one already-stacked tensor per layer (the fused vLLM layout, Muse-Spark). Both are
         converted; the block scale takes the module's layout ops either way."""
         sources = {p for c in self._modelopt_conversions() for p in c.source_patterns}
-        for suffix in ("weight_scale$", "weight_scale_2", "input_scale"):
-            self.assertTrue(
-                any(p.startswith("mlp.experts.*.gate_proj.") and p.endswith(suffix) for p in sources),
-                f"no per-expert converter for {suffix}",
-            )
-            self.assertTrue(
-                any("gate_up_proj_" in p and p.endswith(suffix.rstrip("$") + "$") for p in sources),
-                f"no fused converter for {suffix}",
-            )
+        for suffix in ("weight_scale", "weight_scale_2", "input_scale"):
+            per_expert = f"model.layers.0.mlp.experts.7.gate_proj.{suffix}"
+            fused = f"model.layers.0.mlp.experts.gate_up_proj_{suffix}"
+            self.assertTrue(any(re.search(p, per_expert) for p in sources), f"no per-expert converter for {suffix}")
+            self.assertTrue(any(re.search(p, fused) for p in sources), f"no fused converter for {suffix}")
+            # the per-expert patterns are REGEXES: unescaped dots matched `_` too, so
+            # `mlp.experts.*.up_proj.weight_scale_2` also claimed the fused key and the
+            # gate|up globals were flattened instead of folded to one per expert
+            claimed = [p for p in sources if re.search(p, fused) and re.search(p, per_expert)]
+            self.assertEqual(claimed, [], f"one pattern claims BOTH layouts for {suffix}: {claimed}")
+
+    def test_the_gate_up_fold_survives_the_loader_s_list_wrapping(self):
+        """The loader hands a converter its tensors in a list. Unwrapped, a fused `(E, 2)` pair
+        reads as `(1, 2E)`, the per-half fold does not fire, and the module gets `2E` globals
+        where the kernels assert one per expert."""
+        import torch
+
+        from transformers.integrations.finegrained import FineGrainedWeightGlobals
+
+        targets = [
+            "experts.gate_up_proj_weight_global_scale",
+            "experts.down_proj_weight_global_scale",
+            "experts.down_proj_input_global_scale",
+        ]
+        experts = 8
+        for wrap in (False, True):
+            pair = torch.rand(experts, 2) + 1
+            src = {
+                "experts.gate_up_proj_weight_scale_2": [pair] if wrap else pair,
+                "experts.down_proj_weight_scale_2": torch.rand(experts) + 1,
+                "experts.down_proj_input_scale": torch.rand(experts) + 1,
+            }
+            out = FineGrainedWeightGlobals(None).convert(src, target_patterns=targets, model=None)
+            with self.subTest(list_wrapped=wrap):
+                self.assertEqual(
+                    out["experts.gate_up_proj_weight_global_scale"].shape,
+                    torch.Size([experts]),
+                    "the gate|up halves were not folded to one global per expert",
+                )
 
     def test_one_converter_merges_a_layer_s_globals(self):
         """modelopt calibrates the gate|up halves separately. One converter owns every global of

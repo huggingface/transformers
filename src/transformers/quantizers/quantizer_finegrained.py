@@ -234,7 +234,6 @@ class FineGrainedHfQuantizer(HfQuantizer):
         from ..integrations.finegrained import FineGrainedExperts
 
         impl = getattr(config, "_experts_implementation", None)
-        interleaved_gate_up = impl != "deepgemm_megamoe"
         layer_overrides = FineGrainedExperts._impl_tp_layer_overrides.get(impl, {})
         for plan_attr in ("base_model_tp_plan", "base_model_ep_plan"):
             base_plan = getattr(config, plan_attr, None) or {}
@@ -275,13 +274,13 @@ class FineGrainedHfQuantizer(HfQuantizer):
                 if projection == "down_proj" and style in ("rowwise", "packed_rowwise"):
                     updated_plan.setdefault(f"{key}_scale_inv", self._expert_shard(2))
                 elif projection != "down_proj" and style in ("packed_colwise", "colwise"):
-                    # `packed_colwise` splits the output axis as two packed halves — the
-                    # `[gate; up]` STACK. A quantized module holds the kernels' INTERLEAVED rows,
-                    # where that split hands a rank gate|up pairs for channels its own down
-                    # projection does not serve, so the weight's own style changes with it.
-                    rows = self._expert_shard(1, packed=not interleaved_gate_up)
-                    if interleaved_gate_up:
-                        updated_plan[key] = rows
+                    # The companions take the WEIGHT's own split. The model declares which one it
+                    # needs and is right: the interleave into the kernels' row order runs on each
+                    # rank's shard, AFTER sharding, so the split has to match the layout the
+                    # CHECKPOINT holds. `packed_colwise` is the strided split a concatenated
+                    # `[gate; up]` keeps pairs together with; `colwise` the contiguous one a
+                    # natively interleaved layout (GPT-OSS, `is_concatenated=False`) needs.
+                    rows = self._expert_shard(1, packed=style == "packed_colwise")
                     updated_plan.setdefault(f"{key}_scale_inv", rows)
                     updated_plan.setdefault(f"{key}_bias", rows)
 
@@ -406,14 +405,14 @@ class FineGrainedHfQuantizer(HfQuantizer):
         per_expert = [
             WeightConverter(
                 source_patterns=[
-                    "mlp.experts.*.gate_proj.weight_scale$",
-                    "mlp.experts.*.up_proj.weight_scale$",
+                    r"mlp\.experts\..*\.gate_proj\.weight_scale$",
+                    r"mlp\.experts\..*\.up_proj\.weight_scale$",
                 ],
                 target_patterns="mlp.experts.gate_up_proj_scale_inv",
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
-                source_patterns="mlp.experts.*.down_proj.weight_scale$",
+                source_patterns=r"mlp\.experts\..*\.down_proj\.weight_scale$",
                 target_patterns="mlp.experts.down_proj_scale_inv",
                 operations=[MergeModulelist(dim=0)],
             ),
@@ -423,10 +422,10 @@ class FineGrainedHfQuantizer(HfQuantizer):
             # decided together (`FineGrainedWeightGlobals`)
             WeightConverter(
                 source_patterns=[
-                    "mlp.experts.*.gate_proj.weight_scale_2",
-                    "mlp.experts.*.up_proj.weight_scale_2",
-                    "mlp.experts.*.down_proj.weight_scale_2",
-                    *(["mlp.experts.*.down_proj.input_scale"] if calibrated else []),
+                    r"mlp\.experts\..*\.gate_proj\.weight_scale_2",
+                    r"mlp\.experts\..*\.up_proj\.weight_scale_2",
+                    r"mlp\.experts\..*\.down_proj\.weight_scale_2",
+                    *([r"mlp\.experts\..*\.down_proj\.input_scale"] if calibrated else []),
                 ],
                 target_patterns=[
                     "mlp.experts.gate_up_proj_weight_global_scale",
@@ -440,8 +439,8 @@ class FineGrainedHfQuantizer(HfQuantizer):
             per_expert.append(
                 WeightConverter(
                     source_patterns=[
-                        "mlp.experts.*.gate_proj.input_scale",
-                        "mlp.experts.*.up_proj.input_scale",
+                        r"mlp\.experts\..*\.gate_proj\.input_scale",
+                        r"mlp\.experts\..*\.up_proj\.input_scale",
                     ],
                     target_patterns="mlp.experts.gate_up_proj_input_global_scale",
                     operations=[MergeModulelist(dim=0), FineGrainedInputGlobals(self)],
@@ -581,6 +580,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
             return ops
 
         updated = []
+        covered: set[str] = set()
         for conv in weight_conversions:
             targets = conv.target_patterns if isinstance(conv, WeightConverter) else []
             expert_targets = [
@@ -591,6 +591,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
                 # `base_model_prefix` and `force_cpu` are set on it before this hook runs and
                 # are not `__init__` arguments, so a fresh one silently loses them.
                 conv.operations = list(conv.operations) + layout_ops(expert_targets[0])
+                covered.update(re.sub(r".*experts\.|\$$", "", t) for t in expert_targets)
             updated.append(conv)
         # dense linears have no converter: their scale keys take the container cast alone
         updated.append(
@@ -601,7 +602,10 @@ class FineGrainedHfQuantizer(HfQuantizer):
             )
         )
         for name in ("gate_up_proj", "gate_up_proj_scale_inv", "gate_up_proj_bias", "down_proj_scale_inv"):
-            if layout_ops(name):
+            # only where no converter already produces that target: a second converter for the
+            # same key is appended LATER and shadows the first, dropping whatever ops it carried
+            # that these do not (the packed uint8 -> int8 view, on a fused modelopt checkpoint)
+            if name not in covered and layout_ops(name):
                 # the target is replacement text (op outputs are keyed by it), so no regex escapes
                 updated.append(
                     WeightConverter(

@@ -607,7 +607,13 @@ def _moe_operands(kernel, module) -> dict:
     norm_eps, norm_weight = 1e-6, None
     if not module.has_post_expert_norm:
         post_expert_norm = None
-    elif module.post_expert_norm_name in kernel.get_supported_norms():
+    elif module.post_expert_norm_name in kernel.get_supported_norms() and not getattr(
+        module.post_expert_norm, "_hf_tp_input_reduce", False
+    ):
+        # fusing puts the norm INSIDE the launch that produced the rows, so a collective that has
+        # to land between the two has nowhere to go: under intra-expert TP those rows are a
+        # partial sum over the sharded intermediate. Fall back to the module, whose wrapped
+        # forward does the all-reduce first.
         post_expert_norm = module.post_expert_norm_name
         norm_weight, norm_eps = module.post_expert_norm.weight, _norm_eps(module.post_expert_norm)
     else:
@@ -1217,7 +1223,9 @@ class FineGrainedWeightGlobals(ConversionOps):
     def convert(self, input_dict, target_patterns=None, model=None, **kwargs):
         sources = defaultdict(dict)
         for key, value in input_dict.items():
-            sources[_global_role(key)][key] = value
+            # the loader hands a converter's tensors in a list; unwrapped, a fused `(E, 2)` pair
+            # reads as `(1, 2E)` and the per-half fold below silently does not fire
+            sources[_global_role(key)][key] = value[0] if isinstance(value, list) and len(value) == 1 else value
         globals_ = {}
         for target in target_patterns:
             if role_sources := sources.get(_global_role(target)):
