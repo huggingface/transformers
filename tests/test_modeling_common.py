@@ -6017,6 +6017,8 @@ class ModelTesterMixin(ExportTesterMixin):
             short_model_kwargs = {"decoder_input_ids": short_input.clone()}
             long_model_kwargs = {"decoder_input_ids": long_input.clone()}
 
+        # Deep-copy rope_parameters before mutating so the tester's shared dict is not contaminated
+        text_config.rope_parameters = copy.deepcopy(text_config.rope_parameters)
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
         _set_config_rope_params(
             text_config,
@@ -6160,6 +6162,8 @@ class ModelTesterMixin(ExportTesterMixin):
             position_ids_short = position_ids_short[None, ...].repeat(num_multimodal_rope_axis, 1, 1)
             position_ids_long = position_ids_long[None, ...].repeat(num_multimodal_rope_axis, 1, 1)
 
+        # Deep-copy rope_parameters before mutating so the tester's shared dict is not contaminated
+        text_config.rope_parameters = copy.deepcopy(text_config.rope_parameters)
         # Sanity check original RoPE
         _set_config_rope_params(
             text_config,
