@@ -165,8 +165,9 @@ class DistributedHelper:
         happen if the distributed group is created before graph mixing is disabled. Typically, if the model is
         initialized before the ContinuousBatchingConfig is created."""
         tp_on = self.tp_size > 1
+        tp_backend = dist.get_backend(self.tp_group) if tp_on else None
         graph_mixing_not_disabled = os.environ.get("NCCL_GRAPH_MIXING_SUPPORT") != "0"
-        if tp_on and graph_mixing_not_disabled:
+        if tp_on and tp_backend == "nccl" and graph_mixing_not_disabled:
             logger.warning(
                 "NCCL_GRAPH_MIXING_SUPPORT was not set to '0' before init_process_group: performance will be harmed. "
                 "Construct your `ContinuousBatchingConfig(...)` BEFORE calling "
