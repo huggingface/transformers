@@ -1090,6 +1090,8 @@ class Glm5NextTextAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
         self.is_causal = True
+        # TODO: needs proper handling around the indexer
+        self.is_mla = False
         self.q_a_proj = nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
         self.q_a_layernorm = Glm5NextTextRMSNorm(self.q_lora_rank, eps=config.rms_norm_eps)
         self.q_b_proj = nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
@@ -1120,9 +1122,12 @@ class Glm5NextTextAttention(nn.Module):
         )
 
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Expands the compressed latents into key and value states. Args:
+        """Expands the compressed latents into key and value states.
+
+        Args:
             - kv_nope: key + value without positional encoding, shape [batch_size, 1, seqlen, self.kv_lora_rank]
             - k_rot: shared key with positional encoding, shape [batch_size, 1, seqlen, self.qk_rope_head_dim]
+
         Returns the key and value states, two tensors of shape [batch, num_heads, seq, (k or v)_head_dim].
         """
         batch_size, _, seq_length, _ = kv_nope.shape

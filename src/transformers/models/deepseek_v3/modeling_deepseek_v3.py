@@ -420,8 +420,7 @@ class DeepseekV3Attention(nn.Module):
 
     @conditional_kv_expansion
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Expands the compressed latents into key and value states.
+        """Expands the compressed latents into key and value states.
 
         Args:
             - kv_nope: key + value without positional encoding, shape [batch_size, 1, seqlen, self.kv_lora_rank]
@@ -478,6 +477,7 @@ class DeepseekV3Attention(nn.Module):
             kv_nope, k_rot = past_key_values.update(kv_nope, k_rot, self.layer_idx)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
+
         key_states, value_states = self.expand_kv(kv_nope, k_rot)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(

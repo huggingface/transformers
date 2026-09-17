@@ -26,6 +26,7 @@ def supports_mla(module: nn.Module):
 
 def conditional_kv_expansion(func):
     """Only certain implementations like FA4 can handle the unexpanded latents within as direct input"""
+
     @wraps(func)
     def wrapper(self, kv_nope, k_rot):
         if supports_mla(self):
@@ -54,6 +55,7 @@ def mla(func):
         1. `Qv @ V.T` follows `q_pass @ k_nope.T == (q_pass @ k_latent) @ kv_nope.T`
         2. Output recovery follows `attn_weights @ value_states` == `(attn_weights @ kv_nope) @ v_latent.T`
     """
+
     @wraps(func)
     def wrapper(
         module,

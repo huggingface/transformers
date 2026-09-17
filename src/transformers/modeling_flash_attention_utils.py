@@ -770,7 +770,9 @@ def _flash_attention_forward(
     )
 
     # PEFT possibly silently casts tensors to fp32, this potentially reconverts to correct dtype or is a no op
-    query_states, key_states, value_states = fa_peft_integration_check(query_states, key_states, value_states, target_dtype=target_dtype)
+    query_states, key_states, value_states = fa_peft_integration_check(
+        query_states, key_states, value_states, target_dtype=target_dtype
+    )
 
     # Extract the flash attention kwargs that have been requested (and are supported by the implementation)
     flash_kwargs = partial(
