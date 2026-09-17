@@ -403,16 +403,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "MMGroundingDinoModel": "Same `bbox_embed` shared-head `KeyError` as `GroundingDinoModel`.",
         "MMGroundingDinoForObjectDetection": "Same `bbox_embed` shared-head `KeyError` as `GroundingDinoModel`.",
     },
-    "openvino": {
-        "RecurrentGemmaModel": (
-            "OpenVINO's `last_hidden_state` diverges from eager on unpadded positions (max ~1.3 over 77% of "
-            "elements) for this recurrence. Not a masking or tie-break artifact, and present with or without "
-            "the cache refactor that was tried and reverted; the cause is not yet identified."
-        ),
-        "RecurrentGemmaForCausalLM": "Same unexplained divergence as `RecurrentGemmaModel`.",
-        "HunYuanVLModel": "OpenVINO conversion of the vision stack fails (same family as the ONNX/ExecuTorch gaps).",
-        "HunYuanVLForConditionalGeneration": "Same OpenVINO gap as `HunYuanVLModel`.",
-    },
     "openvino.exactness": {
         "FlaubertForQuestionAnswering": (
             "`end_top_index` is an index output chosen by `topk` over tied scores in the tiny test config, so "

@@ -160,8 +160,31 @@ def _fix_exported_program(exported_program: ExportedProgram) -> tuple[ExportedPr
     return exported_program, graph_module
 
 
+def _move_tensors_to_host(graph_module) -> None:
+    """Rebind the module's tensors to host copies it owns before OV reads them.
+
+    OV builds every constant with ``shared_memory=True``, so the constant points into the tensor's
+    buffer instead of copying it. For a tensor that is not already on the host, OV first materialises
+    one with ``Tensor.numpy(force=True)`` — a temporary that is freed as soon as the constant is
+    built, leaving it aimed at memory that gets reused. Weights then read back as garbage (denormals)
+    and the model's outputs collapse to zero. Copies are rebound on the exported module only; the
+    parameters the caller's model holds are left untouched.
+    """
+    for module in graph_module.modules():
+        for name, param in list(module._parameters.items()):
+            if param is not None and param.device.type != "cpu":
+                module._parameters[name] = torch.nn.Parameter(param.detach().cpu(), requires_grad=False)
+        for name, buffer in list(module._buffers.items()):
+            if buffer is not None and buffer.device.type != "cpu":
+                module._buffers[name] = buffer.detach().cpu()
+        for name, value in list(module.__dict__.items()):
+            if isinstance(value, torch.Tensor) and value.device.type != "cpu":
+                setattr(module, name, value.detach().cpu())
+
+
 def _convert_to_openvino(graph_module) -> openvino.Model:
     """Hand the repaired FX graph to OV's frontend and fix up the ports it produces."""
+    _move_tensors_to_host(graph_module)
     decoder = TorchFXPythonDecoder(graph_module, dynamic_shapes=True)
     # Name every input port after its FX placeholder — OV may drop unused inputs, so all
     # downstream port↔placeholder matching is done by name, never positionally.
@@ -890,6 +913,33 @@ def _fix_gather_index_extent(gm, node):
             narrowed.meta.update(node.meta)
     for user in users:
         user.replace_input_with(node, narrowed)
+    return True
+
+
+@register_fx_node_fix("openvino")
+def _fix_narrow_int_item(gm, node):
+    """Read a scalar out of an int64 tensor so shape arithmetic stays one element type.
+
+    A size taken with `.item()` off a narrow integer tensor (hunyuan_vl's vision stack reads its grid
+    out of an `int32` tensor) reaches OV as an `i32` scalar — decompositions spell that read
+    `aten._local_scalar_dense`. Concatenating it with the `i64` constants that make up the rest of an
+    `expand`/`view` shape then fails type validation (``Argument element types are inconsistent``).
+    Widening the tensor first is value-preserving.
+    """
+    if node.target is not torch.ops.aten._local_scalar_dense.default or not node.args:
+        return False
+    source = node.args[0]
+    val = getattr(source, "meta", {}).get("val")
+    if val is None or getattr(val, "dtype", None) not in (torch.int32, torch.int16, torch.int8, torch.uint8):
+        return False
+
+    with gm.graph.inserting_before(node):
+        widened = gm.graph.call_function(
+            torch.ops.aten._to_copy.default, args=(source,), kwargs={"dtype": torch.int64}
+        )
+        widened.meta.update(source.meta)
+        widened.meta["val"] = val.to(torch.int64)
+    node.args = (widened,) + tuple(node.args[1:])
     return True
 
 
