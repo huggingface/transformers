@@ -1751,7 +1751,9 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
     ) -> torch.Tensor:
         batch_size, seq_length = inputs_tensor.shape[:2]
         past_length = 0 if past_key_values is None else past_key_values.get_seq_length()
-        has_multimodal_data = any(grid is not None and grid.numel() > 0 for grid in (image_grid_thw, video_grid_thw))
+        has_multimodal_data = audio_feature_lengths is not None or any(
+            grid is not None and grid.numel() > 0 for grid in (image_grid_thw, video_grid_thw)
+        )
         if past_length == 0 or self.rope_deltas is None:
             if attention_mask is None:
                 attention_mask = torch.ones((batch_size, seq_length), dtype=torch.long, device=inputs_tensor.device)
@@ -1800,7 +1802,7 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
             inputs_tensor = model_kwargs["talker_input_ids"]
 
         is_input_ids = len(inputs_tensor.shape) == 2 and inputs_tensor.dtype in [torch.int, torch.long]
-        has_multimodal_data = any(
+        has_multimodal_data = model_kwargs.get("audio_feature_lengths") is not None or any(
             grid is not None and grid.numel() > 0
             for grid in (model_kwargs.get("image_grid_thw"), model_kwargs.get("video_grid_thw"))
         )
