@@ -189,6 +189,31 @@ class CacheTest(unittest.TestCase):
             keys, _ = cache.update(*_kv(1), layer_idx)
             self.assertEqual(keys.device.type, torch.device(torch_device).type)
 
+    def test_dynamic_layers_reset_drops_their_states(self):
+        """
+        Regression test: `reset` used to zero the dynamic layers' states in place, inherited from the static layers.
+        That is a no-op for them, as they grow by concatenation and read their length off `keys.shape[-2]`: the layer
+        kept its length and the next `update` appended to a run of stale zeros.
+        """
+        keys = torch.rand(2, 4, 5, 16, device=torch_device)
+        indexer_keys = torch.rand(2, 5, 8, device=torch_device)
+
+        for layer in (DynamicLayer(), DynamicSlidingWindowLayer(sliding_window=1024), DynamicIndexedLayer()):
+            layer.update(keys, keys.clone())
+            if isinstance(layer, DynamicIndexedLayer):
+                layer.update_indexer(indexer_keys)
+
+            layer.reset()
+            self.assertEqual(layer.get_seq_length(), 0)
+
+            # The next update must start from scratch, instead of appending to the pre-reset states.
+            new_keys, _ = layer.update(keys, keys.clone())
+            self.assertEqual(new_keys.shape[-2], 5)
+            if isinstance(layer, DynamicIndexedLayer):
+                # The indexer has to stay in step with the main states, else `topk` indices computed over it go out
+                # of bounds of the (shorter) key length downstream.
+                self.assertEqual(layer.update_indexer(indexer_keys).shape[1], 5)
+
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
     """Function to skip tests on failed cache prerequisites, given a cache implementation"""
@@ -242,6 +267,23 @@ class CacheIntegrationTest(unittest.TestCase):
         # Confirm that the output matches expectations
         decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
+
+    def test_reset_dynamic_cache_matches_a_fresh_one(self):
+        """A reset cache must behave exactly like a newly built one, so that it can be reused across generations."""
+        first = self.tokenizer(["The capital of France is"], return_tensors="pt").to(self.model.device)
+        second = self.tokenizer(["A sequence: 1, 2, 3, 4, 5"], return_tensors="pt").to(self.model.device)
+
+        cache = DynamicCache(config=self.model.config)
+        self.model.generate(**first, past_key_values=cache, max_new_tokens=10, do_sample=False)
+
+        # Reuse the same cache for a different prompt, which is what `reset` is for.
+        cache.reset()
+        self.assertEqual(cache.get_seq_length(), 0)
+        reused = self.model.generate(**second, past_key_values=cache, max_new_tokens=10, do_sample=False)
+
+        # Before the fix, the reset kept the first prompt's states around, so this silently generated gibberish.
+        expected = self.model.generate(**second, max_new_tokens=10, do_sample=False)
+        self.assertEqual(self.tokenizer.decode(reused[0]), self.tokenizer.decode(expected[0]))
 
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_beam_search(self, cache_implementation):
@@ -1651,3 +1693,50 @@ class CacheCroppingTests(unittest.TestCase):
             if hasattr(layer, "indexer_keys"):
                 self.assertEqual(layer.indexer_keys.shape[-2], self.seq_len - 3)
                 self.assertTrue((layer.indexer_keys == indexer_states[..., :-3, :]).all())
+
+    def test_update_with_recording_returns_advertised_kv_width(self):
+        """Test that with past recording activated, `update` returns exactly the states advertised by `get_mask_sizes`"""
+        sliding_window = 4
+
+        # Several consecutive single-token updates without an intervening `crop`, as during assisted decoding drafting:
+        # `get_mask_sizes` is queried before the update adds the new states, and `update` must return what it advertises
+        layer = DynamicSlidingWindowLayer(sliding_window=sliding_window)
+        layer.activate_past_recording()
+        for step in range(sliding_window + 2):
+            new_states = torch.ones((1, 1, 1, 2), dtype=float) * step
+            kv_length, _ = layer.get_mask_sizes(new_states.shape[-2])
+            returned_keys, returned_values = layer.update(new_states, new_states)
+
+            self.assertEqual(returned_keys.shape[-2], kv_length)
+            self.assertEqual(returned_values.shape[-2], kv_length)
+            expected_window = torch.arange(float(step + 1))[-kv_length:]
+            self.assertTrue((returned_keys[0, 0, :, 0] == expected_window).all())
+            self.assertTrue((returned_values[0, 0, :, 0] == expected_window).all())
+            # All states stay recorded for `crop` to roll back, even beyond the sliding window
+            self.assertEqual(layer.keys.shape[-2], step + 1)
+            self.assertEqual(layer.values.shape[-2], step + 1)
+
+        # The same must hold for a multi-token update crossing the window size mid-draft
+        layer = DynamicSlidingWindowLayer(sliding_window=sliding_window)
+        layer.activate_past_recording()
+        for step in range(2):
+            new_states = torch.full((1, 1, 1, 2), float(step))
+            kv_length, _ = layer.get_mask_sizes(new_states.shape[-2])
+            returned_keys, _ = layer.update(new_states, new_states)
+            self.assertEqual(returned_keys.shape[-2], kv_length)
+
+        crossing_states = torch.arange(2, 5).view(1, 1, 3, 1).expand(1, 1, 3, 2)
+        kv_length, _ = layer.get_mask_sizes(crossing_states.shape[-2])
+        returned_keys, returned_values = layer.update(crossing_states, crossing_states)
+        self.assertEqual(returned_keys.shape[-2], kv_length)
+        self.assertEqual(returned_values.shape[-2], kv_length)
+        self.assertEqual(returned_keys[0, 0, :, 0].tolist(), [0.0, 1.0, 2.0, 3.0, 4.0])
+        self.assertEqual(layer.keys.shape[-2], 5)
+
+        # And once the buffer is larger than what is advertised, only its trailing window is returned
+        final_states = torch.full((1, 1, 1, 2), 5.0)
+        kv_length, _ = layer.get_mask_sizes(final_states.shape[-2])
+        returned_keys, _ = layer.update(final_states, final_states)
+        self.assertEqual(kv_length, sliding_window)
+        self.assertEqual(returned_keys.shape[-2], kv_length)
+        self.assertEqual(returned_keys[0, 0, :, 0].tolist(), [2.0, 3.0, 4.0, 5.0])
