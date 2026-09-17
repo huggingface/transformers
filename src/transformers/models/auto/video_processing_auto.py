@@ -139,12 +139,15 @@ def _load_backend_class(video_processor_class_name: str, backend: str):
         *VIDEO_PROCESSOR_MAPPING._extra_content.values(),
         *VIDEO_PROCESSOR_MAPPING.values(),
     ):
-        if any(v == video_processor_class_name for v in mapping_dict.values()):
+        if any(
+            video_processor_class_name == (v if not isinstance(v, type) else v.__name__) for v in mapping_dict.values()
+        ):
             mapping = mapping_dict
             break
 
-    if (backend_processor_class_name := mapping.get(backend)) is not None:
-        processor_class = video_processor_class_from_name(backend_processor_class_name)
+    if (processor_class := mapping.get(backend)) is not None:
+        if isinstance(processor_class, str):
+            processor_class = video_processor_class_from_name(processor_class)
         return processor_class
     else:
         raise ImportError(f"Video processor cannot be loaded - requested {backend} backend is not available.")
