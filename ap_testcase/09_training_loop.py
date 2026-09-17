@@ -5,9 +5,8 @@ Needs one CUDA GPU (skips otherwise); CASE 3 needs two. The pruned LM head score
 must be `< output_vocab_size` or `-100`, so positions holding media ids (image/audio codes above
 the cutoff) must be masked with `-100`.
 
-- CASE 1, label contract: a no-label forward returns logits padded to the logical `vocab_size` with
-  a `finfo.min` tail, and a labeled forward with masked media ids returns physical-width logits
-  with a finite loss.
+- CASE 1, label contract: forwards with and without labels return physical-width logits,
+  and a labeled forward with masked media ids returns a finite loss.
 - CASE 2, single-device loop: overfit smoke test; four SGD steps on the last decoder layer plus
   lm_head must reduce the loss on a fixed text+image batch.
 - CASE 3, data parallelism: relaunches this file under `torchrun --nproc_per_node=2`; two
@@ -82,26 +81,21 @@ def prepare_trainable(model):
 def case_1_label_contract(model, inputs, labels, text_config):
     """CASE 1: LABEL CONTRACT
 
-    The pruned head can only score the first `output_vocab_size` ids, so three behaviors are
-    checked: 1) a no-label forward returns logits padded to the full `vocab_size` with a
-    non-selectable `finfo.min` tail 2) a labeled forward returns physical-width logits and 3) a finite
-    loss with media ids masked using `-100`.
+    Forwards with and without labels return finite logits at the physical `output_vocab_size`
+    width. A labeled forward has a finite loss with media ids masked using `-100`.
     """
     with torch.no_grad():
         no_label_logits = model(**inputs).logits
-    assert no_label_logits.shape[-1] == text_config.vocab_size, "no-label logits have the wrong width"
-    tail = no_label_logits[..., text_config.output_vocab_size :]
-    assert (tail == torch.finfo(no_label_logits.dtype).min).all(), "padded logits tail is selectable"
+    assert no_label_logits.shape[-1] == text_config.output_vocab_size, "no-label logits have the wrong width"
+    assert torch.isfinite(no_label_logits).all(), "non-finite logits"
 
     with torch.no_grad():
         loss_out = model(**inputs, labels=labels)
     assert loss_out.logits.shape[-1] == text_config.output_vocab_size, "loss logits have the wrong width"
     assert torch.isfinite(loss_out.loss), f"non-finite loss {loss_out.loss}"
+    torch.testing.assert_close(loss_out.logits, no_label_logits)
 
-    return (
-        f"logits {no_label_logits.shape[-1]} padded / {loss_out.logits.shape[-1]} physical; "
-        f"loss {float(loss_out.loss):.4f}"
-    )
+    return f"logits {loss_out.logits.shape[-1]} wide with and without labels; loss {float(loss_out.loss):.4f}"
 
 
 def case_2_single_device_loop(model, inputs, labels):

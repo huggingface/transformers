@@ -1,6 +1,6 @@
 """Validate text-only classes loaded from the composite checkpoint.
 
-Covers config extraction, pruned-head loading, the padded-logits contract, generation, and the bare
+Covers config extraction, pruned-head loading, physical-width logits, generation, and the bare
 text backbone.
 """
 
@@ -63,25 +63,23 @@ def case_2_clean_load(model, info):
     return f"0 missing; {len(info['unexpected_keys'])} expected extras; head width {head_rows}"
 
 
-def case_3_padded_logits(model, tokenizer):
-    """CASE 3: PADDED LOGITS
+def case_3_physical_logits(model, tokenizer):
+    """CASE 3: PHYSICAL LOGITS
 
-    Keep logits finite with a zero-probability padded tail.
+    Return finite logits at the physical LM-head width.
     """
     config = model.config
     inputs = tokenizer("The capital of Switzerland is", return_tensors="pt")
     with torch.no_grad():
         logits = model(**inputs).logits
-    assert logits.shape[-1] == config.vocab_size, f"expected logits padded to {config.vocab_size}, got {logits.shape}"
-    assert bool(torch.isfinite(logits).all()), "padded logits contain non-finite values"
-    tail = logits[..., config.output_vocab_size :]
-    assert (tail == torch.finfo(logits.dtype).min).all(), "padded tail must be finfo.min everywhere"
+    output_vocab_size = config.output_vocab_size or config.vocab_size
+    assert logits.shape[-1] == output_vocab_size, f"expected width {output_vocab_size}, got {logits.shape}"
+    assert bool(torch.isfinite(logits).all()), "logits contain non-finite values"
 
     probabilities = logits.float().softmax(-1)
-    assert (probabilities[..., config.output_vocab_size :] == 0).all(), "padded tail leaks probability mass"
-    head_mass = float(probabilities[..., : config.output_vocab_size].sum(-1).min())
+    head_mass = float(probabilities.sum(-1).min())
     assert abs(head_mass - 1.0) < 1e-4, f"head probabilities do not sum to 1: {head_mass}"
-    return f"logits {logits.shape[-1]} wide, finite; tail softmaxes to exactly 0; head mass {head_mass:.6f}"
+    return f"logits {logits.shape[-1]} wide, finite; head mass {head_mass:.6f}"
 
 
 def case_4_raw_generation(model, tokenizer):
@@ -148,7 +146,7 @@ def main():
         results = [
             run_case(case_1_config, config),
             run_case(case_2_clean_load, model, info),
-            run_case(case_3_padded_logits, model, tokenizer),
+            run_case(case_3_physical_logits, model, tokenizer),
             run_case(case_4_raw_generation, model, tokenizer),
             run_case(case_5_chat_generation, model, tokenizer),
         ]
