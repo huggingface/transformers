@@ -3191,18 +3191,25 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
     ) -> torch.Tensor:
         batch_size, seq_length = inputs_tensor.shape[:2]
         past_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        has_multimodal_data = any(grid is not None and grid.numel() > 0 for grid in (image_grid_thw, video_grid_thw))
         if past_length == 0 or self.rope_deltas is None:
             if attention_mask is None:
                 attention_mask = torch.ones((batch_size, seq_length), dtype=torch.long, device=inputs_tensor.device)
-            position_ids, rope_deltas = self.get_rope_index(
-                talker_input_ids,
-                image_grid_thw,
-                video_grid_thw,
-                attention_mask,
-                use_audio_in_video or False,
-                audio_feature_lengths,
-                video_second_per_grid,
-            )
+            if talker_input_ids is not None and has_multimodal_data:
+                position_ids, rope_deltas = self.get_rope_index(
+                    talker_input_ids,
+                    image_grid_thw,
+                    video_grid_thw,
+                    attention_mask,
+                    use_audio_in_video or False,
+                    audio_feature_lengths,
+                    video_second_per_grid,
+                )
+            else:
+                position_ids = attention_mask.long().cumsum(-1) - 1
+                position_ids = position_ids.masked_fill(attention_mask == 0, 0)
+                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+                rope_deltas = torch.zeros(batch_size, 1, dtype=torch.long, device=inputs_tensor.device)
             self.rope_deltas = rope_deltas - (1 - attention_mask).sum(dim=-1).unsqueeze(1)
         else:
             delta = (past_length + self.rope_deltas).to(inputs_tensor.device)
@@ -3233,7 +3240,11 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
             inputs_tensor = model_kwargs["talker_input_ids"]
 
         is_input_ids = len(inputs_tensor.shape) == 2 and inputs_tensor.dtype in [torch.int, torch.long]
-        if is_input_ids and attention_mask is not None:
+        has_multimodal_data = any(
+            grid is not None and grid.numel() > 0
+            for grid in (model_kwargs.get("image_grid_thw"), model_kwargs.get("video_grid_thw"))
+        )
+        if is_input_ids and attention_mask is not None and has_multimodal_data:
             vision_positions, rope_deltas = self.get_rope_index(
                 inputs_tensor,
                 image_grid_thw=model_kwargs.get("image_grid_thw"),
