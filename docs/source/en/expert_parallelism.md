@@ -109,7 +109,32 @@ With `tp_size=1`, `ep_size` must divide `fsdp_size` and the number of experts, a
 
 - The parameters outside the experts are sharded with [FSDP2](./fsdp) across `fsdp`, which reduces their gradients.
 - The experts are sharded across `ep` and, when `efsdp_size = fsdp_size * tp_size // ep_size` is larger than one, additionally FSDP-sharded across `efsdp`. They are always FSDP-wrapped, so `fsdp_mixed_precision` and `fsdp_cpu_offload` apply to them too and [`~PreTrainedModel.save_pretrained`] gathers them like any other parameter.
-- An expert parallel group collects `ep_size / tp_size` batches, so the expert gradients are scaled by `tp_size / ep_size` before the `efsdp` reduction, matching the average FSDP2 takes for the trunk.
+- An expert parallel group holds `ep_size / tp_size` batches, so an expert's gradient is a sum over that many batches. The `efsdp` reduction divides by `fsdp_size` instead of its group size, which gives the same per-batch average FSDP2 takes for the dense modules.
+- Every local expert also processes one zero pad row per layer. A rank whose experts received no tokens still joins the reverse all-to-all and the expert gradient reduction.
+
+### How the sizes combine
+
+- `tp_size * fsdp_size` is the number of processes. `ep_size` adds none: it regroups the same ranks for the expert weights only.
+- `ep_size` cuts the expert list into `ep_size` blocks. Each rank computes `num_experts / ep_size` experts, and `ep_size` consecutive ranks hold one complete set. That set of ranks is the group the all-to-all runs in.
+- `efsdp_size = fsdp_size * tp_size / ep_size` is how many complete copies of the expert set exist. Ranks at the same position in different copies shard those experts for memory and average their gradients, like FSDP does for the dense modules.
+- The batch a rank holds depends on `fsdp` only. Consecutive ranks form a TP group and get the same batch; the `fsdp_size` groups get different batches.
+
+Eight processes, `tp_size=2, fsdp_size=4`, eight experts:
+
+```text
+rank         0      1       2      3       4      5       6      7
+batch       [====B0====]   [====B1====]   [====B2====]   [====B3====]     one batch per TP pair
+tp           0      1       0      1       0      1       0      1
+
+ep_size=2   E0-3   E4-7    E0-3   E4-7    E0-3   E4-7    E0-3   E4-7     group = a TP pair,   efsdp_size=4
+ep_size=4   E0E1   E2E3    E4E5   E6E7    E0E1   E2E3    E4E5   E6E7     group = two pairs,   efsdp_size=2
+ep_size=8   E0     E1      E2     E3      E4     E5      E6     E7       group = all ranks,   efsdp_size=1
+```
+
+Two numbers follow from the picture:
+
+- Inside an EP group, each token exists `tp_size` times, once per rank of the pair that holds its batch. This does not depend on `ep_size`.
+- An EP group holds `ep_size / tp_size` different batches. This is the count an expert's gradient sums over.
 
 ### With tensor parallelism
 
@@ -123,18 +148,17 @@ distributed_config = DistributedConfig(
 )
 ```
 
-Each pair of TP ranks receives the same batch. At each MoE layer, the TP ranks dispatch disjoint slices of their shared tokens, so every token is routed once, then combine the results into a replicated output. Expert groups span four ranks and each expert is FSDP-sharded across `efsdp_size = 2` ranks, while the trunk's FSDP group spans four ranks. The model's usual TP constraints, such as attention-head divisibility, still apply to the dense modules. Token slices may be uneven or empty, including during single-token decoding.
+Each pair of TP ranks receives the same batch, because tensor parallelism replicates the activations inside the pair. If both ranks dispatched all of their tokens, the rank owning an expert would receive every token twice, compute it twice, and its weight gradient would double. Experts are whole on one rank, so the duplicate cannot be split by weights, and the owner is usually another rank, so it cannot be resolved by ownership as masking does. The pair therefore splits the rows: each TP rank dispatches a disjoint `1 / tp_size` of the tokens, results come back to the rank that sent them, and an all-reduce over the pair of the zero-padded halves restores the replicated output the next layer expects. The split is by `tp_size`, not `ep_size`, since only the ranks that hold a batch can send it. Expert groups span four ranks and each expert is FSDP-sharded across `efsdp_size = 2` ranks, while the trunk's FSDP group spans four ranks. The model's usual TP constraints, such as attention-head divisibility, still apply to the dense modules. Token slices may be uneven or empty, including during single-token decoding.
 
-Token dispatch cannot be combined with pipeline parallelism yet; use `pp_size=1`. It requires `torch>=2.7`.
-
+Token dispatch cannot be combined yet with pipeline parallelism yet; use `pp_size=1` (not tested yet)
 These configurations each use eight GPUs:
 
 | Configuration | Result |
 | :--- | :--- |
-| `DistributedConfig(tp_size=4, fsdp_size=2, ep_size=4)` | Dispatch with TP groups of four (Qwen3 MoE default plan); masking and all-reduce for models with a masked plan. |
-| `DistributedConfig(tp_size=1, fsdp_size=8, ep_size=4)` | Dispatch with an independent batch on each rank and experts FSDP-sharded across pairs of ranks. |
-| `DistributedConfig(tp_size=2, fsdp_size=4, ep_size=4)` | Dispatch with a TP pair per batch. |
-| `DistributedConfig(tp_size=8, ep_size=8)` | Dispatch with every rank sharing one batch, or masking and all-reduce for a masked plan. |
+| `DistributedConfig(tp_size=4, fsdp_size=2, ep_size=4)` | Dispatch with TP groups of four, each slicing its batch in four (Qwen3 MoE default plan); unless you specify a ep_plan to use the legacy masked EP |
+| `DistributedConfig(tp_size=1, fsdp_size=8, ep_size=4)` | Dispatch with an independent batch on each rank, no slicing, and experts FSDP-sharded across pairs of ranks. |
+| `DistributedConfig(tp_size=2, fsdp_size=4, ep_size=4)` | Dispatch with a TP pair per batch, each pair slicing its batch in two; two batches per expert group. |
+| `DistributedConfig(tp_size=8, ep_size=8)` | Dispatch with every rank sharing one batch, sliced in eight, or masking and all-reduce for a masked plan. |
 
 > [!WARNING]
 > The [`Trainer`] does not account for token dispatch yet: batch and token counting assume the all-reduce layout, where the ranks of a TP group share a batch and `fsdp_size` data-parallel shards exist. Trainer support for dispatch comes in a follow-up.
