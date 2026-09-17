@@ -2105,18 +2105,6 @@ class Qwen3TTSTokenizerMultiCodebookModel(Qwen3TTSTokenizerMultiCodebookPreTrain
 
         self.post_init()
 
-    def get_input_sample_rate(self):
-        return self.input_sample_rate
-
-    def get_output_sample_rate(self):
-        return self.output_sample_rate
-
-    def get_encode_downsample_rate(self):
-        return self.encode_downsample_rate
-
-    def get_decode_upsample_rate(self):
-        return self.decode_upsample_rate
-
     def encode(
         self,
         input_values: torch.Tensor,
