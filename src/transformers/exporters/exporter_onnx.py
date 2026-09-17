@@ -241,6 +241,30 @@ def _patch_unsqueeze(original):
     return patch
 
 
+@register_patch("onnx", "torch.nn.functional.scaled_dot_product_attention")
+def _patch_sdpa(original):
+    """Zero rows that mask every key, the way torch's fused kernels do.
+
+    A row masked at every key asks for a softmax over nothing. Torch's fused CUDA kernel answers with
+    zeros; ONNX Runtime evaluates the softmax literally and, when the mask is `-inf` (parakeet's
+    relative-position bias masks that way), returns `NaN` — which a later BatchNorm then spreads over
+    the whole batch. Rows like these are routine: any padded frame under a padding mask has one.
+    """
+
+    def patch(query, key, value, attn_mask=None, *args, **kwargs):
+        attn_output = original(query, key, value, attn_mask, *args, **kwargs)
+        if attn_mask is None:
+            return attn_output
+        if attn_mask.dtype == torch.bool:
+            unattended = ~attn_mask.any(dim=-1, keepdim=True)
+        else:
+            unattended = attn_mask.amax(dim=-1, keepdim=True) <= torch.finfo(attn_mask.dtype).min
+        zero = torch.zeros((), dtype=attn_output.dtype, device=attn_output.device)
+        return torch.where(unattended, zero, attn_output)
+
+    return patch
+
+
 @register_patch("onnx", "transformers.masking_utils._vmap_expansion_sdpa")
 def _patch_broadcast_mask_expansion(_original):
     """Replace vmap-based mask expansion with broadcast expansion."""
@@ -727,6 +751,91 @@ def _fix_detach_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     with gm.graph.inserting_before(node):
         new = gm.graph.call_function(torch.ops.aten.detach.default, args=node.args, kwargs=node.kwargs)
     node.replace_all_uses_with(new)
+    gm.graph.erase_node(node)
+    return True
+
+
+@register_fx_node_fix("onnx")
+def _fix_slice_implicit_start(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Spell out a slice's implicit start as ``0``.
+
+    ``x[..., :end]`` traces as `aten.slice` with ``start=None``, which onnxscript lowers to a `Slice`
+    whose `starts` input is an `Unsqueeze` of nothing. ORT then rejects the whole graph with
+    ``input 0 is marked single but has an empty string`` (funnel's relative-shift gather), or, with
+    optimisation on, the malformed node surfaces as an `onnx_ir` `PassError` from the inliner.
+    ``None`` already means ``0`` here, so writing it out changes nothing but the emitted graph.
+    """
+    if node.target is not torch.ops.aten.slice.Tensor or len(node.args) < 3 or node.args[2] is not None:
+        return False
+    args = list(node.args)
+    args[2] = 0
+    node.args = tuple(args)
+    return True
+
+
+@register_fx_node_fix("onnx")
+def _fix_index_put_last_dim_index(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Rewrite ``self[..., idx] = value`` as a mask + ``where`` when ``idx`` selects on the last dim.
+
+    torchlib's `index_put` lowering silently drops the write under dynamic shapes — the indexed
+    columns come back unchanged (chameleon masks its image-token logits with `finfo.min` that way, and
+    the sentinel never lands). Comparing an `arange` over the indexed dim against `idx` gives a mask
+    that broadcasts against `self`, which ONNX handles identically in both shape modes. Only scalar
+    (broadcastable) values take this path; anything else keeps the original lowering.
+    """
+    if node.target not in (torch.ops.aten.index_put.default, torch.ops.aten.index_put_.default):
+        return False
+    if len(node.args) < 3:
+        return False
+    self_arg, indices, values = node.args[0], node.args[1], node.args[2]
+    accumulate = node.args[3] if len(node.args) > 3 else node.kwargs.get("accumulate", False)
+    if accumulate or not isinstance(indices, (list, tuple)) or not indices or indices[-1] is None:
+        return False
+    if any(index is not None for index in indices[:-1]):
+        return False
+
+    index = indices[-1]
+    index_val = getattr(index, "meta", {}).get("val")
+    self_val = getattr(self_arg, "meta", {}).get("val")
+    values_val = getattr(values, "meta", {}).get("val")
+    if index_val is None or self_val is None or values_val is None:
+        return False
+    # bool masks have their own translation, and only a broadcastable value can become a `where`
+    if index_val.dtype == torch.bool or values_val.numel() != 1 or len(indices) != self_val.ndim:
+        return False
+
+    # `x[:, :, idx] = v` mutates a *view*: the graph slices, writes into the slice, and returns the
+    # base it never re-reads. Walk back through slices that keep the shape (a full `:`) so the write
+    # lands on the tensor later nodes actually read.
+    base = self_arg
+    while (
+        base.op == "call_function"
+        and base.target is torch.ops.aten.slice.Tensor
+        and getattr(base.args[0], "meta", {}).get("val") is not None
+        and base.meta["val"].shape == base.args[0].meta["val"].shape
+    ):
+        base = base.args[0]
+
+    last_dim = self_val.ndim - 1
+    with gm.graph.inserting_before(node):
+        size = gm.graph.call_function(torch.ops.aten.sym_size.int, args=(self_arg, last_dim))
+        arange = gm.graph.call_function(
+            torch.ops.aten.arange.default, args=(size,), kwargs={"dtype": index_val.dtype, "device": index_val.device}
+        )
+        columns = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(arange, -1))
+        selected = gm.graph.call_function(torch.ops.aten.unsqueeze.default, args=(index, 0))
+        matches = gm.graph.call_function(torch.ops.aten.eq.Tensor, args=(columns, selected))
+        mask = gm.graph.call_function(torch.ops.aten.any.dim, args=(matches, -1))
+        result = gm.graph.call_function(torch.ops.aten.where.self, args=(mask, values, base))
+        result.meta.update(node.meta)
+    node.replace_all_uses_with(result)
+    # Under dynamic shapes `index_put_` is left with no users at all: the graph returns the tensor it
+    # mutated and relies on the mutation, which a functional IR drops on the floor. Hand every later
+    # reader of that tensor the value instead.
+    ordering = {other: position for position, other in enumerate(gm.graph.nodes)}
+    for user in list(base.users):
+        if user is not node and ordering.get(user, -1) > ordering[node]:
+            user.replace_input_with(base, result)
     gm.graph.erase_node(node)
     return True
 

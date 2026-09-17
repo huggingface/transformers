@@ -206,6 +206,70 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "PixioBackbone": "Same `timeout` failure as `PixioModel`.",
     },
     # ONNX, generate path only.
+    # Exported and run as usual, but not compared against eager (see the ``.exactness`` note above).
+    "onnx.exactness": {
+        "Wav2Vec2ForPreTraining": (
+            "`codevector_perplexity` and `projected_quantized_states` come out of a Gumbel-softmax draw "
+            "inside the forward, so the quantizer picks different codes each run and eager does not agree "
+            "with itself either."
+        ),
+        "UniSpeechForPreTraining": "Same Gumbel-softmax quantizer draw as `Wav2Vec2ForPreTraining`.",
+        "PatchTSTForPretraining": (
+            "The tiny config sets `random_mask_ratio=0.0`, so nothing is masked and the pretraining loss is "
+            "`0 / (0 + 1e-10)`: eager reports a clean `0.0` while ORT lands on `NaN`. The reconstruction it "
+            "is computed from matches. TODO: revisit if the tiny config ever masks anything."
+        ),
+        "BitModel": (
+            "ONNX Runtime's fp32 accumulation through this conv stack drifts ~0.0018 from torch, over the "
+            "1e-3 tolerance but far from structural."
+        ),
+        "BitBackbone": "Same ORT accumulation as `BitModel` (~0.0048 across the feature maps).",
+        "ClapModel": "Same ORT accumulation as `BitModel` (~0.0033 on the contrastive logits).",
+        "CLIPSegForImageSegmentation": "Same ORT accumulation as `BitModel` (~0.0059 on the decoder logits).",
+        "FlavaForPreTraining": "Same ORT accumulation as `BitModel` (~0.0039 on the contrastive logits).",
+        "Tipsv2DptForDensePrediction": "Same ORT accumulation as `BitModel` (~0.0052 across the dense heads).",
+        "Tipsv2DptForDepthEstimation": "Same ORT accumulation as `BitModel` (~0.0034).",
+        "Tipsv2DptForNormalEstimation": "Same ORT accumulation as `BitModel` (~0.0048).",
+        "Tipsv2DptForSemanticSegmentation": "Same ORT accumulation as `BitModel` (~0.0041).",
+        "DepthProForDepthEstimation": (
+            "`predicted_depth` differs by ~0.036 — the same ORT accumulation as `BitModel`, amplified by the "
+            "multi-scale depth head's upsampling and fusion."
+        ),
+        "OneFormerModel": (
+            "`task_token` differs by ~0.029. Everything else matches; the task MLP runs on a constant task "
+            "input, so ORT's accumulation shows up undamped there."
+        ),
+        "OneFormerForUniversalSegmentation": "Same `task_token` divergence as `OneFormerModel`.",
+        "TapasForQuestionAnswering": (
+            "It selects one column with an `argmax` over `column_logits`, and in the tiny config those are "
+            "tied: several rows have two columns at the maximum and one has all 32 (every column reads as "
+            "padding, so they all sit at `CLOSE_ENOUGH_TO_LOG_ZERO`). ONNX Runtime breaks the tie "
+            "differently from torch, so a different column is selected and the -10000 mask lands on "
+            "different cells — the same arbitrary-but-valid choice as the detection models above."
+        ),
+        "FlaubertForQuestionAnswering": (
+            "`end_top_index` is an index output chosen by `topk` over tied scores in the tiny test config, "
+            "so ONNX Runtime breaks the tie differently — an equally valid choice, the same way OpenVINO "
+            "does. `torch.export` still resolves it exactly as eager, so it stays compared there."
+        ),
+        "XLMForQuestionAnswering": "Same tied-`end_top_index` selection as `FlaubertForQuestionAnswering`.",
+        "DFineModel": (
+            "The tiny test config's classification head emits a constant, so the encoder's `topk` over "
+            "`enc_outputs_class` picks among *tied* scores and ONNX Runtime breaks the tie differently: "
+            "`enc_topk_bboxes` / `encoder_pred_boxes` hold the same boxes in another order."
+        ),
+        "DFineForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "Deimv2Model": "Same tied-`topk` selection as `DFineModel`.",
+        "Deimv2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "RTDetrModel": "Same tied-`topk` selection as `DFineModel`.",
+        "RTDetrForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "RTDetrV2Model": "Same tied-`topk` selection as `DFineModel`.",
+        "RTDetrV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "PPDocLayoutV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "PPDocLayoutV3ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "MMGroundingDinoModel": "Same tied-`topk` box selection as `DFineModel`.",
+        "MMGroundingDinoForObjectDetection": "Same tied-`topk` box selection as `DFineModel`.",
+    },
     "onnx.generate": {
         "ReformerModelWithLMHead": (
             "Chunked local attention exports a Constant idx that exceeds the cached-keys axis "
@@ -445,6 +509,42 @@ ONNX_DISABLE_OPTIMIZE: dict[str, dict[str, str]] = {
     },
     # Disable for dynamic-shape only — static benefits from optimisation.
     "dynamic": {
+        "Wav2Vec2Model": (
+            "The optimizer mis-folds the symbolic conv-length chain that sizes the feature-vector "
+            "attention mask: the `zeros` it builds comes out `{batch, -2}` and ORT fails the `Expand` with "
+            "`right operand cannot broadcast on dim 1`. `optimize=False` exports and matches eager to 2e-4."
+        ),
+        "Wav2Vec2ForCTC": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Wav2Vec2ForSequenceClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "WavLMModel": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "WavLMForCTC": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "WavLMForSequenceClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "WavLMForAudioFrameClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "HubertModel": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "HubertForCTC": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "HubertForSequenceClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Data2VecAudioModel": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Data2VecAudioForCTC": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Data2VecAudioForSequenceClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Data2VecAudioForAudioFrameClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "UniSpeechSatModel": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "UniSpeechSatForCTC": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "UniSpeechSatForPreTraining": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "UniSpeechSatForSequenceClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "UniSpeechSatForAudioFrameClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Wav2Vec2ConformerModel": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Wav2Vec2ConformerForCTC": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Wav2Vec2ConformerForPreTraining": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Wav2Vec2ConformerForSequenceClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Wav2Vec2ConformerForAudioFrameClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Wav2Vec2ConformerForXVector": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Wav2Vec2ForAudioFrameClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Wav2Vec2ForXVector": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "Wav2Vec2ForPreTraining": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "WavLMForXVector": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "HubertForAudioFrameClassification": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "HubertForXVector": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
+        "UniSpeechSatForXVector": "Same mis-folded conv-length chain as `Wav2Vec2Model`.",
         "ProphetNetModel": (
             "Onnxscript's `SplitToSequence` constant-folding trips `'NoneType' object has no attribute 'ndim'` "
             "under dynamic shapes. Static works after the vectorized `ngram_attention_bias` rewrite."
@@ -538,16 +638,20 @@ def _clean_inputs_for_export(inputs_dict, config):
 
 
 def _run_onnx_program(onnx_program, inputs) -> dict:
-    """Run an ONNX program and return outputs as a `{name: tensor}` dict."""
+    """Run an ONNX program and return outputs as a `{name: torch.Tensor}` dict.
+
+    ONNX Runtime hands back numpy arrays on CPU whatever device eager ran on; they come back as
+    torch tensors so callers compare outputs the same way across backends (with `check_device=False`).
+    """
     set_seed(1234)
     onnx_inputs = get_leaf_tensors(inputs)
     onnx_outputs = onnx_program(**onnx_inputs)
     onnx_names = (re.sub(r"^output\.", "", node.name) for node in onnx_program.model_proto.graph.output)
-    return dict(zip(onnx_names, onnx_outputs))
+    return {name: torch.as_tensor(value) for name, value in zip(onnx_names, onnx_outputs)}
 
 
 def _run_openvino_model(ov_model, inputs) -> dict:
-    """Compile an OpenVINO model and run it, returning outputs as a `{name: array}` dict.
+    """Compile an OpenVINO model and run it, returning outputs as a `{name: torch.Tensor}` dict.
 
     Feeds the tensor leaves that survived as input ports (stateful folding removes cache
     inputs), seeds folded state variables from the sample cache leaves so outputs correspond
@@ -596,12 +700,12 @@ def _run_openvino_model(ov_model, inputs) -> dict:
         # numeric id — prefer the human-readable alias over ``get_any_name``'s sorted-first.
         names = sorted(port.get_names())
         name = next((n for n in names if not n.isdigit()), names[0])
-        outputs[re.sub(r"^output\.", "", name)] = results[port]
+        outputs[re.sub(r"^output\.", "", name)] = torch.as_tensor(results[port])
 
     # Folded state tensors are outputs too — read them back so the returned dict covers the
     # same leaves eager returns.
     for state in request.query_state():
-        outputs[_state_path(state)] = state.state.data.copy()
+        outputs[_state_path(state)] = torch.as_tensor(state.state.data.copy())
 
     return outputs
 
@@ -920,8 +1024,8 @@ class ExportTesterMixin:
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
-    def test_onnx_export(self, dynamic):
-        """Export each model class to ONNX and verify output names match eager."""
+    def test_onnx_export(self, dynamic, atol=1e-3, rtol=1e-3):
+        """Export each model class to ONNX, run it, and verify outputs match eager."""
         self._skip_if_not_exportable()
 
         for model_class in self.all_model_classes:
@@ -941,6 +1045,10 @@ class ExportTesterMixin:
                     onnx_outputs = _run_onnx_program(onnx_program, inputs)
                     self.assertTrue(onnx_outputs, f"ONNX outputs are empty for {name}.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
+                    if not self._should_skip_exactness(model_class, dynamic=dynamic, backend="onnx"):
+                        self._check_outputs_close(
+                            onnx_outputs, eager_outputs[name], atol=atol, rtol=rtol, check_device=False, inputs=inputs
+                        )
 
     # ──────────────────── OpenVINO tests ─────────────────────────
 
@@ -969,11 +1077,9 @@ class ExportTesterMixin:
                     ov_outputs = _run_openvino_model(ov_model, inputs)
                     self.assertTrue(ov_outputs, f"OpenVINO outputs are empty for {name}.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
-                    # the OpenVINO runtime hands back numpy arrays on CPU, whatever device eager ran on
-                    ov_tensors = {key: torch.as_tensor(value) for key, value in ov_outputs.items()}
                     if not self._should_skip_exactness(model_class, dynamic=dynamic, backend="openvino"):
                         self._check_outputs_close(
-                            ov_tensors, eager_outputs[name], atol=atol, rtol=rtol, check_device=False, inputs=inputs
+                            ov_outputs, eager_outputs[name], atol=atol, rtol=rtol, check_device=False, inputs=inputs
                         )
 
     # ──────────────────── ExecuTorch tests ───────────────────────
