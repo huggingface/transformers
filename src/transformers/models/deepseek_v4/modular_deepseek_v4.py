@@ -788,8 +788,8 @@ class DeepseekV4HyperConnection(nn.Module):
     To keep the same input shape for attention or MLP blocks, the streams are collapsed into one upon entering a block,
     and expanded back into `hc_mult` streams upon exiting. There is also a weighted residual connection between the
     input and output streams.
-    The weights used for collapsing (pre), expanding (post) and mixing (comb) are computed from the N input streams
-    through a learned projection (plus Sinkhorn-Knopp algorithm for the comb weight).
+    The weights used for collapsing (pre), expanding (post) and mixing (comb) are computed from the `hc_mult` input
+    streams through a learned projection (plus Sinkhorn-Knopp algorithm for the comb weight).
 
     The diagram below shows the flow of the mHC streams (B = batch_size, S = seq_length, N = hc_mult, D = hidden_size):
 
@@ -847,14 +847,14 @@ class DeepseekV4HyperConnection(nn.Module):
 
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        Computes the weights used to mix in the N streams with the input and output of the next layer, which can be an
-        attention or a MLP layer. This is done through three weights:
+        Computes the weights used to mix in the `hc_mult` streams with the input and output of the next layer, which can
+        be an attention or a MLP layer. This is done through three weights:
 
-        - pre: used to collapse the N input streams into one, creating an input tensor compatible with the next layer
-        - post: used to expand the output of the next layer back into N streams
-        - comb: used to mix the N input streams with the N output streams
+        - pre: used to collapse the `hc_mult` input streams into one, creating an input tensor for the next layer
+        - post: used to expand the output of the next layer back into `hc_mult` streams
+        - comb: used to mix the `hc_mult` input streams with the `hc_mult` output streams
 
-        All weights are returned execpt "pre", which is consumed here.
+        All weights are returned except "pre", which is consumed here.
         """
         batch_size, seq_len = hidden_streams.shape[:2]
         hc = self.hc_mult
@@ -886,8 +886,8 @@ class DeepseekV4HyperConnection(nn.Module):
             comb = comb / (comb.sum(dim=-1, keepdim=True) + self.hc_eps)
             comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
 
-        # Since "pre" is meant to be used with the N input streams (available here as `hidden_streams`), we collapse the
-        # N streams here and return `collapsed` tensor, which will be the input for the next attention or MLP block.
+        # Since "pre" is meant to be used with the input streams (available here as `hidden_streams`), we collapse the
+        # streams here and return `collapsed` tensor, which will be the input for the next attention or MLP block.
         collapsed = (pre.unsqueeze(-1) * hidden_streams).sum(dim=2).to(hidden_streams.dtype)
         return post, comb, collapsed
 
