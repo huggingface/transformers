@@ -298,28 +298,20 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
 
     @pytest.mark.generate
     def test_generate_batched_matches_single(self):
-        # different default to trigger error for incorrect indexing of audio chunks
-        model_tester = VibeVoiceModelTester(
-            self,
-            batch_size=4,
-            seq_length=4,
-            audio_config={
-                "model_type": "vibevoice_acoustic_tokenizer",
-                "hidden_size": 16,
-                "kernel_size": 3,
-                "num_filters": 4,
-                "downsampling_ratios": [2],
-                "depths": [1, 1],
-                "layer_scale_init_value": 0.1,
-                "initializer_range": 0.5,
-                "weight_init_value": 0.5,
-            },
-        )
-        config = model_tester.get_config()
+        """
+        Each decoded audio chunk must be attributed to the sequence that produced it, see
+        https://github.com/huggingface/transformers/pull/48902.
+        """
         seed = 7
-        input_ids = ids_tensor(
-            [model_tester.batch_size, model_tester.seq_length], model_tester.vocab_size, rng=random.Random(seed)
-        )
+        batch_size, seq_length = 4, 4
+
+        config = self.model_tester.get_config()
+        # Change config so the decoded audio is distinguishable between rows.
+        config.audio_config.layer_scale_init_value = 0.1
+        config.audio_config.initializer_range = 0.5
+        config.audio_config.weight_init_value = 0.5
+
+        input_ids = ids_tensor([batch_size, seq_length], self.model_tester.vocab_size, rng=random.Random(seed))
         attention_mask = torch.ones_like(input_ids)
 
         set_seed(seed)
@@ -339,7 +331,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         def zeros_instead_of_randn(*args, **kwargs):
             return torch.zeros(*args, **kwargs)
 
-        with torch.no_grad(), patch("torch.randn", zeros_instead_of_randn):
+        with patch("torch.randn", zeros_instead_of_randn):
             batched = model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
             per_sample = [
                 model.generate(
