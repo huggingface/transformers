@@ -69,8 +69,8 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
         return LayoutLMv2Tokenizer.from_pretrained(cls.tmpdirname)
 
-    @unittest.skip("LayoutLMv2Processor doesn't use pixel_values")
-    def test_image_processor_defaults(self):
+    @unittest.skip("LayoutLMv2Processor can't process string text, requires pre-tokenized words")
+    def test_subprocessor_defaults_0_text(self):
         pass
 
     @unittest.skip("LayoutLMv2Processor doesn't use pixel_values")
@@ -141,6 +141,10 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         train_data = preprocess_data(datasets["train"])
 
         self.assertEqual(len(train_data["image"]), len(train_data["input_ids"]))
+
+    @unittest.skip("Processor doesn't accept typed kwargs!")
+    def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
+        pass
 
 
 # different use cases tests

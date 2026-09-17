@@ -73,6 +73,3 @@ for API reference and examples.
 
 [[autodoc]] HerbertTokenizer
 
-## HerbertTokenizerFast
-
-[[autodoc]] HerbertTokenizerFast

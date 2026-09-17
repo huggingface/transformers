@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import queue
+import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
 from math import ceil, log2
@@ -48,6 +49,11 @@ class WorkloadHints:
     max_prompt_length: int = 0
     max_generated_length: int = 0
     num_requests: int = 0
+
+
+class ThreadLocalCounter(threading.local):
+    def __init__(self) -> None:
+        self.value = 0
 
 
 def attn_mask_is_needed(config: PreTrainedConfig) -> bool:
