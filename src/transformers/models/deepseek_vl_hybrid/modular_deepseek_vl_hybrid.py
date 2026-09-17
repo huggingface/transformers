@@ -407,7 +407,7 @@ class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs, total=False):
     min_size (`int`, *optional*, defaults to 14):
         The minimum allowed size for the resized image. Ensures that neither the height nor width
         falls below this value after resizing.
-     high_res_size (`dict`, *optional*, defaults to `{"height": 1024, "width": 1024}`):
+    high_res_size (`dict`, *optional*, defaults to `{"height": 1024, "width": 1024}`):
         Size of the high resolution output image after resizing. Can be overridden by the `high_res_size` parameter in the `preprocess`
         method.
     high_res_resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):

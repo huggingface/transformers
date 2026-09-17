@@ -219,7 +219,7 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
         ```python
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, VipLlavaForConditionalGeneration
 
@@ -264,7 +264,9 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **lm_kwargs
+            )
 
         return VipLlavaCausalLMOutputWithPast(
             loss=loss,

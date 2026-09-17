@@ -28,6 +28,7 @@ class CacheLayerMixin(ABC):
     """Base, abstract class for a single layer's cache."""
 
     is_compileable = False
+    is_croppable = False
     supports_early_init = True
     # Subclasses can set `_layer_type` to auto-register themselves in the mappings, if the class definition lives in a modeling
     # file instead of this file. This allows to update the mapping only when the modeling file is imported, which simplifies imports
@@ -117,6 +118,7 @@ class DynamicLayer(CacheLayerMixin):
     """
 
     is_sliding = False
+    is_croppable = True
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         self.dtype, self.device = key_states.dtype, key_states.device
@@ -160,6 +162,14 @@ class DynamicLayer(CacheLayerMixin):
     def get_max_length(self) -> int:
         """Returns the maximum sequence length of the cache object. DynamicLayer does not have a maximum length."""
         return -1
+
+    def reset(self) -> None:
+        """Resets the cache values while preserving the objects."""
+        # Dropped rather than zeroed, as `update` grows them by concatenation. Clearing `is_initialized` first skips
+        # the zeroing in `super`, which is still called to reset the `cumulative_length` of the inheriting layers.
+        self.keys = self.values = None
+        self.is_initialized = False
+        super().reset()
 
     @deprecate_kwarg("max_length", new_name="tokens_to_remove", version="5.18")
     def crop(self, tokens_to_remove: int) -> None:
@@ -367,8 +377,9 @@ class DynamicIndexedLayer(DynamicLayer):
 
     def reset(self) -> None:
         super().reset()
-        if self.is_indexer_initialized:
-            self.indexer_keys.zero_()
+        # Dropped rather than zeroed, as `update_indexer` grows them by concatenation, like the main states
+        self.indexer_keys = None
+        self.is_indexer_initialized = False
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         super().reorder_cache(beam_idx)
@@ -699,6 +710,11 @@ class StaticIndexedLayer(StaticLayer):
             self.indexer_keys.zero_()
             self.indexer_cumulative_length.zero_()
 
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
+            self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
+
 
 class QuantizedLayer(DynamicLayer):
     """
@@ -959,6 +975,18 @@ class LinearAttentionCacheLayerMixin(ABC):
             # recurrent_states can stay empty sometimes, see e.g. lfm2 which only uses the conv_states
             if self.is_recurrent_states_initialized[i]:
                 self.recurrent_states[i] = self.recurrent_states[i].index_select(0, beam_idx.to(self.device))
+
+    @property
+    def is_croppable(self) -> bool:
+        """
+        Whether `crop` can put this layer back as it was. This is only supported when there are no recurrent states.
+        """
+        if any(self.is_recurrent_states_initialized.values()):
+            return False
+        # If nothing is initialized, return False as we don't yet know whether we will have any recurrent states or no, so let's be
+        # extra careful. If a conv states is initialized but no recurrent states are, then we return True as we know that we will never
+        # have any recurrent state (they are updated in the same forward)
+        return any(self.is_conv_states_initialized.values())
 
     def activate_past_recording(self):
         """
@@ -1234,6 +1262,7 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     "hybrid_sliding": LinearAttentionAndSlidingWindowAttentionLayer,
     # More exotic implementations
     "deepseek_sparse_attention": DynamicIndexedLayer,
+    "qwen_sparse_attention": DynamicIndexedLayer,
     # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
     # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
     # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
@@ -1255,6 +1284,7 @@ STATIC_LAYER_TYPE_MAPPING = {
     "hybrid_sliding": LinearAttentionAndStaticSlidingWindowAttentionLayer,
     # More exotic implementations
     "deepseek_sparse_attention": StaticIndexedLayer,
+    "qwen_sparse_attention": StaticIndexedLayer,
     # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
     # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
     # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
@@ -1659,6 +1689,11 @@ class Cache:
         """Return whether the cache data is initialized"""
         layers = [layer for layer in self.layers if layer.supports_early_init]
         return len(layers) > 0 and all(layer.is_initialized for layer in layers)
+
+    @property
+    def is_croppable(self) -> bool:
+        """Whether `crop` can put the whole cache back as it was, so a rollback leaves no trace."""
+        return all(layer.is_croppable for layer in self.layers)
 
     @property
     def is_sliding(self) -> list[bool]:
@@ -2082,6 +2117,10 @@ class EncoderDecoderCache(Cache):
     @property
     def is_compileable(self) -> bool:
         return self.self_attention_cache.is_compileable
+
+    @property
+    def is_croppable(self) -> bool:
+        return self.self_attention_cache.is_croppable
 
     def activate_past_recording(self):
         self.self_attention_cache.activate_past_recording()

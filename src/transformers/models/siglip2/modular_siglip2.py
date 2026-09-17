@@ -269,7 +269,7 @@ class Siglip2VisionModel(SiglipVisionModel):
         Examples:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, Siglip2VisionModel
@@ -426,7 +426,7 @@ class Siglip2Model(SiglipModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, AutoModel
         >>> import torch
@@ -528,7 +528,7 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
         >>> from transformers import AutoImageProcessor, Siglip2ForImageClassification
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT

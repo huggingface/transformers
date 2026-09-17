@@ -20,7 +20,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_torch_available():
@@ -32,7 +32,7 @@ if is_vision_available():
     from transformers.image_transforms import get_image_size
 
 
-class Swin2SRImageProcessingTester:
+class Swin2SRImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -79,17 +79,6 @@ class Swin2SRImageProcessingTester:
         pad_width = (input_width // self.size_divisor + 1) * self.size_divisor - input_width
 
         return self.num_channels, input_height + pad_height, input_width + pad_width
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
 
 @require_torch

@@ -68,7 +68,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-Use `attn_implementation` to enable [FlashAttention2](../perf_infer_gpu_one#flashattention-2) to further accelerate inference.
+Use `attn_implementation` to enable [FlashAttention2](../kernel_doc/loading_kernels#attention-kernels) to further accelerate inference.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
