@@ -28,7 +28,6 @@ from ...modeling_layers import GenericForSequenceClassification, GenericForToken
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
-from ...utils.output_capturing import OutputRecorder
 from ..clip.modeling_clip import CLIPMLP
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
@@ -121,7 +120,7 @@ class AXK2Config(DeepseekV32Config):
     topk_group: int | None = None
 
     output_indexer_loss = AttributeError()
-    keys_to_ignore_at_inference = ["past_key_values", "indexer_scores"]
+    keys_to_ignore_at_inference = ["past_key_values"]
     first_k_dense_replace = AttributeError()
     mlp_bias = AttributeError()
 
@@ -355,14 +354,14 @@ class AXK2Attention(DeepseekV32Attention):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
-        topk_indices, _ = self.indexer(
+        topk_indices = self.indexer(
             hidden_states,
             q_resid,
             position_embeddings,
             attention_mask[:, 0, :, :],
             position_ids,  # Kept for BC
             past_key_values=past_key_values,
-        )
+        )[0]
 
         sparse_indices = None
         if self.config._attn_implementation in ("eager", "sdpa"):
@@ -414,10 +413,10 @@ class AXK2DecoderLayer(Glm4MoeLiteDecoderLayer):
 
 class AXK2PreTrainedModel(DeepseekV32PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["inv_freq"]
+    # The indexer loss is not supported here, so its inputs are not recorded
     _can_record_outputs = {
         "hidden_states": AXK2DecoderLayer,
         "attentions": AXK2Attention,
-        "indexer_scores": OutputRecorder(AXK2Indexer, index=1),
     }
 
     @torch.no_grad()

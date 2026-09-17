@@ -360,14 +360,14 @@ class DeepseekV32Attention(AXK1Attention):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
-        topk_indices, _ = self.indexer(
+        topk_indices = self.indexer(
             hidden_states,
             q_resid,
             position_embeddings,
             attention_mask[:, 0, :, :],
             position_ids,  # Kept for BC
             past_key_values=past_key_values,
-        )  # [B, S, topk]
+        )[0]  # [B, S, topk]
 
         # Recorded, with the indexer scores, as the target of the indexer's distillation loss
         indexer_target = None

@@ -59,7 +59,7 @@ class AXK2Config(PreTrainedConfig):
     ```"""
 
     model_type = "axk2"
-    keys_to_ignore_at_inference = ["past_key_values", "indexer_scores"]
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_gate_proj": "colwise",

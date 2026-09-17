@@ -45,7 +45,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import capture_outputs
 from .configuration_axk2 import AXK2Config
 
 
@@ -632,14 +632,14 @@ class AXK2Attention(nn.Module):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
-        topk_indices, _ = self.indexer(
+        topk_indices = self.indexer(
             hidden_states,
             q_resid,
             position_embeddings,
             attention_mask[:, 0, :, :],
             position_ids,  # Kept for BC
             past_key_values=past_key_values,
-        )
+        )[0]
 
         sparse_indices = None
         if self.config._attn_implementation in ("eager", "sdpa"):
@@ -737,10 +737,10 @@ class AXK2PreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
+    # The indexer loss is not supported here, so its inputs are not recorded
     _can_record_outputs = {
         "hidden_states": AXK2DecoderLayer,
         "attentions": AXK2Attention,
-        "indexer_scores": OutputRecorder(AXK2Indexer, index=1),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = ["inv_freq"]
