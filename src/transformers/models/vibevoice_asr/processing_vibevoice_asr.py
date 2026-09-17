@@ -119,11 +119,10 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
             _, text, _, audio = self.prepare_inputs_layout(text=text, audio=audio, **kwargs)
 
             # Replace audio duration placeholders in text
-            if self.audio_duration_token:
-                audio_durations = iter([len(el) / self.feature_extractor.sampling_rate for el in audio])
-                audio_duration_pattern = re.compile(re.escape(self.audio_duration_token))
-                for i in range(len(text)):
-                    text[i] = audio_duration_pattern.sub(lambda _: f"{next(audio_durations):.2f}", text[i])
+            audio_durations = iter([len(el) / self.feature_extractor.sampling_rate for el in audio])
+            audio_duration_pattern = re.compile(re.escape(self.audio_duration_token))
+            for i in range(len(text)):
+                text[i] = audio_duration_pattern.sub(lambda _: f"{next(audio_durations):.2f}", text[i])
 
         model_inputs = super().__call__(text=text, audio=audio, **kwargs)
 

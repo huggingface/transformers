@@ -86,13 +86,22 @@ def convert_checkpoint(checkpoint_dir, push_to_hub, bfloat16):
     dtype = torch.bfloat16 if bfloat16 else torch.float32
     checkpoint_dir = Path(checkpoint_dir)
 
-    # 1) Load original state dict, config, generation config and processor. The original checkpoint's
-    # `config.json` / processor files already use the same field names as the native classes below (only the
-    # model weights use the original repo's module names), so they can be loaded directly.
+    # `adaptor_input_dim` is derived.
+    config_path = checkpoint_dir / "config.json"
+    with open(config_path, "r") as f:
+        raw_config_dict = json.load(f)
+    raw_config_dict.pop("adaptor_input_dim", None)
+    with open(config_path, "w") as f:
+        json.dump(raw_config_dict, f, indent=2)
+
+    # 1) Load original state dict, config, generation config and processor.
     logger.info(f"Loading checkpoint from {checkpoint_dir}")
     original_state_dict = load_original_state_dict(checkpoint_dir)
     config = MossTranscribeDiarizeConfig.from_pretrained(checkpoint_dir)
     processor = MossTranscribeDiarizeProcessor.from_pretrained(checkpoint_dir)
+
+    processor.tokenizer.padding_side = "left"
+    processor.tokenizer.init_kwargs["padding_side"] = "left"
 
     # 2) Convert state dict to match HF model structure
     logger.info("Converting state dict")

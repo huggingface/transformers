@@ -30,6 +30,7 @@ import numpy as np
 from huggingface_hub.utils import httpx
 from packaging import version
 
+from .processing_utils import prepare_prompt_input
 from .utils import (
     is_librosa_available,
     is_numpy_array,
@@ -549,6 +550,31 @@ def prepare_language_inputs(
             raise ValueError(f"Got {len(language)} language(s) for {batch_size} sample(s); counts must match.")
         return [resolve_language(lang, code_to_name, return_code) for lang in language]
     raise TypeError("`language` must be a string, a list of strings, or `None`.")
+
+
+def prepare_keyword_inputs(
+    keywords: str | list[str] | list[list[str]] | None, batch_size: int
+) -> list[list[str] | None]:
+    """
+    Broadcast and validate a hotword/keyword argument to match ``batch_size``.
+
+    Args:
+        keywords (`str`, `list[str]`, `list[list[str]]`, or `None`):
+            The keyword(s) to bias transcription towards. A single string, or a flat list of strings, is broadcast
+            to every sample in the batch. A list of lists must match ``batch_size``, one keyword list per sample.
+            ``None`` disables keyword biasing for the whole batch.
+        batch_size (`int`):
+            The number of samples in the batch.
+
+    Returns:
+        `list[list[str] | None]`: A list of length ``batch_size``.
+    """
+    if isinstance(keywords, str):
+        keywords = [keywords]
+    if isinstance(keywords, (list, tuple)) and all(isinstance(item, str) for item in keywords):
+        keywords = [list(keywords)] * batch_size
+
+    return prepare_prompt_input(keywords, batch_size, input_name="keywords")
 
 
 def hertz_to_mel(freq: float | np.ndarray, mel_scale: str = "htk") -> float | np.ndarray:
