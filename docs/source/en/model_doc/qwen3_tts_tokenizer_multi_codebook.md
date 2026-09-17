@@ -60,9 +60,9 @@ feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 # load audio at the sample rate the tokenizer expects
 audio = load_audio_librosa(
     "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
-    sampling_rate=model.config.input_sample_rate,
+    sampling_rate=model.config.input_sampling_rate,
 )
-inputs = feature_extractor(audio, sampling_rate=model.config.input_sample_rate).to(model.device, model.dtype)
+inputs = feature_extractor(audio, sampling_rate=model.config.input_sampling_rate).to(model.device, model.dtype)
 print("Input audio shape:", inputs["input_values"].shape)
 # Input audio shape: torch.Size([1, 222480])
 
@@ -79,7 +79,7 @@ with torch.no_grad():
 
 # save audio
 output_fp = "qwen3_tts_tokenizer_multi_codebook_reconstructed.wav"
-wavfile.write(output_fp, model.config.output_sample_rate, audio_values.float().cpu().numpy())
+wavfile.write(output_fp, model.config.output_sampling_rate, audio_values.float().cpu().numpy())
 print(f"Reconstructed audio saved to: {output_fp}")
 ```
 
@@ -104,14 +104,14 @@ model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
 audios = [
-    load_audio_librosa(url, sampling_rate=model.config.input_sample_rate)
+    load_audio_librosa(url, sampling_rate=model.config.input_sampling_rate)
     for url in [
         "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
         "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Carter_man.wav",
     ]
 ]
 
-inputs = feature_extractor(audios, sampling_rate=model.config.input_sample_rate).to(model.device, model.dtype)
+inputs = feature_extractor(audios, sampling_rate=model.config.input_sampling_rate).to(model.device, model.dtype)
 print("Input audio shape:", inputs["input_values"].shape)
 # Input audio shape: torch.Size([2, 665600])
 
@@ -144,9 +144,9 @@ feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
 audio = load_audio_librosa(
     "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
-    sampling_rate=model.config.input_sample_rate,
+    sampling_rate=model.config.input_sampling_rate,
 )
-inputs = feature_extractor(audio, sampling_rate=model.config.input_sample_rate).to(model.device, model.dtype)
+inputs = feature_extractor(audio, sampling_rate=model.config.input_sampling_rate).to(model.device, model.dtype)
 
 model.encode = torch.compile(model.encode)
 model.decode = torch.compile(model.decode)
