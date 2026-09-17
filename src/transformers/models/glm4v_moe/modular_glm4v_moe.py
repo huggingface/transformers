@@ -20,7 +20,7 @@ from huggingface_hub.dataclasses import strict
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import MoeModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -365,6 +365,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Glm4vMoeCausalLMOutputWithPast:
         outputs = self.model(
@@ -378,6 +379,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             mm_token_type_ids=mm_token_type_ids,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
