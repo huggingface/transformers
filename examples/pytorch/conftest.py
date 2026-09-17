@@ -60,6 +60,7 @@ _is_worker = False
 _worker_id = "ctrl"
 _worker_pids = {}  # {workerid: pid}  — controller only
 _ctrl_stop = threading.Event()
+_ckpt_offsets = {}  # {workerid: file_offset} — controller only, for reading worker CKPT files
 _pending_cleanups = {}  # {nodeid: cleanup_fn} — worker only, avoids item.addfinalizer
 
 
@@ -189,19 +190,41 @@ def _ctrl_monitor_loop():
                 nch = len(_children(wpid))
                 parts.append(f"{wid}(pid={wpid}) RSS={wr:.0f} PSS={wp:.0f}MB nch={nch}")
             _mlog("[CTRL] " + " | ".join(parts))
+            # Drain any CKPT lines written by workers to /tmp/ckpt_{gw}.log
+            for gw in list(_worker_pids):
+                try:
+                    ckpt_file = f"/tmp/ckpt_{gw}.log"
+                    offset = _ckpt_offsets.get(gw, 0)
+                    with open(ckpt_file) as fh:
+                        fh.seek(offset)
+                        new_text = fh.read()
+                        _ckpt_offsets[gw] = fh.tell()
+                    for ckpt_line in new_text.splitlines():
+                        if ckpt_line:
+                            sys.stderr.write(ckpt_line + "\n")
+                            sys.stderr.flush()
+                except Exception:  # noqa: S110
+                    pass
         except Exception as exc:
             _mlog(f"[CTRL] monitor error: {exc}")
-        _ctrl_stop.wait(2)
+        _ctrl_stop.wait(1)
 
 
 # ── wav2vec2 detailed checkpoints ─────────────────────────────────────────────
 
 
 def _checkpoint(label):
+    """Write a CKPT line to /tmp/ckpt_{worker_id}.log; controller reads and emits it."""
     try:
         rss, pss = _tree(os.getpid())
         sys_used, _ = _sys_mem()
-        _mlog(f"[{_worker_id}] CKPT {label} | RSS+subtree={rss:.0f} PSS+subtree={pss:.0f}MB | SYS={sys_used:.0f}MB")
+        t = time.monotonic() - _t0
+        line = (
+            f"[MEM t={t:8.2f}s] [{_worker_id}] CKPT {label}"
+            f" | RSS+subtree={rss:.0f} PSS+subtree={pss:.0f}MB | SYS={sys_used:.0f}MB\n"
+        )
+        with open(f"/tmp/ckpt_{_worker_id}.log", "a") as fh:
+            fh.write(line)
     except Exception:  # noqa: S110
         pass
 
