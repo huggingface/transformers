@@ -213,6 +213,16 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
 
     model_tester_class = LongcatFlashModelTester
 
+    def test_num_hidden_layers_is_derived_from_num_layers(self):
+        """Each decoder layer holds two attention sublayers, so the cache is keyed by
+        `2 * num_layers`. Checkpoints declare only `num_layers`, so the config has to
+        derive this itself rather than leaving the default in place."""
+        self.assertEqual(LongcatFlashConfig(num_layers=14).num_hidden_layers, 28)
+
+    def test_moe_intermediate_size_maps_to_expert_ffn_hidden_size(self):
+        config = LongcatFlashConfig(expert_ffn_hidden_size=1024)
+        self.assertEqual(config.moe_intermediate_size, 1024)
+
     @unittest.skip("LongcatFlash buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
