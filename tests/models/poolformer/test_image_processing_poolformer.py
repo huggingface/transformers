@@ -49,4 +49,4 @@ class PoolFormerImageProcessingNoCropPctTest(PoolFormerImageProcessingTest):
 
     def setUp(self):
         super().setUp()
-        self.image_processing_tester = PoolFormerImageProcessingTester(parent=self, crop_pct=None)
+        self.image_processor_tester.crop_pct = None

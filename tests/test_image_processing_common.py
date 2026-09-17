@@ -351,10 +351,6 @@ class ImageProcessingTestMixin:
     def image_processor_tester(self):
         return self.image_processing_tester
 
-    @image_processor_tester.setter
-    def image_processor_tester(self, tester):
-        self.image_processing_tester = tester
-
     @property
     def image_processing_classes(self):
         return self.image_processor_classes

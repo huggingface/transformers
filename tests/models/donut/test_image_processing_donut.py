@@ -182,4 +182,4 @@ class DonutImageProcessingAlignAxisTest(DonutImageProcessingTest):
 
     def setUp(self):
         super().setUp()
-        self.image_processing_tester = DonutImageProcessingTester(parent=self, do_align_long_axis=True)
+        self.image_processor_tester.do_align_long_axis = True

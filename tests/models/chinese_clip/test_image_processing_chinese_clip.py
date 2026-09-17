@@ -30,6 +30,7 @@ class ChineseCLIPImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("image_mean", [0.48145466, 0.4578275, 0.40821073])
         kwargs.setdefault("image_std", [0.26862954, 0.26130258, 0.27577711])
         kwargs.setdefault("do_convert_rgb", True)
+        kwargs.setdefault("do_center_crop", True)
         super().__init__(**kwargs)
 
 
@@ -37,10 +38,6 @@ class ChineseCLIPImageProcessingTester(ImageProcessingTester):
 @require_vision
 class ChineseCLIPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_tester_class = ChineseCLIPImageProcessingTester
-
-    def setUp(self):
-        super().setUp()
-        self.image_processing_tester = ChineseCLIPImageProcessingTester(parent=self, do_center_crop=True)
 
     @property
     def image_processor_dict(self):
@@ -60,9 +57,6 @@ class ChineseCLIPImageProcessingTestFourChannels(ImageProcessingTestMixin, unitt
 
     def setUp(self):
         super().setUp()
-        self.image_processing_tester = ChineseCLIPImageProcessingTester(
-            parent=self, num_channels=3, do_center_crop=True
-        )
         self.expected_encoded_image_num_channels = 3
 
     @property

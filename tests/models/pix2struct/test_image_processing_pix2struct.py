@@ -323,7 +323,7 @@ class Pix2StructImageProcessingTestFourChannels(ImageProcessingTestMixin, unitte
 
     def setUp(self):
         super().setUp()
-        self.image_processing_tester = Pix2StructImageProcessingTester(parent=self, num_channels=4)
+        self.image_processor_tester.num_channels = 4
         self.expected_encoded_image_num_channels = 3
 
     @property
