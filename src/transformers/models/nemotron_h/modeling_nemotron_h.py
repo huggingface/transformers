@@ -637,7 +637,7 @@ class NemotronHExperts(nn.Module):
 
         # Create expert mask to identify which tokens go to which experts
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
             expert_mask = expert_mask.permute(2, 1, 0)  # (num_experts, num_experts_per_tok, num_tokens)
             # Only iterate over experts that have at least one token assigned
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero().squeeze(-1)
@@ -713,7 +713,7 @@ class NemotronHMoE(nn.Module):
 
 
 class NemotronHTopkRouter(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: NemotronHConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
@@ -924,7 +924,12 @@ class NemotronHBlock(GradientCheckpointingLayer):
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
 
         if self.block_type == "linear_attention":
-            hidden_states = self.mixer(hidden_states, cache_params=past_key_values, attention_mask=attention_mask)
+            hidden_states = self.mixer(
+                hidden_states,
+                cache_params=past_key_values,
+                attention_mask=attention_mask,
+                **kwargs,
+            )
         elif self.block_type == "full_attention":
             hidden_states, _ = self.mixer(
                 hidden_states=hidden_states,

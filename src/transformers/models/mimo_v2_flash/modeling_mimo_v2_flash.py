@@ -138,7 +138,7 @@ class MiMoV2FlashRotaryEmbedding(nn.Module):
 
 
 class MiMoV2FlashTopkRouter(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: MiMoV2FlashConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
@@ -199,7 +199,7 @@ class MiMoV2FlashExperts(nn.Module):
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 

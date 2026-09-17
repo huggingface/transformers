@@ -41,7 +41,7 @@ class Sam2VideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_with_multiple_inputs(self):
         pass
 
-    def prepare_image_inputs(self):
+    def prepare_images_inputs(self, **kwargs):
         """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
         or a list of PyTorch tensors if one specifies torchify=True.
         """
@@ -63,7 +63,7 @@ class Sam2VideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = Sam2VideoProcessor(image_processor=image_processor, video_processor=video_processor)
 
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
 
         input_feat_extract = image_processor(image_input)
         input_processor = processor(images=image_input)
@@ -89,7 +89,7 @@ class Sam2VideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = Sam2VideoProcessor(image_processor=image_processor, video_processor=video_processor)
 
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         mask_input = self.prepare_mask_inputs()
 
         input_feat_extract = image_processor(images=image_input, segmentation_maps=mask_input, return_tensors="pt")
@@ -126,3 +126,6 @@ class Sam2VideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         dummy_masks = [[1, 0], [0, 1]]
         with self.assertRaises(TypeError):
             masks = processor.post_process_masks(dummy_masks, np.array(original_sizes))
+
+    def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
+        self.skipTest("Sam2Processor has a custom interface, not a standard VLM text+image interface")

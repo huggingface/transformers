@@ -35,10 +35,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
-from ...utils.generic import (
-    maybe_autocast,
-    merge_with_config_defaults,
-)
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
@@ -60,7 +57,7 @@ from ..gemma2.modeling_gemma2 import (
     apply_rotary_pos_emb,
 )
 from ..gemma3.modeling_gemma3 import Gemma3CausalLMOutputWithPast, Gemma3ModelOutputWithPast
-from ..gemma4.modeling_gemma4 import Gemma4RMSNorm, Gemma4VisionRotaryEmbedding
+from ..gemma4.modeling_gemma4 import Gemma4RMSNorm
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..kimi_k25.configuration_kimi_k25 import Kimi_K25VisionConfig
 from ..kimi_k25.modeling_kimi_k25 import (
@@ -72,6 +69,7 @@ from ..kimi_k25.modeling_kimi_k25 import (
 )
 from ..llama.modeling_llama import eager_attention_forward
 from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionEmbeddings
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -427,6 +425,8 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
             np.ndarray:
                 Indices to sample video frames.
         """
+        fps = fps if fps is not None else self.fps
+        num_frames = num_frames if num_frames is not None else self.num_frames
         if metadata.fps is None:
             logger.warning_once(
                 "The `fps` of the input video could not be inferred. Defaulting to `fps=24`. "
@@ -946,22 +946,19 @@ class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
         return embeddings
 
 
-class MuseGlimmerVisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
+class MuseGlimmerVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     def forward(self, x, position_ids):
-        # We interleave as `[freq_w, freq_h, freq_w, freq_h]` in MuseGlimmer
-        inv_freq = self.inv_freq.to(device=x.device, dtype=torch.float32)
-        w_ids = position_ids[:, 0].float()  # position_ids: (seq, 2), unbatched
-        h_ids = position_ids[:, 1].float()
-
+        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        position_ids_expanded = position_ids[..., None].float()
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):
-            freq_w = w_ids[:, None] * inv_freq[None, :]
-            freq_h = h_ids[:, None] * inv_freq[None, :]
-            freq = torch.cat([freq_w, freq_h, freq_w, freq_h], dim=-1)
-            cos = freq.cos() * self.attention_scaling
-            sin = freq.sin() * self.attention_scaling
+            freqs = position_ids_expanded * self.inv_freq.float()
+            cos = freqs.cos() * self.attention_scaling
+            sin = freqs.sin() * self.attention_scaling
 
-        return cos.to(x.dtype), sin.to(x.dtype)
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 def get_vision_pixel_shuffle_index(

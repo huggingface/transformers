@@ -136,6 +136,8 @@ class Glm4vMoeVisionConfig(PreTrainedConfig):
 
     model_type = "glm4v_moe_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 24
     hidden_size: int = 1536
@@ -152,6 +154,7 @@ class Glm4vMoeVisionConfig(PreTrainedConfig):
     out_hidden_size: int = 4096
     intermediate_size: int = 13696
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5V")
