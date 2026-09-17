@@ -23,6 +23,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
+    is_flaky,
     require_torch,
     require_vision,
     slow,
@@ -214,6 +215,15 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_missing_keys = False
     test_resize_embeddings = False
     model_split_percents = [0.5, 0.87, 0.9]
+
+    @is_flaky(
+        max_attempts=3,
+        description="Tiny floating-point non-determinism in earlier layers may cause top_k to select "
+        "different proposal indices, which propagates to later outputs differing at scale ~1.0. "
+        "See PR #48869 for more details.",
+    )
+    def test_save_load(self):
+        super().test_save_load()
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
