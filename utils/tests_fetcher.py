@@ -1120,34 +1120,8 @@ def parse_commit_message(commit_message: str) -> dict[str, bool]:
 
 
 JOB_TO_TEST_FILE = {
-    "tests_torch": r"tests/models/.*/test_modeling_.*",
-    "tests_generate": r"(tests/models/.*/test_modeling_.*|tests/generation/test_.*\.py)",
-    "tests_tokenization": r"tests/(?:models/.*/test_tokenization.*|test_tokenization_mistral_common\.py)",
-    "tests_processors": r"tests/models/.*/test_(?!(?:modeling_|tokenization_)).*",  # takes feature extractors, image processors, processors
     "examples_torch": r"examples/pytorch/.*test_.*",
-    "tests_exotic_models": r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
-    "tests_custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
-    # conftest tests exercise the test runner (repo-root conftest.py); they share the
-    # consistency image and run alongside the repo utils tests in the same CI job.
-    "tests_repo_utils": r"tests/(?:repo_utils|conftest_tests)/test_.*\.py",
-    "pipelines_torch": r"tests/models/.*/test_modeling_.*",
-    # Exclude the suites that have a job of their own, or they run twice: peft_integration, and
-    # the conftest + repo utils tests that the repo_utils job above already claims. That job runs
-    # them in the consistency image they are written for; non_model would run them again in
-    # torch-light.
-    "tests_non_model": r"tests/(?!peft_integration/|conftest_tests/|repo_utils/)[^/]*?/test_.*\.py",
-    "tests_training_ci": r"tests/models/.*/test_modeling_.*",
-    "tests_tensor_parallel_ci": r"(tests/models/.*/test_modeling_.*|tests/tensor_parallel(?:/test_tensor_parallel\.py)?)",
-    "tests_fsdp_ci": r"(tests/models/.*/test_modeling_.*|tests/test_fsdp_mixin\.py)",
-    "tests_peft_integration": r"tests/peft_integration/test_.*\.py",
 }
-
-
-EXAMPLES_TORCH_TEST_FILES = [
-    "examples/pytorch/old_test_xla_examples.py",
-    "examples/pytorch/test_accelerate_examples.py",
-    "examples/pytorch/test_pytorch_examples.py",
-]
 
 
 def create_test_list_from_filter(full_test_list, out_path):
@@ -1159,11 +1133,7 @@ def create_test_list_from_filter(full_test_list, out_path):
     for job_name, _filter in JOB_TO_TEST_FILE.items():
         file_name = os.path.join(out_path, f"{job_name}_test_list.txt")
 
-        # examples_torch: always run all example tests regardless of diff
-        if job_name == "examples_torch":
-            files_to_test = EXAMPLES_TORCH_TEST_FILES
-        else:
-            files_to_test = list(re.findall(_filter, all_test_files))
+        files_to_test = list(re.findall(_filter, all_test_files))
 
         print(job_name, file_name, len(files_to_test))
 
