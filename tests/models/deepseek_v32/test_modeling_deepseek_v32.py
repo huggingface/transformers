@@ -136,55 +136,56 @@ class DeepseekV32ModelTester(CausalLMModelTester):
         self.index_topk = index_topk
 
 
-class IndexerLossTesterMixin:
-    """Tests for training the DSA indexer with its KL distillation loss, mixed into the test class of every model that
-    shares the DeepSeek-V3.2 indexer. Shared DSA layers (no indexer of their own) contribute no loss."""
+@require_torch
+class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": DeepseekV32Model,
+            "text-generation": DeepseekV32ForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
+    fx_compatible = False
+    test_torchscript = False
+    test_all_params_have_gradient = False
+    model_tester_class = DeepseekV32ModelTester
+    model_split_percents = [0.5, 0.7, 0.8]
 
-    def prepare_indexer_loss_config_and_inputs(self):
+    # used in `test_torch_compile_for_training`
+    _torch_compile_train_cls = DeepseekV32ForCausalLM if is_torch_available() else None
+
+    @unittest.skip("DeepseekV32 applies RoPE to qk_rope_head_dim; generic rope scaling tests assume config.head_dim")
+    def test_model_rope_scaling_frequencies(self):
+        pass
+
+    def test_indexer_loss(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_indexer_loss = True
         config.index_topk = 2
+        config._attn_implementation = "eager"
         config.use_cache = False
-        return config, inputs
-
-    def get_indexer_loss_model(self, config, attn_implementation):
-        model_class = self.model_tester.causal_lm_class
-        if attn_implementation == "sdpa" and not model_class._supports_sdpa:
-            attn_implementation = "eager"
-        config._attn_implementation = attn_implementation
-        return model_class(config).to(torch_device).train()
-
-    def test_indexer_loss(self):
-        config, inputs = self.prepare_indexer_loss_config_and_inputs()
-        model = self.get_indexer_loss_model(config, "eager")
+        model = DeepseekV32ForCausalLM(config).to(torch_device).train()
         input_ids, attention_mask = inputs["input_ids"], inputs["attention_mask"]
         labels = input_ids.masked_fill(~attention_mask.bool(), -100)
 
-        indexer_layers = [idx for idx, layer in enumerate(model.model.layers) if layer.self_attn.indexer is not None]
-        self.assertGreater(len(indexer_layers), 0)
+        # Compare the recomputed target against the actual eager attention probabilities.
         indexer_outputs = []
         hooks = [
-            model.model.layers[idx].self_attn.indexer.register_forward_hook(
-                lambda module, args, output: indexer_outputs.append(output)
-            )
-            for idx in indexer_layers
+            layer.self_attn.indexer.register_forward_hook(lambda module, args, output: indexer_outputs.append(output))
+            for layer in model.model.layers
         ]
         outputs = model(input_ids, attention_mask=attention_mask, labels=labels, output_attentions=True)
         for hook in hooks:
             hook.remove()
-
-        # Compare the recomputed target against the eager attention probabilities over the selected keys. They are
-        # renormalized per head first: attention sinks, when the model has them, take mass away from the keys.
         reference_loss = 0
-        for (indices, scores), layer_idx in zip(indexer_outputs, indexer_layers):
+        for (indices, scores), attentions in zip(indexer_outputs, outputs.attentions):
             indices = indices.long()
-            attentions = outputs.attentions[layer_idx].detach().float()
-            target = attentions.gather(-1, indices.unsqueeze(1).expand(-1, attentions.shape[1], -1, -1))
-            target = (target / target.sum(dim=-1, keepdim=True)).mean(dim=1)
+            target = attentions.detach().float().mean(dim=1).gather(-1, indices)
             log_probs = scores.gather(-1, indices).log_softmax(-1)
             kl = torch.nn.functional.kl_div(log_probs, target, reduction="none").sum(-1)
             reference_loss += kl.masked_fill(~attention_mask.bool(), 0).sum()
-        reference_loss /= len(indexer_layers) * attention_mask.sum()
+        reference_loss /= config.num_hidden_layers * attention_mask.sum()
         torch.testing.assert_close(outputs.indexer_loss, reference_loss)
         lm_loss = model.loss_function(logits=outputs.logits, labels=labels, vocab_size=config.vocab_size)
         torch.testing.assert_close(outputs.loss, lm_loss + outputs.indexer_loss)
@@ -201,18 +202,20 @@ class IndexerLossTesterMixin:
         self.assertTrue(any(p.grad is not None for p in other_params))
         model.zero_grad(set_to_none=True)
 
-        if model._supports_sdpa:
-            model.set_attn_implementation("sdpa")
-            outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
-            torch.testing.assert_close(outputs.indexer_loss, reference_loss)
+        model.set_attn_implementation("sdpa")
+        sdpa_outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
+        torch.testing.assert_close(sdpa_outputs.indexer_loss, outputs.indexer_loss)
         disabled_outputs = model(input_ids, attention_mask=attention_mask, labels=labels, output_indexer_loss=False)
         self.assertIsNone(disabled_outputs.indexer_loss)
-        torch.testing.assert_close(disabled_outputs.logits, outputs.logits)
+        torch.testing.assert_close(disabled_outputs.logits, sdpa_outputs.logits)
 
     @parameterized.expand([(False,), (True,)])
     def test_indexer_loss_checkpointing(self, use_reentrant):
-        config, inputs = self.prepare_indexer_loss_config_and_inputs()
-        model = self.get_indexer_loss_model(config, "sdpa")
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_indexer_loss = True
+        config.index_topk = 2
+        config.use_cache = False
+        model = DeepseekV32ForCausalLM(config).to(torch_device).train()
         checkpointed = copy.deepcopy(model)
         checkpointed.gradient_checkpointing_enable({"use_reentrant": use_reentrant})
         inputs = {k: v for k, v in inputs.items() if k in ("input_ids", "attention_mask")}
@@ -234,18 +237,23 @@ class IndexerLossTesterMixin:
         self.assertTrue(any(p.grad is not None and p.grad.abs().sum() > 0 for p in checkpointed.parameters()))
 
     def test_indexer_loss_masks(self):
-        config, inputs = self.prepare_indexer_loss_config_and_inputs()
-        model = self.get_indexer_loss_model(config, "sdpa")
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_indexer_loss = True
+        config.index_topk = 2
+        config.use_cache = False
+        config._attn_implementation = "sdpa"
+        model = DeepseekV32ForCausalLM(config).to(torch_device).train()
         input_ids = inputs["input_ids"][:2]
         batch_size, seq_length = input_ids.shape
-        min_value = torch.finfo(torch.float32).min
         causal_mask = torch.ones(batch_size, 1, seq_length, seq_length, device=torch_device, dtype=torch.bool).tril()
-        float_mask = torch.zeros_like(causal_mask, dtype=torch.float32).masked_fill(~causal_mask, min_value)
-        # A prepared 4D mask goes straight to attention, and eager attention adds it to the logits.
-        uses_sdpa = model.config._attn_implementation == "sdpa"
-        prepared_mask = causal_mask if uses_sdpa else float_mask
         expected = model(input_ids, labels=input_ids).indexer_loss
-        for mask in (prepared_mask, float_mask, {"deepseek_sparse_attention": prepared_mask}):
+        for mask in (
+            causal_mask,
+            torch.zeros_like(causal_mask, dtype=torch.float32).masked_fill(
+                ~causal_mask, torch.finfo(torch.float32).min
+            ),
+            {"deepseek_sparse_attention": causal_mask},
+        ):
             outputs = model(input_ids, labels=input_ids, attention_mask=mask)
             torch.testing.assert_close(outputs.indexer_loss, expected)
             outputs.loss.backward()
@@ -259,8 +267,7 @@ class IndexerLossTesterMixin:
             mask[:, :2] = 0 if left else 1
             mask[:, -2:] = 1 if left else 0
             torch.testing.assert_close(model.model(padded_ids, attention_mask=mask).indexer_loss, expected)
-        all_masked_4d = torch.zeros_like(causal_mask) if uses_sdpa else torch.full_like(float_mask, min_value)
-        for mask in (torch.zeros_like(input_ids), all_masked_4d):
+        for mask in (torch.zeros_like(input_ids), torch.zeros_like(causal_mask)):
             outputs = model(input_ids, attention_mask=mask)
             torch.testing.assert_close(outputs.indexer_loss, torch.zeros_like(outputs.indexer_loss))
             outputs.indexer_loss.backward()
@@ -268,8 +275,11 @@ class IndexerLossTesterMixin:
             model.zero_grad(set_to_none=True)
 
     def test_indexer_loss_gradient_accumulation(self):
-        config, inputs = self.prepare_indexer_loss_config_and_inputs()
-        model = self.get_indexer_loss_model(config, "sdpa")
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_indexer_loss = True
+        config.index_topk = 2
+        config.use_cache = False
+        model = DeepseekV32ForCausalLM(config).to(torch_device).train()
         accumulated = copy.deepcopy(model)
         input_ids = inputs["input_ids"][:2]
         attention_mask = torch.ones_like(input_ids)
@@ -294,30 +304,6 @@ class IndexerLossTesterMixin:
         for (name, parameter), accumulated_parameter in zip(model.named_parameters(), accumulated.parameters()):
             if ".indexer." in name or name == "lm_head.weight":
                 torch.testing.assert_close(accumulated_parameter.grad, parameter.grad, atol=1e-6, rtol=1e-4)
-
-
-@require_torch
-class DeepseekV32ModelTest(IndexerLossTesterMixin, CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": DeepseekV32Model,
-            "text-generation": DeepseekV32ForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-    fx_compatible = False
-    test_torchscript = False
-    test_all_params_have_gradient = False
-    model_tester_class = DeepseekV32ModelTester
-    model_split_percents = [0.5, 0.7, 0.8]
-
-    # used in `test_torch_compile_for_training`
-    _torch_compile_train_cls = DeepseekV32ForCausalLM if is_torch_available() else None
-
-    @unittest.skip("DeepseekV32 applies RoPE to qk_rope_head_dim; generic rope scaling tests assume config.head_dim")
-    def test_model_rope_scaling_frequencies(self):
-        pass
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     @unittest.skip("DeepseekV32 applies RoPE to qk_rope_head_dim; generic rope scaling tests assume config.head_dim")

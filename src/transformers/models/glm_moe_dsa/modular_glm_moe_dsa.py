@@ -21,12 +21,13 @@ from huggingface_hub.dataclasses import strict
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import maybe_autocast
 from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3ForCausalLM,
     DeepseekV3RMSNorm,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
@@ -34,15 +35,10 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 from ..deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
 from ..deepseek_v32.modeling_deepseek_v32 import (
     DeepseekV32DecoderLayer,
-    DeepseekV32ForCausalLM,
     DeepseekV32Indexer,
     DeepseekV32Model,
-    DeepseekV32ModelOutputWithPast,
     DeepseekV32PreTrainedModel,
     DeepseekV32RotaryEmbedding,
-    get_indexer_query_mask,
-    indexer_kl_loss,
-    normalize_indexer_loss,
 )
 
 
@@ -65,9 +61,6 @@ class GlmMoeDsaConfig(DeepseekV32Config):
         Number of heads for the indexer projections (DSA).
     first_k_dense_replace (`int`, *optional*, defaults to 3):
         Number of leading layers that use a dense MLP; the rest use the MoE block.
-    output_indexer_loss (`bool`, *optional*, defaults to `False`):
-        Whether to compute the indexer's KL distillation loss on the layers that run an indexer. Only the indexer
-        receives gradients from this loss; its inputs and the attention distribution used as its target are detached.
     indexer_types (`list[str]`, *optional*):
         Per-layer indexer mode (`"full"` runs the indexer, `"shared"` reuses the previous full
         layer's top-k). Defaults to the pattern derived from `index_topk_freq` /
@@ -85,6 +78,9 @@ class GlmMoeDsaConfig(DeepseekV32Config):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
+    output_indexer_loss = AttributeError()
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 154880
     hidden_size: int = 6144
@@ -138,6 +134,7 @@ class GlmMoeDsaRotaryEmbedding(DeepseekV32RotaryEmbedding):
 
 
 class GlmMoeDsaIndexer(DeepseekV32Indexer):
+    @torch.no_grad()
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -146,49 +143,56 @@ class GlmMoeDsaIndexer(DeepseekV32Indexer):
         attention_mask: torch.Tensor,
         position_ids: torch.Tensor,  # Kept for BC
         past_key_values: Cache | None = None,
-        output_scores: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Same as [`DeepseekV32Indexer.forward`], but the indexer applies **interleaved** RoPE."""
-        # Top-k has no gradient; only the distillation loss trains the indexer.
-        with torch.set_grad_enabled(torch.is_grad_enabled() and output_scores):
-            # Detach the inputs so the indexer loss reaches no parameter but the indexer's.
-            hidden_states, q_resid = hidden_states.detach(), q_resid.detach()
-            batch_size, seq_len, _ = hidden_states.shape
-            cos, sin = position_embeddings
-            q = self.wq_b(q_resid)  # [B, S, H*D]
-            q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
-            q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+    ) -> torch.Tensor:
+        """
+        Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
 
-            k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
-            k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+        Same as [`DeepseekV32Indexer.forward`], but the indexer applies **interleaved** RoPE
+        rather than the non-interleaved half-split RoPE used by DeepSeek-V3.2.
 
-            # GLM-MoE-DSA uses interleaved RoPE in the indexer
-            q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
-            q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
-            k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
+        Args:
+            hidden_states: Input hidden states `[B, S, hidden_size]`.
+            q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
+            position_embeddings: `(cos, sin)` from RotaryEmbedding.
+            attention_mask: Causal mask, broadcastable to `[B, S, T]`.
+            past_key_values: Cache object containing the indexer key cache for this layer.
 
-            if past_key_values is not None:
-                k = past_key_values.update_indexer(k, self.layer_idx)
+        Returns:
+            `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
+                turn these into an additive sparse mask; the `flash-mla` kernel consumes them directly.
+        """
+        batch_size, seq_len, _ = hidden_states.shape
+        cos, sin = position_embeddings
+        q = self.wq_b(q_resid)  # [B, S, H*D]
+        q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
+        q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-            # Flatten queries and heads to avoid broadcasting a copy of the keys for every query position.
-            with maybe_autocast(device_type=hidden_states.device.type, enabled=False):
-                scores = torch.matmul(q.flatten(1, 2).float(), k.transpose(-1, -2).float()) * self.softmax_scale
-                scores = F.relu(scores).view(batch_size, seq_len, self.n_heads, k.shape[1])
-                weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (
-                    self.n_heads**-0.5
-                )
-                index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+        k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
+        k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-            if attention_mask.dtype == torch.bool:
-                index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
-            else:
-                index_scores = index_scores + attention_mask
+        # GLM-MoE-DSA uses interleaved RoPE in the indexer
+        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+        q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
+        k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
 
-            topk = min(self.index_topk, index_scores.shape[-1])
-            topk_indices = index_scores.topk(topk, dim=-1).indices.to(torch.int32)
-            # Early queries can select masked keys when fewer than topk are visible. Keep log-softmax finite.
-            scores = index_scores.clamp_min(torch.finfo(torch.float32).min) if output_scores else None
-            return topk_indices, scores
+        if past_key_values is not None:
+            k = past_key_values.update_indexer(k, self.layer_idx)
+
+        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
+        scores = F.relu(scores)
+
+        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
+        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
+        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+
+        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
+        if attention_mask.dtype == torch.bool:
+            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
+        else:
+            index_scores = index_scores + attention_mask
+
+        topk = min(self.index_topk, index_scores.shape[-1])
+        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
 
 
 class GlmMoeDsaAttention(AXK1Attention):
@@ -214,10 +218,8 @@ class GlmMoeDsaAttention(AXK1Attention):
         past_key_values: Cache | None = None,
         position_ids: torch.Tensor | None = None,
         prev_topk_indices: torch.Tensor | None = None,
-        output_indexer_loss: bool = False,
-        indexer_query_mask: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
 
@@ -243,27 +245,15 @@ class GlmMoeDsaAttention(AXK1Attention):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
-        indexer_loss = None
         if self.indexer is not None:
-            topk_indices, indexer_scores = self.indexer(
+            topk_indices = self.indexer(
                 hidden_states,
                 q_resid,
                 position_embeddings,
                 attention_mask[:, 0, :, :],
                 position_ids,  # Kept for BC
                 past_key_values=past_key_values,
-                output_scores=output_indexer_loss,
             )  # [B, S, topk]
-            if output_indexer_loss:
-                indexer_loss = indexer_kl_loss(
-                    indexer_scores,
-                    query_states,
-                    key_states,
-                    attention_mask,
-                    indexer_query_mask,
-                    self.scaling,
-                    topk_indices,
-                )
         else:
             if prev_topk_indices is None:
                 raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
@@ -301,7 +291,7 @@ class GlmMoeDsaAttention(AXK1Attention):
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights, topk_indices, indexer_loss
+        return attn_output, attn_weights, topk_indices
 
 
 class GlmMoeDsaDecoderLayer(DeepseekV32DecoderLayer):
@@ -314,14 +304,12 @@ class GlmMoeDsaDecoderLayer(DeepseekV32DecoderLayer):
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         prev_topk_indices: torch.Tensor | None = None,  # MAIN DIFF with DSV3.2
-        output_indexer_loss: bool = False,
-        indexer_query_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
-        hidden_states, _, topk_indices, indexer_loss = self.self_attn(
+        hidden_states, _, topk_indices = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -329,8 +317,6 @@ class GlmMoeDsaDecoderLayer(DeepseekV32DecoderLayer):
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             prev_topk_indices=prev_topk_indices,  # MAIN DIFF with DSV3.2
-            output_indexer_loss=output_indexer_loss,
-            indexer_query_mask=indexer_query_mask,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -339,15 +325,11 @@ class GlmMoeDsaDecoderLayer(DeepseekV32DecoderLayer):
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-        return hidden_states, topk_indices, indexer_loss
+        return hidden_states, topk_indices
 
 
 class GlmMoeDsaPreTrainedModel(DeepseekV32PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
-
-
-class GlmMoeDsaModelOutputWithPast(DeepseekV32ModelOutputWithPast):
-    pass
 
 
 class GlmMoeDsaModel(DeepseekV32Model):
@@ -360,7 +342,7 @@ class GlmMoeDsaModel(DeepseekV32Model):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> GlmMoeDsaModelOutputWithPast:
+    ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -387,20 +369,12 @@ class GlmMoeDsaModel(DeepseekV32Model):
             }
             causal_mask_mapping = {"deepseek_sparse_attention": create_causal_mask(**mask_kwargs)}
 
-        output_indexer_loss = kwargs.pop("output_indexer_loss", None)
-        if output_indexer_loss is None:
-            output_indexer_loss = self.config.output_indexer_loss
-        indexer_query_mask = None
-        if output_indexer_loss:
-            causal_mask = causal_mask_mapping["deepseek_sparse_attention"]
-            indexer_query_mask = get_indexer_query_mask(attention_mask, causal_mask, inputs_embeds.shape[1])
-
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        topk_indices, indexer_losses = None, []  # MAIN DIFF with DSV3.2
+        topk_indices = None  # MAIN DIFF with DSV3.2
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            hidden_states, topk_indices, layer_loss = decoder_layer(
+            hidden_states, topk_indices = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
@@ -408,27 +382,17 @@ class GlmMoeDsaModel(DeepseekV32Model):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 prev_topk_indices=topk_indices,  # MAIN DIFF with DSV3.2
-                output_indexer_loss=output_indexer_loss,
-                indexer_query_mask=indexer_query_mask,
                 **kwargs,
             )
-            # Shared layers reuse an earlier selection and have no indexer loss.
-            if layer_loss is not None:
-                indexer_losses.append(layer_loss)
-
-        indexer_loss = None
-        if indexer_losses:
-            indexer_loss = normalize_indexer_loss(indexer_losses, indexer_query_mask, kwargs.get("num_items_in_batch"))
 
         hidden_states = self.norm(hidden_states)
-        return GlmMoeDsaModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            indexer_loss=indexer_loss,
         )
 
 
-class GlmMoeDsaForCausalLM(DeepseekV32ForCausalLM):
+class GlmMoeDsaForCausalLM(DeepseekV3ForCausalLM):
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
 

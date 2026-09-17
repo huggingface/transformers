@@ -24,7 +24,6 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...models.deepseek_v32.test_modeling_deepseek_v32 import IndexerLossTesterMixin
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
@@ -69,7 +68,7 @@ class AXK2ModelTester(CausalLMModelTester):
 
 
 @require_torch
-class AXK2ModelTest(IndexerLossTesterMixin, CausalLMModelTest, unittest.TestCase):
+class AXK2ModelTest(CausalLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     model_tester_class = AXK2ModelTester
     model_split_percents = [0.5, 0.7, 0.8]

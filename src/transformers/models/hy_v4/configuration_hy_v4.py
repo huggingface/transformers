@@ -44,9 +44,6 @@ class HYV4Config(PreTrainedConfig):
     indexer_types (`list[str]`, *optional*):
         Per-layer DSA indexer type, either `"full"` or `"shared"`. A shared layer reuses the
         most recent full indexer in the same forward request.
-    output_indexer_loss (`bool`, *optional*, defaults to `False`):
-        Whether to compute the indexer's KL distillation loss on the layers that run an indexer. Only the indexer
-        receives gradients from this loss; its inputs and the attention distribution used as its target are detached.
     hc_mult (`int`, *optional*, defaults to 4):
         Number of hidden-state channels maintained by iHC.
     hc_magnitude (`float`, *optional*, defaults to 2.0):
@@ -60,7 +57,7 @@ class HYV4Config(PreTrainedConfig):
     """
 
     model_type = "hy_v4"
-    keys_to_ignore_at_inference = ["past_key_values", "indexer_loss"]
+    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }
@@ -130,7 +127,6 @@ class HYV4Config(PreTrainedConfig):
     index_head_dim: int = 128
     index_n_heads: int = 16
     indexer_types: list[str] | None = None
-    output_indexer_loss: bool = False
     hc_mult: int = 4
     hc_magnitude: float = 2.0
     hc_eps: float = 1e-6

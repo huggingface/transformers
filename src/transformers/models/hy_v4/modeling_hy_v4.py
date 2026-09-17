@@ -20,7 +20,6 @@
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -194,6 +193,7 @@ class HYV4Indexer(nn.Module):
         self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
         self.softmax_scale = self.head_dim**-0.5
 
+    @torch.no_grad()
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -202,57 +202,52 @@ class HYV4Indexer(nn.Module):
         attention_mask: torch.Tensor,
         position_ids: torch.Tensor,  # Kept for BC
         past_key_values: Cache | None = None,
-        output_scores: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Same as [`DeepseekV32Indexer.forward`], but RoPE rotates the trailing slice of each head and the key norm
-        runs in fp32."""
-        # Top-k has no gradient; only the distillation loss trains the indexer.
-        with torch.set_grad_enabled(torch.is_grad_enabled() and output_scores):
-            # Detach the inputs so the indexer loss reaches no parameter but the indexer's.
-            hidden_states, q_resid = hidden_states.detach(), q_resid.detach()
-            batch_size, seq_len, _ = hidden_states.shape
-            cos, sin = position_embeddings
-            q = self.wq_b(q_resid)  # [B, S, H*D]
-            q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
-            # Flipped RoPE position (later portion instead of the first)
-            q_pass, q_rot = torch.split(q, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
+    ) -> torch.Tensor:
+        """Score keys and select top-k tokens for each query.
 
-            # Norm is kept in fp32
-            k = (
-                self.k_norm(self.wk(hidden_states).to(self.k_norm.weight.dtype)).to(hidden_states.dtype).unsqueeze(2)
-            )  # [B, S, 1, D]
-            k_pass, k_rot = torch.split(k, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
+        The reference indexer uses an orthogonal Hadamard transform and FP8 scoring. Here the dot products are
+        computed directly in FP32.
+        """
+        batch_size, seq_len, _ = hidden_states.shape
+        cos, sin = position_embeddings
+        q = self.wq_b(q_resid)  # [B, S, H*D]
+        q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
+        # Flipped RoPE position (later portion instead of the first)
+        q_pass, q_rot = torch.split(q, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
 
-            q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
-            q = torch.cat([q_pass, q_rot], dim=-1)  # [B, S, H, D]
-            k = torch.cat([k_pass, k_rot], dim=-1).squeeze(2)  # [B, S, D]
+        # Norm is kept in fp32
+        k = (
+            self.k_norm(self.wk(hidden_states).to(self.k_norm.weight.dtype)).to(hidden_states.dtype).unsqueeze(2)
+        )  # [B, S, 1, D]
+        k_pass, k_rot = torch.split(k, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
 
-            if past_key_values is not None:
-                k = past_key_values.update_indexer(k, self.layer_idx)
+        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+        q = torch.cat([q_pass, q_rot], dim=-1)  # [B, S, H, D]
+        k = torch.cat([k_pass, k_rot], dim=-1).squeeze(2)  # [B, S, D]
 
-            # Flatten queries and heads to avoid broadcasting a copy of the keys for every query position.
-            with maybe_autocast(device_type=hidden_states.device.type, enabled=False):
-                scores = torch.matmul(q.flatten(1, 2).float(), k.transpose(-1, -2).float())
-                scores = F.relu(scores).view(batch_size, seq_len, self.n_heads, k.shape[1])
-                # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
-                # Apply softmax scale later
-                weights = (
-                    self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float()
-                    * (self.n_heads**-0.5)
-                    * self.softmax_scale
-                )
-                index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+        if past_key_values is not None:
+            k = past_key_values.update_indexer(k, self.layer_idx)
 
-            if attention_mask.dtype == torch.bool:
-                index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
-            else:
-                index_scores = index_scores + attention_mask
+        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
+        scores = F.relu(scores)
 
-            topk = min(self.index_topk, index_scores.shape[-1])
-            topk_indices = index_scores.topk(topk, dim=-1).indices.to(torch.int32)
-            # Early queries can select masked keys when fewer than topk are visible. Keep log-softmax finite.
-            scores = index_scores.clamp_min(torch.finfo(torch.float32).min) if output_scores else None
-            return topk_indices, scores
+        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
+        # Apply softmax scale later
+        weights = (
+            self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float()
+            * (self.n_heads**-0.5)
+            * self.softmax_scale
+        )
+        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+
+        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
+        if attention_mask.dtype == torch.bool:
+            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
+        else:
+            index_scores = index_scores + attention_mask
+
+        topk = min(self.index_topk, index_scores.shape[-1])
+        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -312,40 +307,6 @@ def yarn_apply_mscale(rope_parameters, scaling):
             mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
             scaling = scaling * mscale * mscale
     return scaling
-
-
-def indexer_kl_loss(
-    scores: torch.Tensor,
-    query_states: torch.Tensor,
-    key_states: torch.Tensor,
-    attention_mask: torch.Tensor,
-    query_mask: torch.Tensor,
-    scaling: float,
-    candidates: torch.Tensor,
-) -> torch.Tensor:
-    """Sum per-query KL losses, distilling the mean attention distribution over the selected keys into the indexer.
-
-    With `index_topk` at least the sequence length, every visible key is selected: the dense warm-up stage.
-    Recompute the detached target in head chunks so the main attention can use SDPA and the loss can be checkpointed.
-    """
-    candidates = candidates.long()
-    scores = scores.gather(-1, candidates)
-    with torch.no_grad():
-        if attention_mask.dtype == torch.bool:
-            attention_mask = torch.zeros_like(attention_mask, dtype=query_states.dtype).masked_fill(
-                ~attention_mask, torch.finfo(query_states.dtype).min
-            )
-        candidates = candidates.unsqueeze(1)
-        target = torch.zeros_like(scores, dtype=torch.float32)
-        for query_chunk, key_chunk in zip(query_states.split(16, dim=1), key_states.split(16, dim=1)):
-            logits = torch.matmul(query_chunk, key_chunk.transpose(-1, -2)) * scaling + attention_mask
-            logits = logits.gather(-1, candidates.expand(-1, logits.shape[1], -1, -1))
-            # All-masked padding queries must also have finite probabilities, even though their loss is excluded.
-            logits = logits.clamp_min(torch.finfo(logits.dtype).min)
-            target += F.softmax(logits, dim=-1, dtype=torch.float32).sum(dim=1)
-        target /= query_states.shape[1]
-    kl = F.kl_div(F.log_softmax(scores, dim=-1, dtype=torch.float32), target, reduction="none").sum(dim=-1)
-    return kl.masked_fill(~query_mask, 0.0).sum()
 
 
 class HYV4Attention(nn.Module):
@@ -431,10 +392,8 @@ class HYV4Attention(nn.Module):
         past_key_values: Cache | None = None,
         position_ids: torch.Tensor | None = None,
         prev_topk_indices: torch.Tensor | None = None,
-        output_indexer_loss: bool = False,
-        indexer_query_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
 
@@ -464,27 +423,15 @@ class HYV4Attention(nn.Module):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
-        indexer_loss = None
         if self.indexer is not None:
-            topk_indices, indexer_scores = self.indexer(
+            topk_indices = self.indexer(
                 hidden_states,
                 q_resid,
                 position_embeddings,
                 attention_mask[:, 0, :, :],
                 position_ids,  # Kept for BC
                 past_key_values=past_key_values,
-                output_scores=output_indexer_loss,
             )  # [B, S, topk]
-            if output_indexer_loss:
-                indexer_loss = indexer_kl_loss(
-                    indexer_scores,
-                    query_states,
-                    key_states,
-                    attention_mask,
-                    indexer_query_mask,
-                    self.scaling,
-                    topk_indices,
-                )
         else:
             if prev_topk_indices is None:
                 raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
@@ -523,7 +470,7 @@ class HYV4Attention(nn.Module):
 
         attn_output = attn_output * torch.sigmoid(gate_states)
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
-        return self.o_proj(attn_output), attn_weights, topk_indices, indexer_loss
+        return self.o_proj(attn_output), attn_weights, topk_indices
 
 
 class HYV4MLP(nn.Module):
@@ -731,10 +678,8 @@ class HYV4DecoderLayer(GradientCheckpointingLayer):
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         prev_topk_indices: torch.LongTensor | None = None,
-        output_indexer_loss: bool = False,
-        indexer_query_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.LongTensor | None, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.LongTensor | None]:
         dtype = hidden_states.dtype
 
         # Key difference is the hyper connection and its residual connection
@@ -742,7 +687,7 @@ class HYV4DecoderLayer(GradientCheckpointingLayer):
         post, hidden_states = self.attn_hc(hidden_states)
         # Self attn
         hidden_states = self.input_layernorm(hidden_states)
-        hidden_states, _, topk_indices, indexer_loss = self.self_attn(
+        hidden_states, _, topk_indices = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -750,8 +695,6 @@ class HYV4DecoderLayer(GradientCheckpointingLayer):
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             prev_topk_indices=prev_topk_indices,
-            output_indexer_loss=output_indexer_loss,
-            indexer_query_mask=indexer_query_mask,
             **kwargs,
         )
         hidden_states = (post.float().unsqueeze(-1) * hidden_states.float().unsqueeze(-2) + residual.float()).to(dtype)
@@ -763,7 +706,7 @@ class HYV4DecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = (post.float().unsqueeze(-1) * hidden_states.float().unsqueeze(-2) + residual.float()).to(dtype)
 
-        return hidden_states, topk_indices, indexer_loss
+        return hidden_states, topk_indices
 
 
 @auto_docstring
@@ -825,68 +768,6 @@ class HYV4PreTrainedModel(PreTrainedModel):
             init.constant_(module.sinks, self.config.learnable_sink_init)
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for outputs of DeepSeek Sparse Attention models, with the indexer's distillation loss.
-    """
-)
-@dataclass
-class HYV4ModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    indexer_loss (`torch.FloatTensor`, *optional*):
-        Indexer KL loss averaged over the layers that run an indexer and over valid queries, or normalized by
-        `num_items_in_batch` when supplied.
-
-        Returned when `output_indexer_loss=True`.
-    """
-
-    indexer_loss: torch.FloatTensor | None = None
-
-
-@auto_docstring(
-    custom_intro="""
-    Base class for causal language model outputs of DeepSeek Sparse Attention models, with the indexer's distillation
-    loss.
-    """
-)
-@dataclass
-class HYV4CausalLMOutputWithPast(CausalLMOutputWithPast):
-    r"""
-    indexer_loss (`torch.FloatTensor`, *optional*):
-        Indexer KL loss averaged over the layers that run an indexer and over valid queries, or normalized by
-        `num_items_in_batch` when supplied.
-
-        Returned when `output_indexer_loss=True`.
-    """
-
-    indexer_loss: torch.FloatTensor | None = None
-
-
-def normalize_indexer_loss(
-    indexer_losses: list[torch.Tensor],
-    indexer_query_mask: torch.Tensor,
-    num_items_in_batch: torch.Tensor | int | None = None,
-) -> torch.Tensor:
-    """Average the per-layer loss sums over the layers that ran an indexer and over the valid queries, or over
-    `num_items_in_batch` when it is supplied, as the language modeling loss is under gradient accumulation."""
-    device = indexer_losses[-1].device
-    indexer_loss = torch.stack([layer_loss.to(device) for layer_loss in indexer_losses]).sum()
-    normalizer = indexer_query_mask.sum() if num_items_in_batch is None else num_items_in_batch
-    normalizer = torch.as_tensor(normalizer, device=device).clamp_min(1)
-    return indexer_loss / (len(indexer_losses) * normalizer)
-
-
-def get_indexer_query_mask(
-    attention_mask: torch.Tensor | dict | None, causal_mask: torch.Tensor, query_length: int
-) -> torch.Tensor:
-    """Boolean `[B, S]` mask of the queries that count in the indexer loss: every non-padding query."""
-    if isinstance(attention_mask, torch.Tensor) and attention_mask.ndim == 2:
-        return attention_mask[:, -query_length:].bool()
-    if causal_mask.dtype != torch.bool:
-        causal_mask = causal_mask > torch.finfo(causal_mask.dtype).min
-    return causal_mask.any(dim=-1).squeeze(1)
-
-
 @auto_docstring
 class HYV4Model(HYV4PreTrainedModel):
     def __init__(self, config: HYV4Config):
@@ -918,7 +799,7 @@ class HYV4Model(HYV4PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> HYV4ModelOutputWithPast:
+    ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -945,22 +826,14 @@ class HYV4Model(HYV4PreTrainedModel):
             }
             causal_mask_mapping = {"deepseek_sparse_attention": create_causal_mask(**mask_kwargs)}
 
-        output_indexer_loss = kwargs.pop("output_indexer_loss", None)
-        if output_indexer_loss is None:
-            output_indexer_loss = self.config.output_indexer_loss
-        indexer_query_mask = None
-        if output_indexer_loss:
-            causal_mask = causal_mask_mapping["deepseek_sparse_attention"]
-            indexer_query_mask = get_indexer_query_mask(attention_mask, causal_mask, inputs_embeds.shape[1])
-
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
         # Prepare HC connections
         hidden_states = inputs_embeds.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
 
-        topk_indices, indexer_losses = None, []
+        topk_indices = None
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            hidden_states, topk_indices, layer_loss = decoder_layer(
+            hidden_states, topk_indices = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping["deepseek_sparse_attention"],
                 position_embeddings=position_embeddings,
@@ -968,25 +841,15 @@ class HYV4Model(HYV4PreTrainedModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 prev_topk_indices=topk_indices,
-                output_indexer_loss=output_indexer_loss,
-                indexer_query_mask=indexer_query_mask,
                 **kwargs,
             )
-            # Shared layers reuse an earlier selection and have no indexer loss.
-            if layer_loss is not None:
-                indexer_losses.append(layer_loss)
-
-        indexer_loss = None
-        if indexer_losses:
-            indexer_loss = normalize_indexer_loss(indexer_losses, indexer_query_mask, kwargs.get("num_items_in_batch"))
 
         # Difference with the HC head at the end
         hidden_states = self.norm(self.hc_head(hidden_states))
 
-        return HYV4ModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            indexer_loss=indexer_loss,
         )
 
 
@@ -1033,7 +896,7 @@ class HYV4ForCausalLM(HYV4PreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> HYV4CausalLMOutputWithPast:
+    ) -> CausalLMOutputWithPast:
         r"""
         Example:
 
@@ -1051,7 +914,7 @@ class HYV4ForCausalLM(HYV4PreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        outputs: HYV4ModelOutputWithPast = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1071,13 +934,8 @@ class HYV4ForCausalLM(HYV4PreTrainedModel, GenerationMixin):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        indexer_loss = outputs.indexer_loss
-        if indexer_loss is not None and loss is not None:
-            loss = loss + indexer_loss.to(loss.device)
-
-        return HYV4CausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
-            indexer_loss=indexer_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,

@@ -25,6 +25,7 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -36,14 +37,7 @@ from ..deepseek_v4.modeling_deepseek_v4 import (
     DeepseekV4HyperHead,
     DeepseekV4UnweightedRMSNorm,
 )
-from ..deepseek_v32.modeling_deepseek_v32 import (
-    DeepseekV32CausalLMOutputWithPast,
-    DeepseekV32Indexer,
-    DeepseekV32ModelOutputWithPast,
-    get_indexer_query_mask,
-    indexer_kl_loss,
-    normalize_indexer_loss,
-)
+from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Indexer
 from ..glm4_moe_lite.modeling_glm4_moe_lite import (
     Glm4MoeLiteForCausalLM,
     Glm4MoeLiteMLP,
@@ -79,9 +73,6 @@ class HYV4Config(PreTrainedConfig):
     indexer_types (`list[str]`, *optional*):
         Per-layer DSA indexer type, either `"full"` or `"shared"`. A shared layer reuses the
         most recent full indexer in the same forward request.
-    output_indexer_loss (`bool`, *optional*, defaults to `False`):
-        Whether to compute the indexer's KL distillation loss on the layers that run an indexer. Only the indexer
-        receives gradients from this loss; its inputs and the attention distribution used as its target are detached.
     hc_mult (`int`, *optional*, defaults to 4):
         Number of hidden-state channels maintained by iHC.
     hc_magnitude (`float`, *optional*, defaults to 2.0):
@@ -95,7 +86,7 @@ class HYV4Config(PreTrainedConfig):
     """
 
     model_type = "hy_v4"
-    keys_to_ignore_at_inference = ["past_key_values", "indexer_loss"]
+    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }
@@ -165,7 +156,6 @@ class HYV4Config(PreTrainedConfig):
     index_head_dim: int = 128
     index_n_heads: int = 16
     indexer_types: list[str] | None = None
-    output_indexer_loss: bool = False
     hc_mult: int = 4
     hc_magnitude: float = 2.0
     hc_eps: float = 1e-6
@@ -215,6 +205,7 @@ class HYV4Indexer(DeepseekV32Indexer):
         super().__init__(config, layer_idx)
         self.k_norm = nn.LayerNorm(self.head_dim, eps=config.rms_norm_eps)
 
+    @torch.no_grad()
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -223,57 +214,47 @@ class HYV4Indexer(DeepseekV32Indexer):
         attention_mask: torch.Tensor,
         position_ids: torch.Tensor,  # Kept for BC
         past_key_values: Cache | None = None,
-        output_scores: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Same as [`DeepseekV32Indexer.forward`], but RoPE rotates the trailing slice of each head and the key norm
-        runs in fp32."""
-        # Top-k has no gradient; only the distillation loss trains the indexer.
-        with torch.set_grad_enabled(torch.is_grad_enabled() and output_scores):
-            # Detach the inputs so the indexer loss reaches no parameter but the indexer's.
-            hidden_states, q_resid = hidden_states.detach(), q_resid.detach()
-            batch_size, seq_len, _ = hidden_states.shape
-            cos, sin = position_embeddings
-            q = self.wq_b(q_resid)  # [B, S, H*D]
-            q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
-            # Flipped RoPE position (later portion instead of the first)
-            q_pass, q_rot = torch.split(q, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
+    ) -> torch.Tensor:
+        batch_size, seq_len, _ = hidden_states.shape
+        cos, sin = position_embeddings
+        q = self.wq_b(q_resid)  # [B, S, H*D]
+        q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
+        # Flipped RoPE position (later portion instead of the first)
+        q_pass, q_rot = torch.split(q, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
 
-            # Norm is kept in fp32
-            k = (
-                self.k_norm(self.wk(hidden_states).to(self.k_norm.weight.dtype)).to(hidden_states.dtype).unsqueeze(2)
-            )  # [B, S, 1, D]
-            k_pass, k_rot = torch.split(k, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
+        # Norm is kept in fp32
+        k = (
+            self.k_norm(self.wk(hidden_states).to(self.k_norm.weight.dtype)).to(hidden_states.dtype).unsqueeze(2)
+        )  # [B, S, 1, D]
+        k_pass, k_rot = torch.split(k, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
 
-            q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
-            q = torch.cat([q_pass, q_rot], dim=-1)  # [B, S, H, D]
-            k = torch.cat([k_pass, k_rot], dim=-1).squeeze(2)  # [B, S, D]
+        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+        q = torch.cat([q_pass, q_rot], dim=-1)  # [B, S, H, D]
+        k = torch.cat([k_pass, k_rot], dim=-1).squeeze(2)  # [B, S, D]
 
-            if past_key_values is not None:
-                k = past_key_values.update_indexer(k, self.layer_idx)
+        if past_key_values is not None:
+            k = past_key_values.update_indexer(k, self.layer_idx)
 
-            # Flatten queries and heads to avoid broadcasting a copy of the keys for every query position.
-            with maybe_autocast(device_type=hidden_states.device.type, enabled=False):
-                scores = torch.matmul(q.flatten(1, 2).float(), k.transpose(-1, -2).float())
-                scores = F.relu(scores).view(batch_size, seq_len, self.n_heads, k.shape[1])
-                # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
-                # Apply softmax scale later
-                weights = (
-                    self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float()
-                    * (self.n_heads**-0.5)
-                    * self.softmax_scale
-                )
-                index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
+        scores = F.relu(scores)
 
-            if attention_mask.dtype == torch.bool:
-                index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
-            else:
-                index_scores = index_scores + attention_mask
+        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
+        # Apply softmax scale later
+        weights = (
+            self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float()
+            * (self.n_heads**-0.5)
+            * self.softmax_scale
+        )
+        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
-            topk = min(self.index_topk, index_scores.shape[-1])
-            topk_indices = index_scores.topk(topk, dim=-1).indices.to(torch.int32)
-            # Early queries can select masked keys when fewer than topk are visible. Keep log-softmax finite.
-            scores = index_scores.clamp_min(torch.finfo(torch.float32).min) if output_scores else None
-            return topk_indices, scores
+        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
+        if attention_mask.dtype == torch.bool:
+            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
+        else:
+            index_scores = index_scores + attention_mask
+
+        topk = min(self.index_topk, index_scores.shape[-1])
+        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
 
 
 class HYV4Attention(GlmMoeDsaAttention):
@@ -291,10 +272,8 @@ class HYV4Attention(GlmMoeDsaAttention):
         past_key_values: Cache | None = None,
         position_ids: torch.Tensor | None = None,
         prev_topk_indices: torch.Tensor | None = None,
-        output_indexer_loss: bool = False,
-        indexer_query_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
 
@@ -324,27 +303,15 @@ class HYV4Attention(GlmMoeDsaAttention):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
-        indexer_loss = None
         if self.indexer is not None:
-            topk_indices, indexer_scores = self.indexer(
+            topk_indices = self.indexer(
                 hidden_states,
                 q_resid,
                 position_embeddings,
                 attention_mask[:, 0, :, :],
                 position_ids,  # Kept for BC
                 past_key_values=past_key_values,
-                output_scores=output_indexer_loss,
             )  # [B, S, topk]
-            if output_indexer_loss:
-                indexer_loss = indexer_kl_loss(
-                    indexer_scores,
-                    query_states,
-                    key_states,
-                    attention_mask,
-                    indexer_query_mask,
-                    self.scaling,
-                    topk_indices,
-                )
         else:
             if prev_topk_indices is None:
                 raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
@@ -383,7 +350,7 @@ class HYV4Attention(GlmMoeDsaAttention):
 
         attn_output = attn_output * torch.sigmoid(gate_states)
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
-        return self.o_proj(attn_output), attn_weights, topk_indices, indexer_loss
+        return self.o_proj(attn_output), attn_weights, topk_indices
 
 
 class HYV4MLP(Glm4MoeLiteMLP):
@@ -467,10 +434,8 @@ class HYV4DecoderLayer(DeepseekV4DecoderLayer):
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         prev_topk_indices: torch.LongTensor | None = None,
-        output_indexer_loss: bool = False,
-        indexer_query_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.LongTensor | None, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.LongTensor | None]:
         dtype = hidden_states.dtype
 
         # Key difference is the hyper connection and its residual connection
@@ -478,7 +443,7 @@ class HYV4DecoderLayer(DeepseekV4DecoderLayer):
         post, hidden_states = self.attn_hc(hidden_states)
         # Self attn
         hidden_states = self.input_layernorm(hidden_states)
-        hidden_states, _, topk_indices, indexer_loss = self.self_attn(
+        hidden_states, _, topk_indices = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -486,8 +451,6 @@ class HYV4DecoderLayer(DeepseekV4DecoderLayer):
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             prev_topk_indices=prev_topk_indices,
-            output_indexer_loss=output_indexer_loss,
-            indexer_query_mask=indexer_query_mask,
             **kwargs,
         )
         hidden_states = (post.float().unsqueeze(-1) * hidden_states.float().unsqueeze(-2) + residual.float()).to(dtype)
@@ -499,7 +462,7 @@ class HYV4DecoderLayer(DeepseekV4DecoderLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = (post.float().unsqueeze(-1) * hidden_states.float().unsqueeze(-2) + residual.float()).to(dtype)
 
-        return hidden_states, topk_indices, indexer_loss
+        return hidden_states, topk_indices
 
 
 class HYV4PreTrainedModel(Glm4MoeLitePreTrainedModel):
@@ -548,14 +511,6 @@ class HYV4PreTrainedModel(Glm4MoeLitePreTrainedModel):
             init.constant_(module.sinks, self.config.learnable_sink_init)
 
 
-class HYV4ModelOutputWithPast(DeepseekV32ModelOutputWithPast):
-    pass
-
-
-class HYV4CausalLMOutputWithPast(DeepseekV32CausalLMOutputWithPast):
-    pass
-
-
 class HYV4Model(Glm4MoeLiteModel):
     def __init__(self, config: HYV4Config):
         super().__init__(config)
@@ -570,7 +525,7 @@ class HYV4Model(Glm4MoeLiteModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> HYV4ModelOutputWithPast:
+    ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -597,22 +552,14 @@ class HYV4Model(Glm4MoeLiteModel):
             }
             causal_mask_mapping = {"deepseek_sparse_attention": create_causal_mask(**mask_kwargs)}
 
-        output_indexer_loss = kwargs.pop("output_indexer_loss", None)
-        if output_indexer_loss is None:
-            output_indexer_loss = self.config.output_indexer_loss
-        indexer_query_mask = None
-        if output_indexer_loss:
-            causal_mask = causal_mask_mapping["deepseek_sparse_attention"]
-            indexer_query_mask = get_indexer_query_mask(attention_mask, causal_mask, inputs_embeds.shape[1])
-
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
         # Prepare HC connections
         hidden_states = inputs_embeds.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
 
-        topk_indices, indexer_losses = None, []
+        topk_indices = None
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            hidden_states, topk_indices, layer_loss = decoder_layer(
+            hidden_states, topk_indices = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping["deepseek_sparse_attention"],
                 position_embeddings=position_embeddings,
@@ -620,25 +567,15 @@ class HYV4Model(Glm4MoeLiteModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 prev_topk_indices=topk_indices,
-                output_indexer_loss=output_indexer_loss,
-                indexer_query_mask=indexer_query_mask,
                 **kwargs,
             )
-            # Shared layers reuse an earlier selection and have no indexer loss.
-            if layer_loss is not None:
-                indexer_losses.append(layer_loss)
-
-        indexer_loss = None
-        if indexer_losses:
-            indexer_loss = normalize_indexer_loss(indexer_losses, indexer_query_mask, kwargs.get("num_items_in_batch"))
 
         # Difference with the HC head at the end
         hidden_states = self.norm(self.hc_head(hidden_states))
 
-        return HYV4ModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            indexer_loss=indexer_loss,
         )
 
 
@@ -669,8 +606,8 @@ class HYV4ForCausalLM(Glm4MoeLiteForCausalLM):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> HYV4CausalLMOutputWithPast:
-        outputs: HYV4ModelOutputWithPast = self.model(
+    ) -> CausalLMOutputWithPast:
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -690,13 +627,8 @@ class HYV4ForCausalLM(Glm4MoeLiteForCausalLM):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        indexer_loss = outputs.indexer_loss
-        if indexer_loss is not None and loss is not None:
-            loss = loss + indexer_loss.to(loss.device)
-
-        return HYV4CausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
-            indexer_loss=indexer_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,

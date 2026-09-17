@@ -20,7 +20,6 @@
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as F
@@ -502,40 +501,6 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
     return q_embed, k_embed
 
 
-def indexer_kl_loss(
-    scores: torch.Tensor,
-    query_states: torch.Tensor,
-    key_states: torch.Tensor,
-    attention_mask: torch.Tensor,
-    query_mask: torch.Tensor,
-    scaling: float,
-    candidates: torch.Tensor,
-) -> torch.Tensor:
-    """Sum per-query KL losses, distilling the mean attention distribution over the selected keys into the indexer.
-
-    With `index_topk` at least the sequence length, every visible key is selected: the dense warm-up stage.
-    Recompute the detached target in head chunks so the main attention can use SDPA and the loss can be checkpointed.
-    """
-    candidates = candidates.long()
-    scores = scores.gather(-1, candidates)
-    with torch.no_grad():
-        if attention_mask.dtype == torch.bool:
-            attention_mask = torch.zeros_like(attention_mask, dtype=query_states.dtype).masked_fill(
-                ~attention_mask, torch.finfo(query_states.dtype).min
-            )
-        candidates = candidates.unsqueeze(1)
-        target = torch.zeros_like(scores, dtype=torch.float32)
-        for query_chunk, key_chunk in zip(query_states.split(16, dim=1), key_states.split(16, dim=1)):
-            logits = torch.matmul(query_chunk, key_chunk.transpose(-1, -2)) * scaling + attention_mask
-            logits = logits.gather(-1, candidates.expand(-1, logits.shape[1], -1, -1))
-            # All-masked padding queries must also have finite probabilities, even though their loss is excluded.
-            logits = logits.clamp_min(torch.finfo(logits.dtype).min)
-            target += F.softmax(logits, dim=-1, dtype=torch.float32).sum(dim=1)
-        target /= query_states.shape[1]
-    kl = F.kl_div(F.log_softmax(scores, dim=-1, dtype=torch.float32), target, reduction="none").sum(dim=-1)
-    return kl.masked_fill(~query_mask, 0.0).sum()
-
-
 class AXK2Attention(nn.Module):
     """
     DeepSeek-V3 MLA, with a DSA indexer whose top-k sparse mask is folded into the attention mask.
@@ -614,10 +579,8 @@ class AXK2Attention(nn.Module):
         attention_mask: torch.Tensor,
         past_key_values: Cache | None = None,
         position_ids: torch.Tensor | None = None,
-        output_indexer_loss: bool = False,
-        indexer_query_mask: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         query_gate_shape = (batch_size, seq_length, -1, self.qk_head_dim + self.v_head_dim)
 
@@ -650,26 +613,14 @@ class AXK2Attention(nn.Module):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
-        topk_indices, indexer_scores = self.indexer(
+        topk_indices, _ = self.indexer(
             hidden_states,
             q_resid,
             position_embeddings,
             attention_mask[:, 0, :, :],
             position_ids,  # Kept for BC
             past_key_values=past_key_values,
-            output_scores=output_indexer_loss,
         )
-        indexer_loss = None
-        if output_indexer_loss:
-            indexer_loss = indexer_kl_loss(
-                indexer_scores,
-                query_states,
-                key_states,
-                attention_mask,
-                indexer_query_mask,
-                self.scaling,
-                topk_indices,
-            )
 
         sparse_indices = None
         if self.config._attn_implementation in ("eager", "sdpa"):
@@ -705,7 +656,7 @@ class AXK2Attention(nn.Module):
         # Input-dependent sigmoid gate on the attention output (the gate half of the fused projection).
         attn_output = (attn_output * torch.sigmoid(gate_states.float())).to(attn_output.dtype)
         attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights, indexer_loss
+        return attn_output, attn_weights
 
 
 class AXK2DecoderLayer(GradientCheckpointingLayer):
@@ -730,26 +681,28 @@ class AXK2DecoderLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        output_indexer_loss: bool = False,
-        indexer_query_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+    ) -> torch.Tensor:
         residual = hidden_states
-        hidden_states, _, indexer_loss = self.self_attn(
-            hidden_states=self.input_layernorm(hidden_states),
+        hidden_states = self.input_layernorm(hidden_states)
+        # Self Attention
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
-            output_indexer_loss=output_indexer_loss,
-            indexer_query_mask=indexer_query_mask,
             **kwargs,
         )
         hidden_states = residual + hidden_states
-        hidden_states = hidden_states + self.mlp(self.post_attention_layernorm(hidden_states))
-        # Return the loss through the checkpoint boundary, including when using reentrant checkpointing.
-        return (hidden_states, indexer_loss) if output_indexer_loss else hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+        return hidden_states
 
 
 @auto_docstring
@@ -784,49 +737,6 @@ class AXK2PreTrainedModel(PreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for outputs of DeepSeek Sparse Attention models, with the indexer's distillation loss.
-    """
-)
-@dataclass
-class AXK2ModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    indexer_loss (`torch.FloatTensor`, *optional*):
-        Indexer KL loss averaged over the layers that run an indexer and over valid queries, or normalized by
-        `num_items_in_batch` when supplied.
-
-        Returned when `output_indexer_loss=True`.
-    """
-
-    indexer_loss: torch.FloatTensor | None = None
-
-
-def get_indexer_query_mask(
-    attention_mask: torch.Tensor | dict | None, causal_mask: torch.Tensor, query_length: int
-) -> torch.Tensor:
-    """Boolean `[B, S]` mask of the queries that count in the indexer loss: every non-padding query."""
-    if isinstance(attention_mask, torch.Tensor) and attention_mask.ndim == 2:
-        return attention_mask[:, -query_length:].bool()
-    if causal_mask.dtype != torch.bool:
-        causal_mask = causal_mask > torch.finfo(causal_mask.dtype).min
-    return causal_mask.any(dim=-1).squeeze(1)
-
-
-def normalize_indexer_loss(
-    indexer_losses: list[torch.Tensor],
-    indexer_query_mask: torch.Tensor,
-    num_items_in_batch: torch.Tensor | int | None = None,
-) -> torch.Tensor:
-    """Average the per-layer loss sums over the layers that ran an indexer and over the valid queries, or over
-    `num_items_in_batch` when it is supplied, as the language modeling loss is under gradient accumulation."""
-    device = indexer_losses[-1].device
-    indexer_loss = torch.stack([layer_loss.to(device) for layer_loss in indexer_losses]).sum()
-    normalizer = indexer_query_mask.sum() if num_items_in_batch is None else num_items_in_batch
-    normalizer = torch.as_tensor(normalizer, device=device).clamp_min(1)
-    return indexer_loss / (len(indexer_losses) * normalizer)
-
-
 @auto_docstring
 class AXK2Model(AXK2PreTrainedModel):
     def __init__(self, config: AXK2Config):
@@ -857,7 +767,7 @@ class AXK2Model(AXK2PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> AXK2ModelOutputWithPast:
+    ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -884,65 +794,25 @@ class AXK2Model(AXK2PreTrainedModel):
             }
             causal_mask_mapping = {"deepseek_sparse_attention": create_causal_mask(**mask_kwargs)}
 
-        output_indexer_loss = kwargs.pop("output_indexer_loss", None)
-        if output_indexer_loss is None:
-            output_indexer_loss = self.config.output_indexer_loss
-        indexer_query_mask = None
-        if output_indexer_loss:
-            causal_mask = causal_mask_mapping["deepseek_sparse_attention"]
-            indexer_query_mask = get_indexer_query_mask(attention_mask, causal_mask, inputs_embeds.shape[1])
-
         hidden_states = inputs_embeds
-        indexer_losses = []
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            layer_output = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                output_indexer_loss=output_indexer_loss,
-                indexer_query_mask=indexer_query_mask,
                 **kwargs,
             )
-            if output_indexer_loss:
-                hidden_states, layer_loss = layer_output
-                indexer_losses.append(layer_loss)
-            else:
-                hidden_states = layer_output
-
-        indexer_loss = None
-        if indexer_losses:
-            indexer_loss = normalize_indexer_loss(indexer_losses, indexer_query_mask, kwargs.get("num_items_in_batch"))
 
         hidden_states = self.norm(hidden_states)
-        return AXK2ModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            indexer_loss=indexer_loss,
         )
-
-
-@auto_docstring(
-    custom_intro="""
-    Base class for causal language model outputs of DeepSeek Sparse Attention models, with the indexer's distillation
-    loss.
-    """
-)
-@dataclass
-class AXK2CausalLMOutputWithPast(CausalLMOutputWithPast):
-    r"""
-    indexer_loss (`torch.FloatTensor`, *optional*):
-        Indexer KL loss averaged over the layers that run an indexer and over valid queries, or normalized by
-        `num_items_in_batch` when supplied.
-
-        Returned when `output_indexer_loss=True`.
-    """
-
-    indexer_loss: torch.FloatTensor | None = None
 
 
 @auto_docstring
@@ -974,15 +844,15 @@ class AXK2ForCausalLM(AXK2PreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> AXK2CausalLMOutputWithPast:
+    ) -> CausalLMOutputWithPast:
         r"""
         Example:
 
         ```python
         >>> from transformers import AutoTokenizer, AXK2ForCausalLM
 
-        >>> model = AXK2ForCausalLM.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp")
-        >>> tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3.2-Exp")
+        >>> model = AXK2ForCausalLM.from_pretrained("meta-axk2/AXK2-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-axk2/AXK2-2-7b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -991,13 +861,8 @@ class AXK2ForCausalLM(AXK2PreTrainedModel, GenerationMixin):
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```
-
-        To train the DSA indexer, pass `output_indexer_loss=True` (or set it in the config). Its loss is returned
-        as `indexer_loss` and added to `loss` when labels are supplied. Only the indexer receives gradients from this
-        loss.
-        """
-        outputs: AXK2ModelOutputWithPast = self.model(
+        ```"""
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1016,13 +881,8 @@ class AXK2ForCausalLM(AXK2PreTrainedModel, GenerationMixin):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        indexer_loss = outputs.indexer_loss
-        if indexer_loss is not None and loss is not None:
-            loss = loss + indexer_loss.to(loss.device)
-
-        return AXK2CausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
-            indexer_loss=indexer_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,

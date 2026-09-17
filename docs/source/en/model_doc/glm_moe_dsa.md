@@ -77,10 +77,6 @@ With advances in both pre-training and post-training, GLM-5 delivers significant
 ![bench](https://raw.githubusercontent.com/zai-org/GLM-5/refs/heads/main/resources/bench.png)
 
 
-## Training the indexer
-
-GLM-5 uses the DeepSeek Sparse Attention indexer of DeepSeek-V3.2. Pass `output_indexer_loss=True` (or set it in the config) to compute its KL distillation loss, returned as `indexer_loss` and added to `loss` when labels are supplied. Only the layers that run their own indexer (`"full"` in `indexer_types`) contribute, and the loss is averaged over those layers. See [Training the indexer](deepseek_v32#training-the-indexer) in the DeepSeek-V3.2 documentation for the dense warm-up stage, gradient checkpointing and gradient accumulation.
-
 ## GlmMoeDsaConfig
 
 [[autodoc]] GlmMoeDsaConfig
