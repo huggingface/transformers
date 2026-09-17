@@ -383,7 +383,7 @@ class GlmgaVideoProcessor(Glm46VVideoProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def get_number_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
+    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
         """
         A utility that returns number of video patches a given video size.
 
@@ -400,8 +400,7 @@ class GlmgaVideoProcessor(Glm46VVideoProcessor):
             `int`: Number of video patches per video.
         """
         videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
-        min_pixels = videos_kwargs.get("min_pixels", None) or self.size["shortest_edge"]
-        max_pixels = videos_kwargs.get("max_pixels", None) or self.size["longest_edge"]
+        size = videos_kwargs.get("size", None) or self.size
         patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
         merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
         temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
@@ -413,8 +412,8 @@ class GlmgaVideoProcessor(Glm46VVideoProcessor):
             width,
             temporal_factor=temporal_patch_size,
             factor=patch_size * merge_size * patch_expand_factor,
-            min_pixels=min_pixels,
-            max_pixels=max_pixels,
+            min_pixels=size["shortest_edge"],
+            max_pixels=size["longest_edge"],
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         grid_t = (num_frames + -num_frames % temporal_patch_size) // temporal_patch_size

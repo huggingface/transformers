@@ -2300,7 +2300,7 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
 
         return tvF.pad(videos, [0, 0, target_width - content_width, target_height - content_height], fill=0)
 
-    def get_number_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
+    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
         """
         A utility that returns number of video patches a given video size.
 

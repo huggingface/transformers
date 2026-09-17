@@ -166,8 +166,7 @@ class Ernie4_5_VLMoeProcessor(ProcessorMixin):
             )
 
             num_video_patches = [
-                self.video_processor.get_number_of_video_patches(*video_size, videos_kwargs)
-                for video_size in video_sizes
+                self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
             ]
             num_video_tokens = [
                 (num_patches // merge_size**2 // temporal_merge_size) for num_patches in num_video_patches

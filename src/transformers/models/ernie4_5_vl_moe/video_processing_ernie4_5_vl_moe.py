@@ -441,7 +441,7 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
             processed_videos.append(video)
         return processed_videos
 
-    def get_number_of_video_patches(
+    def get_num_of_video_patches(
         self, num_frames: int, height: int, width: int, videos_kwargs: dict | None = None
     ) -> int:
         """
@@ -463,13 +463,12 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
             `int`: Number of video patches per video.
         """
         videos_kwargs = videos_kwargs or {}
-        min_pixels = videos_kwargs["min_pixels"] if "min_pixels" in videos_kwargs else self.size["shortest_edge"]
-        max_pixels = videos_kwargs["max_pixels"] if "max_pixels" in videos_kwargs else self.size["longest_edge"]
+        size = videos_kwargs.get("size", self.size)
         patch_size = videos_kwargs.get("patch_size", self.patch_size)
         merge_size = videos_kwargs.get("merge_size", self.merge_size)
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
-            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
+            height, width, factor, min_pixels=size["shortest_edge"], max_pixels=size["longest_edge"]
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         grid_t = num_frames + num_frames % 2

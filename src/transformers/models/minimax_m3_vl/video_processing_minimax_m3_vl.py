@@ -59,7 +59,7 @@ class MiniMaxM3VLVideoProcessor(BaseVideoProcessor):
     def __init__(self, **kwargs: Unpack[MiniMaxM3VLVideoProcessorKwargs]):
         super().__init__(**kwargs)
 
-    def get_number_of_video_patches(
+    def get_num_of_video_patches(
         self, num_frames: int, height: int, width: int, videos_kwargs: dict | None = None
     ) -> int:
         """
