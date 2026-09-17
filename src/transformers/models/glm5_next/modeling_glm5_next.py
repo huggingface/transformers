@@ -228,10 +228,13 @@ class Glm5NextTextHyperConnection(nn.Module):
     and expanded back into `hc_mult` streams upon exiting. There is also a weighted residual connection between the
     input and output streams.
     The weights used for collapsing (pre), expanding (post) and mixing (comb) are computed from the N input streams
-    through a learned projection. The diagram below shows the flow of the mHC streams:
+    through a learned projection (plus Sinkhorn-Knopp algorithm for the comb weight).
 
-                             N input streams
-                              [B, S, N, D]
+    The diagram below shows the flow of the mHC streams (B = batch_size, S = seq_length, N = hc_mult, D = hidden_size):
+
+                                                  ┌───────────────────┐
+                             N input streams  ────│ FLATTEN + PROJECT |────> (pre, post, comb) weights
+                              [B, S, N, D]        └───────────────────┘      ([B, S, N],  [B, S, N],  [B, S, N, N])
                                   │ │ │
                ╭──────────────────┴─┼─┼──────────────────╮
                │ ╭──────────────────┴─┼────────────────╮ │
@@ -265,8 +268,6 @@ class Glm5NextTextHyperConnection(nn.Module):
                                   ▼ ▼ ▼
                             N output streams
                               [B, S, N, D]
-
-    where B = batch_size, S = sequence_length, N = hc_mult, D = hidden_size.
     """
 
     def __init__(self, config: Glm5NextTextConfig):
