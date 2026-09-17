@@ -957,6 +957,8 @@
         title: Zamba2
       - local: model_doc/zaya
         title: ZAYA
+      - local: model_doc/zgcm
+        title: ZGCM
       title: Text models
     - sections:
       - local: model_doc/aimv2
