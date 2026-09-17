@@ -78,7 +78,7 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
 
     @require_torch
     def test_chat_template(self):
-        processor = AutoProcessor.from_pretrained(self.tmpdirname, trust_remote_code=True)
+        processor = AutoProcessor.from_pretrained(self.tmpdirname)
         default_transcription_prompt = (
             "请将音频转写为文本，每一段需以起始时间戳和说话人编号"
             "（[S01]、[S02]、[S03]…）开头，正文为对应的语音内容，"

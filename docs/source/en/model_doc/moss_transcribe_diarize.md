@@ -47,10 +47,10 @@ This model was contributed by the Hugging Face team. See the
 <hfoption id="AutoModel">
 
 ```python
-from transformers import AutoModelForSeq2SeqLM, AutoProcessor
+from transformers import AutoProcessor, MossTranscribeDiarizeForConditionalGeneration
 
 processor = AutoProcessor.from_pretrained("itazap/MOSS-Transcribe-Diarize-HF")
-model = AutoModelForSeq2SeqLM.from_pretrained("itazap/MOSS-Transcribe-Diarize-HF", device_map="auto")
+model = MossTranscribeDiarizeForConditionalGeneration.from_pretrained("itazap/MOSS-Transcribe-Diarize-HF", device_map="auto")
 
 inputs = processor.apply_transcription_request(
     "https://huggingface.co/datasets/itazap/audio_samples/resolve/main/intro_sample.wav"
