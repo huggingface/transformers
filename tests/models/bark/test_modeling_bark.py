@@ -34,6 +34,7 @@ from transformers.models.bark.generation_configuration_bark import (
 )
 from transformers.testing_utils import (
     backend_torch_accelerator_module,
+    require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -1014,6 +1015,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
             self.model.generate(**input_ids, do_sample=True, temperature=0.6, penalty_alpha=0.6)
             self.model.generate(**input_ids, do_sample=True, temperature=0.6, num_beams=4)
 
+    @require_deterministic_for_xpu
     def test_generate_batching(self):
         args = {"do_sample": False, "temperature": None}
 

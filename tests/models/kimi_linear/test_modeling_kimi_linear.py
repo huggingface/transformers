@@ -69,7 +69,10 @@ class KimiLinearModelTester(CausalLMModelTester):
         self.v_head_dim = 32
         # MoE
         self.moe_intermediate_size = 16
-        self.n_routed_experts = 8
+        # Must override the config default (256) with a small value: with 256 experts the MoE layer
+        # dominates ~94% of model size, making accelerate unable to split it across GPU/CPU in
+        # test_cpu_offload (infer_auto_device_map puts everything on CPU → no dispatch → no hf_device_map).
+        self.num_local_experts = 4
         self.n_shared_experts = 1
         self.num_experts_per_tok = 2
         self.n_group = 1

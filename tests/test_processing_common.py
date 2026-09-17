@@ -21,6 +21,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -156,6 +157,9 @@ class ProcessorTesterMixin:
 
     # Max-length value used in chat template tests. Override in subclasses if needed.
     chat_template_max_length = 100  # max_length in test_apply_chat_template_*
+
+    # Role used in chat template tests. Override in subclasses whose template expects another role.
+    chat_template_user_role = "user"
 
     @classmethod
     def setUpClass(cls):
@@ -1323,6 +1327,56 @@ class ProcessorTesterMixin:
                 "audio_processor",
                 MODALITY_INPUT_DATA["audio"],
             )
+
+    @require_librosa
+    def test_chat_template_audio_sampling_rate(self):
+        """Audio decoded by `apply_chat_template` reaches the processor with the `sampling_rate` it was decoded at,
+        so audio processors don't warn about a missing one. Users may pass it flat or nested under `audio_kwargs`,
+        and a nested one must be forwarded as-is instead of being duplicated by a flat one."""
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        audio_processor = getattr(processor, "feature_extractor", getattr(processor, "audio_processor", None))
+        if audio_processor is None:
+            self.skipTest(f"{self.processor_class} has no audio processor")
+
+        sampling_rate = audio_processor.sampling_rate
+        messages = [
+            {
+                "role": self.chat_template_user_role,
+                "content": [
+                    {"type": "audio", "url": MODALITY_INPUT_DATA["audio"][0]},
+                    {"type": "text", "text": "What is happening in this audio?"},
+                ],
+            },
+        ]
+
+        for processor_kwargs in [
+            None,
+            {"sampling_rate": sampling_rate},
+            {"audio_kwargs": {"sampling_rate": sampling_rate}},
+            {"sampling_rate": None},
+            {"audio_kwargs": {"sampling_rate": None}},
+        ]:
+            with patch.object(
+                type(processor), "__call__", autospec=True, side_effect=type(processor).__call__
+            ) as mocked_call:
+                out_dict = processor.apply_chat_template(
+                    messages,
+                    add_generation_prompt=True,
+                    tokenize=True,
+                    return_dict=True,
+                    return_tensors="pt",
+                    processor_kwargs=processor_kwargs,
+                )
+
+            call_kwargs = mocked_call.call_args.kwargs
+            passed_sampling_rate = call_kwargs.get(
+                "sampling_rate", call_kwargs.get("audio_kwargs", {}).get("sampling_rate")
+            )
+            self.assertEqual(passed_sampling_rate, sampling_rate)
+            self.assertIn(self.audio_input_name, out_dict)
 
     @require_torchcodec
     @parameterized.expand([(1, "pt")])

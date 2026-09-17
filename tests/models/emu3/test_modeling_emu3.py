@@ -446,6 +446,7 @@ class Emu3IntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETIONS = Expectations(
                 {
                     ("xpu", 3): ['USER: 64*6464*64What do these two images have in common? ASSISTANT: The two images both depict a rhinoceros, yet they are significantly different in terms of focus and clarity. The rhinoceros in the upper image is in sharp focus, showing detailed textures'],
+                    ("xpu", 5): ["USER: 32*3232*32What do these two images have in common? ASSISTANT: The two images share a common theme of featuring a black dog. The top image focuses on the dog's face, while the bottom image shows the dog's body. Both images display the dog's presence"],
                     (None, None): ["USER: 64*6464*64What do these two images have in common? ASSISTANT: Both images feature a black animal, but they are not the same animal. The top image shows a close-up of a black cow's head, while the bottom image depicts a black cow in a natural"],
                     ("cuda", 8): ["USER: 32*3232*32What do these two images have in common? ASSISTANT: The two images share a common theme of featuring a black cow. One image captures a close-up of the cow's face, while the other image shows the cow in its natural environment, standing on a"],
                 }
