@@ -101,10 +101,10 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
         Configuration for the Mimi-based encoder sub-model.
     decoder_config (`dict`, *optional*):
         Configuration for the Code2Wav decoder sub-model.
-    input_sample_rate (`int`, *optional*, defaults to 24000):
-        Sample rate of the input audio.
-    output_sample_rate (`int`, *optional*, defaults to 24000):
-        Sample rate of the decoded output audio.
+    input_sampling_rate (`int`, *optional*, defaults to 24000):
+        Sampling rate, in hertz (Hz), of the encoder's input audio waveform.
+    output_sampling_rate (`int`, *optional*, defaults to 24000):
+        Sampling rate, in hertz (Hz), of the decoder's output audio waveform.
     decode_upsample_rate (`int`, *optional*, defaults to 1920):
         Upsampling rate applied during decoding.
     encode_downsample_rate (`int`, *optional*, defaults to 1920):
@@ -119,8 +119,8 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
 
     encoder_config: dict | PreTrainedConfig | None = None
     decoder_config: dict | PreTrainedConfig | None = None
-    input_sample_rate: int | None = 24000
-    output_sample_rate: int | None = 24000
+    input_sampling_rate: int | None = 24000
+    output_sampling_rate: int | None = 24000
     decode_upsample_rate: int | None = 1920
     encode_downsample_rate: int | None = 1920
 
