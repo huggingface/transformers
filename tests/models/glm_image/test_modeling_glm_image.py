@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch GLM-Image model."""
 
-import copy
 import unittest
 
 import pytest
@@ -144,7 +143,7 @@ class GlmImageVisionText2TextModelTester:
 
     def get_config(self):
         return GlmImageConfig(
-            text_config=copy.deepcopy(self.text_config),
+            text_config=self.text_config,
             vision_config=self.vision_config,
             vq_config=self.vq_config,
             image_token_id=self.image_token_id,
