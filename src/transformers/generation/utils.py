@@ -3260,8 +3260,8 @@ class GenerationMixin(ContinuousMixin):
         do_sample: bool,
         beams_to_keep: int,
         num_beams: int,
-        vocab_size: int,
         batch_size: int,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Get top-K continuations given the accumulated log probs on the next token.
@@ -3288,6 +3288,7 @@ class GenerationMixin(ContinuousMixin):
         else:
             topk_log_probs, topk_indices = torch.topk(accumulated_log_probs, k=beams_to_keep)
 
+        vocab_size = accumulated_log_probs.shape[-1] // num_beams
         # Gather K top beams, recover the beam index by floor division and token id by modulo division
         topk_current_beam_indices = topk_indices // vocab_size
         topk_running_beam_indices = self._gather_beams(running_beam_indices, topk_current_beam_indices)
@@ -3442,15 +3443,6 @@ class GenerationMixin(ContinuousMixin):
 
         batch_size_unflattened, cur_len = input_ids.shape[:2]
         batch_size = batch_size_unflattened // num_beams
-        # TODO (joao): standardize special cases
-        if self.__class__.__name__ == "MoshiDepthDecoder":
-            vocab_size = self.config.audio_vocab_size
-        elif self.__class__.__name__ == "ImageGPTForCausalImageModeling":
-            vocab_size = self.get_output_embeddings().out_features
-        elif self.__class__.__name__ == "BarkSemanticModel":
-            vocab_size = self.config.output_vocab_size
-        else:
-            vocab_size = self.config.get_text_config().vocab_size
         decoder_prompt_len = cur_len
         this_peer_finished = False
 
@@ -3593,7 +3585,7 @@ class GenerationMixin(ContinuousMixin):
 
             log_probs = self._unflatten_beam_dim(log_probs, batch_size, num_beams)
             log_probs = log_probs + running_beam_scores[:, :, None]
-            log_probs = torch.reshape(log_probs, (batch_size, num_beams * vocab_size))
+            log_probs = torch.reshape(log_probs, (batch_size, -1))  # The -1 dim is `num_beams * vocab_size`
 
             # c. Retrieve top-K continuations, i.e. select the next token (greedy or sampling) and then keep the best
             # continuations among all beams based on the accumulated scores.
@@ -3606,7 +3598,6 @@ class GenerationMixin(ContinuousMixin):
                 do_sample=do_sample,
                 beams_to_keep=beams_to_keep,
                 num_beams=num_beams,
-                vocab_size=vocab_size,
                 batch_size=batch_size,
             )
 
