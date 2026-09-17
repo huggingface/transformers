@@ -951,17 +951,6 @@ def _validate_parallel_plan_styles(plan: dict[str, str] | None) -> None:
         )
 
 
-def _validate_plan_override(model: nn.Module, plan_name: str, override: dict[str, str], model_names: set[str]):
-    """Reject override keys that match nothing, e.g. `layers.*` when the model uses `model.layers.*`."""
-    valid_names = model_names | set(getattr(model, plan_name))
-    for pattern in override:
-        if not any(fnmatchcase(name, pattern) for name in valid_names):
-            raise ValueError(
-                f"The `{plan_name}` pattern {pattern!r} does not match any module, parameter, or existing plan "
-                f"entry in {type(model).__name__}. Check the full path, including any 'model.' prefix."
-            )
-
-
 def resolve_parallel_plans(
     model: nn.Module, distributed_config: DistributedConfig
 ) -> tuple[dict[str, str], dict[str, str]]:
@@ -971,11 +960,27 @@ def resolve_parallel_plans(
     when its parallel size is 1. EP owns every module it names, so TP rules for those modules and their children
     are dropped: expert weights are sharded once, by the EP plan.
     """
+    # Reject invalid paths before merging, e.g. "layers.*" when the model uses "model.layers.*".
     model_names = {name for name, _ in model.named_modules()} | {name for name, _ in model.named_parameters()}
-    for plan_name in ("tp_plan", "ep_plan"):
-        override = getattr(distributed_config, plan_name)
-        if isinstance(override, dict):
-            _validate_plan_override(model, plan_name, override, model_names)
+    if isinstance(distributed_config.tp_plan, dict):
+        valid_names = model_names | set(model.tp_plan)
+        for pattern in distributed_config.tp_plan:
+            if not any(fnmatchcase(name, pattern) for name in valid_names):
+                raise ValueError(
+                    f"The `tp_plan` pattern {pattern!r} does not match any module, parameter, "
+                    f"or existing plan entry in {type(model).__name__}. "
+                    "Check the full path, including any 'model.' prefix."
+                )
+
+    if isinstance(distributed_config.ep_plan, dict):
+        valid_names = model_names | set(model.ep_plan)
+        for pattern in distributed_config.ep_plan:
+            if not any(fnmatchcase(name, pattern) for name in valid_names):
+                raise ValueError(
+                    f"The `ep_plan` pattern {pattern!r} does not match any module, parameter, "
+                    f"or existing plan entry in {type(model).__name__}. "
+                    "Check the full path, including any 'model.' prefix."
+                )
 
     if isinstance(distributed_config.tp_plan, dict):
         model._tp_plan = model.tp_plan | distributed_config.tp_plan
@@ -1009,6 +1014,7 @@ def resolve_parallel_plans(
 def apply_tensor_parallelism(model, tp_mesh, tp_plan=None):
     """Apply parameter sharding and forward hooks on the TP mesh."""
     tp_plan = model.tp_plan if tp_plan is None else tp_plan
+    _validate_parallel_plan_styles(tp_plan)
 
     for name, module in model.named_modules():
         # Create DTensor placeholders so the loader knows which shard belongs to this rank.
@@ -1057,6 +1063,7 @@ def apply_dispatch_expert_parallelism(
         module._is_hooked = True
 
     return model
+
 
 def gather_state_dict_for_save(
     state_dict: dict[str, torch.Tensor],
