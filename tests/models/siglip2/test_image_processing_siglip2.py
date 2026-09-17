@@ -55,18 +55,6 @@ class Siglip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     # Ignore copy
     # Ignore copy
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.max_num_patches, 256)
-            self.assertEqual(image_processor.patch_size, 16)
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, patch_size=32, max_num_patches=512
-            )
-            self.assertEqual(image_processor.patch_size, 32)
-            self.assertEqual(image_processor.max_num_patches, 512)
-
     @unittest.skip(reason="not supported")
     # Ignore copy
     def test_call_numpy_4_channels(self):

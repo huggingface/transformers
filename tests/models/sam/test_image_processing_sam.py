@@ -51,15 +51,6 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def image_processor_dict(self):
         return self.image_processing_tester.prepare_image_processor_dict()
 
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processing_class = image_processing_class(**self.image_processor_dict)
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"longest_edge": 20})
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size={"longest_edge": 42})
-            self.assertEqual(image_processor.size, {"longest_edge": 42})
-
     def test_call_segmentation_maps(self):
         for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processor

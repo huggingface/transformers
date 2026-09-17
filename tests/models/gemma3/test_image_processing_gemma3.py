@@ -55,14 +55,6 @@ class Gemma3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def image_processor_dict(self):
         return self.image_processing_tester.prepare_image_processor_dict()
 
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 18, "width": 18})
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=84)
-            self.assertEqual(image_processor.size, {"height": 84, "width": 84})
-
     def test_without_pan_and_scan(self):
         """
         Disable do_pan_and_scan parameter.

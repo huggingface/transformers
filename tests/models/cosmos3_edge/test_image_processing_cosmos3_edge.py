@@ -70,18 +70,6 @@ class Cosmos3EdgeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         self.assertEqual(output.image_grid_thw.shape[0], batch_size)
         self.assertEqual(tuple(output.pixel_values.shape), (expected_num_patches, expected_patch_width))
 
-    def test_image_processor_from_dict_with_kwargs(self):
-        """Ensure Edge's pixel-budget size dictionary can be overridden on loading."""
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"shortest_edge": 32 * 32, "longest_edge": 64 * 64})
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict,
-                size={"shortest_edge": 64 * 64, "longest_edge": 96 * 96},
-            )
-            self.assertEqual(image_processor.size, {"shortest_edge": 64 * 64, "longest_edge": 96 * 96})
-
     def test_call_pil(self):
         """Adapt the shared PIL test to Edge's packed patch output layout."""
         for image_processing_class in self.image_processor_classes.values():

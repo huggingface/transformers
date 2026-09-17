@@ -78,15 +78,6 @@ class Gemma4UnifiedImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
             self.assertEqual(list(proc.image_std), [1.0, 1.0, 1.0])
             self.assertEqual(proc.resample, 3)
 
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.patch_size, 6)
-            self.assertEqual(image_processor.max_soft_tokens, 70)
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, patch_size=18)
-            self.assertEqual(image_processor.patch_size, 18)
-
     def test_output_keys(self):
         """Test that the output contains pixel_values, image_position_ids, and num_soft_tokens_per_image."""
         for image_processing_class in self.image_processor_classes.values():

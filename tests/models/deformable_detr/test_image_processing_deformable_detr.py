@@ -63,12 +63,8 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
     def image_processor_dict(self):
         return self.image_processing_tester.prepare_image_processor_dict()
 
-    def test_image_processor_from_dict_with_kwargs(self):
+    def test_from_dict_with_legacy_integer_size(self):
         for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 1333})
-            self.assertEqual(image_processor.do_pad, True)
-
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
             self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 1333})
 

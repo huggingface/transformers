@@ -65,14 +65,6 @@ class IdeficsImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def image_processor_dict(self):
         return self.image_processing_tester.prepare_image_processor_dict()
 
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertNotEqual(image_processor.image_size, 30)
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, image_size=42)
-            self.assertEqual(image_processor.image_size, 42)
-
     @require_torchvision
     def test_torchvision_numpy_transforms_equivalency(self):
         def convert_to_rgb(image):

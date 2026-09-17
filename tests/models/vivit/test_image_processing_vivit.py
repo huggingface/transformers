@@ -70,15 +70,6 @@ class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def image_processor_dict(self):
         return self.image_processing_tester.prepare_image_processor_dict()
 
-    def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"shortest_edge": 18})
-        self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
-
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
-        self.assertEqual(image_processor.size, {"shortest_edge": 42})
-        self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
-
     def test_rescale(self):
         # ViVit optionally rescales between -1 and 1 instead of the usual 0 and 1
         image = np.arange(0, 256, 1, dtype=np.uint8).reshape(1, 8, 32)

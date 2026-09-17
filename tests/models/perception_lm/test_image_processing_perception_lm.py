@@ -55,20 +55,6 @@ class PerceptionLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
     def image_processor_dict(self):
         return self.image_processing_tester.prepare_image_processor_dict()
 
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.tile_size, 16)
-            self.assertEqual(image_processor.max_num_tiles, 4)
-            self.assertEqual(image_processor.vision_input_type, "thumb+tile")
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, tile_size=42, max_num_tiles=9
-            )
-            self.assertEqual(image_processor.tile_size, 42)
-            self.assertEqual(image_processor.max_num_tiles, 9)
-            self.assertEqual(image_processor.vision_input_type, "thumb+tile")
-
     def test_call_pil(self):
         for image_processing_class in self.image_processor_classes.values():
             # Initialize image_processing

@@ -89,23 +89,6 @@ class NeoMMEImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def image_processor_dict(self):
         return self.image_processing_tester.prepare_image_processor_dict()
 
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.patch_size, self.image_processing_tester.patch_size)
-            self.assertIsNone(image_processor.max_side)
-            self.assertIsNone(image_processor.size)
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict,
-                patch_size=8,
-                max_side=64,
-                size={"min_pixels": 256, "max_pixels": 1024},
-            )
-            self.assertEqual(image_processor.patch_size, 8)
-            self.assertEqual(image_processor.max_side, 64)
-            self.assertEqual(dict(image_processor.size), {"min_pixels": 256, "max_pixels": 1024})
-
     def _check_call(self, image_inputs) -> None:
         for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)

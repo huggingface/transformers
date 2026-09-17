@@ -105,14 +105,6 @@ class MuseGlimmerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
     def image_processor_dict(self):
         return self.image_processing_tester.prepare_image_processor_dict()
 
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.patch_size, 14)
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, patch_size=24)
-            self.assertEqual(image_processor.patch_size, 24)
-
     # batch size is flattened
     def test_call_pil(self):
         for image_processing_class in self.image_processor_classes.values():

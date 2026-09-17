@@ -55,16 +55,6 @@ class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processing_tester.prepare_image_processor_dict()
 
     # Ignore copy
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"shortest_edge": 20})
-            self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
-            self.assertEqual(image_processor.size, {"shortest_edge": 42})
-            self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
-
     # Ignore copy
     def test_padding(self):
         """

@@ -111,16 +111,6 @@ class EfficientLoFTRImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             self.assertTrue(hasattr(image_processing, "rescale_factor"))
             self.assertTrue(hasattr(image_processing, "do_grayscale"))
 
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 480, "width": 640})
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, size={"height": 42, "width": 42}
-            )
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
-
     @unittest.skip(reason="SuperPointImageProcessor is always supposed to return a grayscaled image")
     def test_call_numpy_4_channels(self):
         pass

@@ -73,14 +73,6 @@ class Phi4MultimodalImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
     def image_processor_dict(self):
         return self.image_processing_tester.prepare_image_processor_dict()
 
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 100, "width": 100})
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
-
     @unittest.skip(reason="Phi4MultimodalImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")
     def test_call_numpy_4_channels(self):
         pass

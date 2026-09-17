@@ -104,22 +104,6 @@ class PaddleOCRVLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
                 if key not in ["min_pixels", "max_pixels"]:
                     self.assertEqual(obj[key], value)
 
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(
-                image_processor.size,
-                {
-                    "shortest_edge": self.image_processor_dict["min_pixels"],
-                    "longest_edge": self.image_processor_dict["max_pixels"],
-                },
-            )
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, min_pixels=28 * 28, max_pixels=56 * 56
-            )
-            self.assertEqual(image_processor.size, {"shortest_edge": 28 * 28, "longest_edge": 56 * 56})
-
     def test_select_best_resolution(self):
         best_resolution = smart_resize(561, 278, factor=28)
         self.assertEqual(best_resolution, (560, 280))

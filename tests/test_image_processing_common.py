@@ -403,24 +403,44 @@ class ImageProcessingTestMixin:
         for backend_name in backend_names[1:]:
             self._assert_tensors_equivalence(reference_encoding, encodings[backend_name].pixel_values)
 
+    def _assert_has_attributes(self, processor, expected_attributes: dict[str, Any]) -> None:
+        """Checks that processor attributes match all expected attributes.
+
+        No error is raised if the processor has additional attributes.
+        """
+        for key, expected_value in expected_attributes.items():
+            # Legacy pixel bounds are stored in size rather than as separate attributes.
+            if key in ("min_pixels", "max_pixels"):
+                size_key = "shortest_edge" if key == "min_pixels" else "longest_edge"
+                value = processor.size[size_key]
+            else:
+                value = getattr(processor, key)
+
+            if isinstance(expected_value, np.ndarray):
+                np.testing.assert_array_equal(value, expected_value)
+            elif isinstance(expected_value, (list, tuple)):
+                self.assertSequenceEqual(value, expected_value)
+            else:
+                self.assertEqual(value, expected_value)
+
     def test_image_processor_has_attributes(self):
         """Check that processor class registers input kwargs as attributes"""
         for image_processor_class in self.image_processor_classes.values():
             image_processor = image_processor_class(**self.image_processor_dict)
-            for key, expected_value in self.image_processor_dict.items():
-                # Legacy pixel bounds are stored in size rather than as separate attributes.
-                if key in ("min_pixels", "max_pixels"):
-                    size_key = "shortest_edge" if key == "min_pixels" else "longest_edge"
-                    value = image_processor.size[size_key]
-                else:
-                    value = getattr(image_processor, key)
+            self._assert_has_attributes(image_processor, self.image_processor_dict)
 
-                if isinstance(expected_value, np.ndarray):
-                    np.testing.assert_array_equal(value, expected_value)
-                elif isinstance(expected_value, (list, tuple)):
-                    self.assertSequenceEqual(value, expected_value)
-                else:
-                    self.assertEqual(value, expected_value)
+    def test_image_processor_from_dict_has_attributes(self):
+        """Check that processor initialized with from_dict registers dict items as attributes"""
+        for image_processor_class in self.image_processor_classes.values():
+            image_processor = image_processor_class.from_dict(self.image_processor_dict)
+            self._assert_has_attributes(image_processor, self.image_processor_dict)
+
+    def test_image_processor_from_dict_with_kwargs_has_attributes(self):
+        """Check that processor initialized with from_dict with kwargs registers kwargs as attributes"""
+        for image_processor_class in self.image_processor_classes.values():
+            kwargs = {"size": {"height": 123, "width": 321}}
+            image_processor = image_processor_class.from_dict(self.image_processor_dict, **kwargs)
+            self._assert_has_attributes(image_processor, kwargs)
 
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processor_classes.values():

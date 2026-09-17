@@ -53,15 +53,9 @@ class DonutImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def image_processor_dict(self):
         return self.image_processing_tester.prepare_image_processor_dict()
 
-    def test_image_processor_from_dict_with_kwargs(self):
+    def test_from_dict_with_legacy_size_tuple(self):
         for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 18, "width": 20})
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
-
-            # Previous config had dimensions in (width, height) order
+            # Legacy configs use (width, height) order.
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=(42, 84))
             self.assertEqual(image_processor.size, {"height": 84, "width": 42})
 

@@ -70,19 +70,6 @@ class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
     def image_processor_dict(self):
         return self.image_processing_tester.prepare_image_processor_dict()
 
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size["shortest_edge"], 56 * 56)
-            self.assertEqual(image_processor.size["longest_edge"], 6177 * 28 * 28)
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict,
-                size={"shortest_edge": 256 * 256, "longest_edge": 640 * 640},
-            )
-            self.assertEqual(image_processor.size["shortest_edge"], 256 * 256)
-            self.assertEqual(image_processor.size["longest_edge"], 640 * 640)
-
     def test_select_best_resolution(self):
         # Test with a final resize resolution
         best_resolution = smart_resize(561, 278, factor=28)

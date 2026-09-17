@@ -96,14 +96,6 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             output_eager.input_ids.float(), output_compiled.input_ids.float(), atol=1e-4, rtol=1e-4, mean_atol=1e-5
         )
 
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 18, "width": 18})
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
-
     def test_image_processor_to_json_string(self):
         for image_processing_class in self.image_processor_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)

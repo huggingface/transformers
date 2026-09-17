@@ -66,16 +66,6 @@ class InklingImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(list(proc.image_std), list(OPENAI_CLIP_STD))
             self.assertEqual(proc.resample, PILImageResampling.LANCZOS)
 
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 40, "width": 40})
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, size={"height": 16, "width": 16}
-            )
-            self.assertEqual(image_processor.size, {"height": 16, "width": 16})
-
     def test_output_keys(self):
         for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)

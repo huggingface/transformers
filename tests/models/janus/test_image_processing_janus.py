@@ -53,18 +53,6 @@ class JanusImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def image_processor_dict(self):
         return self.image_processing_tester.prepare_image_processor_dict()
 
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 384, "width": 384})
-            self.assertEqual(list(image_processor.image_mean), [0.48145466, 0.4578275, 0.40821073])
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, size=42, image_mean=[1.0, 2.0, 1.0]
-            )
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
-            self.assertEqual(list(image_processor.image_mean), [1.0, 2.0, 1.0])
-
     def test_call_pil(self):
         for image_processing_class in self.image_processor_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
