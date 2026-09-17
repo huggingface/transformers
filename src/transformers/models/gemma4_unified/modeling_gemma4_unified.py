@@ -113,6 +113,8 @@ class Gemma4UnifiedCausalLMOutputWithPast(ModelOutput):
     audio_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
+    last_hidden_state (`torch.FloatTensor`, *optional*):
+        Final layer hidden states from the language model, of shape `(batch_size, sequence_length, hidden_size)`.
     shared_kv_states (`dict`, *optional*):
         Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
@@ -127,6 +129,7 @@ class Gemma4UnifiedCausalLMOutputWithPast(ModelOutput):
 
     audio_hidden_states: torch.FloatTensor | None = None
 
+    last_hidden_state: torch.FloatTensor | None = None
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
 
 
@@ -709,6 +712,11 @@ class Gemma4UnifiedForCausalLM(Gemma4UnifiedPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4UnifiedCausalLMOutputWithPast:
         r"""
+        logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
+            A `torch.BoolTensor` must have the same shape as the input (`(batch_size, sequence_length)`); logits are
+            then computed only for the positions marked `True`, flattened in `input_ids` order, which supports
+            non-contiguous spans (e.g. packed sequences).
+
         Example:
 
         ```python
@@ -723,10 +731,10 @@ class Gemma4UnifiedForCausalLM(Gemma4UnifiedPreTrainedModel, GenerationMixin):
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "What is your favorite condiment?"
-        ```"""
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs: Gemma4UnifiedTextModelOutputWithPast = self.model(
+        "What is your favorite condiment?\n\nI love a good hot sauce! I'm a big fan of anything spicy, so I'm always looking for new hot sauces to try"
+        ```
+        """
+        outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -737,9 +745,13 @@ class Gemma4UnifiedForCausalLM(Gemma4UnifiedPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss.
+        if isinstance(logits_to_keep, torch.Tensor) and logits_to_keep.dtype == torch.bool:
+            # Bool mask for non-contiguous position selection, see https://github.com/huggingface/transformers/issues/48784
+            logits = self.lm_head(hidden_states[logits_to_keep])
+        else:
+            slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+            logits = self.lm_head(hidden_states[:, slice_indices, :])
         if self.config.final_logit_softcapping is not None:
             logits = logits / self.config.final_logit_softcapping
             logits = torch.tanh(logits)
@@ -753,6 +765,7 @@ class Gemma4UnifiedForCausalLM(Gemma4UnifiedPreTrainedModel, GenerationMixin):
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
+            last_hidden_state=hidden_states,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             shared_kv_states=outputs.shared_kv_states,
@@ -1307,6 +1320,10 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
         video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
+        logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
+            A `torch.BoolTensor` must have the same shape as the input (`(batch_size, sequence_length)`); logits are
+            then computed only for the positions marked `True`, flattened in `input_ids` order, which supports
+            non-contiguous spans (e.g. packed sequences).
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -1328,9 +1345,13 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss.
+        if isinstance(logits_to_keep, torch.Tensor) and logits_to_keep.dtype == torch.bool:
+            # Bool mask for non-contiguous position selection, see https://github.com/huggingface/transformers/issues/48784
+            logits = self.lm_head(hidden_states[logits_to_keep])
+        else:
+            slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+            logits = self.lm_head(hidden_states[:, slice_indices, :])
         if (final_logit_softcapping := self.config.get_text_config().final_logit_softcapping) is not None:
             logits = logits / final_logit_softcapping
             logits = torch.tanh(logits)
@@ -1344,6 +1365,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
+            last_hidden_state=hidden_states,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,

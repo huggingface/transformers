@@ -619,6 +619,33 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_generate_from_random_inputs_embeds(self):
         pass
 
+    def test_logits_to_keep_bool_mask_and_last_hidden_state(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Gemma4ForConditionalGeneration(config)
+        model.to(torch_device)
+        model.eval()
+
+        input_ids = inputs_dict["input_ids"]
+        # 1. Test last_hidden_state is exposed
+        with torch.no_grad():
+            outputs = model(**inputs_dict)
+            self.assertTrue(hasattr(outputs, "last_hidden_state"))
+            self.assertIsNotNone(outputs.last_hidden_state)
+            self.assertEqual(outputs.last_hidden_state.shape[:2], input_ids.shape)
+
+        # 2. Test logits_to_keep as bool mask (e.g. non-contiguous spans)
+        bool_mask = torch.zeros(input_ids.shape, dtype=torch.bool, device=torch_device)
+        bool_mask[0, 0] = True
+        bool_mask[0, -1] = True
+        if bool_mask.shape[0] > 1:
+            bool_mask[1, 1] = True
+
+        with torch.no_grad():
+            outputs_masked = model(**inputs_dict, logits_to_keep=bool_mask)
+            expected_num_tokens = bool_mask.sum().item()
+            self.assertEqual(outputs_masked.logits.shape[0], expected_num_tokens)
+            self.assertEqual(outputs_masked.logits.shape[-1], config.get_text_config().vocab_size)
+
     @unittest.skip(
         "Randomly starts failing after module order changed in the __init__ because accelertate is not robust enough"
     )
