@@ -67,11 +67,12 @@ _pending_cleanups = {}  # {nodeid: cleanup_fn} — worker only, avoids item.addf
 def _mlog(msg):
     t = time.monotonic() - _t0
     line = f"[MEM t={t:8.2f}s] {msg}\n"
-    # sys.__stdout__ bypasses pytest's per-worker stdout capture so lines
-    # appear in the CI log even when the test passes.
+    # Write to stderr: pytest-xdist does not capture stderr in workers, so
+    # lines appear in the CI log for both passing and failing tests, and from
+    # background threads (execnet only forwards stdout, not stderr).
     try:
-        sys.__stdout__.write(line)
-        sys.__stdout__.flush()
+        sys.stderr.write(line)
+        sys.stderr.flush()
     except Exception:  # noqa: S110
         pass
 
@@ -80,7 +81,23 @@ def _mlog(msg):
 
 
 def _sys_mem():
-    """(used_mb, total_mb) from /proc/meminfo."""
+    """(used_mb, limit_mb) — pod-level cgroup memory when available, else /proc/meminfo."""
+    # cgroup v2
+    for path in ("/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory/memory.usage_in_bytes"):
+        limit_path = path.replace("memory.current", "memory.max").replace(
+            "memory.usage_in_bytes", "memory.limit_in_bytes"
+        )
+        try:
+            used = int(open(path).read().strip()) / 1024 / 1024
+            raw_limit = open(limit_path).read().strip()
+            # "max" means no limit; fall back to /proc/meminfo total
+            if raw_limit in ("max", "9223372036854771712"):
+                raise ValueError("no cgroup limit")
+            limit = int(raw_limit) / 1024 / 1024
+            return used, limit
+        except Exception:  # noqa: S110
+            pass
+    # Fallback: node-level /proc/meminfo
     fields = {}
     with open("/proc/meminfo") as f:
         for line in f:
@@ -179,7 +196,7 @@ def _ctrl_monitor_loop():
             _mlog("[CTRL] " + " | ".join(parts))
         except Exception as exc:
             _mlog(f"[CTRL] monitor error: {exc}")
-        _ctrl_stop.wait(5)
+        _ctrl_stop.wait(1)
 
 
 def _worker_monitor_loop(wid, pid):
@@ -191,7 +208,7 @@ def _worker_monitor_loop(wid, pid):
             _mlog(f"[{wid}] RSS+subtree={rss:.0f} PSS+subtree={pss:.0f}MB nchildren={nch} SYS={sys_used:.0f}MB")
         except Exception as exc:
             _mlog(f"[{wid}] monitor error: {exc}")
-        _worker_stop.wait(2)
+        _worker_stop.wait(1)
 
 
 # ── wav2vec2 detailed checkpoints ─────────────────────────────────────────────
