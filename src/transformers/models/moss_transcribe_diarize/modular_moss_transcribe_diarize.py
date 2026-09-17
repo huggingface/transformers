@@ -12,10 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import annotations
-
 import re
-from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -36,18 +33,16 @@ from ...processing_utils import Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.import_utils import requires
+from ..audioflamingo3.configuration_audioflamingo3 import AudioFlamingo3Config
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3CausalLMOutputWithPast,
     AudioFlamingo3ForConditionalGeneration,
     AudioFlamingo3Model,
+    AudioFlamingo3ModelOutputWithPast,
     AudioFlamingo3MultiModalProjector,
+    AudioFlamingo3PreTrainedModel,
 )
 from ..auto import CONFIG_MAPPING
-from ..glmasr.configuration_glmasr import GlmAsrConfig
-from ..glmasr.modeling_glmasr import (
-    GlmAsrModelOutputWithPast,
-    GlmAsrPreTrainedModel,
-)
 from ..vibevoice_asr.processing_vibevoice_asr import VibeVoiceAsrProcessor, VibeVoiceAsrProcessorKwargs
 from ..whisper.modeling_whisper import WhisperEncoder
 
@@ -60,15 +55,29 @@ _SEGMENT_PATTERN = re.compile(
 )
 
 
-@auto_docstring
+@auto_docstring(checkpoint="itazap/MOSS-Transcribe-Diarize-HF")
 @strict
-class MossTranscribeDiarizeConfig(GlmAsrConfig):
+class MossTranscribeDiarizeConfig(AudioFlamingo3Config):
     r"""
     audio_merge_size (`int`, *optional*, defaults to 4):
         Number of consecutive Whisper encoder frames concatenated before the multi-modal projector.
     audio_chunk_size (`int`, *optional*, defaults to 480000):
         Whisper encoder window size in raw audio samples, used with `padding_mask` to recover `audio_chunk_mapping`.
-    """
+
+    Example:
+
+    ```python
+    >>> from transformers import MossTranscribeDiarizeForConditionalGeneration, MossTranscribeDiarizeConfig
+
+    >>> # Initializing a MossTranscribeDiarize configuration
+    >>> configuration = MossTranscribeDiarizeConfig()
+
+    >>> # Initializing a model from the configuration
+    >>> model = MossTranscribeDiarizeForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "moss_transcribe_diarize"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -101,8 +110,10 @@ class MossTranscribeDiarizeConfig(GlmAsrConfig):
     audio_token_id: int = 151671
     audio_merge_size: int = 4
     projector_hidden_act: str = "silu"
-    projector_bias: bool = True
     audio_chunk_size: int = 480_000
+    # Not declared on `AudioFlamingo3Config`; needed so `PreTrainedModel.get_expanded_tied_weights_keys` actually
+    # ties `lm_head.weight` per `MossTranscribeDiarizeForConditionalGeneration._tied_weights_keys`.
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
@@ -433,7 +444,7 @@ class MossTranscribeDiarizeMultiModalProjector(AudioFlamingo3MultiModalProjector
         return self.norm(hidden_states)
 
 
-class MossTranscribeDiarizePreTrainedModel(GlmAsrPreTrainedModel):
+class MossTranscribeDiarizePreTrainedModel(AudioFlamingo3PreTrainedModel):
     config_class = MossTranscribeDiarizeConfig
     _no_split_modules = ["MossTranscribeDiarizeEncoderLayer"]
 
@@ -444,18 +455,10 @@ class MossTranscribeDiarizeEncoder(WhisperEncoder):
         return (input_lengths - 1) // 2 + 1
 
 
-@auto_docstring
-@dataclass
-class MossTranscribeDiarizeModelOutputWithPast(GlmAsrModelOutputWithPast):
+class MossTranscribeDiarizeModelOutputWithPast(AudioFlamingo3ModelOutputWithPast):
     pass
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for MossTranscribeDiarize causal language model (or autoregressive) outputs.
-    """
-)
-@dataclass
 class MossTranscribeDiarizeCausalLMOutputWithPast(AudioFlamingo3CausalLMOutputWithPast):
     pass
 
