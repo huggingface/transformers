@@ -1661,7 +1661,7 @@ class CacheCroppingTests(unittest.TestCase):
         layer = DynamicSlidingWindowLayer(sliding_window=sliding_window)
         layer.activate_past_recording()
         for step in range(sliding_window + 2):
-            new_states = torch.full((1, 1, 1, 2), float(step))
+            new_states = torch.ones((1, 1, 1, 2), dtype=float) * step
             kv_length, _ = layer.get_mask_sizes(new_states.shape[-2])
             returned_keys, returned_values = layer.update(new_states, new_states)
 
@@ -1683,7 +1683,7 @@ class CacheCroppingTests(unittest.TestCase):
             returned_keys, _ = layer.update(new_states, new_states)
             self.assertEqual(returned_keys.shape[-2], kv_length)
 
-        crossing_states = torch.arange(2.0, 5.0).view(1, 1, 3, 1).expand(1, 1, 3, 2)
+        crossing_states = torch.arange(2, 5).view(1, 1, 3, 1).expand(1, 1, 3, 2)
         kv_length, _ = layer.get_mask_sizes(crossing_states.shape[-2])
         returned_keys, returned_values = layer.update(crossing_states, crossing_states)
         self.assertEqual(returned_keys.shape[-2], kv_length)
@@ -1695,6 +1695,6 @@ class CacheCroppingTests(unittest.TestCase):
         final_states = torch.full((1, 1, 1, 2), 5.0)
         kv_length, _ = layer.get_mask_sizes(final_states.shape[-2])
         returned_keys, _ = layer.update(final_states, final_states)
-        self.assertEqual(kv_length, sliding_window - 1 + 1)
+        self.assertEqual(kv_length, sliding_window)
         self.assertEqual(returned_keys.shape[-2], kv_length)
         self.assertEqual(returned_keys[0, 0, :, 0].tolist(), [2.0, 3.0, 4.0, 5.0])
