@@ -298,7 +298,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
 
     @pytest.mark.generate
     def test_generate_batched_matches_single(self):
-        # different default to trigger error for incorrectly indexing of audio chunks
+        # different default to trigger error for incorrect indexing of audio chunks
         model_tester = VibeVoiceModelTester(
             self,
             batch_size=4,
