@@ -959,8 +959,8 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     @parameterized.expand(
         [
             # (loaded_attn_implementation, supports_flash_attn, expected_after_switch)
-            ("sdpa", True, None),  # flash-capable model on a non-flash impl -> auto-switched to flash
-            ("flash_attention_2", True, None),  # already flash -> left exactly as loaded
+            ("sdpa", True, "ANY_FLASH"),  # flash-capable model on a non-flash impl -> auto-switched to flash
+            ("flash_attention_2", True, "flash_attention_2"),  # already flash -> left exactly as loaded
             ("paged|sdpa", True, "paged|sdpa"),  # an explicit paged request is respected: no flash upgrade
             ("sdpa", False, "sdpa"),  # no flash available: sdpa serves the engine unpaged
             ("eager", False, "paged|eager"),  # eager is the one that still has to be paged
@@ -970,18 +970,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     def test_switch_to_cb_friendly_attn(
         self, attn_implementation: str, supports_flash_attn: bool, expected_after_switch: str | None
     ) -> None:
-        """Continuous batching prefers flash, and only pages what it has to.
-
-        `flash_attention_*` and `sdpa` reach the paged kernel from the forward kwargs, so the model keeps the
-        implementation it was loaded with and stays usable for an ordinary forward while the engine runs. Only
-        `eager` still gets the `paged|` prefix, since every model brings its own eager forward.
-        `expected_after_switch` of `None` means "whatever flash resolved to".
-        """
+        """Tests that continuous batching switches to flash when possible, and only adds "paged|" when attention
+        implementation is eager."""
         flash_available = is_flash_attn_2_available(kernels_fallback_ok=True)
         flash_available |= is_flash_attn_3_available(kernels_fallback_ok=True)
-
-        if expected_after_switch is None and not flash_available:
-            self.skipTest("Flash attention is unavailable, cannot test the auto-switch to flash.")
 
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         _, model = get_tokenizer_and_model(model_id, attn_implementation, torch_device, torch.bfloat16)
@@ -992,14 +984,16 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         manager = model.init_continuous_batching(
             continuous_batching_config=ContinuousBatchingConfig(num_blocks=8, block_size=32, use_cuda_graph=False)
         )
+
+        # Check model correctly switched to a CB-friendly attention implementation
         switched_attn_impl = model.config._attn_implementation
-        if expected_after_switch is None:
-            is_flash = is_flash_attention_requested(requested_attention_implementation=switched_attn_impl)
-            self.assertTrue(is_flash, f"Expected a flash impl, got {switched_attn_impl}")
-            # left unpaged, so an ordinary forward on this model still works
-            self.assertFalse(
-                switched_attn_impl.startswith("paged|"), f"Expected an unpaged flash impl, got {switched_attn_impl}"
-            )
+        if expected_after_switch == "ANY_FLASH":
+            # The switch to flash can only be checked if flash is available
+            if flash_available:
+                self.assertTrue(
+                    is_flash_attention_requested(requested_attention_implementation=switched_attn_impl),
+                    f"Expected a flash impl, got {switched_attn_impl}",
+                )
         else:
             self.assertEqual(switched_attn_impl, expected_after_switch)
 

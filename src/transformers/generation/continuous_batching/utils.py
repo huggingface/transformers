@@ -53,12 +53,7 @@ class WorkloadHints:
 
 
 def attn_mask_is_needed(config: PretrainedConfig) -> bool:
-    """Whether the engine has to materialise a mask for this attention implementation.
-
-    Flash builds its own from the cumulative sequence lengths; eager and sdpa attend over the packed batch and
-    need the block-diagonal mask spelled out. Keyed off the implementation itself rather than a `paged|` prefix,
-    because only eager still carries one.
-    """
+    """Checks if attention mask is needed for the given config."""
     return not is_flash_attention_requested(config)
 
 

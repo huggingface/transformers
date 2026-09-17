@@ -1,8 +1,9 @@
 import torch
 
+from ..generation.continuous_batching import PagedAttentionCache
 from ..modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
 from ..utils import logging
-from .paged_dispatch import is_paged_call
+from .flash_paged import paged_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -38,9 +39,8 @@ def flash_attention_forward(
     s_aux: torch.Tensor | None = None,  # alias: learnable attention sink
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
-    if is_paged_call(kwargs):
-        from .flash_paged import paged_attention_forward
-
+    # Dispatch to paged attention instead if there is a paged cache
+    if isinstance(kwargs.get("cache"), PagedAttentionCache):
         if s_aux is not None:
             kwargs["s_aux"] = s_aux
         return paged_attention_forward(module, query, key, value, attention_mask, **kwargs)

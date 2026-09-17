@@ -649,13 +649,9 @@ class ContinuousBatchingManager:
         self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
 
     def switch_to_cb_friendly_attn(self, model: ProtoPretrainedModel) -> None:
-        """Make sure the model can serve the engine: prefer a flash implementation, and page only what needs it.
-
-        `flash_attention_*` and `sdpa` need no change: their forwards route to the paged kernel when a call
-        carries a paged cache, so the engine and an ordinary forward share one model untouched. `eager` is the
-        exception, because every model defines its own eager forward and there is no single one to route, so it
-        still gets the `paged|` prefix and a model left on it cannot serve a training forward meanwhile.
-        """
+        """Switch the attn implementation to one that is CB friendly. If SDPA or eager is requested, and flash is
+        availaible, change to flash. If that can't be done and the attention is "eager", then change to "paged|eager",
+        as SDPA and flash can automatically route to flash but "eager" can't (it's redefined in each model)."""
         # The self._original_attn_impl is set only if the attn implementation is changed (makes this fn idempotent)
         original_attn_impl = model.config._attn_implementation
         target_implem = original_attn_impl
@@ -677,15 +673,13 @@ class ContinuousBatchingManager:
                 target_implem = f"flash_attention_{version}"
                 logger.warning(
                     f"{msg} Switching from {original_attn_impl} to {target_implem}. "
-                    "Set `_supports_flash_attn = False` on the model to keep the implementation you loaded."
+                    "If you need paged eager or sdpa, use paged|eager or paged|sdpa as the `attn_implementation`."
                 )
             else:
                 logger.info(f"{msg} Consider using a flash `attn_implementation` when loading the model.")
 
-        # Only eager has to be paged through the config; everything else reaches the paged kernel from the forward
-        # kwargs and is left exactly as the user loaded it.
-        if target_implem == "eager":
-            target_implem = "paged|eager"
+        # If eager is requested, change to paged|eager so the forward does not crash
+        target_implem = "paged|eager" if target_implem == "eager" else target_implem
         if target_implem != original_attn_impl:
             model.set_attn_implementation(target_implem)
             self._original_attn_impl = original_attn_impl
