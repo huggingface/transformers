@@ -620,12 +620,12 @@ class HYV4HyperConnection(nn.Module):
 
     def __init__(self, config: HYV4Config):
         super().__init__()
-        self.hc_mult = config.hc_mult
+        self.hc_mult = config.hc_mult  # number of streams, refered as N below
         self.hc_eps = config.hc_eps
         self.input_norm = HYV4UnweightedRMSNorm(eps=config.rms_norm_eps)
-        mix = 2 * self.hc_mult  # noqa: F841
-        self.fn = nn.Parameter(torch.empty(mix, self.hc_mult * config.hidden_size))
-        self.base = nn.Parameter(torch.empty(mix))
+        concatenated_weights_size = 2 * self.hc_mult  # noqa: F841
+        self.fn = nn.Parameter(torch.empty(concatenated_weights_size, self.hc_mult * config.hidden_size))
+        self.base = nn.Parameter(torch.empty(concatenated_weights_size))
         self.scale = nn.Parameter(torch.empty(2))
         self.hc_post_magnitude = config.hc_magnitude
 
