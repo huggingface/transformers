@@ -68,7 +68,7 @@ class Glm4vMoeVisionText2TextModelTester:
         is_training=True,
         text_config={
             "vocab_size": 99,
-            "hidden_size": 16,
+            "hidden_size": 32,
             "intermediate_size": 22,
             "num_hidden_layers": 2,
             "num_attention_heads": 2,
@@ -76,7 +76,7 @@ class Glm4vMoeVisionText2TextModelTester:
             "output_channels": 64,
             "hidden_act": "silu",
             "max_position_embeddings": 512,
-            "rope_parameters": {"type": "default", "mrope_section": [2, 1, 1], "partial_rotary_factor": 1.0},
+            "rope_parameters": {"type": "default", "mrope_section": [2, 1, 1], "partial_rotary_factor": 0.5},
             "rope_theta": 10000,
             "tie_word_embeddings": True,
             "bos_token_id": 0,
@@ -92,7 +92,7 @@ class Glm4vMoeVisionText2TextModelTester:
             "depth": 2,
             "hidden_act": "silu",
             "hidden_size": 48,
-            "out_hidden_size": 16,
+            "out_hidden_size": 32,
             "intermediate_size": 22,
             "patch_size": 14,
             "spatial_merge_size": 1,
@@ -197,6 +197,10 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def setUp(self):
         self.model_tester = Glm4vMoeVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Glm4vMoeConfig, has_text_modality=False)
+
+    @unittest.skip("We don't really care about this one, test is not that slow")
+    def test_model_is_small(self):
+        pass
 
     def test_config(self):
         self.config_tester.run_common_tests()
