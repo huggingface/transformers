@@ -1143,6 +1143,13 @@ JOB_TO_TEST_FILE = {
 }
 
 
+EXAMPLES_TORCH_TEST_FILES = [
+    "examples/pytorch/old_test_xla_examples.py",
+    "examples/pytorch/test_accelerate_examples.py",
+    "examples/pytorch/test_pytorch_examples.py",
+]
+
+
 def create_test_list_from_filter(full_test_list, out_path):
     os.makedirs(out_path, exist_ok=True)
     all_test_files = "\n".join(full_test_list)
@@ -1151,7 +1158,12 @@ def create_test_list_from_filter(full_test_list, out_path):
     to_output = []
     for job_name, _filter in JOB_TO_TEST_FILE.items():
         file_name = os.path.join(out_path, f"{job_name}_test_list.txt")
-        files_to_test = list(re.findall(_filter, all_test_files))
+
+        # examples_torch: always run all example tests regardless of diff
+        if job_name == "examples_torch":
+            files_to_test = EXAMPLES_TORCH_TEST_FILES
+        else:
+            files_to_test = list(re.findall(_filter, all_test_files))
 
         print(job_name, file_name, len(files_to_test))
 
