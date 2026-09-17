@@ -230,7 +230,7 @@ class Qwen3TTSProcessor(ProcessorMixin):
         if len(audio) != len(saving_path):
             raise ValueError("The number of audio and saving paths must be the same")
 
-        sampling_rate = self.audio_tokenizer.config.output_sample_rate
+        sampling_rate = self.audio_tokenizer.config.output_sampling_rate
         for audio_value, p in zip(audio, saving_path):
             if isinstance(audio_value, torch.Tensor):
                 audio_value = audio_value.cpu().float().numpy()
