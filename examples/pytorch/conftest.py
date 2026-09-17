@@ -61,6 +61,7 @@ _worker_id = "ctrl"
 _worker_pids = {}  # {workerid: pid}  — controller only
 _ctrl_stop = threading.Event()
 _ckpt_offsets = {}  # {workerid: file_offset} — controller only, for reading worker CKPT files
+_worker_current_test = {}  # {workerid: nodeid} — controller only, current test per worker
 _pending_cleanups = {}  # {nodeid: cleanup_fn} — worker only, avoids item.addfinalizer
 
 
@@ -188,7 +189,9 @@ def _ctrl_monitor_loop():
             for wid, wpid in sorted(_worker_pids.items()):
                 wr, wp = _tree(wpid)
                 nch = len(_children(wpid))
-                parts.append(f"{wid}(pid={wpid}) RSS={wr:.0f} PSS={wp:.0f}MB nch={nch}")
+                test_nodeid = _worker_current_test.get(wid, "")
+                test_short = test_nodeid.split("::")[-1] if test_nodeid else "idle"
+                parts.append(f"{wid}(pid={wpid}) RSS={wr:.0f} PSS={wp:.0f}MB nch={nch} [{test_short}]")
             _mlog("[CTRL] " + " | ".join(parts))
             # Drain any CKPT lines written by workers to /tmp/ckpt_{gw}.log
             for gw in list(_worker_pids):
@@ -428,11 +431,19 @@ def pytest_runtest_logstart(nodeid, location):
 
 
 def pytest_runtest_logreport(report):
-    """Controller: log system memory when a worker finishes a test phase."""
-    if not _MEM_ENABLED or _is_worker or report.when not in ("call", "setup"):
+    """Controller: track current test per worker; log failures."""
+    if not _MEM_ENABLED or _is_worker:
         return
-    if report.outcome == "passed":
-        return  # only log failures/errors for call/setup to reduce noise
+    # Track which test each worker is currently running (for CTRL monitor line)
+    if hasattr(report, "workerid"):
+        wid = report.workerid
+        if report.when == "setup" and report.passed:
+            _worker_current_test[wid] = report.nodeid
+        elif report.when == "teardown":
+            _worker_current_test.pop(wid, None)
+    # Log failures/errors only
+    if report.when not in ("call", "setup") or report.outcome == "passed":
+        return
     try:
         sys_used, _ = _sys_mem()
         _mlog(f"[CTRL] {report.when.upper()} {report.nodeid} outcome={report.outcome} | SYS={sys_used:.0f}MB")
